@@ -1,3 +1,3 @@
 # rust_adms
 
-An Verilog_AMS frontend writen in rust
+A Verilog_AMS frontend written in rust
