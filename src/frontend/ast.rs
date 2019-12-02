@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::os::raw::c_double;
 
-#[derive(Debug)]
+use Node_Types::*;
+
+#[derive(Clone, Debug)]
 pub enum Node_Type {
     DESIGN,
     MODULE(String),
@@ -106,13 +108,48 @@ pub enum Node_Type {
     INTERFACE,
     INTERFACEPORT,
     INTERFACEPORTTYPE,
-    MODPORT,
+    MODPORT(PORT),
     MODPORTMEMBER,
     PACKAGE,
-
     WIRETYPE,
 }
 
+pub mod Node_Types {
+    #[derive(Clone, Debug)]
+    pub struct PORT {
+        pub identifier: String,
+        pub is_signed: bool,
+        pub is_input: bool,
+        pub is_output: bool,
+        pub verilog_type: VERILOG_TYPE,
+        pub discipline: String,
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum VERILOG_TYPE {
+        UNDECLARED,
+        REG,
+        WREAL,
+        SUPPLY0,
+        SUPPLY1,
+        TRI,
+        TRIAND,
+        TRIOR,
+        TRI0,
+        TRI1,
+        WIRE,
+        UWIRE,
+        WAND,
+        WOR,
+        TIME,
+        INTEGER,
+        REAL,
+        REALTIME,
+    }
+}
+
+
+#[derive(Clone, Debug)]
 pub struct Node {
     pub Type: Node_Type,
     pub children: Vec<Node>,
