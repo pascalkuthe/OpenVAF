@@ -1,11 +1,19 @@
 use std::collections::HashMap;
 use std::os::raw::c_double;
 
+use indextree::Arena;
+use pest::error::ErrorVariant;
+use pest::iterators::{Pair, Pairs};
+
 use Node_Types::*;
 
+use crate::frontend::parser;
+use crate::frontend::State;
+
 #[derive(Clone, Debug)]
-pub enum Node_Type {
-    DESIGN,
+pub enum Node {
+    TOP,
+    ATTRIBUTE(String),
     MODULE(String),
     TASK,
     FUNCTION,
@@ -79,7 +87,7 @@ pub enum Node_Type {
     CELLARRAY,
     ALWAYS,
     INITIAL,
-    ANALOG,
+    ANALOG(bool),
     BLOCK,
     ASSIGN_EQ,
     ASSIGN_LE,
@@ -147,32 +155,14 @@ pub mod Node_Types {
         REALTIME,
     }
 }
+//    fn expect<'pair>(expected_value: Option<Pair<'pair, parser::Rule>>, error_message: &str, containing_rule: pest::Span)
+//                     -> parser::Result<Pair<'pair, parser::Rule>> {
+//        match expected_value {
+//            Some(pair) => Ok(pair),
+//            None => error(error_message, containing_rule)
+//        }
+//    }
 
 
-#[derive(Clone, Debug)]
-pub struct Node {
-    pub Type: Node_Type,
-    pub children: Vec<Node>,
-    //TODO Compilertime Keyword Decleration
-    pub attributes: HashMap<String, Node>,
-}
 
-impl Node {
-    pub fn new(Type: Node_Type) -> Node {
-        Node {
-            Type,
-            children: Vec::new(),
-            attributes: HashMap::new(),
-        }
-    }
 
-    //TODO simplfy
-    pub fn simplfy(mut self) -> Option<Node> {
-        /*for i in &mut self.children {
-            if let Some(x) = i.simplfy(){
-                *i = x;
-            }
-        }*/
-        return Some(self)
-    }
-}

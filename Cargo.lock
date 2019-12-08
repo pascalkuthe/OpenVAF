@@ -4,6 +4,7 @@
 name = "adms_rust"
 version = "0.1.0"
 dependencies = [
+ "indextree 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pest 2.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pest_derive 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -57,6 +58,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "typenum 1.11.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "indextree"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "maplit"
@@ -167,6 +173,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum digest 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f3d0c8c8752312f9713efd397ff63acb9f85585afbf179282e720e7704954dd5"
 "checksum fake-simd 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
 "checksum generic-array 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)" = "c68f0274ae0e023facc3c97b2e00f076be70e254bc851d972503b328db79b2ec"
+"checksum indextree 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "df86f0c82859379c2e9068f42fb345d4c0fba1bb09fcc52454ec19131a2aa068"
 "checksum maplit 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 "checksum opaque-debug 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2839e79665f131bdb5782e51f2c6c9599c133c6098982a54c794358bf432529c"
 "checksum pest 2.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7e4fb201c5c22a55d8b24fef95f78be52738e5e1361129be1b5e862ecdb6894a"
