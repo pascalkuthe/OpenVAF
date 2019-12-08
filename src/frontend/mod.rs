@@ -8,28 +8,33 @@
  * *******************************************************************************************
  */
 
-
-
-
 use std::collections::HashMap;
 use std::fmt::Error;
 use std::fs;
 use std::path::Path;
 
+use indextree::{Arena, NodeId};
 use pest;
 use pest::error::ErrorVariant;
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
 use pest::Parser;
 
-use ast::*;
-use ast::AST;
+use crate::frontend::parser::{ParseResult, ParseTreeToAstFolder, Preprocessor};
 
 pub mod ast;
 mod parser;
 
-pub fn parse_file(file: &Path) -> parser::Result<AST> {
-    ast::create_ast_from_parse_tree(parse_tree_top_node);
+
+pub fn run_frontend(file_path: &Path) -> ParseResult<(Arena<ast::Node>, NodeId)> {
+    let file_contents = fs::read_to_string(file_path).expect("File not found!");
+    let mut preprocessor = Preprocessor::new();
+    preprocessor.run_preprocessor(&file_contents)?;
+    let preprocessed_source = preprocessor.finalize();
+    let parse_tree = parser::create_parse_tree(&preprocessed_source)?;
+    println!("{:?}", parse_tree);
+    let parse_tree_ast_fold = ParseTreeToAstFolder::fold(parse_tree)?;
+    Ok(parse_tree_ast_fold.finish())
 }
 
 

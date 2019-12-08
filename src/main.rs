@@ -1,7 +1,6 @@
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
-extern crate slab;
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -14,8 +13,10 @@ fn main() {
     let home = env::var_os("HOME").unwrap();
     let mut path = PathBuf::from(home);
     path.push(Path::new("test.v"));
-    match { frontend::parse_file(path.as_path()) } {
-        Ok(node) => println!("{:?}", node),
+    match { frontend::run_frontend(path.as_path()) } {
+        Ok(ast) => {
+            println!("{}", ast.0.get(ast.1).unwrap())
+        }
         Err(E) => println!("{}", E)
     }
 }

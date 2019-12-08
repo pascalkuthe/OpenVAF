@@ -1,14 +1,4 @@
-use std::collections::HashMap;
-use std::os::raw::c_double;
-
-use indextree::Arena;
-use pest::error::ErrorVariant;
-use pest::iterators::{Pair, Pairs};
-
 use Node_Types::*;
-
-use crate::frontend::parser;
-use crate::frontend::State;
 
 #[derive(Clone, Debug)]
 pub enum Node {
@@ -88,7 +78,7 @@ pub enum Node {
     ALWAYS,
     INITIAL,
     ANALOG(bool),
-    BLOCK,
+    BLOCK(Option<String>),
     ASSIGN_EQ,
     ASSIGN_LE,
     CONTRIBUTE,
@@ -116,7 +106,7 @@ pub enum Node {
     INTERFACE,
     INTERFACEPORT,
     INTERFACEPORTTYPE,
-    MODPORT(PORT),
+    MODPORT(Option<PORT>),
     MODPORTMEMBER,
     PACKAGE,
     WIRETYPE,
@@ -131,6 +121,19 @@ pub mod Node_Types {
         pub is_output: bool,
         pub verilog_type: VERILOG_TYPE,
         pub discipline: String,
+    }
+
+    impl PORT {
+        pub fn new() -> Self {
+            PORT {
+                identifier: String::from(""),
+                is_signed: false,
+                is_input: false,
+                is_output: false,
+                verilog_type: VERILOG_TYPE::UNDECLARED,
+                discipline: String::from(""),
+            }
+        }
     }
 
     #[derive(Clone, Debug)]
