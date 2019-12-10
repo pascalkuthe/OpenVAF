@@ -72,7 +72,7 @@ pub struct Preprocessor<'lifetime> {
     calling_macros: Vec<String>,
     calling_macro_arguments: HashMap<String, String>,
 }
-
+#[derive(Debug)]
 struct MACRO<'lt> {
     args: Vec<String>,
     text: Option<ParseTreeNode<'lt>>,
@@ -92,17 +92,16 @@ impl<'lt> Preprocessor<'lt> {
     pub fn run_preprocessor(&mut self, source_code: &'lt str) -> Result {
         let mut preprocessor_parse_tree_top_nodes
             = PestParser::parse(Rule::PREPROCESSOR, &source_code)?;
-        for node in preprocessor_parse_tree_top_nodes.next().unwrap().into_inner().next().unwrap().into_inner() {
-            self.process_compiler_directives(node)?
-        };
+        self.process_compiler_directives(preprocessor_parse_tree_top_nodes.next().unwrap().into_inner().next().unwrap())?;
         Ok(())
     }
     fn process_compiler_directives(&mut self, node: ParseTreeNode<'lt>) -> Result {
         for compiler_directive_or_code in node.into_inner() {
-            match compiler_directive_or_code.as_rule() {
-                Rule::CODE => self.preprocessed_source.push_str(compiler_directive_or_code.as_str()),
-                Rule::COMPILER_DIRECTIVE => self.process_compiler_directive(compiler_directive_or_code)?,
-                _ => unexpected_rule!(compiler_directive_or_code),
+            let current = compiler_directive_or_code.clone().into_inner().next().unwrap();
+            match current.as_rule() {
+                Rule::CODE => self.preprocessed_source.push_str(current.as_str()),
+                Rule::COMPILER_DIRECTIVE => self.process_compiler_directive(current)?,
+                _ => unexpected_rule!(current),
             }
         };
         Ok(())
@@ -131,8 +130,10 @@ impl<'lt> Preprocessor<'lt> {
         description.next();
         let name = identifier_string(description.next().unwrap());
         let mut args: Vec<String> = Vec::new();
-        while !description.peek().is_none() && description.peek().unwrap().as_rule() == Rule::MACRO_ARGUMENT_LIST_DEFINITION {
-            args.push(as_string!(description.next().unwrap()));
+        if !description.peek().is_none() && description.peek().unwrap().as_rule() == Rule::IDENTIFIER_LIST {
+            for identifier in description.next().unwrap().into_inner() {
+                args.push(identifier_string(identifier));
+            }
         }
         let text = description.next();
         //TODO warn when overriden or no effekt for compiler directives
@@ -234,20 +235,26 @@ impl<'lt> Preprocessor<'lt> {
             };
         {
             let identifier = identifier_string(description.next().unwrap());
-            if self.macros.contains_key(&identifier) && !if_ndef | !self.macros.contains_key(&identifier) && if_ndef {
+            if self.macros.contains_key(&identifier) && !if_ndef || !self.macros.contains_key(&identifier) && if_ndef {
                 return self.process_compiler_directives(description.next().unwrap());
+            } else {
+                description.next();
             }
         }
         while description.peek().is_some() {
-            match description.next().unwrap().as_rule() {
+            let current = description.next().unwrap();
+            match current.as_rule() {
                 Rule::TOK_ELSIF => {
                     let identifier = identifier_string(description.next().unwrap());
                     if self.macros.contains_key(&identifier) {
                         return self.process_compiler_directives(description.next().unwrap());
+                    } else {
+                        description.next();
                     }
                 }
-                Rule::TOK_ELSE => return self.process_compiler_directives(description.next().unwrap()),
-                _ => unexpected_rule!(node)
+                Rule::TOK_ELSEDEF => return self.process_compiler_directives(description.next().unwrap()),
+                Rule::TOK_ENDIF => return Ok(()),
+                _ => unexpected_rule!(current)
             }
         };
         unreachable!()
@@ -393,7 +400,7 @@ impl<'lt> ParseTreeToAstFolder {
             }
             parent_ast_node.append(current_node, &mut self.ast);
             if identifier_list.peek().is_some() && identifier_list.peek().unwrap().as_rule() == Rule::CONSTANT_EXPRESSION {
-                self.process_constant_expression(identifier_list.next().unwrap(), current_node);
+                self.process_constant_expression(identifier_list.next().unwrap(), current_node)?;
             }
         }
         //remove temporary node
@@ -438,8 +445,8 @@ impl<'lt> ParseTreeToAstFolder {
         let range_node = self.ast.new_node(ast::Node::RANGE);
         parent_ast_node.append(range_node, &mut self.ast);
         let mut description = matched_parse_tree_node.into_inner();
-        self.process_constant_expression(description.next().unwrap(), parent_ast_node);
-        self.process_constant_expression(description.next().unwrap(), parent_ast_node);
+        self.process_constant_expression(description.next().unwrap(), parent_ast_node)?;
+        self.process_constant_expression(description.next().unwrap(), parent_ast_node)?;
         Ok(())
     }
 
