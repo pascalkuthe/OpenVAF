@@ -39,7 +39,6 @@ pub enum Node {
     CELL,
     CELLARRAY,
     ALWAYS,
-    INITIAL,
     ANALOG(bool),
     BLOCK(Option<String>),
     ASSIGN_EQ,
@@ -77,7 +76,7 @@ pub enum Node {
     //PRIMITVES
     INTEGER_VALUE(i64),
     REAL_VALUE(f64),
-    REFERENCE(String),
+    REFERENCE(Vec<String>),
     NATURE_REFERENCE(String, String),
     //OPERATORS
     CONCAT,
@@ -86,7 +85,7 @@ pub enum Node {
     BIT_AND,
     BIT_OR,
     BIT_XOR,
-    BIT_XNOR,
+    BIT_EQ,
     REDUCE_AND,
     REDUCE_OR,
     REDUCE_XOR,

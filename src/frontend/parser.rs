@@ -39,6 +39,14 @@ pub type ParseResult<T> = std::result::Result<T, pest::error::Error<Rule>>;
 type Result = ParseResult<()>;
 type ParseTreeNode<'lifetime> = Pair<'lifetime, Rule>;
 
+fn hierarchical_identifier_string(matched_pair: Pair<Rule>) -> Vec<String> {
+    let mut description = matched_pair.into_inner();
+    let mut res = vec!(identifier_string(description.next().unwrap()));
+    for identifier in description {
+        res.push(identifier_string(identifier));
+    };
+    res
+}
 
 fn identifier_string(matched_pair: Pair<Rule>) -> String {
     if matched_pair.as_str().starts_with("\\") {
@@ -383,7 +391,7 @@ impl<'lt> ParseTreeToAstFolder {
             _ => unexpected_rule!(inout_declaration),
         }
 
-        while description.peek().is_some() && description.peek().unwrap().as_rule() != Rule::IDENTIFIER_LIST && description.peek().unwrap().as_rule() != Rule::VARIABEL_IDENTIFIER_LIST {
+        while description.peek().is_some() && description.peek().unwrap().as_rule() != Rule::IDENTIFIER_LIST && description.peek().unwrap().as_rule() != Rule::VARIABLE_IDENTIFIER_LIST {
             let port_type_property = description.next().unwrap();
             match port_type_property.as_rule() {
                 Rule::IDENTIFIER => port_info.discipline = identifier_string(port_type_property),
@@ -451,7 +459,7 @@ impl<'lt> ParseTreeToAstFolder {
         let range_node = self.ast.new_node(ast::Node::RANGE);
         parent_ast_node.append(range_node, &mut self.ast);
         let mut description = matched_parse_tree_node.into_inner();
-        self.process_constant_expression(description.next().unwrap(), parent_ast_node)?;
+        self.process_constant_expression(description.next().unwrap(), range_node)?;
         self.process_constant_expression(description.next().unwrap(), parent_ast_node)?;
         Ok(())
     }
@@ -534,17 +542,18 @@ impl<'lt> ParseTreeToAstFolder {
     }
 
 
-    //TODO implement constant expression
-    //TODO make return type result
+
     fn process_constant_expression(&mut self, parse_tree_node: Pair<Rule>
                                    , parent_ast_node: NodeId) -> Result {
+        let constant_expr = self.ast.new_node(ast::Node::CONSTANT_EXPRESSION);
         let id = self.process_expression(parse_tree_node.into_inner().next().unwrap())?;
         //TODO check if actually constant and resolve
-        parent_ast_node.append(id, &mut self.ast);
+        constant_expr.append(id, &mut self.ast);
+        parent_ast_node.append(constant_expr, &mut self.ast);
         Ok(())
     }
 
-    //TODO implement expression
+
     fn process_expression(&mut self, parse_tree_node: Pair<Rule>) -> ParseResult<NodeId> {
         let shared_self = RefCell::new(self);
         let operand_evaluation = |node: Pair<Rule>| -> ParseResult<NodeId>{
@@ -559,15 +568,14 @@ impl<'lt> ParseTreeToAstFolder {
             }
         };
         let operator_evaluation = |lh: ParseResult<NodeId>, op: Pair<Rule>, rh: ParseResult<NodeId>| -> ParseResult<NodeId>{
-            shared_self.borrow_mut().process_operator(lh, op.as_rule(), rh)
+            shared_self.borrow_mut().process_operator(lh, op, rh)
         };
         let mut operator_precedence: PrecClimber<Rule> = PrecClimber::new(vec![
             //OTHER
             Operator::new(Rule::OP_CONCAT, Assoc::Left)
                 | Operator::new(Rule::OP_REPLICATION, Assoc::Left),
             //CONDITIONAL
-            Operator::new(Rule::OP_IF, Assoc::Right)
-                | Operator::new(Rule::OP_ELSE, Assoc::Right),
+            Operator::new(Rule::OP_COND, Assoc::Right),
             //LOGICAL OR
             Operator::new(Rule::OP_LOGIC_OR, Assoc::Left),
             //LOGICAL AND
@@ -609,40 +617,116 @@ impl<'lt> ParseTreeToAstFolder {
         let res = operator_precedence.climb(parse_tree_node.into_inner(), operand_evaluation, operator_evaluation);
         res
     }
+
     fn process_unary_operator(&mut self, operator: Rule, value: Pair<Rule>) -> ParseResult<NodeId> {
         let child = match value.as_rule() {
             Rule::PRIMARY => self.process_primary(value)?,
             Rule::EXPRESSION => self.process_expression(value)?,
             _ => unexpected_rule!(value)
         };
-        match operator {
-            Rule::OP_MINUS => {
-                let node = self.ast.new_node(ast::Node::SUB);
-                node.append(child, &mut self.ast);
-                Ok(node)
-            },
-            _ => unimplemented!(),
-        }
+        let op_node =
+            match operator {
+                Rule::OP_MINUS => self.ast.new_node(ast::Node::NEG),
+                Rule::OP_PLUS => return Ok(child), //PLUS OPERATOR CAN BE IGNORED BUT IS PART OF THE SPEC SMH
+                Rule::OP_BIT_NOT => self.ast.new_node(ast::Node::BIT_NOT),
+                Rule::OP_NOT => self.ast.new_node(ast::Node::LOGIC_NOT),
+                Rule::OP_XOR => self.ast.new_node(ast::Node::REDUCE_XOR),
+                Rule::OP_NXOR => self.ast.new_node(ast::Node::REDUCE_XNOR),
+                Rule::OP_OR => self.ast.new_node(ast::Node::REDUCE_OR),
+                Rule::OP_AND => self.ast.new_node(ast::Node::REDUCE_AND),
+                _ => unimplemented!(),
+            };
+        op_node.append(child, &mut self.ast);
+        Ok(op_node)
     }
     fn process_primary(&mut self, value: Pair<Rule>) -> ParseResult<NodeId> {
         match value.as_rule() {
-            Rule::IDENTIFIER => {
-                let ident = identifier_string(value);
+            Rule::HIERARCHICAL_ID => {
+                let ident = hierarchical_identifier_string(value);
                 Ok(self.ast.new_node(ast::Node::REFERENCE(ident)))
             },
             Rule::UNSIGNED_NUMBER => {
                 Ok(self.ast.new_node(ast::Node::INTEGER_VALUE(value.as_str().parse::<i64>().unwrap())))
+            },
+            Rule::REAL_NUMBER => {
+                let mut description = value.into_inner();
+                let mut number_as_string = as_string!(description.next().unwrap());
+                if description.peek().unwrap().as_rule() == Rule::UNSIGNED_NUMBER {
+                    number_as_string = format!("{}.{}", number_as_string, description.next().unwrap().as_str());
+                }
+                let mut real_value: f64 = number_as_string.parse::<f64>().unwrap();
+                if description.peek().is_some() {
+                    let scientific_factor =
+                        if description.peek().unwrap().as_rule() == Rule::EXP {
+                            description.next();
+                            let mut scientific_factor_str = as_string!(description.next().unwrap());
+                            if description.peek().is_some() {
+                                scientific_factor_str.push_str(&as_string!(description.next().unwrap()));
+                            }
+                            scientific_factor_str.parse::<i32>().unwrap()
+                        } else {
+                            let scale_factor = description.next().unwrap();
+                            match scale_factor.as_str() {
+                                "T" => 12,
+                                "G" => 9,
+                                "M" => 6,
+                                "K" | "k" => 3,
+                                "m" => -3,
+                                "u" => -6,
+                                "p" => -9,
+                                "f" => -12,
+                                "a" => -15,
+                                _ => unexpected_rule!(scale_factor)
+                            }
+                        };
+                    real_value = real_value * (10f64).powi(scientific_factor);
+                }
+                Ok(self.ast.new_node(ast::Node::REAL_VALUE(real_value)))
             }
             _ => unexpected_rule!(value)
         }
     }
-    fn process_operator(&mut self, lh: ParseResult<NodeId>, op: Rule, rh: ParseResult<NodeId>) -> ParseResult<NodeId> {
+
+    fn process_operator(&mut self, lh: ParseResult<NodeId>, op: Pair<Rule>, rh: ParseResult<NodeId>) -> ParseResult<NodeId> {
         let node =
-            match op {
+            match op.as_rule() {
                 Rule::OP_PLUS => self.ast.new_node(ast::Node::ADD),
                 Rule::OP_MINUS => self.ast.new_node(ast::Node::SUB),
                 Rule::OP_MUL => self.ast.new_node(ast::Node::MUL),
                 Rule::OP_DIV => self.ast.new_node(ast::Node::DIV),
+                Rule::OP_MOD => self.ast.new_node(ast::Node::MOD),
+
+                Rule::OP_XOR => self.ast.new_node(ast::Node::BIT_XOR),
+                Rule::OP_NXOR => self.ast.new_node(ast::Node::BIT_EQ),
+                Rule::OP_OR => self.ast.new_node(ast::Node::BIT_OR),
+                Rule::OP_AND => self.ast.new_node(ast::Node::BIT_AND),
+
+                Rule::OP_GE => self.ast.new_node(ast::Node::GE),
+                Rule::OP_GT => self.ast.new_node(ast::Node::GT),
+                Rule::OP_LE => self.ast.new_node(ast::Node::LE),
+                Rule::OP_LT => self.ast.new_node(ast::Node::LT),
+
+                Rule::OP_NE => self.ast.new_node(ast::Node::NE),
+                Rule::OP_EQ => self.ast.new_node(ast::Node::EQ),
+
+                Rule::OP_LOGIC_AND => self.ast.new_node(ast::Node::LOGIC_AND),
+                Rule::OP_LOGIC_OR => self.ast.new_node(ast::Node::LOGIC_OR),
+
+                Rule::OP_LOGIC_LEFT => self.ast.new_node(ast::Node::SHIFT_LEFT),
+                Rule::OP_LOGIC_RIGHT => self.ast.new_node(ast::Node::SHIFT_RIGHT),
+                Rule::OP_ARITHMETIC_LEFT => self.ast.new_node(ast::Node::SHIFT_SLEFT),
+                Rule::OP_ARITHMETIC_RIGHT => self.ast.new_node(ast::Node::SHIFT_SRIGHT),
+
+                Rule::OP_COND => {
+                    let node = self.ast.new_node(ast::Node::COND);
+                    node.append(lh?, &mut self.ast);
+                    let inner_expression = op.into_inner().next();
+                    if inner_expression.is_some() {
+                        node.append(self.process_expression(inner_expression.unwrap())?, &mut self.ast);
+                    }
+                    node.append(rh?, &mut self.ast);
+                    return Ok(node);
+                },
                 _ => unimplemented!()
             };
         node.append(lh?, &mut self.ast);

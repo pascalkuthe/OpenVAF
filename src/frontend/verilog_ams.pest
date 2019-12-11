@@ -47,87 +47,139 @@ MACRO_CONDITION=${(TOK_IFDEF|TOK_IFNDEF)~WHITE_SPACE*~IDENTIFIER~BODY
 WHITESPACE = _{ SPACE_SEPARATOR|NEWLINE }
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
+//Operators
+    OP_NOT=@{"!"}
+    OP_AND = @{"&"}
+    OP_NAND = @{"~&"}
+    OP_NXOR = @{ "~^" |"^~"}
+    OP_XOR = @{ "^"}
+    OP_OR=@{"|"}
+    OP_NOR = @ {"~|"}
+    OP_BIT_NOT=@{"~"}
+
+    OP_PLUS=@{"+"}
+    OP_MINUS=@{"-"}
+    OP_POT = @{"**"}
+    OP_MUL=@{"*"}
+    OP_DIV=@{"/"}
+    OP_MOD=@{"%"}
+
+    OP_LOGIC_LEFT=@{"<<"}
+    OP_LOGIC_RIGHT=@{">>"}
+    OP_ARITHMETIC_LEFT=@{"<<<"}
+    OP_ARITHMETIC_RIGHT=@{">>>"}
+
+    OP_LT = @{"<"}
+    OP_LE = @{"<="}
+    OP_GT = @{">"}
+    OP_GE = @{">="}
+
+    OP_EQ=@{"=="}
+    OP_NE=@{"!="}
+
+    OP_LOGIC_OR=@{"||"}
+    OP_LOGIC_AND=@{"&&"}
+
+    OP_COND={"?"~(EXPRESSION~":")?}
+
+    OP_CASE_EQ=@{"==="}
+    OP_CASE_NE=@{"!=="}
+
+    OP_CONCAT=@{"{}"}
+    OP_REPLICATION=@{"{{}}"}
+
+
 //keywords
-TOK_MODULE = @{"macromodule"|"connectmodule"|"module"}
-TOK_ENDMODULE = @{"endmodule"}
+    TOK_MODULE = @{"macromodule"|"connectmodule"|"module"}
+    TOK_ENDMODULE = @{"endmodule"}
 
-TOK_BRANCH = @{"branhc"}
-TOK_PARAMETER  = @{"parameter"}
-TOK_LOCALPARAM =  @{"localparam" }
-TOK_DEFPARAM = @{"defparam"}
-TOK_ALIASPARAM = @{"aliasparam"}
+    TOK_BRANCH = @{"branhc"}
+    TOK_PARAMETER  = @{"parameter"}
+    TOK_LOCALPARAM =  @{"localparam" }
+    TOK_DEFPARAM = @{"defparam"}
+    TOK_ALIASPARAM = @{"aliasparam"}
 
-TOK_ANALOG = @{"analog"}
-TOK_INITIAL = @{"initial"}
-TOK_BEGIN = @{"begin"}
-TOK_END = @{"end"}
+    TOK_ANALOG = @{"analog"}
+    TOK_INITIAL = @{"initial"}
+    TOK_BEGIN = @{"begin"}
+    TOK_END = @{"end"}
 
-TOK_IF = @{"if"}
-TOK_ELSE = @{"else"}
-TOK_ENDCASE = @{"endcase"}
-TOK_CASE = @{"case"~("z"|"x")?}
-TOK_DEFAULT = @{"endcase"}
+    TOK_IF = @{"if"}
+    TOK_ELSE = @{"else"}
+    TOK_ENDCASE = @{"endcase"}
+    TOK_CASE = @{"case"~("z"|"x")?}
+    TOK_DEFAULT = @{"endcase"}
 
-TOK_FOR = @{"for"}
-TOK_WHILE = @{"while"}
+    TOK_FOR = @{"for"}
+    TOK_WHILE = @{"while"}
 
-TOK_IN= @{"input"}
-TOK_INOUT= @{"inout"}
-TOK_OUT= @{"output"}
+    TOK_IN= @{"input"}
+    TOK_INOUT= @{"inout"}
+    TOK_OUT= @{"output"}
 
-TOK_SIGNED= @{"signed"}
-TOK_VEKTORED = @{"vectored"}
-TOK_SCALARED = @{"scalared"}
-
-
-TOK_TIME= @{"time"}
-TOK_REALTIME= @{"realtime"}
-TOK_INTEGER= @{"integer"}
-TOK_REAL= @{"real"}
-
-TOK_REG=@{"reg"}
-TOK_WREAL= @{"wreal"}
-TOK_SUPPLY0=@{"supply0"}
-TOK_SUPPLY1=@{"supply1"}
-TOK_TRI=@{"tri"}
-TOK_TRIAND=@{"triand"}
-TOK_TRIOR=@{"trior"}
-TOK_TRI0=@{"tri0"}
-TOK_TRI1=@{"tri1"}
-TOK_WIRE=@{"wire"}
-TOK_UWIRE=@{"uwire"}
-TOK_WAND=@{"wand"}
-TOK_WOR=@{"wor"}
-TOK_TRIREG=@{"trireg"}
-TOK_GROUND=@{"ground"}
-TOK_EVENT=@{"event"}
-
-TOK_POTENTIAL = @{"potential"}
-TOK_FLOW = @{"flow"}
+    TOK_SIGNED= @{"signed"}
+    TOK_VEKTORED = @{"vectored"}
+    TOK_SCALARED = @{"scalared"}
 
 
-TOK_TIME_DERIVATIVE = @{"ddt"}
-TOK_PARTIAL_DERIVATIVE = @{"ddx"}
-TOK_TIME_INTEGRAL = @{"idt"}
-TOK_TIME_INTEGRAL_MODULUS = @{"idtmod"}
+    TOK_TIME= @{"time"}
+    TOK_REALTIME= @{"realtime"}
+    TOK_INTEGER= @{"integer"}
+    TOK_REAL= @{"real"}
+
+    TOK_REG=@{"reg"}
+    TOK_WREAL= @{"wreal"}
+    TOK_SUPPLY0=@{"supply0"}
+    TOK_SUPPLY1=@{"supply1"}
+    TOK_TRI=@{"tri"}
+    TOK_TRIAND=@{"triand"}
+    TOK_TRIOR=@{"trior"}
+    TOK_TRI0=@{"tri0"}
+    TOK_TRI1=@{"tri1"}
+    TOK_WIRE=@{"wire"}
+    TOK_UWIRE=@{"uwire"}
+    TOK_WAND=@{"wand"}
+    TOK_WOR=@{"wor"}
+    TOK_TRIREG=@{"trireg"}
+    TOK_GROUND=@{"ground"}
+    TOK_EVENT=@{"event"}
+
+    TOK_POTENTIAL = @{"potential"}
+    TOK_FLOW = @{"flow"}
+
+
+    TOK_TIME_DERIVATIVE = @{"ddt"}
+    TOK_PARTIAL_DERIVATIVE = @{"ddx"}
+    TOK_TIME_INTEGRAL = @{"idt"}
+    TOK_TIME_INTEGRAL_MODULUS = @{"idtmod"}
 
 
 KEYWORD = @{TOK_MODULE|TOK_ENDMODULE|
-TOK_BRANCH|TOK_PARAMETER|TOK_LOCALPARAM|TOK_DEFPARAM|TOK_ALIASPARAM
-|TOK_ANALOG|TOK_INITIAL|TOK_BEGIN|TOK_END|
-TOK_CASE|TOK_IF|TOK_ELSE|TOK_FOR|TOK_WHILE|
-TOK_IN|TOK_OUT|TOK_INOUT|TOK_SIGNED|
-TOK_WREAL|TOK_SUPPLY0|TOK_SUPPLY1|TOK_TRI|TOK_TRIAND|TOK_TRIOR|TOK_TRI0|TOK_TRI1|TOK_WIRE|TOK_UWIRE|TOK_WAND|TOK_WOR|
-TOK_INTEGER|TOK_REG|TOK_REAL|TOK_REALTIME|TOK_TRIREG|TOK_GROUND|
-TOK_POTENTIAL|TOK_FLOW|
-TOK_TIME_DERIVATIVE|TOK_PARTIAL_DERIVATIVE|TOK_TIME_INTEGRAL|TOK_TIME_INTEGRAL_MODULUS
-}
-IDENTIFIER=@{"\\" ~ (NUMBER|LETTER_NUMBER|SYMBOL|PUNCTUATION)+ ~WHITE_SPACE|SIMPLE_IDENTIFIER}
-SIMPLE_IDENTIFIER=@{KEYWORD~(LETTER|NUMBER|"_"|"$")+|!KEYWORD ~ (LETTER|"_") ~ (LETTER|NUMBER|"_"|"$")*}
-HIERACHICAL_ID={IDENTIFIER}
-IDENTIFIER_LIST = {IDENTIFIER~(","~IDENTIFIER)*}
-VARIABEL_IDENTIFIER_LIST = {IDENTIFIER~("="~CONSTANT_EXPRESSION)?~(","~IDENTIFIER~("="~CONSTANT_EXPRESSION)?)*}
+    TOK_BRANCH|TOK_PARAMETER|TOK_LOCALPARAM|TOK_DEFPARAM|TOK_ALIASPARAM
+    |TOK_ANALOG|TOK_INITIAL|TOK_BEGIN|TOK_END|
+    TOK_CASE|TOK_IF|TOK_ELSE|TOK_FOR|TOK_WHILE|
+    TOK_IN|TOK_OUT|TOK_INOUT|TOK_SIGNED|
+    TOK_WREAL|TOK_SUPPLY0|TOK_SUPPLY1|TOK_TRI|TOK_TRIAND|TOK_TRIOR|TOK_TRI0|TOK_TRI1|TOK_WIRE|TOK_UWIRE|TOK_WAND|TOK_WOR|
+    TOK_INTEGER|TOK_REG|TOK_REAL|TOK_REALTIME|TOK_TRIREG|TOK_GROUND|
+    TOK_POTENTIAL|TOK_FLOW|
+    TOK_TIME_DERIVATIVE|TOK_PARTIAL_DERIVATIVE|TOK_TIME_INTEGRAL|TOK_TIME_INTEGRAL_MODULUS}
 
+IDENTIFIER=@{"\\" ~ (NUMBER|LETTER_NUMBER|SYMBOL|PUNCTUATION)+ ~WHITE_SPACE|SIMPLE_IDENTIFIER}
+    SIMPLE_IDENTIFIER=@{KEYWORD~(LETTER|NUMBER|"_"|"$")+|!KEYWORD ~ (LETTER|"_") ~ (LETTER|NUMBER|"_"|"$")*}
+    HIERARCHICAL_ID={IDENTIFIER~(":"~IDENTIFIER)*}
+    IDENTIFIER_LIST = {IDENTIFIER~(","~IDENTIFIER)*}
+    VARIABLE_IDENTIFIER_LIST = {IDENTIFIER~("="~CONSTANT_EXPRESSION)?~(","~IDENTIFIER~("="~CONSTANT_EXPRESSION)?)*}
+
+
+UNSIGNED_NUMBER = @{ASCII_DIGIT~(IGNORE_UNDERSCORE|ASCII_DIGIT)*}
+REAL_NUMBER = ${UNSIGNED_NUMBER~(
+    ("."~UNSIGNED_NUMBER)?~(SCALE_FACTOR|EXP~SIGN?~UNSIGNED_NUMBER)
+    |"."~UNSIGNED_NUMBER)}
+
+    EXP = @{"e"|"E"}
+    SCALE_FACTOR = @{"T"|"G"|"M"|"K"|"k"|"m"|"u"|"p"|"f"|"a"}
+    SIGN = @{OP_PLUS|OP_MINUS}
+    IGNORE_UNDERSCORE = _{"_"}
 
 
 ATTRIBUTE = {"(*" ~ ATTRIBUTE_SPEC ~ (","~ATTRIBUTE_SPEC)*~"*)"}
@@ -159,7 +211,7 @@ BEHAVIORAL_STMT = {
         ~ BEHAVIORAL_STMT+ ~ TOK_END
     }
     //TODO DIMESION/ARRAYINIT
-    //TODO REMOVE WHITESPACE AND ACCOUNT FOR GREED
+    //Type checking will be done during schematic
     VARIABEL_DECLERATION = {
         (NET_TYPE|TOK_TRIREG|TOK_WREAL|TOK_GROUND|TOK_REG)~(
             IDENTIFIER~((CHARGE_STRENGTH|DRIVE_STRENGTH|TOK_SIGNED)+|&IDENTIFIER)
@@ -186,7 +238,7 @@ BEHAVIORAL_STMT = {
             (DELAY_CONTROL | EVENT_CONTROL) ~ BEHAVIORAL_STMT
         }
             EVENT_CONTROL = {
-                "@"~(HIERACHICAL_ID|"*"|"("~("*"|EVENT_EXPRESSION)~")")
+                "@"~(HIERARCHICAL_ID|"*"|"("~("*"|EVENT_EXPRESSION)~")")
             }
     //analog
     ANALOG = { TOK_ANALOG ~ (TOK_INITIAL ~ BEHAVIORAL_STMT|BEHAVIORAL_STMT)}
@@ -198,10 +250,10 @@ BEHAVIORAL_STMT = {
         NATURE_ACCESS ~ BRANCH_IDENTIFIER
         }
         BRANCH_IDENTIFIER = {
-            "("~ HIERACHICAL_ID ~ SINGEL_RANGE? ~ (","~ HIERACHICAL_ID ~ SINGEL_RANGE?)?~")"
+            "("~ HIERARCHICAL_ID ~ SINGEL_RANGE? ~ (","~ HIERARCHICAL_ID ~ SINGEL_RANGE?)?~")"
         }
         PORT_BRANCH_IDENTIFIER = {
-            "(<" ~ HIERACHICAL_ID ~ SINGEL_RANGE? ~">)"
+            "(<" ~ HIERARCHICAL_ID ~ SINGEL_RANGE? ~">)"
         }
         NATURE_ACCESS = {
             TOK_POTENTIAL|TOK_FLOW|IDENTIFIER
@@ -226,8 +278,6 @@ BEHAVIORAL_STMT = {
 
 
 
-
-
     //digital
     DELAY_CONTROL = {"#"~(
         (REAL_NUMBER|UNSIGNED_NUMBER|IDENTIFIER)
@@ -237,9 +287,6 @@ BEHAVIORAL_STMT = {
 
 
 
-
-
-//TODO check for unallowed decleration, allows wrong order.. enfroce?
 PORT_DECLARATION =
     {ATTRIBUTE* ~ (TOK_INOUT|TOK_IN|TOK_OUT)
         ~(IDENTIFIER ~ (NET_TYPE|TOK_WREAL|TOK_SIGNED|RANGE_DECL)+ |IDENTIFIER ~ &IDENTIFIER|(NET_TYPE|TOK_WREAL|TOK_SIGNED|RANGE_DECL)*)
@@ -247,7 +294,7 @@ PORT_DECLARATION =
     | ATTRIBUTE* ~ TOK_OUT
         ~((IDENTIFIER)?~ TOK_REG ~ TOK_SIGNED? ~  RANGE_DECL?
         |TOK_INTEGER~TOK_TIME)
-        ~ VARIABEL_IDENTIFIER_LIST}
+        ~ VARIABLE_IDENTIFIER_LIST}
     PORT_DECLARATION_LIST = {PORT_DECLARATION~(","~PORT_DECLARATION)*
 }
 
@@ -284,41 +331,43 @@ INTEGER_DECLERATION = {"TODO"}
 REAL_DECLERATION = {"TODO"}
 
 CONSTANT_EXPRESSION = {EXPRESSION}
-EXPRESSION = {(
-// THESE ARE TREATED AS PRIMARIES DURING OPERATOR PRECEDENCE PARSING
-("("~EXPRESSION~")"|PRIMARY|UNARY_OPERATOR)~(
-    /*
-    BINARY OPERATORS
-    OPERATOR PRECEDENCE IS PARSED DURING AST GENERATION
-    PRECEDENCE HERE ENSURES THAT OPERATORS ARE FULLY PARSED: for example ~^instead of just ~
-    */
-    OP_CASE_EQ|OP_CASE_NE|
-    OP_EQ|OP_NE|
-    OP_LE|OP_LT|OP_GE|OP_GT|
-    OP_LOGIC_AND|OP_LOGIC_OR|
 
-    OP_PLUS|OP_MINUS|
-    OP_POT|OP_MUL|OP_DIV|OP_MOD|
+EXPRESSION = {
+    (   // THESE ARE TREATED AS PRIMARIES DURING OPERATOR PRECEDENCE PARSING
+        ("("~EXPRESSION~")"|PRIMARY|UNARY_OPERATOR)
+        ~(  /*
+            BINARY OPERATORS
+            OPERATOR PRECEDENCE IS PARSED DURING AST GENERATION
+            PRECEDENCE HERE ENSURES THAT OPERATORS ARE FULLY PARSED: for example ~^instead of just ~
+            */
+            OP_CASE_EQ|OP_CASE_NE|
+            OP_EQ|OP_NE|
+            OP_LE|OP_LT|OP_GE|OP_GT|
+            OP_LOGIC_AND|OP_LOGIC_OR|
 
-    OP_ARITHMETIC_RIGHT|OP_ARITHMETIC_LEFT|
-    OP_LOGIC_LEFT|OP_LOGIC_RIGHT|
+            OP_PLUS|OP_MINUS|
+            OP_POT|OP_MUL|OP_DIV|OP_MOD|
 
-    OP_NAND|OP_NXOR|OP_NOR|
-    OP_OR|OP_AND|OP_NEG|OP_XOR|
+            OP_ARITHMETIC_RIGHT|OP_ARITHMETIC_LEFT|
+            OP_LOGIC_LEFT|OP_LOGIC_RIGHT|
 
-    OP_CONCAT|OP_REPLICATION)?
-)+
+            OP_NAND|OP_NXOR|OP_NOR|
+            OP_OR|OP_AND|OP_BIT_NOT|OP_XOR|
+
+            OP_COND|
+
+            OP_CONCAT|OP_REPLICATION)
+        )*~("("~EXPRESSION~")"|PRIMARY|UNARY_OPERATOR)
 }
-UNARY_OPERATOR = {
-(
-OP_NAND|OP_NXOR|OP_NOR|
-OP_OR|OP_AND|OP_NEG|OP_XOR|
-OP_NOT|
-OP_PLUS|OP_MINUS
-)
-~(PRIMARY|"("~EXPRESSION~")")}
-    PRIMARY = {UNSIGNED_NUMBER|REAL_NUMBER|IDENTIFIER}
-    BINARY_OP = {"*"|"/"|"+"|"-"}
+
+UNARY_OPERATOR ={(OP_NAND|OP_NXOR|OP_NOR|
+                    OP_OR|OP_AND|OP_XOR|
+                    OP_BIT_NOT|OP_NOT|
+                    OP_PLUS|OP_MINUS)
+                ~(PRIMARY|"("~EXPRESSION~")")}
+
+    PRIMARY = {REAL_NUMBER|UNSIGNED_NUMBER|HIERARCHICAL_ID}
+
 MINTYPEMAX_EXPRESSION = {EXPRESSION|EXPRESSION~":"~EXPRESSION~":"~EXPRESSION}
 EVENT_EXPRESSION = {
 EXPRESSION| "TODO" ~ EXPRESSION
@@ -327,54 +376,5 @@ EXPRESSION| "TODO" ~ EXPRESSION
 
 
 
-EXP = @{"e"|"E"}
-SCALE_FACTOR = @{"T"|"G"|"M"|"K"|"k"|"m"|"u"|"p"|"f"|"a"}
-SIGN = @{"+"|"-"}
-IGNORE_UNDERSCORE = _{"_"}
-UNSIGNED_NUMBER = @{ASCII_DIGIT~(IGNORE_UNDERSCORE|ASCII_DIGIT)*}
-REAL_NUMBER = @{UNSIGNED_NUMBER~(
-"."~UNSIGNED_NUMBER
-|("."~UNSIGNED_NUMBER)?~(SCALE_FACTOR|EXP~SIGN?~UNSIGNED_NUMBER)
-)}
 
-OP_NOT=@{"!"}
 
-OP_AND = @{"&"}
-OP_NAND = @{"~&"}
-OP_NXOR = @{ "~^" |"^~"}
-OP_XOR = @{ "^"}
-OP_OR=@{"|"}
-OP_NOR = @ {"~|"}
-OP_NEG=@{"~"}
-
-OP_PLUS=@{"+"}
-OP_MINUS=@{"-"}
-OP_POT = @{"**"}
-OP_MUL=@{"*"}
-OP_DIV=@{"/"}
-OP_MOD=@{"%"}
-
-OP_LOGIC_LEFT=@{"<<"}
-OP_LOGIC_RIGHT=@{">>"}
-OP_ARITHMETIC_LEFT=@{"<<<"}
-OP_ARITHMETIC_RIGHT=@{">>>"}
-
-OP_LT = @{"<"}
-OP_LE = @{"<="}
-OP_GT = @{">"}
-OP_GE = @{">="}
-
-OP_EQ=@{"=="}
-OP_NE=@{"!="}
-
-OP_LOGIC_OR=@{"||"}
-OP_LOGIC_AND=@{"&&"}
-
-OP_IF=@{"?"}
-OP_ELSE=@{":"}
-
-OP_CASE_EQ=@{"==="}
-OP_CASE_NE=@{"!=="}
-
-OP_CONCAT=@{"{}"}
-OP_REPLICATION=@{"{{}}"}
