@@ -2,4 +2,4 @@
 
 A Verilog_AMS compiler written in rust (the goal is to replace ADMS at some point)
 
-Note this project is still extremly early in development and primarily developed for use in a different University Project at the moment
+Note this project is still in extremly early development and is also primarily being developed for use in a different university-project
