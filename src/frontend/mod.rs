@@ -14,19 +14,23 @@ use std::fs;
 use std::path::Path;
 
 use indextree::{Arena, NodeId};
+use log::{debug, error, info, warn};
 use pest;
 use pest::error::ErrorVariant;
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
 use pest::Parser;
 
-use crate::frontend::parser::{ParseResult, ParseTreeToAstFolder, Preprocessor};
+use crate::frontend::parser::ParseTreeToAstFolder;
+use crate::frontend::preprocessor::Preprocessor;
 
 pub mod ast;
+#[macro_use]
 mod parser;
+mod preprocessor;
 
 
-pub fn run_frontend(file_path: &Path) -> ParseResult<(Arena<ast::Node>, NodeId)> {
+pub fn run_frontend(file_path: &Path) -> Result<(Arena<ast::Node>, NodeId), ()> {
     let file_contents = fs::read_to_string(file_path).expect("File not found!");
     let mut preprocessor = Preprocessor::new();
     preprocessor.run_preprocessor(&file_contents)?;
