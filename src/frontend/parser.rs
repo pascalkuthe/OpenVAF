@@ -284,7 +284,7 @@ impl<'lt> ParseTreeToAstFolder {
             i = i + 1;
         }
         let is_port_branch = description.peek().unwrap().as_rule() == Rule::PORT_BRANCH_IDENTIFIER;
-        let mut identifier_list = description.next().unwrap().into_inner();
+        let identifier_list = description.next().unwrap().into_inner();
         for ident in identifier_list {
             let name = identifier_string(ident);
             let ast_node = self.ast.new_node(ast::Node::BRANCH_DECL(name, is_port_branch));
@@ -485,7 +485,7 @@ impl<'lt> ParseTreeToAstFolder {
 
     fn process_variable_assignment(&mut self, parse_tree_node: ParseTreeNode, parent: NodeId, attributes: Vec<NodeId>) -> Result {
         let mut description = parse_tree_node.into_inner();
-        let mut lvalues = description.next().unwrap().into_inner();
+        let lvalues = description.next().unwrap().into_inner();
         let value = self.process_expression(description.next().unwrap())?;
         for ident in lvalues {
             //TODO Range
@@ -577,7 +577,7 @@ impl<'lt> ParseTreeToAstFolder {
         let operator_evaluation = |lh: Result<NodeId>, op: Pair<Rule>, rh: Result<NodeId>| -> Result<NodeId>{
             shared_self.borrow_mut().process_operator(lh, op, rh)
         };
-        let mut operator_precedence: PrecClimber<Rule> = PrecClimber::new(vec![
+        let operator_precedence: PrecClimber<Rule> = PrecClimber::new(vec![
             //OTHER
             Operator::new(Rule::OP_CONCAT, Assoc::Left)
                 | Operator::new(Rule::OP_REPLICATION, Assoc::Left),

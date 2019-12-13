@@ -16,7 +16,6 @@ mod frontend;
 
 fn main() {
     setup_logger();
-    let args: Vec<String> = env::args().collect();
     let home = env::var_os("HOME").unwrap();
     let mut path = PathBuf::from(home);
     path.push(Path::new("bjtp.va"));

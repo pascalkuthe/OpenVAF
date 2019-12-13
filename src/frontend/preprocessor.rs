@@ -82,7 +82,7 @@ impl<'lt> Preprocessor<'lt> {
     }
 
     pub fn run_preprocessor(&mut self, source_code: &'lt str) -> std::result::Result<(), ()> {
-        let mut preprocessor_parse_result
+        let preprocessor_parse_result
             = PestParser::parse(Rule::PREPROCESSOR, source_code);
         match preprocessor_parse_result {
             Err(message) => {
