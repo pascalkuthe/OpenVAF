@@ -575,7 +575,7 @@ impl<'lt> ParseTreeToAstFolder {
             }
         };
         let operator_evaluation = |lh: Result<NodeId>, op: Pair<Rule>, rh: Result<NodeId>| -> Result<NodeId>{
-            shared_self.borrow_mut().process_operator(lh, op, rh)
+            shared_self.borrow_mut().process_operator(lh?, op, rh?)
         };
         let operator_precedence: PrecClimber<Rule> = PrecClimber::new(vec![
             //OTHER
@@ -625,7 +625,7 @@ impl<'lt> ParseTreeToAstFolder {
         res
     }
 
-    fn process_operator(&mut self, lh: Result<NodeId>, op: Pair<Rule>, rh: Result<NodeId>) -> Result<NodeId> {
+    fn process_operator(&mut self, lh: NodeId, op: Pair<Rule>, rh: NodeId) -> Result<NodeId> {
         let node =
             match op.as_rule() {
                 Rule::OP_PLUS => self.ast.new_node(ast::Node::ADD),
@@ -657,18 +657,18 @@ impl<'lt> ParseTreeToAstFolder {
 
                 Rule::OP_COND => {
                     let node = self.ast.new_node(ast::Node::COND);
-                    node.append(lh?, &mut self.ast);
+                    node.append(lh, &mut self.ast);
                     let inner_expression = op.into_inner().next();
                     if inner_expression.is_some() {
                         node.append(self.process_expression(inner_expression.unwrap())?, &mut self.ast);
                     }
-                    node.append(rh?, &mut self.ast);
+                    node.append(rh, &mut self.ast);
                     return Ok(node);
                 },
                 _ => unexpected_rule!(op)
             };
-        node.append(lh?, &mut self.ast);
-        node.append(rh?, &mut self.ast);
+        node.append(lh, &mut self.ast);
+        node.append(rh, &mut self.ast);
         Ok(node)
     }
 
