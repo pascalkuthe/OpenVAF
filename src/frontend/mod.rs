@@ -8,8 +8,6 @@
  * *******************************************************************************************
  */
 
-use std::collections::HashMap;
-use std::fmt::Error;
 use std::fs;
 use std::path::Path;
 
@@ -35,7 +33,6 @@ pub fn run_frontend(file_path: &Path) -> Result<(Arena<ast::Node>, NodeId), ()> 
     let mut preprocessor = Preprocessor::new();
     preprocessor.run_preprocessor(&file_contents)?;
     let preprocessed_source = preprocessor.finalize();
-    println!("{}", preprocessed_source);
     let parse_tree = parser::create_parse_tree(&preprocessed_source)?;
     let parse_tree_ast_fold = ParseTreeToAstFolder::fold(parse_tree)?;
     Ok(parse_tree_ast_fold.finish())

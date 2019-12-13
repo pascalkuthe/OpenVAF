@@ -29,6 +29,39 @@ use crate::frontend::ast::Node_Types::VERILOG_TYPE;
 use crate::frontend::ast::Node_Types::VERILOG_TYPE::UNDECLARED;
 use crate::pest::Parser;
 
+macro_rules! for_rules {
+($i:ident in $pairs:ident where $rule:pat $(| $optional_rule:pat),* => $body:block) => {
+    loop{
+        match $pairs.peek(){
+            Some($i) => match $i.as_rule(){
+                $rule $(| $optional_rule),* => {$pairs.next();$body},
+                _ => break,
+            }
+            None =>break,
+        }
+    }}
+}
+macro_rules! if_rule {
+(let Some($i:ident) = $pairs:ident.next() where $rule:pat $(| $optional_rule:pat),* => $body:block) => {
+    if let Some($i) = $pairs.peek(){
+        match $i.as_rule(){
+                $rule $(| $optional_rule),* => {$pairs.next();$body},
+                _ => (),
+            }
+    }}
+}
+macro_rules! for_other_rules {
+($i:ident in $pairs:ident where $rule:pat $(| $optional_rule:pat),* => $body:block) => {
+    loop{
+        match $pairs.peek(){
+            Some($i) => match $i.as_rule(){
+                $rule $(| $optional_rule),* => break,
+                _ => {$pairs.next();$body;},
+            }
+            None => break,
+        }
+    }};
+}
 //Create Pest Parser from grammar
 #[derive(Parser)]
 #[grammar = "frontend/verilog_ams.pest"]
@@ -71,6 +104,12 @@ fn error<T>(error_message: &str, containing_rule: pest::Span)
             -> Result<T> {
     Err(pest::error::Error::new_from_span(
         ErrorVariant::CustomError { message: error_message.to_string() }, containing_rule))
+}
+
+fn error_message(error_message: &str, containing_rule: pest::Span)
+                 -> pest::error::Error<Rule> {
+    pest::error::Error::new_from_span(
+        ErrorVariant::CustomError { message: error_message.to_string() }, containing_rule)
 }
 
 
@@ -144,8 +183,8 @@ impl<'lt> ParseTreeToAstFolder {
 
         let mut description = parse_tree_node.into_inner();
         let attributes = self.process_attributes(&mut description)?;
-        if description.peek().is_some() {
-            self.process_parse_tree_node(description.next().unwrap(), parent_ast_node, attributes)?;
+        if let Some(node) = description.next() {
+            self.process_parse_tree_node(node, parent_ast_node, attributes)?;
         }
         Ok(())
     }
@@ -233,36 +272,34 @@ impl<'lt> ParseTreeToAstFolder {
             }
             _ => unexpected_rule!(inout_declaration),
         }
-
-        let mut range = None;
-        while description.peek().is_some() && description.peek().unwrap().as_rule() != Rule::IDENTIFIER_LIST && description.peek().unwrap().as_rule() != Rule::VARIABLE_IDENTIFIER_LIST {
+        let mut optional_range = None;
+        for_other_rules!(port_type_property in description where Rule::IDENTIFIER_LIST|Rule::VARIABLE_IDENTIFIER_LIST => {
             let port_type_property = description.next().unwrap();
             match port_type_property.as_rule() {
                 Rule::IDENTIFIER => port_info.discipline = identifier_string(port_type_property),
                 Rule::TOK_SIGNED => port_info.is_signed = true,
                 Rule::RANGE_DECL => {
-                    if range.is_some() {
+                    if optional_range.is_some() {
                         return error("Range cant be declared twice", parse_tree_node.as_span());
                     }
-                    range = Some(self.process_range(port_type_property)?)
+                    optional_range = Some(self.process_range(port_type_property)?)
                 },
                 _ => port_info.verilog_type = Self::process_type(port_type_property),
             }
-        }
+        });
 
         let mut identifier_list = description.next().unwrap().into_inner();
-        while identifier_list.peek().is_some() {
-            let identifier = identifier_string(identifier_list.next().unwrap());
-            let current_node = self.ast.new_node(ast::Node::MODPORT(identifier, port_info.clone()));
+        while let Some(identifier_node) = identifier_list.next() {
+            let current_node = self.ast.new_node(ast::Node::MODPORT(identifier_string(identifier_node), port_info.clone()));
             self.append_attributes(current_node, &attributes);
-            if range.is_some() {
-                current_node.append(range.unwrap(), &mut self.ast);
+            if let Some(range) = optional_range {
+                current_node.append(range, &mut self.ast);
             }
-            if identifier_list.peek().is_some() && identifier_list.peek().unwrap().as_rule() == Rule::CONSTANT_EXPRESSION {
+            if_rule!(let Some(expr) = description.next() where Rule::CONSTANT_EXPRESSION => {
                 current_node.append(
-                    self.process_constant_expression(identifier_list.next().unwrap())?,
+                    self.process_constant_expression(expr)?,
                     &mut self.ast);
-            }
+            });
             parent_ast_node.append(current_node, &mut self.ast);
         }
         Ok(())
@@ -272,16 +309,21 @@ impl<'lt> ParseTreeToAstFolder {
         let mut description = parse_tree_node.into_inner();
         description.next();
         let mut wire_reference_description = description.next().unwrap().into_inner();
-        //TODO twice if macro instead if this nonsense
         let mut references = [None, None];
-        let mut i = 0;
-        while wire_reference_description.peek().is_some() {
-            let reference_node = self.process_hierarchical_id(wire_reference_description.next().unwrap())?;
-            if wire_reference_description.peek().is_some() && wire_reference_description.peek().unwrap().as_rule() == Rule::SINGEL_RANGE {
-                self.process_single_range(wire_reference_description.next().unwrap(), reference_node)?;
-            }
-            references[i] = Some(reference_node);
-            i = i + 1;
+        //TODO n or m times procedural if macro instead if this nonsense
+        if let Some(h_identifier) = wire_reference_description.next() {
+            let reference_node = self.process_hierarchical_id(h_identifier)?;
+            if_rule!(let Some(range) =  wire_reference_description.next() where Rule::SINGEL_RANGE => {
+                 self.process_single_range(wire_reference_description.next().unwrap(), reference_node)?;
+            });
+            references[0] = Some(reference_node);
+        }
+        if let Some(h_identifier) = wire_reference_description.next() {
+            let reference_node = self.process_hierarchical_id(h_identifier)?;
+            if_rule!(let Some(range) =  wire_reference_description.next() where Rule::SINGEL_RANGE => {
+                 self.process_single_range(wire_reference_description.next().unwrap(), reference_node)?;
+            });
+            references[1] = Some(reference_node);
         }
         let is_port_branch = description.peek().unwrap().as_rule() == Rule::PORT_BRANCH_IDENTIFIER;
         let identifier_list = description.next().unwrap().into_inner();
@@ -289,8 +331,8 @@ impl<'lt> ParseTreeToAstFolder {
             let name = identifier_string(ident);
             let ast_node = self.ast.new_node(ast::Node::BRANCH_DECL(name, is_port_branch));
             for i in references.iter() {
-                if i.is_some() {
-                    ast_node.append(i.unwrap(), &mut self.ast);
+                if let Some(reference) = i {
+                    ast_node.append(*reference, &mut self.ast);
                 }
             }
             parent_ast_node.append(ast_node, &mut self.ast);
@@ -303,15 +345,15 @@ impl<'lt> ParseTreeToAstFolder {
         let local = description.next().unwrap().as_rule() == Rule::TOK_LOCALPARAM;
         let mut parameter_type = ast::Node_Types::PARAMETER { verilog_type: UNDECLARED, signed: false };
         let mut type_info_node = description.next().unwrap();
-        let mut range = None;
+        let mut optional_range = None;
         while type_info_node.as_rule() != Rule::PARAMETER_ASSIGNMET {
             match type_info_node.as_rule() {
                 Rule::TOK_SIGNED => parameter_type.signed = true,
                 Rule::RANGE => {
-                    if range.is_some() {
+                    if optional_range.is_some() {
                         return error("Range may only be declared once", parse_tree_node.as_span())
                     }
-                    range = Some(self.process_range(type_info_node)?)
+                    optional_range = Some(self.process_range(type_info_node)?)
                 },
                 _ => parameter_type.verilog_type = Self::process_type(type_info_node)
             }
@@ -323,13 +365,13 @@ impl<'lt> ParseTreeToAstFolder {
             let node = self.ast.new_node(ast::Node::PARAMETER(name, local, parameter_type.clone()));
             self.append_attributes(node, &attributes);
             parent_ast_node.append(node, &mut self.ast);
-            if range.is_some() {
-                node.append(range.unwrap(), &mut self.ast);
+            if let Some(range) = optional_range {
+                node.append(range, &mut self.ast);
             }
-            let value = assignment_description.peek();
+            let optional_value = assignment_description.peek();
             //TODO weird expression, value range
-            if value.is_some() {
-                node.append(self.process_expression(value.unwrap())?, &mut self.ast)
+            if let Some(value) = optional_value {
+                node.append(self.process_expression(value)?, &mut self.ast)
             }
         }
         Ok(())
@@ -371,12 +413,11 @@ impl<'lt> ParseTreeToAstFolder {
             discipline: String::from(""),
             is_signed: false,
         };
-        let mut range = None;
+        let mut optional_range = None;
         if description.peek().unwrap().as_rule() != Rule::IDENTIFIER {
             variable_info.verilog_type = Self::process_type(description.next().unwrap())
         };
-        while description.peek().is_some() && description.peek().unwrap().as_rule() != Rule::VARIABLE_IDENTIFIER_LIST && description.peek().unwrap().as_rule() != Rule::IDENTIFIER_LIST {
-            let variable_type_property = description.next().unwrap();
+        for_other_rules!(variable_type_property in description where Rule::VARIABLE_IDENTIFIER_LIST|Rule::IDENTIFIER_LIST=>{
             match variable_type_property.as_rule() {
                 Rule::IDENTIFIER => variable_info.discipline = identifier_string(variable_type_property),
                 Rule::TOK_SIGNED => {
@@ -387,31 +428,31 @@ impl<'lt> ParseTreeToAstFolder {
                     variable_info.is_signed = true
                 },
                 Rule::RANGE_DECL => {
-                    if range.is_some() {
+                    if optional_range.is_some() {
                         //TODO disallow for some type
                         return error("Range cant be declared twice", variable_type_property.as_span());
                     }
-                    range = Some(self.process_range(variable_type_property)?)
+                    optional_range = Some(self.process_range(variable_type_property)?)
                 },
                 Rule::DRIVE_STRENGTH => unimplemented!("Drive Strength"),
                 Rule::CHARGE_STRENGTH => unimplemented!("CHARGE Strength"),
                 _ => unexpected_rule!(variable_type_property),
             }
-        }
+        });
 
         let mut identifier_list = description.next().unwrap().into_inner();
-        while identifier_list.peek().is_some() {
-            let identifier = identifier_string(identifier_list.next().unwrap());
+        while let Some(identifier_node) = identifier_list.next() {
+            let identifier = identifier_string(identifier_node);
             let current_node = self.ast.new_node(ast::Node::WIRE(identifier, variable_info.clone()));
             self.append_attributes(current_node, &attributes);
-            if range.is_some() {
-                current_node.append(range.unwrap(), &mut self.ast);
+            if let Some(range) = optional_range {
+                current_node.append(range, &mut self.ast);
             }
-            if identifier_list.peek().is_some() && identifier_list.peek().unwrap().as_rule() == Rule::CONSTANT_EXPRESSION {
+            if_rule!(let Some(expr) = identifier_list.next() where Rule::CONSTANT_EXPRESSION => {
                 current_node.append(
-                    self.process_constant_expression(identifier_list.next().unwrap())?,
+                    self.process_constant_expression(expr)?,
                     &mut self.ast);
-            }
+            });
             parent_ast_node.append(current_node, &mut self.ast);
         }
         Ok(())
@@ -428,9 +469,8 @@ impl<'lt> ParseTreeToAstFolder {
         let expr = self.process_expression(description.next().unwrap())?;
         ast_node.append(expr, &mut self.ast);
         self.process_parse_tree_node_with_attributes(description.next().unwrap(), ast_node)?;
-        while description.peek().is_some() {
-            let current_parse_tree_node = description.next().unwrap();
-            if current_parse_tree_node.as_rule() == Rule::TOK_ELSE {
+        while let Some(next_stmt) = description.next() {
+            if next_stmt.as_rule() == Rule::TOK_ELSE {
                 match description.peek().unwrap().as_rule() {
                     Rule::TOK_IF => {
                         let expr = self.process_expression(description.next().unwrap())?;
@@ -658,9 +698,8 @@ impl<'lt> ParseTreeToAstFolder {
                 Rule::OP_COND => {
                     let node = self.ast.new_node(ast::Node::COND);
                     node.append(lh, &mut self.ast);
-                    let inner_expression = op.into_inner().next();
-                    if inner_expression.is_some() {
-                        node.append(self.process_expression(inner_expression.unwrap())?, &mut self.ast);
+                    if let Some(inner_expression) = op.into_inner().next() {
+                        node.append(self.process_expression(inner_expression)?, &mut self.ast);
                     }
                     node.append(rh, &mut self.ast);
                     return Ok(node);
@@ -729,12 +768,12 @@ impl<'lt> ParseTreeToAstFolder {
         let port_branch = description.peek().unwrap().as_rule() == Rule::PORT_BRANCH_IDENTIFIER;
         let ast_node = self.ast.new_node(ast::Node::BRANCH_REF(nature, port_branch));
         description = description.next().unwrap().into_inner();
-        while description.peek().is_some() {
-            let reference_node = self.process_hierarchical_id(description.next().unwrap())?;
+        while let Some(reference_name) = description.next() {
+            let reference_node = self.process_hierarchical_id(reference_name)?;
             ast_node.append(reference_node, &mut self.ast);
-            if description.peek().is_some() && description.peek().unwrap().as_rule() == Rule::SINGEL_RANGE {
-                self.process_single_range(description.next().unwrap(), reference_node)?
-            }
+            if_rule!(let Some(range) = description.next() where Rule::SINGEL_RANGE => {
+                self.process_single_range(range, reference_node)?
+            });
         }
         Ok(ast_node)
     }
@@ -765,18 +804,16 @@ impl<'lt> ParseTreeToAstFolder {
             number_as_string = format!("{}.{}", number_as_string, description.next().unwrap().as_str());
         }
         let mut real_value: f64 = number_as_string.parse::<f64>().unwrap();
-        if description.peek().is_some() {
+        if let Some(first_factor_node) = description.next() {
             let scientific_factor =
-                if description.peek().unwrap().as_rule() == Rule::EXP {
-                    description.next();
+                if first_factor_node.as_rule() == Rule::EXP {
                     let mut scientific_factor_str = as_string!(description.next().unwrap());
-                    if description.peek().is_some() {
-                        scientific_factor_str.push_str(&as_string!(description.next().unwrap()));
+                    if let Some(number) = description.next() {
+                        scientific_factor_str.push_str(&as_string!(number));
                     }
                     scientific_factor_str.parse::<i32>().unwrap()
                 } else {
-                    let scale_factor = description.next().unwrap();
-                    match scale_factor.as_str() {
+                    match first_factor_node.as_str() {
                         "T" => 12,
                         "G" => 9,
                         "M" => 6,
@@ -786,7 +823,7 @@ impl<'lt> ParseTreeToAstFolder {
                         "p" => -9,
                         "f" => -12,
                         "a" => -15,
-                        _ => unexpected_rule!(scale_factor)
+                        _ => unexpected_rule!(first_factor_node)
                     }
                 };
             real_value = real_value * (10f64).powi(scientific_factor);
@@ -804,24 +841,23 @@ impl<'lt> ParseTreeToAstFolder {
     fn process_attributes(&mut self, parse_tree_nodes: &mut Pairs<Rule>) -> Result<Vec<NodeId>> {
         let node_iterator = parse_tree_nodes.into_iter();
         let mut attributes: HashMap<String, Option<ParseTreeNode>> = HashMap::new();
-        let mut attribute_list;
-        while node_iterator.peek().is_some() && node_iterator.peek().unwrap().as_rule() == Rule::ATTRIBUTE {
-            attribute_list = node_iterator.next().unwrap();
+        let mut attribute_list: Pairs<Rule>;
+        for_rules!(attribute_list in node_iterator where Rule::ATTRIBUTE => {
             for attribute in attribute_list.into_inner() {
-                let mut description = attribute.into_inner();
+                let mut description = attribute.clone().into_inner();
                 let identifier = as_string!(description.next().unwrap());
                 //Overwrite if attribute already declared
-                if attributes.insert(identifier, description.next()).is_some() {
-                    //TODO warn when attribute is overwritten
+                if let Some (overwritten) = attributes.insert(identifier.clone(), description.next()) {
+                    warn!("{}",error_message(&format!("Attribute {} is declared twice",identifier),attribute.as_span()));
                 }
             }
-        }
+        });
         let res = Vec::new();
         for attribute in attributes {
             let node = self.ast.new_node(ast::Node::ATTRIBUTE(attribute.0));
             let value =
-                if attribute.1.is_some() {
-                    self.process_constant_expression(attribute.1.unwrap())?
+                if let Some(expr) = attribute.1 {
+                    self.process_constant_expression(expr)?
                 } else {
                     self.ast.new_node(ast::Node::INTEGER_VALUE(1))
                 };

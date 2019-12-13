@@ -129,11 +129,11 @@ impl<'lt> Preprocessor<'lt> {
         description.next();
         let name = identifier_string(description.next().unwrap());
         let mut args: Vec<String> = Vec::new();
-        if !description.peek().is_none() && description.peek().unwrap().as_rule() == Rule::IDENTIFIER_LIST {
-            for identifier in description.next().unwrap().into_inner() {
+        if_rule!(let Some(identifier_list) = description.next() where Rule::IDENTIFIER_LIST => {
+            for identifier in identifier_list.into_inner() {
                 args.push(identifier_string(identifier));
             }
-        }
+        });
         let text = description.next();
         debug!("Macro {} with args {:?} declared with the following body", name, args);
         trace! {"{:?}", text}
@@ -268,8 +268,7 @@ impl<'lt> Preprocessor<'lt> {
                 description.next();
             }
         }
-        while description.peek().is_some() {
-            let current = description.next().unwrap();
+        while let Some(current) = description.next() {
             match current.as_rule() {
                 Rule::TOK_ELSIF => {
                     let identifier = identifier_string(description.next().unwrap());
