@@ -4,7 +4,6 @@ extern crate pest_derive;
 
 use std::env;
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use fern::colors::{Color, ColoredLevelConfig};
@@ -31,7 +30,7 @@ fn pprint_tree<T: Debug>(top_node: NodeId, arena: &Arena<T>) {
     fn pprint_tree<T: Debug>(node: NodeId, arena: &Arena<T>, prefix: String, last: bool) {
         let prefix_current = if last { "`- " } else { "|- " };
 
-        println!("{}{}{:?}", prefix, prefix_current, arena.get(node).unwrap().get());
+        info!("{}{}{:?}", prefix, prefix_current, arena.get(node).unwrap().get());
 
         let prefix_child = if last { "   " } else { "|  " };
         let prefix = prefix + prefix_child;

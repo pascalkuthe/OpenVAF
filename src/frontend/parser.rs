@@ -51,7 +51,7 @@ macro_rules! if_rule {
     }}
 }
 macro_rules! for_other_rules {
-($i:ident in $pairs:ident where $rule:pat $(| $optional_rule:pat),* => $body:block) => {
+($i:ident in $pairs:ident where !$rule:pat $(| $optional_rule:pat),* => $body:block) => {
     loop{
         match $pairs.peek(){
             Some($i) => match $i.as_rule(){
@@ -273,7 +273,7 @@ impl<'lt> ParseTreeToAstFolder {
             _ => unexpected_rule!(inout_declaration),
         }
         let mut optional_range = None;
-        for_other_rules!(port_type_property in description where Rule::IDENTIFIER_LIST|Rule::VARIABLE_IDENTIFIER_LIST => {
+        for_other_rules!(port_type_property in description where !Rule::IDENTIFIER_LIST|Rule::VARIABLE_IDENTIFIER_LIST => {
             let port_type_property = description.next().unwrap();
             match port_type_property.as_rule() {
                 Rule::IDENTIFIER => port_info.discipline = identifier_string(port_type_property),
@@ -417,7 +417,7 @@ impl<'lt> ParseTreeToAstFolder {
         if description.peek().unwrap().as_rule() != Rule::IDENTIFIER {
             variable_info.verilog_type = Self::process_type(description.next().unwrap())
         };
-        for_other_rules!(variable_type_property in description where Rule::VARIABLE_IDENTIFIER_LIST|Rule::IDENTIFIER_LIST=>{
+        for_other_rules!(variable_type_property in description where !Rule::VARIABLE_IDENTIFIER_LIST|Rule::IDENTIFIER_LIST=>{
             match variable_type_property.as_rule() {
                 Rule::IDENTIFIER => variable_info.discipline = identifier_string(variable_type_property),
                 Rule::TOK_SIGNED => {
