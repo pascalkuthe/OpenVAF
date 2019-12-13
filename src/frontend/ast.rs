@@ -1,3 +1,5 @@
+use indextree::NodeId;
+
 use Node_Types::*;
 
 #[derive(Clone, Debug)]
@@ -7,11 +9,9 @@ pub enum Node {
     MODULE(String),
     TASK,
     FUNCTION,
-    WIRE { is_input: bool, is_output: bool },
-    BRANCH_DECL,
-    BRANC_REF,
-    PARAMETER,
-    LOCALPARAM,
+    WIRE(String, VARIABLE),
+    BRANCH_DECL(String, bool),
+    PARAMETER(String, bool, PARAMETER),
     ALIAS_PARAMETER,
     DEFPARAM,
     PARASET,
@@ -24,7 +24,8 @@ pub enum Node {
     PREFIX,
     ASSERT,
 
-    FCALL,
+    //name and whether a system function was called
+    FCALL(Vec<String>, bool),
     TO_BITS,
     TO_SIGNED,
     TO_UNSIGNED,
@@ -68,8 +69,8 @@ pub enum Node {
     INTERFACE,
     INTERFACEPORT,
     INTERFACEPORTTYPE,
-    MODPORT(Option<PORT>),
-    MODPORTMEMBER,
+    MODPORT(String, PORT),
+    MODPORTMEMBER(String),
     PACKAGE,
     WIRETYPE,
 
@@ -77,7 +78,7 @@ pub enum Node {
     INTEGER_VALUE(i64),
     REAL_VALUE(f64),
     REFERENCE(Vec<String>),
-    NATURE_REFERENCE(String, String),
+    BRANCH_REF(NATURE_ACCESS, bool),
     //OPERATORS
     CONCAT,
     REPLICATE,
@@ -119,7 +120,6 @@ pub enum Node {
 pub mod Node_Types {
     #[derive(Clone, Debug)]
     pub struct PORT {
-        pub identifier: String,
         pub is_signed: bool,
         pub is_input: bool,
         pub is_output: bool,
@@ -130,7 +130,6 @@ pub mod Node_Types {
     impl PORT {
         pub fn new() -> Self {
             PORT {
-                identifier: String::from(""),
                 is_signed: false,
                 is_input: false,
                 is_output: false,
@@ -138,6 +137,19 @@ pub mod Node_Types {
                 discipline: String::from(""),
             }
         }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PARAMETER {
+        pub verilog_type: VERILOG_TYPE,
+        pub signed: bool,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct VARIABLE {
+        pub verilog_type: VERILOG_TYPE,
+        pub is_signed: bool,
+        pub discipline: String,
     }
 
     #[derive(Clone, Debug)]
@@ -161,14 +173,15 @@ pub mod Node_Types {
         REAL,
         REALTIME,
     }
+
+    #[derive(Clone, Debug)]
+    pub enum NATURE_ACCESS {
+        POTENTIAL,
+        FLOW,
+        UNRESOLVED(String),
+    }
 }
-//    fn expect<'pair>(expected_value: Option<Pair<'pair, parser::Rule>>, error_message: &str, containing_rule: pest::Span)
-//                     -> parser::Result<Pair<'pair, parser::Rule>> {
-//        match expected_value {
-//            Some(pair) => Ok(pair),
-//            None => error(error_message, containing_rule)
-//        }
-//    }
+
 
 
 
