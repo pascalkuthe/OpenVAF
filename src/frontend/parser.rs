@@ -25,7 +25,7 @@ use pest::prec_climber::{Assoc, Operator, PrecClimber};
 
 use crate::frontend::{ast, parser};
 use crate::frontend::ast::{Node, Node_Types};
-use crate::frontend::ast::Node_Types::VERILOG_TYPE;
+use crate::frontend::ast::Node_Types::{VERILOG_TYPE, PORT};
 use crate::frontend::ast::Node_Types::VERILOG_TYPE::UNDECLARED;
 use crate::pest::Parser;
 
@@ -218,9 +218,11 @@ impl<'lt> ParseTreeToAstFolder {
     //MODULE
 
     fn process_module(&mut self, parse_tree_node: ParseTreeNode, parent_ast_node: NodeId, attributes: Vec<NodeId>) -> Result {
+        trace!{"Processing Module from \n {:?}",parse_tree_node}
         let mut description = parse_tree_node.into_inner();
         description.next();
         let name = identifier_string(description.next().unwrap());
+        debug!("Processing Module {} ",name);
         let ast_node = self.ast.new_node(ast::Node::MODULE(name));
         self.append_attributes(ast_node, &attributes);
         while description.peek().unwrap().as_rule() != Rule::TOK_ENDMODULE {
@@ -231,6 +233,7 @@ impl<'lt> ParseTreeToAstFolder {
     }
 
     fn process_analog(&mut self, parse_tree_node: ParseTreeNode, parent_ast_node: NodeId) -> Result {
+        trace!("Processing Analog from {:?}",parse_tree_node);
         self.state_stack.push(State::ANALOG_BEHAVIOR);
         let mut description = parse_tree_node.into_inner();
         description.next();
@@ -240,11 +243,13 @@ impl<'lt> ParseTreeToAstFolder {
             Rule::TOK_INITIAL => {
                 node = self.ast.new_node(ast::Node::ANALOG(true));
                 self.state_stack.push(State::INITAL);
+                debug!("Processing analog initial statement!");
                 self.process_parse_tree_node_with_attributes(description.next().unwrap(), node)?;
                 self.state_stack.pop();
             },
             Rule::BEHAVIORAL_STMT => {
                 node = self.ast.new_node(ast::Node::ANALOG(false));
+                debug!("Processing analog statement");
                 self.process_parse_tree_node_with_attributes(inital_or_behavior, node)?;
             },
             _ => unexpected_rule!(inital_or_behavior),
@@ -287,10 +292,12 @@ impl<'lt> ParseTreeToAstFolder {
                 _ => port_info.verilog_type = Self::process_type(port_type_property),
             }
         });
-
+        debug!("Processed the following PortInfo {:?} and Range {:?} for identifiers: ",port_info,optional_range);
         let mut identifier_list = description.next().unwrap().into_inner();
         while let Some(identifier_node) = identifier_list.next() {
-            let current_node = self.ast.new_node(ast::Node::MODPORT(identifier_string(identifier_node), port_info.clone()));
+            let name = identifier_string(identifier_node);
+            debug!("{}",name);
+            let current_node = self.ast.new_node(ast::Node::MODPORT(name, port_info.clone()));
             self.append_attributes(current_node, &attributes);
             if let Some(range) = optional_range {
                 current_node.append(range, &mut self.ast);
@@ -306,6 +313,7 @@ impl<'lt> ParseTreeToAstFolder {
     }
 
     fn process_branch_declaration(&mut self, parse_tree_node: ParseTreeNode, parent_ast_node: NodeId) -> Result {
+        trace!("Processing Port declaration from {}",parse_tree_node);
         let mut description = parse_tree_node.into_inner();
         description.next();
         let mut wire_reference_description = description.next().unwrap().into_inner();
@@ -329,6 +337,7 @@ impl<'lt> ParseTreeToAstFolder {
         let identifier_list = description.next().unwrap().into_inner();
         for ident in identifier_list {
             let name = identifier_string(ident);
+            debug!("Processed {} branch declaration {}",if is_port_branch{"port"}else{""},name);
             let ast_node = self.ast.new_node(ast::Node::BRANCH_DECL(name, is_port_branch));
             for i in references.iter() {
                 if let Some(reference) = i {
@@ -554,6 +563,7 @@ impl<'lt> ParseTreeToAstFolder {
     }
 
     fn process_single_range(&mut self, matched_parse_tree_node: ParseTreeNode, parent_ast_node: NodeId) -> Result {
+        trace!("Processing range from {}",matched_parse_tree_node);
         let range_node = self.ast.new_node(ast::Node::RANGE);
         parent_ast_node.append(range_node, &mut self.ast);
         let mut description = matched_parse_tree_node.into_inner();
@@ -602,6 +612,7 @@ impl<'lt> ParseTreeToAstFolder {
     }
 
     fn process_expression(&mut self, parse_tree_node: Pair<Rule>) -> Result<NodeId> {
+        trace!("Processing expression from {:?}",parse_tree_node);
         let shared_self = RefCell::new(self);
         let operand_evaluation = |node: Pair<Rule>| -> Result<NodeId>{
             match node.as_rule() {
@@ -753,6 +764,7 @@ impl<'lt> ParseTreeToAstFolder {
     }
 
     fn process_branch_reference(&mut self, value: ParseTreeNode) -> Result<NodeId> {
+        trace!("Processing branch reference from {:0?}",value);
         if !self.state_stack.contains(&State::ANALOG_BEHAVIOR) {
             return error("Branch acess is only allowed in analog behavior!", value.as_span());
         }
@@ -779,6 +791,7 @@ impl<'lt> ParseTreeToAstFolder {
     }
 
     fn process_function_call(&mut self, value: ParseTreeNode, system_function: bool) -> Result<NodeId> {
+        trace!("Processing function call from {}",value);
         let mut description = value.into_inner();
         let name = if system_function {
             vec!(identifier_string(description.next().unwrap()))
@@ -789,11 +802,12 @@ impl<'lt> ParseTreeToAstFolder {
                 hierarchical_identifier_string(description.next().unwrap())
             }
         };
-        let node = self.ast.new_node(ast::Node::FCALL(name, system_function));
+        let node = self.ast.new_node(ast::Node::FCALL(name.clone(), system_function));
         for arg in description {
             let arg_node = self.process_expression(arg)?;
             node.append(arg_node, &mut self.ast);
         }
+        debug!("Processed {}function {:?} call with {} arguments",if system_function{"System"}else{""},name,node.children(&self.ast).count());
         Ok(node)
     }
 
@@ -854,13 +868,14 @@ impl<'lt> ParseTreeToAstFolder {
         });
         let res = Vec::new();
         for attribute in attributes {
-            let node = self.ast.new_node(ast::Node::ATTRIBUTE(attribute.0));
             let value =
                 if let Some(expr) = attribute.1 {
                     self.process_constant_expression(expr)?
                 } else {
                     self.ast.new_node(ast::Node::INTEGER_VALUE(1))
                 };
+            debug!("Processing Attribute {} with value {}",attribute.0,value);
+            let node = self.ast.new_node(ast::Node::ATTRIBUTE(attribute.0));
             node.append(value, &mut self.ast)
         }
         Ok(res)
@@ -876,3 +891,16 @@ impl<'lt> ParseTreeToAstFolder {
         (self.ast, self.ast_top_node)
     }
 }
+
+
+#[cfg(test)]
+mod test{
+    use std::fs;
+    use crate::setup_logger;
+
+    #[test]
+    pub fn expression_presedance(){
+
+    }
+}
+
