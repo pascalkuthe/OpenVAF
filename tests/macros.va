@@ -1,0 +1,25 @@
+//EXPECTED OUTPUT OK1,OK2,__SMS__,OK3\nOK3L,OK4
+`ifdef test1 ERROR
+`endif
+`define test2
+`ifdef test2 OK1
+`endif,
+    `ifdef test2 OK2,`define test3 OK3\
+OK3L
+    `endif
+`ifdef test4 ERROR
+`else
+__SMS__
+`endif
+`ifndef test4
+`define test4 OK4
+                                            `endif
+`test3
+
+,
+
+`ifndef test4
+ERROR
+`else
+`test4
+`endif

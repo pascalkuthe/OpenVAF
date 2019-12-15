@@ -1,0 +1,25 @@
+`define condition
+`define branches\
+branch (test1, test2) a;\
+branch (test1,test3) b;\
+branch (test2,test3) c;
+
+
+ifdef `condition
+module jup(inout electrical test1, input wreal test2,output wreal test3);
+parameter real x;
+parameter real y;
+
+`branches
+
+`endif
+`else ERROR
+`endif
+
+analog being
+x = 3.141;
+I(a) <+ x * V(a)
+I(b) <+ y * V(b)
+I(c) <+ (x+y)*(V(a)+V(b)+V(c))
+end
+endmodule
