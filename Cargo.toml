@@ -8,6 +8,14 @@ edition = "2018"
 pest = "*"
 pest_derive = "*"
 indextree = "*"
+typed-arena = "*"
 log = "*"
+paste="*"
+#jemallocator = "*"
+
+#Logging for tests
+#[dev-dependencies]
 fern={version="*",features=["colored"]}
 chrono="*"
+
+

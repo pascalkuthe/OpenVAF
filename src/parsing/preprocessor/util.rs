@@ -1,4 +1,3 @@
-
 //  * ******************************************************************************************
 //  * Copyright (c) 2019 Pascal Kuthe. This file is part of the rust_adms project.
 //  * It is subject to the license terms in the LICENSE file found in the top-level directory
@@ -7,20 +6,14 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+use pest::iterators::Pair;
 
-module  jup(inout electrical test1, input wreal test2,output wreal test3);
-parameter real x = 1  from [-1:1];
-parameter real y = 2        from [-1:1];
+use crate::parsing::preprocessor::Rule;
 
-branch (test1, test2) a;
-branch (test1,test3) b;
-branch (test2,test3) c;
+//This might get merged straight into mod but at the moment I will leave this here in case
 
+//Shorthands and sensible defaults for often used types
 
-analog begin
-x = 3.141;
-I(a) <+ x * V(a);
-I(b) <+ y * V(b);
-I(c) <+ (x+y)*(V(a)+V(b)+V(c));
-end
-endmodule
+pub type PreprocessorResult<T = ()> = crate::parsing::util::Result<Rule, T>;
+pub(crate) type ParseTreeNode<'lifetime> = Pair<'lifetime, Rule>;
+

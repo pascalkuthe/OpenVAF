@@ -1,4 +1,3 @@
-
 //  * ******************************************************************************************
 //  * Copyright (c) 2019 Pascal Kuthe. This file is part of the rust_adms project.
 //  * It is subject to the license terms in the LICENSE file found in the top-level directory
@@ -8,19 +7,19 @@
 //  * *******************************************************************************************
 
 
-module  jup(inout electrical test1, input wreal test2,output wreal test3);
-parameter real x = 1  from [-1:1];
-parameter real y = 2        from [-1:1];
+use std::path::Path;
 
-branch (test1, test2) a;
-branch (test1,test3) b;
-branch (test2,test3) c;
+use crate::ast::RawAst;
 
+#[macro_use]
+mod util;
+#[macro_use]
+mod preprocessor;
+mod syntax;
 
-analog begin
-x = 3.141;
-I(a) <+ x * V(a);
-I(b) <+ y * V(b);
-I(c) <+ (x+y)*(V(a)+V(b)+V(c));
-end
-endmodule
+//TODO better error information?
+pub fn parse_to_unverified_ast(file_path: &Path) -> Result<RawAst, String> {
+    let preprocessed_source = preprocessor::process_file(file_path.to_str().unwrap())?;
+    syntax::raw_ast_from_preprocessed_source(&preprocessed_source)
+}
+

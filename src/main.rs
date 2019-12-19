@@ -1,50 +1,36 @@
-extern crate pest;
+//  * ******************************************************************************************
+//  * Copyright (c) 2019 Pascal Kuthe. This file is part of the rust_adms project.
+//  * It is subject to the license terms in the LICENSE file found in the top-level directory
+//  *  of this distribution and at  https://gitlab.com/jamescoding/rust_adms/blob/master/LICENSE.
+//  *  No part of rust_adms, including this file, may be copied, modified, propagated, or
+//  *  distributed except according to the terms contained in the LICENSE file.
+//  * *******************************************************************************************
+
+
 #[macro_use]
 extern crate pest_derive;
 
-use std::env;
-use std::fmt::Debug;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use fern::colors::{Color, ColoredLevelConfig};
-use indextree::{Arena, NodeId};
 use log::*;
 
-mod frontend;
+mod parsing;
+mod ast;
 
+//TODO test for better speed on Linux
+//extern crate jemallocator;
+//#[global_allocator]
+//static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 fn main() {
     setup_logger();
-    let home = env::var_os("HOME").unwrap();
-    let mut path = PathBuf::from(home);
-    path.push(Path::new("bjtp.va"));
-    match { frontend::run_frontend(path.as_path()) } {
+    match { parsing::parse_to_unverified_ast(Path::new("tests/bjt.va")) } {
         Ok(ast) => {
-            pprint_tree(ast.1, &ast.0)
+            ast.pprint();
         },
-        Err(e) => ()
+        Err(e) => error!("{}", e)
     }
-}
-
-fn pprint_tree<T: Debug>(top_node: NodeId, arena: &Arena<T>) {
-    fn pprint_tree<T: Debug>(node: NodeId, arena: &Arena<T>, prefix: String, last: bool) {
-        let prefix_current = if last { "`- " } else { "|- " };
-
-        info!("{}{}{:?}", prefix, prefix_current, arena.get(node).unwrap().get());
-
-        let prefix_child = if last { "   " } else { "|  " };
-        let prefix = prefix + prefix_child;
-
-        if node.children(arena).next().is_some() {
-            let last_child = node.children(arena).count() - 1;
-
-            for (i, child) in node.children(arena).enumerate() {
-                pprint_tree(child, arena, prefix.to_string(), i == last_child);
-            }
-        }
-    }
-
-    pprint_tree(top_node, arena, "".to_string(), true);
 }
 
 fn setup_logger() -> Result<(), fern::InitError> {
@@ -76,7 +62,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
                 message = message,
             ));
         })
-        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
         .chain(fern::log_file("output.log")?)
         .apply()?;

@@ -1,3 +1,12 @@
+
+//  * ******************************************************************************************
+//  * Copyright (c) 2019 Pascal Kuthe. This file is part of the rust_adms project.
+//  * It is subject to the license terms in the LICENSE file found in the top-level directory
+//  *  of this distribution and at  https://gitlab.com/jamescoding/rust_adms/blob/master/LICENSE.
+//  *  No part of rust_adms, including this file, may be copied, modified, propagated, or
+//  *  distributed except according to the terms contained in the LICENSE file.
+//  * *******************************************************************************************
+
 `define condition
 `define branches\
 branch (test1, test2) a;\
@@ -5,21 +14,20 @@ branch (test1,test3) b;\
 branch (test2,test3) c;
 
 
-ifdef `condition
-module jup(inout electrical test1, input wreal test2,output wreal test3);
-parameter real x;
-parameter real y;
+`ifdef condition
+module  jup(inout electrical test1, input wreal test2,output wreal test3);
+parameter real x = 1  from [-1:1];
+parameter real y = 2        from [-1:1];
 
 `branches
 
-`endif
 `else ERROR
 `endif
 
-analog being
+analog begin
 x = 3.141;
-I(a) <+ x * V(a)
-I(b) <+ y * V(b)
-I(c) <+ (x+y)*(V(a)+V(b)+V(c))
+I(a) <+ x * V(a);
+I(b) <+ y * V(b);
+I(c) <+ (x+y)*(V(a)+V(b)+V(c));
 end
 endmodule
