@@ -6,34 +6,9 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
-#[macro_use]
-extern crate pest_derive;
-
-use std::path::Path;
-
 use fern::colors::{Color, ColoredLevelConfig};
-use log::*;
 
-mod parsing;
-mod ast;
-
-//TODO test for better speed on Linux
-//extern crate jemallocator;
-//#[global_allocator]
-//static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
-fn main() {
-    setup_logger();
-    match { parsing::parse_to_unverified_ast(Path::new("tests/bjt.va")) } {
-        Ok(ast) => {
-            ast.pprint();
-        },
-        Err(e) => error!("{}", e)
-    }
-}
-
-fn setup_logger() -> Result<(), fern::InitError> {
+pub(crate) fn setup_logger() -> Result<(), fern::InitError> {
     let colors_line = ColoredLevelConfig::new()
         .error(Color::Red)
         .warn(Color::Yellow)
@@ -62,7 +37,7 @@ fn setup_logger() -> Result<(), fern::InitError> {
                 message = message,
             ));
         })
-        .level(log::LevelFilter::Info)
+        .level(log::LevelFilter::Debug)
         .chain(std::io::stdout())
         .chain(fern::log_file("output.log")?)
         .apply()?;

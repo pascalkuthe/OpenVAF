@@ -5,15 +5,14 @@
 //  *  No part of rust_adms, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
-
-use pest::iterators::Pair;
-
-use crate::parsing::preprocessor::Rule;
-
-//This might get merged straight into mod but at the moment I will leave this here in case
-
-//Shorthands and sensible defaults for often used types
-
-pub type PreprocessorResult<T = ()> = crate::parsing::util::Result<Rule, T>;
-pub(crate) type ParseTreeNode<'lifetime> = Pair<'lifetime, Rule>;
-
+//! A frontend for Verilog AMS that returns an Ast as its endresult
+//!
+//! TODO showoff API
+//!
+#[macro_use]
+extern crate pest_derive;
+pub mod ast;
+pub mod error;
+pub mod parsing;
+#[cfg(test)]
+mod test;

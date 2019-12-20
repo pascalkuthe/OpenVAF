@@ -7,10 +7,18 @@
 //  * *******************************************************************************************
 
 use indextree::{Arena, NodeId};
-use log::info;
 use node_types::*;
 
 use crate::ast;
+use pest::Span;
+use std::fmt::{Display, Error, Formatter};
+
+/// A now of a `RawAst` It contains the span of the source that generated it in addition to a normal Ast `Node`
+#[derive(Debug, Clone)]
+pub struct RawNode<'lt> {
+    pub node_info: Node,
+    pub src: Span<'lt>,
+}
 
 //TODO allow replacing name based references with node based references
 #[derive(Clone, Debug)]
@@ -18,12 +26,25 @@ pub enum Node {
     Top,
     Attribute(String),
     Module(String),
-    Nature { name: String, discipline: Option<NodeId> },
+    Nature {
+        name: String,
+        discipline: Option<NodeId>,
+    },
     Task,
     Function,
-    VariableOrWire { name: String, type_info: VARIABLE },
-    Branch { name: String, port_branch: bool },
-    Parameter { name: String, local: bool, type_info: SIGNED },
+    VariableOrWire {
+        name: String,
+        type_info: VARIABLE,
+    },
+    Branch {
+        name: String,
+        port_branch: bool,
+    },
+    Parameter {
+        name: String,
+        local: bool,
+        type_info: SIGNED,
+    },
     AliasParameter,
     DEFPARAM,
     PARASET,
@@ -35,7 +56,10 @@ pub enum Node {
     ASSERT,
 
     //name and whether a system function was called
-    Fcall { hierarchical_identifier: Vec<String>, system_function: bool },
+    Fcall {
+        hierarchical_identifier: Vec<String>,
+        system_function: bool,
+    },
     ToBits,
     TERNARY,
     MEMRD,
@@ -122,7 +146,6 @@ pub enum Node {
     LogicNot,
 }
 
-
 pub mod node_types {
     #[derive(Clone, Debug)]
     pub struct PORT {
@@ -154,6 +177,11 @@ pub mod node_types {
             }
         }
     }
+    impl Default for VARIABLE {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     #[derive(Clone, Debug)]
     pub enum VerilogType {
@@ -178,19 +206,32 @@ pub mod node_types {
     }
 }
 
-
+/// An Abstract Syntax Tree that hasn't undergone schemantic analysis yet.
+/// *Node* As Analysis of this Ast isn't complete yet it still contains references to the original source (to allow for error reporting) and its lifetime is therefor bounded by that of the source it was generated from
 #[derive(Debug, Clone)]
-pub struct RawAst {
-    pub(super) arena: Arena<ast::Node>,
+pub struct RawAst<'lt> {
+    pub(super) arena: Arena<ast::RawNode<'lt>>,
     pub(super) top_node: NodeId,
 }
 
-impl RawAst {
-    pub fn pprint(&self) {
-        fn pprint(node: NodeId, arena: &Arena<ast::Node>, prefix: String, last: bool) {
+impl<'lt> Display for RawAst<'lt> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        fn pprint(
+            f: &mut Formatter<'_>,
+            node: NodeId,
+            arena: &Arena<ast::RawNode>,
+            prefix: String,
+            last: bool,
+        ) -> Result<(), Error> {
             let prefix_current = if last { "`- " } else { "|- " };
 
-            info!("{}{}{:?}", prefix, prefix_current, arena.get(node).unwrap().get());
+            write!(
+                f,
+                "{}{}{:?}",
+                prefix,
+                prefix_current,
+                arena.get(node).unwrap().get()
+            )?;
 
             let prefix_child = if last { "   " } else { "|  " };
             let prefix = prefix + prefix_child;
@@ -199,16 +240,16 @@ impl RawAst {
                 let last_child = node.children(arena).count() - 1;
 
                 for (i, child) in node.children(arena).enumerate() {
-                    pprint(child, arena, prefix.to_string(), i == last_child);
+                    pprint(f, child, arena, prefix.to_string(), i == last_child)?;
                 }
             }
+            Ok(())
         }
-        pprint(self.top_node, &self.arena, "".to_string(), true);
+        pprint(f, self.top_node, &self.arena, "".to_string(), true)
     }
 }
-
+/// An [Abstract Syntax Tree](https://en.wikipedia.org/wiki/Abstract_syntax_tree "Wikipedia") that abstractly represents a Verlog-AMS Project independent of the original source
 pub struct Ast {
-    pub tree: RawAst,
-    //TODO pub symbboltable
+    pub(super) arena: Arena<ast::Node>,
+    pub(super) top_node: NodeId, //TODO pub symtable
 }
-

@@ -8,46 +8,59 @@
  * *****************************************************************************************
  */
 
-
 use log::*;
 use pest::Parser;
-use std::{fs, mem};
 use std::collections::HashMap;
+use std::mem;
 use typed_arena::Arena;
 
-use crate::parsing::preprocessor::util::*;
+use crate::error::PreprocessorResult;
 use crate::parsing::util::*;
+use crate::parsing::Source;
+use pest::iterators::Pair;
+use std::convert::TryFrom;
 
 #[cfg(test)]
 mod test;
-mod util;
+
+pub(crate) type ParseTreeNode<'lifetime> = Pair<'lifetime, Rule>;
 
 #[derive(Parser)]
 #[grammar = "parsing/preprocessor/grammar.pest"]
-struct PestParser;
+pub struct PestParser;
 
-
-//make
-pub struct PreprocessedSource(pub(super) String);
-
-impl PreprocessedSource {
-    pub fn skip_preprocessor(source: String) -> Self {
-        Self(source)
+impl Source {
+    /// Creates a Source object directly from a source String without invoking the preprocessor
+    /// *Note* Parsing a source created using this method may fail even tough the syntax is correct
+    /// as compiler directives are exclusively handled by the preprocessor
+    /// #Exampels
+    /// TODO demonstrate failure
+    pub fn skip_preprocessing(source: String) -> Self {
+        Self { raw: source }
     }
 }
 
-pub fn process_file(file: &str) -> std::result::Result<PreprocessedSource, String> {
-    let file_contents =
-        match fs::read_to_string(file) {
-            Ok(res) => res,
-            Err(e) => return Err(format!("{}", e))
-        };
-    let source_container = Arena::new();
-    let mut preprocessor = Preprocessor::new(&source_container);
-    if let Err(e) = preprocessor.run(&file_contents) {
-        return Err(format!("{}", e))
+impl TryFrom<&str> for Source {
+    type Error = pest::error::Error<Rule>;
+
+    /// Invokes the preprocessor and returns the resulting Source Object
+    /// #Arguments
+    /// * 'unprocessed_source' the source file contends as a String
+    fn try_from(unprocessed_source: &str) -> PreprocessorResult<Self> {
+        let source_allocator = Arena::new();
+        let mut preprocessor = Preprocessor::new(&source_allocator);
+        preprocessor.run(unprocessed_source)?;
+        Ok(preprocessor.collapse())
     }
-    Ok(preprocessor.collapse())
+}
+impl TryFrom<String> for Source {
+    type Error = pest::error::Error<Rule>;
+    /// Invokes the preprocessor and returns the resulting Source Object
+    /// #Arguments
+    ///* 'unprocessed_source' the source file contends as a String
+    fn try_from(unprocessed_source: String) -> PreprocessorResult<Self> {
+        Self::try_from(&unprocessed_source[..])
+    }
 }
 
 pub struct Preprocessor<'lifetime> {
@@ -67,7 +80,8 @@ pub struct MACRO<'lt> {
 }
 
 impl<'lt> Preprocessor<'lt> {
-    pub fn new(source_container: &'lt Arena<u8>) -> Self {//Arena is passed insntead of created internally because this would be a self referential strucht which would be a pain
+    pub fn new(source_container: &'lt Arena<u8>) -> Self {
+        //Arena is passed insntead of created internally because this would be a self referential strucht which would be a pain
         Self {
             source_container,
             macros: HashMap::new(),
@@ -76,7 +90,6 @@ impl<'lt> Preprocessor<'lt> {
             preprocessed_source: String::from(""),
         }
     }
-
 
     fn process_parsed_source(&mut self, node: ParseTreeNode<'lt>) -> PreprocessorResult {
         for compiler_directive_or_code in node.into_inner() {
@@ -87,18 +100,26 @@ impl<'lt> Preprocessor<'lt> {
                     _ => unexpected_rule!(current),
                 }
             }
-        };
+        }
         Ok(())
     }
-    fn process_compiler_directive(&mut self, compiler_directive_or_code: ParseTreeNode<'lt>) -> PreprocessorResult {
-        trace!("Processing compiler declaration from: {:?}", compiler_directive_or_code);
+    fn process_compiler_directive(
+        &mut self,
+        compiler_directive_or_code: ParseTreeNode<'lt>,
+    ) -> PreprocessorResult {
+        trace!(
+            "Processing compiler declaration from: {:?}",
+            compiler_directive_or_code
+        );
         let compiler_directive = compiler_directive_or_code.into_inner().next().unwrap();
         match compiler_directive.as_rule() {
             Rule::MACRO_DEFINITION => self.process_declaration(compiler_directive)?,
             Rule::MACRO_REFERENCE => self.process_reference(compiler_directive)?,
             Rule::MACRO_CONDITION => self.process_macro_condition(compiler_directive)?,
             Rule::INCLUDE => self.process_include(compiler_directive)?,
-            _ => { unexpected_rule!(compiler_directive); },
+            _ => {
+                unexpected_rule!(compiler_directive);
+            }
         };
         Ok(())
     }
@@ -117,11 +138,12 @@ impl<'lt> Preprocessor<'lt> {
         &mut self.preprocessed_source
     }
 
-    pub fn collapse(self) -> PreprocessedSource {
-        PreprocessedSource(self.preprocessed_source)
+    pub fn collapse(self) -> Source {
+        Source {
+            raw: self.preprocessed_source,
+        }
     }
 }
 
 mod macros;
 pub mod sources;
-

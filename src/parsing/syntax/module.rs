@@ -6,14 +6,16 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 use super::*;
 
-impl ParseTreeToRawAstFolder {
-    mk_fold_fn!(module (self,parse_tree_node,description) {
+impl<'lt> ParseTreeToRawAstFolder<'lt> {
+    mk_fold_fn!(module (self,parse_tree_node,'lt,description) {
         let name = identifier_string(description.next().unwrap());
         debug!("Processing Module {} ",name);
-        let ast_node = self.ast.arena.new_node(ast::Node::Module(name));
+        let ast_node = self.ast.arena.new_node(ast::RawNode{
+            node_info: Node::Module(name),
+            src:parse_tree_node.as_span()
+        });
         if_rule!(let Some(parameter_list)=description.next() where Rule::PARAMETER_DECLARATION_LIST => {
             self.fold_list_items_with_attributes(parameter_list,ast_node)?
         });
@@ -26,20 +28,26 @@ impl ParseTreeToRawAstFolder {
         Ok([ast_node])
     });
 
-    mk_fold_fn!(analog(self,parse_tree_node,description){
+    mk_fold_fn!(analog(self,parse_tree_node,'lt,description){
         let node;
         self.state_stack.push(State::AnalogBehavior);
         let inital_or_behavior = description.next().unwrap();
         match inital_or_behavior.as_rule() {
             Rule::TOK_INITIAL => {
-                node = self.ast.arena.new_node(ast::Node::Analog(true));
+                node = self.ast.arena.new_node(ast::RawNode{
+                    node_info : Node::Analog(true),
+                    src:inital_or_behavior.as_span()
+                });
                 self.state_stack.push(State::INITIAL);
                 debug!("Processing analog initial statement!");
                 self.fold_item_with_attributes(description.next().unwrap(), node)?;
                 self.state_stack.pop();
             },
             Rule::BEHAVIORAL_STMT => {
-                node = self.ast.arena.new_node(ast::Node::Analog(false));
+                node = self.ast.arena.new_node(ast::RawNode{
+                    node_info : Node::Analog(false),
+                    src:inital_or_behavior.as_span()
+                });
                 debug!("Processing analog statement");
                 self.fold_item_with_attributes(inital_or_behavior, node)?;
             },
@@ -51,11 +59,17 @@ impl ParseTreeToRawAstFolder {
 
     //TODO understand standard
     //TODO complety reimplement this
-    pub(super) fn process_port(&mut self, parse_tree_node: ParseTreeNode, parent_ast_node: NodeId, attributes: Vec<NodeId>) -> SyntaxResult {
+    pub(super) fn process_port(
+        &mut self,
+        parse_tree_node: ParseTreeNode<'lt>,
+        parent_ast_node: NodeId,
+        attributes: Vec<NodeId>,
+    ) -> SyntaxResult {
+        let span = parse_tree_node.as_span();
         let mut description = parse_tree_node.into_inner();
         if description.peek().is_none() {
             //EMPTY ports are allowed according to standard (they represent ports not connected to the interior)
-            return Ok(())
+            return Ok(());
         }
         if description.peek().unwrap().as_rule() == Rule::IDENTIFIER {
             unimplemented!("Weird port listing not yet supported");
@@ -70,7 +84,10 @@ impl ParseTreeToRawAstFolder {
         if expression.peek().is_some() {
             unimplemented!("Port listing with range not yet supported")
         }
-        let node = self.ast.arena.new_node(ast::Node::ModPort(identifer));
+        let node = self.ast.arena.new_node(ast::RawNode {
+            src: span,
+            node_info: Node::ModPort(identifer),
+        });
         parent_ast_node.append(node, &mut self.ast.arena);
         Ok(())
     }

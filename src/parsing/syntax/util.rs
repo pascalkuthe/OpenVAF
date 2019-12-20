@@ -10,19 +10,12 @@ use pest::iterators::Pair;
 
 use crate::parsing::syntax::Rule;
 
-//Shorthands and sensible defaults for often used types
-
-//TODO switch to universal Error type
-pub type SyntaxResult<T = ()> = crate::parsing::util::Result<Rule, T>;
 pub(crate) type ParseTreeNode<'lifetime> = Pair<'lifetime, Rule>;
-
-
 // Macros to generate similar functions
-
 
 //TODO report issue or wait for rust additions to avoid this hack
 macro_rules! mk_fold_fn {
-    ($name:ident($sel:ident,$parse_tree_node:ident,$description:ident) $body:block) => {
+    ($name:ident($sel:ident,$parse_tree_node:ident, $lt:lifetime ,$description:ident) $body:block) => {
     //Paste allows to concat identifiers in macros but has a bug
     //A weird error is produced when the actual function is put into a paste::item!
     //apparently all macro parameters are parsed seperatly
@@ -30,14 +23,14 @@ macro_rules! mk_fold_fn {
     //This is a workout with the only caviat that this needs to be declared in a seperate impl block in a submodule
     //Otherwise this might create name conflicts that are not transparent
         paste::item!{
-        pub (super) fn [<fold_$name>](&mut $sel, $parse_tree_node: ParseTreeNode
+        pub (super) fn [<fold_$name>](&mut $sel, $parse_tree_node: ParseTreeNode<$lt>
             , parent_ast_node: NodeId, attributes: Vec<NodeId>) -> SyntaxResult {
                 $sel.$name($parse_tree_node,parent_ast_node,attributes)
             }
         }
 
         #[inline]
-        fn $name(&mut $sel, $parse_tree_node: ParseTreeNode
+        fn $name(&mut $sel, $parse_tree_node: ParseTreeNode<$lt>
         , parent_ast_node: NodeId, attributes: Vec<NodeId>) -> SyntaxResult {
             trace!{"Processing {} from \n {:?}",stringify!($name),$parse_tree_node}
             let mut $description = $parse_tree_node.clone().into_inner();
@@ -52,7 +45,7 @@ macro_rules! mk_fold_fn {
     };
 }
 
-
+/*
 macro_rules! mk_simple_fold_fn {
     ($name:ident($sel:ident,$parse_tree_node:ident,$description:ident) $body:block) => {
     //Paste allows to concat identifiers in macros but has a bug
@@ -83,8 +76,7 @@ macro_rules! mk_simple_fold_fn {
         }
 
     };
-}
-
+}*/
 
 macro_rules! rule_eq {
     (let $res:ident = $pair:expr; $eq:pat $(| $additional_eq:pat),* , $neq:pat $(| $additional_neq:pat),*) => {
