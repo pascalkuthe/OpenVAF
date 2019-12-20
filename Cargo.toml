@@ -11,10 +11,9 @@ indextree = "*"
 typed-arena = "*"
 log = "*"
 paste="*"
-#jemallocator = "*"
 
 #Logging for tests
-#[dev-dependencies]
+[dev-dependencies]
 fern={version="*",features=["colored"]}
 chrono="*"
 

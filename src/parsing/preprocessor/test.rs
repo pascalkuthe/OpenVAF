@@ -1,48 +1,47 @@
-use pest::error::{Error, ErrorVariant};
-use pest::RuleType;
+use super::*;
+use crate::error::UserError;
+use crate::test::setup_logger;
 use std::fs;
 
-use crate::parsing::syntax::{create_parse_tree, ParseTree};
-use crate::setup_logger;
-
-use super::*;
-
 #[test]
-pub fn macro_test() {
+pub fn macro_test() -> std::result::Result<(), UserError> {
     setup_logger();
-    let preprocessed_source = match process_file("tests/macros.va") {
-        Ok(res) => res,
-        Err(e) => panic!("{}", e)
-    };
+    let preprocessed_source = Source::try_from(fs::read_to_string("tests/macros.va")?)?;
     //Trimming is done here since amount of newlines may change and mostly doesnt make any statement about correctness (as long as necessary ones arent removed)
-    assert_eq!(preprocessed_source.0.replace("\r", "").replace("\n", "").replace(" ", ""), "OK1,OK2,__SMS__OK3OK3L,OK4")
+    assert_eq!(
+        preprocessed_source
+            .raw
+            .replace("\r", "")
+            .replace("\n", "")
+            .replace(" ", ""),
+        "OK1,OK2,__SMS__OK3OK3L,OK4"
+    );
+    Ok(())
 }
 
 #[test]
-pub fn code_invariance() {
+pub fn code_invariance() -> std::result::Result<(), UserError> {
     setup_logger();
-    let preprocessed_source = match process_file("tests/invariance.va") {
-        Err(io_err) => panic!(format!("{}", io_err)),
-        Ok(source) => { source }
-    };
-    let parse_tree = match create_parse_tree(&preprocessed_source) {
-        Ok(result) => result,
-        Err(e) => panic!("{}", e)
-    };
-    let control_source = PreprocessedSource::skip_preprocessor(
-        fs::read_to_string("tests/invariance_control.va").expect("File not found!"));
-    let control_parse_tree = match create_parse_tree(&control_source) {
-        Ok(result) => result,
-        Err(e) => panic!()
-    };
-    if let Err(e) = assert_eq_parse_tree(parse_tree.0, control_parse_tree.0) {
-        panic!(e)
-    }
+    let preprocessed_source = Source::try_from(fs::read_to_string("tests/invariance.va")?)?;
+    let control_source = Source::skip_preprocessing(
+        fs::read_to_string("tests/invariance_control.va").expect("File not found!"),
+    );
+    assert_eq_parse_tree(
+        preprocessed_source.parse()?.top_node,
+        control_source.parse()?.top_node,
+    )?;
+    Ok(())
 }
 
-fn assert_eq_parse_tree(top_node1: crate::parsing::syntax::util::ParseTreeNode, top_node2: crate::parsing::syntax::util::ParseTreeNode) -> std::result::Result<(), String> {
+fn assert_eq_parse_tree(
+    top_node1: crate::parsing::syntax::util::ParseTreeNode,
+    top_node2: crate::parsing::syntax::util::ParseTreeNode,
+) -> std::result::Result<(), String> {
     if top_node1.as_rule() != top_node2.as_rule() {
-        return Err(format!("Rules mismatch for {:?},{:?}", top_node1, top_node2));
+        return Err(format!(
+            "Rules mismatch for {:?},{:?}",
+            top_node1, top_node2
+        ));
     }
     let mut children_tree1 = top_node1.clone().into_inner();
     let mut children_tree2 = top_node2.clone().into_inner();
@@ -52,6 +51,9 @@ fn assert_eq_parse_tree(top_node1: crate::parsing::syntax::util::ParseTreeNode, 
     if children_tree1.next().is_none() && children_tree2.next().is_none() {
         Ok(())
     } else {
-        return Err(format!("Children mismatch for {:?},{:?}", top_node1, top_node2));
+        return Err(format!(
+            "Children mismatch for {:?},{:?}",
+            top_node1, top_node2
+        ));
     }
 }

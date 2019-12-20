@@ -6,41 +6,56 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 use super::*;
+use crate::ast::Node;
 
-impl ParseTreeToRawAstFolder {
-    pub(super) fn process_range(&mut self, matched_parse_tree_node: ParseTreeNode) -> SyntaxResult<NodeId> {
-        let range_node = self.ast.arena.new_node(ast::Node::Range);
+impl<'lt> ParseTreeToRawAstFolder<'lt> {
+    pub(super) fn process_range(
+        &mut self,
+        matched_parse_tree_node: ParseTreeNode<'lt>,
+    ) -> SyntaxResult<NodeId> {
+        let range_node = self.ast.arena.new_node(ast::RawNode {
+            src: matched_parse_tree_node.as_span(),
+            node_info: Node::Range,
+        });
         let mut description = matched_parse_tree_node.into_inner();
         range_node.append(
             self.process_constant_expression(description.next().unwrap())?,
-            &mut self.ast.arena);
+            &mut self.ast.arena,
+        );
         range_node.append(
             self.process_constant_expression(description.next().unwrap())?,
-            &mut self.ast.arena);
+            &mut self.ast.arena,
+        );
         Ok(range_node)
     }
 
     //Todo remove adding to parent
-    pub(super) fn process_single_range(&mut self, matched_parse_tree_node: ParseTreeNode, parent_ast_node: NodeId) -> SyntaxResult {
+    pub(super) fn process_single_range(
+        &mut self,
+        matched_parse_tree_node: ParseTreeNode<'lt>,
+        parent_ast_node: NodeId,
+    ) -> SyntaxResult {
         trace!("Processing range from {}", matched_parse_tree_node);
-        let range_node = self.ast.arena.new_node(ast::Node::Range);
+        let range_node = self.ast.arena.new_node(ast::RawNode {
+            src: matched_parse_tree_node.as_span(),
+            node_info: Node::Range,
+        });
         parent_ast_node.append(range_node, &mut self.ast.arena);
         let mut description = matched_parse_tree_node.into_inner();
         range_node.append(
-            self.process_constant_expression(description.next().unwrap())?
-            , &mut self.ast.arena);
+            self.process_constant_expression(description.next().unwrap())?,
+            &mut self.ast.arena,
+        );
         Ok(())
     }
 
     pub(super) fn process_type(matched_pair: Pair<Rule>) -> node_types::VerilogType {
-        let actual_pair =
-            if let Rule::NET_TYPE = matched_pair.as_rule() {
-                matched_pair.into_inner().next().unwrap()
-            } else {
-                matched_pair
-            };
+        let actual_pair = if let Rule::NET_TYPE = matched_pair.as_rule() {
+            matched_pair.into_inner().next().unwrap()
+        } else {
+            matched_pair
+        };
         match actual_pair.as_rule() {
             Rule::TOK_WREAL => node_types::VerilogType::WREAL,
             Rule::TOK_SUPPLY0 => node_types::VerilogType::SUPPLY0,

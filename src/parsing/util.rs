@@ -6,23 +6,8 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
-use pest::error::ErrorVariant;
 use pest::iterators::Pair;
 use pest::RuleType;
-
-pub(super) type Result<R, T = ()> = std::result::Result<T, pest::error::Error<R>>;
-
-pub(super) fn error<R: RuleType, T>(message: &str, error_span: pest::Span)
-                                    -> Result<R, T> {
-    Err(error_message(message, error_span))
-}
-
-pub(super) fn error_message<R: RuleType>(error_message: &str, containing_rule: pest::Span)
-                                         -> pest::error::Error<R> {
-    pest::error::Error::new_from_span(
-        ErrorVariant::CustomError { message: error_message.to_string() }, containing_rule)
-}
 
 pub(super) fn identifier_string<R: RuleType>(matched_pair: Pair<R>) -> String {
     if matched_pair.as_str().starts_with('\\') {
@@ -33,11 +18,14 @@ pub(super) fn identifier_string<R: RuleType>(matched_pair: Pair<R>) -> String {
     }
 }
 
-
-
-
 macro_rules! unexpected_rule {
-    ( $ unexpected_pair: expr) => { panic! ("Unexpected Rule {:?} from string {}", $ unexpected_pair.as_rule(), $ unexpected_pair.as_str()) }
+    ( $ unexpected_pair: expr) => {
+        panic!(
+            "Unexpected Rule {:?} from string {}",
+            $unexpected_pair.as_rule(),
+            $unexpected_pair.as_str()
+        )
+    };
 }
 
 //Macros that make working with Pest Pairs Iterators more convenient by extending the if let/for syntax to allow imposing conditions using where
@@ -77,10 +65,10 @@ macro_rules! if_rule {
     }}
 }
 
-
 //Short hands that I like but don't offer too much
 
 macro_rules! as_string {
-    ($pair:expr) => {$pair.as_str().to_string()}
+    ($pair:expr) => {
+        $pair.as_str().to_string()
+    };
 }
-
