@@ -1,16 +1,19 @@
 [package]
-name = "adms_rust"
+name = "VARF"
 version = "0.1.0"
 authors = ["DSOM"]
 edition = "2018"
 
 [dependencies]
-pest = "*"
-pest_derive = "*"
-indextree = "*"
-typed-arena = "*"
-log = "*"
-paste="*"
+nom="*"
+nom_locate = "*"
+nom-trace = "*"
+log="*"
+intrusive-collections = "*"
+logos = "*"
+
+[dependencies.hesr_alloc]
+path = "../im_he_sr_graph"
 
 #Logging for tests
 [dev-dependencies]

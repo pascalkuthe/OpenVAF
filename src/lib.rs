@@ -9,8 +9,11 @@
 //!
 //! TODO showoff API
 //!
+//!
+
 #[macro_use]
-extern crate pest_derive;
+extern crate nom;
+
 pub mod ast;
 pub mod error;
 pub mod parsing;
