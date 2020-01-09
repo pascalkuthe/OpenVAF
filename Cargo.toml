@@ -5,19 +5,26 @@ authors = ["DSOM"]
 edition = "2018"
 
 [dependencies]
-nom="*"
-nom_locate = "*"
-nom-trace = "*"
 log="*"
 intrusive-collections = "*"
-logos = "*"
+logos = "0.10.0-rc2"
+enum-as-inner = "*"
+indexmap = "*"
+bytecount = "*"
+[dependencies.annotate-snippets]
+version = "*"
+features = ["ansi_term"]
 
-[dependencies.hesr_alloc]
-path = "../im_he_sr_graph"
+[dependencies.sr_alloc]
+version = "*"
+path = "../sralloc"
+
+[dependencies.bumpalo]
+version = "*"
+features=['collections']
 
 #Logging for tests
 [dev-dependencies]
 fern={version="*",features=["colored"]}
 chrono="*"
-
-
+jemallocator-global = "*"

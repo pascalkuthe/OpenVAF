@@ -6,35 +6,32 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
-
-use hesr_alloc::{Allocator, SliceId, Immutable, StrId};
+use sr_alloc::{Allocator, Immutable, SliceId, StrId};
 
 /// This is an Ast. Once created is it completely immutable
-pub struct  Ast{
-    data:Immutable,
-    top_nodes:SliceId<TopNode>,
+pub struct Ast {
+    data: Immutable,
+    top_nodes: SliceId<TopNode>,
 }
-impl Ast{
-    pub fn new(data:Allocator,top_nodes:SliceId<TopNode>)->Self{
-        Self{
-            data:Immutable::new(data),
-            top_nodes
+impl Ast {
+    pub fn new(data: Allocator, top_nodes: SliceId<TopNode>) -> Self {
+        Self {
+            data: Immutable::new(data),
+            top_nodes,
         }
     }
-    pub fn top_nodes(&self)->&[TopNode]{
-        self.data.get_slice(*&self.top_nodes)
+    pub fn top_nodes(&self) -> &[TopNode] {
+        &self.data.get_slice(self.top_nodes)
     }
-    pub fn get_data(&self)->&Immutable{
+    pub fn get_data(&self) -> &Immutable {
         &self.data
     }
 }
 
-pub enum TopNode{
-    Module()
+pub enum TopNode {
+    Module(),
 }
 
-pub struct Module{
-    name:StrId
+pub struct Module {
+    name: StrId,
 }
-

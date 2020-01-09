@@ -8,7 +8,8 @@
 //  * *******************************************************************************************
 
 
-//EXPECTED OUTPUT OK1,OK2,__SMS__,OK3\nOK3L,OK4
+//EXPECTED OUTPUT OK1,OK2,SMS__OK3\nOK3L,OK4
+`define test5(x,y) x+y
 `ifdef test1 ERROR
 `endif
 `define test2
@@ -19,7 +20,7 @@ OK3L
     `endif
 `ifdef test4 ERROR
 `else
-__SMS__
+SMS__
 `endif
 `ifndef test4
 `define test4 OK4
@@ -33,3 +34,6 @@ ERROR
 `else
 `test4
 `endif
+`test5(Sum1,Sum2)
+`define test6(x,y) `test5(x*y,x/y)
+`test6(Fac1,Fac2)

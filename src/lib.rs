@@ -12,10 +12,21 @@
 //!
 
 #[macro_use]
-extern crate nom;
+extern crate enum_as_inner;
+#[macro_use]
+extern crate intrusive_collections;
+extern crate std;
 
-pub mod ast;
-pub mod error;
-pub mod parsing;
+pub use parser::lexer::Lexer;
+pub use parser::preprocessor::Preprocessor;
+pub use parser::preprocessor::SourceMap;
+pub use span::Span;
+
+#[macro_use]
+mod util;
+mod ast;
+mod error;
+mod parser;
+mod span;
 #[cfg(test)]
 mod test;
