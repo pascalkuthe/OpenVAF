@@ -74,9 +74,9 @@ impl Span {
         }
         self
     }
-    pub fn signed_offset(mut self, offset: IndexOffset) -> Self {
+    pub fn signed_offset(self, offset: IndexOffset) -> Self {
         if offset < 0 {
-            self.negative_offset((offset * (-1)) as Index)
+            self.negative_offset(-offset as Index)
         } else {
             self.offset(offset as Index)
         }

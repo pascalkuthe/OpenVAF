@@ -119,13 +119,8 @@ pub struct Preprocessor {
 }
 
 impl Preprocessor {
-    pub fn new(main_file: &Path) -> Result<Self> {
-        let (source_map_builder, main_lexer) = unsafe {
-            SourceMapBuilder::new(main_file).map_err(|io_err| Error {
-                source: Span::new(0, 0),
-                error_type: io_err.into(),
-            })? //this is save because we do not hand out references to the lexer so it doesnt outlive self and the builder lives exactly as long as self
-        };
+    pub fn new(main_file: &Path) -> std::io::Result<Self> {
+        let (source_map_builder, main_lexer) = unsafe { SourceMapBuilder::new(main_file)? };
         let mut res = Self {
             macros: HashMap::new(),
             called_macros: IndexMap::new(),
@@ -141,7 +136,6 @@ impl Preprocessor {
         res.current_len = main_lexer.token_len();
         res.state_stack
             .push(PreprocessorState::new(0, TokenSource::File(main_lexer)));
-        res.process_token()?;
         Ok(res)
     }
     pub fn done(self) -> Box<SourceMap> {
@@ -270,7 +264,7 @@ impl Preprocessor {
         self.advance_state()?;
         self.process_token()
     }
-    fn process_token(&mut self) -> Result {
+    pub fn process_token(&mut self) -> Result {
         loop {
             // advance state until error occurs or token not handled by the preprocessor is encountered
             match self.current_token {
@@ -680,6 +674,16 @@ impl Preprocessor {
 
     pub fn current_span(&self) -> Span {
         Span::new_with_length(self.current_start, self.current_len)
+    }
+
+    pub fn current_start(&self) -> Index {
+        self.current_start
+    }
+    pub fn current_end(&self) -> Index {
+        self.current_start + self.current_len
+    }
+    pub fn current_len(&self) -> Index {
+        self.current_len
     }
 
     fn current_source_span(&self) -> Span {

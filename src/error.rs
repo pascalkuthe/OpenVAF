@@ -7,9 +7,11 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+use annotate_snippets::formatter::DisplayListFormatter;
+
 use crate::{parser, SourceMap, Span};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Error<ErrorType> {
     pub error_type: ErrorType,
     pub source: Span,

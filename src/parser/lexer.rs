@@ -98,6 +98,8 @@ pub enum Token {
     Contribute,
     #[token = "="]
     Assign,
+    #[token = "#"]
+    Hash,
 
     //Arithmatic Operators
     #[token = "*"]
@@ -153,7 +155,7 @@ pub enum Token {
     //Other
     #[token = "?"]
     OpCondition,
-    #[token = "?"]
+    #[token = ":"]
     OpElse,
 
     //Keywords
@@ -196,6 +198,7 @@ pub enum Token {
     #[token = "scalared"]
     Scalared,
 
+    //Types
     #[token = "string"]
     String,
     #[token = "time"]
@@ -206,11 +209,32 @@ pub enum Token {
     Integer,
     #[token = "real"]
     Real,
-
     #[token = "reg"]
     Reg,
     #[token = "wreal"]
     Wreal,
+    #[token = "supply0"]
+    Supply0,
+    #[token = "supply1"]
+    Supply1,
+    #[token = "tri"]
+    Tri,
+    #[token = "triand"]
+    TriAnd,
+    #[token = "trior"]
+    TriOr,
+    #[token = "tri0"]
+    Tri0,
+    #[token = "tri1"]
+    Tri1,
+    #[token = "wire"]
+    Wire,
+    #[token = "uwire"]
+    Uwire,
+    #[token = "wand"]
+    Wand,
+    #[token = "wor"]
+    Wor,
 
     #[token = "potential"]
     Potential,
@@ -259,6 +283,12 @@ pub enum Token {
     #[token = "units"]
     Units,
 }
+/*TODO pretty printing
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+
+    }
+}*/
 
 fn ignore_comments<'source, Src: Source<'source>>(lex: &mut logos::Lexer<Token, Src>) {
     //handel comment here since we dont want the resulting token anyway (if i don't do this lexer generation slows to a crawl)
@@ -374,17 +404,17 @@ mod test {
     }
     #[test]
     pub fn macro_else() {
-        let mut lexer = Lexer::new("`else");
+        let lexer = Lexer::new("`else");
         assert_eq!(lexer.token(), Token::MacroElse)
     }
     #[test]
     pub fn macro_elsif() {
-        let mut lexer = Lexer::new("`elsif");
+        let lexer = Lexer::new("`elsif");
         assert_eq!(lexer.token(), Token::MacroElsif)
     }
     #[test]
     pub fn macro_definition() {
-        let mut lexer = Lexer::new("`define");
+        let lexer = Lexer::new("`define");
         assert_eq!(lexer.token(), Token::MacroDef)
     }
     #[test]
@@ -423,23 +453,23 @@ mod test {
     }
     #[test]
     pub fn comment() {
-        let mut lexer = Lexer::new_test("//jdfjdfjw4$%\r%&/**#.,|\n/*3\n\r\n_/*_*/ test");
+        let lexer = Lexer::new_test("//jdfjdfjw4$%\r%&/**#.,|\n/*3\n\r\n_/*_*/ test");
         assert_eq!(lexer.token(), Token::SimpleIdentifier);
         assert_eq!(lexer.slice(), "test")
     }
     #[test]
     pub fn string() {
-        let mut lexer = Lexer::new(r#""lel\"dsd%§.,-032391\t    ""#);
+        let lexer = Lexer::new(r#""lel\"dsd%§.,-032391\t    ""#);
         assert_eq!(lexer.token(), Token::LiteralString);
     }
     #[test]
     pub fn unsigned_number() {
-        let mut lexer = Lexer::new("1_2345_5678_9");
+        let lexer = Lexer::new("1_2345_5678_9");
         assert_eq!(lexer.token(), Token::LiteralUnsignedNumber);
     }
     #[test]
     pub fn macro_ref() {
-        let mut lexer = Lexer::new_test("`lel");
+        let lexer = Lexer::new_test("`lel");
         assert_eq!(lexer.token(), Token::MacroReference)
     }
     #[test]

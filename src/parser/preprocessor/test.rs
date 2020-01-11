@@ -16,17 +16,19 @@ use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, Sou
 use crate::parser::error::{Result, Type};
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::source_map::{SourceMap, SourceMapBuilder};
+use crate::parser::Error;
 use crate::test::setup_logger;
 use crate::{Preprocessor, Span};
 
 #[test]
 pub fn macro_test() -> std::result::Result<(), String> {
     setup_logger();
-    let mut preprocessor = Preprocessor::new(Path::new("tests/macros.va")).expect("Inital Error");
+    let mut preprocessor = Preprocessor::new(Path::new("tests/macros.va")).expect("IoError");
     let mut start = 0;
     let mut end = 0;
     let mut span = Span::new(0, 0);
     let res = Ok(()).and_then(|_| {
+        preprocessor.process_token()?;
         assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
         assert_eq!(preprocessor.slice(), "OK1");
         preprocessor.advance()?;
@@ -84,7 +86,10 @@ pub fn macro_test() -> std::result::Result<(), String> {
         Ok(())
     });
     let source_map = preprocessor.done();
-    res.map_err(|err| Type::print(&err, source_map.as_ref()))?;
+    res.map_err(|err: Error| {
+        err.print(&source_map);
+        ""
+    })?;
     let (string, lines) = source_map.resolve_span(Span::new(start, end));
     println!("{} at {}", lines, string);
     let (string, lines, range) = source_map.resolve_span_within_line(span);
@@ -122,7 +127,7 @@ pub fn test_source_map() {
     }
     builder.as_mut().new_line();
     builder.as_mut().new_line();
-    let mut span = lexer.range().into();
+    let span = lexer.range().into();
     builder.as_mut().enter_root_macro(
         lexer.range().start,
         span,

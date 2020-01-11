@@ -15,7 +15,6 @@ use std::ptr::NonNull;
 
 use intrusive_collections::rbtree::{Cursor, CursorMut};
 use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink, UnsafeRef};
-use logos::Source;
 use sr_alloc::{Allocator, NodeId, StrId};
 
 use crate::span::{Index, LineNumber};
@@ -196,7 +195,7 @@ impl SourceMap {
         if reverse {
             let res = characters
                 .rev()
-                .find(|(_, c)| if **c == b'\n' { true } else { false })
+                .find(|(_, c)| **c == b'\n')
                 .map(|(index, _)| index as Index);
             if let Some(index) = res {
                 dest.push_str(&string[index as usize + 1..]);

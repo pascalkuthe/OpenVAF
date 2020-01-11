@@ -26,7 +26,7 @@ pub use span::Span;
 mod util;
 mod ast;
 mod error;
-mod parser;
+pub mod parser;
 mod span;
 #[cfg(test)]
 mod test;
