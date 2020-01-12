@@ -1,0 +1,18 @@
+module test1;
+endmodule
+
+module test2 (a,b,c,d,e,f,g);
+    output a;
+    input signed b;
+    inout wire c;
+    inout electrical d;
+    output electrical e,f;
+    inout electrical wire signed g;
+endmodule
+
+module test3 (output a,input electrical b,inout electrical tri c);
+   /*
+    * lel
+    *lele
+    */
+endmodule

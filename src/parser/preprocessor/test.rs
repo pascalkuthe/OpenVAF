@@ -114,7 +114,7 @@ pub fn macro_test() -> std::result::Result<(), String> {
     };
     let dl = DisplayList::from(snippet);
     let dlf = DisplayListFormatter::new(true, false);
-    print!("{}", dlf.format(&dl));
+    println!("{}", dlf.format(&dl));
     Ok(())
 }
 

@@ -90,6 +90,9 @@ impl Span {
         }
         self
     }
+    pub fn extend(mut self, to: Self) -> Self {
+        Self::new(self.get_start(), to.get_end())
+    }
 }
 impl From<Range> for Span {
     fn from(range: Range) -> Self {

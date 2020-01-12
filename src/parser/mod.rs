@@ -23,13 +23,17 @@ use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
 pub(crate) mod preprocessor;
+#[cfg(test)]
+pub mod test;
 
+mod branch;
 mod module;
 mod primaries;
 mod variables;
 //mod combinators;
 pub mod error;
 
+#[derive(Debug)]
 pub struct Parser {
     pub preprocessor: Preprocessor,
     pub lookahead: Option<Result<(Token, Span)>>,
@@ -47,7 +51,7 @@ impl Parser {
         })
     }
     fn look_ahead(&mut self) -> Result<(Token, Span)> {
-        if let Some(lookahead) = self.lookahead.take() {
+        if let Some(lookahead) = self.lookahead.clone() {
             return lookahead;
         }
         let res = self.preprocessor.advance().map(|_| {
@@ -86,18 +90,22 @@ impl Parser {
         Ok(self.ast_allocator.alloc_slice_clone(top_nodes.as_slice()))
     }
     pub fn parse_identifier(&mut self, optional: bool) -> Result<StrId> {
-        let (token, span) = if optional {
+        let identifier = self.parse_identifier_internal(optional)?.to_owned(); //to_string necessary due to a bug with the borrow checker
+        Ok(self.ast_allocator.alloc_str_copy(&identifier))
+    }
+    pub fn parse_identifier_internal(&mut self, optional: bool) -> Result<&str> {
+        let (token, source) = if optional {
             self.look_ahead()?
         } else {
             self.next()?
         };
-        let identifier = match self.next()? {
-            (Token::SimpleIdentifier, _) => self.preprocessor.slice(),
-            (Token::EscapedIdentifier, _) => {
+        let identifier = match token {
+            Token::SimpleIdentifier => self.preprocessor.slice(),
+            Token::EscapedIdentifier => {
                 let raw = self.preprocessor.slice();
                 &raw[1..raw.len() - 1]
             }
-            (_, source) => {
+            _ => {
                 return Err(Error {
                     source,
                     error_type: error::Type::UnexpectedTokens {
@@ -109,7 +117,16 @@ impl Parser {
         if optional {
             self.lookahead.take();
         }
-        Ok(self.ast_allocator.alloc_str_copy(identifier))
+        Ok(identifier)
+    }
+    pub fn parse_hieraichal_identifier(&mut self, optional: bool) -> Result<StrId> {
+        let mut identifier = self.parse_identifier_internal(optional)?.to_string();
+        while self.look_ahead()?.0 == Token::Accessor {
+            self.lookahead.take();
+            identifier.push_str(".");
+            identifier.push_str(self.parse_identifier_internal(false)?)
+        }
+        Ok(self.ast_allocator.alloc_str_copy(identifier.as_str()))
     }
     //todo attributes
     pub fn parse_attributes(&mut self) -> Result<Attributes> {
@@ -129,6 +146,7 @@ impl Parser {
         }
     }
     pub fn span_to_current_end(&self, start: Index) -> Span {
+        let end = self.preprocessor.current_end();
         Span::new(start, self.preprocessor.current_end())
     }
 }
@@ -141,6 +159,10 @@ pub fn parse(main_file: &Path) -> std::io::Result<(Box<SourceMap>, Result<Ast>)>
         lookahead: None,
         ast_allocator: Allocator::new(),
     };
+    parser.lookahead = Some(Ok((
+        parser.preprocessor.current_token(),
+        parser.preprocessor.current_span(),
+    )));
     let res = parser.run();
     let mut preprocessor = parser.preprocessor;
     if let Err(error) = res {

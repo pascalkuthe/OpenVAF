@@ -127,7 +127,7 @@ pub enum Token {
 
     //Relational
     #[token = "<"]
-    OpLT,
+    OpLess,
     #[token = "<="]
     OpLessEqual,
     #[token = ">"]

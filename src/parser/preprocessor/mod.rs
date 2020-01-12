@@ -104,6 +104,7 @@ impl MacroArg {
         Self { tokens, source }
     }
 }
+#[derive(Debug)]
 pub struct Preprocessor {
     //internal state
     macros: HashMap<String, Macro>,
@@ -693,8 +694,6 @@ impl Preprocessor {
     fn current_offset(&self) -> IndexOffset {
         self.state_stack.last().unwrap().offset
     }
-    const EXPECT_TOKEN_SOURCES: &'static str =
-        "Preprocessor State should at least contain the main file";
 
     pub fn source(&self) -> &str {
         self.source_map_builder.source()

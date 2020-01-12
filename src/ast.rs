@@ -6,13 +6,14 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+use intrusive_collections::__core::cell::Ref;
 use sr_alloc::{Allocator, Immutable, NodeId, SliceId, StrId};
 
 use crate::Span;
 
 /// This is an Ast. Once created is it completely immutable
 pub struct Ast {
-    data: Immutable,
+    pub data: Immutable,
     top_nodes: SliceId<AttributeNode<TopNode>>,
 }
 impl Ast {
@@ -24,9 +25,6 @@ impl Ast {
     }
     pub fn top_nodes(&self) -> &[AttributeNode<TopNode>] {
         &self.data.get_slice(self.top_nodes)
-    }
-    pub fn get_data(&self) -> &Immutable {
-        &self.data
     }
 }
 pub type AstNodeId<T> = NodeId<Node<T>>;
@@ -54,6 +52,7 @@ impl<T: Clone> AttributeNode<T> {
 #[derive(Clone, Copy, Debug)]
 pub enum TopNode {
     Module(Module),
+    Nature,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -69,6 +68,7 @@ pub struct Port {
     pub input: bool,
     pub output: bool,
     pub discipline: Option<Reference<()>>, //TODO discipline
+    pub signed: bool,
     pub verilog_type: VerilogType,
 }
 
@@ -79,21 +79,34 @@ impl Default for Port {
             input: false,
             output: false,
             discipline: None,
+            signed: false,
             verilog_type: VerilogType::UNDECLARED,
         }
     }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct Net {}
+#[derive(Debug, Clone, Copy)]
+pub enum Branch {
+    Port(Reference<Port>),
+    Nets(Reference<Net>, Reference<Net>),
+}
+#[derive(Debug, Clone, Copy)]
+pub struct BranchDeclaration {
+    pub name: StrId,
+    pub branch: Branch,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum ModuleItem {
     AnalogStmt,
-    BranchDecl,
+    BranchDecl(BranchDeclaration),
     ParameterDecl,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Reference<T: Clone> {
-    name: StrId,
-    declaration: Option<AstNodeId<T>>,
+    pub name: StrId,
+    pub declaration: Option<AstNodeId<T>>,
 }
 impl<T: Clone> Reference<T> {
     pub fn new(name: StrId) -> Self {
@@ -103,7 +116,7 @@ impl<T: Clone> Reference<T> {
         }
     }
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerilogType {
     UNDECLARED,
     REG,

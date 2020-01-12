@@ -1,6 +1,18 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 use sr_alloc::{SliceId, StrId};
 
-use crate::ast::{AttributeNode, Attributes, Module, Port, Reference, VerilogType};
+use crate::ast::{
+    AstAttributeNodeId, AttributeNode, Attributes, Module, ModuleItem, Port, Reference, VerilogType,
+};
 use crate::error::Error;
 use crate::parser::error;
 use crate::parser::error::Type::Unsupported;
@@ -13,14 +25,17 @@ use crate::Span;
 
 impl Parser {
     pub(super) fn parse_module(&mut self) -> Result<Module> {
+        let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
-
+        //parameters
         if self.look_ahead()?.0 == Token::Hash {
             self.expect(Token::ParenOpen)?;
             self.parse_parameter_list()?;
             self.expect(Token::ParenClose)?;
         }
 
+        let port_list_start = self.preprocessor.current_start();
+        //ports
         let (allow_port_declaration, mut port_list) = if self.look_ahead()?.0 == Token::ParenOpen {
             self.lookahead.take();
             let (next_token, next_span) = self.look_ahead()?;
@@ -45,23 +60,30 @@ impl Parser {
         } else {
             (false, Vec::new())
         };
-        let macro_items = Vec::new();
+        let port_list_span = self
+            .span_to_current_end(port_list_start)
+            .negative_offset(start);
+
+        self.expect(Token::Semicolon)?;
+
+        let mut macro_items = Vec::new();
         loop {
             let (token, span) = self.look_ahead()?;
             match token {
-                Token::Inout | Token::Input | Token::Inout if allow_port_declaration => {
+                Token::Inout | Token::Input | Token::Output if allow_port_declaration => {
                     port_list.append(&mut self.parse_port_declaration()?)
                 }
-                Token::Inout | Token::Input | Token::Inout => {
+                Token::Inout | Token::Input | Token::Output => {
                     let source = self
                         .parse_port_declaration()?
                         .last()
                         .unwrap()
                         .contents
-                        .source; //we do this here so that the error doesnt just underline the input but
+                        .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
+                        .negative_offset(start);
                     return Err(Error {
-                        source,
-                        error_type: error::Type::PortRedeclaration,
+                        source: self.span_to_current_end(start),
+                        error_type: error::Type::PortRedeclaration(source, port_list_span),
                     });
                 }
                 Token::EOF => {
@@ -72,8 +94,11 @@ impl Parser {
                         source: span,
                     })
                 }
-                Token::EndModule => break,
-                _ => unimplemented!("Macro Items"),
+                Token::EndModule => {
+                    self.lookahead.take();
+                    break;
+                }
+                token => macro_items.push(self.parse_module_item()?),
             }
         }
         Ok(Module {
@@ -82,6 +107,7 @@ impl Parser {
             children: self.ast_allocator.alloc_slice_copy(macro_items.as_slice()),
         })
     }
+
     fn parse_port_list(&mut self) -> Result<Vec<AttributeNode<Port>>> {
         let name = self.parse_identifier(false)?;
         let mut res = vec![AttributeNode::new(
@@ -92,7 +118,8 @@ impl Parser {
                 ..Port::default()
             },
         )];
-        while self.look_ahead()?.0 == Token::Colon {
+        while self.look_ahead()?.0 == Token::Comma {
+            self.lookahead.take();
             let name = self.parse_identifier(false)?;
             res.push(AttributeNode::new(
                 self.preprocessor.current_span(),
@@ -117,8 +144,8 @@ impl Parser {
             attributes,
             port,
         )];
-        while self.look_ahead()?.0 == Token::Colon {
-            while self.next()?.0 == Token::Colon {
+        while self.look_ahead()?.0 == Token::Comma {
+            while self.next()?.0 == Token::Comma {
                 if let Ok(name) = self.parse_identifier(true) {
                     port.name = name;
                     res.push(AttributeNode::new(
@@ -141,6 +168,7 @@ impl Parser {
         }
         Ok(res)
     }
+
     /// this parses a port Declaration which only declares one port (for example input electrical x but not input electrical x,y)
     /// this function is a helper function to either be called from parse_port_declaration or parse_port_declaration_list which handel the extra ports declared
     fn parse_port_declaration_base(&mut self) -> Result<Port> {
@@ -193,13 +221,14 @@ impl Parser {
                     (first_identifier_or_discipline, None)
                 }
             }
-            Err(e) => (self.parse_identifier(false)?, None),
+            Err(_) => (self.parse_identifier(false)?, None),
         }; //TODO default discipline
         Ok(Port {
             name,
             input,
             output,
             discipline,
+            signed,
             verilog_type: port_type,
         })
     }
@@ -213,7 +242,8 @@ impl Parser {
             attributes,
             port,
         )];
-        while self.look_ahead()?.0 == Token::Colon {
+        while self.look_ahead()?.0 != Token::Semicolon {
+            self.expect(Token::Comma);
             let port = Port {
                 name: self.parse_identifier(false)?,
                 ..port
@@ -224,9 +254,29 @@ impl Parser {
                 port,
             ));
         }
+        self.lookahead.take();
         Ok(res)
     }
+
     fn parse_parameter_list(&mut self) -> Result {
         unimplemented!()
+    }
+    fn parse_module_item(&mut self) -> Result<AttributeNode<ModuleItem>> {
+        let attributes = self.parse_attributes()?;
+        let start = self.look_ahead()?.1.get_start();
+        let contents = match self.look_ahead()?.0 {
+            Token::Analog => {
+                self.lookahead.take();
+                unimplemented!("Analog_Block")
+            }
+            Token::Branch => {
+                self.lookahead.take();
+                let branch_decl = self.parse_branch_declaration()?;
+                ModuleItem::BranchDecl(branch_decl)
+            }
+            _ => unimplemented!("Variable Declaration"),
+        };
+        let span = self.span_to_current_end(start);
+        Ok(AttributeNode::new(span, attributes, contents))
     }
 }

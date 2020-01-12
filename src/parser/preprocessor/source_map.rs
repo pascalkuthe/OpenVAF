@@ -159,11 +159,13 @@ impl SourceMap {
             } else {
                 //we have passed the last substitution and are now inside the main file
                 let start = if reverse { 0 } else { main_file.len() as Index };
-                if let Some(index) = Self::append_until_newline_in_str(
-                    &main_file[start as usize..last_end as usize],
-                    &mut res,
-                    reverse,
-                ) {
+                let end_slice = if reverse {
+                    &main_file[start as usize..last_end as usize]
+                } else {
+                    &main_file[last_end as usize..start as usize]
+                };
+                if let Some(index) = Self::append_until_newline_in_str(end_slice, &mut res, reverse)
+                {
                     return (res, index, true);
                 } else {
                     return (res, start, true);
@@ -231,7 +233,7 @@ impl SourceMap {
         };
         head_content.push_str(main_content.as_str());
         head_content.push_str(tail_content.as_str());
-
+        let head_offset = head_offset + 1; //we need to include the last line in the counting as well
         let line_number = if let Some(start_substitution) = start_cursor.get() {
             if head_in_root {
                 let range: Range<usize> = Range {
@@ -253,7 +255,7 @@ impl SourceMap {
                 b'\n',
             ) as LineNumber
         };
-        (head_content, line_number, range)
+        (head_content, line_number + 1, range)
     }
     pub fn resolve_span(&self, span: Span) -> (String, LineNumber) {
         let mut start_cursor = self.map.upper_bound(Bound::Included(&span.get_start()));
@@ -279,7 +281,7 @@ impl SourceMap {
             ) as LineNumber
         };
         let res = self.resolve_span_internal(span, &mut start_cursor);
-        (res, line_number as LineNumber)
+        (res, line_number + 1)
     }
 
     fn resolve_span_internal(&self, span: Span, cursor: &mut Cursor<SourceMapAdapter>) -> String {
@@ -348,11 +350,13 @@ impl SourceMap {
     }
 }
 
+#[derive(Debug)]
 struct SourceMapBuilderState {
     source: String,
     offset: Index,
 }
 
+#[derive(Debug)]
 pub(super) struct SourceMapBuilder {
     cursor: NonNull<CursorMut<'static, SourceMapAdapter>>,
     current_source: Option<(NonNull<Substitution>, bumpalo::collections::String<'static>)>,
@@ -374,7 +378,7 @@ impl SourceMapBuilder {
         let mut res = Box::pin(Self {
             source_map: NonNull::dangling(),
             cursor: NonNull::dangling(),
-            root_line: 1,
+            root_line: 0,
             current_source: None,
             substitution_stack: Vec::new(),
             _pin_marker: PhantomPinned,

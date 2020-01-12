@@ -13,6 +13,7 @@ use crate::{SourceMap, Span};
 use crate::ast::{AstAttributeNodeId, AstNodeId, Module, Port};
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
+use crate::span::{Index, Range};
 
 pub type Error = crate::error::Error<Type>;
 pub(crate) type Warning = crate::error::Error<WarningType>;
@@ -37,7 +38,7 @@ impl From<Error> for MultiError {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    PortRedeclaration,
+    PortRedeclaration(Span, Span),
     EmptyListEntry(List),
 
     //Preprocessor
@@ -94,13 +95,64 @@ pub enum List {
 }
 impl Error {
     pub fn print(&self, source_map: &SourceMap) {
+        let (line, line_number, range) = source_map.resolve_span_within_line(self.source);
         let snippet = match self.error_type {
-            Type::UnexpectedToken { ref expected } => {
-                let (line, line_number, range) = source_map.resolve_span_within_line(self.source);
+            Type::UnexpectedToken { ref expected } => Snippet {
+                title: Some(Annotation {
+                    id: None,
+                    label: Some("Unexpected Token".to_string()),
+                    annotation_type: AnnotationType::Error,
+                }),
+                footer: vec![],
+                slices: vec![Slice {
+                    source: line,
+                    line_start: line_number as usize,
+                    origin: None,
+                    annotations: vec![SourceAnnotation {
+                        range: (range.start, range.end),
+                        label: format!("expected {:?}", expected),
+                        annotation_type: AnnotationType::Error,
+                    }],
+                    fold: false,
+                }],
+            },
+            Type::UnexpectedTokens { ref expected } => Snippet {
+                title: Some(Annotation {
+                    id: None,
+                    label: Some("Unexpected Token".to_string()),
+                    annotation_type: AnnotationType::Error,
+                }),
+                footer: vec![],
+                slices: vec![Slice {
+                    source: line,
+                    line_start: line_number as usize,
+                    origin: None,
+                    annotations: vec![SourceAnnotation {
+                        range: (range.start, range.end),
+                        label: format!("expected {:?}", expected),
+                        annotation_type: AnnotationType::Error,
+                    }],
+                    fold: false,
+                }],
+            },
+            Type::PortRedeclaration(error_span, declaration_list_span) => {
+                let error_range = translate_to_inner_snippet_range(
+                    range.start as Index + error_span.get_start(),
+                    range.start as Index + error_span.get_end(),
+                    &line,
+                );
+                let declaration_list_range = translate_to_inner_snippet_range(
+                    declaration_list_span.get_start() + range.start as Index,
+                    range.start as Index + declaration_list_span.get_end(),
+                    &line,
+                );
                 Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Unexpected Token".to_string()),
+                        label: Some(
+                            "Module ports declared in Module body when already declared in Module Head"
+                                .to_string(),
+                        ),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer: vec![],
@@ -108,12 +160,19 @@ impl Error {
                         source: line,
                         line_start: line_number as usize,
                         origin: None,
-                        annotations: vec![SourceAnnotation {
-                            range: (range.start, range.end),
-                            label: format!("expected {:?}", expected),
-                            annotation_type: AnnotationType::Error,
-                        }],
-                        fold: false,
+                        annotations: vec![
+                            SourceAnnotation {
+                                range:declaration_list_range,
+                                label: "Ports are declared here".to_string(),
+                                annotation_type: AnnotationType::Info,
+                            },
+                            SourceAnnotation {
+                                range: error_range,
+                                label: "Port declaration is illegal here".to_string(),
+                                annotation_type: AnnotationType::Error,
+                            },
+                        ],
+                        fold: true,
                     }],
                 }
             }
@@ -121,9 +180,14 @@ impl Error {
         };
         let display_list = DisplayList::from(snippet);
         let formatter = DisplayListFormatter::new(true, false);
-        formatter.format(&display_list);
+        println!("{}", formatter.format(&display_list));
     }
 }
+fn translate_to_inner_snippet_range(start: Index, end: Index, source: &str) -> (usize, usize) {
+    let lines = bytecount::count(&source.as_bytes()[..start as usize], b'\n');
+    (start as usize + lines, end as usize + lines)
+}
+
 pub fn merge_multi_result<T>(value_res: MultiResult<T>, condition: MultiResult) -> MultiResult<T> {
     match value_res {
         Ok(res) => {

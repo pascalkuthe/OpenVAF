@@ -1,6 +1,7 @@
 use crate::ast::VerilogType;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
+use crate::parser::Result;
 
 impl Parser {
     pub fn parse_type(&mut self, token: Token) -> std::result::Result<VerilogType, ()> {
