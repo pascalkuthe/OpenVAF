@@ -7,31 +7,55 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use intrusive_collections::__core::borrow::BorrowMut;
-use std::borrow::Borrow;
 
-use crate::parser::error::List;
+use crate::error::Error;
 use crate::parser::error::Result;
+use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken};
 use crate::parser::lexer::Token;
-use crate::source::Span;
+use crate::parser::Parser;
+use crate::Span;
 
-/* TODO for parser use
-pub fn parse_list<'source,T,C,TokenHandler, NewEntry,NextToken>(terminator:Token, separator:Token, error_type: List,
-handel_token:TokenHandler,new_entry:NewEntry,next_token:NextToken,context:&mut C) ->Result<Vec<T>>
-    where TokenHandler: Fn(Token,&C,T)->Result
-        ,NewEntry:Fn()->T
-        ,NextToken:Fn(&C)->Result<Token>{
-    let mut res = Vec::new();//Todo sralloc Vec
-    res.push(new_entry());
-    loop{
-        let last_colon;
-        match next_token(context.borrow_mut())? {
-            token if token == terminator=> break,
-            token if token == separator => {
-                res.push(new_entry());
+impl Parser {
+    /// Combinator that parses a list delimited by a comma and terminated by [end].
+    /// This function does not parse the first entry as this requires extra logic in some cases
+    /// # Example
+    /// ,x,y,z;
+    pub fn parse_list<F>(&mut self, mut parse_list_item: F, end: Token, consume_end: bool) -> Result
+    where
+        F: FnMut(&mut Self) -> Result,
+    {
+        let start = self.preprocessor.current_start();
+        loop {
+            let (token, span) = if consume_end {
+                self.next()?
+            } else {
+                self.look_ahead()?
+            };
+            match token {
+                Token::EOF => {
+                    return Err(Error {
+                        error_type: UnexpectedEof {
+                            expected: vec![end],
+                        },
+                        source: self.span_to_current_end(start),
+                    })
+                }
+                Token::Comma => {
+                    if !consume_end {
+                        self.lookahead.take();
+                    }
+                    parse_list_item(self)?
+                }
+                token if end == token => return Ok(()),
+                _ => {
+                    return Err(Error {
+                        source: span,
+                        error_type: UnexpectedToken {
+                            expected: vec![Token::Colon, end],
+                        },
+                    })
+                }
             }
-            token => handel_token(token,context.borrow_mut(),res.last())
         }
     }
-    Ok(res)
-}*/
+}

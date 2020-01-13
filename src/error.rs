@@ -7,7 +7,6 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use annotate_snippets::formatter::DisplayListFormatter;
 
 use crate::{parser, SourceMap, Span};
 

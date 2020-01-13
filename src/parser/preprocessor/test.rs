@@ -9,13 +9,8 @@
  */
 use std::path::Path;
 
-use annotate_snippets::display_list::DisplayList;
-use annotate_snippets::formatter::DisplayListFormatter;
-use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
-
-use crate::parser::error::{Result, Type};
 use crate::parser::lexer::Token;
-use crate::parser::preprocessor::source_map::{SourceMap, SourceMapBuilder};
+use crate::parser::preprocessor::source_map::SourceMapBuilder;
 use crate::parser::Error;
 use crate::test::setup_logger;
 use crate::{Preprocessor, Span};
@@ -90,31 +85,31 @@ pub fn macro_test() -> std::result::Result<(), String> {
         err.print(&source_map);
         ""
     })?;
-    let (string, lines) = source_map.resolve_span(Span::new(start, end));
-    println!("{} at {}", lines, string);
-    let (string, lines, range) = source_map.resolve_span_within_line(span);
-    let snippet = Snippet {
-        title: Some(Annotation {
-            id: None,
-            label: Some("This is a test".to_string()),
-            annotation_type: AnnotationType::Warning,
-        }),
-        footer: vec![],
-        slices: vec![Slice {
-            source: string,
-            line_start: lines as usize,
-            origin: Some("macros.va".to_string()),
-            annotations: vec![SourceAnnotation {
-                range: (range.start, range.end),
-                label: "here".to_string(),
-                annotation_type: AnnotationType::Warning,
-            }],
-            fold: false,
-        }],
-    };
-    let dl = DisplayList::from(snippet);
-    let dlf = DisplayListFormatter::new(true, false);
-    println!("{}", dlf.format(&dl));
+    //    let (string, lines) = source_map.resolve_span(Span::new(start, end));
+    //    println!("{} at {}", lines, string);
+    //    let (string, lines, range) = source_map.resolve_span_within_line(span);
+    //    let snippet = Snippet {
+    //        title: Some(Annotation {
+    //            id: None,
+    //            label: Some("This is a test".to_string()),
+    //            annotation_type: AnnotationType::Warning,
+    //        }),
+    //        footer: vec![],
+    //        slices: vec![Slice {
+    //            source: string,
+    //            line_start: lines as usize,
+    //            origin: Some("macros.va".to_string()),
+    //            annotations: vec![SourceAnnotation {
+    //                range: (range.start, range.end),
+    //                label: "here".to_string(),
+    //                annotation_type: AnnotationType::Warning,
+    //            }],
+    //            fold: false,
+    //        }],
+    //    };
+    //    let dl = DisplayList::from(snippet);
+    //    let dlf = DisplayListFormatter::new(true, false);
+    //    println!("{}", dlf.format(&dl));
     Ok(())
 }
 

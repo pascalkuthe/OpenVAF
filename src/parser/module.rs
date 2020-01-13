@@ -11,7 +11,8 @@
 use sr_alloc::{SliceId, StrId};
 
 use crate::ast::{
-    AstAttributeNodeId, AttributeNode, Attributes, Module, ModuleItem, Port, Reference, VerilogType,
+    AstAttributeNodeId, AttributeNode, Attributes, Module, ModuleItem, NetType, Port, Reference,
+    VariableType,
 };
 use crate::error::Error;
 use crate::parser::error;
@@ -98,7 +99,7 @@ impl Parser {
                     self.lookahead.take();
                     break;
                 }
-                token => macro_items.push(self.parse_module_item()?),
+                token => macro_items.append(&mut self.parse_module_item()?),
             }
         }
         Ok(Module {
@@ -132,151 +133,66 @@ impl Parser {
         }
         Ok(res)
     }
-    fn parse_port_declaration_list(&mut self) -> Result<Vec<AttributeNode<Port>>> {
-        if self.look_ahead()?.0 == ParenClose {
-            return Ok(Vec::new());
-        }
-        let mut start = self.look_ahead()?.1.get_start();
-        let mut attributes = self.parse_attributes()?;
-        let mut port = self.parse_port_declaration_base()?;
-        let mut res = vec![AttributeNode::new(
-            self.span_to_current_end(start),
-            attributes,
-            port,
-        )];
-        while self.look_ahead()?.0 == Token::Comma {
-            while self.next()?.0 == Token::Comma {
-                if let Ok(name) = self.parse_identifier(true) {
-                    port.name = name;
-                    res.push(AttributeNode::new(
-                        self.span_to_current_end(start),
-                        attributes,
-                        port,
-                    ));
-                } else {
-                    break;
-                }
-            }
-            start = self.look_ahead()?.1.get_start();
-            attributes = self.parse_attributes()?;
-            port = self.parse_port_declaration_base()?;
-            res.push(AttributeNode::new(
-                self.span_to_current_end(start),
-                attributes,
-                port,
-            ));
-        }
-        Ok(res)
-    }
-
-    /// this parses a port Declaration which only declares one port (for example input electrical x but not input electrical x,y)
-    /// this function is a helper function to either be called from parse_port_declaration or parse_port_declaration_list which handel the extra ports declared
-    fn parse_port_declaration_base(&mut self) -> Result<Port> {
-        let (token, span) = self.next()?;
-        let (input, output) = match token {
-            Token::Input => (true, false),
-            Token::Output => (false, true),
-            Token::Inout => (true, true),
-            _ => {
-                return Err(Error {
-                    source: span,
-                    error_type: error::Type::UnexpectedToken {
-                        expected: vec![Token::Inout, Token::Input, Token::Output],
-                    },
-                })
-            }
-        };
-
-        let opt_first_identifier_or_discipline = self.parse_identifier(true);
-        let mut is_discipline = false; //helps resolve the ambiguity whether an identifier refers to the first name or the discipline of a port declaration
-        let token = self.look_ahead()?.0;
-        let port_type = if let Ok(port_type) = self.parse_type(token) {
-            self.lookahead.take();
-            is_discipline = true;
-            port_type
-        } else {
-            VerilogType::UNDECLARED
-        };
-
-        let signed = if self.look_ahead()?.0 == Token::Signed {
-            self.lookahead.take();
-            is_discipline = true;
-            true
-        } else {
-            false
-        };
-
-        let (name, discipline) = match opt_first_identifier_or_discipline {
-            Ok(discipline) if is_discipline => (
-                self.parse_identifier(false)?,
-                Some(Reference::new(discipline)),
-            ),
-            Ok(first_identifier_or_discipline) => {
-                if let Ok(first_identifier) = self.parse_identifier(true) {
-                    (
-                        first_identifier,
-                        Some(Reference::new(first_identifier_or_discipline)),
-                    )
-                } else {
-                    (first_identifier_or_discipline, None)
-                }
-            }
-            Err(_) => (self.parse_identifier(false)?, None),
-        }; //TODO default discipline
-        Ok(Port {
-            name,
-            input,
-            output,
-            discipline,
-            signed,
-            verilog_type: port_type,
-        })
-    }
-
-    pub fn parse_port_declaration(&mut self) -> Result<Vec<AttributeNode<Port>>> {
-        let start = self.look_ahead()?.1.get_start();
-        let port = self.parse_port_declaration_base()?;
-        let attributes = self.parse_attributes()?;
-        let mut res = vec![AttributeNode::new(
-            self.span_to_current_end(start),
-            attributes,
-            port,
-        )];
-        while self.look_ahead()?.0 != Token::Semicolon {
-            self.expect(Token::Comma);
-            let port = Port {
-                name: self.parse_identifier(false)?,
-                ..port
-            };
-            res.push(AttributeNode::new(
-                self.span_to_current_end(start),
-                attributes,
-                port,
-            ));
-        }
-        self.lookahead.take();
-        Ok(res)
-    }
 
     fn parse_parameter_list(&mut self) -> Result {
         unimplemented!()
     }
-    fn parse_module_item(&mut self) -> Result<AttributeNode<ModuleItem>> {
+
+    fn parse_module_item(&mut self) -> Result<Vec<AttributeNode<ModuleItem>>> {
         let attributes = self.parse_attributes()?;
         let start = self.look_ahead()?.1.get_start();
-        let contents = match self.look_ahead()?.0 {
+        let contents: Vec<ModuleItem> = match self.look_ahead()?.0 {
             Token::Analog => {
                 self.lookahead.take();
                 unimplemented!("Analog_Block")
             }
             Token::Branch => {
                 self.lookahead.take();
-                let branch_decl = self.parse_branch_declaration()?;
-                ModuleItem::BranchDecl(branch_decl)
+                self.parse_branch_declaration()?
+                    .into_iter()
+                    .map(|branch_decl| ModuleItem::BranchDecl(branch_decl))
+                    .collect()
             }
-            _ => unimplemented!("Variable Declaration"),
+            Token::Integer => {
+                self.lookahead.take();
+                self.parse_variable_declaration(VariableType::INTEGER)?
+                    .into_iter()
+                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
+                    .collect()
+            }
+            Token::Real => {
+                self.lookahead.take();
+                self.parse_variable_declaration(VariableType::REAL)?
+                    .into_iter()
+                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
+                    .collect()
+            }
+            Token::Realtime => {
+                self.lookahead.take();
+                self.parse_variable_declaration(VariableType::REALTIME)?
+                    .into_iter()
+                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
+                    .collect()
+            }
+            Token::Time => {
+                self.lookahead.take();
+                self.parse_variable_declaration(VariableType::TIME)?
+                    .into_iter()
+                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
+                    .collect()
+            }
+
+            _ => self
+                .parse_net_declaration()?
+                .into_iter()
+                .map(|net_decl| ModuleItem::NetDecl(net_decl))
+                .collect(),
         };
         let span = self.span_to_current_end(start);
-        Ok(AttributeNode::new(span, attributes, contents))
+        let res = contents
+            .into_iter()
+            .map(|module_items| AttributeNode::new(span, attributes, module_items))
+            .collect();
+        Ok(res)
     }
 }

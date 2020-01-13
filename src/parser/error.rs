@@ -91,50 +91,55 @@ pub(crate) enum WarningType {
 pub enum List {
     MacroArgument,
     FunctionArgument,
-    Identifier,
 }
 impl Error {
     pub fn print(&self, source_map: &SourceMap) {
         let (line, line_number, range) = source_map.resolve_span_within_line(self.source);
         let snippet = match self.error_type {
-            Type::UnexpectedToken { ref expected } => Snippet {
-                title: Some(Annotation {
-                    id: None,
-                    label: Some("Unexpected Token".to_string()),
-                    annotation_type: AnnotationType::Error,
-                }),
-                footer: vec![],
-                slices: vec![Slice {
-                    source: line,
-                    line_start: line_number as usize,
-                    origin: None,
-                    annotations: vec![SourceAnnotation {
-                        range: (range.start, range.end),
-                        label: format!("expected {:?}", expected),
+            Type::UnexpectedToken { ref expected } => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Unexpected Token".to_string()),
                         annotation_type: AnnotationType::Error,
+                    }),
+                    footer: vec![],
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: None,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: format!("expected {:?}", expected),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
                     }],
-                    fold: false,
-                }],
-            },
-            Type::UnexpectedTokens { ref expected } => Snippet {
-                title: Some(Annotation {
-                    id: None,
-                    label: Some("Unexpected Token".to_string()),
-                    annotation_type: AnnotationType::Error,
-                }),
-                footer: vec![],
-                slices: vec![Slice {
-                    source: line,
-                    line_start: line_number as usize,
-                    origin: None,
-                    annotations: vec![SourceAnnotation {
-                        range: (range.start, range.end),
-                        label: format!("expected {:?}", expected),
+                }
+            }
+            Type::UnexpectedTokens { ref expected } => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Unexpected Token".to_string()),
                         annotation_type: AnnotationType::Error,
+                    }),
+                    footer: vec![],
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: None,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: format!("expected {:?}", expected),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
                     }],
-                    fold: false,
-                }],
-            },
+                }
+            }
             Type::PortRedeclaration(error_span, declaration_list_span) => {
                 let error_range = translate_to_inner_snippet_range(
                     range.start as Index + error_span.get_start(),
@@ -183,6 +188,56 @@ impl Error {
         println!("{}", formatter.format(&display_list));
     }
 }
+impl Warning {
+    pub fn print(&self, source_map: &SourceMap) {
+        let (line, line_number, range) = source_map.resolve_span_within_line(self.source);
+        let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+        let snippet = match self.error_type {
+            WarningType::MacroOverwritten(first_declaration) => {
+                let (original_line, original_line_number, original_range) =
+                    source_map.resolve_span_within_line(first_declaration);
+                let original_range = translate_to_inner_snippet_range(
+                    original_range.start,
+                    original_range.end,
+                    &original_line,
+                );
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Macro overwritten".to_string()),
+                        annotation_type: AnnotationType::Warning,
+                    }),
+                    footer: vec![],
+                    slices: vec![
+                        Slice {
+                            source: original_line,
+                            line_start: original_line_number as usize,
+                            origin: None,
+                            annotations: vec![SourceAnnotation {
+                                range: original_range,
+                                label: "First_declared here".to_string(),
+                                annotation_type: AnnotationType::Info,
+                            }],
+                            fold: false,
+                        },
+                        Slice {
+                            source: line,
+                            line_start: line_number as usize,
+                            origin: None,
+                            annotations: vec![SourceAnnotation {
+                                range,
+                                label: "Later overwritten here".to_string(),
+                                annotation_type: AnnotationType::Warning,
+                            }],
+                            fold: false,
+                        },
+                    ],
+                }
+            }
+        };
+    }
+}
+
 fn translate_to_inner_snippet_range(start: Index, end: Index, source: &str) -> (usize, usize) {
     let lines = bytecount::count(&source.as_bytes()[..start as usize], b'\n');
     (start as usize + lines, end as usize + lines)
@@ -203,9 +258,11 @@ pub fn merge_multi_result<T>(value_res: MultiResult<T>, condition: MultiResult) 
         }
     }
 }
+
 pub fn into_multi_res<T>(res: Result<T>) -> MultiResult<T> {
     res.map_err(|err| err.into())
 }
+
 pub fn add_error<T>(res: MultiResult<T>, error: Error) -> MultiResult<T> {
     match res {
         Ok(_) => Err(error.into()),

@@ -1,0 +1,6 @@
+module test;
+    wire x,y;
+    electrical x;
+    wire electrical signed x;
+
+endmodule

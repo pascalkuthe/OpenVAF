@@ -6,7 +6,6 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use intrusive_collections::__core::cell::Ref;
 use sr_alloc::{Allocator, Immutable, NodeId, SliceId, StrId};
 
 use crate::Span;
@@ -67,9 +66,9 @@ pub struct Port {
     pub name: StrId,
     pub input: bool,
     pub output: bool,
-    pub discipline: Option<Reference<()>>, //TODO discipline
+    pub discipline: Discipline, //TODO discipline
     pub signed: bool,
-    pub verilog_type: VerilogType,
+    pub net_type: NetType,
 }
 
 impl Default for Port {
@@ -80,12 +79,10 @@ impl Default for Port {
             output: false,
             discipline: None,
             signed: false,
-            verilog_type: VerilogType::UNDECLARED,
+            net_type: NetType::UNDECLARED,
         }
     }
 }
-#[derive(Debug, Clone, Copy)]
-pub struct Net {}
 #[derive(Debug, Clone, Copy)]
 pub enum Branch {
     Port(Reference<Port>),
@@ -101,12 +98,30 @@ pub struct BranchDeclaration {
 pub enum ModuleItem {
     AnalogStmt,
     BranchDecl(BranchDeclaration),
+    NetDecl(Net),
+    VariableDecl(Variable),
     ParameterDecl,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Reference<T: Clone> {
     pub name: StrId,
     pub declaration: Option<AstNodeId<T>>,
+}
+pub type Discipline = Option<Reference<()>>;
+#[derive(Debug, Clone, Copy)]
+pub struct Net {
+    pub name: StrId,
+    pub discipline: Discipline, //TODO discipline
+    pub signed: bool,
+    pub net_type: NetType,
+    //TODO defaut value
+}
+#[derive(Debug, Clone, Copy)]
+pub struct Variable {
+    pub name: StrId,
+    //TODO defaut value
+    pub variable_type: VariableType,
+    pub default_value: Option<Expression>,
 }
 impl<T: Clone> Reference<T> {
     pub fn new(name: StrId) -> Self {
@@ -117,7 +132,7 @@ impl<T: Clone> Reference<T> {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum VerilogType {
+pub enum NetType {
     UNDECLARED,
     REG,
     WREAL,
@@ -132,6 +147,45 @@ pub enum VerilogType {
     UWIRE,
     WAND,
     WOR,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Expression {
+    BinaryOperator(
+        AstNodeId<Expression>,
+        Node<BinaryOperator>,
+        AstNodeId<Expression>,
+    ),
+    UnaryOperator(Node<UnaryOperator>, AstNodeId<Expression>),
+    Primary(Primary),
+}
+#[derive(Clone, Copy, Debug)]
+pub enum Primary {
+    Integer(i64),
+    UnsignedInteger(u32),
+    Real(f64),
+    NetReference(Reference<Net>),
+    VariableReference(Reference<Variable>),
+    FunctionCall(Reference<Variable>),
+    BranchAcess(Reference<BranchDeclaration>),
+    ImplictBranch(Branch),
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BinaryOperator {
+    Sum,
+    Subtract,
+    Multiply,
+    Divide,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnaryOperator {
+    BitNegate,
+    LogicNegate,
+    ArithmeticNegate,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VariableType {
     TIME,
     INTEGER,
     REAL,

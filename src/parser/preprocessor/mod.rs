@@ -42,6 +42,7 @@ enum TokenSource {
     File(Lexer<'static>),
     Insert(Peekable<IntoIter<MacroBodyElement>>, bool),
 }
+
 impl Debug for TokenSource {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
@@ -79,12 +80,14 @@ struct UnresolvedMacroReference {
     source: String,
     arg_bindings: Vec<MacroArg>,
 }
+
 #[derive(Debug)]
 struct PreprocessorState {
     start: Index,
     offset: IndexOffset,
     token_source: TokenSource,
 }
+
 impl PreprocessorState {
     pub fn new(start: Index, token_source: TokenSource) -> Self {
         Self {
@@ -94,16 +97,19 @@ impl PreprocessorState {
         }
     }
 }
+
 #[derive(Debug, Clone)]
 struct MacroArg {
     tokens: Vec<MacroBodyElement>,
     source: String,
 }
+
 impl MacroArg {
     pub fn new(tokens: Vec<MacroBodyElement>, source: String) -> Self {
         Self { tokens, source }
     }
 }
+
 #[derive(Debug)]
 pub struct Preprocessor {
     //internal state
@@ -461,16 +467,13 @@ impl Preprocessor {
             body,
             arg_count: args.len() as ArgumentIndex,
             source: decl_source,
-            span: decl_range,
+            span: decl_range.clone(),
         };
-        if self.macros.insert(name, maco_decl).is_some() {
-            /*warn!(
-                "{}",
-                self.source_map.format_error(Error {
-                    source: range.into(),
-                    error_type: error::WarningType::MacroOverwritten(location)
-                })
-            )*/ //TODO WARNINGS / ERROR printing
+        if let Some(old) = self.macros.insert(name, maco_decl) {
+            /*Warning {
+                error_type: WarningType::MacroOverwritten(old.span),
+                source: decl_range,
+            }.print() TODO warning architecture for preprocessor*/
         }
         Ok(())
     }
@@ -685,10 +688,6 @@ impl Preprocessor {
     }
     pub fn current_len(&self) -> Index {
         self.current_len
-    }
-
-    fn current_source_span(&self) -> Span {
-        Span::new_with_length(self.current_source_start, self.current_len)
     }
 
     fn current_offset(&self) -> IndexOffset {

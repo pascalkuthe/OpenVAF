@@ -219,7 +219,7 @@ impl SourceMap {
         }
     }
 
-    pub fn resolve_span_within_line(&self, span: Span) -> (String, LineNumber, Range<usize>) {
+    pub fn resolve_span_within_line(&self, span: Span) -> (String, LineNumber, Range<Index>) {
         let mut start_cursor = self.map.upper_bound(Bound::Included(&span.get_start()));
         let mut end_cursor = start_cursor.clone();
 
@@ -228,8 +228,8 @@ impl SourceMap {
         let main_content = self.resolve_span_internal(span, &mut end_cursor);
         let (tail_content, _, _) = self.string_to_newline(false, &mut end_cursor, span.get_end());
         let range = Range {
-            start: head_content.len(),
-            end: head_content.len() + main_content.len(),
+            start: head_content.len() as Index,
+            end: head_content.len() as Index + main_content.len() as Index,
         };
         head_content.push_str(main_content.as_str());
         head_content.push_str(tail_content.as_str());

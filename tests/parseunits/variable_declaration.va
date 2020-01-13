@@ -1,0 +1,6 @@
+module test;
+    real x;
+    integer y,z;
+    time t;
+    realtime rt;
+endmodule

@@ -90,7 +90,7 @@ impl Span {
         }
         self
     }
-    pub fn extend(mut self, to: Self) -> Self {
+    pub fn extend(self, to: Self) -> Self {
         Self::new(self.get_start(), to.get_end())
     }
 }

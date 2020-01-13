@@ -16,7 +16,6 @@ pub use error::Result;
 
 use crate::ast::{Ast, AttributeNode, Attributes, TopNode};
 use crate::parser::error::Expected;
-use crate::parser::error::List::Identifier;
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::{Preprocessor, SourceMap, Span};
@@ -27,7 +26,10 @@ pub(crate) mod preprocessor;
 pub mod test;
 
 mod branch;
+mod combinators;
+mod expression;
 mod module;
+mod net_declarations;
 mod primaries;
 mod variables;
 //mod combinators;
@@ -133,7 +135,7 @@ impl Parser {
         Ok(SliceId::dangling()) //Attributes are not yet supported
     }
     pub fn expect(&mut self, token: Token) -> Result {
-        let (found, source) = self.next()?;
+        let (found, source) = self.look_ahead()?;
         if found != token {
             Err(Error {
                 source,
@@ -142,6 +144,7 @@ impl Parser {
                 },
             })
         } else {
+            self.lookahead.take();
             Ok(())
         }
     }
