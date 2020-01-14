@@ -7,7 +7,7 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::ast::{Branch, BranchDeclaration, Reference};
+use crate::ast::{Branch, BranchAccess, BranchDeclaration, NatureAccess, Reference};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
@@ -49,5 +49,29 @@ impl Parser {
                 Reference::new(second_net_name),
             ))
         }
+    }
+    pub fn parse_branch_access(&mut self) -> Result<BranchAccess> {
+        self.expect(Token::ParenOpen)?;
+
+        let res = if self.look_ahead()?.0 == Token::OpLess {
+            self.lookahead.take();
+            let res = Branch::Port(Reference::new(self.parse_hieraichal_identifier(false)?));
+            self.expect(Token::OpGreater)?;
+            BranchAccess::Implicit(res)
+        } else {
+            let first_net_name_or_identifer = self.parse_hieraichal_identifier(false)?;
+            if self.look_ahead().0 == Token::Comma {
+                let second_net_name = self.parse_hieraichal_identifier(false)?;
+                BranchAccess::Implicit(Branch::Nets(
+                    Reference::new(first_net_name),
+                    Reference::new(second_net_name),
+                ))
+            } else {
+                BranchAccess::Explicit(Reference::new(first_net_name_or_identifer))
+            }
+        };
+
+        self.expect(Token::ParenClose)?;
+        Ok(res)
     }
 }

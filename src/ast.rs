@@ -154,7 +154,30 @@ pub enum NetType {
     WOR,
 }
 
-#[derive(Clone, Copy, Debug, EnumAsInner)]
+#[derive(Clone, Copy, Debug)]
+pub enum Statement {
+    Block(SeqBlock),
+    Condition(Condition),
+    Contribute(NatureAccess, BranchAccess, Expression),
+    //  TODO IndirectContribute(),
+    Assign(Reference<Variable>, Expression),
+}
+#[derive(Clone, Copy, Debug)]
+pub struct SeqBlock {
+    name: Option<StrId>,
+    variables: SliceId<Variable>,
+    statements: SliceId<Statement>, //    parameters:Parameters, TODO parameters
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Condition {
+    main_condition: Node<Expression>,
+    main_condition_block: AstNodeId<Statement>,
+    else_ifs: SliceId<(Node<Expression>, Node<Statement>)>,
+    else_block: Option<AstNodeId<Statement>>,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum Expression {
     BinaryOperator(
         AstNodeId<Expression>,
@@ -164,6 +187,12 @@ pub enum Expression {
     UnaryOperator(Node<UnaryOperator>, AstNodeId<Expression>),
     Primary(Primary),
 }
+
+#[derive(Clone, Copy, Debug)]
+pub enum BranchAccess {
+    Explicit(Reference<BranchDeclaration>),
+    Implicit(Branch),
+}
 #[derive(Clone, Copy, Debug)]
 pub enum Primary {
     Integer(i64),
@@ -172,7 +201,7 @@ pub enum Primary {
     NetReference(Reference<Net>),
     VariableReference(Reference<Variable>),
     FunctionCall(Reference<Variable>, SliceId<Node<Expression>>),
-    BranchAcess(NatureAccess, Reference<BranchDeclaration>),
+    BranchAccess(NatureAccess, BranchAccess),
     ImplictBranch(NatureAccess, Branch),
 }
 #[derive(Clone, Copy, Debug)]

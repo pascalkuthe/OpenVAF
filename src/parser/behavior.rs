@@ -7,9 +7,10 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-module test;
-    real x;
-    integer y,z;//the default value is only here to test whether this crashes; Expressions are testes separately
-    time t;
-    realtime rt;
-endmodule
+use crate::parser::error::*;
+use crate::parser::lexer::Token;
+use crate::parser::Parser;
+
+impl Parser {
+    pub fn parse_statement(&mut self) -> Result {}
+}

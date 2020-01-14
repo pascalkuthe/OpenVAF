@@ -9,8 +9,10 @@
  */
 use sr_alloc::{NodeId, SliceId};
 
+use crate::ast::Primary::BranchAcess;
 use crate::ast::{
-    AstNodeId, BinaryOperator, Expression, NatureAccess, Node, Primary, Reference, UnaryOperator,
+    AstNodeId, BinaryOperator, BranchAccess, Expression, NatureAccess, Node, Primary, Reference,
+    UnaryOperator,
 };
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
@@ -23,7 +25,9 @@ impl Parser {
         let lhs = self.parse_atom()?;
         self.precedence_climb_expression(0, lhs)
     }
-    /// Precedance Climbs an expression. This enforces very little correctness (this is done at Schemantic Analysis) so a==x**2?y is legal here
+    /// Parses Expressions using a precedance clinbing parser (see
+    /// This enforces very little correctness (this is done at Schemantic Analysis) so a==x**2?y is legal here
+    ///
     fn precedence_climb_expression(
         &mut self,
         min_prec: u8,
@@ -149,14 +153,14 @@ impl Parser {
                 Node::new(Expression::Primary(Primary::UnsignedInteger(value)), span)
             }
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
-                let ident = self.parse_hieraichal_identifier(false)?;
+                let ident = self.parse_hieraichal_identifier(false)?; //we allow hieraichal identifers here because they are required for functions (but illegal for natures) this will just produce an error at name resolution
                 let start = self.preprocessor.current_start();
                 let primary = if self.look_ahead()?.0 == Token::ParenOpen {
                     self.lookahead.take();
                     if self.look_ahead()?.0 == Token::OpLess {
-                        Primary::ImplictBranch(
+                        Primary::BranchAcess(
                             NatureAccess::Unresolved(ident),
-                            self.parse_branch()?,
+                            BranchAccess::Implicit(self.parse_branch()?),
                         )
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
@@ -184,6 +188,10 @@ impl Parser {
                     self.span_to_current_end(start),
                 )
             }
+            Token::Potential => {
+                Primary::BranchAccess(NatureAccess::Potential, self.parse_branch_access()?)
+            }
+            Token::Flow => Primary::BranchAccess(NatureAccess::Flow, self.parse_branch_access()?),
             _ => {
                 return Err(Error {
                     source: span,

@@ -25,6 +25,7 @@ pub(crate) mod preprocessor;
 #[cfg(test)]
 pub mod test;
 
+mod behavior;
 mod branch;
 mod combinators;
 mod expression;
