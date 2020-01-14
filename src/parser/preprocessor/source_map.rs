@@ -518,7 +518,6 @@ impl SourceMapBuilder {
             .unwrap()
             .1
             .push_str(&old_source[old_offset..original_span.get_start() as usize]);
-        let debug = self.current_source.as_ref().unwrap().1.as_str();
         self.substitution_stack
             .push(SourceMapBuilderState { source, offset: 0 });
     }
@@ -552,7 +551,6 @@ impl SourceMapBuilder {
             unsafe {
                 let substitution = substitution.as_mut();
                 substitution.end = substitution.start + contents.len() as Index;
-                let debug = contents.as_str();
                 substitution.contents = self.allocator_mut().string_to_id_unchecked(contents);
                 //this is save since we only ever insert substitutions never delete them
             }

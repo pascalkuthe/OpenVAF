@@ -1,3 +1,12 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
 use sr_alloc::StrId;
 
 use crate::ast::{AttributeNode, Attributes, Discipline, Net, NetType, Port, Reference};
@@ -91,7 +100,6 @@ impl Parser {
 
         let opt_first_identifier_or_discipline = self.parse_identifier(true);
         let mut is_discipline = false; //helps resolve the ambiguity whether an identifier refers to the first name or the discipline of a port declaration
-        let token = self.look_ahead()?.0;
         let port_type = self.parse_net_type()?;
         if port_type != NetType::UNDECLARED {
             is_discipline = true;

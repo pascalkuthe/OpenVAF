@@ -13,7 +13,6 @@ use crate::parser::error::Result;
 use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
-use crate::Span;
 
 impl Parser {
     /// Combinator that parses a list delimited by a comma and terminated by [end].
@@ -51,7 +50,7 @@ impl Parser {
                     return Err(Error {
                         source: span,
                         error_type: UnexpectedToken {
-                            expected: vec![Token::Colon, end],
+                            expected: vec![Token::Comma, end],
                         },
                     })
                 }

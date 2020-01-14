@@ -83,8 +83,11 @@ impl Parser {
                     ));
                 }
                 (_, span) => {
-                    return self.preprocessor.token_error(error::Type::UnexpectedToken {
-                        expected: vec![Token::Module],
+                    return Err(Error {
+                        error_type: error::Type::UnexpectedToken {
+                            expected: vec![Token::Module],
+                        },
+                        source: span,
                     })
                 }
             }
@@ -149,7 +152,6 @@ impl Parser {
         }
     }
     pub fn span_to_current_end(&self, start: Index) -> Span {
-        let end = self.preprocessor.current_end();
         Span::new(start, self.preprocessor.current_end())
     }
 }

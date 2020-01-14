@@ -467,7 +467,7 @@ impl Preprocessor {
             body,
             arg_count: args.len() as ArgumentIndex,
             source: decl_source,
-            span: decl_range.clone(),
+            span: decl_range,
         };
         if let Some(old) = self.macros.insert(name, maco_decl) {
             /*Warning {

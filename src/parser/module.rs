@@ -67,7 +67,7 @@ impl Parser {
 
         self.expect(Token::Semicolon)?;
 
-        let mut macro_items = Vec::new();
+        let mut module_items = Vec::new();
         loop {
             let (token, span) = self.look_ahead()?;
             match token {
@@ -99,13 +99,13 @@ impl Parser {
                     self.lookahead.take();
                     break;
                 }
-                token => macro_items.append(&mut self.parse_module_item()?),
+                _ => module_items.append(&mut self.parse_module_item()?),
             }
         }
         Ok(Module {
             name,
             port_list: self.ast_allocator.alloc_slice_copy(port_list.as_slice()),
-            children: self.ast_allocator.alloc_slice_copy(macro_items.as_slice()),
+            children: self.ast_allocator.alloc_slice_copy(module_items.as_slice()),
         })
     }
 

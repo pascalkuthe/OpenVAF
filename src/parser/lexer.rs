@@ -75,11 +75,15 @@ pub enum Token {
     #[regex = r"[0-9][0-9_]*"]
     LiteralUnsignedNumber,
     #[regex = r"[0-9][0-9_]*\.[0-9][0-9_]*[TGMKkmupfa]"]
+    LiteralRealNumberDotScaleChar,
     #[regex = r"[0-9][0-9_]*\.[0-9][0-9_]*[eE][+-]?[0-9][0-9_]*"]
+    LiteralRealNumberDotExp,
     #[regex = r"[0-9][0-9_]*[TGMKkmupfa]"]
+    LiteralRealNumberScaleChar,
     #[regex = r"[0-9][0-9_]*[eE][+-]?[0-9][0-9_]*"]
+    LiteralRealNumberExp,
     #[regex = r"[0-9][0-9_]*\.[0-9][0-9_]*"]
-    LiteralRealNumber,
+    LiteralRealNumberDot,
 
     //Symbols
     #[token = "."]
@@ -107,7 +111,7 @@ pub enum Token {
     #[token = "/"]
     OpDiv,
     #[token = "%"]
-    OpRemain,
+    OpModulus,
     #[token = "+"]
     Plus,
     #[token = "-"]
@@ -135,7 +139,7 @@ pub enum Token {
     #[token = ">="]
     OpGreaterEqual,
     #[token = "=="]
-    OpeEqual,
+    OpEqual,
     #[token = "!="]
     OpNotEqual,
     //Logic
@@ -149,14 +153,15 @@ pub enum Token {
     OpBitAnd,
     #[token = "^"]
     OpBitXor,
+    #[token = "~^"]
+    #[token = "^~"]
+    OpBitNXor,
     #[token = "|"]
     OpBitOr,
 
     //Other
     #[token = "?"]
     OpCondition,
-    #[token = ":"]
-    OpElse,
 
     //Keywords
     #[token = "if"]
@@ -476,20 +481,37 @@ mod test {
     pub fn real_number() {
         let mut lexer = Lexer::new_test(
             "1.2
-        0.1
-2394.26331
-1.2E12 // the exponent symbol can be e or E
-1.30e-2
-0.1e-0
-236.123_763_e-12 // underscores are ignored
-1.3u
-23E10
-29E-2
-7k",
+            0.1
+            2394.26331
+            1.2E12 // the exponent symbol can be e or E
+            1.30e-2
+            0.1e-0
+            236.123_763_e-12 // underscores are ignored
+            1.3u
+            23E10
+            29E-2
+            7k",
         );
-        while lexer.token() != Token::EOF {
-            assert_eq!(lexer.token(), Token::LiteralRealNumber);
-            lexer.test_advance()
-        }
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDot);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDot);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDot);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDotExp);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDotExp);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDotExp);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDotExp);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberDotScaleChar);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberExp);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberExp);
+        lexer.test_advance();
+        assert_eq!(lexer.token(), Token::LiteralRealNumberScaleChar);
     }
 }

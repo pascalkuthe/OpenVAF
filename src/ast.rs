@@ -33,6 +33,11 @@ pub struct Node<T: Clone> {
     pub source: Span,
     pub contents: T,
 }
+impl<T: Clone> Node<T> {
+    pub fn new(contents: T, source: Span) -> Self {
+        Self { contents, source }
+    }
+}
 pub type Attribute = ();
 pub type Attributes = SliceId<Attribute>;
 #[derive(Clone, Copy, Debug)]
@@ -121,7 +126,7 @@ pub struct Variable {
     pub name: StrId,
     //TODO defaut value
     pub variable_type: VariableType,
-    pub default_value: Option<Expression>,
+    pub default_value: Option<Node<Expression>>,
 }
 impl<T: Clone> Reference<T> {
     pub fn new(name: StrId) -> Self {
@@ -149,7 +154,7 @@ pub enum NetType {
     WOR,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, EnumAsInner)]
 pub enum Expression {
     BinaryOperator(
         AstNodeId<Expression>,
@@ -166,22 +171,52 @@ pub enum Primary {
     Real(f64),
     NetReference(Reference<Net>),
     VariableReference(Reference<Variable>),
-    FunctionCall(Reference<Variable>),
-    BranchAcess(Reference<BranchDeclaration>),
-    ImplictBranch(Branch),
+    FunctionCall(Reference<Variable>, SliceId<Node<Expression>>),
+    BranchAcess(NatureAccess, Reference<BranchDeclaration>),
+    ImplictBranch(NatureAccess, Branch),
+}
+#[derive(Clone, Copy, Debug)]
+pub enum NatureAccess {
+    Potential,
+    Flow,
+    Unresolved(StrId),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperator {
+    Condition,
+    Either,
     Sum,
     Subtract,
     Multiply,
     Divide,
+    Exponent,
+    Modulus,
+
+    ShiftLeft,
+    ShiftRight,
+
+    LessThen,
+    LessEqual,
+    GreaterThen,
+    GreaterEqual,
+    LogicEqual,
+    LogicalNotEqual,
+
+    LogicOr,
+    LogicAnd,
+
+    Xor,
+    NXor,
+    And,
+    Or,
 }
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnaryOperator {
     BitNegate,
     LogicNegate,
     ArithmeticNegate,
+    ExplicitPositive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

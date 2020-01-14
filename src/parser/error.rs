@@ -81,6 +81,9 @@ pub enum Expected {
     Identifier,
     PortDeclaration,
     Port,
+    UnaryOperator,
+    BinaryOperator,
+    Primary,
 }
 #[derive(Clone, Debug)]
 pub(crate) enum WarningType {
@@ -235,6 +238,9 @@ impl Warning {
                 }
             }
         };
+        let display_list = DisplayList::from(snippet);
+        let formatter = DisplayListFormatter::new(true, false);
+        println!("{}", formatter.format(&display_list));
     }
 }
 

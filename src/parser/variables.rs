@@ -1,8 +1,19 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
 use std::env::var;
 
 use sr_alloc::StrId;
 
-use crate::ast::{Discipline, Expression, Net, NetType, Reference, Variable, VariableType};
+use crate::ast::{
+    AstNodeId, Discipline, Expression, Net, NetType, Node, Reference, Variable, VariableType,
+};
 use crate::error::Error;
 use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens};
 use crate::parser::lexer::Token;
@@ -41,7 +52,7 @@ impl Parser {
 
     fn parse_single_declaration_with_opt_default_value(
         &mut self,
-    ) -> Result<(StrId, Option<Expression>)> {
+    ) -> Result<(StrId, Option<Node<Expression>>)> {
         let name = self.parse_identifier(false)?;
         let default_value = if self.look_ahead()?.0 == Token::Assign {
             self.lookahead.take();
