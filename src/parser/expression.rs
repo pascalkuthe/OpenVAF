@@ -7,11 +7,10 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use sr_alloc::{NodeId, SliceId};
+use sr_alloc::SliceId;
 
 use crate::ast::{
-    AstNodeId, BinaryOperator, BranchAccess, Expression, NatureAccess, Node, Primary, Reference,
-    UnaryOperator,
+    BinaryOperator, BranchAccess, Expression, NatureAccess, Node, Primary, Reference, UnaryOperator,
 };
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;

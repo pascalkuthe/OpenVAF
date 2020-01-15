@@ -7,7 +7,6 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use std::env::var;
 use std::path::Path;
 
 use crate::ast::{Branch, VariableType};
@@ -340,7 +339,6 @@ pub fn net_decl() -> Result<(), ()> {
         panic!("Parsed Something else than a module!")
     };
     assert_eq!(ast.data.get_str(module.name), "test");
-    let ports = ast.data.get_slice(module.port_list);
 
     let mut children = ast.data.get_slice(module.children).iter();
     if let ModuleItem::NetDecl(net) = children.next().unwrap().contents.contents {
@@ -378,6 +376,5 @@ pub fn net_decl() -> Result<(), ()> {
     } else {
         panic!("Found something else than a net decl")
     }
-
     Ok(())
 }

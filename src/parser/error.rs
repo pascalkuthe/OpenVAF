@@ -10,10 +10,9 @@ use crate::{SourceMap, Span};
 //  *  No part of VARF, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
-use crate::ast::{AstAttributeNodeId, AstNodeId, Module, Port};
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
-use crate::span::{Index, Range};
+use crate::span::Index;
 
 pub type Error = crate::error::Error<Type>;
 pub(crate) type Warning = crate::error::Error<WarningType>;

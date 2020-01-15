@@ -8,21 +8,12 @@
  * *****************************************************************************************
  */
 
-use sr_alloc::{SliceId, StrId};
-
-use crate::ast::{
-    AstAttributeNodeId, AttributeNode, Attributes, Module, ModuleItem, NetType, Port, Reference,
-    VariableType,
-};
+use crate::ast::{AttributeNode, Attributes, Module, ModuleItem, Port, VariableType};
 use crate::error::Error;
 use crate::parser::error;
-use crate::parser::error::Type::Unsupported;
-use crate::parser::error::Unsupported::DefaultDiscipline;
 use crate::parser::error::{Expected, Result};
 use crate::parser::lexer::Token;
-use crate::parser::lexer::Token::{ParenClose, SimpleIdentifier};
 use crate::parser::Parser;
-use crate::Span;
 
 impl Parser {
     pub(super) fn parse_module(&mut self) -> Result<Module> {

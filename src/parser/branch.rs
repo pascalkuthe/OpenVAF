@@ -7,7 +7,7 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::ast::{Branch, BranchAccess, BranchDeclaration, NatureAccess, Reference};
+use crate::ast::{Branch, BranchAccess, BranchDeclaration, Reference};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;

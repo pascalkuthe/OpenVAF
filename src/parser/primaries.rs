@@ -7,7 +7,6 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::parser::error::*;
 
 /// This function assumes that source is a valid string matched by the lexer and only strips "" and resolves any escaped characters
 pub(super) fn parse_string(source: &str) -> String {

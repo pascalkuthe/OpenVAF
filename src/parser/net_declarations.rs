@@ -9,7 +9,7 @@
  */
 use sr_alloc::StrId;
 
-use crate::ast::{AttributeNode, Attributes, Discipline, Net, NetType, Port, Reference};
+use crate::ast::{AttributeNode, Discipline, Net, NetType, Port, Reference};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::{error, Error, Parser};

@@ -580,7 +580,7 @@ impl Preprocessor {
                             expected: vec![Token::ParenClose],
                         });
                     }
-                    t => current_arg_body.push(self.current_macro_body_token(
+                    _ => current_arg_body.push(self.current_macro_body_token(
                         current_arg_start,
                         parent_macro_args,
                         macro_call_depth,

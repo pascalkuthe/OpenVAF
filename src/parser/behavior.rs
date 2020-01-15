@@ -11,13 +11,12 @@ use sr_alloc::{SliceId, StrId};
 
 use crate::ast::{
     AttributeNode, Branch, BranchAccess, Condition, Expression, NatureAccess, Node, Primary,
-    Reference, SeqBlock, Statement, VariableType,
+    Reference, SeqBlock, Statement, Variable, VariableType,
 };
 use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens};
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
-use crate::Span;
 
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Node<Statement>> {
@@ -104,7 +103,7 @@ impl Parser {
             loop {
                 let token = self.look_ahead()?.0;
                 let start = self.preprocessor.current_start();
-                match token {
+                let mut res: Vec<AttributeNode<Variable>> = match token {
                     Token::Integer => {
                         self.lookahead.take();
                         self.parse_variable_declaration(VariableType::INTEGER)?
@@ -116,13 +115,9 @@ impl Parser {
                     _ => break,
                 }
                 .into_iter()
-                .map(|decl| {
-                    variables.push(AttributeNode::new(
-                        self.span_to_current_end(start),
-                        attributes,
-                        decl,
-                    ))
-                });
+                .map(|decl| AttributeNode::new(self.span_to_current_end(start), attributes, decl))
+                .collect();
+                variables.append(&mut res);
             }
             (
                 self.ast_allocator.alloc_slice_copy(variables.as_slice()),
@@ -133,7 +128,6 @@ impl Parser {
         };
         let mut statements = Vec::new();
         while self.look_ahead()?.0 != Token::End {
-            let start = self.preprocessor.current_start();
             statements.push(self.parse_statement()?);
         }
         let statements = self.ast_allocator.alloc_slice_copy(statements.as_slice());
@@ -153,7 +147,7 @@ impl Parser {
         self.expect(Token::Contribute)?;
         let expr = self.parse_expression()?;
         self.expect(Token::Semicolon)?;
-        Ok(Statement::Contribute(NatureAccess::Flow, branch, expr))
+        Ok(Statement::Contribute(nature_acceess, branch, expr))
     }
     pub fn parse_condition(&mut self) -> Result<Condition> {
         self.expect(Token::ParenOpen)?;
@@ -167,8 +161,6 @@ impl Parser {
             if self.look_ahead()?.0 != Token::Else {
                 break;
             }
-            let (token, span) = self.look_ahead()?;
-            self.lookahead.take();
             if self.look_ahead()?.0 == Token::If {
                 self.lookahead.take();
                 let condition = self.parse_expression()?;

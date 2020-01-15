@@ -7,15 +7,10 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use std::env::var;
 
 use sr_alloc::StrId;
 
-use crate::ast::{
-    AstNodeId, Discipline, Expression, Net, NetType, Node, Reference, Variable, VariableType,
-};
-use crate::error::Error;
-use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens};
+use crate::ast::{Expression, Node, Variable, VariableType};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::parser::Result;

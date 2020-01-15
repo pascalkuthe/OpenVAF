@@ -399,12 +399,12 @@ mod test {
 
     #[test]
     pub fn macro_if() {
-        let mut lexer = Lexer::new("`ifdef");
+        let lexer = Lexer::new("`ifdef");
         assert_eq!(lexer.token(), Token::MacroIf)
     }
     #[test]
     pub fn macro_ifn() {
-        let mut lexer = Lexer::new("`ifndef");
+        let lexer = Lexer::new("`ifndef");
         assert_eq!(lexer.token(), Token::MacroIfn)
     }
     #[test]

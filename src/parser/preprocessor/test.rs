@@ -117,7 +117,7 @@ pub fn macro_test() -> std::result::Result<(), String> {
 pub fn test_source_map() {
     let (mut builder, mut lexer) =
         unsafe { SourceMapBuilder::new(Path::new("tests/source_map.va")) }.expect("IoError");
-    for i in 0..6 {
+    for _ in 0..6 {
         lexer.advance();
     }
     builder.as_mut().new_line();

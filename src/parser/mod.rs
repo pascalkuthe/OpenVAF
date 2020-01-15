@@ -72,7 +72,7 @@ impl Parser {
             match self.next()? {
                 //TODO multierror
                 (Token::EOF, _) => break,
-                (Token::Module, span) => {
+                (Token::Module, _) => {
                     let start = self.preprocessor.current_start();
                     let attributes = self.parse_attributes()?;
                     let module = self.parse_module()?;
@@ -169,7 +169,7 @@ pub fn parse(main_file: &Path) -> std::io::Result<(Box<SourceMap>, Result<Ast>)>
         parser.preprocessor.current_token(),
         parser.preprocessor.current_span(),
     )));
-    let res = parser.run();
+    let res = res.and_then(|_| parser.run());
     let mut preprocessor = parser.preprocessor;
     if let Err(error) = res {
         while preprocessor.current_token() != Token::EOF {
