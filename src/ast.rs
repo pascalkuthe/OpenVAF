@@ -158,9 +158,10 @@ pub enum NetType {
 pub enum Statement {
     Block(SeqBlock),
     Condition(Condition),
-    Contribute(NatureAccess, BranchAccess, Expression),
+    Contribute(NatureAccess, BranchAccess, Node<Expression>),
     //  TODO IndirectContribute(),
-    Assign(Reference<Variable>, Expression),
+    Assign(Reference<Variable>, Node<Expression>),
+    FunctionCall(Reference<Variable>, SliceId<Node<Expression>>),
 }
 #[derive(Clone, Copy, Debug)]
 pub struct SeqBlock {
@@ -172,12 +173,12 @@ pub struct SeqBlock {
 #[derive(Clone, Copy, Debug)]
 pub struct Condition {
     main_condition: Node<Expression>,
-    main_condition_block: AstNodeId<Statement>,
+    main_condition_statement: AstNodeId<Statement>,
     else_ifs: SliceId<(Node<Expression>, Node<Statement>)>,
-    else_block: Option<AstNodeId<Statement>>,
+    else_statement: Option<AstNodeId<Statement>>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, EnumAsInner)]
 pub enum Expression {
     BinaryOperator(
         AstNodeId<Expression>,
@@ -193,7 +194,7 @@ pub enum BranchAccess {
     Explicit(Reference<BranchDeclaration>),
     Implicit(Branch),
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, EnumAsInner)]
 pub enum Primary {
     Integer(i64),
     UnsignedInteger(u32),

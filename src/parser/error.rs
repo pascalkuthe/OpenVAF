@@ -84,6 +84,10 @@ pub enum Expected {
     UnaryOperator,
     BinaryOperator,
     Primary,
+    Statement,
+    FunctionCall,
+    BranchAcess,
+    Assign,
 }
 #[derive(Clone, Debug)]
 pub(crate) enum WarningType {
