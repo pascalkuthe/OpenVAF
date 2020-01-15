@@ -9,7 +9,6 @@
  */
 use sr_alloc::{NodeId, SliceId};
 
-use crate::ast::Primary::BranchAcess;
 use crate::ast::{
     AstNodeId, BinaryOperator, BranchAccess, Expression, NatureAccess, Node, Primary, Reference,
     UnaryOperator,
@@ -158,7 +157,7 @@ impl Parser {
                 let primary = if self.look_ahead()?.0 == Token::ParenOpen {
                     self.lookahead.take();
                     if self.look_ahead()?.0 == Token::OpLess {
-                        Primary::BranchAcess(
+                        Primary::BranchAccess(
                             NatureAccess::Unresolved(ident),
                             BranchAccess::Implicit(self.parse_branch()?),
                         )
@@ -189,9 +188,16 @@ impl Parser {
                 )
             }
             Token::Potential => {
-                Primary::BranchAccess(NatureAccess::Potential, self.parse_branch_access()?)
+                let start = self.preprocessor.current_start();
+                let res =
+                    Primary::BranchAccess(NatureAccess::Potential, self.parse_branch_access()?);
+                Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
-            Token::Flow => Primary::BranchAccess(NatureAccess::Flow, self.parse_branch_access()?),
+            Token::Flow => {
+                let start = self.preprocessor.current_start();
+                let res = Primary::BranchAccess(NatureAccess::Flow, self.parse_branch_access()?);
+                Node::new(Expression::Primary(res), self.span_to_current_end(start))
+            }
             _ => {
                 return Err(Error {
                     source: span,

@@ -7,17 +7,17 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use intrusive_collections::__core::intrinsics::floorf32;
 use sr_alloc::{SliceId, StrId};
 
 use crate::ast::{
-    Branch, BranchAccess, Condition, Expression, NatureAccess, Node, Primary, Reference, SeqBlock,
-    Statement,
+    AttributeNode, Branch, BranchAccess, Condition, Expression, NatureAccess, Node, Primary,
+    Reference, SeqBlock, Statement, VariableType,
 };
 use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens};
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
+use crate::Span;
 
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Node<Statement>> {
@@ -25,11 +25,11 @@ impl Parser {
         let res = match token {
             Token::If => Statement::Condition(self.parse_condition()?),
             Token::Flow => self.parse_contribute_statement(NatureAccess::Flow)?,
-            Token::Potential => self.parse_contriubte(NatureAccess::Potential)?,
-            Token::Begin => self.parse_block()?,
+            Token::Potential => self.parse_contribute_statement(NatureAccess::Potential)?,
+            Token::Begin => Statement::Block(self.parse_block()?),
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
                 let identifier = self.parse_hieraichal_identifier(false)?;
-                let (token, span) = self.look_ahead()?.0;
+                let (token, span) = self.look_ahead()?;
                 match token {
                     Token::Assign => {
                         self.lookahead.take();
@@ -37,11 +37,11 @@ impl Parser {
                     }
                     Token::ParenOpen => {
                         self.lookahead.take();
-                        if self.look_ahead()?.0 == Token::OpLess {
+                        let res = if self.look_ahead()?.0 == Token::OpLess {
                             self.parse_contribute_statement(NatureAccess::Unresolved(identifier))?
                         } else if self.look_ahead()?.0 == Token::ParenClose {
                             self.lookahead.take();
-                            Statement::FunctionCall(Reference::new(ident), SliceId::dangling())
+                            Statement::FunctionCall(Reference::new(identifier), SliceId::dangling())
                         } else {
                             let mut arg = vec![self.parse_expression()?];
                             self.parse_list(
@@ -61,17 +61,18 @@ impl Parser {
                                 )
                             } else {
                                 Statement::FunctionCall(
-                                    Reference::new(ident),
+                                    Reference::new(identifier),
                                     self.ast_allocator.alloc_slice_copy(arg.as_slice()),
                                 )
                             }
-                            self.expect(Token::Semicolon)?;
-                        }
+                        };
+                        self.expect(Token::Semicolon)?;
+                        res
                     }
                     _ => {
                         return Err(Error {
                             error_type: UnexpectedTokens {
-                                expected: vec![Expected::],
+                                expected: vec![Expected::Statement],
                             },
                             source: span,
                         })
@@ -94,14 +95,54 @@ impl Parser {
         Ok(Node::new(res, self.span_to_current_end(span.get_start())))
     }
     pub fn parse_block(&mut self) -> Result<SeqBlock> {
-        if self.look_ahead()?.0 == Token::Colon {
+        let (variables, name) = if self.look_ahead()?.0 == Token::Colon {
             self.lookahead.take();
             let name = self.parse_identifier(false)?;
-            loop {}
             let attributes = self.parse_attributes()?;
+            let mut variables = Vec::new();
+            //TODO parameteres
+            loop {
+                let token = self.look_ahead()?.0;
+                let start = self.preprocessor.current_start();
+                match token {
+                    Token::Integer => {
+                        self.lookahead.take();
+                        self.parse_variable_declaration(VariableType::INTEGER)?
+                    }
+                    Token::Real => {
+                        self.lookahead.take();
+                        self.parse_variable_declaration(VariableType::REAL)?
+                    }
+                    _ => break,
+                }
+                .into_iter()
+                .map(|decl| {
+                    variables.push(AttributeNode::new(
+                        self.span_to_current_end(start),
+                        attributes,
+                        decl,
+                    ))
+                });
+            }
+            (
+                self.ast_allocator.alloc_slice_copy(variables.as_slice()),
+                Some(name),
+            )
+        } else {
+            (SliceId::dangling(), None)
+        };
+        let mut statements = Vec::new();
+        while self.look_ahead()?.0 != Token::End {
+            let start = self.preprocessor.current_start();
+            statements.push(self.parse_statement()?);
         }
-        self.expect(Token::End)?;
-        Ok(res)
+        let statements = self.ast_allocator.alloc_slice_copy(statements.as_slice());
+        self.lookahead.take();
+        Ok(SeqBlock {
+            name,
+            variables,
+            statements,
+        })
     }
 
     pub fn parse_contribute_statement(
@@ -118,7 +159,8 @@ impl Parser {
         self.expect(Token::ParenOpen)?;
         let main_condition = self.parse_expression()?;
         self.expect(Token::ParenClose)?;
-        let main_condition_statement = self.ast_allocator.alloc_node(|| self.parse_statement()?);
+        let main_condition_statement = self.parse_statement()?;
+        let main_condition_statement = self.ast_allocator.alloc_node(|| main_condition_statement);
         let mut else_if = Vec::new();
         let mut else_statement = None;
         loop {
@@ -133,21 +175,21 @@ impl Parser {
                 let statement = self.parse_statement()?;
                 else_if.push((condition, statement));
             } else {
-                else_statement = Some(self.ast_allocator.alloc_node(|| self.parse_statement()?));
+                let statement = self.parse_statement()?;
+                else_statement = Some(self.ast_allocator.alloc_node(|| statement));
                 break;
             }
         }
         Ok(Condition {
             main_condition,
             main_condition_statement,
-            else_ifs: self.ast_allocator.alloc_slice_copy(&if_else),
+            else_ifs: self.ast_allocator.alloc_slice_copy(&else_if),
             else_statement,
         })
     }
 }
 
 pub fn convert_function_call_to_branch_access(args: &[Node<Expression>]) -> Result<BranchAccess> {
-    let nature = NatureAccess::Unresolved(identifier);
     let res = match args.len() {
         1 => BranchAccess::Explicit(Reference::new(reinterpret_expression_as_identifier(
             args[0],
@@ -168,8 +210,16 @@ pub fn convert_function_call_to_branch_access(args: &[Node<Expression>]) -> Resu
 }
 pub fn reinterpret_expression_as_identifier(expression: Node<Expression>) -> Result<StrId> {
     if let Expression::Primary(primary) = expression.contents {
-        if let Primary::VariableReference(reference) | Primary::NetReference(reference) = primary {
-            reference.name
+        if let Primary::VariableReference(Reference {
+            name,
+            declaration: _,
+        })
+        | Primary::NetReference(Reference {
+            name,
+            declaration: _,
+        }) = primary
+        {
+            return Ok(name);
         }
     }
     Err(Error {

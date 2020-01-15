@@ -60,10 +60,10 @@ impl Parser {
             BranchAccess::Implicit(res)
         } else {
             let first_net_name_or_identifer = self.parse_hieraichal_identifier(false)?;
-            if self.look_ahead().0 == Token::Comma {
+            if self.look_ahead()?.0 == Token::Comma {
                 let second_net_name = self.parse_hieraichal_identifier(false)?;
                 BranchAccess::Implicit(Branch::Nets(
-                    Reference::new(first_net_name),
+                    Reference::new(first_net_name_or_identifer),
                     Reference::new(second_net_name),
                 ))
             } else {

@@ -165,17 +165,17 @@ pub enum Statement {
 }
 #[derive(Clone, Copy, Debug)]
 pub struct SeqBlock {
-    name: Option<StrId>,
-    variables: SliceId<Variable>,
-    statements: SliceId<Statement>, //    parameters:Parameters, TODO parameters
+    pub name: Option<StrId>,
+    pub variables: SliceId<AttributeNode<Variable>>,
+    pub statements: SliceId<Node<Statement>>, //    parameters:Parameters, TODO parameters
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Condition {
-    main_condition: Node<Expression>,
-    main_condition_statement: AstNodeId<Statement>,
-    else_ifs: SliceId<(Node<Expression>, Node<Statement>)>,
-    else_statement: Option<AstNodeId<Statement>>,
+    pub main_condition: Node<Expression>,
+    pub main_condition_statement: AstNodeId<Statement>,
+    pub else_ifs: SliceId<(Node<Expression>, Node<Statement>)>,
+    pub else_statement: Option<AstNodeId<Statement>>,
 }
 
 #[derive(Clone, Copy, Debug, EnumAsInner)]
