@@ -57,13 +57,17 @@ impl Parser {
             .negative_offset(start);
 
         self.expect(Token::Semicolon)?;
-
+        let mut declared_ports = if allow_port_declaration {
+            Vec::new()
+        } else {
+            port_list
+        };
         let mut module_items = Vec::new();
         loop {
             let (token, span) = self.look_ahead()?;
             match token {
                 Token::Inout | Token::Input | Token::Output if allow_port_declaration => {
-                    port_list.append(&mut self.parse_port_declaration()?)
+                    declared_ports.append(&mut self.parse_port_declaration()?)
                 }
                 Token::Inout | Token::Input | Token::Output => {
                     let source = self
@@ -93,9 +97,12 @@ impl Parser {
                 _ => module_items.append(&mut self.parse_module_item()?),
             }
         }
+        //TODO build symbol table
         Ok(Module {
             name,
-            port_list: self.ast_allocator.alloc_slice_copy(port_list.as_slice()),
+            port_list: self
+                .ast_allocator
+                .alloc_slice_copy(declared_ports.as_slice()),
             children: self.ast_allocator.alloc_slice_copy(module_items.as_slice()),
         })
     }
@@ -135,7 +142,7 @@ impl Parser {
         let contents: Vec<ModuleItem> = match self.look_ahead()?.0 {
             Token::Analog => {
                 self.lookahead.take();
-                unimplemented!("Analog_Block")
+                vec![ModuleItem::AnalogStmt(self.parse_statement()?)]
             }
             Token::Branch => {
                 self.lookahead.take();

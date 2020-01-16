@@ -22,21 +22,33 @@ impl Parser {
     pub fn parse_statement(&mut self) -> Result<Node<Statement>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
-            Token::If => Statement::Condition(self.parse_condition()?),
-            Token::Flow => self.parse_contribute_statement(NatureAccess::Flow)?,
-            Token::Potential => self.parse_contribute_statement(NatureAccess::Potential)?,
-            Token::Begin => Statement::Block(self.parse_block()?),
+            Token::If => {
+                self.lookahead.take();
+                Statement::Condition(self.parse_condition()?)
+            }
+            Token::Flow => {
+                self.lookahead.take();
+                self.parse_contribute_statement(NatureAccess::Flow)?
+            }
+            Token::Potential => {
+                self.lookahead.take();
+                self.parse_contribute_statement(NatureAccess::Potential)?
+            }
+            Token::Begin => {
+                self.lookahead.take();
+                Statement::Block(self.parse_block()?)
+            }
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
                 let identifier = self.parse_hieraichal_identifier(false)?;
                 let (token, span) = self.look_ahead()?;
-                match token {
+                let res = match token {
                     Token::Assign => {
                         self.lookahead.take();
                         Statement::Assign(Reference::new(identifier), self.parse_expression()?)
                     }
                     Token::ParenOpen => {
                         self.lookahead.take();
-                        let res = if self.look_ahead()?.0 == Token::OpLess {
+                        if self.look_ahead()?.0 == Token::OpLess {
                             self.parse_contribute_statement(NatureAccess::Unresolved(identifier))?
                         } else if self.look_ahead()?.0 == Token::ParenClose {
                             self.lookahead.take();
@@ -64,9 +76,7 @@ impl Parser {
                                     self.ast_allocator.alloc_slice_copy(arg.as_slice()),
                                 )
                             }
-                        };
-                        self.expect(Token::Semicolon)?;
-                        res
+                        }
                     }
                     _ => {
                         return Err(Error {
@@ -76,7 +86,9 @@ impl Parser {
                             source: span,
                         })
                     }
-                }
+                };
+                self.expect(Token::Semicolon)?;
+                res
             }
             _ => {
                 return Err(Error {
@@ -130,8 +142,8 @@ impl Parser {
         while self.look_ahead()?.0 != Token::End {
             statements.push(self.parse_statement()?);
         }
-        let statements = self.ast_allocator.alloc_slice_copy(statements.as_slice());
         self.lookahead.take();
+        let statements = self.ast_allocator.alloc_slice_copy(statements.as_slice());
         Ok(SeqBlock {
             name,
             variables,

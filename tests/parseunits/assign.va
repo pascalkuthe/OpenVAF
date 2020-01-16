@@ -1,0 +1,5 @@
+module test;
+    analog begin
+        x = 32/y;
+    end
+endmodule

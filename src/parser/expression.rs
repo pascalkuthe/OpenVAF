@@ -85,7 +85,7 @@ impl Parser {
             Token::OpMul => (BinaryOperator::Multiply, 10),
             Token::OpDiv => (BinaryOperator::Divide, 10),
             Token::OpModulus => (BinaryOperator::Modulus, 10),
-            Token::Exp => (BinaryOperator::Exponent, 11),
+            Token::OpExp => (BinaryOperator::Exponent, 11),
             _ => {
                 return Err(Error {
                     error_type: UnexpectedTokens {
@@ -114,39 +114,58 @@ impl Parser {
     return lhs
     */
     fn parse_atom(&mut self) -> Result<Node<Expression>> {
-        let (token, span) = self.next()?;
+        let (token, span) = self.look_ahead()?;
         let res = match token {
-            Token::Minus => self.parse_unary_operator(UnaryOperator::ArithmeticNegate)?,
-            Token::Plus => self.parse_unary_operator(UnaryOperator::ExplicitPositive)?,
-            Token::OpLogicNot => self.parse_unary_operator(UnaryOperator::LogicNegate)?,
-            Token::OpBitNot => self.parse_unary_operator(UnaryOperator::BitNegate)?,
+            Token::Minus => {
+                self.lookahead.take();
+                self.parse_unary_operator(UnaryOperator::ArithmeticNegate)?
+            }
+            Token::Plus => {
+                self.lookahead.take();
+                self.parse_unary_operator(UnaryOperator::ExplicitPositive)?
+            }
+            Token::OpLogicNot => {
+                self.lookahead.take();
+                self.parse_unary_operator(UnaryOperator::LogicNegate)?
+            }
+            Token::OpBitNot => {
+                self.lookahead.take();
+                self.parse_unary_operator(UnaryOperator::BitNegate)?
+            }
             Token::ParenOpen => {
+                self.lookahead.take();
                 let res = self.parse_expression()?;
                 self.expect(Token::ParenClose)?;
                 res
             }
             Token::LiteralRealNumberDot => {
+                self.lookahead.take();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::Dot);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberDotExp => {
+                self.lookahead.take();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::DotExp);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberDotScaleChar => {
+                self.lookahead.take();
                 let value =
                     parse_real_value(self.preprocessor.slice(), RealLiteralType::DotScaleChar);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberExp => {
+                self.lookahead.take();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::Exp);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberScaleChar => {
+                self.lookahead.take();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::ScaleChar);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralUnsignedNumber => {
+                self.lookahead.take();
                 let value = parse_unsigned_int_value(self.preprocessor.slice());
                 Node::new(Expression::Primary(Primary::UnsignedInteger(value)), span)
             }

@@ -6,9 +6,12 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+use intrusive_collections::__core::fmt::{Debug, Error, Formatter};
 use sr_alloc::{Allocator, Immutable, NodeId, SliceId, StrId};
 
 use crate::Span;
+
+//mod visitor;
 
 /// This is an Ast. Once created is it completely immutable
 pub struct Ast {
@@ -101,7 +104,7 @@ pub struct BranchDeclaration {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ModuleItem {
-    AnalogStmt,
+    AnalogStmt(Node<Statement>),
     BranchDecl(BranchDeclaration),
     NetDecl(Net),
     VariableDecl(Variable),
@@ -240,7 +243,6 @@ pub enum BinaryOperator {
     And,
     Or,
 }
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnaryOperator {
     BitNegate,

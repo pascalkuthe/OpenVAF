@@ -171,7 +171,7 @@ pub enum Token {
 
     #[token = "begin"]
     Begin,
-    #[token = "End"]
+    #[token = "end"]
     End,
     #[token = "module"]
     Module,

@@ -88,12 +88,7 @@ impl SourceMap {
         let mut res = String::new();
         let mut last_end = if let Some(first) = cursor.get() {
             //defined here because the loop needs to be initialized
-            let last_end = if reverse {
-                first.original_span.get_start()
-            } else {
-                first.original_span.get_end()
-            };
-            if first.end > start {
+            if first.end >= start {
                 //if inside substitution append until newline in there first
                 let start = start - first.start;
                 let string = self.allocator.get_str(first.contents);
@@ -105,13 +100,19 @@ impl SourceMap {
                 if let Some(index) = Self::append_until_newline_in_str(string, &mut res, reverse) {
                     return (res, index, false);
                 }
-            };
-            if reverse {
-                cursor.move_prev()
+                if reverse {
+                    cursor.move_prev();
+                    first.original_span.get_start()
+                } else {
+                    cursor.move_next();
+                    first.original_span.get_end()
+                }
             } else {
-                cursor.move_next()
+                if !reverse {
+                    cursor.move_next()
+                }
+                start - first.end + first.original_span.get_end()
             }
-            last_end
         } else {
             //the cursor is pointing at the mainfile
             if reverse {
@@ -158,11 +159,10 @@ impl SourceMap {
                 (self.allocator().get_str(current.contents), current)
             } else {
                 //we have passed the last substitution and are now inside the main file
-                let start = if reverse { 0 } else { main_file.len() as Index };
                 let end_slice = if reverse {
-                    &main_file[start as usize..last_end as usize]
+                    &main_file[0..last_end as usize]
                 } else {
-                    &main_file[last_end as usize..start as usize]
+                    &main_file[last_end as usize..main_file.len()]
                 };
                 if let Some(index) = Self::append_until_newline_in_str(end_slice, &mut res, reverse)
                 {
@@ -244,16 +244,16 @@ impl SourceMap {
                 start_substitution.original_last_line
                     + bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
             } else {
+                /* TODO keep track of position within substitution
                 let string_to_count =
-                    &self.allocator.get_str(start_substitution.contents)[..head_offset as usize];
+                    &self.allocator.get_str(start_substitution.contents)[..head_offset as usize];*/
                 start_substitution.original_last_line
-                    + bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
+                //  + bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
             }
         } else {
-            bytecount::count(
-                &self.allocator.get_str(self.main_file_contents)[..head_offset as usize].as_bytes(),
-                b'\n',
-            ) as LineNumber
+            let str_to_count =
+                &self.allocator.get_str(self.main_file_contents)[..head_offset as usize];
+            bytecount::count(str_to_count.as_bytes(), b'\n') as LineNumber
         };
         (head_content, line_number + 1, range)
     }
@@ -297,10 +297,19 @@ impl SourceMap {
                 let res_id = first_substitution.contents.range(range);
                 return self.allocator.get_str(res_id).to_string();
             }
-            res.push_str(&self.allocator.get_str(first_substitution.contents)[start..]);
-            Range {
-                start: first_substitution.original_span.get_end() as usize,
-                end: 0,
+            if first_substitution.end < span.get_start() {
+                Range {
+                    start: (span.get_start() - first_substitution.end
+                        + first_substitution.original_span.get_end())
+                        as usize,
+                    end: 0,
+                }
+            } else {
+                res.push_str(&self.allocator.get_str(first_substitution.contents)[start..]);
+                Range {
+                    start: first_substitution.original_span.get_end() as usize,
+                    end: 0,
+                }
             }
         } else {
             match cursor.peek_next().get() {
@@ -375,6 +384,8 @@ impl SourceMapBuilder {
         main_file: &Path,
     ) -> std::io::Result<(Pin<Box<Self>>, Lexer<'static>)> {
         //By pinning we guarantee that the SourceMap outlives self
+        let name = main_file.to_str().unwrap();
+        let contents = std::fs::read_to_string(main_file)?;
         let mut res = Box::pin(Self {
             source_map: NonNull::dangling(),
             cursor: NonNull::dangling(),
@@ -384,8 +395,6 @@ impl SourceMapBuilder {
             _pin_marker: PhantomPinned,
             _phantom_data: Default::default(),
         });
-        let name = main_file.to_str().unwrap();
-        let contents = std::fs::read_to_string(main_file)?;
         let source_map_ptr = Box::into_raw(Box::new(SourceMap::new(name, contents.as_str()))); //This is save since the sourcemap doesnt get dropped by the builder its only returned when calling done
         res.as_mut().get_unchecked_mut().source_map = NonNull::new_unchecked(source_map_ptr); //this is save since we just created the ptr and it therefore cant be null
         let cursor = Box::into_raw(Box::new((&mut *source_map_ptr).map.cursor_mut())); //this is save since source_map cant be dropped by self so it will always outlive self and this is a save self refence

@@ -9,7 +9,7 @@
  */
 use std::path::Path;
 
-use crate::ast::{Branch, VariableType};
+use crate::ast::{Branch, Expression, Statement, VariableType};
 use crate::ast::{ModuleItem, NetType, TopNode};
 
 const PARSE_UNIT_DIRECTORY: &'static str = "tests/parseunits/";
@@ -39,46 +39,9 @@ pub fn module() -> Result<(), ()> {
         panic!("Parsed Something else than a module!")
     };
     assert_eq!(ast.data.get_str(second_module.name), "test2");
-    let ports = ast.data.get_slice(second_module.port_list);
+    let mut ports = ast.data.get_slice(second_module.port_list).iter();
 
-    let port = ports[0].contents.contents;
-    assert_eq!(ast.data.get_str(port.name), "a");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, false);
-
-    let port = ports[1].contents.contents;
-    assert_eq!(ast.data.get_str(port.name), "b");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, false);
-
-    let port = ports[2].contents.contents;
-    assert_eq!(ast.data.get_str(port.name), "c");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, false);
-
-    let port = ports[3].contents.contents;
-    assert_eq!(ast.data.get_str(port.name), "d");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, false);
-
-    let port = ports[4].contents.contents;
-    assert_eq!(ast.data.get_str(port.name), "e");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, false);
-
-    let port = ports[5].contents.contents;
-    assert_eq!(ast.data.get_str(port.name), "f");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, false);
-
-    let port = ports[6].contents.contents;
-    assert_eq!(ast.data.get_str(port.name), "g");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, false);
-
-    //declarations in body
-
-    let port = ports[7].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "a");
     assert_eq!(port.output, true);
     assert_eq!(port.input, false);
@@ -86,7 +49,7 @@ pub fn module() -> Result<(), ()> {
     assert!(port.discipline.is_none());
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports[8].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "b");
     assert_eq!(port.output, false);
     assert_eq!(port.input, true);
@@ -94,7 +57,7 @@ pub fn module() -> Result<(), ()> {
     assert!(port.discipline.is_none());
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports[9].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "c");
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
@@ -102,7 +65,7 @@ pub fn module() -> Result<(), ()> {
     assert!(port.discipline.is_none());
     assert_eq!(port.net_type, NetType::WIRE);
 
-    let port = ports[10].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "d");
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
@@ -113,7 +76,7 @@ pub fn module() -> Result<(), ()> {
     );
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports[11].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "e");
     assert_eq!(port.output, true);
     assert_eq!(port.input, false);
@@ -124,7 +87,7 @@ pub fn module() -> Result<(), ()> {
     );
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports[12].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "f");
     assert_eq!(port.output, true);
     assert_eq!(port.input, false);
@@ -135,7 +98,7 @@ pub fn module() -> Result<(), ()> {
     );
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports[13].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "g");
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
@@ -153,8 +116,8 @@ pub fn module() -> Result<(), ()> {
         panic!("Parsed Something else than a module!")
     };
     assert_eq!(ast.data.get_str(third_module.name), "test3");
-    let ports = ast.data.get_slice(third_module.port_list);
-    let port = ports[0].contents.contents;
+    let mut ports = ast.data.get_slice(third_module.port_list).iter();
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "a");
     assert_eq!(port.output, true);
     assert_eq!(port.input, false);
@@ -162,7 +125,7 @@ pub fn module() -> Result<(), ()> {
     assert!(port.discipline.is_none());
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports[1].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "b");
     assert_eq!(port.output, false);
     assert_eq!(port.input, true);
@@ -173,7 +136,7 @@ pub fn module() -> Result<(), ()> {
     );
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports[2].contents.contents;
+    let port = ports.next().unwrap().contents.contents;
     assert_eq!(ast.data.get_str(port.name), "c");
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
@@ -378,3 +341,195 @@ pub fn net_decl() -> Result<(), ()> {
     }
     Ok(())
 }
+#[test]
+pub fn linear() -> Result<(), ()> {
+    let (source_map, res) =
+        super::parse(Path::new("tests/linear.va")).expect("Test File not found");
+    let ast = match res {
+        Ok(ast) => ast,
+        Err(e) => {
+            e.print(&source_map);
+            return Err(());
+        }
+    };
+    let mut top_nodes = ast.top_nodes().iter();
+    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents.contents {
+        module
+    } else {
+        panic!("Parsed Something else than a module!")
+    };
+
+    let mut ports = ast.data.get_slice(module.port_list).iter();
+    let port = ports.next().unwrap().contents.contents;
+    assert_eq!(ast.data.get_str(port.name), "A");
+    assert_eq!(port.output, true);
+    assert_eq!(port.input, true);
+    assert_eq!(port.signed, false);
+    assert_eq!(
+        ast.data.get_str(port.discipline.unwrap().name),
+        "electrical"
+    );
+    assert_eq!(port.net_type, NetType::UNDECLARED);
+
+    let port = ports.next().unwrap().contents.contents;
+    assert_eq!(ast.data.get_str(port.name), "B");
+    assert_eq!(port.output, true);
+    assert_eq!(port.input, true);
+    assert_eq!(port.signed, false);
+    assert_eq!(
+        ast.data.get_str(port.discipline.unwrap().name),
+        "electrical"
+    );
+    let mut children = ast.data.get_slice(module.children).iter();
+    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(net.name), "x");
+        assert_eq!(net.signed, false);
+        assert_eq!(ast.data.get_str(net.discipline.unwrap().name), "electrical");
+        assert_eq!(net.net_type, NetType::UNDECLARED);
+    } else {
+        panic!("Found something else than a net decl")
+    }
+    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(net.name), "y");
+        assert_eq!(net.signed, false);
+        assert_eq!(ast.data.get_str(net.discipline.unwrap().name), "electrical");
+        assert_eq!(net.net_type, NetType::UNDECLARED);
+    } else {
+        panic!("Found something else than a net decl")
+    }
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(branch.name), "ax");
+        if let Branch::Nets(net1, net2) = branch.branch {
+            assert_eq!(ast.data.get_str(net1.name), "A");
+            assert_eq!(ast.data.get_str(net2.name), "x");
+        } else {
+            panic!("This should be a branch between two nets")
+        }
+    } else {
+        panic!("Found something else than a branch decl")
+    }
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(branch.name), "ay");
+        if let Branch::Nets(net1, net2) = branch.branch {
+            assert_eq!(ast.data.get_str(net1.name), "A");
+            assert_eq!(ast.data.get_str(net2.name), "y");
+        } else {
+            panic!("This should be a branch between two nets")
+        }
+    } else {
+        panic!("Found something else than a branch decl")
+    }
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(branch.name), "xb");
+        if let Branch::Nets(net1, net2) = branch.branch {
+            assert_eq!(ast.data.get_str(net1.name), "x");
+            assert_eq!(ast.data.get_str(net2.name), "B");
+        } else {
+            panic!("This should be a branch between two nets")
+        }
+    } else {
+        panic!("Found something else than a branch decl")
+    }
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(branch.name), "yb");
+        if let Branch::Nets(net1, net2) = branch.branch {
+            assert_eq!(ast.data.get_str(net1.name), "y");
+            assert_eq!(ast.data.get_str(net2.name), "B");
+        } else {
+            panic!("This should be a branch between two nets")
+        }
+    } else {
+        panic!("Found something else than a branch decl")
+    }
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(branch.name), "xy");
+        if let Branch::Nets(net1, net2) = branch.branch {
+            assert_eq!(ast.data.get_str(net1.name), "x");
+            assert_eq!(ast.data.get_str(net2.name), "y");
+        } else {
+            panic!("This should be a branch between two nets")
+        }
+    } else {
+        panic!("Found something else than a branch decl")
+    }
+    if let ModuleItem::VariableDecl(variable) = children.next().unwrap().contents.contents {
+        assert_eq!(ast.data.get_str(variable.name), "B");
+        assert_eq!(variable.variable_type, VariableType::REAL)
+    } else {
+        panic!("Found something else than a branch decl")
+    }
+    if let ModuleItem::AnalogStmt(analog) = children.next().unwrap().contents.contents {
+        if let Statement::Block(block) = analog.contents {
+            assert_eq!(block.name, None);
+            assert_eq!(block.variables.len(), 0);
+            let contents = Vec::from(ast.data.get_slice(block.statements));
+            let tmp = 2;
+        }
+    } else {
+        panic!("Found something else than an analog_block")
+    }
+    Ok(())
+}
+
+/*#[test]
+pub fn contribute() -> Result<(), ()> {
+    let (source_map, res) =
+        super::parse(Path::new(&format!("{}contribute.va", PARSE_UNIT_DIRECTORY)))
+            .expect("Test File not found");
+    let ast = match res {
+        Ok(ast) => ast,
+        Err(e) => {
+            e.print(&source_map);
+            return Err(());
+        }
+    };
+    let mut top_nodes = ast.top_nodes().iter();
+    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents.contents {
+        module
+    } else {
+        panic!("Parsed Something else than a module!")
+    };
+    assert_eq!(ast.data.get_str(module.name), "test");
+    Ok(());
+}
+#[test]
+pub fn assignment() -> Result<(), ()> {
+    let (source_map, res) =
+        super::parse(Path::new(&format!("{}assignment.va", PARSE_UNIT_DIRECTORY)))
+            .expect("Test File not found");
+    let ast = match res {
+        Ok(ast) => ast,
+        Err(e) => {
+            e.print(&source_map);
+            return Err(());
+        }
+    };
+    let mut top_nodes = ast.top_nodes().iter();
+    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents.contents {
+        module
+    } else {
+        panic!("Parsed Something else than a module!")
+    };
+    assert_eq!(ast.data.get_str(module.name), "test");
+    Ok(());
+}
+#[test]
+pub fn condition() -> Result<(), ()> {
+    let (source_map, res) = super::parse(Path::new(&format!("{}if.va", PARSE_UNIT_DIRECTORY)))
+        .expect("Test File not found");
+    let ast = match res {
+        Ok(ast) => ast,
+        Err(e) => {
+            e.print(&source_map);
+            return Err(());
+        }
+    };
+    let mut top_nodes = ast.top_nodes().iter();
+    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents.contents {
+        module
+    } else {
+        panic!("Parsed Something else than a module!")
+    };
+    assert_eq!(ast.data.get_str(module.name), "test");
+    Ok(());
+}*/

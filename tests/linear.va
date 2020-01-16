@@ -1,0 +1,24 @@
+`define branches\
+    branch (A,x) ax;\
+    branch (A,y) ay;\
+    branch (x,B) xb\
+    branch (y,B) yb;\
+    branch (x,y) xy;\
+
+module schaltung (A,B);
+    inout electrical A,B;
+    electrical x,y;
+    `branches
+    real B = 30;
+
+    analog begin
+        if (V(ax) > 100) begin
+            B = B-1;
+        end
+        I(ax) <+ V(ax)/10;
+        I(ay) <+ V(ay)/20;
+        I(xy) <+ (B*V(ax)+V(xy))/30;
+        I(ay) <+ V(xa)/40;
+        I(ay) <+ V(ya)/50;
+    end
+endmodule
