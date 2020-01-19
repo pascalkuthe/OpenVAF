@@ -18,6 +18,7 @@ use crate::ast::{Ast, AttributeNode, Attributes, TopNode};
 use crate::parser::error::Expected;
 use crate::parser::lexer::Token;
 use crate::span::Index;
+use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
@@ -39,10 +40,19 @@ pub mod error;
 #[derive(Debug)]
 pub struct Parser {
     pub preprocessor: Preprocessor,
-    pub lookahead: Option<Result<(Token, Span)>>,
+    pub scope_stack: Vec<SymbolTable>,
+    lookahead: Option<Result<(Token, Span)>>,
     pub ast_allocator: Allocator,
 }
 impl Parser {
+    pub fn new(preprocessor: Preprocessor) -> Self {
+        Self {
+            preprocessor,
+            scope_stack: vec![SymbolTable::new()],
+            lookahead: None,
+            ast_allocator: Allocator::new(),
+        }
+    }
     fn next(&mut self) -> Result<(Token, Span)> {
         self.lookahead.take().unwrap_or_else(|| {
             self.preprocessor.advance().map(|_| {
@@ -155,16 +165,24 @@ impl Parser {
     pub fn span_to_current_end(&self, start: Index) -> Span {
         Span::new(start, self.preprocessor.current_end())
     }
+    pub fn symbol_table(&self) -> &SymbolTable {
+        self.scope_stack.last().unwrap()
+    }
+    pub fn insert_symbol(&mut self, name_id: StrId, declaration: SymbolDeclaration) {
+        let name = unsafe {
+            std::mem::transmute::<&str, &'static str>(self.ast_allocator.get_str(name_id))
+        };
+        self.scope_stack
+            .last_mut()
+            .unwrap()
+            .insert(name, declaration);
+    }
 }
 
 pub fn parse(main_file: &Path) -> std::io::Result<(Box<SourceMap>, Result<Ast>)> {
     let mut preprocessor = Preprocessor::new(main_file)?;
     let res = preprocessor.process_token();
-    let mut parser = Parser {
-        preprocessor,
-        lookahead: None,
-        ast_allocator: Allocator::new(),
-    };
+    let mut parser = Parser::new(preprocessor);
     parser.lookahead = Some(Ok((
         parser.preprocessor.current_token(),
         parser.preprocessor.current_span(),

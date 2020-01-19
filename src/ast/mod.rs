@@ -157,7 +157,7 @@ pub enum NetType {
     WOR,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, EnumAsInner)]
 pub enum Statement {
     Block(SeqBlock),
     Condition(Condition),
@@ -197,6 +197,7 @@ pub enum BranchAccess {
     Explicit(Reference<BranchDeclaration>),
     Implicit(Branch),
 }
+pub type Function = ();
 #[derive(Clone, Copy, Debug, EnumAsInner)]
 pub enum Primary {
     Integer(i64),
@@ -204,7 +205,7 @@ pub enum Primary {
     Real(f64),
     NetReference(Reference<Net>),
     VariableReference(Reference<Variable>),
-    FunctionCall(Reference<Variable>, SliceId<Node<Expression>>),
+    FunctionCall(Reference<Function>, SliceId<Node<Expression>>),
     BranchAccess(NatureAccess, BranchAccess),
     ImplictBranch(NatureAccess, Branch),
 }

@@ -28,5 +28,6 @@ mod ast;
 mod error;
 pub mod parser;
 mod span;
+mod symbol_table;
 #[cfg(test)]
 mod test;

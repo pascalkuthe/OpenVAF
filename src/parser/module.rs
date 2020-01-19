@@ -14,6 +14,7 @@ use crate::parser::error;
 use crate::parser::error::{Expected, Result};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
+use crate::symbol_table::SymbolTable;
 
 impl Parser {
     pub(super) fn parse_module(&mut self) -> Result<Module> {
@@ -25,7 +26,7 @@ impl Parser {
             self.parse_parameter_list()?;
             self.expect(Token::ParenClose)?;
         }
-
+        self.scope_stack.push(SymbolTable::new());
         let port_list_start = self.preprocessor.current_start();
         //ports
         let (allow_port_declaration, mut port_list) = if self.look_ahead()?.0 == Token::ParenOpen {

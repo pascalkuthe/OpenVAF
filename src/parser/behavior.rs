@@ -7,7 +7,7 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use sr_alloc::{SliceId, StrId};
+use sr_alloc::{NodeId, SliceId, StrId};
 
 use crate::ast::{
     AttributeNode, Branch, BranchAccess, Condition, Expression, NatureAccess, Node, Primary,
@@ -17,6 +17,7 @@ use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens};
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
+use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
 impl Parser {
     pub fn parse_statement(&mut self) -> Result<Node<Statement>> {
@@ -36,7 +37,20 @@ impl Parser {
             }
             Token::Begin => {
                 self.lookahead.take();
-                Statement::Block(self.parse_block()?)
+                let res = self.ast_allocator.alloc_node(|| {
+                    Node::new(
+                        Statement::Block(self.parse_block()?),
+                        self.span_to_current_end(span.get_start()),
+                    )
+                });
+                let block_reference = self.ast_allocator.id_from_sub_item(res, |statement_node| {
+                    statement_node.contents.as_block().unwrap()
+                });
+                if let Some(name) = name {
+                    let block_symbol_table = self.scope_stack.pop().unwrap();
+                    self.insert_symbol(name, SymbolDeclaration::Block());
+                }
+                return Ok(res);
             }
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
                 let identifier = self.parse_hieraichal_identifier(false)?;
@@ -109,6 +123,7 @@ impl Parser {
         let (variables, name) = if self.look_ahead()?.0 == Token::Colon {
             self.lookahead.take();
             let name = self.parse_identifier(false)?;
+            self.scope_stack.push(SymbolTable::new());
             let attributes = self.parse_attributes()?;
             let mut variables = Vec::new();
             //TODO parameteres
@@ -144,11 +159,12 @@ impl Parser {
         }
         self.lookahead.take();
         let statements = self.ast_allocator.alloc_slice_copy(statements.as_slice());
-        Ok(SeqBlock {
+        let res = SeqBlock {
             name,
             variables,
             statements,
-        })
+        };
+        Ok(res)
     }
 
     pub fn parse_contribute_statement(
