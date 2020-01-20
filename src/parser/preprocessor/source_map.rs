@@ -13,9 +13,11 @@ use std::path::Path;
 use std::pin::Pin;
 use std::ptr::NonNull;
 
+use bumpalo::Bump;
+use intrusive_collections::__core::cell::Cell;
+use intrusive_collections::__core::ops::Sub;
 use intrusive_collections::rbtree::{Cursor, CursorMut};
-use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink, UnsafeRef};
-use sr_alloc::{Allocator, NodeId, StrId};
+use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
 
 use crate::span::{Index, LineNumber};
 use crate::{Lexer, Span};
@@ -25,20 +27,20 @@ pub type CallDepth = u8;
 
 //Map Declarations/
 
-intrusive_adapter!(SourceMapAdapter = UnsafeRef<Substitution> : Substitution {link:RBTreeLink});
-impl<'a> KeyAdapter<'a> for SourceMapAdapter {
+intrusive_adapter!(SourceMapAdapter<'source_map> = &'source_map Substitution<'source_map> : Substitution<'source_map> {link:RBTreeLink});
+impl<'source_map, 'lt> KeyAdapter<'lt> for SourceMapAdapter<'source_map> {
     type Key = Index;
 
-    fn get_key(&self, value: &'a Self::Value) -> Self::Key {
+    fn get_key(&self, value: &'lt Self::Value) -> Self::Key {
         value.start
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct Substitution {
+pub(crate) struct Substitution<'source_map> {
     start: Index,
-    end: Index,
-    contents: StrId,
+    end: Cell<Index>,
+    contents: Cell<&'source_map str>,
     stype: SourceType,
     original_span: Span,
     original_first_line: LineNumber,
@@ -51,22 +53,17 @@ pub(crate) enum SourceType {
     File,
 }
 #[derive(Debug)]
-pub struct SourceMap {
-    allocator: Allocator,
-    main_file_name: StrId,
-    main_file_contents: StrId,
-    children: RBTree<SourceMapAdapter>,
-    map: RBTree<SourceMapAdapter>,
+pub struct SourceMap<'source_map> {
+    main_file_name: &'source_map str,
+    main_file_contents: &'source_map str,
+    children: RBTree<SourceMapAdapter<'source_map>>,
+    map: RBTree<SourceMapAdapter<'source_map>>,
     _pin_marker: PhantomPinned,
 }
 
-impl SourceMap {
-    pub fn new(main_file_name: &str, main_file_contents: &str) -> Self {
-        let allocator = Allocator::new();
-        let main_file_name = allocator.alloc_str_copy(main_file_name);
-        let main_file_contents = allocator.alloc_str_copy(main_file_contents);
+impl<'source_map> SourceMap<'source_map> {
+    pub fn new(main_file_name: &'source_map str, main_file_contents: &'source_map str) -> Self {
         Self {
-            allocator,
             main_file_name,
             main_file_contents,
             children: Default::default(),
@@ -74,24 +71,21 @@ impl SourceMap {
             _pin_marker: PhantomPinned,
         }
     }
-    pub fn allocator(&self) -> &Allocator {
-        &self.allocator
-    }
 
     fn string_to_newline(
         &self,
         reverse: bool,
-        cursor: &mut Cursor<SourceMapAdapter>,
+        cursor: &mut Cursor<SourceMapAdapter<'source_map>>,
         start: Index,
     ) -> (String, Index, bool) {
-        let main_file = self.allocator.get_str(self.main_file_contents);
+        let main_file = self.main_file_contents;
         let mut res = String::new();
         let mut last_end = if let Some(first) = cursor.get() {
             //defined here because the loop needs to be initialized
             if first.end >= start {
                 //if inside substitution append until newline in there first
                 let start = start - first.start;
-                let string = self.allocator.get_str(first.contents);
+                let string = first.contents;
                 let string = if reverse {
                     &string[..start as usize]
                 } else {
@@ -138,7 +132,7 @@ impl SourceMap {
         };
 
         loop {
-            let (string, current) = if let Some(current) = cursor.get() {
+            let current = if let Some(current) = cursor.get() {
                 //check if newlines is in space between substitutions
                 let range = if reverse {
                     Range {
@@ -156,7 +150,7 @@ impl SourceMap {
                 {
                     return (res, index, true);
                 }
-                (self.allocator().get_str(current.contents), current)
+                current
             } else {
                 //we have passed the last substitution and are now inside the main file
                 let end_slice = if reverse {
@@ -182,7 +176,9 @@ impl SourceMap {
                 end
             };
 
-            if let Some(index) = Self::append_until_newline_in_str(string, &mut res, reverse) {
+            if let Some(index) =
+                Self::append_until_newline_in_str(current.contents, &mut res, reverse)
+            {
                 return (res, index, false);
             }
         }
@@ -240,19 +236,18 @@ impl SourceMap {
                     start: start_substitution.original_span.get_end() as usize,
                     end: start_substitution.original_span.get_end() as usize + head_offset as usize,
                 };
-                let string_to_count = &self.allocator.get_str(self.main_file_contents)[range];
+                let string_to_count = &self.main_file_contents[range];
                 start_substitution.original_last_line
                     + bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
             } else {
                 /* TODO keep track of position within substitution
                 let string_to_count =
-                    &self.allocator.get_str(start_substitution.contents)[..head_offset as usize];*/
+                    &start_substitution.contents)[..head_offset as usize];*/
                 start_substitution.original_last_line
                 //  + bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
             }
         } else {
-            let str_to_count =
-                &self.allocator.get_str(self.main_file_contents)[..head_offset as usize];
+            let str_to_count = &self.main_file_contents[..head_offset as usize];
             bytecount::count(str_to_count.as_bytes(), b'\n') as LineNumber
         };
         (head_content, line_number + 1, range)
@@ -267,7 +262,7 @@ impl SourceMap {
                 //we are in the main file
                 let end = (start_substitution.original_span.get_end()
                     + (span.get_end() - start_substitution.end)) as usize; //avoids overflows
-                let string_to_count = &self.allocator.get_str(self.main_file_contents)
+                let string_to_count = &self.main_file_contents
                     [start_substitution.original_span.get_end() as usize..end];
                 bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
                     + start_substitution.original_last_line
@@ -275,8 +270,7 @@ impl SourceMap {
         } else {
             //there is no substitution before we will just need to count from the beginning
             bytecount::count(
-                &self.allocator.get_str(self.main_file_contents)[..span.get_start() as usize]
-                    .as_bytes(),
+                &self.main_file_contents[..span.get_start() as usize].as_bytes(),
                 b'\n',
             ) as LineNumber
         };
@@ -284,8 +278,12 @@ impl SourceMap {
         (res, line_number + 1)
     }
 
-    fn resolve_span_internal(&self, span: Span, cursor: &mut Cursor<SourceMapAdapter>) -> String {
-        let main_file = self.allocator.get_str(self.main_file_contents);
+    fn resolve_span_internal(
+        &self,
+        span: Span,
+        cursor: &mut Cursor<SourceMapAdapter<'source_map>>,
+    ) -> String {
+        let main_file = self.main_file_contents;
         let mut res = String::new();
         let mut current_main_range = if let Some(first_substitution) = cursor.get() {
             let start = (span.get_start() - first_substitution.start) as usize;
@@ -294,8 +292,7 @@ impl SourceMap {
                     start,
                     end: (span.get_end() - first_substitution.start) as usize,
                 };
-                let res_id = first_substitution.contents.range(range);
-                return self.allocator.get_str(res_id).to_string();
+                return first_substitution.contents[range].to_string();
             }
             if first_substitution.end < span.get_start() {
                 Range {
@@ -305,7 +302,7 @@ impl SourceMap {
                     end: 0,
                 }
             } else {
-                res.push_str(&self.allocator.get_str(first_substitution.contents)[start..]);
+                res.push_str(&first_substitution.contents[start..]);
                 Range {
                     start: first_substitution.original_span.get_end() as usize,
                     end: 0,
@@ -336,7 +333,7 @@ impl SourceMap {
             }
             current_main_range.end = current_substitution.original_span.get_start() as usize;
             res.push_str(&main_file[current_main_range]);
-            res.push_str(self.allocator().get_str(current_substitution.contents));
+            res.push_str(current_substitution.contents);
 
             current_main_range = Range {
                 start: current_substitution.original_span.get_end() as usize,
@@ -347,7 +344,7 @@ impl SourceMap {
             current_main_range.end = last_substitution.original_span.get_start() as usize;
             res.push_str(&main_file[current_main_range]);
             let end = span.get_end() - last_substitution.start;
-            res.push_str(&self.allocator.get_str(last_substitution.contents)[..end as usize]);
+            res.push_str(&last_substitution.contents[..end as usize]);
         } else {
             cursor.move_prev();
             let last_substitution = cursor.get().unwrap();
@@ -366,27 +363,31 @@ struct SourceMapBuilderState {
 }
 
 #[derive(Debug)]
-pub(super) struct SourceMapBuilder {
-    cursor: NonNull<CursorMut<'static, SourceMapAdapter>>,
-    current_source: Option<(NonNull<Substitution>, bumpalo::collections::String<'static>)>,
+pub(super) struct SourceMapBuilder<'source_map> {
+    allocator: &'source_map Bump,
+    cursor: NonNull<CursorMut<'source_map, SourceMapAdapter<'source_map>>>,
+    current_source: Option<(
+        &'source_map Substitution<'source_map>,
+        bumpalo::collections::String<'source_map>,
+    )>,
     substitution_stack: Vec<SourceMapBuilderState>,
-    source_map: NonNull<SourceMap>,
+    source_map: NonNull<SourceMap<'source_map>>,
     root_line: LineNumber,
-    _phantom_data: PhantomData<CursorMut<'static, SourceMapAdapter>>,
+    _phantom_data: PhantomData<CursorMut<'source_map, SourceMapAdapter<'source_map>>>,
     _pin_marker: PhantomPinned,
 }
 
-impl SourceMapBuilder {
-    /// #Safety
-    /// this returns a lexer with a static lifetime to avoid lifetime complications
-    /// it is the callers responsibility to ensure the lexer doesnt outlive self
-    pub(super) unsafe fn new(
+impl<'source_map> SourceMapBuilder<'source_map> {
+    pub(super) fn new(
+        allocator: &'source_map Bump,
         main_file: &Path,
-    ) -> std::io::Result<(Pin<Box<Self>>, Lexer<'static>)> {
+    ) -> std::io::Result<(Pin<Box<Self>>, Lexer<'source_map>)> {
         //By pinning we guarantee that the SourceMap outlives self
-        let name = main_file.to_str().unwrap();
+        let name = allocator.alloc_str(main_file.to_str().unwrap());
         let contents = std::fs::read_to_string(main_file)?;
+        let contents = allocator.alloc_str(contents.as_str());
         let mut res = Box::pin(Self {
+            allocator,
             source_map: NonNull::dangling(),
             cursor: NonNull::dangling(),
             root_line: 0,
@@ -395,16 +396,18 @@ impl SourceMapBuilder {
             _pin_marker: PhantomPinned,
             _phantom_data: Default::default(),
         });
-        let source_map_ptr = Box::into_raw(Box::new(SourceMap::new(name, contents.as_str()))); //This is save since the sourcemap doesnt get dropped by the builder its only returned when calling done
-        res.as_mut().get_unchecked_mut().source_map = NonNull::new_unchecked(source_map_ptr); //this is save since we just created the ptr and it therefore cant be null
-        let cursor = Box::into_raw(Box::new((&mut *source_map_ptr).map.cursor_mut())); //this is save since source_map cant be dropped by self so it will always outlive self and this is a save self refence
-        let ptr = NonNull::new_unchecked(cursor); //we just created this pointer from a reference so it wont be null
-        res.as_mut().get_unchecked_mut().cursor = ptr; //this is save since changing a single field doesnt move the whole struct
-        let lexer_str = std::mem::transmute::<&str, &'static str>(res.source()); //unsafety occurs here
+        unsafe {
+            let source_map_ptr = Box::into_raw(Box::new(SourceMap::new(name, &*contents))); //This is save since the sourcemap doesnt get dropped by the builder its only returned when calling done
+            res.as_mut().get_unchecked_mut().source_map = NonNull::new_unchecked(source_map_ptr); //this is save since we just created the ptr and it therefore cant be null
+            let cursor = Box::into_raw(Box::new((&mut *source_map_ptr).map.cursor_mut())); //this is save since source_map cant be dropped by self so it will always outlive self and this is a save self refence
+            let ptr = NonNull::new_unchecked(cursor); //we just created this pointer from a reference so it wont be null
+            res.as_mut().get_unchecked_mut().cursor = ptr; //this is save since changing a single field doesnt move the whole struct
+        }
+        let lexer_str = res.source_map().main_file_contents;
         Ok((res, Lexer::new(lexer_str)))
     }
 
-    pub fn done(self: Pin<Box<Self>>) -> Box<SourceMap> {
+    pub fn done(self: Pin<Box<Self>>) -> Box<SourceMap<'source_map>> {
         unsafe {
             Box::from_raw(self.source_map.as_ptr()) //This is save since we created SourceMap using a box and it cant be reassigned
         }
@@ -417,7 +420,10 @@ impl SourceMapBuilder {
     // Internal getters/projections
     fn current_root_substitution(
         self: Pin<&mut Self>,
-    ) -> &mut Option<(NonNull<Substitution>, bumpalo::collections::String<'static>)> {
+    ) -> &mut Option<(
+        &'source_map Substitution<'source_map>,
+        bumpalo::collections::String<'source_map>,
+    )> {
         unsafe { &mut self.get_unchecked_mut().current_source } //This is save since we don't treat parent_locations as structurally pinned
     }
     pub(super) fn new_line(mut self: Pin<&mut Self>) {
@@ -429,25 +435,15 @@ impl SourceMapBuilder {
         }
     }
 
-    fn cursor(self: Pin<&mut Self>) -> &mut CursorMut<'static, SourceMapAdapter> {
+    fn cursor(self: Pin<&mut Self>) -> &mut CursorMut<'source_map, SourceMapAdapter<'source_map>> {
         unsafe { self.get_unchecked_mut().cursor.as_mut() } //This is save since we do not pin cursor structurally and we own the pointer
     }
-    fn source_map_mut(self: Pin<&mut Self>) -> Pin<&mut SourceMap> {
+    fn source_map_mut(self: Pin<&mut Self>) -> Pin<&'source_map mut SourceMap> {
         unsafe { self.map_unchecked_mut(|s| s.source_map.as_mut()) } //This is save: just a projection and source_map remains valid as long as this method can becalled
     }
 
-    fn source_map(&self) -> &SourceMap {
+    fn source_map(&self) -> &SourceMap<'source_map> {
         unsafe { self.source_map.as_ref() } //This is save since the source_map outlives self
-    }
-    pub(super) fn allocator_mut(self: Pin<&mut Self>) -> Pin<&mut Allocator> {
-        unsafe {
-            self.source_map_mut()
-                .map_unchecked_mut(|s| &mut s.allocator)
-        }
-        //This is just a projection (save)
-    }
-    pub(super) fn allocator(&self) -> &Allocator {
-        self.source_map().allocator()
     }
 
     fn enter_root_substitution(
@@ -459,47 +455,33 @@ impl SourceMapBuilder {
     ) {
         let substitution = {
             let range: Range<usize> = original_span.into();
-            let original_source = &self
-                .allocator()
-                .get_str(self.source_map().main_file_contents)[range];
+            let original_source = &self.source_map().main_file_contents[range];
             let original_lines = bytecount::count(original_source.as_bytes(), b'\n') as LineNumber;
             let root_line = self.root_line;
-            self.as_mut()
-                .allocator_mut()
-                .alloc_node(move || Substitution {
-                    start,
-                    end: 0,
-                    contents: StrId::dangling(),
-                    stype,
-                    original_span,
-                    original_first_line: root_line,
-                    original_last_line: root_line + original_lines,
-                    link: RBTreeLink::new(),
-                })
+            self.allocator.alloc_with(|| Substitution {
+                start,
+                end: Cell::new(0),
+                contents: Cell::new(""),
+                stype,
+                original_span,
+                original_first_line: root_line,
+                original_last_line: root_line + original_lines,
+                link: RBTreeLink::new(),
+            })
         };
-        let mut string = unsafe {
-            std::mem::transmute::<
-                bumpalo::collections::String<'_>,
-                bumpalo::collections::String<'static>,
-            >(self.as_mut().allocator_mut().new_string())
-        };
-        string.reserve(source.len());
-        *self.as_mut().current_root_substitution() = Some((substitution.into(), string));
         self.as_mut()
             .insert_into_root_substitution_map(substitution);
+        let string = bumpalo::collections::String::with_capacity_in(source.len(), self.allocator);
+        *self.as_mut().current_root_substitution() = Some((substitution.into(), string));
         self.substitution_stack()
             .push(SourceMapBuilderState { source, offset: 0 })
     }
 
     fn insert_into_root_substitution_map(
         mut self: Pin<&mut Self>,
-        substitution: NodeId<Substitution>,
+        substitution: &'source_map Substitution,
     ) {
-        unsafe {
-            self.as_mut()
-                .cursor()
-                .insert_after(UnsafeRef::from_raw(substitution.into())); //This is save since we guarantee that locations cant be deleted (pinning of the sourcemap which contains the allocator)
-        }
+        self.as_mut().cursor().insert_after(substitution);
         self.as_mut().cursor().move_next();
     }
 
@@ -557,12 +539,10 @@ impl SourceMapBuilder {
             );
             let (mut substitution, contents) =
                 finished_root_substitution.expect(Self::NO_ROOT_SUBSTITUTION);
-            unsafe {
-                let substitution = substitution.as_mut();
-                substitution.end = substitution.start + contents.len() as Index;
-                substitution.contents = self.allocator_mut().string_to_id_unchecked(contents);
-                //this is save since we only ever insert substitutions never delete them
-            }
+            substitution
+                .end
+                .set(substitution.start + contents.len() as Index);
+            substitution.contents.set(contents.into_bump_str());
         }
         finished_substitution.source.len() as Index
     }
@@ -604,12 +584,11 @@ impl SourceMapBuilder {
         if let Some(state) = self.substitution_stack.last() {
             state.source.as_str()
         } else {
-            self.allocator()
-                .get_str(self.source_map().main_file_contents)
+            self.source_map().main_file_contents
         }
     }
 }
-impl Drop for SourceMapBuilder {
+impl<'source_map> Drop for SourceMapBuilder<'source_map> {
     fn drop(&mut self) {
         unsafe {
             //This is save since non_null is non owning so this wont cause a doube free

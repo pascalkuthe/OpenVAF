@@ -7,35 +7,35 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use sr_alloc::StrId;
 
-use crate::ast::{AttributeNode, Discipline, Net, NetType, Port, Reference};
+use crate::ast::{AttributeNode, Net, NetType, Port};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::{error, Error, Parser};
+use crate::symbol::Ident;
 
-impl Parser {
-    pub fn parse_port_declaration_list(&mut self) -> Result<Vec<AttributeNode<Port>>> {
+impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+    pub fn parse_port_declaration_list(&mut self) -> Result<Vec<AttributeNode<'ast, Port>>> {
         if self.look_ahead()?.0 == Token::ParenClose {
             return Ok(Vec::new());
         }
         let mut start = self.look_ahead()?.1.get_start();
         let mut attributes = self.parse_attributes()?;
         let mut port = self.parse_port_declaration_base()?;
-        let mut res = vec![AttributeNode::new(
-            self.span_to_current_end(start),
+        let mut res = vec![AttributeNode {
             attributes,
-            port,
-        )];
+            source: self.span_to_current_end(start),
+            contents: port,
+        }];
         while self.look_ahead()?.0 == Token::Comma {
             while self.next()?.0 == Token::Comma {
                 if let Ok(name) = self.parse_identifier(true) {
                     port.name = name;
-                    res.push(AttributeNode::new(
-                        self.span_to_current_end(start),
+                    res.push(AttributeNode {
                         attributes,
-                        port,
-                    ));
+                        source: self.span_to_current_end(start),
+                        contents: port,
+                    });
                 } else {
                     break;
                 }
@@ -43,35 +43,35 @@ impl Parser {
             start = self.look_ahead()?.1.get_start();
             attributes = self.parse_attributes()?;
             port = self.parse_port_declaration_base()?;
-            res.push(AttributeNode::new(
-                self.span_to_current_end(start),
+            res.push(AttributeNode {
                 attributes,
-                port,
-            ));
+                source: self.span_to_current_end(start),
+                contents: port,
+            });
         }
         Ok(res)
     }
 
-    pub fn parse_port_declaration(&mut self) -> Result<Vec<AttributeNode<Port>>> {
+    pub fn parse_port_declaration(&mut self) -> Result<Vec<AttributeNode<'ast, Port>>> {
         let start = self.look_ahead()?.1.get_start();
         let port = self.parse_port_declaration_base()?;
         let attributes = self.parse_attributes()?;
-        let mut res = vec![AttributeNode::new(
-            self.span_to_current_end(start),
+        let mut res = vec![AttributeNode {
             attributes,
-            port,
-        )];
+            source: self.span_to_current_end(start),
+            contents: port,
+        }];
         self.parse_list(
             |sel: &mut Self| {
                 let port = Port {
                     name: sel.parse_identifier(false)?,
                     ..port
                 };
-                res.push(AttributeNode::new(
-                    sel.span_to_current_end(start),
+                res.push(AttributeNode {
                     attributes,
-                    port,
-                ));
+                    source: sel.span_to_current_end(start),
+                    contents: port,
+                });
                 Ok(())
             },
             Token::Semicolon,
@@ -149,8 +149,8 @@ impl Parser {
     fn parse_net_declaration_end(
         &mut self,
         mut is_discipline: bool,
-        opt_first_identifier_or_discipline: Result<StrId>,
-    ) -> Result<(Discipline, bool, StrId)> {
+        opt_first_identifier_or_discipline: Result<Ident>,
+    ) -> Result<(Ident, bool, Ident)> {
         let signed = self.look_ahead()?.0 == Token::Signed;
 
         if signed {
@@ -159,21 +159,15 @@ impl Parser {
         };
 
         let (name, discipline) = match opt_first_identifier_or_discipline {
-            Ok(discipline) if is_discipline => (
-                self.parse_identifier(false)?,
-                Some(Reference::new(discipline)),
-            ),
+            Ok(discipline) if is_discipline => (self.parse_identifier(false)?, discipline),
             Ok(first_identifier_or_discipline) => {
                 if let Ok(first_identifier) = self.parse_identifier(true) {
-                    (
-                        first_identifier,
-                        Some(Reference::new(first_identifier_or_discipline)),
-                    )
+                    (first_identifier, first_identifier_or_discipline)
                 } else {
-                    (first_identifier_or_discipline, None)
+                    (first_identifier_or_discipline, Ident::empty())
                 }
             }
-            Err(_) => (self.parse_identifier(false)?, None),
+            Err(_) => (self.parse_identifier(false)?, Ident::empty()),
         }; //TODO default discipline
         Ok((discipline, signed, name))
     }

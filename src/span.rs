@@ -41,6 +41,12 @@ impl Span {
             unimplemented!("Spans longer than {} aren't supported yet", std::u16::MAX)
         }
     }
+    pub const fn new_short_span(start: Index, len: u16) -> Self {
+        Self {
+            start_or_large_span_index: start,
+            data: SpanData::Length(len as Length),
+        }
+    }
     pub fn get_start(self) -> Index {
         match self.data {
             SpanData::LargeSpan => {

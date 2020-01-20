@@ -7,19 +7,17 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use sr_alloc::SliceId;
 
-use crate::ast::{
-    BinaryOperator, BranchAccess, Expression, NatureAccess, Node, Primary, Reference, UnaryOperator,
-};
+use crate::ast::{BinaryOperator, BranchAccess, Expression, Node, Primary, UnaryOperator};
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealLiteralType};
 use crate::parser::Parser;
+use crate::symbol::{keywords, Ident};
 
-impl Parser {
-    pub fn parse_expression(&mut self) -> Result<Node<Expression>> {
+impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+    pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
         let lhs = self.parse_atom()?;
         self.precedence_climb_expression(0, lhs)
     }
@@ -29,8 +27,8 @@ impl Parser {
     fn precedence_climb_expression(
         &mut self,
         min_prec: u8,
-        mut lhs: Node<Expression>,
-    ) -> Result<Node<Expression>> {
+        mut lhs: Node<Expression<'ast>>,
+    ) -> Result<Node<Expression<'ast>>> {
         loop {
             match self.parse_binary_operator() {
                 Ok((op, precedence)) if precedence >= min_prec => {
@@ -52,8 +50,8 @@ impl Parser {
                     }
                     let op = Node::new(op, op_span);
                     let span = lhs.source.extend(rhs.source);
-                    let parsed_lhs = self.ast_allocator.alloc_node(|| lhs);
-                    let parsed_rhs = self.ast_allocator.alloc_node(|| rhs);
+                    let parsed_lhs = self.ast_allocator.alloc_with(|| lhs);
+                    let parsed_rhs = self.ast_allocator.alloc_with(|| rhs);
                     lhs = Node::new(Expression::BinaryOperator(parsed_lhs, op, parsed_rhs), span)
                 }
                 _ => return Ok(lhs),
@@ -113,7 +111,7 @@ impl Parser {
         lhs := the result of applying op with operands lhs and rhs
     return lhs
     */
-    fn parse_atom(&mut self) -> Result<Node<Expression>> {
+    fn parse_atom(&mut self) -> Result<Node<Expression<'ast>>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::Minus => {
@@ -170,18 +168,18 @@ impl Parser {
                 Node::new(Expression::Primary(Primary::UnsignedInteger(value)), span)
             }
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
-                let ident = self.parse_hieraichal_identifier(false)?; //we allow hieraichal identifers here because they are required for functions (but illegal for natures) this will just produce an error at name resolution
+                let ident = self.parse_hierarchical_identifier_internal(false)?; //we allow hieraichal identifers here because they are required for functions (but illegal for natures) this will just produce an error at name resolution
                 let start = self.preprocessor.current_start();
                 let primary = if self.look_ahead()?.0 == Token::ParenOpen {
                     self.lookahead.take();
                     if self.look_ahead()?.0 == Token::OpLess {
                         Primary::BranchAccess(
-                            NatureAccess::Unresolved(ident),
+                            Self::convert_to_nature_identifier(ident)?,
                             BranchAccess::Implicit(self.parse_branch()?),
                         )
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
-                        Primary::FunctionCall(Reference::new(ident), SliceId::dangling())
+                        Primary::FunctionCall(ident.into(), &[])
                     } else {
                         let mut arg = vec![self.parse_expression()?];
                         self.parse_list(
@@ -193,12 +191,12 @@ impl Parser {
                             true,
                         )?;
                         Primary::FunctionCall(
-                            Reference::new(ident),
+                            ident.into(),
                             self.ast_allocator.alloc_slice_copy(arg.as_slice()),
                         )
                     }
                 } else {
-                    Primary::VariableReference(Reference::new(ident)) //this is a variable because thats whats most common in expressions but it could also be a net. Schemantic anlasys will figure that out and chnage this accordingly
+                    Primary::VariableOrNetReference(ident.into())
                 };
                 Node::new(
                     Expression::Primary(primary),
@@ -207,13 +205,18 @@ impl Parser {
             }
             Token::Potential => {
                 let start = self.preprocessor.current_start();
-                let res =
-                    Primary::BranchAccess(NatureAccess::Potential, self.parse_branch_access()?);
+                let res = Primary::BranchAccess(
+                    Ident::new(keywords::POTENTIAL, span),
+                    self.parse_branch_access()?,
+                );
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
             Token::Flow => {
                 let start = self.preprocessor.current_start();
-                let res = Primary::BranchAccess(NatureAccess::Flow, self.parse_branch_access()?);
+                let res = Primary::BranchAccess(
+                    Ident::new(keywords::FLOW, span),
+                    self.parse_branch_access()?,
+                );
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
             _ => {
@@ -227,7 +230,7 @@ impl Parser {
         };
         Ok(res)
     }
-    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression>> {
+    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression<'ast>>> {
         let span = self.look_ahead()?.1;
         self.lookahead.take();
         let unary_op = Node {
@@ -236,7 +239,7 @@ impl Parser {
         };
         let expr = self.parse_expression()?;
         let span = unary_op.source.extend(unary_op.source);
-        let expr = self.ast_allocator.alloc_node(|| expr);
+        let expr = self.ast_allocator.alloc_with(|| expr);
         Ok(Node::new(Expression::UnaryOperator(unary_op, expr), span))
     }
 }

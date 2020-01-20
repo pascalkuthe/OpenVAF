@@ -22,6 +22,8 @@ pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
 pub use span::Span;
 
+pub mod symbol;
+
 #[macro_use]
 mod util;
 mod ast;

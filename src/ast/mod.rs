@@ -6,31 +6,13 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use intrusive_collections::__core::fmt::{Debug, Error, Formatter};
-use sr_alloc::{Allocator, Immutable, NodeId, SliceId, StrId};
+use intrusive_collections::__core::fmt::Debug;
 
+use crate::symbol::Ident;
 use crate::Span;
 
 //mod visitor;
 
-/// This is an Ast. Once created is it completely immutable
-pub struct Ast {
-    pub data: Immutable,
-    top_nodes: SliceId<AttributeNode<TopNode>>,
-}
-impl Ast {
-    pub fn new(data: Allocator, top_nodes: SliceId<AttributeNode<TopNode>>) -> Self {
-        Self {
-            data: Immutable::new(data),
-            top_nodes,
-        }
-    }
-    pub fn top_nodes(&self) -> &[AttributeNode<TopNode>] {
-        &self.data.get_slice(self.top_nodes)
-    }
-}
-pub type AstNodeId<T> = NodeId<Node<T>>;
-pub type AstAttributeNodeId<T> = NodeId<AttributeNode<T>>;
 #[derive(Clone, Copy, Debug)]
 pub struct Node<T: Clone> {
     pub source: Span,
@@ -42,39 +24,33 @@ impl<T: Clone> Node<T> {
     }
 }
 pub type Attribute = ();
-pub type Attributes = SliceId<Attribute>;
+pub type Attributes<'ast> = &'ast [Attribute];
 #[derive(Clone, Copy, Debug)]
-pub struct AttributeNode<T: Clone> {
-    pub attributes: Attributes,
-    pub contents: Node<T>,
+pub struct AttributeNode<'ast, T: Clone> {
+    pub attributes: Attributes<'ast>,
+    pub source: Span,
+    pub contents: T,
 }
-impl<T: Clone> AttributeNode<T> {
-    pub fn new(source: Span, attributes: Attributes, contents: T) -> Self {
-        Self {
-            attributes,
-            contents: Node { source, contents },
-        }
-    }
-}
+
 #[derive(Clone, Copy, Debug)]
-pub enum TopNode {
-    Module(Module),
+pub enum TopNode<'ast> {
+    Module(Module<'ast>),
     Nature,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Module {
-    pub name: StrId,
-    pub port_list: SliceId<AttributeNode<Port>>,
+pub struct Module<'ast> {
+    pub name: Ident,
+    pub port_list: &'ast [AttributeNode<'ast, Port>],
     //parameter_list: SliceId<Parameter>,TODO Parameter List
-    pub children: SliceId<AttributeNode<ModuleItem>>,
+    pub children: &'ast [AttributeNode<'ast, ModuleItem<'ast>>],
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Port {
-    pub name: StrId,
+    pub name: Ident,
     pub input: bool,
     pub output: bool,
-    pub discipline: Discipline, //TODO discipline
+    pub discipline: Ident, //TODO discipline
     pub signed: bool,
     pub net_type: NetType,
 }
@@ -82,63 +58,59 @@ pub struct Port {
 impl Default for Port {
     fn default() -> Self {
         Self {
-            name: StrId::dangling(),
+            name: Ident::empty(),
             input: false,
             output: false,
-            discipline: None,
+            discipline: Ident::empty(),
             signed: false,
             net_type: NetType::UNDECLARED,
         }
     }
 }
+
 #[derive(Debug, Clone, Copy)]
-pub enum Branch {
-    Port(Reference<Port>),
-    Nets(Reference<Net>, Reference<Net>),
+pub enum Branch<'ast> {
+    Port(HierarchicalId<'ast>),
+    Nets(HierarchicalId<'ast>, HierarchicalId<'ast>),
 }
 #[derive(Debug, Clone, Copy)]
-pub struct BranchDeclaration {
-    pub name: StrId,
-    pub branch: Branch,
+pub struct BranchDeclaration<'ast> {
+    pub name: Ident,
+    pub branch: Branch<'ast>,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum ModuleItem {
-    AnalogStmt(Node<Statement>),
-    BranchDecl(BranchDeclaration),
+pub enum ModuleItem<'ast> {
+    AnalogStmt(Node<Statement<'ast>>),
+    BranchDecl(BranchDeclaration<'ast>),
     NetDecl(Net),
-    VariableDecl(Variable),
+    VariableDecl(Variable<'ast>),
     ParameterDecl,
 }
 #[derive(Clone, Copy, Debug)]
-pub struct Reference<T: Clone> {
-    pub name: StrId,
-    pub declaration: Option<AstNodeId<T>>,
+pub struct Discipline {
+    pub name: Ident,
 }
-pub type Discipline = Option<Reference<()>>;
+#[derive(Clone, Copy, Debug)]
+pub struct Function<'ast> {
+    pub name: Ident,
+    pub args: &'ast [Ident],
+    pub body: Node<Statement<'ast>>,
+}
 #[derive(Debug, Clone, Copy)]
 pub struct Net {
-    pub name: StrId,
-    pub discipline: Discipline, //TODO discipline
+    pub name: Ident,
+    pub discipline: Ident,
     pub signed: bool,
     pub net_type: NetType,
-    //TODO defaut value
 }
 #[derive(Debug, Clone, Copy)]
-pub struct Variable {
-    pub name: StrId,
-    //TODO defaut value
+pub struct Variable<'ast> {
+    pub name: Ident,
     pub variable_type: VariableType,
-    pub default_value: Option<Node<Expression>>,
+    pub default_value: Option<&'ast Node<Expression<'ast>>>, //a reference because this used rarely in practice
 }
-impl<T: Clone> Reference<T> {
-    pub fn new(name: StrId) -> Self {
-        Self {
-            name,
-            declaration: None,
-        }
-    }
-}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NetType {
     UNDECLARED,
@@ -157,64 +129,62 @@ pub enum NetType {
     WOR,
 }
 
-#[derive(Clone, Copy, Debug, EnumAsInner)]
-pub enum Statement {
-    Block(SeqBlock),
-    Condition(Condition),
-    Contribute(NatureAccess, BranchAccess, Node<Expression>),
+#[derive(Clone, Copy, Debug)]
+pub enum Statement<'ast> {
+    Block(&'ast SeqBlock<'ast>),
+    Condition(Condition<'ast>),
+    Contribute(Ident, BranchAccess<'ast>, Node<Expression<'ast>>),
     //  TODO IndirectContribute(),
-    Assign(Reference<Variable>, Node<Expression>),
-    FunctionCall(Reference<Variable>, SliceId<Node<Expression>>),
+    Assign(HierarchicalId<'ast>, Node<Expression<'ast>>),
+    FunctionCall(HierarchicalId<'ast>, &'ast [Node<Expression<'ast>>]),
 }
 #[derive(Clone, Copy, Debug)]
-pub struct SeqBlock {
-    pub name: Option<StrId>,
-    pub variables: SliceId<AttributeNode<Variable>>,
-    pub statements: SliceId<Node<Statement>>, //    parameters:Parameters, TODO parameters
+pub struct SeqBlock<'ast> {
+    pub scope: Option<BlockScope<'ast>>,
+    pub statements: &'ast [Node<Statement<'ast>>],
+    //    parameters:Parameters, TODO parameters
+}
+#[derive(Clone, Copy, Debug)]
+pub struct BlockScope<'ast> {
+    pub name: Ident,
+    pub variables: &'ast [AttributeNode<'ast, Variable<'ast>>],
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Condition {
-    pub main_condition: Node<Expression>,
-    pub main_condition_statement: AstNodeId<Statement>,
-    pub else_ifs: SliceId<(Node<Expression>, Node<Statement>)>,
-    pub else_statement: Option<AstNodeId<Statement>>,
+pub struct Condition<'ast> {
+    pub main_condition: Node<Expression<'ast>>,
+    pub main_condition_statement: &'ast Node<Statement<'ast>>,
+    pub else_ifs: &'ast [(Node<Expression<'ast>>, Node<Statement<'ast>>)],
+    pub else_statement: Option<&'ast Node<Statement<'ast>>>,
 }
 
-#[derive(Clone, Copy, Debug, EnumAsInner)]
-pub enum Expression {
+#[derive(Clone, Copy, Debug)]
+pub enum Expression<'ast> {
     BinaryOperator(
-        AstNodeId<Expression>,
+        &'ast Node<Expression<'ast>>,
         Node<BinaryOperator>,
-        AstNodeId<Expression>,
+        &'ast Node<Expression<'ast>>,
     ),
-    UnaryOperator(Node<UnaryOperator>, AstNodeId<Expression>),
-    Primary(Primary),
+    UnaryOperator(Node<UnaryOperator>, &'ast Node<Expression<'ast>>),
+    Primary(Primary<'ast>),
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum BranchAccess {
-    Explicit(Reference<BranchDeclaration>),
-    Implicit(Branch),
+pub enum BranchAccess<'ast> {
+    Explicit(HierarchicalId<'ast>),
+    Implicit(Branch<'ast>),
 }
-pub type Function = ();
-#[derive(Clone, Copy, Debug, EnumAsInner)]
-pub enum Primary {
+
+#[derive(Clone, Copy, Debug)]
+pub enum Primary<'ast> {
     Integer(i64),
     UnsignedInteger(u32),
     Real(f64),
-    NetReference(Reference<Net>),
-    VariableReference(Reference<Variable>),
-    FunctionCall(Reference<Function>, SliceId<Node<Expression>>),
-    BranchAccess(NatureAccess, BranchAccess),
-    ImplictBranch(NatureAccess, Branch),
+    VariableOrNetReference(HierarchicalId<'ast>),
+    FunctionCall(HierarchicalId<'ast>, &'ast [Node<Expression<'ast>>]),
+    BranchAccess(Ident, BranchAccess<'ast>),
 }
-#[derive(Clone, Copy, Debug)]
-pub enum NatureAccess {
-    Potential,
-    Flow,
-    Unresolved(StrId),
-}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperator {
     Condition,
@@ -258,4 +228,15 @@ pub enum VariableType {
     INTEGER,
     REAL,
     REALTIME,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct HierarchicalId<'ast> {
+    pub names: &'ast [Ident],
+}
+impl<'ast> From<bumpalo::collections::Vec<'ast, Ident>> for HierarchicalId<'ast> {
+    fn from(vec: bumpalo::collections::Vec<'ast, Ident>) -> Self {
+        Self {
+            names: vec.into_bump_slice(),
+        }
+    }
 }

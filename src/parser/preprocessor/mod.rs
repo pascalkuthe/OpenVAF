@@ -13,6 +13,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::vec::IntoIter;
 
+use bumpalo::Bump;
 use indexmap::map::IndexMap;
 use intrusive_collections::__core::fmt::{Debug, Formatter};
 use intrusive_collections::__core::iter::Peekable;
@@ -37,13 +38,12 @@ mod source_map;
 #[cfg(test)]
 pub mod test;
 
-#[derive(EnumAsInner)]
-enum TokenSource {
-    File(Lexer<'static>),
+enum TokenSource<'source_map> {
+    File(Lexer<'source_map>),
     Insert(Peekable<IntoIter<MacroBodyElement>>, bool),
 }
 
-impl Debug for TokenSource {
+impl<'source_map> Debug for TokenSource<'source_map> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             TokenSource::File(_) => f.write_str("FILE")?,
@@ -82,14 +82,14 @@ struct UnresolvedMacroReference {
 }
 
 #[derive(Debug)]
-struct PreprocessorState {
+struct PreprocessorState<'source_map> {
     start: Index,
     offset: IndexOffset,
-    token_source: TokenSource,
+    token_source: TokenSource<'source_map>,
 }
 
-impl PreprocessorState {
-    pub fn new(start: Index, token_source: TokenSource) -> Self {
+impl<'source_map> PreprocessorState<'source_map> {
+    pub fn new(start: Index, token_source: TokenSource<'source_map>) -> Self {
         Self {
             start,
             offset: start as IndexOffset,
@@ -111,12 +111,12 @@ impl MacroArg {
 }
 
 #[derive(Debug)]
-pub struct Preprocessor {
+pub struct Preprocessor<'source_map> {
     //internal state
     macros: HashMap<String, Macro>,
     called_macros: IndexMap<String, Vec<MacroArg>>,
-    source_map_builder: Pin<Box<SourceMapBuilder>>,
-    state_stack: Vec<PreprocessorState>,
+    source_map_builder: Pin<Box<SourceMapBuilder<'source_map>>>,
+    state_stack: Vec<PreprocessorState<'source_map>>,
     condition_stack: Vec<Span>,
     /// Start of the current token in the source that contains it. (Either a file or a macro definition)
     current_source_start: Index,
@@ -125,9 +125,10 @@ pub struct Preprocessor {
     current_token: Token,
 }
 
-impl Preprocessor {
-    pub fn new(main_file: &Path) -> std::io::Result<Self> {
-        let (source_map_builder, main_lexer) = unsafe { SourceMapBuilder::new(main_file)? };
+impl<'source_map> Preprocessor<'source_map> {
+    pub fn new(source_map_allocator: &'source_map Bump, main_file: &Path) -> std::io::Result<Self> {
+        let (source_map_builder, main_lexer) =
+            SourceMapBuilder::new(source_map_allocator, main_file)?;
         let mut res = Self {
             macros: HashMap::new(),
             called_macros: IndexMap::new(),
@@ -145,7 +146,7 @@ impl Preprocessor {
             .push(PreprocessorState::new(0, TokenSource::File(main_lexer)));
         Ok(res)
     }
-    pub fn done(self) -> Box<SourceMap> {
+    pub fn done(self) -> Box<SourceMap<'source_map>> {
         self.source_map_builder.done()
     }
 
@@ -620,7 +621,7 @@ impl Preprocessor {
         source_span: Span,
         reference: UnresolvedMacroReference,
         root: bool,
-    ) -> Result<TokenSource> {
+    ) -> Result<TokenSource<'source_map>> {
         let span = source_span.signed_offset(self.current_offset());
         if self.called_macros.contains_key(&reference.name) {
             return Err(Error {

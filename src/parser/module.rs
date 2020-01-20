@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use crate::ast::{AttributeNode, Attributes, Module, ModuleItem, Port, VariableType};
+use crate::ast::{AttributeNode, Module, ModuleItem, Port, VariableType};
 use crate::error::Error;
 use crate::parser::error;
 use crate::parser::error::{Expected, Result};
@@ -16,8 +16,8 @@ use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol_table::SymbolTable;
 
-impl Parser {
-    pub(super) fn parse_module(&mut self) -> Result<Module> {
+impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+    pub(super) fn parse_module(&mut self) -> Result<Module<'ast>> {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
         //parameters
@@ -29,7 +29,7 @@ impl Parser {
         self.scope_stack.push(SymbolTable::new());
         let port_list_start = self.preprocessor.current_start();
         //ports
-        let (allow_port_declaration, mut port_list) = if self.look_ahead()?.0 == Token::ParenOpen {
+        let (allow_port_declaration, port_list) = if self.look_ahead()?.0 == Token::ParenOpen {
             self.lookahead.take();
             let (next_token, next_span) = self.look_ahead()?;
             let (allow_declarations, ports) = match next_token {
@@ -75,7 +75,6 @@ impl Parser {
                         .parse_port_declaration()?
                         .last()
                         .unwrap()
-                        .contents
                         .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
                         .negative_offset(start);
                     return Err(Error {
@@ -108,27 +107,27 @@ impl Parser {
         })
     }
 
-    fn parse_port_list(&mut self) -> Result<Vec<AttributeNode<Port>>> {
+    fn parse_port_list(&mut self) -> Result<Vec<AttributeNode<'ast, Port>>> {
         let name = self.parse_identifier(false)?;
-        let mut res = vec![AttributeNode::new(
-            self.preprocessor.current_span(),
-            Attributes::dangling(),
-            Port {
+        let mut res = vec![AttributeNode {
+            source: self.preprocessor.current_span(),
+            attributes: self.parse_attributes()?,
+            contents: Port {
                 name,
                 ..Port::default()
             },
-        )];
+        }];
         while self.look_ahead()?.0 == Token::Comma {
             self.lookahead.take();
             let name = self.parse_identifier(false)?;
-            res.push(AttributeNode::new(
-                self.preprocessor.current_span(),
-                Attributes::dangling(),
-                Port {
+            res.push(AttributeNode {
+                source: self.preprocessor.current_span(),
+                attributes: self.parse_attributes()?,
+                contents: Port {
                     name,
                     ..Port::default()
                 },
-            ))
+            })
         }
         Ok(res)
     }
@@ -137,7 +136,7 @@ impl Parser {
         unimplemented!()
     }
 
-    fn parse_module_item(&mut self) -> Result<Vec<AttributeNode<ModuleItem>>> {
+    fn parse_module_item(&mut self) -> Result<Vec<AttributeNode<'ast, ModuleItem<'ast>>>> {
         let attributes = self.parse_attributes()?;
         let start = self.look_ahead()?.1.get_start();
         let contents: Vec<ModuleItem> = match self.look_ahead()?.0 {
@@ -190,7 +189,11 @@ impl Parser {
         let span = self.span_to_current_end(start);
         let res = contents
             .into_iter()
-            .map(|module_items| AttributeNode::new(span, attributes, module_items))
+            .map(|module_items| AttributeNode {
+                source: span,
+                attributes,
+                contents: module_items,
+            })
             .collect();
         Ok(res)
     }

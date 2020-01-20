@@ -1,8 +1,3 @@
-use annotate_snippets::display_list::DisplayList;
-use annotate_snippets::formatter::DisplayListFormatter;
-use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
-
-use crate::{SourceMap, Span};
 //  * ******************************************************************************************
 //  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
 //  * It is subject to the license terms in the LICENSE file found in the top-level directory
@@ -10,9 +5,16 @@ use crate::{SourceMap, Span};
 //  *  No part of VARF, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
+
+use annotate_snippets::display_list::DisplayList;
+use annotate_snippets::formatter::DisplayListFormatter;
+use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
+
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
 use crate::span::Index;
+use crate::symbol::Ident;
+use crate::{SourceMap, Span};
 
 pub type Error = crate::error::Error<Type>;
 pub(crate) type Warning = crate::error::Error<WarningType>;
@@ -63,7 +65,9 @@ pub enum Type {
     UnexpectedTokens {
         expected: Vec<Expected>,
     },
-
+    HierarchicalIdNotAllowedAsNature {
+        hierarchical_id: Vec<Ident>,
+    },
     Unsupported(Unsupported),
 }
 impl From<std::io::Error> for Type {

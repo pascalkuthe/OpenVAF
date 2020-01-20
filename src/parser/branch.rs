@@ -7,13 +7,13 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::ast::{Branch, BranchAccess, BranchDeclaration, Reference};
+use crate::ast::{Branch, BranchAccess, BranchDeclaration};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 
-impl Parser {
-    pub fn parse_branch_declaration(&mut self) -> Result<Vec<BranchDeclaration>> {
+impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+    pub fn parse_branch_declaration(&mut self) -> Result<Vec<BranchDeclaration<'ast>>> {
         self.expect(Token::ParenOpen)?;
         let branch = self.parse_branch()?;
         self.expect(Token::ParenClose)?;
@@ -34,40 +34,34 @@ impl Parser {
         )?;
         Ok(res)
     }
-    pub fn parse_branch(&mut self) -> Result<Branch> {
+    pub fn parse_branch(&mut self) -> Result<Branch<'ast>> {
         if self.look_ahead()?.0 == Token::OpLess {
             self.lookahead.take();
-            let res = Branch::Port(Reference::new(self.parse_hieraichal_identifier(false)?));
+            let res = Branch::Port(self.parse_hierarchical_identifier(false)?);
             self.expect(Token::OpGreater)?;
             Ok(res)
         } else {
-            let first_net_name = self.parse_hieraichal_identifier(false)?;
+            let first_net_name = self.parse_hierarchical_identifier(false)?;
             self.expect(Token::Comma)?;
-            let second_net_name = self.parse_hieraichal_identifier(false)?;
-            Ok(Branch::Nets(
-                Reference::new(first_net_name),
-                Reference::new(second_net_name),
-            ))
+            let second_net_name = self.parse_hierarchical_identifier(false)?;
+            Ok(Branch::Nets(first_net_name, second_net_name))
         }
     }
-    pub fn parse_branch_access(&mut self) -> Result<BranchAccess> {
+    pub fn parse_branch_access(&mut self) -> Result<BranchAccess<'ast>> {
         self.expect(Token::ParenOpen)?;
 
         let res = if self.look_ahead()?.0 == Token::OpLess {
             self.lookahead.take();
-            let res = Branch::Port(Reference::new(self.parse_hieraichal_identifier(false)?));
+            let res = Branch::Port(self.parse_hierarchical_identifier(false)?);
             self.expect(Token::OpGreater)?;
             BranchAccess::Implicit(res)
         } else {
-            let first_net_name_or_identifer = self.parse_hieraichal_identifier(false)?;
+            let first_net_name_or_identifer = self.parse_hierarchical_identifier(false)?;
             if self.look_ahead()?.0 == Token::Comma {
-                let second_net_name = self.parse_hieraichal_identifier(false)?;
-                BranchAccess::Implicit(Branch::Nets(
-                    Reference::new(first_net_name_or_identifer),
-                    Reference::new(second_net_name),
-                ))
+                let second_net_name = self.parse_hierarchical_identifier(false)?;
+                BranchAccess::Implicit(Branch::Nets(first_net_name_or_identifer, second_net_name))
             } else {
-                BranchAccess::Explicit(Reference::new(first_net_name_or_identifer))
+                BranchAccess::Explicit(first_net_name_or_identifer)
             }
         };
 

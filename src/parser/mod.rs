@@ -9,16 +9,17 @@
  */
 use std::path::Path;
 
-use sr_alloc::{Allocator, SliceId, StrId};
+use bumpalo::Bump;
 
 pub use error::Error;
 pub use error::Result;
 
-use crate::ast::{Ast, AttributeNode, Attributes, TopNode};
+use crate::ast::{AttributeNode, Attributes, HierarchicalId, TopNode};
 use crate::parser::error::Expected;
 use crate::parser::lexer::Token;
 use crate::span::Index;
-use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::symbol::Ident;
+use crate::symbol_table::SymbolTable;
 use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
@@ -38,19 +39,19 @@ mod variables;
 pub mod error;
 
 #[derive(Debug)]
-pub struct Parser {
-    pub preprocessor: Preprocessor,
-    pub scope_stack: Vec<SymbolTable>,
+pub struct Parser<'source_map, 'ast> {
+    pub preprocessor: Preprocessor<'source_map>,
+    pub scope_stack: Vec<SymbolTable<'ast>>,
     lookahead: Option<Result<(Token, Span)>>,
-    pub ast_allocator: Allocator,
+    pub ast_allocator: &'ast Bump,
 }
-impl Parser {
-    pub fn new(preprocessor: Preprocessor) -> Self {
+impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+    pub fn new(preprocessor: Preprocessor<'source_map>, ast_allocator: &'ast Bump) -> Self {
         Self {
             preprocessor,
             scope_stack: vec![SymbolTable::new()],
             lookahead: None,
-            ast_allocator: Allocator::new(),
+            ast_allocator,
         }
     }
     fn next(&mut self) -> Result<(Token, Span)> {
@@ -76,8 +77,8 @@ impl Parser {
         self.lookahead = Some(res.clone());
         res
     }
-    pub fn run(&mut self) -> Result<SliceId<AttributeNode<TopNode>>> {
-        let mut top_nodes = Vec::new();
+    pub fn run(&mut self) -> Result<AstTop<'ast>> {
+        let mut top_nodes = Vec::new(); //we allocate on the heap and copy into the ast_allocator later because other things might be allocated on the allocator in between causing a temporary leak until the allocator is freed
         loop {
             match self.next()? {
                 //TODO multierror
@@ -86,30 +87,26 @@ impl Parser {
                     let start = self.preprocessor.current_start();
                     let attributes = self.parse_attributes()?;
                     let module = self.parse_module()?;
-                    let span = self.span_to_current_end(start);
-                    top_nodes.push(AttributeNode::new(
-                        span,
+                    let source = self.span_to_current_end(start);
+                    top_nodes.push(AttributeNode {
                         attributes,
-                        TopNode::Module(module),
-                    ));
+                        source,
+                        contents: TopNode::Module(module),
+                    });
                 }
-                (_, span) => {
+                (_, source) => {
                     return Err(Error {
                         error_type: error::Type::UnexpectedToken {
                             expected: vec![Token::Module],
                         },
-                        source: span,
+                        source,
                     })
                 }
             }
         }
-        Ok(self.ast_allocator.alloc_slice_clone(top_nodes.as_slice()))
+        Ok(self.ast_allocator.alloc_slice_copy(top_nodes.as_slice()))
     }
-    pub fn parse_identifier(&mut self, optional: bool) -> Result<StrId> {
-        let identifier = self.parse_identifier_internal(optional)?.to_owned(); //to_string necessary due to a bug with the borrow checker
-        Ok(self.ast_allocator.alloc_str_copy(&identifier))
-    }
-    pub fn parse_identifier_internal(&mut self, optional: bool) -> Result<&str> {
+    pub fn parse_identifier(&mut self, optional: bool) -> Result<Ident> {
         let (token, source) = if optional {
             self.look_ahead()?
         } else {
@@ -133,20 +130,35 @@ impl Parser {
         if optional {
             self.lookahead.take();
         }
-        Ok(identifier)
+        Ok(Ident::from_str_and_span(identifier, source))
     }
-    pub fn parse_hieraichal_identifier(&mut self, optional: bool) -> Result<StrId> {
-        let mut identifier = self.parse_identifier_internal(optional)?.to_string();
+    pub fn parse_hierarchical_identifier(
+        &mut self,
+        optional: bool,
+    ) -> Result<HierarchicalId<'ast>> {
+        Ok(HierarchicalId {
+            names: self
+                .parse_hierarchical_identifier_internal(optional)?
+                .into_bump_slice(),
+        })
+    }
+    pub fn parse_hierarchical_identifier_internal(
+        &mut self,
+        optional: bool,
+    ) -> Result<bumpalo::collections::Vec<'ast, Ident>> {
+        let mut identifier = bumpalo::vec![in &self.ast_allocator;self.parse_identifier(optional)?];
         while self.look_ahead()?.0 == Token::Accessor {
             self.lookahead.take();
-            identifier.push_str(".");
-            identifier.push_str(self.parse_identifier_internal(false)?)
+            identifier.push(self.parse_identifier(false)?)
         }
-        Ok(self.ast_allocator.alloc_str_copy(identifier.as_str()))
+        Ok(identifier)
     }
     //todo attributes
-    pub fn parse_attributes(&mut self) -> Result<Attributes> {
-        Ok(SliceId::dangling()) //Attributes are not yet supported
+    pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
+        Ok(unsafe {
+            use std::ptr::NonNull;
+            &*(NonNull::<[(); 0]>::dangling() as NonNull<[()]>).as_ptr()
+        }) //Attributes are not yet supported
     }
     pub fn expect(&mut self, token: Token) -> Result {
         let (found, source) = self.look_ahead()?;
@@ -165,38 +177,23 @@ impl Parser {
     pub fn span_to_current_end(&self, start: Index) -> Span {
         Span::new(start, self.preprocessor.current_end())
     }
-    pub fn symbol_table(&self) -> &SymbolTable {
-        self.scope_stack.last().unwrap()
-    }
-    pub fn insert_symbol(&mut self, name_id: StrId, declaration: SymbolDeclaration) {
-        let name = unsafe {
-            std::mem::transmute::<&str, &'static str>(self.ast_allocator.get_str(name_id))
-        };
-        self.scope_stack
-            .last_mut()
-            .unwrap()
-            .insert(name, declaration);
+    pub fn symbol_table(&mut self) -> &mut SymbolTable<'ast> {
+        self.scope_stack.last_mut().unwrap()
     }
 }
-
-pub fn parse(main_file: &Path) -> std::io::Result<(Box<SourceMap>, Result<Ast>)> {
-    let mut preprocessor = Preprocessor::new(main_file)?;
+pub type AstTop<'ast> = &'ast [AttributeNode<'ast, TopNode<'ast>>];
+pub fn parse<'source_map, 'ast>(
+    main_file: &Path,
+    source_map_allocator: &'source_map Bump,
+    ast_allocator: &'ast Bump,
+) -> std::io::Result<(Box<SourceMap<'source_map>>, Result<AstTop<'ast>>)> {
+    let mut preprocessor = Preprocessor::new(source_map_allocator, main_file)?;
     let res = preprocessor.process_token();
-    let mut parser = Parser::new(preprocessor);
+    let mut parser = Parser::new(preprocessor, ast_allocator);
     parser.lookahead = Some(Ok((
         parser.preprocessor.current_token(),
         parser.preprocessor.current_span(),
     )));
     let res = res.and_then(|_| parser.run());
-    let mut preprocessor = parser.preprocessor;
-    if let Err(error) = res {
-        while preprocessor.current_token() != Token::EOF {
-            //this is here to complete the sourcemap. This wont be needed when multierrors are introducted
-            preprocessor.advance();
-        }
-        Ok((preprocessor.done(), Err(error)))
-    } else {
-        let ast = Ast::new(parser.ast_allocator, res.unwrap());
-        Ok((preprocessor.done(), Ok(ast)))
-    }
+    Ok((parser.preprocessor.done(), res))
 }

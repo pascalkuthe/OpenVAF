@@ -11,13 +11,11 @@ logos = "0.10.0-rc2"
 enum-as-inner = "*"
 indexmap = "*"
 bytecount = "*"
+ahash = "*"
+smallvec = "*"
 [dependencies.annotate-snippets]
 version = "*"
 features = ["ansi_term"]
-
-[dependencies.sr_alloc]
-version = "*"
-path = "../sralloc"
 
 [dependencies.bumpalo]
 version = "*"

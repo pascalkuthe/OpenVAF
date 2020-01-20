@@ -14,7 +14,7 @@ use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 
-impl Parser {
+impl<'source_map, 'ast> Parser<'source_map, 'ast> {
     /// Combinator that parses a list delimited by a comma and terminated by [end].
     /// This function does not parse the first entry as this requires extra logic in some cases
     /// # Example
