@@ -9,6 +9,8 @@
  */
 use std::path::Path;
 
+use bumpalo::Bump;
+
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::source_map::SourceMapBuilder;
 use crate::parser::Error;
@@ -17,8 +19,10 @@ use crate::{Preprocessor, Span};
 
 #[test]
 pub fn macro_test() -> std::result::Result<(), String> {
+    let source_map_allocator = Bump::new();
     setup_logger();
-    let mut preprocessor = Preprocessor::new(Path::new("tests/macros.va")).expect("IoError");
+    let mut preprocessor =
+        Preprocessor::new(&source_map_allocator, Path::new("tests/macros.va")).expect("IoError");
     let mut start = 0;
     let mut end = 0;
     let mut span = Span::new(0, 0);
@@ -115,8 +119,10 @@ pub fn macro_test() -> std::result::Result<(), String> {
 
 #[test]
 pub fn test_source_map() {
+    let source_map_allocator = Bump::new();
     let (mut builder, mut lexer) =
-        unsafe { SourceMapBuilder::new(Path::new("tests/source_map.va")) }.expect("IoError");
+        unsafe { SourceMapBuilder::new(&source_map_allocator, Path::new("tests/source_map.va")) }
+            .expect("IoError");
     for _ in 0..6 {
         lexer.advance();
     }

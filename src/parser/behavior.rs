@@ -39,6 +39,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                 self.parse_contribute_statement(Ident::new(keywords::POTENTIAL, span))?
             }
             Token::Begin => {
+                self.lookahead.take();
                 let (block, block_symbol_table) = self.parse_block()?;
                 let block_symbol_table = if let Some(block_symbol_table) = block_symbol_table {
                     Some((block.scope.unwrap().name.name, block_symbol_table))

@@ -15,7 +15,6 @@ use std::ptr::NonNull;
 
 use bumpalo::Bump;
 use intrusive_collections::__core::cell::Cell;
-use intrusive_collections::__core::ops::Sub;
 use intrusive_collections::rbtree::{Cursor, CursorMut};
 use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
 
@@ -82,10 +81,10 @@ impl<'source_map> SourceMap<'source_map> {
         let mut res = String::new();
         let mut last_end = if let Some(first) = cursor.get() {
             //defined here because the loop needs to be initialized
-            if first.end >= start {
+            if first.end.get() >= start {
                 //if inside substitution append until newline in there first
                 let start = start - first.start;
-                let string = first.contents;
+                let string = first.contents.get();
                 let string = if reverse {
                     &string[..start as usize]
                 } else {
@@ -105,7 +104,7 @@ impl<'source_map> SourceMap<'source_map> {
                 if !reverse {
                     cursor.move_next()
                 }
-                start - first.end + first.original_span.get_end()
+                start - first.end.get() + first.original_span.get_end()
             }
         } else {
             //the cursor is pointing at the mainfile
@@ -117,7 +116,7 @@ impl<'source_map> SourceMap<'source_map> {
             };
             let res = match cursor.get() {
                 Some(current) if !reverse => {
-                    let len = start - current.end;
+                    let len = start - current.end.get();
                     len + current.original_span.get_end()
                 }
                 _ => start, //there are either no substitutions or we are at the beginning of the main file; there is no need for translation in both cases
@@ -177,7 +176,7 @@ impl<'source_map> SourceMap<'source_map> {
             };
 
             if let Some(index) =
-                Self::append_until_newline_in_str(current.contents, &mut res, reverse)
+                Self::append_until_newline_in_str(current.contents.get(), &mut res, reverse)
             {
                 return (res, index, false);
             }
@@ -242,7 +241,7 @@ impl<'source_map> SourceMap<'source_map> {
             } else {
                 /* TODO keep track of position within substitution
                 let string_to_count =
-                    &start_substitution.contents)[..head_offset as usize];*/
+                    &start_substitution.contents.get())[..head_offset as usize];*/
                 start_substitution.original_last_line
                 //  + bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
             }
@@ -255,13 +254,14 @@ impl<'source_map> SourceMap<'source_map> {
     pub fn resolve_span(&self, span: Span) -> (String, LineNumber) {
         let mut start_cursor = self.map.upper_bound(Bound::Included(&span.get_start()));
         let line_number = if let Some(start_substitution) = start_cursor.get() {
-            if start_substitution.end > span.get_start() {
+            if start_substitution.end.get() > span.get_start() {
                 //we are inside an substitution
                 start_substitution.original_first_line
             } else {
                 //we are in the main file
                 let end = (start_substitution.original_span.get_end()
-                    + (span.get_end() - start_substitution.end)) as usize; //avoids overflows
+                    + (span.get_end() - start_substitution.end.get()))
+                    as usize; //avoids overflows
                 let string_to_count = &self.main_file_contents
                     [start_substitution.original_span.get_end() as usize..end];
                 bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
@@ -287,22 +287,22 @@ impl<'source_map> SourceMap<'source_map> {
         let mut res = String::new();
         let mut current_main_range = if let Some(first_substitution) = cursor.get() {
             let start = (span.get_start() - first_substitution.start) as usize;
-            if first_substitution.end >= span.get_end() {
+            if first_substitution.end.get() >= span.get_end() {
                 let range = Range {
                     start,
                     end: (span.get_end() - first_substitution.start) as usize,
                 };
-                return first_substitution.contents[range].to_string();
+                return first_substitution.contents.get()[range].to_string();
             }
-            if first_substitution.end < span.get_start() {
+            if first_substitution.end.get() < span.get_start() {
                 Range {
-                    start: (span.get_start() - first_substitution.end
+                    start: (span.get_start() - first_substitution.end.get()
                         + first_substitution.original_span.get_end())
                         as usize,
                     end: 0,
                 }
             } else {
-                res.push_str(&first_substitution.contents[start..]);
+                res.push_str(&first_substitution.contents.get()[start..]);
                 Range {
                     start: first_substitution.original_span.get_end() as usize,
                     end: 0,
@@ -328,12 +328,12 @@ impl<'source_map> SourceMap<'source_map> {
             cursor.move_next();
             cursor.get()
         } {
-            if current_substitution.end >= span.get_end() {
+            if current_substitution.end.get() >= span.get_end() {
                 break;
             }
             current_main_range.end = current_substitution.original_span.get_start() as usize;
             res.push_str(&main_file[current_main_range]);
-            res.push_str(current_substitution.contents);
+            res.push_str(current_substitution.contents.get());
 
             current_main_range = Range {
                 start: current_substitution.original_span.get_end() as usize,
@@ -344,11 +344,11 @@ impl<'source_map> SourceMap<'source_map> {
             current_main_range.end = last_substitution.original_span.get_start() as usize;
             res.push_str(&main_file[current_main_range]);
             let end = span.get_end() - last_substitution.start;
-            res.push_str(&last_substitution.contents[..end as usize]);
+            res.push_str(&last_substitution.contents.get()[..end as usize]);
         } else {
             cursor.move_prev();
             let last_substitution = cursor.get().unwrap();
-            let len = span.get_end() - last_substitution.end;
+            let len = span.get_end() - last_substitution.end.get();
             current_main_range.end = (last_substitution.original_span.get_end() + len) as usize;
             res.push_str(&main_file[current_main_range])
         }
@@ -438,9 +438,6 @@ impl<'source_map> SourceMapBuilder<'source_map> {
     fn cursor(self: Pin<&mut Self>) -> &mut CursorMut<'source_map, SourceMapAdapter<'source_map>> {
         unsafe { self.get_unchecked_mut().cursor.as_mut() } //This is save since we do not pin cursor structurally and we own the pointer
     }
-    fn source_map_mut(self: Pin<&mut Self>) -> Pin<&'source_map mut SourceMap> {
-        unsafe { self.map_unchecked_mut(|s| s.source_map.as_mut()) } //This is save: just a projection and source_map remains valid as long as this method can becalled
-    }
 
     fn source_map(&self) -> &SourceMap<'source_map> {
         unsafe { self.source_map.as_ref() } //This is save since the source_map outlives self
@@ -472,14 +469,14 @@ impl<'source_map> SourceMapBuilder<'source_map> {
         self.as_mut()
             .insert_into_root_substitution_map(substitution);
         let string = bumpalo::collections::String::with_capacity_in(source.len(), self.allocator);
-        *self.as_mut().current_root_substitution() = Some((substitution.into(), string));
+        *self.as_mut().current_root_substitution() = Some((&*substitution, string));
         self.substitution_stack()
             .push(SourceMapBuilderState { source, offset: 0 })
     }
 
     fn insert_into_root_substitution_map(
         mut self: Pin<&mut Self>,
-        substitution: &'source_map Substitution,
+        substitution: &'source_map Substitution<'source_map>,
     ) {
         self.as_mut().cursor().insert_after(substitution);
         self.as_mut().cursor().move_next();
@@ -537,7 +534,7 @@ impl<'source_map> SourceMapBuilder<'source_map> {
                 &mut finished_root_substitution,
                 self.as_mut().current_root_substitution(),
             );
-            let (mut substitution, contents) =
+            let (substitution, contents) =
                 finished_root_substitution.expect(Self::NO_ROOT_SUBSTITUTION);
             substitution
                 .end

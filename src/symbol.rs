@@ -217,14 +217,16 @@ mod statics {
     use crate::symbol::keywords::{EMPTY_SYMBOL_STR, FLOW_STR, POTENTIAL_STR};
     use crate::symbol::Interner;
 
-    static interner: Mutex<Interner> = Mutex::new(Interner::prefill(&[
-        EMPTY_SYMBOL_STR,
-        FLOW_STR,
-        POTENTIAL_STR,
-    ]));
+    lazy_static! {
+        static ref INTERNER: Mutex<Interner> = Mutex::new(Interner::prefill(&[
+            EMPTY_SYMBOL_STR,
+            FLOW_STR,
+            POTENTIAL_STR,
+        ]));
+    }
     #[inline]
     pub(super) fn with_interner<T, F: FnOnce(&mut Interner) -> T>(f: F) -> T {
-        f(&mut *interner.lock().unwrap())
+        f(&mut *INTERNER.lock().unwrap())
     }
 }
 

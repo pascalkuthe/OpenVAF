@@ -13,6 +13,8 @@ indexmap = "*"
 bytecount = "*"
 ahash = "*"
 smallvec = "*"
+lazy_static = "*"
+
 [dependencies.annotate-snippets]
 version = "*"
 features = ["ansi_term"]
