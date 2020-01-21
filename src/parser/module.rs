@@ -8,13 +8,16 @@
  * *****************************************************************************************
  */
 
+use smallvec::SmallVec;
+
+use crate::ast::BinaryOperator::Modulus;
 use crate::ast::{AttributeNode, Module, ModuleItem, Port, VariableType};
 use crate::error::Error;
 use crate::parser::error;
 use crate::parser::error::{Expected, Result};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
-use crate::symbol_table::SymbolTable;
+use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
 impl<'source_map, 'ast> Parser<'source_map, 'ast> {
     pub(super) fn parse_module(&mut self) -> Result<Module<'ast>> {
@@ -97,12 +100,17 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                 _ => module_items.append(&mut self.parse_module_item()?),
             }
         }
+        let port_list = &*self
+            .ast_allocator
+            .alloc_slice_copy(declared_ports.as_slice());
+        for port in port_list {
+            self.symbol_table()
+                .insert(port.contents.name.name, SymbolDeclaration::Port(port));
+        }
         //TODO build symbol table
         Ok(Module {
             name,
-            port_list: self
-                .ast_allocator
-                .alloc_slice_copy(declared_ports.as_slice()),
+            port_list,
             children: self.ast_allocator.alloc_slice_copy(module_items.as_slice()),
         })
     }
@@ -136,65 +144,120 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
         unimplemented!()
     }
 
-    fn parse_module_item(&mut self) -> Result<Vec<AttributeNode<'ast, ModuleItem<'ast>>>> {
+    //TODO avoid code duplication
+    fn parse_module_item(&mut self) -> Result<Vec<ModuleItem<'ast>>> {
         let attributes = self.parse_attributes()?;
         let start = self.look_ahead()?.1.get_start();
-        let contents: Vec<ModuleItem> = match self.look_ahead()?.0 {
+        let res = match self.look_ahead()?.0 {
             Token::Analog => {
                 self.lookahead.take();
-                vec![ModuleItem::AnalogStmt(self.parse_statement()?)]
+                //TODO mark as analog context
+                let res = self.parse_statement()?;
+                let res_node = &*self.ast_allocator.alloc_with(|| AttributeNode {
+                    attributes,
+                    source: res.source,
+                    contents: res.contents,
+                });
+                vec![ModuleItem::AnalogStmt(res_node)]
             }
             Token::Branch => {
                 self.lookahead.take();
-                self.parse_branch_declaration()?
-                    .into_iter()
-                    .map(|branch_decl| ModuleItem::BranchDecl(branch_decl))
-                    .collect()
+                let branches = self.parse_branch_declaration()?;
+                let mut res = Vec::with_capacity(branches.len());
+                for branch in branches {
+                    let res_node = &*self.ast_allocator.alloc_with(|| AttributeNode {
+                        attributes,
+                        source: self.span_to_current_end(start),
+                        contents: branch,
+                    });
+                    self.symbol_table()
+                        .insert(branch.name.name, SymbolDeclaration::Branch(res_node));
+                    res.push(ModuleItem::BranchDecl(res_node))
+                }
+                res
             }
             Token::Integer => {
                 self.lookahead.take();
-                self.parse_variable_declaration(VariableType::INTEGER)?
-                    .into_iter()
-                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
-                    .collect()
+                let variables = self.parse_variable_declaration(VariableType::INTEGER)?;
+                let mut res = Vec::with_capacity(variables.len());
+                for variable in variables {
+                    let res_node = &*self.ast_allocator.alloc_with(|| AttributeNode {
+                        attributes,
+                        source: self.span_to_current_end(start),
+                        contents: variable,
+                    });
+                    self.symbol_table()
+                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    res.push(ModuleItem::VariableDecl(res_node))
+                }
+                res
             }
             Token::Real => {
                 self.lookahead.take();
-                self.parse_variable_declaration(VariableType::REAL)?
-                    .into_iter()
-                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
-                    .collect()
+                let variables = self.parse_variable_declaration(VariableType::REAL)?;
+                let mut res = Vec::with_capacity(variables.len());
+                for variable in variables {
+                    let res_node = &*self.ast_allocator.alloc_with(|| AttributeNode {
+                        attributes,
+                        source: self.span_to_current_end(start),
+                        contents: variable,
+                    });
+                    self.symbol_table()
+                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    res.push(ModuleItem::VariableDecl(res_node))
+                }
+                let tmp = self.symbol_table();
+                res
             }
             Token::Realtime => {
                 self.lookahead.take();
-                self.parse_variable_declaration(VariableType::REALTIME)?
-                    .into_iter()
-                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
-                    .collect()
+                let variables = self.parse_variable_declaration(VariableType::REALTIME)?;
+                let mut res = Vec::with_capacity(variables.len());
+                for variable in variables {
+                    let res_node = &*self.ast_allocator.alloc_with(|| AttributeNode {
+                        attributes,
+                        source: self.span_to_current_end(start),
+                        contents: variable,
+                    });
+                    self.symbol_table()
+                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    res.push(ModuleItem::VariableDecl(res_node))
+                }
+                res
             }
             Token::Time => {
                 self.lookahead.take();
-                self.parse_variable_declaration(VariableType::TIME)?
-                    .into_iter()
-                    .map(|variable_decl| ModuleItem::VariableDecl(variable_decl))
-                    .collect()
+                let variables = self.parse_variable_declaration(VariableType::TIME)?;
+                let mut res = Vec::with_capacity(variables.len());
+                for variable in variables {
+                    let res_node = &*self.ast_allocator.alloc_with(|| AttributeNode {
+                        attributes,
+                        source: self.span_to_current_end(start),
+                        contents: variable,
+                    });
+                    self.symbol_table()
+                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    res.push(ModuleItem::VariableDecl(res_node))
+                }
+                res
             }
 
-            _ => self
-                .parse_net_declaration()?
-                .into_iter()
-                .map(|net_decl| ModuleItem::NetDecl(net_decl))
-                .collect(),
+            _ => {
+                let nets = self.parse_net_declaration()?;
+                let mut res = Vec::with_capacity(nets.len());
+                for net in nets {
+                    let res_node = &*self.ast_allocator.alloc_with(|| AttributeNode {
+                        attributes,
+                        source: self.span_to_current_end(start),
+                        contents: net,
+                    });
+                    self.symbol_table()
+                        .insert(net.name.name, SymbolDeclaration::Net(res_node));
+                    res.push(ModuleItem::NetDecl(res_node))
+                }
+                res
+            }
         };
-        let span = self.span_to_current_end(start);
-        let res = contents
-            .into_iter()
-            .map(|module_items| AttributeNode {
-                source: span,
-                attributes,
-                contents: module_items,
-            })
-            .collect();
         Ok(res)
     }
 }

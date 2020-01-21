@@ -18,7 +18,7 @@ module schaltung (A,B);
     inout electrical A,B;
     electrical x,y;
     `branches
-    real B = 30;
+    real C = 30;
 
     analog begin
         if (V(ax) > 100) begin

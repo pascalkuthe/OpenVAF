@@ -13,7 +13,8 @@ use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, Sou
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
 use crate::span::Index;
-use crate::symbol::Ident;
+use crate::symbol::{Ident, Symbol};
+use crate::symbol_table::SymbolDeclaration;
 use crate::{SourceMap, Span};
 
 pub type Error = crate::error::Error<Type>;
@@ -54,6 +55,11 @@ pub enum Type {
     MacroRecursion,
     CompilerDirectiveSplit,
     IoErr(String),
+    AlreadyDeclaredInThisScope {
+        scope: Option<Span>,
+        other_declaration: Span,
+        name: Symbol,
+    },
 
     //General
     UnexpectedEof {
@@ -189,6 +195,104 @@ impl Error {
                         ],
                         fold: true,
                     }],
+                }
+            }
+
+            Type::AlreadyDeclaredInThisScope {
+                name,
+                scope,
+                other_declaration,
+            } => {
+                let (
+                    other_declaration_line,
+                    other_declaration_line_number,
+                    other_declaration_range,
+                ) = source_map.resolve_span_within_line(self.source);
+                if let Some(scope) = scope {
+                    let error_range = translate_to_inner_snippet_range(
+                        range.start as Index + error_span.get_start(),
+                        range.start as Index + error_span.get_end(),
+                        &line,
+                    );
+                    let declaration_list_range = translate_to_inner_snippet_range(
+                        declaration_list_span.get_start() + range.start as Index,
+                        range.start as Index + declaration_list_span.get_end(),
+                        &line,
+                    );
+                    Snippet {
+                        title: Some(Annotation {
+                            id: None,
+                            label: Some(
+                                "Module ports declared in Module body when already declared in Module Head"
+                                    .to_string(),
+                            ),
+                            annotation_type: AnnotationType::Error,
+                        }),
+                        footer: vec![],
+                        slices: vec![Slice {
+                            source: line,
+                            line_start: line_number as usize,
+                            origin: None,
+                            annotations: vec![
+                                SourceAnnotation {
+                                    range:declaration_list_range,
+                                    label: "Ports are declared here".to_string(),
+                                    annotation_type: AnnotationType::Info,
+                                },
+                                SourceAnnotation {
+                                    range: error_range,
+                                    label: "Port declaration is illegal here".to_string(),
+                                    annotation_type: AnnotationType::Error,
+                                },
+                            ],
+                            fold: true,
+                        }],
+                    }
+                } else {
+                    Snippet {
+                        title: Some(Annotation {
+                            id: None,
+                            label: Some(
+                                format!("'{}'", name.as_str(), " has already been declared")
+                                    .to_string(),
+                            ),
+                            annotation_type: AnnotationType::Error,
+                        }),
+                        footer: vec![],
+                        slices: vec![
+                            Slice {
+                                source: line,
+                                line_start: line_number as usize,
+                                origin: None,
+                                annotations: vec![SourceAnnotation {
+                                    range: translate_to_inner_snippet_range(
+                                        range.start,
+                                        range.end,
+                                        &line,
+                                    ),
+                                    label: "Item already declared".to_string(),
+                                    annotation_type: AnnotationType::Error,
+                                }],
+                                fold: false,
+                            },
+                            Slice {
+                                source: other_declaration_line,
+                                line_start: other_declaration_line_number,
+                                origin: None,
+                                annotations: vec![SourceAnnotation {
+                                    range: translate_to_inner_snippet_range(
+                                        other_declaration_range.get_start(),
+                                        other_declaration_range.get_end(),
+                                        other_declaration_line,
+                                    ),
+                                    label: format!("'{}' first declared here", name.as_str())
+                                        .to_string(),
+                                    annotation_type: AnnotationType::Info,
+                                }],
+                                fold: false,
+                            },
+                        ],
+                    }
                 }
             }
             _ => unimplemented!("{:?}", self.error_type),

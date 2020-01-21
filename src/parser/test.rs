@@ -27,14 +27,14 @@ pub fn module() -> Result<(), ()> {
         &ast_allocator,
     )
     .expect("Test File not found");
-    let top_nodes = match res {
+    let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);
             return Err(());
         }
     };
-    let mut top_nodes = top_nodes.iter();
+    let mut top_nodes = ast.iter();
     let first_module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
         module
     } else {
@@ -148,7 +148,7 @@ pub fn branch() -> Result<(), ()> {
         &ast_allocator,
     )
     .expect("Test File not found");
-    let ast = match res {
+    let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);
@@ -175,7 +175,8 @@ pub fn branch() -> Result<(), ()> {
     assert_eq!(port.input, true);
 
     let mut children = module.children.iter();
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "ab1");
         if let Branch::Nets(net1, net2) = branch.branch {
             assert_eq!(net1.names[0].as_str(), "a");
@@ -186,7 +187,8 @@ pub fn branch() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "ab2");
         if let Branch::Nets(net1, net2) = branch.branch {
             assert_eq!(net1.names[0].as_str(), "a");
@@ -197,7 +199,8 @@ pub fn branch() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "pa");
         if let Branch::Port(port) = branch.branch {
             assert_eq!(port.names[0].as_str(), "a");
@@ -207,7 +210,8 @@ pub fn branch() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "pb");
         if let Branch::Port(port) = branch.branch {
             assert_eq!(port.names[0].as_str(), "b");
@@ -230,7 +234,7 @@ pub fn variable_decl() -> Result<(), ()> {
         &ast_allocator,
     )
     .expect("Test File not found");
-    let ast = match res {
+    let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);
@@ -247,32 +251,37 @@ pub fn variable_decl() -> Result<(), ()> {
     let ports = module.port_list;
 
     let mut children = module.children.iter();
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap().contents {
+    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
+        let variable = &variable.contents;
         assert_eq!(variable.name.as_str(), "x");
         assert_eq!(variable.variable_type, VariableType::REAL)
     } else {
         panic!("Found something else than a branch decl")
     }
 
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap().contents {
+    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
+        let variable = &variable.contents;
         assert_eq!(variable.name.as_str(), "y");
         assert_eq!(variable.variable_type, VariableType::INTEGER)
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap().contents {
+    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
+        let variable = &variable.contents;
         assert_eq!(variable.name.as_str(), "z");
         assert_eq!(variable.variable_type, VariableType::INTEGER)
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap().contents {
+    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
+        let variable = &variable.contents;
         assert_eq!(variable.name.as_str(), "t");
         assert_eq!(variable.variable_type, VariableType::TIME)
     } else {
         panic!("Found something else than a variable decl")
     }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap().contents {
+    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
+        let variable = &variable.contents;
         assert_eq!(variable.name.as_str(), "rt");
         assert_eq!(variable.variable_type, VariableType::REALTIME)
     } else {
@@ -291,7 +300,7 @@ pub fn net_decl() -> Result<(), ()> {
         &ast_allocator,
     )
     .expect("Test File not found");
-    let ast = match res {
+    let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);
@@ -307,7 +316,8 @@ pub fn net_decl() -> Result<(), ()> {
     assert_eq!(module.name.as_str(), "test");
 
     let mut children = module.children.iter();
-    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents {
+    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
+        let net = &net.contents;
         assert_eq!(net.name.as_str(), "x");
         assert_eq!(net.signed, false);
         assert_eq!(net.discipline.name, EMPTY_SYMBOL);
@@ -316,7 +326,8 @@ pub fn net_decl() -> Result<(), ()> {
         panic!("Found something else than a net decl")
     }
 
-    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents {
+    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
+        let net = &net.contents;
         assert_eq!(net.name.as_str(), "y");
         assert_eq!(net.signed, false);
         assert_eq!(net.discipline.name, EMPTY_SYMBOL);
@@ -325,7 +336,8 @@ pub fn net_decl() -> Result<(), ()> {
         panic!("Found something else than a net decl")
     }
 
-    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents {
+    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
+        let net = &net.contents;
         assert_eq!(net.name.as_str(), "x");
         assert_eq!(net.signed, false);
         assert_eq!(net.discipline.as_str(), "electrical");
@@ -334,7 +346,8 @@ pub fn net_decl() -> Result<(), ()> {
         panic!("Found something else than a net decl")
     }
 
-    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents {
+    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
+        let net = &net.contents;
         assert_eq!(net.name.as_str(), "x");
         assert_eq!(net.signed, true);
         assert_eq!(net.discipline.as_str(), "electrical");
@@ -355,7 +368,7 @@ pub fn linear() -> Result<(), ()> {
         &ast_allocator,
     )
     .expect("Test File not found");
-    let ast = match res {
+    let (ast, symbol_table) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);
@@ -385,7 +398,8 @@ pub fn linear() -> Result<(), ()> {
     assert_eq!(port.signed, false);
     assert_eq!(port.discipline.as_str(), "electrical");
     let mut children = module.children.iter();
-    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents {
+    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
+        let net = &net.contents;
         assert_eq!(net.name.as_str(), "x");
         assert_eq!(net.signed, false);
         assert_eq!(net.discipline.as_str(), "electrical");
@@ -393,7 +407,8 @@ pub fn linear() -> Result<(), ()> {
     } else {
         panic!("Found something else than a net decl")
     }
-    if let ModuleItem::NetDecl(net) = children.next().unwrap().contents {
+    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
+        let net = &net.contents;
         assert_eq!(net.name.as_str(), "y");
         assert_eq!(net.signed, false);
         assert_eq!(net.discipline.as_str(), "electrical");
@@ -401,7 +416,8 @@ pub fn linear() -> Result<(), ()> {
     } else {
         panic!("Found something else than a net decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "ax");
         if let Branch::Nets(net1, net2) = branch.branch {
             assert_eq!(net1.names[0].as_str(), "A");
@@ -412,7 +428,8 @@ pub fn linear() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "ay");
         if let Branch::Nets(net1, net2) = branch.branch {
             assert_eq!(net1.names[0].as_str(), "A");
@@ -423,7 +440,8 @@ pub fn linear() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "xb");
         if let Branch::Nets(net1, net2) = branch.branch {
             assert_eq!(net1.names[0].as_str(), "x");
@@ -434,7 +452,8 @@ pub fn linear() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "yb");
         if let Branch::Nets(net1, net2) = branch.branch {
             assert_eq!(net1.names[0].as_str(), "y");
@@ -445,7 +464,8 @@ pub fn linear() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap().contents {
+    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
+        let branch = &branch.contents;
         assert_eq!(branch.name.as_str(), "xy");
         if let Branch::Nets(net1, net2) = branch.branch {
             assert_eq!(net1.names[0].as_str(), "x");
@@ -456,13 +476,14 @@ pub fn linear() -> Result<(), ()> {
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap().contents {
-        assert_eq!(variable.name.as_str(), "B");
+    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
+        let variable = &variable.contents;
+        assert_eq!(variable.name.as_str(), "C");
         assert_eq!(variable.variable_type, VariableType::REAL)
     } else {
         panic!("Found something else than a branch decl")
     }
-    if let ModuleItem::AnalogStmt(analog) = children.next().unwrap().contents {
+    if let ModuleItem::AnalogStmt(analog) = children.next().unwrap() {
         if let Statement::Block(block) = analog.contents {
             assert!(block.scope.is_none());
             let contents = Vec::from(block.statements);
@@ -479,7 +500,7 @@ pub fn contribute() -> Result<(), ()> {
     let (source_map, res) =
         super::parse(Path::new(&format!("{}contribute.va", PARSE_UNIT_DIRECTORY)))
             .expect("Test File not found");
-    let ast = match res {
+    let (ast,_) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);
@@ -500,7 +521,7 @@ pub fn assignment() -> Result<(), ()> {
     let (source_map, res) =
         super::parse(Path::new(&format!("{}assignment.va", PARSE_UNIT_DIRECTORY)))
             .expect("Test File not found");
-    let ast = match res {
+    let (ast,_) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);
@@ -520,7 +541,7 @@ pub fn assignment() -> Result<(), ()> {
 pub fn condition() -> Result<(), ()> {
     let (source_map, res) = super::parse(Path::new(&format!("{}if.va", PARSE_UNIT_DIRECTORY)))
         .expect("Test File not found");
-    let ast = match res {
+    let (ast,_) = match res {
         Ok(ast) => ast,
         Err(e) => {
             e.print(&source_map);

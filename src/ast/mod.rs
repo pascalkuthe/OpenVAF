@@ -43,7 +43,7 @@ pub struct Module<'ast> {
     pub name: Ident,
     pub port_list: &'ast [AttributeNode<'ast, Port>],
     //parameter_list: SliceId<Parameter>,TODO Parameter List
-    pub children: &'ast [AttributeNode<'ast, ModuleItem<'ast>>],
+    pub children: &'ast [ModuleItem<'ast>],
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Port {
@@ -81,11 +81,11 @@ pub struct BranchDeclaration<'ast> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ModuleItem<'ast> {
-    AnalogStmt(Node<Statement<'ast>>),
-    BranchDecl(BranchDeclaration<'ast>),
-    NetDecl(Net),
-    VariableDecl(Variable<'ast>),
-    ParameterDecl,
+    AnalogStmt(&'ast AttributeNode<'ast, Statement<'ast>>),
+    BranchDecl(&'ast AttributeNode<'ast, BranchDeclaration<'ast>>),
+    NetDecl(&'ast AttributeNode<'ast, Net>),
+    VariableDecl(&'ast AttributeNode<'ast, Variable<'ast>>),
+    //ParameterDecl,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Discipline {

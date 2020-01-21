@@ -186,7 +186,10 @@ pub fn parse<'source_map, 'ast>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
     ast_allocator: &'ast Bump,
-) -> std::io::Result<(Box<SourceMap<'source_map>>, Result<AstTop<'ast>>)> {
+) -> std::io::Result<(
+    Box<SourceMap<'source_map>>,
+    Result<(AstTop<'ast>, SymbolTable<'ast>)>,
+)> {
     let mut preprocessor = Preprocessor::new(source_map_allocator, main_file)?;
     let res = preprocessor.process_token();
     let mut parser = Parser::new(preprocessor, ast_allocator);
@@ -194,6 +197,8 @@ pub fn parse<'source_map, 'ast>(
         parser.preprocessor.current_token(),
         parser.preprocessor.current_span(),
     )));
-    let res = res.and_then(|_| parser.run());
+    let res = res
+        .and_then(|_| parser.run())
+        .map(|ast| (ast, parser.scope_stack.pop().unwrap()));
     Ok((parser.preprocessor.done(), res))
 }
