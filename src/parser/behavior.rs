@@ -39,20 +39,25 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                 self.parse_contribute_statement(Ident::new(keywords::POTENTIAL, span))?
             }
             Token::Begin => {
+                let start = self.preprocessor.current_start();
                 self.lookahead.take();
                 let (block, block_symbol_table) = self.parse_block()?;
                 let block_symbol_table = if let Some(block_symbol_table) = block_symbol_table {
-                    Some((block.scope.unwrap().name.name, block_symbol_table))
+                    Some((block.scope.unwrap().name, block_symbol_table))
                 } else {
                     None
                 };
                 self.lookahead.take();
                 let res = self.ast_allocator.alloc(block);
                 if let Some(symbol_table) = block_symbol_table {
-                    self.symbol_table().insert(
+                    self.insert_symbol(
                         symbol_table.0,
-                        SymbolDeclaration::Block(res, symbol_table.1),
-                    );
+                        SymbolDeclaration::Block(
+                            res,
+                            symbol_table.1,
+                            self.span_to_current_end(start),
+                        ),
+                    )?;
                 }
                 Statement::Block(res)
             }
@@ -71,7 +76,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                     }
                     Token::ParenOpen => {
                         self.lookahead.take();
-                        let (token, span) = self.look_ahead()?;
+                        let (token, _) = self.look_ahead()?;
                         match token {
                             Token::OpLess => self.parse_contribute_statement(
                                 Self::convert_to_nature_identifier(identifier)?,

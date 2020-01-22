@@ -9,7 +9,7 @@
  */
 module test;
     wire x,y;
-    electrical x;
-    wire electrical signed x;
+    electrical z;
+    wire electrical signed l;
 
 endmodule

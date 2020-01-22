@@ -14,7 +14,6 @@ use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
 use crate::span::Index;
 use crate::symbol::{Ident, Symbol};
-use crate::symbol_table::SymbolDeclaration;
 use crate::{SourceMap, Span};
 
 pub type Error = crate::error::Error<Type>;
@@ -56,7 +55,6 @@ pub enum Type {
     CompilerDirectiveSplit,
     IoErr(String),
     AlreadyDeclaredInThisScope {
-        scope: Option<Span>,
         other_declaration: Span,
         name: Symbol,
     },
@@ -110,7 +108,18 @@ pub enum List {
 }
 impl Error {
     pub fn print(&self, source_map: &SourceMap) {
-        let (line, line_number, range) = source_map.resolve_span_within_line(self.source);
+        let (line, mut line_number, substitution_name, range) =
+            source_map.resolve_span_within_line(self.source);
+        let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
+            (substitution_name,vec![Annotation{
+                id: None,
+                label: Some("This error occurred inside an expansion of a macro or a file. If additional macros or files are included inside this expansion the line information will be inaccurate and the error output might be hard to track if macros are used extensivly. The fully expanded source could give better insight in that case".to_string()),
+                annotation_type: AnnotationType::Note
+            }])
+        } else {
+            (source_map.main_file_name().to_string(), Vec::new())
+        };
+        let origin = Some(origin);
         let snippet = match self.error_type {
             Type::UnexpectedToken { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -124,7 +133,7 @@ impl Error {
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin: None,
+                        origin,
                         annotations: vec![SourceAnnotation {
                             range,
                             label: format!("expected {:?}", expected),
@@ -146,7 +155,7 @@ impl Error {
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin: None,
+                        origin,
                         annotations: vec![SourceAnnotation {
                             range,
                             label: format!("expected {:?}", expected),
@@ -180,7 +189,7 @@ impl Error {
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin: None,
+                        origin,
                         annotations: vec![
                             SourceAnnotation {
                                 range:declaration_list_range,
@@ -200,99 +209,53 @@ impl Error {
 
             Type::AlreadyDeclaredInThisScope {
                 name,
-                scope,
                 other_declaration,
             } => {
                 let (
                     other_declaration_line,
                     other_declaration_line_number,
+                    other_declaration_origin,
                     other_declaration_range,
-                ) = source_map.resolve_span_within_line(self.source);
-                if let Some(scope) = scope {
-                    let error_range = translate_to_inner_snippet_range(
-                        range.start as Index + error_span.get_start(),
-                        range.start as Index + error_span.get_end(),
-                        &line,
-                    );
-                    let declaration_list_range = translate_to_inner_snippet_range(
-                        declaration_list_span.get_start() + range.start as Index,
-                        range.start as Index + declaration_list_span.get_end(),
-                        &line,
-                    );
-                    Snippet {
-                        title: Some(Annotation {
-                            id: None,
-                            label: Some(
-                                "Module ports declared in Module body when already declared in Module Head"
-                                    .to_string(),
-                            ),
-                            annotation_type: AnnotationType::Error,
-                        }),
-                        footer: vec![],
-                        slices: vec![Slice {
+                ) = source_map.resolve_span_within_line(other_declaration);
+
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let other_declaration_range = translate_to_inner_snippet_range(
+                    other_declaration_range.start,
+                    other_declaration_range.end,
+                    &other_declaration_line,
+                );
+
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(format!("'{}' has already been declared", name.as_str())),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer: vec![],
+                    slices: vec![
+                        Slice {
+                            source: other_declaration_line,
+                            line_start: other_declaration_line_number as usize,
+                            origin: origin.clone(),
+                            annotations: vec![SourceAnnotation {
+                                range: other_declaration_range,
+                                label: format!("First declaration of '{}' here", name.as_str()),
+                                annotation_type: AnnotationType::Info,
+                            }],
+                            fold: false,
+                        },
+                        Slice {
                             source: line,
                             line_start: line_number as usize,
-                            origin: None,
-                            annotations: vec![
-                                SourceAnnotation {
-                                    range:declaration_list_range,
-                                    label: "Ports are declared here".to_string(),
-                                    annotation_type: AnnotationType::Info,
-                                },
-                                SourceAnnotation {
-                                    range: error_range,
-                                    label: "Port declaration is illegal here".to_string(),
-                                    annotation_type: AnnotationType::Error,
-                                },
-                            ],
-                            fold: true,
-                        }],
-                    }
-                } else {
-                    Snippet {
-                        title: Some(Annotation {
-                            id: None,
-                            label: Some(
-                                format!("'{}'", name.as_str(), " has already been declared")
-                                    .to_string(),
-                            ),
-                            annotation_type: AnnotationType::Error,
-                        }),
-                        footer: vec![],
-                        slices: vec![
-                            Slice {
-                                source: line,
-                                line_start: line_number as usize,
-                                origin: None,
-                                annotations: vec![SourceAnnotation {
-                                    range: translate_to_inner_snippet_range(
-                                        range.start,
-                                        range.end,
-                                        &line,
-                                    ),
-                                    label: "Item already declared".to_string(),
-                                    annotation_type: AnnotationType::Error,
-                                }],
-                                fold: false,
-                            },
-                            Slice {
-                                source: other_declaration_line,
-                                line_start: other_declaration_line_number,
-                                origin: None,
-                                annotations: vec![SourceAnnotation {
-                                    range: translate_to_inner_snippet_range(
-                                        other_declaration_range.get_start(),
-                                        other_declaration_range.get_end(),
-                                        other_declaration_line,
-                                    ),
-                                    label: format!("'{}' first declared here", name.as_str())
-                                        .to_string(),
-                                    annotation_type: AnnotationType::Info,
-                                }],
-                                fold: false,
-                            },
-                        ],
-                    }
+                            origin,
+                            annotations: vec![SourceAnnotation {
+                                range,
+                                label: "Item already declared".to_string(),
+                                annotation_type: AnnotationType::Error,
+                            }],
+                            fold: false,
+                        },
+                    ],
                 }
             }
             _ => unimplemented!("{:?}", self.error_type),
@@ -304,11 +267,17 @@ impl Error {
 }
 impl Warning {
     pub fn print(&self, source_map: &SourceMap) {
-        let (line, line_number, range) = source_map.resolve_span_within_line(self.source);
+        let (line, line_number, substitution_name, range) =
+            source_map.resolve_span_within_line(self.source);
+        let origin = if let Some(substitution_name) = substitution_name {
+            substitution_name.to_string()
+        } else {
+            source_map.main_file_name().to_string()
+        };
         let range = translate_to_inner_snippet_range(range.start, range.end, &line);
         let snippet = match self.error_type {
             WarningType::MacroOverwritten(first_declaration) => {
-                let (original_line, original_line_number, original_range) =
+                let (original_line, original_line_number, substitution_name, original_range) =
                     source_map.resolve_span_within_line(first_declaration);
                 let original_range = translate_to_inner_snippet_range(
                     original_range.start,

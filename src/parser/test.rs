@@ -338,7 +338,7 @@ pub fn net_decl() -> Result<(), ()> {
 
     if let ModuleItem::NetDecl(net) = children.next().unwrap() {
         let net = &net.contents;
-        assert_eq!(net.name.as_str(), "x");
+        assert_eq!(net.name.as_str(), "z");
         assert_eq!(net.signed, false);
         assert_eq!(net.discipline.as_str(), "electrical");
         assert_eq!(net.net_type, NetType::UNDECLARED);
@@ -348,7 +348,7 @@ pub fn net_decl() -> Result<(), ()> {
 
     if let ModuleItem::NetDecl(net) = children.next().unwrap() {
         let net = &net.contents;
-        assert_eq!(net.name.as_str(), "x");
+        assert_eq!(net.name.as_str(), "l");
         assert_eq!(net.signed, true);
         assert_eq!(net.discipline.as_str(), "electrical");
         assert_eq!(net.net_type, NetType::WIRE);

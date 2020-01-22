@@ -639,21 +639,21 @@ impl<'source_map> Preprocessor<'source_map> {
                     source: span,
                 })
             } else {
-                self.called_macros
-                    .insert(reference.name, reference.arg_bindings.clone());
-                self.state_stack.last_mut().unwrap().offset -= source_span.get_len() as IndexOffset;
                 if root {
                     self.source_map_builder.as_mut().enter_root_macro(
                         span.get_start(),
                         source_span,
-                        definition.span,
                         definition.source.clone(),
+                        &reference.name,
                     )
                 } else {
                     self.source_map_builder
                         .as_mut()
                         .enter_non_root_substitution(source_span, definition.source.clone())
                 }
+                self.called_macros
+                    .insert(reference.name, reference.arg_bindings.clone());
+                self.state_stack.last_mut().unwrap().offset -= source_span.get_len() as IndexOffset;
                 let token_source =
                     TokenSource::Insert(definition.body.clone().into_iter().peekable(), true);
                 Ok(token_source)

@@ -12,6 +12,7 @@ use std::ops::Range;
 use std::path::Path;
 use std::pin::Pin;
 use std::ptr::NonNull;
+use std::thread::Builder;
 
 use bumpalo::Bump;
 use intrusive_collections::__core::cell::Cell;
@@ -37,9 +38,9 @@ impl<'source_map, 'lt> KeyAdapter<'lt> for SourceMapAdapter<'source_map> {
 
 #[derive(Debug)]
 pub(crate) struct Substitution<'source_map> {
+    name: &'source_map str,
     start: Index,
     end: Cell<Index>,
-    contents: Cell<&'source_map str>,
     stype: SourceType,
     original_span: Span,
     original_first_line: LineNumber,
@@ -48,23 +49,29 @@ pub(crate) struct Substitution<'source_map> {
 }
 #[derive(Debug)]
 pub(crate) enum SourceType {
-    Macro { definition_span: Span },
+    Macro { definition_line: LineNumber },
     File,
 }
 #[derive(Debug)]
 pub struct SourceMap<'source_map> {
     main_file_name: &'source_map str,
-    main_file_contents: &'source_map str,
+    expanded_source: &'source_map str,
     children: RBTree<SourceMapAdapter<'source_map>>,
     map: RBTree<SourceMapAdapter<'source_map>>,
     _pin_marker: PhantomPinned,
 }
 
 impl<'source_map> SourceMap<'source_map> {
-    pub fn new(main_file_name: &'source_map str, main_file_contents: &'source_map str) -> Self {
+    pub fn main_file_name(&self) -> &'source_map str {
+        self.main_file_name
+    }
+    pub fn main_file_contents(&self) -> &'source_map str {
+        self.main_file_contents
+    }
+    pub fn new(main_file_name: &'source_map str) -> Self {
         Self {
             main_file_name,
-            main_file_contents,
+            expanded_source: "",
             children: Default::default(),
             map: RBTree::new(SourceMapAdapter::new()),
             _pin_marker: PhantomPinned,
@@ -76,13 +83,13 @@ impl<'source_map> SourceMap<'source_map> {
         reverse: bool,
         cursor: &mut Cursor<SourceMapAdapter<'source_map>>,
         start: Index,
-    ) -> (String, Index, bool) {
+    ) -> (String, Index, bool, bool) {
         let main_file = self.main_file_contents;
         let mut res = String::new();
         let mut last_end = if let Some(first) = cursor.get() {
             //defined here because the loop needs to be initialized
             if first.end.get() >= start {
-                //if inside substitution append until newline in there first
+                //inside substitution append until newline or beginning/end of first
                 let start = start - first.start;
                 let string = first.contents.get();
                 let string = if reverse {
@@ -91,7 +98,7 @@ impl<'source_map> SourceMap<'source_map> {
                     &string[start as usize..]
                 };
                 if let Some(index) = Self::append_until_newline_in_str(string, &mut res, reverse) {
-                    return (res, index, false);
+                    return (res, index, false, true);
                 }
                 if reverse {
                     cursor.move_prev();
@@ -109,25 +116,18 @@ impl<'source_map> SourceMap<'source_map> {
         } else {
             //the cursor is pointing at the mainfile
             if reverse {
-                //get the first /last substitution
-                cursor.move_next();
+                start
             } else {
                 cursor.move_prev();
-            };
-            let res = match cursor.get() {
-                Some(current) if !reverse => {
+                let res = if let Some(current) = cursor.get() {
                     let len = start - current.end.get();
                     len + current.original_span.get_end()
-                }
-                _ => start, //there are either no substitutions or we are at the beginning of the main file; there is no need for translation in both cases
-            };
-            if reverse {
-                //move the cursor back
-                cursor.move_prev()
-            } else {
-                cursor.move_next()
+                } else {
+                    start
+                };
+                cursor.move_next();
+                res
             }
-            res
         };
 
         loop {
@@ -147,7 +147,7 @@ impl<'source_map> SourceMap<'source_map> {
                 if let Some(index) =
                     Self::append_until_newline_in_str(&main_file[range], &mut res, reverse)
                 {
-                    return (res, index, true);
+                    return (res, index, true, false);
                 }
                 current
             } else {
@@ -159,9 +159,9 @@ impl<'source_map> SourceMap<'source_map> {
                 };
                 if let Some(index) = Self::append_until_newline_in_str(end_slice, &mut res, reverse)
                 {
-                    return (res, index, true);
+                    return (res, index, true, false);
                 } else {
-                    return (res, start, true);
+                    return (res, start, true, false);
                 }
             };
 
@@ -178,7 +178,7 @@ impl<'source_map> SourceMap<'source_map> {
             if let Some(index) =
                 Self::append_until_newline_in_str(current.contents.get(), &mut res, reverse)
             {
-                return (res, index, false);
+                return (res, index, false, false);
             }
         }
     }
@@ -214,21 +214,27 @@ impl<'source_map> SourceMap<'source_map> {
         }
     }
 
-    pub fn resolve_span_within_line(&self, span: Span) -> (String, LineNumber, Range<Index>) {
+    pub fn resolve_span_within_line(
+        &self,
+        span: Span,
+    ) -> (String, LineNumber, Option<(String)>, Range<Index>) {
         let mut start_cursor = self.map.upper_bound(Bound::Included(&span.get_start()));
         let mut end_cursor = start_cursor.clone();
 
-        let (mut head_content, head_offset, head_in_root) =
+        let (mut head_content, head_offset, head_in_root, start_stayed_in_substitution) =
             self.string_to_newline(true, &mut start_cursor, span.get_start());
         let main_content = self.resolve_span_internal(span, &mut end_cursor);
-        let (tail_content, _, _) = self.string_to_newline(false, &mut end_cursor, span.get_end());
+        let (tail_content, _, _, end_stayed_in_substitution) =
+            self.string_to_newline(false, &mut end_cursor, span.get_end());
         let range = Range {
             start: head_content.len() as Index,
             end: head_content.len() as Index + main_content.len() as Index,
         };
         head_content.push_str(main_content.as_str());
         head_content.push_str(tail_content.as_str());
+
         let head_offset = head_offset + 1; //we need to include the last line in the counting as well
+        let mut containing_expansion_description = None;
         let line_number = if let Some(start_substitution) = start_cursor.get() {
             if head_in_root {
                 let range: Range<usize> = Range {
@@ -242,14 +248,55 @@ impl<'source_map> SourceMap<'source_map> {
                 /* TODO keep track of position within substitution
                 let string_to_count =
                     &start_substitution.contents.get())[..head_offset as usize];*/
-                start_substitution.original_last_line
-                //  + bytecount::count(string_to_count.as_bytes(), b'\n') as LineNumber
+                if start_stayed_in_substitution && end_stayed_in_substitution {
+                    let column = span.get_start()
+                        - *&self.main_file_contents
+                            [..start_substitution.original_span.get_start() as usize]
+                            .rfind("\n")
+                            .unwrap() as Index;
+                    let (mut name, line_offset) = match start_substitution.stype {
+                        SourceType::File => (
+                            format!(
+                                "{}:{}:{} Occurred inside include expansion\n --> {}",
+                                self.main_file_name,
+                                start_substitution.original_first_line,
+                                column,
+                                start_substitution.name
+                            ),
+                            0,
+                        ),
+                        SourceType::Macro { definition_line } => (
+                            format!(
+                                "{}:{}:{} Occurred inside macro expansion of {}\n --> {}",
+                                self.main_file_name,
+                                start_substitution.original_first_line,
+                                column,
+                                start_substitution.name,
+                                self.main_file_name
+                            ),
+                            definition_line,
+                        ),
+                    };
+                    containing_expansion_description = Some(name);
+                    line_offset
+                        + bytecount::count(
+                            &start_substitution.contents.get()[..head_offset as usize].as_bytes(),
+                            b'\n',
+                        ) as LineNumber
+                } else {
+                    start_substitution.original_first_line
+                }
             }
         } else {
             let str_to_count = &self.main_file_contents[..head_offset as usize];
             bytecount::count(str_to_count.as_bytes(), b'\n') as LineNumber
         };
-        (head_content, line_number + 1, range)
+        (
+            head_content,
+            line_number + 1,
+            containing_expansion_description,
+            range,
+        )
     }
     pub fn resolve_span(&self, span: Span) -> (String, LineNumber) {
         let mut start_cursor = self.map.upper_bound(Bound::Included(&span.get_start()));
@@ -346,119 +393,88 @@ impl<'source_map> SourceMap<'source_map> {
             let end = span.get_end() - last_substitution.start;
             res.push_str(&last_substitution.contents.get()[..end as usize]);
         } else {
+            //Inside main file
             cursor.move_prev();
             let last_substitution = cursor.get().unwrap();
             let len = span.get_end() - last_substitution.end.get();
             current_main_range.end = (last_substitution.original_span.get_end() + len) as usize;
-            res.push_str(&main_file[current_main_range])
+            res.push_str(&main_file[current_main_range]);
         }
-        res
+        res //TODO show what substitution an error came from (in case of multiple)
     }
 }
 
 #[derive(Debug)]
-struct SourceMapBuilderState {
-    source: String,
+struct SourceMapBuilderState<'lt> {
+    source: &'lt str,
     offset: Index,
 }
 
 #[derive(Debug)]
-pub(super) struct SourceMapBuilder<'source_map> {
-    allocator: &'source_map Bump,
-    cursor: NonNull<CursorMut<'source_map, SourceMapAdapter<'source_map>>>,
-    current_source: Option<(
-        &'source_map Substitution<'source_map>,
-        bumpalo::collections::String<'source_map>,
-    )>,
-    substitution_stack: Vec<SourceMapBuilderState>,
+pub(super) struct SourceMapBuilder<'lt, 'source_map> {
+    source_map_allocator: &'source_map Bump,
+    allocator: &'lt Bump,
+    cursor: CursorMut<'source_map, SourceMapAdapter<'source_map>>,
+    expansion: String,
+    substitution_stack: Vec<SourceMapBuilderState<'lt>>,
     source_map: NonNull<SourceMap<'source_map>>,
     root_line: LineNumber,
+    root_file_contents: &'lt str,
     _phantom_data: PhantomData<CursorMut<'source_map, SourceMapAdapter<'source_map>>>,
-    _pin_marker: PhantomPinned,
 }
 
-impl<'source_map> SourceMapBuilder<'source_map> {
+impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     pub(super) fn new(
-        allocator: &'source_map Bump,
+        source_map_allocator: &'source_map Bump,
+        builder_allocator: &'lt Bump,
         main_file: &Path,
-    ) -> std::io::Result<(Pin<Box<Self>>, Lexer<'source_map>)> {
-        //By pinning we guarantee that the SourceMap outlives self
-        let name = allocator.alloc_str(main_file.to_str().unwrap());
-        let contents = std::fs::read_to_string(main_file)?;
-        let contents = allocator.alloc_str(contents.as_str());
-        let mut res = Box::pin(Self {
-            allocator,
-            source_map: NonNull::dangling(),
-            cursor: NonNull::dangling(),
+    ) -> std::io::Result<(Self, Lexer<'lt>)> {
+        let root_file_contents = builder_allocator.alloc_str(&std::fs::read_to_string(main_file)?);
+        let name = builder_allocator.alloc_str(main_file.to_str().unwrap());
+        let source_map = source_map_allocator.alloc_with(|| SourceMap::new(name));
+        let mut res = Self {
+            source_map_allocator,
+            allocator: builder_allocator,
+            source_map: NonNull::from(source_map),
+            cursor: source_map.map.cursor_mut(),
             root_line: 0,
-            current_source: None,
             substitution_stack: Vec::new(),
-            _pin_marker: PhantomPinned,
+            expansion: "".to_string(),
+            root_file_contents,
             _phantom_data: Default::default(),
-        });
-        unsafe {
-            let source_map_ptr = Box::into_raw(Box::new(SourceMap::new(name, &*contents))); //This is save since the sourcemap doesnt get dropped by the builder its only returned when calling done
-            res.as_mut().get_unchecked_mut().source_map = NonNull::new_unchecked(source_map_ptr); //this is save since we just created the ptr and it therefore cant be null
-            let cursor = Box::into_raw(Box::new((&mut *source_map_ptr).map.cursor_mut())); //this is save since source_map cant be dropped by self so it will always outlive self and this is a save self refence
-            let ptr = NonNull::new_unchecked(cursor); //we just created this pointer from a reference so it wont be null
-            res.as_mut().get_unchecked_mut().cursor = ptr; //this is save since changing a single field doesnt move the whole struct
-        }
-        let lexer_str = res.source_map().main_file_contents;
-        Ok((res, Lexer::new(lexer_str)))
+        };
+        Ok((res, Lexer::new(root_file_contents)))
     }
 
-    pub fn done(self: Pin<Box<Self>>) -> Box<SourceMap<'source_map>> {
-        unsafe {
-            Box::from_raw(self.source_map.as_ptr()) //This is save since we created SourceMap using a box and it cant be reassigned
-        }
+    pub fn done(self) -> &'source_map SourceMap<'source_map> {
+        unsafe { &*self.source_map.as_ptr() }
     }
 
-    // Internal getters/projections
-    fn substitution_stack(self: Pin<&mut Self>) -> &mut Vec<SourceMapBuilderState> {
-        unsafe { &mut self.get_unchecked_mut().substitution_stack } //This is save since we don't treat source_stack as structurally pinned
-    }
-    // Internal getters/projections
-    fn current_root_substitution(
-        self: Pin<&mut Self>,
-    ) -> &mut Option<(
-        &'source_map Substitution<'source_map>,
-        bumpalo::collections::String<'source_map>,
-    )> {
-        unsafe { &mut self.get_unchecked_mut().current_source } //This is save since we don't treat parent_locations as structurally pinned
-    }
-    pub(super) fn new_line(mut self: Pin<&mut Self>) {
-        if self.current_source.is_none() {
+    pub(super) fn new_line(&mut self) {
+        if self.substitution_stack.is_empty() {
             //we only keep track of macro expansion independent line numbers in the mainfile
-            unsafe {
-                self.as_mut().get_unchecked_mut().root_line += 1; //this is save since lines aren't pinned structurally
-            }
+            self.root_line += 1;
         }
-    }
-
-    fn cursor(self: Pin<&mut Self>) -> &mut CursorMut<'source_map, SourceMapAdapter<'source_map>> {
-        unsafe { self.get_unchecked_mut().cursor.as_mut() } //This is save since we do not pin cursor structurally and we own the pointer
-    }
-
-    fn source_map(&self) -> &SourceMap<'source_map> {
-        unsafe { self.source_map.as_ref() } //This is save since the source_map outlives self
     }
 
     fn enter_root_substitution(
-        mut self: Pin<&mut Self>,
+        &mut self,
         start: Index,
         stype: SourceType,
         original_span: Span,
-        source: String,
+        source: &'lt str,
+        name: &str,
     ) {
         let substitution = {
+            let name = &*self.allocator.alloc_str(name);
             let range: Range<usize> = original_span.into();
             let original_source = &self.source_map().main_file_contents[range];
             let original_lines = bytecount::count(original_source.as_bytes(), b'\n') as LineNumber;
             let root_line = self.root_line;
             self.allocator.alloc_with(|| Substitution {
+                name,
                 start,
                 end: Cell::new(0),
-                contents: Cell::new(""),
                 stype,
                 original_span,
                 original_first_line: root_line,
@@ -466,97 +482,61 @@ impl<'source_map> SourceMapBuilder<'source_map> {
                 link: RBTreeLink::new(),
             })
         };
-        self.as_mut()
-            .insert_into_root_substitution_map(substitution);
-        let string = bumpalo::collections::String::with_capacity_in(source.len(), self.allocator);
-        *self.as_mut().current_root_substitution() = Some((&*substitution, string));
+        self.cursor.insert_after(substitution);
+        self.expansion.reserve(source.len()); //Expansions are typically longer than their names (they would be pointless otherwise)
         self.substitution_stack()
             .push(SourceMapBuilderState { source, offset: 0 })
     }
 
-    fn insert_into_root_substitution_map(
-        mut self: Pin<&mut Self>,
-        substitution: &'source_map Substitution<'source_map>,
-    ) {
-        self.as_mut().cursor().insert_after(substitution);
-        self.as_mut().cursor().move_next();
-    }
-
-    pub(super) fn enter_non_root_substitution(
-        self: Pin<&mut Self>,
-        original_span: Span,
-        source: String,
-    ) {
+    pub(super) fn enter_non_root_substitution(&mut self, original_span: Span, source: &'lt str) {
         unsafe { self.get_unchecked_mut() }
             .enter_non_root_substitution_internal(original_span, source)
         //this is save since eveything unsed in that function isn't pinned structurally and we dont move self
     }
-    fn enter_non_root_substitution_internal(&mut self, original_span: Span, source: String) {
-        //this is here because borrows cant be split with pins
-        let old_offset = {
-            let parent_src_state = self.substitution_stack.last_mut().unwrap();
-            let old_offset = parent_src_state.offset as usize;
-            parent_src_state.offset = original_span.get_end();
-            old_offset
-        };
-
-        let old_source = &self.substitution_stack.last().unwrap().source;
-        self.current_source
-            .as_mut()
-            .unwrap()
-            .1
-            .push_str(&old_source[old_offset..original_span.get_start() as usize]);
+    fn enter_non_root_substitution_internal(&mut self, original_span: Span, source: &'lt str) {
+        let parent_src_state = self.substitution_stack.last_mut().unwrap();
+        let old_offset = parent_src_state.offset as usize;
+        parent_src_state.offset = original_span.get_end();
+        self.expansion
+            .push_str(&parent_src_state.source[old_offset..original_span.get_start() as usize]);
         self.substitution_stack
             .push(SourceMapBuilderState { source, offset: 0 });
     }
 
     const EMPTY_STACK: &'static str = "SourceBuilder: Substitution stack is empty";
     const NO_ROOT_SUBSTITUTION: &'static str = "SourceBuilder: Empty substitution";
-    pub(super) fn finish_substitution(mut self: Pin<&mut Self>) -> Index {
-        let finished_substitution = self
-            .as_mut()
-            .substitution_stack()
-            .pop()
-            .expect(Self::EMPTY_STACK);
-        {
-            let remaining_str =
-                &finished_substitution.source[finished_substitution.offset as usize..];
-            let current_substitution = self
-                .as_mut()
-                .current_root_substitution()
-                .as_mut()
-                .expect(Self::NO_ROOT_SUBSTITUTION);
-            current_substitution.1.push_str(remaining_str);
-        }
+    pub(super) fn finish_substitution(&mut self) -> Index {
+        let SourceMapBuilderState { source, offset } =
+            self.substitution_stack.pop().expect(Self::EMPTY_STACK);
+        let remaining_str = &source[offset as usize..];
+        self.expansion.push_str(remaining_str);
+
         if self.substitution_stack.is_empty() {
-            let mut finished_root_substitution = None;
-            std::mem::swap(
-                &mut finished_root_substitution,
-                self.as_mut().current_root_substitution(),
-            );
-            let (substitution, contents) =
-                finished_root_substitution.expect(Self::NO_ROOT_SUBSTITUTION);
-            substitution
+            self.cursor
+                .get()
+                .unwrap()
                 .end
                 .set(substitution.start + contents.len() as Index);
-            substitution.contents.set(contents.into_bump_str());
         }
-        finished_substitution.source.len() as Index
+        source.len() as Index
     }
 
-    /// # Safety
-    /// This returns a lexer that has an arbitrary lifetime it is up to the caller to ensure that it doesnt outlive finish_substitution call on the file
-    pub(crate) unsafe fn enter_file<'res>(
+    pub(crate) fn enter_file(
         mut self: Pin<&mut Self>,
         path: &Path,
         start: Index,
         original_span: Span,
-    ) -> std::io::Result<Lexer<'res>> {
+    ) -> std::io::Result<Lexer<'lt>> {
         let contents = std::fs::read_to_string(path)?;
-        let lexer_str = std::mem::transmute::<&str, &'res str>(contents.as_str()); //unsafety occures here
+        let contents = &*self.allocator.alloc_str(&contents);
         if self.substitution_stack.is_empty() {
-            self.as_mut()
-                .enter_root_substitution(start, SourceType::File, original_span, contents);
+            self.as_mut().enter_root_substitution(
+                start,
+                SourceType::File,
+                original_span,
+                contents,
+                path.to_str().unwrap(),
+            );
         } else {
             self.enter_non_root_substitution(original_span, contents)
         }
@@ -564,32 +544,26 @@ impl<'source_map> SourceMapBuilder<'source_map> {
     }
 
     pub(super) fn enter_root_macro(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         start: Index,
         original_span: Span,
-        definition_span: Span,
-        definition: String,
+        definition: &'lt str,
+        name: &str,
     ) {
+        let definition_line = self.root_line;
         self.enter_root_substitution(
             start,
-            SourceType::Macro { definition_span },
+            SourceType::Macro { definition_line },
             original_span,
             definition,
+            name,
         )
     }
-    pub(super) fn source(&self) -> &str {
+    pub(super) fn source(&self) -> &'lt str {
         if let Some(state) = self.substitution_stack.last() {
-            state.source.as_str()
+            state.source
         } else {
-            self.source_map().main_file_contents
-        }
-    }
-}
-impl<'source_map> Drop for SourceMapBuilder<'source_map> {
-    fn drop(&mut self) {
-        unsafe {
-            //This is save since non_null is non owning so this wont cause a doube free
-            Box::from_raw(self.cursor.as_ptr()); //box acts as an owning pointer so it will drop the cursor
+            self.root_file_contents
         }
     }
 }

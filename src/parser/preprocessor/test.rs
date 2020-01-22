@@ -121,19 +121,19 @@ pub fn macro_test() -> std::result::Result<(), String> {
 pub fn test_source_map() {
     let source_map_allocator = Bump::new();
     let (mut builder, mut lexer) =
-        unsafe { SourceMapBuilder::new(&source_map_allocator, Path::new("tests/source_map.va")) }
+        SourceMapBuilder::new(&source_map_allocator, Path::new("tests/source_map.va"))
             .expect("IoError");
     for _ in 0..6 {
         lexer.advance();
     }
     builder.as_mut().new_line();
     builder.as_mut().new_line();
-    let span = lexer.range().into();
+    let span: Span = lexer.range().into();
     builder.as_mut().enter_root_macro(
         lexer.range().start,
-        span,
         Span::new(0, 0),
         "BAR".to_string(),
+        "test",
     );
     builder.as_mut().finish_substitution();
     let source_map = builder.done();

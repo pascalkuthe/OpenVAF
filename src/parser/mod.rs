@@ -15,11 +15,11 @@ pub use error::Error;
 pub use error::Result;
 
 use crate::ast::{AttributeNode, Attributes, HierarchicalId, TopNode};
-use crate::parser::error::Expected;
+use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::symbol::Ident;
-use crate::symbol_table::SymbolTable;
+use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
@@ -177,8 +177,21 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
     pub fn span_to_current_end(&self, start: Index) -> Span {
         Span::new(start, self.preprocessor.current_end())
     }
-    pub fn symbol_table(&mut self) -> &mut SymbolTable<'ast> {
-        self.scope_stack.last_mut().unwrap()
+    #[inline]
+    pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration<'ast>) -> Result {
+        let symbol_table = self.scope_stack.last_mut().unwrap();
+        let source = declaration.span();
+        if let Some(old_declaration) = symbol_table.insert(name.name, declaration) {
+            Err(Error {
+                error_type: Type::AlreadyDeclaredInThisScope {
+                    other_declaration: old_declaration.span(),
+                    name: name.name,
+                },
+                source,
+            })
+        } else {
+            Ok(())
+        }
     }
 }
 pub type AstTop<'ast> = &'ast [AttributeNode<'ast, TopNode<'ast>>];

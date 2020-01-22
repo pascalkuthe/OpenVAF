@@ -8,9 +8,6 @@
  * *****************************************************************************************
  */
 
-use smallvec::SmallVec;
-
-use crate::ast::BinaryOperator::Modulus;
 use crate::ast::{AttributeNode, Module, ModuleItem, Port, VariableType};
 use crate::error::Error;
 use crate::parser::error;
@@ -104,8 +101,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
             .ast_allocator
             .alloc_slice_copy(declared_ports.as_slice());
         for port in port_list {
-            self.symbol_table()
-                .insert(port.contents.name.name, SymbolDeclaration::Port(port));
+            self.insert_symbol(port.contents.name, SymbolDeclaration::Port(port))?;
         }
         //TODO build symbol table
         Ok(Module {
@@ -170,8 +166,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                         source: self.span_to_current_end(start),
                         contents: branch,
                     });
-                    self.symbol_table()
-                        .insert(branch.name.name, SymbolDeclaration::Branch(res_node));
+                    self.insert_symbol(branch.name, SymbolDeclaration::Branch(res_node))?;
                     res.push(ModuleItem::BranchDecl(res_node))
                 }
                 res
@@ -186,8 +181,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                         source: self.span_to_current_end(start),
                         contents: variable,
                     });
-                    self.symbol_table()
-                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    self.insert_symbol(variable.name, SymbolDeclaration::Variable(res_node))?;
                     res.push(ModuleItem::VariableDecl(res_node))
                 }
                 res
@@ -202,11 +196,9 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                         source: self.span_to_current_end(start),
                         contents: variable,
                     });
-                    self.symbol_table()
-                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    self.insert_symbol(variable.name, SymbolDeclaration::Variable(res_node))?;
                     res.push(ModuleItem::VariableDecl(res_node))
                 }
-                let tmp = self.symbol_table();
                 res
             }
             Token::Realtime => {
@@ -219,8 +211,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                         source: self.span_to_current_end(start),
                         contents: variable,
                     });
-                    self.symbol_table()
-                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    self.insert_symbol(variable.name, SymbolDeclaration::Variable(res_node))?;
                     res.push(ModuleItem::VariableDecl(res_node))
                 }
                 res
@@ -235,8 +226,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                         source: self.span_to_current_end(start),
                         contents: variable,
                     });
-                    self.symbol_table()
-                        .insert(variable.name.name, SymbolDeclaration::Variable(res_node));
+                    self.insert_symbol(variable.name, SymbolDeclaration::Variable(res_node))?;
                     res.push(ModuleItem::VariableDecl(res_node))
                 }
                 res
@@ -251,8 +241,7 @@ impl<'source_map, 'ast> Parser<'source_map, 'ast> {
                         source: self.span_to_current_end(start),
                         contents: net,
                     });
-                    self.symbol_table()
-                        .insert(net.name.name, SymbolDeclaration::Net(res_node));
+                    self.insert_symbol(net.name, SymbolDeclaration::Net(res_node))?;
                     res.push(ModuleItem::NetDecl(res_node))
                 }
                 res
