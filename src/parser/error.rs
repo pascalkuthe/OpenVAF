@@ -107,18 +107,19 @@ pub enum List {
     FunctionArgument,
 }
 impl Error {
-    pub fn print(&self, source_map: &SourceMap) {
+    pub fn print(&self, source_map: &SourceMap, translate_lines: bool) {
         let (line, mut line_number, substitution_name, range) =
-            source_map.resolve_span_within_line(self.source);
+            source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
             (substitution_name,vec![Annotation{
                 id: None,
-                label: Some("This error occurred inside an expansion of a macro or a file. If additional macros or files are included inside this expansion the line information will be inaccurate and the error output might be hard to track if macros are used extensivly. The fully expanded source could give better insight in that case".to_string()),
+                label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)".to_string()),
                 annotation_type: AnnotationType::Note
             }])
         } else {
             (source_map.main_file_name().to_string(), Vec::new())
         };
+        let line = line.to_string(); //necessary because annotate snippet cant work with slices yet
         let origin = Some(origin);
         let snippet = match self.error_type {
             Type::UnexpectedToken { ref expected } => {
@@ -129,7 +130,7 @@ impl Error {
                         label: Some("Unexpected Token".to_string()),
                         annotation_type: AnnotationType::Error,
                     }),
-                    footer: vec![],
+                    footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
@@ -151,7 +152,7 @@ impl Error {
                         label: Some("Unexpected Token".to_string()),
                         annotation_type: AnnotationType::Error,
                     }),
-                    footer: vec![],
+                    footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
@@ -185,7 +186,7 @@ impl Error {
                         ),
                         annotation_type: AnnotationType::Error,
                     }),
-                    footer: vec![],
+                    footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
@@ -216,7 +217,7 @@ impl Error {
                     other_declaration_line_number,
                     other_declaration_origin,
                     other_declaration_range,
-                ) = source_map.resolve_span_within_line(other_declaration);
+                ) = source_map.resolve_span_within_line(other_declaration, translate_lines);
 
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let other_declaration_range = translate_to_inner_snippet_range(
@@ -231,10 +232,10 @@ impl Error {
                         label: Some(format!("'{}' has already been declared", name.as_str())),
                         annotation_type: AnnotationType::Error,
                     }),
-                    footer: vec![],
+                    footer,
                     slices: vec![
                         Slice {
-                            source: other_declaration_line,
+                            source: other_declaration_line.to_string(),
                             line_start: other_declaration_line_number as usize,
                             origin: origin.clone(),
                             annotations: vec![SourceAnnotation {
@@ -266,19 +267,25 @@ impl Error {
     }
 }
 impl Warning {
-    pub fn print(&self, source_map: &SourceMap) {
+    pub fn print(&self, source_map: &SourceMap, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =
-            source_map.resolve_span_within_line(self.source);
-        let origin = if let Some(substitution_name) = substitution_name {
-            substitution_name.to_string()
+            source_map.resolve_span_within_line(self.source, translate_lines);
+        let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
+            (substitution_name,vec![Annotation{
+                id: None,
+                label: Some("This error occurred inside an expansion of a macro or a file. If additional macros or files are included inside this expansion the line information will be inaccurate and the error output might be hard to track if macros are used extensivly. The fully expanded source could give better insight in that case".to_string()),
+                annotation_type: AnnotationType::Note
+            }])
         } else {
-            source_map.main_file_name().to_string()
+            (source_map.main_file_name().to_string(), Vec::new())
         };
+
+        let line = line.to_string();
         let range = translate_to_inner_snippet_range(range.start, range.end, &line);
         let snippet = match self.error_type {
             WarningType::MacroOverwritten(first_declaration) => {
                 let (original_line, original_line_number, substitution_name, original_range) =
-                    source_map.resolve_span_within_line(first_declaration);
+                    source_map.resolve_span_within_line(first_declaration, translate_lines);
                 let original_range = translate_to_inner_snippet_range(
                     original_range.start,
                     original_range.end,
@@ -290,12 +297,12 @@ impl Warning {
                         label: Some("Macro overwritten".to_string()),
                         annotation_type: AnnotationType::Warning,
                     }),
-                    footer: vec![],
+                    footer,
                     slices: vec![
                         Slice {
-                            source: original_line,
+                            source: original_line.to_string(),
                             line_start: original_line_number as usize,
-                            origin: None,
+                            origin: Some(origin.clone()),
                             annotations: vec![SourceAnnotation {
                                 range: original_range,
                                 label: "First_declared here".to_string(),
@@ -306,7 +313,7 @@ impl Warning {
                         Slice {
                             source: line,
                             line_start: line_number as usize,
-                            origin: None,
+                            origin: Some(origin),
                             annotations: vec![SourceAnnotation {
                                 range,
                                 label: "Later overwritten here".to_string(),

@@ -14,7 +14,7 @@ use crate::parser::Parser;
 use crate::parser::Result;
 use crate::symbol::Ident;
 
-impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     pub fn parse_variable_declaration(
         &mut self,
         variable_type: VariableType,

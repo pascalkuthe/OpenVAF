@@ -30,7 +30,7 @@ pub fn module() -> Result<(), ()> {
     let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
-            e.print(&source_map);
+            e.print(&source_map, true);
             return Err(());
         }
     };
@@ -151,7 +151,7 @@ pub fn branch() -> Result<(), ()> {
     let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
-            e.print(&source_map);
+            e.print(&source_map, true);
             return Err(());
         }
     };
@@ -237,7 +237,7 @@ pub fn variable_decl() -> Result<(), ()> {
     let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
-            e.print(&source_map);
+            e.print(&source_map, true);
             return Err(());
         }
     };
@@ -303,7 +303,7 @@ pub fn net_decl() -> Result<(), ()> {
     let (ast, _) = match res {
         Ok(ast) => ast,
         Err(e) => {
-            e.print(&source_map);
+            e.print(&source_map, true);
             return Err(());
         }
     };
@@ -371,7 +371,7 @@ pub fn linear() -> Result<(), ()> {
     let (ast, symbol_table) = match res {
         Ok(ast) => ast,
         Err(e) => {
-            e.print(&source_map);
+            e.print(&source_map, true);
             return Err(());
         }
     };

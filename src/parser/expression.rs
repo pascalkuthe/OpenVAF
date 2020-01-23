@@ -16,7 +16,7 @@ use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealL
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
 
-impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
         let lhs = self.parse_atom()?;
         self.precedence_climb_expression(0, lhs)

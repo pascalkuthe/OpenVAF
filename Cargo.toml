@@ -10,10 +10,13 @@ intrusive-collections = "*"
 logos = "0.10.0-rc2"
 enum-as-inner = "*"
 indexmap = "*"
-bytecount = "*"
 ahash = "*"
 smallvec = "*"
 lazy_static = "*"
+
+[dependencies.bytecount]
+version = "*"
+features = ["runtime-dispatch-simd"]
 
 [dependencies.annotate-snippets]
 version = "*"

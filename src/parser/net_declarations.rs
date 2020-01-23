@@ -14,7 +14,7 @@ use crate::parser::lexer::Token;
 use crate::parser::{error, Error, Parser};
 use crate::symbol::Ident;
 
-impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     pub fn parse_port_declaration_list(&mut self) -> Result<Vec<AttributeNode<'ast, Port>>> {
         if self.look_ahead()?.0 == Token::ParenClose {
             return Ok(Vec::new());

@@ -12,8 +12,6 @@
 //!
 
 #[macro_use]
-extern crate enum_as_inner;
-#[macro_use]
 extern crate intrusive_collections;
 #[macro_use]
 extern crate lazy_static;

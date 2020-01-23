@@ -318,8 +318,12 @@ fn ignore_comments<'source, Src: Source<'source>>(lex: &mut logos::Lexer<Token, 
                 Some(_) => lex.bump(1),
             }
         }
-        lex.extras.0 = lines; //one newline is implicit by the token
-        lex.advance();
+        if lines > 0 {
+            lex.extras.0 = lines - 1; //one newline is implicit by the token
+            lex.token = Token::Newline
+        } else {
+            lex.advance()
+        }
     } else if lex.slice().as_bytes() == b"//" {
         loop {
             match lex.read() {
@@ -327,7 +331,8 @@ fn ignore_comments<'source, Src: Source<'source>>(lex: &mut logos::Lexer<Token, 
                     lex.bump(1);
                     break;
                 }
-                _ => lex.bump(1),
+                Some(tmp) => lex.bump(1),
+                None => break,
             }
         }
         lex.token = Token::Newline
@@ -343,20 +348,28 @@ impl<'lt> Lexer<'lt> {
             internal: Token::lexer(source),
         }
     }
-    pub fn multi_line_count(&mut self) -> &mut LineNumber {
-        &mut self.internal.extras.0
-    }
+
     #[cfg(test)]
     pub fn new_test(source: &'lt str) -> Self {
-        let mut res = Self::new(source);
+        let mut res = Self {
+            internal: Token::lexer(source),
+        };
         while res.token() == Token::Newline {
             res.advance()
         }
         res
     }
+
     pub fn advance(&mut self) {
-        self.internal.advance();
+        if self.internal.extras.0 > 0 {
+            debug_assert_eq!(self.internal.token, Token::Newline);
+            self.internal.extras.0 -= 1;
+            return;
+        } else {
+            self.internal.advance();
+        }
     }
+
     pub fn peek(&self) -> (Range, Token) {
         let mut lexer = self.internal.clone();
         lexer.advance();
@@ -458,9 +471,15 @@ mod test {
     }
     #[test]
     pub fn comment() {
-        let lexer = Lexer::new_test("//jdfjdfjw4$%\r%&/**#.,|\n/*3\n\r\n_/*_*/ test");
+        let lexer = Lexer::new_test("//jdfjdfjw4$%\r%&/**#.,|\ntest");
         assert_eq!(lexer.token(), Token::SimpleIdentifier);
         assert_eq!(lexer.slice(), "test")
+    }
+    #[test]
+    pub fn block_comment() {
+        let mut lexer = Lexer::new_test("/*A\nB\n*C*/`test");
+        assert_eq!(lexer.token(), Token::MacroReference);
+        assert_eq!(lexer.slice(), "`test")
     }
     #[test]
     pub fn string() {

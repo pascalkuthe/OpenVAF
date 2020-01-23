@@ -18,11 +18,16 @@ use crate::test::setup_logger;
 use crate::{Preprocessor, Span};
 
 #[test]
-pub fn macro_test() -> std::result::Result<(), String> {
+pub fn macros() -> std::result::Result<(), String> {
     let source_map_allocator = Bump::new();
+    let preprocessor_allocator = Bump::new();
     setup_logger();
-    let mut preprocessor =
-        Preprocessor::new(&source_map_allocator, Path::new("tests/macros.va")).expect("IoError");
+    let mut preprocessor = Preprocessor::new(
+        &preprocessor_allocator,
+        &source_map_allocator,
+        Path::new("tests/macros.va"),
+    )
+    .expect("IoError");
     let mut start = 0;
     let mut end = 0;
     let mut span = Span::new(0, 0);
@@ -86,7 +91,7 @@ pub fn macro_test() -> std::result::Result<(), String> {
     });
     let source_map = preprocessor.done();
     res.map_err(|err: Error| {
-        err.print(&source_map);
+        err.print(&source_map, true);
         ""
     })?;
     //    let (string, lines) = source_map.resolve_span(Span::new(start, end));
@@ -98,7 +103,7 @@ pub fn macro_test() -> std::result::Result<(), String> {
     //            label: Some("This is a test".to_string()),
     //            annotation_type: AnnotationType::Warning,
     //        }),
-    //        footer: vec![],
+    //        footer,
     //        slices: vec![Slice {
     //            source: string,
     //            line_start: lines as usize,
@@ -120,25 +125,24 @@ pub fn macro_test() -> std::result::Result<(), String> {
 #[test]
 pub fn test_source_map() {
     let source_map_allocator = Bump::new();
-    let (mut builder, mut lexer) =
-        SourceMapBuilder::new(&source_map_allocator, Path::new("tests/source_map.va"))
-            .expect("IoError");
+    let source_map_builder_allocator = Bump::new();
+    let (mut builder, mut lexer) = SourceMapBuilder::new(
+        &source_map_allocator,
+        &source_map_builder_allocator,
+        Path::new("tests/source_map.va"),
+    )
+    .expect("IoError");
     for _ in 0..6 {
         lexer.advance();
     }
-    builder.as_mut().new_line();
-    builder.as_mut().new_line();
+    builder.new_line();
+    builder.new_line();
     let span: Span = lexer.range().into();
-    builder.as_mut().enter_root_macro(
-        lexer.range().start,
-        Span::new(0, 0),
-        "BAR".to_string(),
-        "test",
-    );
-    builder.as_mut().finish_substitution();
+    builder.enter_root_macro(lexer.range().start, Span::new(0, 0), "BAR", 3, "test");
+    builder.finish_substitution();
     let source_map = builder.done();
     let span = Span::new_with_length(span.get_start(), 3);
-    let (string, lines) = source_map.resolve_span(span);
-    assert_eq!(string.as_str(), "BAR");
+    let (string, lines, _) = source_map.resolve_span(span, true);
+    assert_eq!(string, "BAR");
     assert_eq!(lines, 3);
 }

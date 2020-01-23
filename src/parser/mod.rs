@@ -38,15 +38,14 @@ mod variables;
 //mod combinators;
 pub mod error;
 
-#[derive(Debug)]
-pub struct Parser<'source_map, 'ast> {
-    pub preprocessor: Preprocessor<'source_map>,
+pub struct Parser<'lt, 'source_map, 'ast> {
+    pub preprocessor: Preprocessor<'lt, 'source_map>,
     pub scope_stack: Vec<SymbolTable<'ast>>,
     lookahead: Option<Result<(Token, Span)>>,
     pub ast_allocator: &'ast Bump,
 }
-impl<'source_map, 'ast> Parser<'source_map, 'ast> {
-    pub fn new(preprocessor: Preprocessor<'source_map>, ast_allocator: &'ast Bump) -> Self {
+impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
+    pub fn new(preprocessor: Preprocessor<'lt, 'source_map>, ast_allocator: &'ast Bump) -> Self {
         Self {
             preprocessor,
             scope_stack: vec![SymbolTable::new()],
@@ -200,10 +199,11 @@ pub fn parse<'source_map, 'ast>(
     source_map_allocator: &'source_map Bump,
     ast_allocator: &'ast Bump,
 ) -> std::io::Result<(
-    Box<SourceMap<'source_map>>,
+    &'source_map SourceMap<'source_map>,
     Result<(AstTop<'ast>, SymbolTable<'ast>)>,
 )> {
-    let mut preprocessor = Preprocessor::new(source_map_allocator, main_file)?;
+    let allocator = Bump::new();
+    let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;
     let res = preprocessor.process_token();
     let mut parser = Parser::new(preprocessor, ast_allocator);
     parser.lookahead = Some(Ok((
@@ -213,5 +213,5 @@ pub fn parse<'source_map, 'ast>(
     let res = res
         .and_then(|_| parser.run())
         .map(|ast| (ast, parser.scope_stack.pop().unwrap()));
-    Ok((parser.preprocessor.done(), res))
+    Ok((parser.preprocessor.skip_rest(), res))
 }

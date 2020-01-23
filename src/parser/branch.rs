@@ -12,7 +12,7 @@ use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 
-impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     pub fn parse_branch_declaration(&mut self) -> Result<Vec<BranchDeclaration<'ast>>> {
         self.expect(Token::ParenOpen)?;
         let branch = self.parse_branch()?;

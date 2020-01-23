@@ -11,14 +11,14 @@
     branch (A,x) ax;\
     branch (A,y) ay;\
     branch (x,B) xb;\
-    branch (y,B) yb;\
-    branch (x,y) xy;\
+    branch (y,B) xb;\
+    branch (x,y) xy;
 
 module schaltung (A,B);
     inout electrical A,B;
     electrical x,y;
     `branches
-    real B = 30;
+    real C = 30;
 
     analog begin
         if (V(ax) > 100) begin
@@ -31,3 +31,4 @@ module schaltung (A,B);
         I(ay) <+ V(ya)/50;
     end
 endmodule
+

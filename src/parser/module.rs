@@ -16,7 +16,7 @@ use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
-impl<'source_map, 'ast> Parser<'source_map, 'ast> {
+impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     pub(super) fn parse_module(&mut self) -> Result<Module<'ast>> {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
