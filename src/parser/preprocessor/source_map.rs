@@ -16,6 +16,7 @@ use bumpalo::Bump;
 use intrusive_collections::__core::cell::Cell;
 use intrusive_collections::rbtree::CursorMut;
 use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
+use logos::Slice;
 
 use crate::span::{Index, LineNumber};
 use crate::{Lexer, Span};
@@ -119,18 +120,23 @@ impl<'source_map> SourceMap<'source_map> {
                         && (end..=expansion_end).contains(&parent_substitution_end) =>
                 {
                     let mut column: u16 = 0;
-                    for byte in self.expanded_source
-                        [substitution.original_span.get_start() as usize..start]
+                    for &byte in self.expanded_source
+                        [..substitution.original_span.get_start() as usize]
                         .as_bytes()
+                        .iter()
+                        .rev()
                     {
-                        column += ((*byte >> 6) != 0b10) as u16
+                        if byte == b'\n' && (byte >> 6) != 0b10 {
+                            break;
+                        }
+                        column += ((byte >> 6) != 0b10) as u16
                     } //This is here so that non ASCII characters don't count as multiple characters. Its done this way and not using iterators for performance reasons (see std reverse count method for explanation of a similar optimization)
                     let (name, line_offset) = match substitution.stype {
                         SourceType::File => (
                             format!(
                                 "{}:{}:{} Occurred inside include expansion\n --> {}",
                                 self.main_file_name,
-                                substitution.original_first_line,
+                                substitution.original_first_line + 1,
                                 column,
                                 substitution.name
                             ),
@@ -140,7 +146,7 @@ impl<'source_map> SourceMap<'source_map> {
                             format!(
                                 "{}:{}:{} Occurred inside macro expansion of `{}\n --> {}",
                                 self.main_file_name,
-                                substitution.original_first_line,
+                                substitution.original_first_line + 1,
                                 column,
                                 substitution.name,
                                 self.main_file_name
@@ -380,7 +386,6 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         }
         source.len() as Index
     }
-    //TODO fix line numbers
     pub(crate) fn enter_file(
         &mut self,
         path: &Path,

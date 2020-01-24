@@ -14,11 +14,11 @@ use crate::parser::Parser;
 use crate::parser::Result;
 use crate::symbol::Ident;
 
-impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     pub fn parse_variable_declaration(
         &mut self,
         variable_type: VariableType,
-    ) -> Result<Vec<Variable<'ast>>> {
+    ) -> Result<Vec<Variable>> {
         let (name, default_value) = self.parse_single_declaration_with_opt_default_value()?;
 
         let mut res = vec![Variable {
@@ -46,7 +46,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
 
     fn parse_single_declaration_with_opt_default_value(
         &mut self,
-    ) -> Result<(Ident, Option<&'ast Node<Expression<'ast>>>)> {
+    ) -> Result<(Ident, Option<&Node<Expression>>)> {
         let name = self.parse_identifier(false)?;
         let default_value = if self.look_ahead()?.0 == Token::Assign {
             self.lookahead.take();

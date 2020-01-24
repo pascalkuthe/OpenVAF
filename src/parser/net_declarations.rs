@@ -9,13 +9,13 @@
  */
 
 use crate::ast::{AttributeNode, Net, NetType, Port};
+use crate::parser::{error, Error, Parser};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
-use crate::parser::{error, Error, Parser};
 use crate::symbol::Ident;
 
-impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
-    pub fn parse_port_declaration_list(&mut self) -> Result<Vec<AttributeNode<'ast, Port>>> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_port_declaration_list(&mut self) -> Result<Vec<AttributeNode<, Port>>> {
         if self.look_ahead()?.0 == Token::ParenClose {
             return Ok(Vec::new());
         }
@@ -52,7 +52,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         Ok(res)
     }
 
-    pub fn parse_port_declaration(&mut self) -> Result<Vec<AttributeNode<'ast, Port>>> {
+    pub fn parse_port_declaration(&mut self) -> Result<Vec<AttributeNode<, Port>>> {
         let start = self.look_ahead()?.1.get_start();
         let port = self.parse_port_declaration_base()?;
         let attributes = self.parse_attributes()?;

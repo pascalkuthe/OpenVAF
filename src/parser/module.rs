@@ -16,8 +16,8 @@ use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
-impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
-    pub(super) fn parse_module(&mut self) -> Result<Module<'ast>> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub(super) fn parse_module(&mut self) -> Result<Module> {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
         //parameters
@@ -111,7 +111,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         })
     }
 
-    fn parse_port_list(&mut self) -> Result<Vec<AttributeNode<'ast, Port>>> {
+    fn parse_port_list(&mut self) -> Result<Vec<AttributeNode<, Port>>> {
         let name = self.parse_identifier(false)?;
         let mut res = vec![AttributeNode {
             source: self.preprocessor.current_span(),
@@ -141,7 +141,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     }
 
     //TODO avoid code duplication
-    fn parse_module_item(&mut self) -> Result<Vec<ModuleItem<'ast>>> {
+    fn parse_module_item(&mut self) -> Result<Vec<ModuleItem>> {
         let attributes = self.parse_attributes()?;
         let start = self.look_ahead()?.1.get_start();
         let res = match self.look_ahead()?.0 {

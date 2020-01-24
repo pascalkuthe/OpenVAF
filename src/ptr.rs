@@ -56,9 +56,9 @@ pub struct FrozenBox<T: ?Sized> {
 
 /// Construct a `P<T>` from a `T` value.
 #[allow(non_snake_case)]
-pub fn P<T: 'static>(value: T) -> FrozenBox<T> {
+pub fn freeze<T: 'static>(value: T) -> FrozenBox<T> {
     FrozenBox {
-        ptr: Box::new(valu),
+        ptr: Box::new(value),
     }
 }
 
@@ -114,7 +114,7 @@ impl<T: ?Sized> DerefMut for FrozenBox<T> {
 
 impl<T: 'static + Clone> Clone for FrozenBox<T> {
     fn clone(&self) -> FrozenBox<T> {
-        FrozenBox((**self).clone())
+        freeze((**self).clone())
     }
 }
 
@@ -137,7 +137,8 @@ impl<T> fmt::Pointer for FrozenBox<T> {
 }
 
 impl<T> FrozenBox<[T]> {
-    pub const fn new() -> FrozenBox<[T]> {
+    #[inline]
+    pub fn new() -> FrozenBox<[T]> {
         // HACK(eddyb) bypass the lack of a `const fn` to create an empty `Box<[T]>`
         // (as trait methods, `default` in this case, can't be `const fn` yet).
         FrozenBox {

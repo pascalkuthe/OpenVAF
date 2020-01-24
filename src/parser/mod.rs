@@ -14,13 +14,13 @@ use bumpalo::Bump;
 pub use error::Error;
 pub use error::Result;
 
+use crate::{Preprocessor, SourceMap, Span};
 use crate::ast::{AttributeNode, Attributes, HierarchicalId, TopNode};
 use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
-use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
 pub(crate) mod preprocessor;
@@ -30,22 +30,21 @@ pub mod test;
 mod behavior;
 mod branch;
 mod combinators;
+pub mod error;
 mod expression;
 mod module;
 mod net_declarations;
 mod primaries;
 mod variables;
-//mod combinators;
-pub mod error;
 
-pub struct Parser<'lt, 'source_map, 'ast> {
+pub struct Parser<'lt, 'source_map> {
     pub preprocessor: Preprocessor<'lt, 'source_map>,
-    pub scope_stack: Vec<SymbolTable<'ast>>,
+    pub scope_stack: Vec<SymbolTable>,
     lookahead: Option<Result<(Token, Span)>>,
-    pub ast_allocator: &'ast Bump,
+    pub ast_allocator: & Bump,
 }
-impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
-    pub fn new(preprocessor: Preprocessor<'lt, 'source_map>, ast_allocator: &'ast Bump) -> Self {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn new(preprocessor: Preprocessor<'lt, 'source_map>, ast_allocator: & Bump) -> Self {
         Self {
             preprocessor,
             scope_stack: vec![SymbolTable::new()],
@@ -76,7 +75,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         self.lookahead = Some(res.clone());
         res
     }
-    pub fn run(&mut self) -> Result<AstTop<'ast>> {
+    pub fn run(&mut self) -> Result<AstTop> {
         let mut top_nodes = Vec::new(); //we allocate on the heap and copy into the ast_allocator later because other things might be allocated on the allocator in between causing a temporary leak until the allocator is freed
         loop {
             match self.next()? {
@@ -131,10 +130,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         }
         Ok(Ident::from_str_and_span(identifier, source))
     }
-    pub fn parse_hierarchical_identifier(
-        &mut self,
-        optional: bool,
-    ) -> Result<HierarchicalId<'ast>> {
+    pub fn parse_hierarchical_identifier(&mut self, optional: bool) -> Result<HierarchicalId> {
         Ok(HierarchicalId {
             names: self
                 .parse_hierarchical_identifier_internal(optional)?
@@ -144,7 +140,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     pub fn parse_hierarchical_identifier_internal(
         &mut self,
         optional: bool,
-    ) -> Result<bumpalo::collections::Vec<'ast, Ident>> {
+    ) -> Result<bumpalo::collections::Vec<, Ident>> {
         let mut identifier = bumpalo::vec![in &self.ast_allocator;self.parse_identifier(optional)?];
         while self.look_ahead()?.0 == Token::Accessor {
             self.lookahead.take();
@@ -153,7 +149,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         Ok(identifier)
     }
     //todo attributes
-    pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
+    pub fn parse_attributes(&mut self) -> Result<Attributes> {
         Ok(unsafe {
             use std::ptr::NonNull;
             &*(NonNull::<[(); 0]>::dangling() as NonNull<[()]>).as_ptr()
@@ -177,7 +173,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         Span::new(start, self.preprocessor.current_end())
     }
     #[inline]
-    pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration<'ast>) -> Result {
+    pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration) -> Result {
         let symbol_table = self.scope_stack.last_mut().unwrap();
         let source = declaration.span();
         if let Some(old_declaration) = symbol_table.insert(name.name, declaration) {
@@ -193,14 +189,14 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         }
     }
 }
-pub type AstTop<'ast> = &'ast [AttributeNode<'ast, TopNode<'ast>>];
-pub fn parse<'source_map, 'ast>(
+pub type AstTop = & [AttributeNode<, TopNode>];
+pub fn parse<'source_map>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
-    ast_allocator: &'ast Bump,
+    ast_allocator: & Bump,
 ) -> std::io::Result<(
     &'source_map SourceMap<'source_map>,
-    Result<(AstTop<'ast>, SymbolTable<'ast>)>,
+    Result<(AstTop, SymbolTable)>,
 )> {
     let allocator = Bump::new();
     let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;

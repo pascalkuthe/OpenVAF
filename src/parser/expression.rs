@@ -16,8 +16,8 @@ use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealL
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
 
-impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
-    pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_expression(&mut self) -> Result<Node<Expression>> {
         let lhs = self.parse_atom()?;
         self.precedence_climb_expression(0, lhs)
     }
@@ -27,8 +27,8 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     fn precedence_climb_expression(
         &mut self,
         min_prec: u8,
-        mut lhs: Node<Expression<'ast>>,
-    ) -> Result<Node<Expression<'ast>>> {
+        mut lhs: Node<Expression>,
+    ) -> Result<Node<Expression>> {
         loop {
             match self.parse_binary_operator() {
                 Ok((op, precedence)) if precedence >= min_prec => {
@@ -111,7 +111,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         lhs := the result of applying op with operands lhs and rhs
     return lhs
     */
-    fn parse_atom(&mut self) -> Result<Node<Expression<'ast>>> {
+    fn parse_atom(&mut self) -> Result<Node<Expression>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::Minus => {
@@ -230,7 +230,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         };
         Ok(res)
     }
-    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression<'ast>>> {
+    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression>> {
         let span = self.look_ahead()?.1;
         self.lookahead.take();
         let unary_op = Node {

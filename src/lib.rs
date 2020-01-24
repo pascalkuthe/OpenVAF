@@ -20,6 +20,7 @@ extern crate std;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
+pub use ptr::FrozenBox;
 pub use span::Span;
 
 pub mod symbol;
@@ -29,6 +30,7 @@ mod util;
 mod ast;
 mod error;
 pub mod parser;
+mod ptr;
 mod span;
 mod symbol_table;
 #[cfg(test)]

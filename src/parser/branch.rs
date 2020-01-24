@@ -12,8 +12,8 @@ use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 
-impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
-    pub fn parse_branch_declaration(&mut self) -> Result<Vec<BranchDeclaration<'ast>>> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_branch_declaration(&mut self) -> Result<Vec<BranchDeclaration>> {
         self.expect(Token::ParenOpen)?;
         let branch = self.parse_branch()?;
         self.expect(Token::ParenClose)?;
@@ -34,7 +34,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         )?;
         Ok(res)
     }
-    pub fn parse_branch(&mut self) -> Result<Branch<'ast>> {
+    pub fn parse_branch(&mut self) -> Result<Branch> {
         if self.look_ahead()?.0 == Token::OpLess {
             self.lookahead.take();
             let res = Branch::Port(self.parse_hierarchical_identifier(false)?);
@@ -47,7 +47,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
             Ok(Branch::Nets(first_net_name, second_net_name))
         }
     }
-    pub fn parse_branch_access(&mut self) -> Result<BranchAccess<'ast>> {
+    pub fn parse_branch_access(&mut self) -> Result<BranchAccess> {
         self.expect(Token::ParenOpen)?;
 
         let res = if self.look_ahead()?.0 == Token::OpLess {

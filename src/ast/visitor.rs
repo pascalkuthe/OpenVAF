@@ -3,42 +3,38 @@ use crate::ast::{
     VariableType,
 };
 
-pub trait Visitor<'ast> {
+pub trait Visitor {
     fn visit_name(&mut self, ident: Ident) {
         /*Nothing to do*/
     }
-    fn visit_net_type(&mut self, net_type: NetType, ast: &'astAst) {
+    fn visit_net_type(&mut self, net_type: NetType, ast: &Ast) {
         /*Nothing to do*/
     }
-    fn visit_variable_type(&mut self, variable_type: VariableType, ast: &'astAst) {
+    fn visit_variable_type(&mut self, variable_type: VariableType, ast: &Ast) {
         /*Nothing to do*/
     }
-    fn visit_reference<T>(&mut self, reference: Reference<T>, ast: &'astAst) -> Option<&'astT> {
+    fn visit_reference<T>(&mut self, reference: Reference<T>, ast: &Ast) -> Option<&T> {
         walk_reference(self, reference, ast)
     }
-    fn visit_attribute_node<T>(
-        &mut self,
-        attribute_node: &'ast AttributeNode<T>,
-        ast: &'astAst,
-    ) -> &'astT {
+    fn visit_attribute_node<T>(&mut self, attribute_node: &AttributeNode<T>, ast: &Ast) -> &T {
         walk_attribute_node(self, attribute_node, ast)
     }
-    fn visit_node<T>(&mut self, node: &'ast Node<T>, ast: &'astAst) -> &'astT {
+    fn visit_node<T>(&mut self, node: &Node<T>, ast: &Ast) -> &T {
         walk_node(self, node, ast)
     }
-    fn visit_module(&mut self, module: &'astModule, ast: &'astAst) {
+    fn visit_module(&mut self, module: &Module, ast: &Ast) {
         walk_module(self, module, ast)
     }
-    fn visit_port_declaration(&mut self, port: &'astPort, ast: &'astAst) {
+    fn visit_port_declaration(&mut self, port: &Port, ast: &Ast) {
         walk_port_declaration(self, port, ast)
     }
-    fn visit_net_declaration(&mut self, net: &'astNet, ast: &'astAst) {
+    fn visit_net_declaration(&mut self, net: &Net, ast: &Ast) {
         walk_net_declaration(self, net, ast)
     }
-    fn visit_branch_declaration(&mut self, branch: &'astBranchDeclaration, ast: &'astAst) {
+    fn visit_branch_declaration(&mut self, branch: &BranchDeclaration, ast: &Ast) {
         walk_branch_declaration(self, net, ast)
     }
-    fn visit_branch(&mut self, branch: &'astBranchDeclaration, ast: &'astAst) {
+    fn visit_branch(&mut self, branch: &BranchDeclaration, ast: &Ast) {
         walk_branch(self, net, ast)
     }
 }

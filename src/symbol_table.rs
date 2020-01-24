@@ -1,24 +1,24 @@
 use std::collections::HashMap;
 
-use crate::symbol::Symbol;
 use crate::Span;
+use crate::symbol::Symbol;
 
 use super::ast::*;
 
-pub type SymbolTable<'ast> = HashMap<Symbol, SymbolDeclaration<'ast>>; //Todo avoid copy
+pub type SymbolTable = HashMap<Symbol, SymbolDeclaration>; //Todo avoid copy
 #[derive(Debug, Clone)]
-pub enum SymbolDeclaration<'ast> {
-    Module(&'ast Module<'ast>, SymbolTable<'ast>, Span),
-    Block(&'ast SeqBlock<'ast>, SymbolTable<'ast>, Span),
-    Variable(&'ast AttributeNode<'ast, Variable<'ast>>),
-    Branch(&'ast AttributeNode<'ast, BranchDeclaration<'ast>>),
-    Net(&'ast AttributeNode<'ast, Net>),
-    Port(&'ast AttributeNode<'ast, Port>),
-    Function(&'ast AttributeNode<'ast, Function<'ast>>),
-    Discipline(&'ast AttributeNode<'ast, Discipline>),
-    Nature(&'ast AttributeNode<'ast, Discipline>),
+pub enum SymbolDeclaration {
+    Module(& Module, SymbolTable, Span),
+    Block(& SeqBlock, SymbolTable, Span),
+    Variable(& AttributeNode<, Variable>),
+    Branch(& AttributeNode<, BranchDeclaration>),
+    Net(& AttributeNode<, Net>),
+    Port(& AttributeNode<, Port>),
+    Function(& AttributeNode<, Function>),
+    Discipline(& AttributeNode<, Discipline>),
+    Nature(& AttributeNode<, Discipline>),
 }
-impl<'ast> SymbolDeclaration<'ast> {
+impl SymbolDeclaration {
     pub fn span(&self) -> Span {
         match self {
             Self::Module(_, _, span)

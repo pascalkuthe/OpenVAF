@@ -22,8 +22,8 @@ use crate::symbol::keywords;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
-impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
-    pub fn parse_statement(&mut self) -> Result<Node<Statement<'ast>>> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_statement(&mut self) -> Result<Node<Statement>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::If => {
@@ -161,7 +161,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         }
     }
 
-    pub fn parse_block(&mut self) -> Result<(SeqBlock<'ast>, Option<SymbolTable<'ast>>)> {
+    pub fn parse_block(&mut self) -> Result<(SeqBlock, Option<SymbolTable>)> {
         let (scope, symbol_table) = if self.look_ahead()?.0 == Token::Colon {
             self.lookahead.take();
             let name = self.parse_identifier(false)?;
@@ -212,14 +212,14 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
         Ok((res, symbol_table))
     }
 
-    pub fn parse_contribute_statement(&mut self, nature_acceess: Ident) -> Result<Statement<'ast>> {
+    pub fn parse_contribute_statement(&mut self, nature_acceess: Ident) -> Result<Statement> {
         let branch = self.parse_branch_access()?;
         self.expect(Token::Contribute)?;
         let expr = self.parse_expression()?;
         self.expect(Token::Semicolon)?;
         Ok(Statement::Contribute(nature_acceess, branch, expr))
     }
-    pub fn parse_condition(&mut self) -> Result<Condition<'ast>> {
+    pub fn parse_condition(&mut self) -> Result<Condition> {
         self.expect(Token::ParenOpen)?;
         let main_condition = self.parse_expression()?;
         self.expect(Token::ParenClose)?;
@@ -251,9 +251,7 @@ impl<'lt, 'source_map, 'ast> Parser<'lt, 'source_map, 'ast> {
     }
 }
 
-pub fn convert_function_call_to_branch_access<'ast>(
-    args: &[Node<Expression<'ast>>],
-) -> Result<BranchAccess<'ast>> {
+pub fn convert_function_call_to_branch_access(args: &[Node<Expression>]) -> Result<BranchAccess> {
     let res = match args.len() {
         1 => BranchAccess::Explicit(reinterpret_expression_as_identifier(args[0])?),
         2 => {
