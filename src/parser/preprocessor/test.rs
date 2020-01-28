@@ -138,7 +138,7 @@ pub fn test_source_map() {
     builder.new_line();
     builder.new_line();
     let span: Span = lexer.range().into();
-    builder.enter_root_macro(lexer.range().start, Span::new(0, 0), "BAR", 3, "test");
+    builder.enter_root_macro(lexer.range().start, Span::new(0, 0), "BAR", 2, "test");
     builder.finish_substitution();
     let source_map = builder.done();
     let span = Span::new_with_length(span.get_start(), 3);

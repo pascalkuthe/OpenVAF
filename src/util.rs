@@ -16,3 +16,18 @@ macro_rules! unreachable_unchecked{
         }
     };
 }
+macro_rules! static_assert_size {
+    ($ty:ty, $size:expr) => {
+        const _: [(); $size] = [(); ::std::mem::size_of::<$ty>()];
+    };
+}
+macro_rules! static_assert_size_eq {
+    ($ty:ty, $ty2:ty) => {
+        const _: [(); ::std::mem::size_of::<$ty>] = [(); ::std::mem::size_of::<$ty2>()];
+    };
+}
+macro_rules! static_assert_align_eq {
+    ($ty:ty, $ty2:ty) => {
+        const _: [(); ::std::mem::align_of::<$ty>] = [(); ::std::mem::align_of::<$ty2>()];
+    };
+}

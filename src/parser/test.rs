@@ -12,42 +12,40 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
+use crate::ast::NetType::{UNDECLARED, WIRE};
+use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{Branch, Expression, Statement, VariableType};
 use crate::ast::{ModuleItem, NetType, TopNode};
+use crate::parser::parse_and_print_errors;
 use crate::symbol::keywords::EMPTY_SYMBOL;
+use crate::symbol::Symbol;
+use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::Ast;
 
 const PARSE_UNIT_DIRECTORY: &'static str = "tests/parseunits/";
 #[test]
 pub fn module() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
-    let ast_allocator = Bump::new();
-    let (source_map, res) = super::parse(
-        Path::new(&format!("{}module.va", PARSE_UNIT_DIRECTORY)),
+    mk_ast!(ast);
+    parse_and_print_errors(
+        Path::new("tests/parseunits/module.va"),
         &source_map_allocator,
-        &ast_allocator,
-    )
-    .expect("Test File not found");
-    let (ast, _) = match res {
-        Ok(ast) => ast,
-        Err(e) => {
-            e.print(&source_map, true);
-            return Err(());
-        }
-    };
-    let mut top_nodes = ast.iter();
-    let first_module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
-        module
+        &mut ast,
+    )?;
+    let mut top_nodes = ast.top_nodes.iter();
+    let first_module = if let TopNode::Module(module) = top_nodes.next().unwrap() {
+        &ast[*module].contents
     } else {
         panic!("Parsed Something else than a module!")
     };
     assert_eq!(first_module.name.as_str(), "test1");
-    let second_module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
-        module
+    let second_module = if let TopNode::Module(module) = top_nodes.next().unwrap() {
+        &ast[*module].contents
     } else {
         panic!("Parsed Something else than a module!")
     };
     assert_eq!(second_module.name.as_str(), "test2");
-    let mut ports = second_module.port_list.iter();
+    let mut ports = ast[&second_module.port_list].iter();
 
     let port = ports.next().unwrap().contents;
     assert_eq!(port.name.as_str(), "a");
@@ -105,13 +103,13 @@ pub fn module() -> Result<(), ()> {
     assert_eq!(port.discipline.as_str(), "electrical");
     assert_eq!(port.net_type, NetType::WIRE);
 
-    let third_module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
-        module
+    let third_module = if let TopNode::Module(module) = top_nodes.next().unwrap() {
+        &ast[*module].contents
     } else {
         panic!("Parsed Something else than a module!")
     };
     assert_eq!(third_module.name.as_str(), "test3");
-    let mut ports = third_module.port_list.iter();
+    let mut ports = ast[&third_module.port_list].iter();
     let port = ports.next().unwrap().contents;
     assert_eq!(port.name.as_str(), "a");
     assert_eq!(port.output, true);
@@ -141,28 +139,20 @@ pub fn module() -> Result<(), ()> {
 #[test]
 pub fn branch() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
-    let ast_allocator = Bump::new();
-    let (source_map, res) = super::parse(
-        Path::new(&format!("{}branch.va", PARSE_UNIT_DIRECTORY)),
+    mk_ast!(ast);
+    parse_and_print_errors(
+        Path::new("tests/parseunits/branch.va"),
         &source_map_allocator,
-        &ast_allocator,
-    )
-    .expect("Test File not found");
-    let (ast, _) = match res {
-        Ok(ast) => ast,
-        Err(e) => {
-            e.print(&source_map, true);
-            return Err(());
-        }
-    };
-    let mut top_nodes = ast.iter();
-    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
-        module
+        &mut ast,
+    )?;
+    let mut top_nodes = ast.top_nodes.iter();
+    let module = if let TopNode::Module(module) = top_nodes.next().unwrap() {
+        &ast[*module].contents
     } else {
         panic!("Parsed Something else than a module!")
     };
     assert_eq!(module.name.as_str(), "test");
-    let ports = module.port_list;
+    let ports = &ast[&module.port_list];
 
     let port = ports[0].contents;
     assert_eq!(port.name.as_str(), "a");
@@ -173,216 +163,151 @@ pub fn branch() -> Result<(), ()> {
     assert_eq!(port.name.as_str(), "b");
     assert_eq!(port.output, false);
     assert_eq!(port.input, true);
-
-    let mut children = module.children.iter();
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "ab1");
-        if let Branch::Nets(net1, net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), "a");
-            assert_eq!(net2.names[0].as_str(), "b");
-        } else {
-            panic!("This should be a branch between two nets")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "ab2");
-        if let Branch::Nets(net1, net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), "a");
-            assert_eq!(net2.names[0].as_str(), "b");
-        } else {
-            panic!("This should be a branch between two nets")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "pa");
-        if let Branch::Port(port) = branch.branch {
-            assert_eq!(port.names[0].as_str(), "a");
-        } else {
-            panic!("This should be a branch trough a port")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "pb");
-        if let Branch::Port(port) = branch.branch {
-            assert_eq!(port.names[0].as_str(), "b");
-        } else {
-            panic!("This should be a branch trough a port")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
+    let symbol_table = &module.symbol_table;
+    assert_branch_decl(symbol_table, &ast, "ab1", "a", "b");
+    assert_branch_decl(symbol_table, &ast, "ab2", "a", "b");
+    assert_port_branch_decl(symbol_table, &ast, "pa", "a");
+    assert_port_branch_decl(symbol_table, &ast, "pb", "b");
     Ok(())
 }
 
+fn assert_branch_decl<'ast>(
+    symbol_table: &SymbolTable<'ast>,
+    ast: &Ast<'ast>,
+    name: &str,
+    net1_name: &str,
+    net2_name: &str,
+) {
+    if let Some(SymbolDeclaration::Branch(branchid)) = symbol_table.get(&Symbol::intern(name)) {
+        let branch = &ast[*branchid].contents;
+        if let Branch::Nets(ref net1, ref net2) = branch.branch {
+            assert_eq!(net1.names[0].as_str(), net1_name);
+            assert_eq!(net2.names[0].as_str(), net2_name);
+        } else {
+            panic!("This should be a branch between two nets")
+        }
+    } else {
+        panic!("Branch {} not found", name);
+    }
+}
+fn assert_port_branch_decl<'ast>(
+    symbol_table: &SymbolTable<'ast>,
+    ast: &Ast<'ast>,
+    name: &str,
+    port_name: &str,
+) {
+    if let Some(SymbolDeclaration::Branch(branchid)) = symbol_table.get(&Symbol::intern(name)) {
+        let branch = &ast[*branchid].contents;
+        if let Branch::Port(ref port) = branch.branch {
+            assert_eq!(port.names[0].as_str(), port_name);
+        } else {
+            panic!("This should be a branch trough a ports")
+        }
+    } else {
+        panic!("Branch {} not found", name)
+    }
+}
+fn assert_variable_decl<'ast>(
+    symbol_table: &SymbolTable<'ast>,
+    ast: &Ast<'ast>,
+    name: &str,
+    vtype: VariableType,
+) {
+    if let Some(SymbolDeclaration::Variable(variableid)) = symbol_table.get(&Symbol::intern(name)) {
+        let variable = &ast[*variableid].contents;
+        assert_eq!(variable.variable_type, vtype)
+    } else {
+        panic!("Variable {} not found", name)
+    }
+}
+fn assert_net_decl<'ast>(
+    symbol_table: &SymbolTable<'ast>,
+    ast: &Ast<'ast>,
+    name: &str,
+    net_type: NetType,
+    discipline: &str,
+    signed: bool,
+) {
+    if let Some(SymbolDeclaration::Net(netid)) = symbol_table.get(&Symbol::intern(name)) {
+        let net = &ast[*netid].contents;
+        assert_eq!(net.signed, signed);
+        assert_eq!(net.discipline.as_str(), discipline);
+        assert_eq!(net.net_type, net_type);
+    } else {
+        panic!("Net {} not found", name)
+    }
+}
+
+fn get_module_symbol_table<'ast, 'astref>(
+    symbol_table: &SymbolTable<'ast>,
+    ast: &'astref Ast<'ast>,
+    name: &str,
+) -> &'astref SymbolTable<'ast> {
+    if let Some(SymbolDeclaration::Module(module)) = symbol_table.get(&Symbol::intern(name)) {
+        &ast[*module].contents.symbol_table
+    } else {
+        panic!("Module {} nout found", name)
+    }
+}
 #[test]
 pub fn variable_decl() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
-    let ast_allocator = Bump::new();
-    let (source_map, res) = super::parse(
-        Path::new(&format!("{}variable_declaration.va", PARSE_UNIT_DIRECTORY)),
+    mk_ast!(ast);
+    parse_and_print_errors(
+        Path::new("tests/parseunits/variable_declaration.va"),
         &source_map_allocator,
-        &ast_allocator,
-    )
-    .expect("Test File not found");
-    let (ast, _) = match res {
-        Ok(ast) => ast,
-        Err(e) => {
-            e.print(&source_map, true);
-            return Err(());
-        }
-    };
-    let mut top_nodes = ast.iter();
-    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
-        module
-    } else {
-        panic!("Parsed Something else than a module!")
-    };
-    assert_eq!(module.name.as_str(), "test");
-    let ports = module.port_list;
-
-    let mut children = module.children.iter();
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
-        let variable = &variable.contents;
-        assert_eq!(variable.name.as_str(), "x");
-        assert_eq!(variable.variable_type, VariableType::REAL)
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
-        let variable = &variable.contents;
-        assert_eq!(variable.name.as_str(), "y");
-        assert_eq!(variable.variable_type, VariableType::INTEGER)
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
-        let variable = &variable.contents;
-        assert_eq!(variable.name.as_str(), "z");
-        assert_eq!(variable.variable_type, VariableType::INTEGER)
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
-        let variable = &variable.contents;
-        assert_eq!(variable.name.as_str(), "t");
-        assert_eq!(variable.variable_type, VariableType::TIME)
-    } else {
-        panic!("Found something else than a variable decl")
-    }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
-        let variable = &variable.contents;
-        assert_eq!(variable.name.as_str(), "rt");
-        assert_eq!(variable.variable_type, VariableType::REALTIME)
-    } else {
-        panic!("Found something else than a variable decl")
-    }
+        &mut ast,
+    )?;
+    let symbol_table = get_module_symbol_table(&ast.top_symbols, &ast, "test");
+    assert_variable_decl(&symbol_table, &ast, "x", REAL);
+    assert_variable_decl(&symbol_table, &ast, "y", INTEGER);
+    assert_variable_decl(&symbol_table, &ast, "z", INTEGER);
+    assert_variable_decl(&symbol_table, &ast, "t", TIME);
+    assert_variable_decl(&symbol_table, &ast, "rt", REALTIME);
     Ok(())
 }
 
 #[test]
 pub fn net_decl() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
-    let ast_allocator = Bump::new();
-    let (source_map, res) = super::parse(
-        Path::new(&format!("{}net_declaration.va", PARSE_UNIT_DIRECTORY)),
+    mk_ast!(ast);
+    parse_and_print_errors(
+        Path::new("tests/parseunits/net_declaration.va"),
         &source_map_allocator,
-        &ast_allocator,
-    )
-    .expect("Test File not found");
-    let (ast, _) = match res {
-        Ok(ast) => ast,
-        Err(e) => {
-            e.print(&source_map, true);
-            return Err(());
-        }
-    };
-    let mut top_nodes = ast.iter();
-    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
-        module
+        &mut ast,
+    )?;
+    let module = if let TopNode::Module(module) = ast.top_nodes[0] {
+        &ast[module].contents
     } else {
         panic!("Parsed Something else than a module!")
     };
+    let symbol_table = &module.symbol_table;
     assert_eq!(module.name.as_str(), "test");
-
-    let mut children = module.children.iter();
-    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
-        let net = &net.contents;
-        assert_eq!(net.name.as_str(), "x");
-        assert_eq!(net.signed, false);
-        assert_eq!(net.discipline.name, EMPTY_SYMBOL);
-        assert_eq!(net.net_type, NetType::WIRE);
-    } else {
-        panic!("Found something else than a net decl")
-    }
-
-    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
-        let net = &net.contents;
-        assert_eq!(net.name.as_str(), "y");
-        assert_eq!(net.signed, false);
-        assert_eq!(net.discipline.name, EMPTY_SYMBOL);
-        assert_eq!(net.net_type, NetType::WIRE);
-    } else {
-        panic!("Found something else than a net decl")
-    }
-
-    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
-        let net = &net.contents;
-        assert_eq!(net.name.as_str(), "z");
-        assert_eq!(net.signed, false);
-        assert_eq!(net.discipline.as_str(), "electrical");
-        assert_eq!(net.net_type, NetType::UNDECLARED);
-    } else {
-        panic!("Found something else than a net decl")
-    }
-
-    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
-        let net = &net.contents;
-        assert_eq!(net.name.as_str(), "l");
-        assert_eq!(net.signed, true);
-        assert_eq!(net.discipline.as_str(), "electrical");
-        assert_eq!(net.net_type, NetType::WIRE);
-    } else {
-        panic!("Found something else than a net decl")
-    }
+    assert_net_decl(symbol_table, &ast, "x", WIRE, " ", false);
+    assert_net_decl(symbol_table, &ast, "y", WIRE, " ", false);
+    assert_net_decl(symbol_table, &ast, "z", UNDECLARED, "electrical", false);
+    assert_net_decl(symbol_table, &ast, "l", WIRE, "electrical", true);
     Ok(())
 }
 
 #[test]
 pub fn linear() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
-    let ast_allocator = Bump::new();
-    let (source_map, res) = super::parse(
+    mk_ast!(ast);
+    parse_and_print_errors(
         Path::new("tests/linear.va"),
         &source_map_allocator,
-        &ast_allocator,
-    )
-    .expect("Test File not found");
-    let (ast, symbol_table) = match res {
-        Ok(ast) => ast,
-        Err(e) => {
-            e.print(&source_map, true);
-            return Err(());
-        }
-    };
-    let mut top_nodes = ast.iter();
-    let module = if let TopNode::Module(module) = top_nodes.next().unwrap().contents {
-        module
+        &mut ast,
+    )?;
+    let mut top_nodes = ast.top_nodes.iter();
+    let mut top_nodes = ast.top_nodes.iter();
+    let module = if let TopNode::Module(module) = top_nodes.next().unwrap() {
+        &ast[*module].contents
     } else {
         panic!("Parsed Something else than a module!")
     };
 
-    let mut ports = module.port_list.iter();
+    let mut ports = ast[&module.port_list].iter();
     let port = ports.next().unwrap().contents;
     assert_eq!(port.name.as_str(), "A");
     assert_eq!(port.output, true);
@@ -397,107 +322,22 @@ pub fn linear() -> Result<(), ()> {
     assert_eq!(port.input, true);
     assert_eq!(port.signed, false);
     assert_eq!(port.discipline.as_str(), "electrical");
-    let mut children = module.children.iter();
-    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
-        let net = &net.contents;
-        assert_eq!(net.name.as_str(), "x");
-        assert_eq!(net.signed, false);
-        assert_eq!(net.discipline.as_str(), "electrical");
-        assert_eq!(net.net_type, NetType::UNDECLARED);
-    } else {
-        panic!("Found something else than a net decl")
-    }
-    if let ModuleItem::NetDecl(net) = children.next().unwrap() {
-        let net = &net.contents;
-        assert_eq!(net.name.as_str(), "y");
-        assert_eq!(net.signed, false);
-        assert_eq!(net.discipline.as_str(), "electrical");
-        assert_eq!(net.net_type, NetType::UNDECLARED);
-    } else {
-        panic!("Found something else than a net decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "ax");
-        if let Branch::Nets(net1, net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), "A");
-            assert_eq!(net2.names[0].as_str(), "x");
-        } else {
-            panic!("This should be a branch between two nets")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "ay");
-        if let Branch::Nets(net1, net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), "A");
-            assert_eq!(net2.names[0].as_str(), "y");
-        } else {
-            panic!("This should be a branch between two nets")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "xb");
-        if let Branch::Nets(net1, net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), "x");
-            assert_eq!(net2.names[0].as_str(), "B");
-        } else {
-            panic!("This should be a branch between two nets")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "yb");
-        if let Branch::Nets(net1, net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), "y");
-            assert_eq!(net2.names[0].as_str(), "B");
-        } else {
-            panic!("This should be a branch between two nets")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::BranchDecl(branch) = children.next().unwrap() {
-        let branch = &branch.contents;
-        assert_eq!(branch.name.as_str(), "xy");
-        if let Branch::Nets(net1, net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), "x");
-            assert_eq!(net2.names[0].as_str(), "y");
-        } else {
-            panic!("This should be a branch between two nets")
-        }
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::VariableDecl(variable) = children.next().unwrap() {
-        let variable = &variable.contents;
-        assert_eq!(variable.name.as_str(), "C");
-        assert_eq!(variable.variable_type, VariableType::REAL)
-    } else {
-        panic!("Found something else than a branch decl")
-    }
-    if let ModuleItem::AnalogStmt(analog) = children.next().unwrap() {
-        if let Statement::Block(block) = analog.contents {
-            assert!(block.scope.is_none());
-            let contents = Vec::from(block.statements);
-            let tmp = 2;
-        }
-    } else {
-        panic!("Found something else than an analog_block")
-    }
+
+    let symbol_table = &module.symbol_table;
+    assert_net_decl(symbol_table, &ast, "x", UNDECLARED, "electrical", false);
+    assert_net_decl(symbol_table, &ast, "y", UNDECLARED, "electrical", false);
+    assert_branch_decl(symbol_table, &ast, "ax", "A", "x");
+    assert_branch_decl(symbol_table, &ast, "ay", "A", "y");
+    assert_branch_decl(symbol_table, &ast, "xb", "x", "B");
+    assert_branch_decl(symbol_table, &ast, "yb", "y", "B");
+    assert_branch_decl(symbol_table, &ast, "xy", "x", "y");
+    assert_variable_decl(symbol_table, &ast, "C", REAL);
     Ok(())
 }
 
 /*#[test]
 pub fn contribute() -> Result<(), ()> {
-    let (source_map, res) =
+    let (source_map,mut errors)=
         super::parse(Path::new(&format!("{}contribute.va", PARSE_UNIT_DIRECTORY)))
             .expect("Test File not found");
     let (ast,_) = match res {
@@ -518,7 +358,7 @@ pub fn contribute() -> Result<(), ()> {
 }
 #[test]
 pub fn assignment() -> Result<(), ()> {
-    let (source_map, res) =
+    let (source_map,mut errors)=
         super::parse(Path::new(&format!("{}assignment.va", PARSE_UNIT_DIRECTORY)))
             .expect("Test File not found");
     let (ast,_) = match res {
@@ -539,7 +379,7 @@ pub fn assignment() -> Result<(), ()> {
 }
 #[test]
 pub fn condition() -> Result<(), ()> {
-    let (source_map, res) = super::parse(Path::new(&format!("{}if.va", PARSE_UNIT_DIRECTORY)))
+    let (source_map,mut errors)= super::parse(Path::new(&format!("{}if.va", PARSE_UNIT_DIRECTORY)))
         .expect("Test File not found");
     let (ast,_) = match res {
         Ok(ast) => ast,

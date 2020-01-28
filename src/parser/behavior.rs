@@ -9,8 +9,8 @@
  */
 
 use crate::ast::{
-    AttributeNode, BlockScope, Branch, BranchAccess, Condition, Expression, HierarchicalId, Node,
-    Primary, SeqBlock, Statement, Variable, VariableType,
+    AttributeNode, Attributes, BlockId, BlockScope, Branch, BranchAccess, Condition, Expression,
+    HierarchicalId, Node, Primary, Push, SeqBlock, Statement, VariableType,
 };
 use crate::parser::error::Type::{
     HierarchicalIdNotAllowedAsNature, UnexpectedToken, UnexpectedTokens,
@@ -22,44 +22,25 @@ use crate::symbol::keywords;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
-impl<'lt, 'source_map> Parser<'lt, 'source_map> {
-    pub fn parse_statement(&mut self) -> Result<Node<Statement>> {
+impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+    pub fn parse_statement(&mut self, attributes: Attributes<'ast>) -> Result<Statement<'ast>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::If => {
                 self.lookahead.take();
-                Statement::Condition(self.parse_condition()?)
+                Statement::Condition(self.parse_condition(attributes)?)
             }
             Token::Flow => {
                 self.lookahead.take();
-                self.parse_contribute_statement(Ident::new(keywords::FLOW, span))?
+                self.parse_contribute_statement(attributes, Ident::new(keywords::FLOW, span))?
             }
             Token::Potential => {
                 self.lookahead.take();
-                self.parse_contribute_statement(Ident::new(keywords::POTENTIAL, span))?
+                self.parse_contribute_statement(attributes, Ident::new(keywords::POTENTIAL, span))?
             }
             Token::Begin => {
-                let start = self.preprocessor.current_start();
                 self.lookahead.take();
-                let (block, block_symbol_table) = self.parse_block()?;
-                let block_symbol_table = if let Some(block_symbol_table) = block_symbol_table {
-                    Some((block.scope.unwrap().name, block_symbol_table))
-                } else {
-                    None
-                };
-                self.lookahead.take();
-                let res = self.ast_allocator.alloc(block);
-                if let Some(symbol_table) = block_symbol_table {
-                    self.insert_symbol(
-                        symbol_table.0,
-                        SymbolDeclaration::Block(
-                            res,
-                            symbol_table.1,
-                            self.span_to_current_end(start),
-                        ),
-                    )?;
-                }
-                Statement::Block(res)
+                Statement::Block(self.parse_block(attributes)?)
             }
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
                 let identifier = self.parse_hierarchical_identifier_internal(false)?;
@@ -67,23 +48,19 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                 let res = match token {
                     Token::Assign => {
                         self.lookahead.take();
-                        Statement::Assign(
-                            HierarchicalId {
-                                names: identifier.into_bump_slice(),
-                            },
-                            self.parse_expression()?,
-                        )
+                        Statement::Assign(attributes, identifier.into(), self.parse_expression()?)
                     }
                     Token::ParenOpen => {
                         self.lookahead.take();
                         let (token, _) = self.look_ahead()?;
                         match token {
                             Token::OpLess => self.parse_contribute_statement(
+                                attributes,
                                 Self::convert_to_nature_identifier(identifier)?,
                             )?,
                             Token::ParenClose => {
                                 self.lookahead.take();
-                                Statement::FunctionCall(identifier.into(), &[])
+                                Statement::FunctionCall(attributes, identifier.into(), Vec::new())
                             }
                             _ => {
                                 let mut arg = vec![self.parse_expression()?];
@@ -98,14 +75,16 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                                 if self.look_ahead()?.0 == Token::Contribute {
                                     self.lookahead.take();
                                     Statement::Contribute(
+                                        attributes,
                                         Self::convert_to_nature_identifier(identifier)?,
-                                        convert_function_call_to_branch_access(arg.as_slice())?,
+                                        convert_function_call_to_branch_access(arg)?,
                                         self.parse_expression()?,
                                     )
                                 } else {
                                     Statement::FunctionCall(
+                                        attributes,
                                         identifier.into(),
-                                        self.ast_allocator.alloc_slice_copy(arg.as_slice()),
+                                        arg.into_iter().map(|expr| self.ast.push(expr)).collect(),
                                     )
                                 }
                             }
@@ -136,15 +115,13 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                 })
             }
         };
-        Ok(Node::new(res, self.span_to_current_end(span.get_start())))
+        Ok(res)
     }
 
     /// Helper function that assert that a parsed hierarchical identifier is valid for acessing natures This is usued when it is not clear whether a nature or some other (hieraichal id) is parsed
     /// For example in the case of V(a) <+ a; V(a) the parser doesnt know yet whether its parsing a function call (in which M.V(a) would be valid) or a Branch acess (for which M.V would not be valid)
     /// When we hit the <+ statement this method is called to convert the types and assert that this is not an hierarchical id
-    pub(crate) fn convert_to_nature_identifier(
-        mut hierarchical_id: bumpalo::collections::Vec<Ident>,
-    ) -> Result<Ident> {
+    pub(crate) fn convert_to_nature_identifier(mut hierarchical_id: Vec<Ident>) -> Result<Ident> {
         if hierarchical_id.len() == 1 {
             Ok(hierarchical_id.pop().unwrap())
         } else {
@@ -161,71 +138,86 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         }
     }
 
-    pub fn parse_block(&mut self) -> Result<(SeqBlock, Option<SymbolTable>)> {
-        let (scope, symbol_table) = if self.look_ahead()?.0 == Token::Colon {
+    pub const BLOCK_DEFAULT_STATEMENT_CAPACITY: usize = 64;
+    pub const BLOCK_DEFAULT_SYMTABLE_SIZE: usize = 8;
+    pub fn parse_block(&mut self, attributes: Attributes<'ast>) -> Result<BlockId<'ast>> {
+        let start = self.preprocessor.current_start();
+        let scope = if self.look_ahead()?.0 == Token::Colon {
             self.lookahead.take();
             let name = self.parse_identifier(false)?;
-            self.scope_stack.push(SymbolTable::new());
-            let attributes = self.parse_attributes()?;
-            let mut variables = Vec::new();
-            //TODO parameteres
+            self.scope_stack.push(SymbolTable::with_capacity(
+                Self::BLOCK_DEFAULT_SYMTABLE_SIZE,
+            ));
             loop {
+                let attributes = self.parse_attributes()?;
                 let token = self.look_ahead()?.0;
                 let start = self.preprocessor.current_start();
-                let mut res: Vec<AttributeNode<Variable>> = match token {
+                match token {
                     Token::Integer => {
                         self.lookahead.take();
-                        self.parse_variable_declaration(VariableType::INTEGER)?
+                        self.parse_variable_declaration(VariableType::INTEGER, attributes)?
                     }
                     Token::Real => {
                         self.lookahead.take();
-                        self.parse_variable_declaration(VariableType::REAL)?
+                        self.parse_variable_declaration(VariableType::REAL, attributes)?
                     }
+                    //TODO parameteres
                     _ => break,
-                }
-                .into_iter()
-                .map(|decl| AttributeNode {
-                    source: self.span_to_current_end(start),
-                    attributes,
-                    contents: decl,
-                })
-                .collect();
-                variables.append(&mut res);
+                };
             }
-            (
-                Some(BlockScope {
-                    name,
-                    variables: self.ast_allocator.alloc_slice_copy(variables.as_slice()),
-                }),
-                Some(self.scope_stack.pop().unwrap()),
-            )
+            Some(BlockScope {
+                name,
+                symbols: self.scope_stack.pop().unwrap(),
+            })
         } else {
-            (None, None)
+            None
         };
-        let mut statements = Vec::new();
+        let mut statements = Vec::with_capacity(Self::BLOCK_DEFAULT_STATEMENT_CAPACITY);
         while self.look_ahead()?.0 != Token::End {
-            statements.push(self.parse_statement()?);
+            let attributes = self.parse_attributes()?;
+            let statement = self.parse_statement(attributes)?;
+            statements.push(self.ast.push(statement));
         }
         self.lookahead.take();
-        let statements = self.ast_allocator.alloc_slice_copy(statements.as_slice());
-        let res = SeqBlock { scope, statements };
-        Ok((res, symbol_table))
+        let res = self.ast.push(AttributeNode {
+            attributes,
+            source: self.span_to_current_end(start),
+            contents: SeqBlock { scope, statements },
+        });
+        if let Some(BlockScope { name, .. }) = self.ast[res].contents.scope {
+            self.insert_symbol(name, SymbolDeclaration::Block(res));
+        }
+        Ok(res)
     }
 
-    pub fn parse_contribute_statement(&mut self, nature_acceess: Ident) -> Result<Statement> {
+    pub fn parse_contribute_statement(
+        &mut self,
+        attributes: Attributes<'ast>,
+        nature_acceess: Ident,
+    ) -> Result<Statement<'ast>> {
         let branch = self.parse_branch_access()?;
         self.expect(Token::Contribute)?;
         let expr = self.parse_expression()?;
         self.expect(Token::Semicolon)?;
-        Ok(Statement::Contribute(nature_acceess, branch, expr))
+        Ok(Statement::Contribute(
+            attributes,
+            nature_acceess,
+            branch,
+            expr,
+        ))
     }
-    pub fn parse_condition(&mut self) -> Result<Condition> {
+    pub fn parse_condition(
+        &mut self,
+        attributes: Attributes<'ast>,
+    ) -> Result<AttributeNode<'ast, Condition<'ast>>> {
+        let start = self.preprocessor.current_start();
         self.expect(Token::ParenOpen)?;
         let main_condition = self.parse_expression()?;
         self.expect(Token::ParenClose)?;
-        let main_condition_statement = self.parse_statement()?;
-        let main_condition_statement = self.ast_allocator.alloc_with(|| main_condition_statement);
-        let mut else_if = Vec::new();
+        let statement_attributes = self.parse_attributes()?;
+        let statement = self.parse_statement(statement_attributes)?;
+        let main_condition_statement = self.ast.push(statement);
+        let mut else_ifs = Vec::new();
         let mut else_statement = None;
         loop {
             if self.look_ahead()?.0 != Token::Else {
@@ -233,30 +225,42 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
             }
             if self.look_ahead()?.0 == Token::If {
                 self.lookahead.take();
-                let condition = self.parse_expression()?;
-                let statement = self.parse_statement()?;
-                else_if.push((condition, statement));
+                self.expect(Token::ParenOpen)?;
+                let expression = self.parse_expression()?;
+                let condition = self.ast.push(expression);
+                self.expect(Token::ParenClose)?;
+                let attributes = self.parse_attributes()?;
+                let statement = self.parse_statement(attributes)?;
+                let statement = self.ast.push(statement);
+                else_ifs.push((condition, statement));
             } else {
-                let statement = self.parse_statement()?;
-                else_statement = Some(&*self.ast_allocator.alloc_with(|| statement));
+                let attributes = self.parse_attributes()?;
+                let statement = self.parse_statement(attributes)?;
+                else_statement = Some(self.ast.push(statement));
                 break;
             }
         }
-        Ok(Condition {
-            main_condition,
-            main_condition_statement,
-            else_ifs: self.ast_allocator.alloc_slice_copy(&else_if),
-            else_statement,
+        Ok(AttributeNode {
+            attributes,
+            source: self.span_to_current_end(start),
+            contents: Condition {
+                main_condition,
+                main_condition_statement,
+                else_ifs,
+                else_statement,
+            },
         })
     }
 }
 
-pub fn convert_function_call_to_branch_access(args: &[Node<Expression>]) -> Result<BranchAccess> {
+pub fn convert_function_call_to_branch_access(
+    mut args: Vec<Node<Expression>>,
+) -> Result<BranchAccess> {
     let res = match args.len() {
-        1 => BranchAccess::Explicit(reinterpret_expression_as_identifier(args[0])?),
+        1 => BranchAccess::Explicit(reinterpret_expression_as_identifier(args.pop().unwrap())?),
         2 => {
-            let first_net = reinterpret_expression_as_identifier(args[0])?;
-            let second_net = reinterpret_expression_as_identifier(args[1])?;
+            let second_net = reinterpret_expression_as_identifier(args.pop().unwrap())?;
+            let first_net = reinterpret_expression_as_identifier(args.pop().unwrap())?;
             BranchAccess::Implicit(Branch::Nets(first_net, second_net))
         }
         _ => {

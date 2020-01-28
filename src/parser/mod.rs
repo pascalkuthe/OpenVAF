@@ -10,17 +10,18 @@
 use std::path::Path;
 
 use bumpalo::Bump;
+use copyless::VecHelper;
 
 pub use error::Error;
 pub use error::Result;
 
-use crate::{Preprocessor, SourceMap, Span};
-use crate::ast::{AttributeNode, Attributes, HierarchicalId, TopNode};
+use crate::ast::{Ast, Attributes, CopyRange, HierarchicalId, TopNode};
 use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
 pub(crate) mod preprocessor;
@@ -37,19 +38,21 @@ mod net_declarations;
 mod primaries;
 mod variables;
 
-pub struct Parser<'lt, 'source_map> {
+pub struct Parser<'lt, 'ast, 'astref, 'source_map> {
     pub preprocessor: Preprocessor<'lt, 'source_map>,
-    pub scope_stack: Vec<SymbolTable>,
+    pub scope_stack: Vec<SymbolTable<'ast>>,
     lookahead: Option<Result<(Token, Span)>>,
-    pub ast_allocator: & Bump,
+    pub ast: &'astref mut Ast<'ast>,
+    pub non_critical_errors: Vec<Error>,
 }
-impl<'lt, 'source_map> Parser<'lt, 'source_map> {
-    pub fn new(preprocessor: Preprocessor<'lt, 'source_map>, ast_allocator: & Bump) -> Self {
+impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+    pub fn new(preprocessor: Preprocessor<'lt, 'source_map>, ast: &'astref mut Ast<'ast>) -> Self {
         Self {
             preprocessor,
-            scope_stack: vec![SymbolTable::new()],
+            scope_stack: Vec::with_capacity(32),
             lookahead: None,
-            ast_allocator,
+            ast,
+            non_critical_errors: Vec::with_capacity(32),
         }
     }
     fn next(&mut self) -> Result<(Token, Span)> {
@@ -75,22 +78,15 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         self.lookahead = Some(res.clone());
         res
     }
-    pub fn run(&mut self) -> Result<AstTop> {
-        let mut top_nodes = Vec::new(); //we allocate on the heap and copy into the ast_allocator later because other things might be allocated on the allocator in between causing a temporary leak until the allocator is freed
+    pub fn run(&mut self) -> Result {
         loop {
+            let attributes = self.parse_attributes()?;
             match self.next()? {
                 //TODO multierror
                 (Token::EOF, _) => break,
                 (Token::Module, _) => {
-                    let start = self.preprocessor.current_start();
-                    let attributes = self.parse_attributes()?;
-                    let module = self.parse_module()?;
-                    let source = self.span_to_current_end(start);
-                    top_nodes.push(AttributeNode {
-                        attributes,
-                        source,
-                        contents: TopNode::Module(module),
-                    });
+                    let module = self.parse_module(attributes)?;
+                    self.ast.top_nodes.alloc().init(TopNode::Module(module));
                 }
                 (_, source) => {
                     return Err(Error {
@@ -102,7 +98,7 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                 }
             }
         }
-        Ok(self.ast_allocator.alloc_slice_copy(top_nodes.as_slice()))
+        Ok(())
     }
     pub fn parse_identifier(&mut self, optional: bool) -> Result<Ident> {
         let (token, source) = if optional {
@@ -132,16 +128,11 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     }
     pub fn parse_hierarchical_identifier(&mut self, optional: bool) -> Result<HierarchicalId> {
         Ok(HierarchicalId {
-            names: self
-                .parse_hierarchical_identifier_internal(optional)?
-                .into_bump_slice(),
+            names: self.parse_hierarchical_identifier_internal(optional)?,
         })
     }
-    pub fn parse_hierarchical_identifier_internal(
-        &mut self,
-        optional: bool,
-    ) -> Result<bumpalo::collections::Vec<, Ident>> {
-        let mut identifier = bumpalo::vec![in &self.ast_allocator;self.parse_identifier(optional)?];
+    pub fn parse_hierarchical_identifier_internal(&mut self, optional: bool) -> Result<Vec<Ident>> {
+        let mut identifier = vec![self.parse_identifier(optional)?];
         while self.look_ahead()?.0 == Token::Accessor {
             self.lookahead.take();
             identifier.push(self.parse_identifier(false)?)
@@ -149,11 +140,8 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         Ok(identifier)
     }
     //todo attributes
-    pub fn parse_attributes(&mut self) -> Result<Attributes> {
-        Ok(unsafe {
-            use std::ptr::NonNull;
-            &*(NonNull::<[(); 0]>::dangling() as NonNull<[()]>).as_ptr()
-        }) //Attributes are not yet supported
+    pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
+        Ok(None) //Attributes are not yet supported
     }
     pub fn expect(&mut self, token: Token) -> Result {
         let (found, source) = self.look_ahead()?;
@@ -173,41 +161,57 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         Span::new(start, self.preprocessor.current_end())
     }
     #[inline]
-    pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration) -> Result {
-        let symbol_table = self.scope_stack.last_mut().unwrap();
-        let source = declaration.span();
-        if let Some(old_declaration) = symbol_table.insert(name.name, declaration) {
-            Err(Error {
+    pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration<'ast>) {
+        let source = declaration.span(&self.ast);
+        if let Some(old_declaration) = self.symbol_table_mut().insert(name.name, declaration) {
+            self.non_critical_errors.push(Error {
                 error_type: Type::AlreadyDeclaredInThisScope {
-                    other_declaration: old_declaration.span(),
+                    other_declaration: old_declaration.span(&self.ast),
                     name: name.name,
                 },
                 source,
-            })
-        } else {
-            Ok(())
+            });
         }
     }
+    pub fn symbol_table_mut(&mut self) -> &mut SymbolTable<'ast> {
+        self.scope_stack
+            .last_mut()
+            .unwrap_or(&mut self.ast.top_symbols)
+    }
+    pub fn symbol_table(&mut self) -> &SymbolTable<'ast> {
+        self.scope_stack.last().unwrap_or(&self.ast.top_symbols)
+    }
 }
-pub type AstTop = & [AttributeNode<, TopNode>];
-pub fn parse<'source_map>(
+pub fn parse<'source_map, 'ast, 'astref>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
-    ast_allocator: & Bump,
-) -> std::io::Result<(
-    &'source_map SourceMap<'source_map>,
-    Result<(AstTop, SymbolTable)>,
-)> {
+    ast: &'astref mut Ast<'ast>,
+) -> std::io::Result<(&'source_map SourceMap<'source_map>, Vec<Error>)> {
     let allocator = Bump::new();
     let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;
     let res = preprocessor.process_token();
-    let mut parser = Parser::new(preprocessor, ast_allocator);
+    let mut parser = Parser::new(preprocessor, ast);
     parser.lookahead = Some(Ok((
         parser.preprocessor.current_token(),
         parser.preprocessor.current_span(),
     )));
-    let res = res
-        .and_then(|_| parser.run())
-        .map(|ast| (ast, parser.scope_stack.pop().unwrap()));
-    Ok((parser.preprocessor.skip_rest(), res))
+    let res = res.and_then(|_| parser.run());
+    res.map_err(|err| parser.non_critical_errors.push(err));
+    Ok((parser.preprocessor.skip_rest(), parser.non_critical_errors))
+}
+pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
+    main_file: &Path,
+    source_map_allocator: &'source_map Bump,
+    ast: &'astref mut Ast<'ast>,
+) -> std::result::Result<(), ()> {
+    let (source_map, mut errors) = parse(main_file, source_map_allocator, ast)
+        .expect(&format!("{} not found!", main_file.to_str().unwrap()));
+    if errors.len() > 0 {
+        errors
+            .drain(..)
+            .for_each(|err| err.print(&source_map, true));
+        Err(())
+    } else {
+        Ok(())
+    }
 }

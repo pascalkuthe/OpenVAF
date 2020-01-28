@@ -7,8 +7,12 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+use intrusive_collections::__core::ops::Range;
 
-use crate::ast::{BinaryOperator, BranchAccess, Expression, Node, Primary, UnaryOperator};
+//TODO dangeling Id
+use crate::ast::{
+    BinaryOperator, BranchAccess, Expression, ExpressionId, Node, Primary, Push, UnaryOperator,
+};
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
@@ -16,25 +20,16 @@ use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealL
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
 
-impl<'lt, 'source_map> Parser<'lt, 'source_map> {
-    pub fn parse_expression(&mut self) -> Result<Node<Expression>> {
-        let lhs = self.parse_atom()?;
-        self.precedence_climb_expression(0, lhs)
-    }
-    /// Parses Expressions using a precedance clinbing parser (see
-    /// This enforces very little correctness (this is done at Schemantic Analysis) so a==x**2?y is legal here
-    ///
-    fn precedence_climb_expression(
-        &mut self,
-        min_prec: u8,
-        mut lhs: Node<Expression>,
-    ) -> Result<Node<Expression>> {
+impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+    pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
+        let mut lhs = self.parse_atom()?;
         loop {
             match self.parse_binary_operator() {
-                Ok((op, precedence)) if precedence >= min_prec => {
+                Ok((op, precedence)) => {
                     self.lookahead.take();
                     let op_span = self.preprocessor.current_span();
-                    let mut rhs = self.parse_atom()?;
+                    let rhs = self.parse_atom()?;
+                    let mut rhs = self.ast.push(rhs);
                     loop {
                         match self.parse_binary_operator() {
                             Ok((op, right_prec))
@@ -43,22 +38,65 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                                         || op == BinaryOperator::Either)
                                         && right_prec == precedence) =>
                             {
-                                rhs = self.precedence_climb_expression(precedence, rhs)?
+                                rhs = self.precedence_climb_expression_id(precedence, rhs)?
                             }
                             _ => break,
                         }
                     }
                     let op = Node::new(op, op_span);
-                    let span = lhs.source.extend(rhs.source);
-                    let parsed_lhs = self.ast_allocator.alloc_with(|| lhs);
-                    let parsed_rhs = self.ast_allocator.alloc_with(|| rhs);
-                    lhs = Node::new(Expression::BinaryOperator(parsed_lhs, op, parsed_rhs), span)
+                    let span = lhs.source.extend(self.ast[rhs].source);
+                    lhs = Node::new(
+                        Expression::BinaryOperator(self.ast.push(lhs), op, rhs),
+                        span,
+                    )
                 }
                 _ => return Ok(lhs),
             }
         }
     }
-
+    pub fn parse_expression_id(&mut self) -> Result<ExpressionId<'ast>> {
+        let lhs = self.parse_atom()?;
+        let lhs = self.ast.push(lhs);
+        self.precedence_climb_expression_id(0, lhs)
+    }
+    /// Parses Expressions using a precedance clinbing parser (see
+    /// This enforces very little correctness (this is done at Schemantic Analysis) so a==x**2?y is legal here
+    ///
+    pub(super) fn precedence_climb_expression_id(
+        &mut self,
+        min_prec: u8,
+        mut lhs: ExpressionId<'ast>,
+    ) -> Result<ExpressionId<'ast>> {
+        loop {
+            match self.parse_binary_operator() {
+                Ok((op, precedence)) if precedence >= min_prec => {
+                    self.lookahead.take();
+                    let op_span = self.preprocessor.current_span();
+                    let rhs = self.parse_atom()?;
+                    let mut rhs = self.ast.push(rhs);
+                    loop {
+                        match self.parse_binary_operator() {
+                            Ok((op, right_prec))
+                                if right_prec > precedence
+                                    || ((op == BinaryOperator::Condition
+                                        || op == BinaryOperator::Either)
+                                        && right_prec == precedence) =>
+                            {
+                                rhs = self.precedence_climb_expression_id(precedence, rhs)?
+                            }
+                            _ => break,
+                        }
+                    }
+                    let op = Node::new(op, op_span);
+                    let span = self.ast[lhs].source.extend(self.ast[rhs].source);
+                    lhs = self
+                        .ast
+                        .push(Node::new(Expression::BinaryOperator(lhs, op, rhs), span))
+                }
+                _ => return Ok(lhs),
+            }
+        }
+    }
     fn parse_binary_operator(&mut self) -> Result<(BinaryOperator, u8)> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
@@ -95,23 +133,8 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         };
         Ok(res)
     }
-    /*
-    parse_expression_1(lhs, min_precedence)
-    lookahead := peek next token
-    while lookahead is a binary operator whose precedence is >= min_precedence
-        op := lookahead
-        advance to next token
-        rhs := parse_primary ()
-        lookahead := peek next token
-        while lookahead is a binary operator whose precedence is greater
-                 than op's, or a right-associative operator
-                 whose precedence is equal to op's
-            rhs := parse_expression_1 (rhs, lookahead's precedence)
-            lookahead := peek next token
-        lhs := the result of applying op with operands lhs and rhs
-    return lhs
-    */
-    fn parse_atom(&mut self) -> Result<Node<Expression>> {
+
+    fn parse_atom(&mut self) -> Result<Node<Expression<'ast>>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::Minus => {
@@ -179,12 +202,13 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                         )
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
-                        Primary::FunctionCall(ident.into(), &[])
+                        Primary::FunctionCall(ident.into(), None)
                     } else {
-                        let mut arg = vec![self.parse_expression()?];
+                        let first_arg = self.parse_expression_id()?;
+                        let mut last_arg = first_arg;
                         self.parse_list(
                             |sel| {
-                                arg.push(sel.parse_expression()?);
+                                last_arg = sel.parse_expression_id()?;
                                 Ok(())
                             },
                             Token::ParenClose,
@@ -192,7 +216,10 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                         )?;
                         Primary::FunctionCall(
                             ident.into(),
-                            self.ast_allocator.alloc_slice_copy(arg.as_slice()),
+                            Some(Range {
+                                start: first_arg,
+                                end: last_arg,
+                            }),
                         )
                     }
                 } else {
@@ -230,16 +257,16 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         };
         Ok(res)
     }
-    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression>> {
+    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression<'ast>>> {
         let span = self.look_ahead()?.1;
         self.lookahead.take();
         let unary_op = Node {
             source: span,
             contents: unary_op,
         };
-        let expr = self.parse_expression()?;
-        let span = unary_op.source.extend(unary_op.source);
-        let expr = self.ast_allocator.alloc_with(|| expr);
+        let expr = self.parse_atom()?;
+        let expr = self.ast.push(expr);
+        let span = unary_op.source.extend(self.ast[expr].source);
         Ok(Node::new(Expression::UnaryOperator(unary_op, expr), span))
     }
 }

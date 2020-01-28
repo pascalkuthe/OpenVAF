@@ -6,15 +6,65 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+/*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+    ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+    TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+    PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+    SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+    OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+    IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+*/
+use core::fmt::Debug;
 use core::ops::Index;
+use std::mem::MaybeUninit;
 use std::ops::Range;
+use std::ptr::NonNull;
 
-use compact_arena::{Idx16, TinyArena};
-use intrusive_collections::__core::fmt::Debug;
+use copyless::BoxHelper;
+use intrusive_collections::__core::alloc::Layout;
 
+use crate::compact_arena::{Idx16, Idx8, InvariantLifetime, NanoArena, TinyArena};
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
-use crate::{FrozenBox, Span};
+use crate::Span;
+
+#[macro_export]
+macro_rules! mk_ast {
+    ($name:ident) => {
+        let tag = $crate::compact_arena::invariant_lifetime();
+        let _guard;
+        let mut $name = unsafe {
+            // this is not per-se unsafe but we need it to be public and
+            // calling it with a non-unique `tag` would allow arena mixups,
+            // which may introduce UB in `Index`/`IndexMut`
+            $crate::Ast::new(tag)
+        };
+        // this doesn't make it to MIR, but ensures that borrowck will not
+        // unify the lifetimes of two macro calls by binding the lifetime to
+        // drop scope
+        if false {
+            struct Guard<'tag>(&'tag $crate::compact_arena::InvariantLifetime<'tag>);
+            impl<'tag> ::core::ops::Drop for Guard<'tag> {
+                fn drop(&mut self) {}
+            }
+            _guard = Guard(&tag);
+        }
+    };
+}
 
 //mod visitor;
 
@@ -28,139 +78,197 @@ impl<T: Clone> Node<T> {
         Self { contents, source }
     }
 }
-pub struct Ast {
+
+/// An Ast representing a parser Verilog-AMS project (root file);
+/// It provides stable indicies for every Node because the entire is immutable once created;
+/// It uses preallocated constant size arrays for performance so you should box this as this is a lot of data to put on the stack
+
+//TODO make this into a general proc macro with lifetimes like compact arena
+pub struct Ast<'tag> {
+    //TODO configure to use different arena sizes
     //Declarations
-    //    parameters: Vec<Parameter>,
-    //    nature: Vec<Nature>
-    branches: Vec<AttributeNode<BranchDeclaration>>,
-    nets: Vec<AttributeNode<Net>>,
-    ports: Vec<AttributeNode<Port>>,
-    variables: Vec<AttributeNode<Variable>>,
-    modules: Vec<AttributeNode<Module>>,
-    functions: Vec<AttributeNode<Function>>,
-    disciplines: Vec<AttributeNode<Discipline>>,
+    //    parameters: NanoArena<'tag,Parameter>,
+    //    nature: NanoArena<'tag,Nature>
+    branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
+    nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
+    ports: NanoArena<'tag, AttributeNode<'tag, Port>>,
+    variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
+    modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
+    functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
+    disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
     //Ast Items
-    expressions: Vec<Node<Expression>>,
-    blocks: Vec<SeqBlock>,
-    attributes: Vec<Attribute>,
+    expressions: TinyArena<'tag, Node<Expression<'tag>>>,
+    blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
+    attributes: TinyArena<'tag, Attribute>,
+    statements: TinyArena<'tag, Statement<'tag>>,
+    pub top_nodes: Vec<TopNode<'tag>>, //would prefer this to be stored here instead of somewhere else on the heap but its probably fine for now
+    pub top_symbols: SymbolTable<'tag>,
 }
-impl Ast {
-    //TODO allow configuration; Values currently based on HICUM plus quite a bit of leanyway rounded (up) to powers of two
-    //These values are here to allow preallocation of data for higher performance makes a lot of sense since compact models have less size variations than general purpose programming languages
-    const PARAMETER_DEFAULT_CAPACITY: usize = 128;
-    const NATURE_DEFAULT_CAPACITY: usize = 16;
-    const NETS_DEFAULT_CAPACITY: usize = 32;
-    const BRANCHES_DEFAULT_CAPACITY: usize = 64;
-    const PORTS_DEFAULT_CAPACITY: usize = 32;
-    const VARIABLES_DEFAULT_CAPACITY: usize = 512;
-    const MODULES_DEFAULT_CAPACITY: usize = 8;
-    const FUNCTIONS_DEFAULT_CAPACITY: usize = 16;
-    const DISCIPLINE_DEFAULT_CAPACITY: usize = 16;
-    const EXPRESSION_DEFAULT_CAPACITY: usize = 1024;
-    const BLOCK_DEFAULT_CAPACITY: usize = 32;
-    const ATTRIBUTE_DEFAULT_CAPACITY: usize = 512;
+///this module contains copys of the dfinitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
 
-    pub fn new() -> Self {
-        Self {
-            branches: Vec::with_capacity(Self::BRANCHES_DEFAULT_CAPACITY),
-            nets: Vec::with_capacity(Self::NETS_DEFAULT_CAPACITY),
-            ports: Vec::with_capacity(Self::PORTS_DEFAULT_CAPACITY),
-            variables: Vec::with_capacity(Self::VARIABLES_DEFAULT_CAPACITY),
-            modules: Vec::with_capacity(Self::MODULES_DEFAULT_CAPACITY),
-            functions: Vec::with_capacity(Self::FUNCTIONS_DEFAULT_CAPACITY),
-            disciplines: Vec::with_capacity(Self::DISCIPLINE_DEFAULT_CAPACITY),
-            expressions: Vec::with_capacity(Self::EXPRESSION_DEFAULT_CAPACITY),
-            blocks: Vec::with_capacity(Self::BLOCK_DEFAULT_CAPACITY),
-            attributes: Vec::with_capacity(Self::ATTRIBUTE_DEFAULT_CAPACITY),
-        }
+impl<'tag> Ast<'tag> {
+    /// # Safety
+    /// You should never call this yourself use mk_ast! instead!
+    /// The tag might not be unique to this arena otherwise which would allow using ids from a different arena which is undfined behavior;
+    /// Apart from that this function should be safe all internal unsafe functions calls are there to allow
+    pub unsafe fn new(tag: InvariantLifetime<'tag>) -> Box<Self> {
+        let layout = std::alloc::Layout::new::<Self>();
+        let mut res: NonNull<Ast<'tag>> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
+            .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
+        NanoArena::init(&mut res.as_mut().branches);
+        TinyArena::init(&mut res.as_mut().nets);
+        NanoArena::init(&mut res.as_mut().ports);
+        TinyArena::init(&mut res.as_mut().variables);
+        NanoArena::init(&mut res.as_mut().modules);
+        NanoArena::init(&mut res.as_mut().functions);
+        NanoArena::init(&mut res.as_mut().disciplines);
+        TinyArena::init(&mut res.as_mut().expressions);
+        NanoArena::init(&mut res.as_mut().blocks);
+        TinyArena::init(&mut res.as_mut().attributes);
+        TinyArena::init(&mut res.as_mut().statements);
+        std::ptr::write(&mut res.as_mut().top_nodes, Vec::with_capacity(64));
+        std::ptr::write(
+            &mut res.as_mut().top_symbols,
+            SymbolTable::with_capacity(64),
+        );
+
+        Box::from_raw(res.as_ptr())
     }
 }
+
 macro_rules! impl_id_type {
-    ($name:ident($id_type:ident): $type:ident in $container:ident::$sub_container:ident) => {
-        impl Index<$name> for $container {
+    ($name:ident($index_type:ident): $type:ty; in $container:ident::$sub_container:ident) => {
+        impl<'tag> ::std::ops::Index<$name<'tag>> for $container<'tag> {
             type Output = $type;
-            fn index(&self, index: $name) -> &Self::Output {
-                self.$sub_container[index.0]
+            fn index(&self, index: $name<'tag>) -> &Self::Output {
+                &self.$sub_container[index.0]
             }
         }
-        impl Index<Range<$name>> for $container {
+        impl<'tag> Index<&Range<$name<'tag>>> for $container<'tag> {
             type Output = [$type];
-            fn index(&self, range: Range<$name>) -> &Self::Output {
-                self.$sub_container[range.start.0..range.end.0]
+            fn index(&self, range: &Range<$name<'tag>>) -> &Self::Output {
+                let range = range as *const Range<$name<'tag>>;
+                let range = unsafe { &*(range as *const Range<$index_type<'tag>>) };
+                &self.$sub_container[range]
             }
         }
-        impl Push for $container {
-            type Value = $type;
-            type Key = $name;
-            fn push(& mut self;val: Self::Value) -> &Self::Key {
-                self.$sub_container.push(val);
-                &name(self.$sub_container.len() as $id_type -1)
+        impl<'tag> Index<&Option<Range<$name<'tag>>>> for $container<'tag> {
+            type Output = [$type];
+            fn index(&self, range: &Option<Range<$name<'tag>>>) -> &Self::Output {
+                if let Some(range) = range {
+                    let range = range as *const Range<$name<'tag>>;
+                    let range = unsafe { &*(range as *const Range<$index_type<'tag>>) };
+                    &self.$sub_container[range]
+                } else {
+                    &[]
+                }
             }
+        }
+        impl<'tag> Push<$type> for $container<'tag> {
+            type Key = $name<'tag>;
+            fn push(&mut self, val: $type) -> Self::Key {
+                $name(self.$sub_container.add(val))
+            }
+        }
+    };
+}
+pub trait Push<T> {
+    type Key;
+    fn push(&mut self, value: T) -> Self::Key;
+}
+
+//TODO cfg options for different id sizes/allocs
+
+#[derive(Copy, Clone, PartialOrd, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct BranchId<'tag>(Idx8<'tag>);
+impl_id_type!(BranchId(Idx8): AttributeNode<'tag,BranchDeclaration>; in Ast::branches);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct NetId<'tag>(Idx16<'tag>);
+impl_id_type!(NetId(Idx16): AttributeNode<'tag,Net>; in Ast::nets);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct PortId<'tag>(Idx8<'tag>);
+impl_id_type!(PortId(Idx8): AttributeNode<'tag,Port>; in Ast::ports);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct VariableId<'tag>(Idx16<'tag>);
+impl_id_type!(VariableId(Idx16): AttributeNode<'tag,Variable<'tag>>; in Ast::variables);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct ModuleId<'tag>(Idx8<'tag>);
+impl_id_type!(ModuleId(Idx8): AttributeNode<'tag,Module<'tag>>; in Ast::modules);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct FunctionId<'tag>(Idx8<'tag>);
+impl_id_type!(FunctionId(Idx8): AttributeNode<'tag,Function<'tag>>; in Ast::functions);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct DisciplineId<'tag>(Idx8<'tag>);
+impl_id_type!(DisciplineId(Idx8): AttributeNode<'tag,Discipline>; in Ast::disciplines);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct ExpressionId<'tag>(Idx16<'tag>);
+impl_id_type!(ExpressionId(Idx16): Node<Expression<'tag>>; in Ast::expressions);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct BlockId<'tag>(Idx8<'tag>);
+impl_id_type!(BlockId(Idx8): AttributeNode<'tag,SeqBlock<'tag>>; in Ast::blocks);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct AttributeId<'tag>(Idx16<'tag>);
+impl_id_type!(AttributeId(Idx16): Attribute; in Ast::attributes);
+#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct StatementId<'tag>(Idx16<'tag>);
+impl_id_type!(StatementId(Idx16): Statement<'tag>; in Ast::statements);
+
+pub type Attribute = ();
+#[derive(Copy, Clone, Debug)]
+pub struct CopyRange<T: Copy> {
+    start: T,
+    end: T,
+}
+impl<T: Copy> Into<Range<T>> for CopyRange<T> {
+    fn into(self) -> Range<T> {
+        std::ops::Range {
+            start: self.start,
+            end: self.end,
         }
     }
 }
-pub trait Push {
-    type Value;
-    type Key;
-    fn push(&mut self, key: Self::Value) -> Self::Key;
+impl<T: Copy> From<Range<T>> for CopyRange<T> {
+    fn from(org: Range<T>) -> Self {
+        Self {
+            start: org.start,
+            end: org.end,
+        }
+    }
 }
-
-//TODO cfg options for different id sizes
-
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct BranchId(u8);
-impl_id_type!(BranchId(u8): AttributeNode<Branch> in Ast::branches);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct NetId(u8);
-impl_id_type!(NetId(u8): AttributeNode<Net> in Ast::nets);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct PortId(u8);
-impl_id_type!(PortId(u8): AttributeNode<Port> in Ast::ports);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct VariableId(u16);
-impl_id_type!(VariableId(u16): AttributeNode<Variable> in Ast::variables);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct ModuleId(u8);
-impl_id_type!(ModuleId(u8): AttributeNode<Module> in Ast::modules);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct FunctionId(u8);
-impl_id_type!(FunctionId(u8): AttributeNode<Function> in Ast::functions);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct DisciplineId(u8);
-impl_id_type!(DisciplineId(u8): AttributeNode<Discipline> in Ast::disciplines);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct ExpressionId(u16);
-impl_id_type!(ExpressionId(u16): Node<Expression> in Ast::expressions);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct BlockId(u8);
-impl_id_type!(BlockId(u8): SeqBlock in Ast::blocks);
-#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct AttributeId(u16);
-impl_id_type!(AttributeId(u16): Attribute in Ast::attributes);
-
-pub type AstPtr<T> = FrozenBox<T>;
-pub type Attribute = ();
-#[derive(Clone, Copy, Debug)]
-pub struct AttributeNode<T: Clone> {
-    pub attributes: Range<AttributeId>,
+pub type Attributes<'ast> = Option<CopyRange<AttributeId<'ast>>>;
+#[derive(Clone, Copy)]
+pub struct AttributeNode<'ast, T: Clone> {
+    pub attributes: Attributes<'ast>,
     pub source: Span,
     pub contents: T,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum TopNode {
-    Module(Module),
-    Nature,
+#[derive(Clone)]
+pub enum TopNode<'tag> {
+    Module(ModuleId<'tag>),
+    Nature(),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Module {
+#[derive(Clone)]
+pub struct Module<'ast> {
     pub name: Ident,
-    pub port_list: Range<PortId>,
-    pub symbol_table: SymbolTable,
-    pub children: Vec<ModuleItem>,
+    pub port_list: Option<Range<PortId<'ast>>>,
+    //    pub parameter_list: Option<Range<ParameterId<'ast>>>
+    pub symbol_table: SymbolTable<'ast>,
+    pub children: Vec<ModuleItem<'ast>>,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Port {
     pub name: Ident,
     pub input: bool,
@@ -183,35 +291,32 @@ impl Default for Port {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct BranchDeclaration {
     pub name: Ident,
     pub branch: Branch,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub enum Branch {
-    Port(PortId),
-    Nets(NetId, NetId),
+    Port(HierarchicalId),
+    Nets(HierarchicalId, HierarchicalId),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ModuleItem {
-    AnalogStmt(Statement),
-    BranchDecl(BranchId),
-    NetDecl(NetId),
-    VariableDecl(VariableId),
-    //ParameterDecl,
+#[derive(Clone, Copy)]
+pub enum ModuleItem<'ast> {
+    AnalogStmt(StatementId<'ast>),
+    GenerateStatement, //TODO
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Discipline {
     pub name: Ident,
 }
-#[derive(Clone, Copy, Debug)]
-pub struct Function {
+#[derive(Clone)]
+pub struct Function<'ast> {
     pub name: Ident,
     pub args: Vec<Ident>,
-    pub body: Statement,
+    pub body: Statement<'ast>,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct Net {
@@ -220,11 +325,11 @@ pub struct Net {
     pub signed: bool,
     pub net_type: NetType,
 }
-#[derive(Debug, Clone, Copy)]
-pub struct Variable {
+#[derive(Clone, Copy)]
+pub struct Variable<'ast> {
     pub name: Ident,
     pub variable_type: VariableType,
-    pub default_value: Option<ExpressionId>,
+    pub default_value: Option<ExpressionId<'ast>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -245,55 +350,59 @@ pub enum NetType {
     WOR,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Statement {
-    Block(BlockId),
-    Condition(Condition),
-    Contribute(Ident, BranchAccess, Node<Expression>),
+#[derive(Clone)]
+pub enum Statement<'ast> {
+    Block(BlockId<'ast>),
+    Condition(AttributeNode<'ast, Condition<'ast>>),
+    Contribute(
+        Attributes<'ast>,
+        Ident,
+        BranchAccess,
+        Node<Expression<'ast>>,
+    ),
     //  TODO IndirectContribute(),
-    Assign(HierarchicalId, Node<Expression>),
-    FunctionCall(HierarchicalId, Vec<ExpressionId>),
+    Assign(Attributes<'ast>, HierarchicalId, Node<Expression<'ast>>),
+    FunctionCall(Attributes<'ast>, HierarchicalId, Vec<ExpressionId<'ast>>),
 }
-#[derive(Clone, Copy, Debug)]
-pub struct SeqBlock {
-    pub scope: Option<BlockScope>,
-    pub statements: Vec<Statement>, //TODO statement id
-                                    //    parameters:Parameters, TODO parameters
+#[derive(Clone)]
+pub struct SeqBlock<'ast> {
+    pub scope: Option<BlockScope<'ast>>,
+    pub statements: Vec<StatementId<'ast>>,
 }
-#[derive(Clone, Copy, Debug)]
-pub struct BlockScope {
+#[derive(Clone)]
+pub struct BlockScope<'ast> {
     pub name: Ident,
-    pub symbols: SymbolTable,
+    pub symbols: SymbolTable<'ast>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Condition {
-    pub main_condition: Node<Expression>,
-    pub main_condition_statement: Node<Statement>,
-    pub else_ifs: Vec<(ExpressionId, Node<Statement>)>, //TODO statement id
-    pub else_statement: Option<Node<Statement>>,
+#[derive(Clone)]
+pub struct Condition<'ast> {
+    pub main_condition: Node<Expression<'ast>>,
+    pub main_condition_statement: StatementId<'ast>,
+    pub else_ifs: Vec<(ExpressionId<'ast>, StatementId<'ast>)>, //TODO statement id
+    pub else_statement: Option<StatementId<'ast>>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Expression {
-    BinaryOperator(ExpressionId, Node<BinaryOperator>, ExpressionId),
-    UnaryOperator(Node<UnaryOperator>, ExpressionId),
-    Primary(Primary),
+#[derive(Clone)]
+pub enum Expression<'ast> {
+    BinaryOperator(ExpressionId<'ast>, Node<BinaryOperator>, ExpressionId<'ast>),
+    UnaryOperator(Node<UnaryOperator>, ExpressionId<'ast>),
+    Primary(Primary<'ast>),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub enum BranchAccess {
     Explicit(HierarchicalId),
     Implicit(Branch),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Primary {
+#[derive(Clone)]
+pub enum Primary<'ast> {
     Integer(i64),
     UnsignedInteger(u32),
     Real(f64),
     VariableOrNetReference(HierarchicalId),
-    FunctionCall(HierarchicalId, ExpressionId),
+    FunctionCall(HierarchicalId, Option<Range<ExpressionId<'ast>>>),
     BranchAccess(Ident, BranchAccess),
 }
 
@@ -341,7 +450,12 @@ pub enum VariableType {
     REAL,
     REALTIME,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct HierarchicalId {
     pub names: Vec<Ident>,
+}
+impl From<Vec<Ident>> for HierarchicalId {
+    fn from(raw: Vec<Ident>) -> Self {
+        Self { names: raw }
+    }
 }

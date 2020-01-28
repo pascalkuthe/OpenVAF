@@ -10,6 +10,16 @@
 
  Adapted from https://github.com/rust-lang/rust src/librustc/symbol.rs under MIT-License
 
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
     ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
     TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
@@ -82,6 +92,7 @@ impl PartialEq for Ident {
         self.name == rhs.name
     }
 }
+impl Eq for Ident {}
 
 impl Hash for Ident {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -98,16 +109,11 @@ impl fmt::Display for Ident {
 /// An interned string.
 ///
 /// Internally, a `Symbol` is implemented as an index, and all operations
-/// (including hashing, equality, and ordering) operate on that index. The use
-/// of `rustc_index::newtype_index!` means that `Option<Symbol>` only takes up 4 bytes,
-/// because `rustc_index::newtype_index!` reserves the last 256 values for tagging purposes.
-///
-/// Note that `Symbol` cannot directly be a `rustc_index::newtype_index!` because it
-/// implements `fmt::Debug`, `Encodable`, and `Decodable` in special ways.
+/// (including hashing, equality, and ordering) operate on that index.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol(SymbolIndex);
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 struct SymbolIndex(u32);
 impl SymbolIndex {
     pub fn as_usize(self) -> usize {
@@ -152,7 +158,8 @@ impl Symbol {
 
 impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.with(|str| fmt::Debug::fmt(&str, f))
+        self.with(|str| fmt::Debug::fmt(&str, f))?;
+        fmt::Debug::fmt(&self.0, f)
     }
 }
 
@@ -203,7 +210,7 @@ impl Interner {
 pub mod keywords {
     use crate::symbol::{Symbol, SymbolIndex};
 
-    pub(super) static EMPTY_SYMBOL_STR: &str = ".EMPTY";
+    pub(super) static EMPTY_SYMBOL_STR: &str = " ";
     pub const EMPTY_SYMBOL: Symbol = Symbol(SymbolIndex(0));
 
     pub(super) static FLOW_STR: &str = "flow";

@@ -8,49 +8,61 @@
  * *****************************************************************************************
  */
 
-use crate::ast::{Expression, Node, Variable, VariableType};
+use crate::ast::{AttributeNode, Attributes, ExpressionId, Push, Variable, VariableType};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::parser::Result;
 use crate::symbol::Ident;
+use crate::symbol_table::SymbolDeclaration;
 
-impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub fn parse_variable_declaration(
         &mut self,
         variable_type: VariableType,
-    ) -> Result<Vec<Variable>> {
+        attributes: Attributes<'ast>,
+    ) -> Result {
+        let start = self.preprocessor.current_start();
         let (name, default_value) = self.parse_single_declaration_with_opt_default_value()?;
-
-        let mut res = vec![Variable {
-            name,
-            default_value,
-            variable_type,
-        }];
+        let variable = self.ast.push(AttributeNode {
+            attributes,
+            source: self.span_to_current_end(start),
+            contents: Variable {
+                name,
+                variable_type,
+                default_value,
+            },
+        });
+        self.insert_symbol(name, SymbolDeclaration::Variable(variable));
 
         self.parse_list(
             |sel| {
                 let (name, default_value) =
                     sel.parse_single_declaration_with_opt_default_value()?;
-                res.push(Variable {
-                    name,
-                    default_value,
-                    variable_type,
+                let variable = sel.ast.push(AttributeNode {
+                    attributes,
+                    source: sel.span_to_current_end(start),
+                    contents: Variable {
+                        name,
+                        variable_type,
+                        default_value,
+                    },
                 });
+                sel.insert_symbol(name, SymbolDeclaration::Variable(variable));
                 Ok(())
             },
             Token::Semicolon,
             true,
         )?;
-        Ok(res)
+        Ok(())
     }
 
     fn parse_single_declaration_with_opt_default_value(
         &mut self,
-    ) -> Result<(Ident, Option<&Node<Expression>>)> {
+    ) -> Result<(Ident, Option<ExpressionId<'ast>>)> {
         let name = self.parse_identifier(false)?;
         let default_value = if self.look_ahead()?.0 == Token::Assign {
             self.lookahead.take();
-            Some(&*self.ast_allocator.alloc(self.parse_expression()?))
+            Some(self.parse_expression_id()?)
         } else {
             None
         };

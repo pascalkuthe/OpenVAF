@@ -17,16 +17,21 @@ extern crate intrusive_collections;
 extern crate lazy_static;
 extern crate std;
 
+#[macro_use]
+pub use ast::Ast;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
 pub use ptr::FrozenBox;
 pub use span::Span;
 
+#[macro_use]
+pub mod compact_arena;
 pub mod symbol;
 
 #[macro_use]
 mod util;
+#[macro_use]
 mod ast;
 mod error;
 pub mod parser;

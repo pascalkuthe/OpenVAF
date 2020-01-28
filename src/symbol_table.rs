@@ -1,35 +1,35 @@
-use std::collections::HashMap;
+use ahash::AHashMap as HashMap;
 
-use crate::Span;
 use crate::symbol::Symbol;
+use crate::Span;
 
 use super::ast::*;
 
-pub type SymbolTable = HashMap<Symbol, SymbolDeclaration>; //Todo avoid copy
-#[derive(Debug, Clone)]
-pub enum SymbolDeclaration {
-    Module(& Module, SymbolTable, Span),
-    Block(& SeqBlock, SymbolTable, Span),
-    Variable(& AttributeNode<, Variable>),
-    Branch(& AttributeNode<, BranchDeclaration>),
-    Net(& AttributeNode<, Net>),
-    Port(& AttributeNode<, Port>),
-    Function(& AttributeNode<, Function>),
-    Discipline(& AttributeNode<, Discipline>),
-    Nature(& AttributeNode<, Discipline>),
+pub type SymbolTable<'ast> = HashMap<Symbol, SymbolDeclaration<'ast>>;
+#[derive(Clone)]
+pub enum SymbolDeclaration<'ast> {
+    Module(ModuleId<'ast>),
+    Block(BlockId<'ast>),
+    Variable(VariableId<'ast>),
+    Branch(BranchId<'ast>),
+    Net(NetId<'ast>),
+    Port(PortId<'ast>),
+    Function(FunctionId<'ast>),
+    Discipline(DisciplineId<'ast>),
+    Nature,
 }
-impl SymbolDeclaration {
-    pub fn span(&self) -> Span {
+impl<'ast> SymbolDeclaration<'ast> {
+    pub fn span(&self, ast: &Ast<'ast>) -> Span {
         match self {
-            Self::Module(_, _, span)
-            | Self::Block(_, _, span)
-            | Self::Variable(AttributeNode { source: span, .. })
-            | Self::Net(AttributeNode { source: span, .. })
-            | Self::Branch(AttributeNode { source: span, .. })
-            | Self::Port(AttributeNode { source: span, .. })
-            | Self::Function(AttributeNode { source: span, .. })
-            | Self::Discipline(AttributeNode { source: span, .. })
-            | Self::Nature(AttributeNode { source: span, .. }) => *span,
+            Self::Module(id) => ast[*id].source,
+            Self::Block(id) => ast[*id].source,
+            Self::Variable(id) => ast[*id].source,
+            Self::Net(id) => ast[*id].source,
+            Self::Branch(id) => ast[*id].source,
+            Self::Port(id) => ast[*id].source,
+            Self::Function(id) => ast[*id].source,
+            Self::Discipline(id) => ast[*id].source,
+            Self::Nature => unimplemented!(), //ast[id].source,
         }
     }
 }

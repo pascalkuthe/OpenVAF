@@ -16,7 +16,6 @@ use bumpalo::Bump;
 use intrusive_collections::__core::cell::Cell;
 use intrusive_collections::rbtree::CursorMut;
 use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
-use logos::Slice;
 
 use crate::span::{Index, LineNumber};
 use crate::{Lexer, Span};
@@ -87,7 +86,6 @@ impl<'source_map> SourceMap<'source_map> {
         let end = self.expanded_source[span.get_end() as usize..]
             .find('\n')
             .unwrap_or(expansion_end);
-        let tmp = 2;
         let range = Range {
             start: span.get_start() - start as Index,
             end: span.get_end() - start as Index,
@@ -294,14 +292,12 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     }
 
     pub fn done(self) -> &'source_map SourceMap<'source_map> {
-        unsafe {
-            let res = &mut *self.source_map.as_ptr();
-            let mut string = bumpalo::collections::String::new_in(self.source_map_allocator);
-            string.push_str(self.expansion.as_str());
-            string.push_str(&self.root_file_contents[self.get_current_root_offset()..]);
-            res.expanded_source = string.into_bump_str();
-            &*res
-        }
+        let mut string = bumpalo::collections::String::new_in(self.source_map_allocator);
+        string.push_str(self.expansion.as_str());
+        string.push_str(&self.root_file_contents[self.get_current_root_offset()..]);
+        let res = unsafe { &mut *self.source_map.as_ptr() }; //this is save since we know that the source_map will outlive the builder since its allocated in the arena which is guaranteed to live for 'sorcemap (its only a pointer so we can have a mutable reference to it in the form of cursor while remebering its location in the arena which wont be used past this point)
+        res.expanded_source = string.into_bump_str();
+        &*res
     }
     fn get_current_root_offset(&self) -> usize {
         self.cursor
@@ -370,7 +366,6 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     }
 
     const EMPTY_STACK: &'static str = "SourceBuilder: Substitution stack is empty";
-    const NO_ROOT_SUBSTITUTION: &'static str = "SourceBuilder: Empty substitution";
     pub(super) fn finish_substitution(&mut self) -> Index {
         let SourceMapBuilderState { source, offset } =
             self.substitution_stack.pop().expect(Self::EMPTY_STACK);

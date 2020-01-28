@@ -7,32 +7,54 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::ast::{Branch, BranchAccess, BranchDeclaration};
+use crate::ast::{AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration, Push};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
+use crate::symbol_table::SymbolDeclaration;
 
-impl<'lt, 'source_map> Parser<'lt, 'source_map> {
-    pub fn parse_branch_declaration(&mut self) -> Result<Vec<BranchDeclaration>> {
+impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+    pub fn parse_branch_declaration(&mut self, attributes: Attributes<'ast>) -> Result {
+        let start = self.preprocessor.current_start();
         self.expect(Token::ParenOpen)?;
         let branch = self.parse_branch()?;
         self.expect(Token::ParenClose)?;
-        let mut res = vec![BranchDeclaration {
-            name: self.parse_identifier(false)?,
-            branch,
-        }];
+        let name = self.parse_identifier(false)?;
+        let source = self.span_to_current_end(start);
+        let branch_decl = self.ast.push(AttributeNode {
+            attributes,
+            contents: BranchDeclaration {
+                name,
+                branch: branch.clone(),
+            },
+            source,
+        });
+        self.insert_symbol(
+            self.ast[branch_decl].contents.name,
+            SymbolDeclaration::Branch(branch_decl),
+        );
         self.parse_list(
             |sel: &mut Self| {
-                res.push(BranchDeclaration {
-                    name: sel.parse_identifier(false)?,
-                    branch,
+                let name = sel.parse_identifier(false)?;
+                let source = sel.span_to_current_end(start);
+                let branch_decl = sel.ast.push(AttributeNode {
+                    attributes,
+                    contents: BranchDeclaration {
+                        name,
+                        branch: branch.clone(),
+                    },
+                    source,
                 });
+                sel.insert_symbol(
+                    sel.ast[branch_decl].contents.name,
+                    SymbolDeclaration::Branch(branch_decl),
+                );
                 Ok(())
             },
             Token::Semicolon,
             true,
         )?;
-        Ok(res)
+        Ok(())
     }
     pub fn parse_branch(&mut self) -> Result<Branch> {
         if self.look_ahead()?.0 == Token::OpLess {

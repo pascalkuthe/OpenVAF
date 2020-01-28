@@ -39,7 +39,15 @@ impl From<Error> for MultiError {
 
 #[derive(Debug, Clone)]
 pub enum Type {
+    //Parser
     PortRedeclaration(Span, Span),
+    HierarchicalIdNotAllowedAsNature {
+        hierarchical_id: Vec<Ident>,
+    },
+    PortNotPreDeclaredInModuleHead {
+        port_list: Span,
+    },
+    PortPreDeclaredNotDefined,
     EmptyListEntry(List),
 
     //Preprocessor
@@ -68,9 +76,6 @@ pub enum Type {
     },
     UnexpectedTokens {
         expected: Vec<Expected>,
-    },
-    HierarchicalIdNotAllowedAsNature {
-        hierarchical_id: Vec<Ident>,
     },
     Unsupported(Unsupported),
 }
@@ -108,7 +113,7 @@ pub enum List {
 }
 impl Error {
     pub fn print(&self, source_map: &SourceMap, translate_lines: bool) {
-        let (line, mut line_number, substitution_name, range) =
+        let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
             (substitution_name,vec![Annotation{

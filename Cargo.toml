@@ -11,7 +11,7 @@ logos = "0.10.0-rc2"
 indexmap = "1.3.1"
 ahash = "0.3.1"
 lazy_static = "1.4.0"
-compact_arena = "0.4.0"
+copyless = "0.1.4"
 
 
 
@@ -29,6 +29,13 @@ features=['collections']
 
 #Logging for tests
 [dev-dependencies]
+criterion = "0.3.1"
 fern={version="*",features=["colored"]}
 chrono="*"
 jemallocator-global = "0.3.2"
+[profile.dev]
+opt-level = 1
+
+[[bench]]
+name = "parser_bench"
+harness = false

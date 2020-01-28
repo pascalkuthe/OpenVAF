@@ -331,8 +331,8 @@ fn ignore_comments<'source, Src: Source<'source>>(lex: &mut logos::Lexer<Token, 
                     lex.bump(1);
                     break;
                 }
-                Some(tmp) => lex.bump(1),
                 None => break,
+                _ => lex.bump(1),
             }
         }
         lex.token = Token::Newline
@@ -364,7 +364,6 @@ impl<'lt> Lexer<'lt> {
         if self.internal.extras.0 > 0 {
             debug_assert_eq!(self.internal.token, Token::Newline);
             self.internal.extras.0 -= 1;
-            return;
         } else {
             self.internal.advance();
         }
