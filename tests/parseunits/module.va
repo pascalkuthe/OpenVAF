@@ -15,7 +15,6 @@ module test2 (a,b,c,d,e,f,g);
     input signed b;
     inout wire c;
     inout electrical d;
-    inout electrical p;
     output electrical e,f;
     inout electrical wire signed g;
 endmodule
