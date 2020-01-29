@@ -28,14 +28,13 @@
     IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
     DEALINGS IN THE SOFTWARE.
 */
+
 use core::fmt::Debug;
 use core::ops::Index;
-use std::mem::MaybeUninit;
 use std::ops::Range;
 use std::ptr::NonNull;
 
-use copyless::BoxHelper;
-use intrusive_collections::__core::alloc::Layout;
+pub use visitor::Visitor;
 
 use crate::compact_arena::{Idx16, Idx8, InvariantLifetime, NanoArena, TinyArena};
 use crate::symbol::Ident;
@@ -66,7 +65,7 @@ macro_rules! mk_ast {
     };
 }
 
-//mod visitor;
+mod visitor;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Node<T: Clone> {
@@ -111,8 +110,10 @@ impl<'tag> Ast<'tag> {
     /// You should never call this yourself use mk_ast! instead!
     /// The tag might not be unique to this arena otherwise which would allow using ids from a different arena which is undfined behavior;
     /// Apart from that this function should be safe all internal unsafe functions calls are there to allow
-    pub unsafe fn new(tag: InvariantLifetime<'tag>) -> Box<Self> {
+    pub unsafe fn new(_tag: InvariantLifetime<'tag>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
+        #[allow(clippy::cast_ptr_alignment)]
+        //the ptr cast below has the right alignment since we are allocation using the right layout
         let mut res: NonNull<Ast<'tag>> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
         NanoArena::init(&mut res.as_mut().branches);

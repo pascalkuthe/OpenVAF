@@ -27,6 +27,7 @@ pub use span::Span;
 
 #[macro_use]
 pub mod compact_arena;
+mod schemantic;
 pub mod symbol;
 
 #[macro_use]

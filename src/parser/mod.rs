@@ -15,7 +15,7 @@ use copyless::VecHelper;
 pub use error::Error;
 pub use error::Result;
 
-use crate::ast::{Ast, Attributes, CopyRange, HierarchicalId, TopNode};
+use crate::ast::{Ast, Attributes, HierarchicalId, TopNode};
 use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
@@ -204,14 +204,20 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
     source_map_allocator: &'source_map Bump,
     ast: &'astref mut Ast<'ast>,
 ) -> std::result::Result<(), ()> {
-    let (source_map, mut errors) = parse(main_file, source_map_allocator, ast)
-        .expect(&format!("{} not found!", main_file.to_str().unwrap()));
-    if errors.len() > 0 {
+    let (source_map, mut errors) =
+        parse(main_file, source_map_allocator, ast).unwrap_or_else(|e| {
+            panic!(
+                "Error while opening {}: {}!",
+                main_file.to_str().unwrap(),
+                e
+            )
+        });
+    if errors.is_empty() {
+        Ok(())
+    } else {
         errors
             .drain(..)
             .for_each(|err| err.print(&source_map, true));
         Err(())
-    } else {
-        Ok(())
     }
 }

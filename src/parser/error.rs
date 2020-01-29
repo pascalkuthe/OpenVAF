@@ -19,23 +19,6 @@ use crate::{SourceMap, Span};
 pub type Error = crate::error::Error<Type>;
 pub(crate) type Warning = crate::error::Error<WarningType>;
 pub type Result<T = ()> = std::result::Result<T, Error>;
-pub type MultiResult<T = ()> = std::result::Result<T, MultiError>;
-pub struct MultiError(pub Vec<Error>);
-
-impl MultiError {
-    pub fn merge(mut self, mut other: Self) -> Self {
-        self.0.append(&mut other.0);
-        self
-    }
-    pub fn add(&mut self, err: Error) {
-        self.0.push(err)
-    }
-}
-impl From<Error> for MultiError {
-    fn from(err: Error) -> Self {
-        MultiError(vec![err])
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -262,6 +245,32 @@ impl Error {
                             fold: false,
                         },
                     ],
+                }
+            }
+
+            Type::PortPreDeclaredNotDefined => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(
+                            "Port was pre declared in module head but not defined in module body"
+                                .to_string(),
+                        ),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Declared here".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
                 }
             }
             _ => unimplemented!("{:?}", self.error_type),

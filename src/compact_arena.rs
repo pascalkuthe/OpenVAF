@@ -205,6 +205,7 @@ impl<T> Error for CapacityExceeded<T> {
 ///
 /// You can obtain an instance of this type by calling `mk_arena`.
 pub struct SmallArena<'tag, T> {
+    #[allow(dead_code)]
     tag: InvariantLifetime<'tag>,
     // TODO: Use a custom structure, forbid resizing over 2G items
     data: Vec<T>,
@@ -424,7 +425,7 @@ impl<'tag, T> TinyArena<'tag, T> {
         }
     }
     pub unsafe fn init(ptr: *mut Self) {
-        ptr::write(&mut (&mut *ptr).len, 0);
+        ptr::write(&mut (*ptr).len, 0);
     }
 
     /// Add an item to the arena, get an index or CapacityExceeded back.
@@ -486,7 +487,7 @@ impl<'tag, T> NanoArena<'tag, T> {
         }
     }
     pub unsafe fn init(ptr: *mut Self) {
-        ptr::write(&mut (&mut *ptr).len, 0);
+        ptr::write(&mut (*ptr).len, 0);
     }
 
     /// Add an item to the arena, get an index or CapacityExceeded back.

@@ -151,7 +151,6 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             loop {
                 let attributes = self.parse_attributes()?;
                 let token = self.look_ahead()?.0;
-                let start = self.preprocessor.current_start();
                 match token {
                     Token::Integer => {
                         self.lookahead.take();

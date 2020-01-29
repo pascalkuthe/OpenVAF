@@ -14,7 +14,7 @@ use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{AttributeNode, Attributes, Module, ModuleId, ModuleItem, Push};
 use crate::error::Error;
 use crate::parser::error;
-use crate::parser::error::{Expected, Result};
+use crate::parser::error::{Expected, Result, Type};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol::Ident;
@@ -107,6 +107,14 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                         module_items.push(module_item);
                     }
                 }
+            }
+        }
+        if let Some(expected_ports) = expected_ports {
+            for port in expected_ports {
+                self.non_critical_errors.push(Error {
+                    error_type: Type::PortPreDeclaredNotDefined,
+                    source: port.span,
+                })
             }
         }
         let module = self.ast.push(AttributeNode {

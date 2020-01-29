@@ -6,7 +6,7 @@ use crate::Span;
 use super::ast::*;
 
 pub type SymbolTable<'ast> = HashMap<Symbol, SymbolDeclaration<'ast>>;
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum SymbolDeclaration<'ast> {
     Module(ModuleId<'ast>),
     Block(BlockId<'ast>),
