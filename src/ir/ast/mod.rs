@@ -37,6 +37,7 @@ use std::ptr::NonNull;
 pub use visitor::Visitor;
 
 use crate::compact_arena::{Idx16, Idx8, InvariantLifetime, NanoArena, TinyArena};
+use crate::ir::{AttributeId, BlockId, ExpressionId, ModuleId, PortId, StatementId};
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
 use crate::Span;
@@ -88,18 +89,18 @@ pub struct Ast<'tag> {
     //Declarations
     //    parameters: NanoArena<'tag,Parameter>,
     //    nature: NanoArena<'tag,Nature>
-    branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
-    nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
-    ports: NanoArena<'tag, AttributeNode<'tag, Port>>,
-    variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
-    modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
-    functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
-    disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
+    pub(super) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
+    pub(super) nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
+    pub(super) ports: NanoArena<'tag, AttributeNode<'tag, Port>>,
+    pub(super) variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
+    pub(super) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
+    pub(super) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
+    pub(super) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
     //Ast Items
-    expressions: TinyArena<'tag, Node<Expression<'tag>>>,
-    blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
-    attributes: TinyArena<'tag, Attribute>,
-    statements: TinyArena<'tag, Statement<'tag>>,
+    pub(super) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
+    pub(super) blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
+    pub(super) attributes: TinyArena<'tag, Attribute>,
+    pub(super) statements: TinyArena<'tag, Statement<'tag>>,
     pub top_nodes: Vec<TopNode<'tag>>, //would prefer this to be stored here instead of somewhere else on the heap but its probably fine for now
     pub top_symbols: SymbolTable<'tag>,
 }
@@ -137,93 +138,18 @@ impl<'tag> Ast<'tag> {
     }
 }
 
-macro_rules! impl_id_type {
-    ($name:ident($index_type:ident): $type:ty; in $container:ident::$sub_container:ident) => {
-        impl<'tag> ::std::ops::Index<$name<'tag>> for $container<'tag> {
-            type Output = $type;
-            fn index(&self, index: $name<'tag>) -> &Self::Output {
-                &self.$sub_container[index.0]
-            }
-        }
-        impl<'tag> Index<&Range<$name<'tag>>> for $container<'tag> {
-            type Output = [$type];
-            fn index(&self, range: &Range<$name<'tag>>) -> &Self::Output {
-                let range = range as *const Range<$name<'tag>>;
-                let range = unsafe { &*(range as *const Range<$index_type<'tag>>) };
-                &self.$sub_container[range]
-            }
-        }
-        impl<'tag> Index<&Option<Range<$name<'tag>>>> for $container<'tag> {
-            type Output = [$type];
-            fn index(&self, range: &Option<Range<$name<'tag>>>) -> &Self::Output {
-                if let Some(range) = range {
-                    let range = range as *const Range<$name<'tag>>;
-                    let range = unsafe { &*(range as *const Range<$index_type<'tag>>) };
-                    &self.$sub_container[range]
-                } else {
-                    &[]
-                }
-            }
-        }
-        impl<'tag> Push<$type> for $container<'tag> {
-            type Key = $name<'tag>;
-            fn push(&mut self, val: $type) -> Self::Key {
-                $name(self.$sub_container.add(val))
-            }
-        }
-    };
-}
-pub trait Push<T> {
-    type Key;
-    fn push(&mut self, value: T) -> Self::Key;
-}
-
 //TODO cfg options for different id sizes/allocs
-
-#[derive(Copy, Clone, PartialOrd, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct BranchId<'tag>(Idx8<'tag>);
 impl_id_type!(BranchId(Idx8): AttributeNode<'tag,BranchDeclaration>; in Ast::branches);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct NetId<'tag>(Idx16<'tag>);
 impl_id_type!(NetId(Idx16): AttributeNode<'tag,Net>; in Ast::nets);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct PortId<'tag>(Idx8<'tag>);
 impl_id_type!(PortId(Idx8): AttributeNode<'tag,Port>; in Ast::ports);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct VariableId<'tag>(Idx16<'tag>);
 impl_id_type!(VariableId(Idx16): AttributeNode<'tag,Variable<'tag>>; in Ast::variables);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct ModuleId<'tag>(Idx8<'tag>);
 impl_id_type!(ModuleId(Idx8): AttributeNode<'tag,Module<'tag>>; in Ast::modules);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct FunctionId<'tag>(Idx8<'tag>);
 impl_id_type!(FunctionId(Idx8): AttributeNode<'tag,Function<'tag>>; in Ast::functions);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct DisciplineId<'tag>(Idx8<'tag>);
 impl_id_type!(DisciplineId(Idx8): AttributeNode<'tag,Discipline>; in Ast::disciplines);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct ExpressionId<'tag>(Idx16<'tag>);
 impl_id_type!(ExpressionId(Idx16): Node<Expression<'tag>>; in Ast::expressions);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct BlockId<'tag>(Idx8<'tag>);
-impl_id_type!(BlockId(Idx8): AttributeNode<'tag,SeqBlock<'tag>>; in Ast::blocks);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct AttributeId<'tag>(Idx16<'tag>);
 impl_id_type!(AttributeId(Idx16): Attribute; in Ast::attributes);
-#[derive(Clone, Copy, PartialOrd, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct StatementId<'tag>(Idx16<'tag>);
 impl_id_type!(StatementId(Idx16): Statement<'tag>; in Ast::statements);
+impl_id_type!(BlockId(Idx8): AttributeNode<'tag,Block<'tag>>; in Ast::block);
 
 pub type Attribute = ();
 #[derive(Copy, Clone, Debug)]
@@ -312,6 +238,8 @@ pub enum ModuleItem<'ast> {
 #[derive(Clone, Copy, Debug)]
 pub struct Discipline {
     pub name: Ident,
+    pub flow_nature: Ident,
+    pub potential_nature: Ident,
 }
 #[derive(Clone)]
 pub struct Function<'ast> {

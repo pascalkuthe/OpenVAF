@@ -1,3 +1,4 @@
+use crate::ast::Visitor;
 use crate::schemantic::error::Result;
 use crate::schemantic::error::{Error, Type};
 use crate::symbol::Ident;
@@ -5,14 +6,13 @@ use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::Ast;
 
 mod error;
-mod name_resolution;
 
-struct SchemanticPass<'ast> {
-    scope_stack: Vec<SymbolTable<'ast>>,
-    ast: Box<Ast<'ast>>,
+struct SchemanticPass<'ast, 'astref> {
+    scope_stack: Vec<&'astref SymbolTable<'ast>>,
+    ast: &'astref Ast<'ast>,
     errors: Vec<Error>,
 }
-impl<'ast> SchemanticPass<'ast> {
+impl<'ast, 'astref> SchemanticPass<'ast, 'astref> {
     fn resolve(&self, ident: Ident) -> Result<SymbolDeclaration<'ast>> {
         for scope in self.scope_stack.iter().rev() {
             if let Some(res) = scope.get(&ident.name) {
@@ -25,3 +25,4 @@ impl<'ast> SchemanticPass<'ast> {
         });
     }
 }
+impl Visitor<Error> for SchemanticPass {}

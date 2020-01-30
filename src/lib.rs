@@ -33,7 +33,7 @@ pub mod symbol;
 #[macro_use]
 mod util;
 #[macro_use]
-mod ast;
+mod ir;
 mod error;
 pub mod parser;
 mod ptr;

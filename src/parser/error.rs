@@ -349,33 +349,3 @@ fn translate_to_inner_snippet_range(start: Index, end: Index, source: &str) -> (
     let lines = bytecount::count(&source.as_bytes()[..start as usize], b'\n');
     (start as usize + lines, end as usize + lines)
 }
-
-pub fn merge_multi_result<T>(value_res: MultiResult<T>, condition: MultiResult) -> MultiResult<T> {
-    match value_res {
-        Ok(res) => {
-            condition?;
-            Ok(res)
-        }
-        Err(res) => {
-            if let Err(err) = condition {
-                Err(res.merge(err))
-            } else {
-                Err(res)
-            }
-        }
-    }
-}
-
-pub fn into_multi_res<T>(res: Result<T>) -> MultiResult<T> {
-    res.map_err(|err| err.into())
-}
-
-pub fn add_error<T>(res: MultiResult<T>, error: Error) -> MultiResult<T> {
-    match res {
-        Ok(_) => Err(error.into()),
-        Err(mut res) => {
-            res.add(error);
-            Err(res)
-        }
-    }
-}
