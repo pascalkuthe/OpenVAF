@@ -47,7 +47,7 @@ impl<'tag> Hir<'tag> {
     /// You should never call this yourself use mk_ast! instead!
     /// The tag might not be unique to this arena otherwise which would allow using ids from a different arena which is undfined behavior;
     /// Apart from that this function should be safe all internal unsafe functions calls are there to allow
-    pub(crate) unsafe fn partial_initalize(ast: &mut Box<Ast<'tag>>) -> Box<Self> {
+    pub(crate) unsafe fn partial_initalize(ast: &mut Ast<'tag>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
         #[allow(clippy::cast_ptr_alignment)]
         //the ptr cast below has the right alignment since we are allocation using the right layout
