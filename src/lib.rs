@@ -17,8 +17,9 @@ extern crate intrusive_collections;
 extern crate lazy_static;
 extern crate std;
 
+pub use ir::ast;
 #[macro_use]
-pub use ast::Ast;
+pub use ir::ast::Ast;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;

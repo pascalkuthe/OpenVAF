@@ -427,6 +427,13 @@ impl<'tag, T> TinyArena<'tag, T> {
     pub unsafe fn init(ptr: *mut Self) {
         ptr::write(&mut (*ptr).len, 0);
     }
+    pub unsafe fn init_from<T>(ptr: *mut Self, src: &TinyArena<T>) {
+        ptr::write(&mut (*ptr).len, src.len);
+    }
+    pub unsafe fn move_to<'tag, T: Copy>(dest: &mut TinyArena<'tag, T>, src: &mut TinyArena<T>) {
+        ptr::write(&mut (*dest).len, src.len);
+        ptr::copy_nonoverlapping(&mut (*dest).data[0], &mut src.data[0], usize::from(src.len));
+    }
 
     /// Add an item to the arena, get an index or CapacityExceeded back.
     #[inline]
@@ -488,6 +495,13 @@ impl<'tag, T> NanoArena<'tag, T> {
     }
     pub unsafe fn init(ptr: *mut Self) {
         ptr::write(&mut (*ptr).len, 0);
+    }
+    pub unsafe fn init_from<T>(ptr: *mut Self, src: &NanoArena<T>) {
+        ptr::write(&mut (*ptr).len, src.len);
+    }
+    pub unsafe fn move_to<'tag, T: Copy>(dest: *mut NanoArena<'tag, T>, src: &mut NanoArena<T>) {
+        ptr::write(&mut (*dest).len, src.len);
+        ptr::copy_nonoverlapping(&mut (*dest).data[0], &mut src.data[0], usize::from(src.len));
     }
 
     /// Add an item to the arena, get an index or CapacityExceeded back.

@@ -1,9 +1,9 @@
 use crate::ast::Visitor;
+use crate::ir::ast::Ast;
 use crate::schemantic::error::Result;
 use crate::schemantic::error::{Error, Type};
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
-use crate::Ast;
 
 mod error;
 

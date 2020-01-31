@@ -133,7 +133,6 @@ impl<'tag> Ast<'tag> {
             &mut res.as_mut().top_symbols,
             SymbolTable::with_capacity(64),
         );
-
         Box::from_raw(res.as_ptr())
     }
 }

@@ -1,14 +1,20 @@
-use super::ast;
+use core::mem::size_of;
+use std::ops::Range;
+use std::ptr::NonNull;
+
+use bumpalo::Bump;
+
 use crate::compact_arena::{InvariantLifetime, NanoArena, TinyArena};
-use crate::ir::ast::{Ast, Attribute, AttributeNode, Attributes, BinaryOperator, ModuleItem, NetType, Node, UnaryOperator, Variable, Function, Discipline, TopNode};
+use crate::ir::ast::{
+    Ast, Attribute, AttributeNode, Attributes, BinaryOperator, Discipline, Function, ModuleItem,
+    NetType, Node, TopNode, UnaryOperator, Variable,
+};
 use crate::ir::{
     BranchId, DisciplineId, ExpressionId, FunctionId, NetId, PortId, StatementId, VariableId,
 };
 use crate::symbol::Ident;
-use bumpalo::Bump;
-use core::mem::size_of;
-use std::ops::Range;
-use std::ptr::NonNull;
+
+use super::ast;
 
 /// An Ast representing a parser Verilog-AMS project (root file);
 /// It provides stable indicies for every Node because the entire is immutable once created;
@@ -41,25 +47,28 @@ impl<'tag> Hir<'tag> {
     /// You should never call this yourself use mk_ast! instead!
     /// The tag might not be unique to this arena otherwise which would allow using ids from a different arena which is undfined behavior;
     /// Apart from that this function should be safe all internal unsafe functions calls are there to allow
-    pub unsafe fn new(ast: &Ast<'tag>) -> Box<Self> {
+    pub(crate) unsafe fn partial_initalize(ast: &mut Box<Ast<'tag>>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
         #[allow(clippy::cast_ptr_alignment)]
-            //the ptr cast below has the right alignment since we are allocation using the right layout
-            let mut res: NonNull<Hir<'tag>> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
+        //the ptr cast below has the right alignment since we are allocation using the right layout
+        let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-        NanoArena::init(&mut res.as_mut().branches);
-        TinyArena::init(&mut res.as_mut().nets);
-        NanoArena::init(&mut res.as_mut().ports);
-        TinyArena::init(&mut res.as_mut().variables);
-        NanoArena::init(&mut res.as_mut().modules);
-        NanoArena::init(&mut res.as_mut().functions);
-        NanoArena::init(&mut res.as_mut().disciplines);
-        TinyArena::init(&mut res.as_mut().expressions);
-        TinyArena::init(&mut res.as_mut().attributes);
-        TinyArena::init(&mut res.as_mut().statements);
-        std::ptr::write(&mut res.as_mut().top_nodes, ast.top_nodes.clone());
-
-        Box::from_raw(res.as_ptr()
+        //TODO natures (remove disciplines then
+        NanoArena::move_to(&mut res.as_mut().disciplines, &mut ast.disciplines);
+        TinyArena::move_to(&mut res.as_mut().variables, &mut ast.variables);
+        TinyArena::move_to(&mut res.as_mut().attributes, &mut ast.attributes);
+        NanoArena::init_from(&mut res.as_mut().branches, &ast.branches);
+        TinyArena::init_from(&mut res.as_mut().nets, &ast.nets);
+        NanoArena::init_from(&mut res.as_mut().ports, &ast.ports);
+        NanoArena::init_from(&mut res.as_mut().modules, &ast.modules);
+        NanoArena::init_from(&mut res.as_mut().functions, &ast.functions);
+        //        NanoArena::init(&mut res.as_mut().disciplines);
+        TinyArena::init_from(&mut res.as_mut().expressions, &ast.expressions);
+        TinyArena::init_from(&mut res.as_mut().statements, &ast.statements);
+        //TODO parameters
+        //TODO natures
+        std::mem::swap(&mut res.as_mut().top_nodes, &mut ast.top_nodes);
+        Box::from_raw(res.as_ptr())
     }
 }
 
