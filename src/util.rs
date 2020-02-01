@@ -7,6 +7,8 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+use std::ops::Range;
+
 macro_rules! unreachable_unchecked{
     ($reason:expr) => {
         if cfg!(debug_assertions){

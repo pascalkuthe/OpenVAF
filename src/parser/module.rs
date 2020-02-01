@@ -9,16 +9,19 @@
  */
 
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
-use crate::ast::{AttributeNode, Attributes, Module, ModuleId, ModuleItem, Push};
+use crate::ast::{AttributeNode, Attributes, Module, ModuleItem};
 use crate::error::Error;
+use crate::ir::ModuleId;
 use crate::parser::error;
 use crate::parser::error::{Expected, Result, Type};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::util::Push;
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
@@ -65,46 +68,49 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             .negative_offset(start);
 
         self.expect(Token::Semicolon)?;
-        let mut module_items = Vec::with_capacity(8);
-        loop {
-            let attributes = self.parse_attributes()?;
-            let (token, span) = self.look_ahead()?;
-            match token {
-                Token::Inout | Token::Input | Token::Output => {
-                    if let Some(ref mut expected) = expected_ports {
-                        let declarations =
-                            self.parse_port_declaration(attributes, expected, port_list_span)?;
-                        if let Some(ref mut port_list) = port_list {
-                            port_list.end = declarations.end;
+        let mut module_items = Rc::new(Vec::with_capacity(8));
+        {
+            let module_items = Rc::get_mut(&mut module_items).unwrap();
+            loop {
+                let attributes = self.parse_attributes()?;
+                let (token, span) = self.look_ahead()?;
+                match token {
+                    Token::Inout | Token::Input | Token::Output => {
+                        if let Some(ref mut expected) = expected_ports {
+                            let declarations =
+                                self.parse_port_declaration(attributes, expected, port_list_span)?;
+                            if let Some(ref mut port_list) = port_list {
+                                port_list.end = declarations.end;
+                            } else {
+                                port_list = Some(declarations);
+                            }
                         } else {
-                            port_list = Some(declarations);
+                            let port_base = self.parse_port_declaration_base(attributes)?;
+                            let source = self.ast[port_base]
+                                .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
+                                .negative_offset(start);
+                            self.non_critical_errors.push(Error {
+                                source: self.span_to_current_end(start),
+                                error_type: error::Type::PortRedeclaration(source, port_list_span),
+                            });
                         }
-                    } else {
-                        let port_base = self.parse_port_declaration_base(attributes)?;
-                        let source = self.ast[port_base]
-                            .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
-                            .negative_offset(start);
-                        self.non_critical_errors.push(Error {
-                            source: self.span_to_current_end(start),
-                            error_type: error::Type::PortRedeclaration(source, port_list_span),
-                        });
                     }
-                }
-                Token::EOF => {
-                    return Err(Error {
-                        error_type: error::Type::UnexpectedEof {
-                            expected: vec![Token::EndModule],
-                        },
-                        source: span,
-                    })
-                }
-                Token::EndModule => {
-                    self.lookahead.take();
-                    break;
-                }
-                _ => {
-                    if let Some(module_item) = self.parse_module_item(attributes)? {
-                        module_items.push(module_item);
+                    Token::EOF => {
+                        return Err(Error {
+                            error_type: error::Type::UnexpectedEof {
+                                expected: vec![Token::EndModule],
+                            },
+                            source: span,
+                        })
+                    }
+                    Token::EndModule => {
+                        self.lookahead.take();
+                        break;
+                    }
+                    _ => {
+                        if let Some(module_item) = self.parse_module_item(attributes)? {
+                            module_items.push(module_item);
+                        }
                     }
                 }
             }
@@ -124,7 +130,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 name,
                 port_list,
                 symbol_table: self.scope_stack.pop().unwrap(),
-                children: vec![],
+                children: module_items,
             },
         });
         self.insert_symbol(name, SymbolDeclaration::Module(module));
@@ -152,8 +158,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         let res = match self.look_ahead()?.0 {
             Token::Analog => {
                 self.lookahead.take();
-                let res = self.parse_statement(attributes)?;
-                Some(ModuleItem::AnalogStmt(self.ast.push(res)))
+                Some(ModuleItem::AnalogStmt(self.parse_statement(attributes)?))
             }
             Token::Branch => {
                 self.lookahead.take();

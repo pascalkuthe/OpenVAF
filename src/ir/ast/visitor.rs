@@ -1,13 +1,14 @@
 use crate::ast::Primary::{FunctionCall, Integer, Real, UnsignedInteger, VariableOrNetReference};
 use crate::ast::{
-    Ast, AttributeNode, Attributes, BlockId, Branch, BranchAccess, BranchDeclaration, BranchId,
-    Condition, Expression, HierarchicalId, Module, ModuleId, ModuleItem, NetType, Node, Primary,
-    SeqBlock, Statement, StatementId, VariableType,
+    Ast, AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration, Condition, Expression,
+    HierarchicalId, Module, ModuleItem, NetType, Node, Primary, SeqBlock, Statement, VariableType,
 };
+use crate::ir::{BlockId, BranchId, ExpressionId, ModuleId, StatementId};
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
 
-pub trait Visitor<'ast, E>: Sized {
+#[allow(unused)]
+pub trait Visitor<'ast, E = ()>: Sized {
     fn visit_declaration_name(&mut self, ident: &Ident, ast: &Ast<'ast>) -> Result<(), E> {
         /*Nothing to do*/
         Ok(())
@@ -56,7 +57,7 @@ pub trait Visitor<'ast, E>: Sized {
         &mut self,
         attributes: Attributes<'ast>,
         ident: &HierarchicalId,
-        value: &Node<Expression<'ast>>,
+        value: ExpressionId<'ast>,
         ast: &Ast<'ast>,
     ) -> Result<(), E> {
         walk_assign(self, ident, value, ast)
@@ -66,7 +67,7 @@ pub trait Visitor<'ast, E>: Sized {
         attributes: Attributes<'ast>,
         nature: &Ident,
         branch: &BranchAccess,
-        value: &Node<Expression<'ast>>,
+        value: ExpressionId<'ast>,
         ast: &Ast<'ast>,
     ) -> Result<(), E> {
         walk_contribute(self, nature, branch, value, ast)
@@ -89,12 +90,8 @@ pub trait Visitor<'ast, E>: Sized {
     fn visit_branch(&mut self, branch: &Branch, ast: &Ast<'ast>) -> Result<(), E> {
         walk_branch(self, branch, ast)
     }
-    fn visit_expression(
-        &mut self,
-        expr: &Node<Expression<'ast>>,
-        ast: &Ast<'ast>,
-    ) -> Result<(), E> {
-        walk_expression(self, expr, ast)
+    fn visit_expression(&mut self, expr: ExpressionId<'ast>, ast: &Ast<'ast>) -> Result<(), E> {
+        walk_expression(self, &ast[expr], ast)
     }
 }
 
@@ -136,11 +133,9 @@ pub fn walk_statement<'ast, E, V: Visitor<'ast, E>>(
     match statement {
         Statement::Block(id) => v.visit_block(*id, ast),
         Statement::Condition(ref condition) => v.visit_condition(condition, ast),
-        Statement::Assign(ref attr, ref ident, ref value) => {
-            v.visit_assign(*attr, ident, value, ast)
-        }
-        Statement::Contribute(ref attr, ref nature_name, ref branch, ref value) => {
-            v.visit_contribute(*attr, nature_name, branch, value, ast)
+        Statement::Assign(ref attr, ref ident, value) => v.visit_assign(*attr, ident, *value, ast),
+        Statement::Contribute(ref attr, ref nature_name, ref branch, value) => {
+            v.visit_contribute(*attr, nature_name, branch, *value, ast)
         }
         Statement::FunctionCall(ref _attr, ref name, ref args) => unimplemented!("Functions"),
     }
@@ -160,11 +155,11 @@ pub fn walk_condition<'ast, E, V: Visitor<'ast, E>>(
     condition: &AttributeNode<Condition<'ast>>,
     ast: &Ast<'ast>,
 ) -> Result<(), E> {
-    v.visit_expression(&condition.contents.main_condition, ast)?;
+    v.visit_expression(condition.contents.main_condition, ast)?;
     v.visit_statement(condition.contents.main_condition_statement, ast)?;
-    for (condition, statement) in condition.contents.else_ifs.iter() {
-        v.visit_expression(&ast[*condition], ast)?;
-        v.visit_statement(*statement, ast)?;
+    for (condition, statement) in condition.contents.else_ifs.iter().copied() {
+        v.visit_expression(condition, ast)?;
+        v.visit_statement(statement, ast)?;
     }
     if let Some(statement) = condition.contents.else_statement {
         v.visit_statement(statement, ast)
@@ -175,7 +170,7 @@ pub fn walk_condition<'ast, E, V: Visitor<'ast, E>>(
 pub fn walk_assign<'ast, E, V: Visitor<'ast, E>>(
     v: &mut V,
     ident: &HierarchicalId,
-    value: &Node<Expression<'ast>>,
+    value: ExpressionId<'ast>,
     ast: &Ast<'ast>,
 ) -> Result<(), E> {
     v.visit_hierarchical_reference(ident, ast)?;
@@ -218,7 +213,7 @@ pub fn walk_contribute<'ast, E, V: Visitor<'ast, E>>(
     v: &mut V,
     nature: &Ident,
     branch: &BranchAccess,
-    value: &Node<Expression<'ast>>,
+    value: ExpressionId<'ast>,
     ast: &Ast<'ast>,
 ) -> Result<(), E> {
     v.visit_branch_access(nature, branch, ast)?;
@@ -231,20 +226,20 @@ pub fn walk_expression<'ast, E, V: Visitor<'ast, E>>(
 ) -> Result<(), E> {
     match expr.contents {
         Expression::BinaryOperator(lhs, _op, rhs) => {
-            v.visit_expression(&ast[lhs], ast)?;
-            v.visit_expression(&ast[rhs], ast)
+            v.visit_expression(lhs, ast)?;
+            v.visit_expression(rhs, ast)
         }
-        Expression::UnaryOperator(_op, rhs) => v.visit_expression(&ast[rhs], ast),
+        Expression::UnaryOperator(_op, rhs) => v.visit_expression(rhs, ast),
         Expression::Primary(Primary::BranchAccess(ref nature, ref branch_access)) => {
             v.visit_branch_access(nature, branch_access, ast)
         }
         Expression::Primary(VariableOrNetReference(ref ident)) => {
             v.visit_hierarchical_reference(ident, ast)
         }
-        Expression::Primary(FunctionCall(ref ident, ref parameters)) => {
+        Expression::Primary(FunctionCall(ref ident, parameters)) => {
             v.visit_hierarchical_reference(ident, ast)?;
             if let Some(args) = parameters {
-                for arg in &ast[args] {
+                for arg in args {
                     v.visit_expression(arg, ast)?;
                 }
             }

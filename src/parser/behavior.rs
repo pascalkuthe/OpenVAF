@@ -8,10 +8,13 @@
  * *****************************************************************************************
  */
 
+use std::rc::Rc;
+
 use crate::ast::{
-    AttributeNode, Attributes, BlockId, BlockScope, Branch, BranchAccess, Condition, Expression,
-    HierarchicalId, Node, Primary, Push, SeqBlock, Statement, VariableType,
+    AttributeNode, Attributes, BlockScope, Branch, BranchAccess, Condition, Expression,
+    HierarchicalId, Node, Primary, SeqBlock, Statement, VariableType,
 };
+use crate::ir::{BlockId, StatementId};
 use crate::parser::error::Type::{
     HierarchicalIdNotAllowedAsNature, UnexpectedToken, UnexpectedTokens,
 };
@@ -21,9 +24,10 @@ use crate::parser::Parser;
 use crate::symbol::keywords;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::util::Push;
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
-    pub fn parse_statement(&mut self, attributes: Attributes<'ast>) -> Result<Statement<'ast>> {
+    pub fn parse_statement(&mut self, attributes: Attributes<'ast>) -> Result<StatementId<'ast>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::If => {
@@ -48,7 +52,11 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 let res = match token {
                     Token::Assign => {
                         self.lookahead.take();
-                        Statement::Assign(attributes, identifier.into(), self.parse_expression()?)
+                        Statement::Assign(
+                            attributes,
+                            identifier.into(),
+                            self.parse_expression_id()?,
+                        )
                     }
                     Token::ParenOpen => {
                         self.lookahead.take();
@@ -60,7 +68,11 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                             )?,
                             Token::ParenClose => {
                                 self.lookahead.take();
-                                Statement::FunctionCall(attributes, identifier.into(), Vec::new())
+                                Statement::FunctionCall(
+                                    attributes,
+                                    identifier.into(),
+                                    Rc::default(),
+                                )
                             }
                             _ => {
                                 let mut arg = vec![self.parse_expression()?];
@@ -78,13 +90,17 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                                         attributes,
                                         Self::convert_to_nature_identifier(identifier)?,
                                         convert_function_call_to_branch_access(arg)?,
-                                        self.parse_expression()?,
+                                        self.parse_expression_id()?,
                                     )
                                 } else {
                                     Statement::FunctionCall(
                                         attributes,
                                         identifier.into(),
-                                        arg.into_iter().map(|expr| self.ast.push(expr)).collect(),
+                                        Rc::new(
+                                            arg.into_iter()
+                                                .map(|expr| self.ast.push(expr))
+                                                .collect(),
+                                        ),
                                     )
                                 }
                             }
@@ -115,7 +131,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 })
             }
         };
-        Ok(res)
+        Ok(self.ast.push(res))
     }
 
     /// Helper function that assert that a parsed hierarchical identifier is valid for acessing natures This is usued when it is not clear whether a nature or some other (hieraichal id) is parsed
@@ -172,12 +188,13 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             None
         };
         let mut statements = Vec::with_capacity(Self::BLOCK_DEFAULT_STATEMENT_CAPACITY);
+
         while self.look_ahead()?.0 != Token::End {
             let attributes = self.parse_attributes()?;
-            let statement = self.parse_statement(attributes)?;
-            statements.push(self.ast.push(statement));
+            statements.push(self.parse_statement(attributes)?);
         }
         self.lookahead.take();
+
         let res = self.ast.push(AttributeNode {
             attributes,
             source: self.span_to_current_end(start),
@@ -196,7 +213,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     ) -> Result<Statement<'ast>> {
         let branch = self.parse_branch_access()?;
         self.expect(Token::Contribute)?;
-        let expr = self.parse_expression()?;
+        let expr = self.parse_expression_id()?;
         self.expect(Token::Semicolon)?;
         Ok(Statement::Contribute(
             attributes,
@@ -211,32 +228,30 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     ) -> Result<AttributeNode<'ast, Condition<'ast>>> {
         let start = self.preprocessor.current_start();
         self.expect(Token::ParenOpen)?;
-        let main_condition = self.parse_expression()?;
+        let main_condition = self.parse_expression_id()?;
         self.expect(Token::ParenClose)?;
         let statement_attributes = self.parse_attributes()?;
-        let statement = self.parse_statement(statement_attributes)?;
-        let main_condition_statement = self.ast.push(statement);
-        let mut else_ifs = Vec::new();
+        let main_condition_statement = self.parse_statement(statement_attributes)?;
+        let mut else_ifs = Rc::new(Vec::new());
         let mut else_statement = None;
-        loop {
-            if self.look_ahead()?.0 != Token::Else {
-                break;
-            }
-            if self.look_ahead()?.0 == Token::If {
-                self.lookahead.take();
-                self.expect(Token::ParenOpen)?;
-                let expression = self.parse_expression()?;
-                let condition = self.ast.push(expression);
-                self.expect(Token::ParenClose)?;
-                let attributes = self.parse_attributes()?;
-                let statement = self.parse_statement(attributes)?;
-                let statement = self.ast.push(statement);
-                else_ifs.push((condition, statement));
-            } else {
-                let attributes = self.parse_attributes()?;
-                let statement = self.parse_statement(attributes)?;
-                else_statement = Some(self.ast.push(statement));
-                break;
+        {
+            let else_ifs = Rc::get_mut(&mut else_ifs).unwrap();
+            loop {
+                if self.look_ahead()?.0 != Token::Else {
+                    break;
+                }
+                if self.look_ahead()?.0 == Token::If {
+                    self.lookahead.take();
+                    self.expect(Token::ParenOpen)?;
+                    let condition = self.parse_expression_id()?;
+                    self.expect(Token::ParenClose)?;
+                    let attributes = self.parse_attributes()?;
+                    else_ifs.push((condition, self.parse_statement(attributes)?));
+                } else {
+                    let attributes = self.parse_attributes()?;
+                    else_statement = Some(self.parse_statement(attributes)?);
+                    break;
+                }
             }
         }
         Ok(AttributeNode {

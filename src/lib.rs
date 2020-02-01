@@ -20,24 +20,21 @@ extern crate std;
 pub use ir::ast;
 #[macro_use]
 pub use ir::ast::Ast;
+pub use ir::hir::lowering::resolve;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
-pub use ptr::FrozenBox;
 pub use span::Span;
 
 #[macro_use]
 pub mod compact_arena;
-mod schemantic;
 pub mod symbol;
-
 #[macro_use]
 mod util;
 #[macro_use]
 mod ir;
 mod error;
 pub mod parser;
-mod ptr;
 mod span;
 mod symbol_table;
 #[cfg(test)]

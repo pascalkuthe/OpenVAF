@@ -10,15 +10,15 @@
 use intrusive_collections::__core::ops::Range;
 
 //TODO dangeling Id
-use crate::ast::{
-    BinaryOperator, BranchAccess, Expression, ExpressionId, Node, Primary, Push, UnaryOperator,
-};
+use crate::ast::{BinaryOperator, BranchAccess, Expression, Node, Primary, UnaryOperator};
+use crate::ir::ExpressionId;
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealLiteralType};
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
+use crate::util::Push;
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
@@ -214,13 +214,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                             Token::ParenClose,
                             true,
                         )?;
-                        Primary::FunctionCall(
-                            ident.into(),
-                            Some(Range {
-                                start: first_arg,
-                                end: last_arg,
-                            }),
-                        )
+                        Primary::FunctionCall(ident.into(), Some((first_arg..last_arg).into()))
                     }
                 } else {
                     Primary::VariableOrNetReference(ident.into())

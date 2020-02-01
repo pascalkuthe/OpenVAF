@@ -106,10 +106,13 @@
 use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use core::marker::PhantomData;
 use core::mem::{self, MaybeUninit};
+use core::ops::{AddAssign, Sub};
 use core::ops::{Index, IndexMut};
 use core::ptr;
 use std::error::Error;
 use std::ops::Range;
+
+use crate::test::Step;
 
 /// This is one part of the secret sauce that ensures that indices from
 /// different arenas cannot be mixed. You should never need to use this type in
@@ -135,6 +138,16 @@ pub fn invariant_lifetime<'tag>() -> InvariantLifetime<'tag> {
 pub struct Idx<'tag, I: Copy + Clone> {
     index: I,
     tag: InvariantLifetime<'tag>,
+}
+impl<'tag, T: Copy + Clone + AddAssign> Idx<'tag, T> {
+    pub unsafe fn add(&mut self, delta: T) {
+        self.index += delta;
+    }
+}
+impl<'tag, T: Copy + Clone + Sub<Output = T>> Idx<'tag, T> {
+    pub fn distance(&self, other: &Self) -> T {
+        self.index - other.index
+    }
 }
 
 /// The index type for a small arena is 32 bits large. You will usually get the
@@ -340,8 +353,7 @@ macro_rules! mk_nano_arena {
 
 #[cfg(feature = "alloc")]
 impl<'tag, T> SmallArena<'tag, T> {
-    /// create a new SmallArena. Don't do this manually. Use the
-    /// [`in_arena`] macro instead.
+    /// create a new SmallArena. Don't do this manually. Use the macro instead.
     ///
     /// # Safety
     ///
@@ -407,6 +419,42 @@ impl<'tag, T> IndexMut<Idx32<'tag>> for SmallArena<'tag, T> {
 
 const TINY_ARENA_ITEMS: u32 = 65536;
 const NANO_ARENA_ITEMS: u16 = 256;
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct SafeRange<T: Copy> {
+    pub start: T,
+    end: T,
+}
+impl<T: Copy> Into<Range<T>> for SafeRange<T> {
+    fn into(self) -> Range<T> {
+        std::ops::Range {
+            start: self.start,
+            end: self.end,
+        }
+    }
+}
+impl<T: Copy> From<Range<T>> for SafeRange<T> {
+    fn from(org: Range<T>) -> Self {
+        Self {
+            start: org.start,
+            end: org.end,
+        }
+    }
+}
+
+impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.start <= self.end {
+            //Range is inclusive of the end
+            let res = Some(self.start);
+            unsafe { self.start.step() };
+            res
+        } else {
+            None
+        }
+    }
+}
 
 /// A "tiny" arena containing <64K elements.
 pub struct TinyArena<'tag, T> {
@@ -416,7 +464,15 @@ pub struct TinyArena<'tag, T> {
 }
 
 impl<'tag, T> TinyArena<'tag, T> {
-    /// create a new TinyArena
+    /// create a new TinyArena. Don't do this manually. Use the macro instead.
+    ///
+    /// # Safety
+    ///
+    /// The whole tagged indexing trick relies on the `'tag` you give to this
+    /// constructor. You must never use this value in another arena, lest you
+    /// might be able to mix up the indices of the two, which could lead to
+    /// out of bounds access and thus **Undefined Behavior**!
+
     pub unsafe fn new(tag: InvariantLifetime<'tag>) -> TinyArena<'tag, T> {
         TinyArena {
             tag,
@@ -424,15 +480,29 @@ impl<'tag, T> TinyArena<'tag, T> {
             len: 0,
         }
     }
+    pub unsafe fn next_id(&self) -> Idx16<'tag> {
+        Idx16 {
+            index: self.len as u16,
+            tag: self.tag,
+        }
+    }
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
     pub unsafe fn init(ptr: *mut Self) {
         ptr::write(&mut (*ptr).len, 0);
     }
-    pub unsafe fn init_from<T>(ptr: *mut Self, src: &TinyArena<T>) {
-        ptr::write(&mut (*ptr).len, src.len);
-    }
-    pub unsafe fn move_to<'tag, T: Copy>(dest: &mut TinyArena<'tag, T>, src: &mut TinyArena<T>) {
-        ptr::write(&mut (*dest).len, src.len);
-        ptr::copy_nonoverlapping(&mut (*dest).data[0], &mut src.data[0], usize::from(src.len));
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn init_from<O>(dst: *mut Self, src: &TinyArena<O>) {
+        ptr::write(&mut (*dst).len, src.len);
     }
 
     /// Add an item to the arena, get an index or CapacityExceeded back.
@@ -449,10 +519,21 @@ impl<'tag, T> TinyArena<'tag, T> {
             tag: self.tag,
         })
     }
-
     /// Add an item to the arena, get an index back
     pub fn add(&mut self, item: T) -> Idx16<'tag> {
         self.try_add(item).unwrap()
+    }
+}
+impl<'tag, T: Copy> TinyArena<'tag, T> {
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn copy_to(dst: *mut Self, src: &TinyArena<T>) {
+        ptr::write(&mut (*dst).len, src.len);
+        ptr::copy_nonoverlapping(&src.data[0], &mut (*dst).data[0], src.len as usize);
     }
 }
 
@@ -493,15 +574,23 @@ impl<'tag, T> NanoArena<'tag, T> {
             len: 0,
         }
     }
-    pub unsafe fn init(ptr: *mut Self) {
-        ptr::write(&mut (*ptr).len, 0);
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn init(dst: *mut Self) {
+        ptr::write(&mut (*dst).len, 0);
     }
-    pub unsafe fn init_from<T>(ptr: *mut Self, src: &NanoArena<T>) {
-        ptr::write(&mut (*ptr).len, src.len);
-    }
-    pub unsafe fn move_to<'tag, T: Copy>(dest: *mut NanoArena<'tag, T>, src: &mut NanoArena<T>) {
-        ptr::write(&mut (*dest).len, src.len);
-        ptr::copy_nonoverlapping(&mut (*dest).data[0], &mut src.data[0], usize::from(src.len));
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn init_from<O>(dst: *mut Self, src: &NanoArena<O>) {
+        ptr::write(&mut (*dst).len, src.len);
     }
 
     /// Add an item to the arena, get an index or CapacityExceeded back.
@@ -524,7 +613,18 @@ impl<'tag, T> NanoArena<'tag, T> {
         self.try_add(item).unwrap()
     }
 }
-
+impl<'tag, T: Copy> NanoArena<'tag, T> {
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn copy_to(dest: *mut Self, src: &NanoArena<T>) {
+        ptr::write(&mut (*dest).len, src.len);
+        ptr::copy_nonoverlapping(&src.data[0], &mut (*dest).data[0], usize::from(src.len));
+    }
+}
 impl<'tag, T> Drop for NanoArena<'tag, T> {
     // dropping the arena drops all values
     fn drop(&mut self) {

@@ -7,11 +7,12 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::ast::{AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration, Push};
+use crate::ast::{AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol_table::SymbolDeclaration;
+use crate::util::Push;
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub fn parse_branch_declaration(&mut self, attributes: Attributes<'ast>) -> Result {

@@ -1,5 +1,6 @@
 use ahash::AHashMap as HashMap;
 
+use crate::ir::{BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NetId, PortId, VariableId};
 use crate::symbol::Symbol;
 use crate::Span;
 
@@ -19,16 +20,16 @@ pub enum SymbolDeclaration<'ast> {
     Nature,
 }
 impl<'ast> SymbolDeclaration<'ast> {
-    pub fn span(&self, ast: &Ast<'ast>) -> Span {
+    pub fn span(self, ast: &Ast<'ast>) -> Span {
         match self {
-            Self::Module(id) => ast[*id].source,
-            Self::Block(id) => ast[*id].source,
-            Self::Variable(id) => ast[*id].source,
-            Self::Net(id) => ast[*id].source,
-            Self::Branch(id) => ast[*id].source,
-            Self::Port(id) => ast[*id].source,
-            Self::Function(id) => ast[*id].source,
-            Self::Discipline(id) => ast[*id].source,
+            Self::Module(id) => ast[id].source,
+            Self::Block(id) => ast[id].source,
+            Self::Variable(id) => ast[id].source,
+            Self::Net(id) => ast[id].source,
+            Self::Branch(id) => ast[id].source,
+            Self::Port(id) => ast[id].source,
+            Self::Function(id) => ast[id].source,
+            Self::Discipline(id) => ast[id].source,
             Self::Nature => unimplemented!(), //ast[id].source,
         }
     }

@@ -11,13 +11,15 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use crate::ast::{AttributeNode, Attributes, Net, NetType, Port, PortId, Push};
+use crate::ast::{AttributeNode, Attributes, Net, NetType, Port};
+use crate::ir::PortId;
 use crate::parser::error::Result;
 use crate::parser::error::Type::{AlreadyDeclaredInThisScope, PortNotPreDeclaredInModuleHead};
 use crate::parser::lexer::Token;
 use crate::parser::{error, Error, Parser};
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
+use crate::util::Push;
 use crate::Span;
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {

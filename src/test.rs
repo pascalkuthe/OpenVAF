@@ -43,3 +43,10 @@ pub(crate) fn setup_logger() -> Result<(), fern::InitError> {
         .apply()?;
     Ok(())
 }
+pub trait Push<T> {
+    type Key;
+    fn push(&mut self, value: T) -> Self::Key;
+}
+pub trait Step {
+    unsafe fn step(&mut self);
+}
