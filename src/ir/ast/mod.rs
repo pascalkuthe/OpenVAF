@@ -13,14 +13,13 @@ use std::rc::Rc;
 
 pub use visitor::Visitor;
 
-use crate::compact_arena::{Idx16, Idx8, InvariantLifetime, NanoArena, TinyArena};
+use crate::compact_arena::{Idx16, Idx8, InvariantLifetime, NanoArena, SafeRange, TinyArena};
 use crate::ir::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NetId,
     PortId, StatementId, VariableId,
 };
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
-use crate::util::SafeRange;
 use crate::Span;
 
 /*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License

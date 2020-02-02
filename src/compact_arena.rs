@@ -149,6 +149,11 @@ impl<'tag, T: Copy + Clone + Sub<Output = T>> Idx<'tag, T> {
         self.index - other.index
     }
 }
+impl<'tag, I: Copy + Clone> Into<I> for Idx<'tag, I> {
+    fn into(self) -> I {
+        self.index
+    }
+}
 
 /// The index type for a small arena is 32 bits large. You will usually get the
 /// index from the arena and use it by indexing, e.g. `arena[index]`.
@@ -440,6 +445,14 @@ impl<T: Copy> From<Range<T>> for SafeRange<T> {
         }
     }
 }
+impl<T1: Copy, T2: Copy> From<SafeRange<T1>> for SafeRange<T2> {
+    fn from(other: SafeRange<T1>) -> Self {
+        Self {
+            start: other.start.into(),
+            end: other.end.into(),
+        }
+    }
+}
 
 impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
     type Item = T;
@@ -484,6 +497,15 @@ impl<'tag, T> TinyArena<'tag, T> {
         Idx16 {
             index: self.len as u16,
             tag: self.tag,
+        }
+    }
+    pub fn range_to(&self, from: Idx16<'tag>) -> SafeRange<Idx16<'tag>> {
+        SafeRange {
+            start: from,
+            end: Idx16 {
+                index: self.len as u16,
+                tag: self.tag,
+            },
         }
     }
     /// # Safety
@@ -701,7 +723,7 @@ impl<'tag, T> Index<&Range<Idx8<'tag>>> for NanoArena<'tag, T> {
         // the arenas lifetime ensures that the index is always valid & within
         // bounds
         let start = unsafe { &*self.data.get_unchecked(usize::from(i.start.index)).as_ptr() };
-        unsafe { std::slice::from_raw_parts(start, usize::from(i.end.index + 1 - i.start.index)) }
+        unsafe { std::slice::from_raw_parts(start, usize::from(i.end.index - i.start.index)) }
     }
 }
 
@@ -719,9 +741,7 @@ impl<'tag, T> IndexMut<&Range<Idx8<'tag>>> for NanoArena<'tag, T> {
                 .get_unchecked_mut(usize::from(i.start.index))
                 .as_mut_ptr()
         };
-        unsafe {
-            std::slice::from_raw_parts_mut(start, usize::from(i.end.index + 1 - i.start.index))
-        }
+        unsafe { std::slice::from_raw_parts_mut(start, usize::from(i.end.index - i.start.index)) }
     }
 }
 impl<'tag, T> Index<&Range<Idx16<'tag>>> for TinyArena<'tag, T> {
@@ -735,7 +755,7 @@ impl<'tag, T> Index<&Range<Idx16<'tag>>> for TinyArena<'tag, T> {
         // the arenas lifetime ensures that the index is always valid & within
         // bounds
         let start = unsafe { &*self.data.get_unchecked(usize::from(i.start.index)).as_ptr() };
-        unsafe { std::slice::from_raw_parts(start, usize::from(i.end.index + 1 - i.start.index)) }
+        unsafe { std::slice::from_raw_parts(start, usize::from(i.end.index - i.start.index)) }
     }
 }
 
@@ -753,8 +773,6 @@ impl<'tag, T> IndexMut<&Range<Idx16<'tag>>> for TinyArena<'tag, T> {
                 .get_unchecked_mut(usize::from(i.start.index))
                 .as_mut_ptr()
         };
-        unsafe {
-            std::slice::from_raw_parts_mut(start, usize::from(i.end.index + 1 - i.start.index))
-        }
+        unsafe { std::slice::from_raw_parts_mut(start, usize::from(i.end.index - i.start.index)) }
     }
 }
