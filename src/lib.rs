@@ -17,10 +17,10 @@ extern crate intrusive_collections;
 extern crate lazy_static;
 extern crate std;
 
+pub use ast_lowering::resolve;
 pub use ir::ast;
 #[macro_use]
 pub use ir::ast::Ast;
-pub use ir::hir::lowering::resolve;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
@@ -33,9 +33,8 @@ pub mod symbol;
 mod util;
 #[macro_use]
 mod ir;
+pub mod ast_lowering;
 mod error;
 pub mod parser;
 mod span;
-mod symbol_table;
-#[cfg(test)]
-mod test;
+pub mod symbol_table;

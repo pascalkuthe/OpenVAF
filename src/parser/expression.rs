@@ -7,9 +7,9 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use intrusive_collections::__core::ops::Range;
 
-//TODO dangeling Id
+use std::rc::Rc;
+
 use crate::ast::{BinaryOperator, BranchAccess, Expression, Node, Primary, UnaryOperator};
 use crate::ir::ExpressionId;
 use crate::parser::error::Type::UnexpectedTokens;
@@ -18,7 +18,7 @@ use crate::parser::lexer::Token;
 use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealLiteralType};
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
-use crate::util::Push;
+use crate::util::{Push, SafeRangeCreation};
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
@@ -202,19 +202,21 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                         )
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
-                        Primary::FunctionCall(ident.into(), None)
+                        Primary::FunctionCall(ident.into(), Rc::default())
                     } else {
-                        let first_arg = self.parse_expression_id()?;
-                        let mut last_arg = first_arg;
-                        self.parse_list(
-                            |sel| {
-                                last_arg = sel.parse_expression_id()?;
-                                Ok(())
-                            },
-                            Token::ParenClose,
-                            true,
-                        )?;
-                        Primary::FunctionCall(ident.into(), Some((first_arg..last_arg).into()))
+                        let mut parameters = Rc::new(vec![self.parse_expression_id()?]);
+                        {
+                            let parameters = Rc::get_mut(&mut parameters).unwrap();
+                            self.parse_list(
+                                |sel| {
+                                    parameters.push(sel.parse_expression_id()?);
+                                    Ok(())
+                                },
+                                Token::ParenClose,
+                                true,
+                            )?;
+                        }
+                        Primary::FunctionCall(ident.into(), parameters)
                     }
                 } else {
                     Primary::VariableOrNetReference(ident.into())

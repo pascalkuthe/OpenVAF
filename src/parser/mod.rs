@@ -16,11 +16,13 @@ pub use error::Error;
 pub use error::Result;
 
 use crate::ast::{Ast, Attributes, HierarchicalId, TopNode};
+use crate::ir::ast::{AttributeNode, Discipline, Nature};
 use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
-use crate::symbol::Ident;
+use crate::symbol::{Ident, Symbol, SymbolStr};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::util::{Push, SafeRangeCreation};
 use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
@@ -84,10 +86,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             match self.next()? {
                 //TODO multierror
                 (Token::EOF, _) => break,
-                (Token::Module, _) => {
-                    let module = self.parse_module(attributes)?;
-                    self.ast.top_nodes.alloc().init(TopNode::Module(module));
-                }
+                (Token::Module, _) => self.parse_module(attributes),
                 (_, source) => {
                     return Err(Error {
                         error_type: error::Type::UnexpectedToken {
@@ -97,6 +96,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     })
                 }
             }
+            .map_err(|err| self.non_critical_errors.push(err));
         }
         Ok(())
     }
@@ -141,7 +141,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     }
     //todo attributes
     pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
-        Ok(None) //Attributes are not yet supported
+        Ok(self.ast.empty_range_from_end()) //Attributes are not yet supported
     }
     pub fn expect(&mut self, token: Token) -> Result {
         let (found, source) = self.look_ahead()?;
@@ -203,7 +203,10 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
     ast: &'astref mut Ast<'ast>,
-) -> std::result::Result<(), ()> {
+) -> (
+    &'source_map SourceMap<'source_map>,
+    std::result::Result<(), ()>,
+) {
     let (source_map, mut errors) =
         parse(main_file, source_map_allocator, ast).unwrap_or_else(|e| {
             panic!(
@@ -213,11 +216,44 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
             )
         });
     if errors.is_empty() {
-        Ok(())
+        (source_map, Ok(()))
     } else {
         errors
             .drain(..)
             .for_each(|err| err.print(&source_map, true));
-        Err(())
+        (source_map, Err(()))
     }
+}
+pub fn insert_electrical_natures_and_disciplines(ast: &mut Ast) {
+    let voltage = ast.push(AttributeNode {
+        attributes: ast.empty_range_from_end(),
+        source: Span::new(0, 0),
+        contents: Nature {
+            name: Ident::from_str("Voltage"),
+        },
+    });
+    ast.top_symbols
+        .insert(Symbol::intern("V"), SymbolDeclaration::Nature(voltage));
+    let current = ast.push(AttributeNode {
+        attributes: ast.empty_range_from_end(),
+        source: Span::new(0, 0),
+        contents: Nature {
+            name: Ident::from_str("Current"),
+        },
+    });
+    ast.top_symbols
+        .insert(Symbol::intern("I"), SymbolDeclaration::Nature(current));
+    let electrical = ast.push(AttributeNode {
+        attributes: ast.empty_range_from_end(),
+        source: Span::new(0, 0),
+        contents: Discipline {
+            name: Ident::from_str("electrical"),
+            flow_nature: Ident::from_str("I"),
+            potential_nature: Ident::from_str("V"),
+        },
+    });
+    ast.top_symbols.insert(
+        Symbol::intern("electrical"),
+        SymbolDeclaration::Discipline(electrical),
+    );
 }

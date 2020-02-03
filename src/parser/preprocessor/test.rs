@@ -14,14 +14,12 @@ use bumpalo::Bump;
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::source_map::SourceMapBuilder;
 use crate::parser::Error;
-use crate::test::setup_logger;
 use crate::{Preprocessor, Span};
 
 #[test]
 pub fn macros() -> std::result::Result<(), String> {
     let source_map_allocator = Bump::new();
     let preprocessor_allocator = Bump::new();
-    setup_logger();
     let mut preprocessor = Preprocessor::new(
         &preprocessor_allocator,
         &source_map_allocator,

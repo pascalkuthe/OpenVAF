@@ -300,9 +300,9 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         &*res
     }
     fn get_current_root_offset(&self) -> usize {
-        self.cursor
-            .get()
-            .map_or(0, |substitution| substitution.end.get() as usize)
+        self.cursor.get().map_or(0, |substitution| {
+            substitution.original_span.get_end() as usize
+        })
     }
 
     pub(super) fn new_line(&mut self) {

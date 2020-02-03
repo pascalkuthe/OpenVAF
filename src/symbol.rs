@@ -245,7 +245,6 @@ mod statics {
 /// safely treat `string` which points to interner data, as an immortal string,
 /// as long as this type never crosses between threads.
 //
-// FIXME: ensure that the interner outlives any thread which uses `SymbolStr`,
 // by creating a new thread right after constructing the interner.
 #[derive(Clone, Eq, PartialOrd, Ord)]
 pub struct SymbolStr {

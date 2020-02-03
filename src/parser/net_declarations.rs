@@ -9,7 +9,6 @@
  */
 
 use std::collections::HashSet;
-use std::ops::Range;
 
 use crate::ast::{AttributeNode, Attributes, Net, NetType, Port};
 use crate::ir::PortId;
@@ -23,7 +22,7 @@ use crate::util::Push;
 use crate::Span;
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
-    pub fn parse_port_declaration_list(&mut self) -> Result<Range<PortId<'ast>>> {
+    pub fn parse_port_declaration_list(&mut self) -> Result {
         let attributes = self.parse_attributes()?;
         let first_port = self.parse_port_declaration_base(attributes)?;
         self.insert_symbol(
@@ -34,7 +33,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         while self.look_ahead()?.0 == Token::Comma {
             while self.next()?.0 == Token::Comma {
                 if let Ok(name) = self.parse_identifier(true) {
-                    last_port = self.ast.push(AttributeNode {
+                    self.ast.push(AttributeNode {
                         attributes: self.ast[last_port].attributes,
                         source: self.ast[last_port].source.extend(name.span),
                         contents: Port {
@@ -57,10 +56,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 SymbolDeclaration::Port(last_port),
             );
         }
-        Ok(Range {
-            start: first_port,
-            end: last_port,
-        })
+        Ok(())
     }
 
     pub fn parse_port_declaration(
@@ -68,31 +64,27 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         attributes: Attributes<'ast>,
         expected: &mut HashSet<Ident>,
         port_list: Span,
-    ) -> Result<Range<PortId<'ast>>> {
+    ) -> Result {
         let first_port = self.parse_port_declaration_base(attributes)?;
         self.insert_port(first_port, port_list, expected);
-        let mut last_port = first_port;
         self.parse_list(
             |sel: &mut Self| {
                 let name = sel.parse_identifier(false)?;
-                last_port = sel.ast.push(AttributeNode {
+                let current_port = sel.ast.push(AttributeNode {
                     attributes,
-                    source: sel.ast[last_port].source.extend(name.span),
+                    source: sel.ast[first_port].source.extend(name.span),
                     contents: Port {
                         name,
-                        ..sel.ast[last_port].contents
+                        ..sel.ast[first_port].contents
                     },
                 });
-                sel.insert_port(last_port, port_list, expected);
+                sel.insert_port(current_port, port_list, expected);
                 Ok(())
             },
             Token::Semicolon,
             true,
         )?;
-        Ok(Range {
-            start: first_port,
-            end: last_port,
-        })
+        Ok(())
     }
     fn insert_port(&mut self, port: PortId<'ast>, port_list: Span, expected: &mut HashSet<Ident>) {
         if expected.remove(&self.ast[port].contents.name) {

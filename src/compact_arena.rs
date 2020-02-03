@@ -112,7 +112,92 @@ use core::ptr;
 use std::error::Error;
 use std::ops::Range;
 
-use crate::test::Step;
+use crate::util::Step;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct SafeRange<T: Copy> {
+    start: T,
+    end: T,
+}
+impl<T: Copy> Into<Range<T>> for SafeRange<T> {
+    fn into(self) -> Range<T> {
+        std::ops::Range {
+            start: self.start,
+            end: self.end,
+        }
+    }
+}
+impl<T: Copy> From<Range<T>> for SafeRange<T> {
+    fn from(org: Range<T>) -> Self {
+        Self {
+            start: org.start,
+            end: org.end,
+        }
+    }
+}
+/*
+Not yet possible because this allows From<SafeRange<T>> for SafeRange<T> which is already implemented in core
+and there is not yet a way to say T1!=T2 (but hopefully there will be soon
+impl<T1: Copy, T2: Copy + Into<T1>> From<SafeRange<T1>> for SafeRange<T2> {
+    fn from(other: SafeRange<T1>) -> Self {
+        Self {
+            start: other.start.into(),
+            end: other.end.into(),
+        }
+    }
+}*/
+
+impl<'tag, T: Copy + Clone> From<SafeRange<Idx<'tag, T>>> for SafeRange<T> {
+    fn from(other: SafeRange<Idx<'tag, T>>) -> Self {
+        Self {
+            start: other.start.index,
+            end: other.end.index,
+        }
+    }
+}
+impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.start < self.end {
+            //Range is inclusive of the end
+            let res = Some(self.start);
+            unsafe { self.start.step() };
+            res
+        } else {
+            None
+        }
+    }
+}
+impl<T: Copy + Clone> SafeRange<T> {
+    /// You should never call this! This is here to allow access in macros
+    pub(crate) unsafe fn get_end(&self) -> T {
+        self.end
+    }
+    /// You should never call this! This is here to allow access in macros
+    pub(crate) unsafe fn get_start(&self) -> T {
+        self.start
+    }
+    pub(crate) fn new(start: T, end: T) -> Self {
+        Self { start, end }
+    }
+    pub fn set_end(&mut self, end: T) {
+        self.end = end;
+    }
+    pub fn set_start(&mut self, start: T) {
+        self.end = start;
+    }
+}
+impl<'tag, T: Copy + Clone + Sub<Output = T>> SafeRange<Idx<'tag, T>> {
+    pub fn len(self) -> T {
+        self.end.distance(self.start)
+    }
+}
+impl<T: Copy + Clone + PartialEq + Eq> SafeRange<T> {
+    pub fn is_empty(self) -> bool {
+        self.end == self.start
+    }
+}
 
 /// This is one part of the secret sauce that ensures that indices from
 /// different arenas cannot be mixed. You should never need to use this type in
@@ -145,15 +230,20 @@ impl<'tag, T: Copy + Clone + AddAssign> Idx<'tag, T> {
     }
 }
 impl<'tag, T: Copy + Clone + Sub<Output = T>> Idx<'tag, T> {
-    pub fn distance(&self, other: &Self) -> T {
+    pub fn distance(&self, other: Self) -> T {
         self.index - other.index
     }
 }
-impl<'tag, I: Copy + Clone> Into<I> for Idx<'tag, I> {
+impl<'tag, I: Copy + Clone + Sized + Debug> Debug for Idx<'tag, I> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Idx: {:?}", self.index))
+    }
+}
+/*impl<'tag, I: Copy + Clone + Sized> Into<I> for Idx<'tag, I> {
     fn into(self) -> I {
         self.index
     }
-}
+}*/
 
 /// The index type for a small arena is 32 bits large. You will usually get the
 /// index from the arena and use it by indexing, e.g. `arena[index]`.
@@ -424,50 +514,6 @@ impl<'tag, T> IndexMut<Idx32<'tag>> for SmallArena<'tag, T> {
 
 const TINY_ARENA_ITEMS: u32 = 65536;
 const NANO_ARENA_ITEMS: u16 = 256;
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct SafeRange<T: Copy> {
-    pub start: T,
-    end: T,
-}
-impl<T: Copy> Into<Range<T>> for SafeRange<T> {
-    fn into(self) -> Range<T> {
-        std::ops::Range {
-            start: self.start,
-            end: self.end,
-        }
-    }
-}
-impl<T: Copy> From<Range<T>> for SafeRange<T> {
-    fn from(org: Range<T>) -> Self {
-        Self {
-            start: org.start,
-            end: org.end,
-        }
-    }
-}
-impl<T1: Copy, T2: Copy> From<SafeRange<T1>> for SafeRange<T2> {
-    fn from(other: SafeRange<T1>) -> Self {
-        Self {
-            start: other.start.into(),
-            end: other.end.into(),
-        }
-    }
-}
-
-impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.start <= self.end {
-            //Range is inclusive of the end
-            let res = Some(self.start);
-            unsafe { self.start.step() };
-            res
-        } else {
-            None
-        }
-    }
-}
 
 /// A "tiny" arena containing <64K elements.
 pub struct TinyArena<'tag, T> {
@@ -493,13 +539,7 @@ impl<'tag, T> TinyArena<'tag, T> {
             len: 0,
         }
     }
-    pub unsafe fn next_id(&self) -> Idx16<'tag> {
-        Idx16 {
-            index: self.len as u16,
-            tag: self.tag,
-        }
-    }
-    pub fn range_to(&self, from: Idx16<'tag>) -> SafeRange<Idx16<'tag>> {
+    pub fn range_to_end(&self, from: Idx16<'tag>) -> SafeRange<Idx16<'tag>> {
         SafeRange {
             start: from,
             end: Idx16 {
@@ -507,6 +547,35 @@ impl<'tag, T> TinyArena<'tag, T> {
                 tag: self.tag,
             },
         }
+    }
+    pub fn empty_range_from_end(&self) -> SafeRange<Idx16<'tag>> {
+        let next_id = Idx16 {
+            index: self.len as u16,
+            tag: self.tag,
+        };
+        SafeRange {
+            start: next_id,
+            end: next_id,
+        }
+    }
+    pub fn full_range(&self) -> SafeRange<Idx16<'tag>> {
+        SafeRange {
+            start: Idx16 {
+                index: 0,
+                tag: self.tag,
+            },
+            end: Idx16 {
+                index: self.len as u16,
+                tag: self.tag,
+            },
+        }
+    }
+    pub fn extend_range_to_end(&self, mut range: SafeRange<Idx16<'tag>>) -> SafeRange<Idx16<'tag>> {
+        range.end = Idx16 {
+            index: self.len as u16,
+            tag: self.tag,
+        };
+        range
     }
     /// # Safety
     /// Behavior is undefined if any of the following conditions are violated:
@@ -604,6 +673,47 @@ impl<'tag, T> NanoArena<'tag, T> {
     /// * `dst` must be properly aligned
     pub unsafe fn init(dst: *mut Self) {
         ptr::write(&mut (*dst).len, 0);
+    }
+
+    pub fn range_to_end(&self, from: Idx8<'tag>) -> SafeRange<Idx8<'tag>> {
+        SafeRange {
+            start: from,
+            end: Idx8 {
+                index: self.len as u8,
+                tag: self.tag,
+            },
+        }
+    }
+
+    pub fn empty_range_from_end(&self) -> SafeRange<Idx8<'tag>> {
+        let next_id = Idx8 {
+            index: self.len as u8,
+            tag: self.tag,
+        };
+        SafeRange {
+            start: next_id,
+            end: next_id,
+        }
+    }
+
+    pub fn extend_range_to_end(&self, mut range: SafeRange<Idx8<'tag>>) -> SafeRange<Idx8<'tag>> {
+        range.end = Idx8 {
+            index: self.len as u8,
+            tag: self.tag,
+        };
+        range
+    }
+    pub fn full_range(&self) -> SafeRange<Idx8<'tag>> {
+        SafeRange {
+            start: Idx8 {
+                index: 0,
+                tag: self.tag,
+            },
+            end: Idx8 {
+                index: self.len as u8,
+                tag: self.tag,
+            },
+        }
     }
     /// # Safety
     /// Behavior is undefined if any of the following conditions are violated:
@@ -712,11 +822,11 @@ impl<'tag, T> IndexMut<Idx8<'tag>> for NanoArena<'tag, T> {
     }
 }
 
-impl<'tag, T> Index<&Range<Idx8<'tag>>> for NanoArena<'tag, T> {
+impl<'tag, T> Index<SafeRange<Idx8<'tag>>> for NanoArena<'tag, T> {
     type Output = [T];
 
-    fn index(&self, i: &Range<Idx8<'tag>>) -> &[T] {
-        debug_assert!(u16::from(i.end.index) < self.len);
+    fn index(&self, i: SafeRange<Idx8<'tag>>) -> &[T] {
+        debug_assert!(u16::from(i.end.index) <= self.len);
         debug_assert!(u16::from(i.start.index) < self.len);
         debug_assert!(i.start.index < i.end.index);
         // we can use unchecked indexing here because branding the indices with
@@ -727,9 +837,9 @@ impl<'tag, T> Index<&Range<Idx8<'tag>>> for NanoArena<'tag, T> {
     }
 }
 
-impl<'tag, T> IndexMut<&Range<Idx8<'tag>>> for NanoArena<'tag, T> {
-    fn index_mut(&mut self, i: &Range<Idx8<'tag>>) -> &mut [T] {
-        debug_assert!(u16::from(i.end.index) < self.len);
+impl<'tag, T> IndexMut<SafeRange<Idx8<'tag>>> for NanoArena<'tag, T> {
+    fn index_mut(&mut self, i: SafeRange<Idx8<'tag>>) -> &mut [T] {
+        debug_assert!(u16::from(i.end.index) <= self.len);
         debug_assert!(u16::from(i.start.index) < self.len);
         debug_assert!(i.start.index < i.end.index);
         // we can use unchecked indexing here because branding the indices with
@@ -744,11 +854,11 @@ impl<'tag, T> IndexMut<&Range<Idx8<'tag>>> for NanoArena<'tag, T> {
         unsafe { std::slice::from_raw_parts_mut(start, usize::from(i.end.index - i.start.index)) }
     }
 }
-impl<'tag, T> Index<&Range<Idx16<'tag>>> for TinyArena<'tag, T> {
+impl<'tag, T> Index<SafeRange<Idx16<'tag>>> for TinyArena<'tag, T> {
     type Output = [T];
 
-    fn index(&self, i: &Range<Idx16<'tag>>) -> &[T] {
-        debug_assert!(u32::from(i.end.index) < self.len);
+    fn index(&self, i: SafeRange<Idx16<'tag>>) -> &[T] {
+        debug_assert!(u32::from(i.end.index) <= self.len);
         debug_assert!(u32::from(i.start.index) < self.len);
         debug_assert!(i.start.index < i.end.index);
         // we can use unchecked indexing here because branding the indices with
@@ -759,9 +869,9 @@ impl<'tag, T> Index<&Range<Idx16<'tag>>> for TinyArena<'tag, T> {
     }
 }
 
-impl<'tag, T> IndexMut<&Range<Idx16<'tag>>> for TinyArena<'tag, T> {
-    fn index_mut(&mut self, i: &Range<Idx16<'tag>>) -> &mut [T] {
-        debug_assert!(u32::from(i.end.index) < self.len);
+impl<'tag, T> IndexMut<SafeRange<Idx16<'tag>>> for TinyArena<'tag, T> {
+    fn index_mut(&mut self, i: SafeRange<Idx16<'tag>>) -> &mut [T] {
+        debug_assert!(u32::from(i.end.index) <= self.len);
         debug_assert!(u32::from(i.start.index) < self.len);
         debug_assert!(i.start.index < i.end.index);
         // we can use unchecked indexing here because branding the indices with

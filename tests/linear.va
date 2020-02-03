@@ -22,13 +22,15 @@ module schaltung (A,B);
 
     analog begin
         if (V(ax) > 100) begin
-            B = B-1;
+            C=42*31+1;
+        end
+        else begin
+            C = 42;
         end
         I(ax) <+ V(ax)/10;
         I(ay) <+ V(ay)/20;
         I(xy) <+ (B*V(ax)+V(xy))/30;
-        I(ay) <+ V(xa)/40;
-        I(ay) <+ V(ya)/50;
+        I(ax) <+ V(ax)/40;
+        I(ay) <+ V(ay)/50;
     end
 endmodule
-

@@ -3,7 +3,9 @@ name = "VARF"
 version = "0.1.0"
 authors = ["DSOM"]
 edition = "2018"
-
+[profile.release]
+debug = true
+opt-level = 3
 [dependencies]
 log="*"
 intrusive-collections = "0.8.5"
@@ -39,3 +41,7 @@ opt-level = 1
 [[bench]]
 name = "parser_bench"
 harness = false
+#[[test]]
+#name = "parser_test"
+#harness = true
+

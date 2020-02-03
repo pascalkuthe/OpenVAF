@@ -345,7 +345,11 @@ impl Warning {
     }
 }
 
-fn translate_to_inner_snippet_range(start: Index, end: Index, source: &str) -> (usize, usize) {
+pub(crate) fn translate_to_inner_snippet_range(
+    start: Index,
+    end: Index,
+    source: &str,
+) -> (usize, usize) {
     let lines = bytecount::count(&source.as_bytes()[..start as usize], b'\n');
     (start as usize + lines, end as usize + lines)
 }

@@ -232,28 +232,28 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         self.expect(Token::ParenClose)?;
         let statement_attributes = self.parse_attributes()?;
         let main_condition_statement = self.parse_statement(statement_attributes)?;
-        let mut else_ifs = Rc::new(Vec::new());
+        let mut else_ifs = Vec::new();
         let mut else_statement = None;
-        {
-            let else_ifs = Rc::get_mut(&mut else_ifs).unwrap();
-            loop {
-                if self.look_ahead()?.0 != Token::Else {
-                    break;
-                }
-                if self.look_ahead()?.0 == Token::If {
-                    self.lookahead.take();
-                    self.expect(Token::ParenOpen)?;
-                    let condition = self.parse_expression_id()?;
-                    self.expect(Token::ParenClose)?;
-                    let attributes = self.parse_attributes()?;
-                    else_ifs.push((condition, self.parse_statement(attributes)?));
-                } else {
-                    let attributes = self.parse_attributes()?;
-                    else_statement = Some(self.parse_statement(attributes)?);
-                    break;
-                }
+
+        loop {
+            if self.look_ahead()?.0 != Token::Else {
+                break;
+            }
+            self.lookahead.take();
+            if self.look_ahead()?.0 == Token::If {
+                self.lookahead.take();
+                self.expect(Token::ParenOpen)?;
+                let condition = self.parse_expression_id()?;
+                self.expect(Token::ParenClose)?;
+                let attributes = self.parse_attributes()?;
+                else_ifs.push((condition, self.parse_statement(attributes)?));
+            } else {
+                let attributes = self.parse_attributes()?;
+                else_statement = Some(self.parse_statement(attributes)?);
+                break;
             }
         }
+
         Ok(AttributeNode {
             attributes,
             source: self.span_to_current_end(start),

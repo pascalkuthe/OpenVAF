@@ -13,10 +13,10 @@ use std::rc::Rc;
 
 pub use visitor::Visitor;
 
-use crate::compact_arena::{Idx16, Idx8, InvariantLifetime, NanoArena, SafeRange, TinyArena};
+use crate::compact_arena::{InvariantLifetime, NanoArena, SafeRange, TinyArena};
 use crate::ir::{
-    AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NetId,
-    PortId, StatementId, VariableId,
+    AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId,
+    NetId, PortId, StatementId, VariableId,
 };
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
@@ -82,9 +82,9 @@ impl<T: Clone> Node<T> {
     }
 }
 
-/// An Ast representing a parser Verilog-AMS project (root file);
-/// It provides stable indicies for every Node because the entire is immutable once created;
-/// It uses preallocated constant size arrays for performance so you should box this as this is a lot of data to put on the stack
+/// An Ast representing a parsed Verilog-AMS project (root file);
+/// It provides stable indicies for every Node because the entire Tree is immutable once created;
+/// It uses preallocated constant size arrays for performance
 
 //TODO make this into a general proc macro with lifetimes like compact arena
 pub struct Ast<'tag> {
@@ -99,12 +99,12 @@ pub struct Ast<'tag> {
     pub(super) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
     pub(super) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
     pub(super) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
+    pub(super) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
     //Ast Items
     pub(super) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
     pub(super) blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
     pub(super) attributes: TinyArena<'tag, Attribute>,
     pub(super) statements: TinyArena<'tag, Statement<'tag>>,
-    pub top_nodes: Vec<TopNode<'tag>>, //would prefer this to be stored here instead of somewhere else on the heap but its probably fine for now
     pub top_symbols: SymbolTable<'tag>,
 }
 ///this module contains copys of the dfinitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
@@ -127,11 +127,11 @@ impl<'tag> Ast<'tag> {
         NanoArena::init(&mut res.as_mut().modules);
         NanoArena::init(&mut res.as_mut().functions);
         NanoArena::init(&mut res.as_mut().disciplines);
+        NanoArena::init(&mut res.as_mut().natures);
         TinyArena::init(&mut res.as_mut().expressions);
         NanoArena::init(&mut res.as_mut().blocks);
         TinyArena::init(&mut res.as_mut().attributes);
         TinyArena::init(&mut res.as_mut().statements);
-        std::ptr::write(&mut res.as_mut().top_nodes, Vec::with_capacity(64));
         std::ptr::write(
             &mut res.as_mut().top_symbols,
             SymbolTable::with_capacity(64),
@@ -141,17 +141,18 @@ impl<'tag> Ast<'tag> {
 }
 
 //TODO cfg options for different id sizes/allocs
-impl_id_type_for_container!(BranchId(Idx8): AttributeNode<'tag,BranchDeclaration>; in Ast::branches);
-impl_id_type_for_container!(NetId(Idx16): AttributeNode<'tag,Net>; in Ast::nets);
-impl_id_type_for_container!(PortId(Idx8): AttributeNode<'tag,Port>; in Ast::ports);
-impl_id_type_for_container!(VariableId(Idx16): AttributeNode<'tag,Variable<'tag>>; in Ast::variables);
-impl_id_type_for_container!(ModuleId(Idx8): AttributeNode<'tag,Module<'tag>>; in Ast::modules);
-impl_id_type_for_container!(FunctionId(Idx8): AttributeNode<'tag,Function<'tag>>; in Ast::functions);
-impl_id_type_for_container!(DisciplineId(Idx8): AttributeNode<'tag,Discipline>; in Ast::disciplines);
-impl_id_type_for_container!(ExpressionId(Idx16): Node<Expression<'tag>>; in Ast::expressions);
-impl_id_type_for_container!(AttributeId(Idx16): Attribute; in Ast::attributes);
-impl_id_type_for_container!(StatementId(Idx16): Statement<'tag>; in Ast::statements);
-impl_id_type_for_container!(BlockId(Idx8): AttributeNode<'tag,SeqBlock<'tag>>; in Ast::blocks);
+impl_id_type!(BranchId in Ast::branches -> AttributeNode<'tag,BranchDeclaration>);
+impl_id_type!(NetId in Ast::nets -> AttributeNode<'tag,Net>);
+impl_id_type!(PortId in Ast::ports -> AttributeNode<'tag,Port>);
+impl_id_type!(VariableId in Ast::variables -> AttributeNode<'tag,Variable<'tag>>);
+impl_id_type!(ModuleId in Ast::modules -> AttributeNode<'tag,Module<'tag>>);
+impl_id_type!(FunctionId in Ast::functions -> AttributeNode<'tag,Function<'tag>>);
+impl_id_type!(DisciplineId in Ast::disciplines -> AttributeNode<'tag,Discipline>);
+impl_id_type!(ExpressionId in Ast::expressions -> Node<Expression<'tag>>);
+impl_id_type!(AttributeId in Ast::attributes -> Attribute);
+impl_id_type!(StatementId in Ast::statements -> Statement<'tag>);
+impl_id_type!(BlockId in Ast::blocks -> AttributeNode<'tag,SeqBlock<'tag>>);
+impl_id_type!(NatureId in Ast::natures -> AttributeNode<'tag,Nature>);
 
 pub type Attribute = ();
 
@@ -165,10 +166,14 @@ pub struct AttributeNode<'ast, T: Clone> {
 #[derive(Clone)]
 pub enum TopNode<'tag> {
     Module(ModuleId<'tag>),
-    Nature,
-    Discipline,
+    Nature(NatureId<'tag>),
+    Discipline(DisciplineId<'tag>),
 }
-
+#[derive(Copy, Clone)]
+pub struct Nature {
+    pub name: Ident,
+    //rest todo
+}
 #[derive(Clone)]
 pub struct Module<'ast> {
     pub name: Ident,
@@ -312,7 +317,7 @@ pub enum Primary<'ast> {
     UnsignedInteger(u32),
     Real(f64),
     VariableOrNetReference(HierarchicalId),
-    FunctionCall(HierarchicalId, Option<SafeRange<ExpressionId<'ast>>>),
+    FunctionCall(HierarchicalId, Rc<Vec<ExpressionId<'ast>>>),
     BranchAccess(Ident, BranchAccess),
 }
 
@@ -363,6 +368,13 @@ pub enum VariableType {
 #[derive(Clone, Debug)]
 pub struct HierarchicalId {
     pub names: Vec<Ident>,
+}
+impl HierarchicalId {
+    pub fn span(&self) -> Span {
+        self.names[0]
+            .span
+            .extend(self.names[self.names.len() - 1].span)
+    }
 }
 impl From<Vec<Ident>> for HierarchicalId {
     fn from(raw: Vec<Ident>) -> Self {

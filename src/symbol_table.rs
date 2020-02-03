@@ -1,13 +1,16 @@
 use ahash::AHashMap as HashMap;
 
-use crate::ir::{BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NetId, PortId, VariableId};
-use crate::symbol::Symbol;
+use crate::ast_lowering::error::MockSymbolDeclaration;
+use crate::ir::{
+    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, PortId, VariableId,
+};
+use crate::symbol::{Symbol, SymbolStr};
 use crate::Span;
 
 use super::ast::*;
 
 pub type SymbolTable<'ast> = HashMap<Symbol, SymbolDeclaration<'ast>>;
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum SymbolDeclaration<'ast> {
     Module(ModuleId<'ast>),
     Block(BlockId<'ast>),
@@ -17,7 +20,7 @@ pub enum SymbolDeclaration<'ast> {
     Port(PortId<'ast>),
     Function(FunctionId<'ast>),
     Discipline(DisciplineId<'ast>),
-    Nature,
+    Nature(NatureId<'ast>),
 }
 impl<'ast> SymbolDeclaration<'ast> {
     pub fn span(self, ast: &Ast<'ast>) -> Span {
@@ -30,7 +33,33 @@ impl<'ast> SymbolDeclaration<'ast> {
             Self::Port(id) => ast[id].source,
             Self::Function(id) => ast[id].source,
             Self::Discipline(id) => ast[id].source,
-            Self::Nature => unimplemented!(), //ast[id].source,
+            Self::Nature(id) => ast[id].source,
+        }
+    }
+    pub fn name<'lt>(self, ast: &'lt Ast<'ast>) -> SymbolStr {
+        match self {
+            Self::Module(id) => ast[id].contents.name.name.as_str(),
+            Self::Block(id) => ast[id].contents.scope.as_ref().unwrap().name.name.as_str(),
+            Self::Variable(id) => ast[id].contents.name.name.as_str(),
+            Self::Net(id) => ast[id].contents.name.name.as_str(),
+            Self::Branch(id) => ast[id].contents.name.name.as_str(),
+            Self::Port(id) => ast[id].contents.name.name.as_str(),
+            Self::Function(id) => ast[id].contents.name.name.as_str(),
+            Self::Discipline(id) => ast[id].contents.name.name.as_str(),
+            Self::Nature(id) => ast[id].contents.name.name.as_str(),
+        }
+    }
+    pub fn mock(self) -> MockSymbolDeclaration {
+        match self {
+            Self::Module(_) => MockSymbolDeclaration::Module,
+            Self::Block(_) => MockSymbolDeclaration::Block,
+            Self::Variable(_) => MockSymbolDeclaration::Variable,
+            Self::Net(_) => MockSymbolDeclaration::Net,
+            Self::Branch(_) => MockSymbolDeclaration::Branch,
+            Self::Port(_) => MockSymbolDeclaration::Port,
+            Self::Function(_) => MockSymbolDeclaration::Function,
+            Self::Discipline(_) => MockSymbolDeclaration::Discipline,
+            Self::Nature(_) => MockSymbolDeclaration::Nature,
         }
     }
 }

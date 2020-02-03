@@ -7,7 +7,8 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use std::ops::Range;
+
+use crate::compact_arena::SafeRange;
 
 macro_rules! unreachable_unchecked{
     ($reason:expr) => {
@@ -32,4 +33,17 @@ macro_rules! static_assert_align_eq {
     ($ty:ty, $ty2:ty) => {
         const _: [(); ::std::mem::align_of::<$ty>] = [(); ::std::mem::align_of::<$ty2>()];
     };
+}
+pub trait Push<T> {
+    type Key;
+    fn push(&mut self, value: T) -> Self::Key;
+}
+pub trait SafeRangeCreation<Key: Copy + Clone> {
+    fn range_to_end(&self, from: Key) -> SafeRange<Key>;
+    fn empty_range_from_end(&self) -> SafeRange<Key>;
+    fn extend_range_to_end(&self, range: SafeRange<Key>) -> SafeRange<Key>;
+    fn full_range(&self) -> SafeRange<Key>;
+}
+pub trait Step {
+    unsafe fn step(&mut self);
 }

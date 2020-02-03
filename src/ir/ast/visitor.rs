@@ -3,7 +3,11 @@ use crate::ast::{
     Ast, AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration, Condition, Expression,
     HierarchicalId, Module, ModuleItem, NetType, Node, Primary, SeqBlock, Statement, VariableType,
 };
-use crate::ir::{BlockId, BranchId, ExpressionId, ModuleId, StatementId};
+use crate::ir::ast::{Discipline, Nature, Port};
+use crate::ir::{
+    BlockId, BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId, PortId, StatementId,
+    VariableId,
+};
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
 
@@ -72,13 +76,7 @@ pub trait Visitor<'ast, E = ()>: Sized {
     ) -> Result<(), E> {
         walk_contribute(self, nature, branch, value, ast)
     }
-    fn visit_branch_declaration(
-        &mut self,
-        branch_declaration: BranchId<'ast>,
-        ast: &Ast<'ast>,
-    ) -> Result<(), E> {
-        walk_branch_declaration(self, &ast[branch_declaration].contents, ast)
-    }
+
     fn visit_branch_access(
         &mut self,
         nature: &Ident,
@@ -93,6 +91,48 @@ pub trait Visitor<'ast, E = ()>: Sized {
     fn visit_expression(&mut self, expr: ExpressionId<'ast>, ast: &Ast<'ast>) -> Result<(), E> {
         walk_expression(self, &ast[expr], ast)
     }
+    fn visit_expression_primary(
+        &mut self,
+        primary: &Primary<'ast>,
+        ast: &Ast<'ast>,
+    ) -> Result<(), E> {
+        walk_expression_primary(self, primary, ast)
+    }
+
+    fn visit_branch_declaration(
+        &mut self,
+        branch_declaration: BranchId<'ast>,
+        ast: &Ast<'ast>,
+    ) -> Result<(), E> {
+        walk_branch_declaration(self, &ast[branch_declaration].contents, ast)
+    }
+
+    fn visit_port(&mut self, port: PortId<'ast>, ast: &Ast<'ast>) -> Result<(), E> {
+        /*Nothing to do*/
+        Ok(())
+    }
+
+    fn visit_net(&mut self, net: NetId<'ast>, ast: &Ast<'ast>) -> Result<(), E> {
+        /*Nothing to do*/
+        Ok(())
+    }
+
+    fn visit_variable(&mut self, variable: VariableId<'ast>, ast: &Ast<'ast>) -> Result<(), E> {
+        /*Nothing to do*/
+        Ok(())
+    }
+    fn visit_nature(&mut self, nature: NatureId<'ast>, ast: &Ast<'ast>) -> Result<(), E> {
+        /*Nothing to do*/
+        Ok(())
+    }
+    fn visit_discipline(
+        &mut self,
+        discipline: DisciplineId<'ast>,
+        ast: &Ast<'ast>,
+    ) -> Result<(), E> {
+        /*Nothing to do*/
+        Ok(())
+    }
 }
 
 pub fn walk_module<'ast, E, V: Visitor<'ast, E>>(
@@ -101,22 +141,21 @@ pub fn walk_module<'ast, E, V: Visitor<'ast, E>>(
     ast: &Ast<'ast>,
 ) -> Result<(), E> {
     let module = &module.contents;
-    for decl in module.symbol_table.values() {
+    for decl in module.symbol_table.values().copied() {
         match decl {
-            SymbolDeclaration::Nature => unreachable_unchecked!("Natures can't be declared inside nature so the parser won't ever place this here"),
+            SymbolDeclaration::Nature(_) => unreachable_unchecked!("Natures can't be declared inside nature so the parser won't ever place this here"),
             SymbolDeclaration::Module(_)=>unreachable_unchecked!("Module cant be declared inside modules so the parser won't ever place this here"),
             SymbolDeclaration::Discipline(_) => unreachable_unchecked!("Discipline can't be declared inside modules so the parser won't ever place this here"),
             SymbolDeclaration::Function(_) => unimplemented!("Functions"),
-            SymbolDeclaration::Branch(branch) => v.visit_branch_declaration(*branch,ast)?,
+            SymbolDeclaration::Branch(branch) => v.visit_branch_declaration(branch,ast)?,
             SymbolDeclaration::Block(_) => (),//Blocks are visited specially as analog / digital blocks since their order and whether they are digital or analog matters and not all blocks are inside the symbol table
-            SymbolDeclaration::Port(_) => (),//TODO Port declaration visit
-            SymbolDeclaration::Net(_) => (),//TODO net declaration visit
-            SymbolDeclaration::Variable(_) => (),//TODO variable declaration visit
+            SymbolDeclaration::Port(portid) => v.visit_port(portid,ast)?,
+            SymbolDeclaration::Net(netid) => v.visit_net(netid,ast)?,
+            SymbolDeclaration::Variable(variableid) => v.visit_variable(variableid,ast)?,
             //TODO parameters
         }
     }
     //TODO parameters
-    //TODO visit variable/branch declarations?
     for module_item in module.children.iter() {
         match module_item {
             ModuleItem::AnalogStmt(statement) => v.visit_statement(*statement, ast)?,
@@ -230,26 +269,37 @@ pub fn walk_expression<'ast, E, V: Visitor<'ast, E>>(
             v.visit_expression(rhs, ast)
         }
         Expression::UnaryOperator(_op, rhs) => v.visit_expression(rhs, ast),
-        Expression::Primary(Primary::BranchAccess(ref nature, ref branch_access)) => {
-            v.visit_branch_access(nature, branch_access, ast)
-        }
-        Expression::Primary(VariableOrNetReference(ref ident)) => {
-            v.visit_hierarchical_reference(ident, ast)
-        }
-        Expression::Primary(FunctionCall(ref ident, parameters)) => {
-            v.visit_hierarchical_reference(ident, ast)?;
-            if let Some(args) = parameters {
-                for arg in args {
-                    v.visit_expression(arg, ast)?;
-                }
-            }
-            Ok(())
-        }
-        Expression::Primary(Integer(_))
-        | Expression::Primary(Real(_))
-        | Expression::Primary(UnsignedInteger(_)) => {
-            /*Nothing to do*/
-            Ok(())
-        }
+        Expression::Primary(ref primary) => v.visit_expression_primary(primary, ast),
     }
+}
+pub fn walk_expression_primary<'ast, E, V: Visitor<'ast, E>>(
+    v: &mut V,
+    primary: &Primary<'ast>,
+    ast: &Ast<'ast>,
+) -> Result<(), E> {
+    match primary {
+        Primary::BranchAccess(ref nature, ref branch_access) => {
+            v.visit_branch_access(nature, branch_access, ast)?
+        }
+        Primary::VariableOrNetReference(ref ident) => v.visit_hierarchical_reference(ident, ast)?,
+        Primary::FunctionCall(ref ident, ref parameters) => {
+            v.visit_hierarchical_reference(ident, ast)?;
+            for parameter in parameters.iter().copied() {
+                v.visit_expression(parameter, ast)?;
+            }
+        }
+        Integer(_) | UnsignedInteger(_) | Real(_) => { /*Nothing to do*/ }
+    }
+    Ok(())
+}
+
+fn walk_variable<'ast, E, V: Visitor<'ast, E>>(
+    v: &mut V,
+    variable: VariableId<'ast>,
+    ast: &Ast<'ast>,
+) -> Result<(), E> {
+    if let Some(default) = ast[variable].contents.default_value {
+        v.visit_expression(default, ast)?;
+    }
+    Ok(())
 }
