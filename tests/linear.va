@@ -14,6 +14,9 @@
     branch (y,B) yb;\
     branch (x,y) xy;
 
+`define calculate(a,b)\
+    b**a/2
+
 module schaltung (A,B);
     inout electrical A,B;
     electrical x,y;
@@ -27,7 +30,7 @@ module schaltung (A,B);
         else begin
             C = 42;
         end
-        I(ax) <+ V(ax)/10;
+        I(ax) <+ `calculate(31,V(ax));
         I(ay) <+ V(ay)/20;
         I(xy) <+ (B*V(ax)+V(xy))/30;
         I(ax) <+ V(ax)/40;

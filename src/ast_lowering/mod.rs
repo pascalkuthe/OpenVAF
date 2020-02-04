@@ -268,6 +268,10 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
         for port in self.ast.full_range() {
             self.visit_port(port, self.ast);
         }
+        if !self.errors.is_empty() {
+            return;
+        }
+
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.ast) {
             let module: &AttributeNode<ast::Module> = &self.ast[module];
             self.scope_stack.push(&module.contents.symbol_table);
@@ -287,6 +291,10 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
             }
             self.scope_stack.pop();
         }
+        if !self.errors.is_empty() {
+            return;
+        }
+
         //Depth first visit of all modules
 
         for module in self.ast.full_range() {

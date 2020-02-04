@@ -48,24 +48,30 @@ pub struct Parser<'lt, 'ast, 'astref, 'source_map> {
     pub non_critical_errors: Vec<Error>,
 }
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
-    pub fn new(preprocessor: Preprocessor<'lt, 'source_map>, ast: &'astref mut Ast<'ast>) -> Self {
+    pub fn new(
+        preprocessor: Preprocessor<'lt, 'source_map>,
+        ast: &'astref mut Ast<'ast>,
+        errors: Vec<Error>,
+    ) -> Self {
         Self {
             preprocessor,
             scope_stack: Vec::with_capacity(32),
             lookahead: None,
             ast,
-            non_critical_errors: Vec::with_capacity(32),
+            non_critical_errors: errors,
         }
     }
     fn next(&mut self) -> Result<(Token, Span)> {
-        self.lookahead.take().unwrap_or_else(|| {
-            self.preprocessor.advance().map(|_| {
-                (
+        match self.lookahead.take() {
+            None => {
+                self.preprocessor.advance()?;
+                Ok((
                     self.preprocessor.current_token(),
                     self.preprocessor.current_span(),
-                )
-            })
-        })
+                ))
+            }
+            Some(res) => res,
+        }
     }
     fn look_ahead(&mut self) -> Result<(Token, Span)> {
         if let Some(lookahead) = self.lookahead.clone() {
@@ -80,25 +86,46 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         self.lookahead = Some(res.clone());
         res
     }
-    pub fn run(&mut self) -> Result {
+    pub fn run(&mut self) {
         loop {
-            let attributes = self.parse_attributes()?;
-            match self.next()? {
-                //TODO multierror
-                (Token::EOF, _) => break,
-                (Token::Module, _) => self.parse_module(attributes),
-                (_, source) => {
-                    return Err(Error {
-                        error_type: error::Type::UnexpectedToken {
-                            expected: vec![Token::Module],
+            let error = match self.parse_attributes() {
+                Ok(attributes) => match self.next() {
+                    Ok((token, source)) => match token {
+                        Token::EOF => return,
+                        Token::Module => {
+                            if let Err(error) = self.parse_module(attributes) {
+                                error
+                            } else {
+                                continue;
+                            }
+                        }
+
+                        _ => Error {
+                            error_type: error::Type::UnexpectedToken {
+                                expected: vec![Token::Module],
+                            },
+                            source,
                         },
-                        source,
-                    })
+                    },
+                    Err(error) => error,
+                },
+                Err(error) => error,
+            }; //we can sadly not use Result::and_then altough thats exactly what this is for because it doesn't allow return which is needed here
+            self.non_critical_errors.push(error);
+            loop {
+                match self.look_ahead() {
+                    Ok((Token::Module, _)) => break,
+                    Ok((Token::EOF, _)) => return,
+                    Ok(_) => {
+                        self.lookahead.take();
+                    }
+                    Err(error) => {
+                        self.lookahead.take();
+                        self.non_critical_errors.push(error);
+                    }
                 }
             }
-            .map_err(|err| self.non_critical_errors.push(err));
         }
-        Ok(())
     }
     pub fn parse_identifier(&mut self, optional: bool) -> Result<Ident> {
         let (token, source) = if optional {
@@ -189,14 +216,19 @@ pub fn parse<'source_map, 'ast, 'astref>(
 ) -> std::io::Result<(&'source_map SourceMap<'source_map>, Vec<Error>)> {
     let allocator = Bump::new();
     let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;
-    let res = preprocessor.process_token();
-    let mut parser = Parser::new(preprocessor, ast);
+    let mut errors = Vec::with_capacity(64);
+    loop {
+        match preprocessor.process_token() {
+            Err(error) => errors.push(error),
+            Ok(()) => break,
+        }
+    }
+    let mut parser = Parser::new(preprocessor, ast, errors);
     parser.lookahead = Some(Ok((
         parser.preprocessor.current_token(),
         parser.preprocessor.current_span(),
     )));
-    let res = res.and_then(|_| parser.run());
-    res.map_err(|err| parser.non_critical_errors.push(err));
+    parser.run();
     Ok((parser.preprocessor.skip_rest(), parser.non_critical_errors))
 }
 pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(

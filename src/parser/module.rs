@@ -24,7 +24,7 @@ use crate::util::{Push, SafeRangeCreation};
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
-    pub(super) fn parse_module(&mut self, attributes: Attributes<'ast>) -> Result<ModuleId<'ast>> {
+    pub(super) fn parse_module(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
         //parameters
@@ -125,7 +125,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             },
         });
         self.insert_symbol(name, SymbolDeclaration::Module(module));
-        Ok(module)
+        Ok(())
     }
     fn parse_port_list(&mut self) -> Result<HashSet<Ident>> {
         let mut res = HashSet::with_capacity(1);
