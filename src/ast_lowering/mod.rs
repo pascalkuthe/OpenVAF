@@ -25,6 +25,7 @@ use crate::{ast, SourceMap};
 
 #[cfg(test)]
 mod test;
+
 macro_rules! resolve {
     ($self:ident; $name:ident as $($declaration:ident($id:ident) => $block:block),+) => {
         match $self.resolve($name) {
@@ -65,6 +66,9 @@ macro_rules! resolve_hierarchical {
         }
     };
 }
+
+//TODO input/output enforcement
+//TODO type checking
 pub mod error;
 type Result<T = ()> = std::result::Result<T, ()>;
 struct AstToHirFolder<'tag, 'astref> {
@@ -74,30 +78,15 @@ struct AstToHirFolder<'tag, 'astref> {
     errors: Vec<Error<'tag>>,
 }
 impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
-    fn resolve_branch_discipline(&mut self, branch: Branch<'tag>) -> Result<DisciplineId<'tag>> {
-        match branch {
-            Branch::Port(id) => Ok(self.hir[self.hir[id].net].contents.discipline),
-            Branch::Nets(net1, net2) => {
-                if self.hir[net1].contents.discipline != self.hir[net2].contents.discipline {
-                    self.errors.push(Error {
-                        source: self.hir[net1].source.extend(self.hir[net2].source),
-                        error_type: Type::DisciplineMismatch(
-                            self.hir[net1].contents.discipline,
-                            self.hir[net2].contents.discipline,
-                        ),
-                    });
-                    Err(())
-                } else {
-                    Ok(self.hir[net1].contents.discipline)
-                }
-            }
-        }
-    }
-    fn resolve_branch(&mut self, branch: &ast::Branch) -> Result<Branch<'tag>> {
+    fn resolve_branch(
+        &mut self,
+        branch: &ast::Branch,
+    ) -> Result<(Branch<'tag>, DisciplineId<'tag>)> {
         match branch {
             ast::Branch::Port(ref port) => {
-                resolve_hierarchical!(self; port as Port(id) => {});
-                Err(())
+                resolve_hierarchical!(self; port as Port(port_id) => {
+                    return Ok((Branch::Port(port_id),self.hir[self.hir[port_id].net].contents.discipline));
+                });
             }
             ast::Branch::Nets(ref net1, ref net2) => {
                 let mut first_net = Err(());
@@ -109,32 +98,57 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                         first_net = Ok(self.hir[id].net);
                     }
                 );
+                let mut second_net = Err(());
                 resolve_hierarchical!(self; net2 as
                     Net(second_id) => {
-                            if self.hir[first_net?].contents.discipline != self.hir[second_id].contents.discipline{
-                                self.errors.push(Error{error_type:Type::DisciplineMismatch(self.hir[first_net?].contents.discipline,self.hir[second_id].contents.discipline),source:net1.span().extend(net2.span())});
-                                return Err(())
-                            }
-                            return Ok(Branch::Nets(first_net?,second_id))
+                        second_net = Ok(second_id)
                     },
                     Port(second_id) => {
-                        return Ok(Branch::Nets(first_net?,self.hir[second_id].net))
+                        second_net = Ok(self.hir[second_id].net)
                     }
                 );
-                Err(())
+                if let (Ok(first_net), Ok(second_net)) = (first_net, second_net) {
+                    if self.hir[first_net].contents.discipline
+                        != self.hir[second_net].contents.discipline
+                    {
+                        self.errors.push(Error {
+                            error_type: Type::DisciplineMismatch(
+                                self.hir[first_net].contents.discipline,
+                                self.hir[second_net].contents.discipline,
+                            ),
+                            source: net1.span().extend(net2.span()),
+                        });
+                    } else {
+                        //doesn't matter which nets discipline we use since we asserted that they are equal
+                        return Ok((
+                            Branch::Nets(first_net, second_net),
+                            self.hir[first_net].contents.discipline,
+                        ));
+                    }
+                }
             }
         }
+        Err(())
     }
     fn resolve_branch_access(
         &mut self,
         branch_access: &ast::BranchAccess,
-    ) -> Result<BranchAccess<'tag>> {
+    ) -> Result<(BranchAccess<'tag>, DisciplineId<'tag>)> {
         match branch_access {
             ast::BranchAccess::Implicit(ref branch) => {
-                return Ok(BranchAccess::Unnamed(self.resolve_branch(branch)?))
+                let (branch, discipline) = self.resolve_branch(branch)?;
+                return Ok((BranchAccess::Unnamed(branch), discipline));
             }
             ast::BranchAccess::Explicit(name) => {
-                resolve_hierarchical!(self; name as Branch(id) => {return Ok(BranchAccess::Named(id))})
+                resolve_hierarchical!(self; name as Branch(id) => {
+                    let discipline = match self.hir[id].contents.branch {
+                        Branch::Port(portid) => {
+                            self.hir[self.hir[portid].net].contents.discipline
+                        }
+                        Branch::Nets(net1, _) => self.hir[net1].contents.discipline
+                    };
+                    return Ok((BranchAccess::Named(id),discipline))
+                })
             }
         }
         Err(())
@@ -254,8 +268,8 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
         for port in self.ast.full_range() {
             self.visit_port(port, self.ast);
         }
-        for module in self.ast.full_range() {
-            let module: &AttributeNode<ast::Module> = self.ast[module];
+        for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.ast) {
+            let module: &AttributeNode<ast::Module> = &self.ast[module];
             self.scope_stack.push(&module.contents.symbol_table);
             for decl in module.contents.symbol_table.values().copied() {
                 match decl {
@@ -301,38 +315,66 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     }
     fn reinterpret_function_call_as_branch_access(
         &mut self,
-        nature: NatureId<'tag>,
-        parameters: &Rc<Vec<ExpressionId<'tag>>>,
-    ) -> Result<Expression<'tag>> {
+        parameters: Rc<Vec<ExpressionId<'tag>>>,
+    ) -> Result<(BranchAccess<'tag>, DisciplineId<'tag>)> {
+        //this has quite a lot of code duplication from resolve_branch_access; This is unavoidable atm because we would need to clone the ident because we cant move out of the ast which is something I'd really like to avoid
         match parameters.len() {
             1 => {
                 let ident = self.reinterpret_expression_as_identifier(&self.ast[parameters[0]])?;
                 resolve_hierarchical!(self; ident as
                     Branch(bid) => {
-                        return Ok(Expression::Primary(
-                                Primary::BranchAccess(discipline,
-                                    BranchAccess::Named(bid)
-                                )
-                            ));
+                        let discipline = match self.hir[bid].contents.branch {
+                            Branch::Port(portid) => {
+                                self.hir[self.hir[portid].net].contents.discipline
+                            }
+                            Branch::Nets(net1, _) => self.hir[net1].contents.discipline
+                         };
+                        return Ok((BranchAccess::Named(bid),discipline));
                     }
                 );
             }
             2 => {
-                let ident = self.reinterpret_expression_as_identifier(&self.ast[parameters[0]])?;
+                let first_net_ident =
+                    self.reinterpret_expression_as_identifier(&self.ast[parameters[0]])?;
                 let mut first_net = Err(());
-                resolve_hierarchical!(self; ident as
+                resolve_hierarchical!(self; first_net_ident as
                     Net(nid) => {
                         first_net = Ok(nid);
+                    },
+                    Port(pid) => {
+                        first_net = Ok(self.hir[pid].net)
                     }
                 );
-                resolve_hierarchical!(self; ident as
-                    Net(second_net) => {
-                        let branch_access = BranchAccess::Unnamed(Branch::Nets(first_net?,second_net));
-                        return Ok(Expression::Primary(
-                            Primary::BranchAccess(discipline,branch_access)
+                let second_net_ident =
+                    self.reinterpret_expression_as_identifier(&self.ast[parameters[1]])?;
+                let mut second_net = Err(());
+                resolve_hierarchical!(self; second_net_ident as
+                    Net(id) => {
+                        second_net = Ok(id);
+                    },
+                    Port(pid) => {
+                        first_net = Ok(self.hir[pid].net)
+                    }
+                );
+                if let (Ok(first_net), Ok(second_net)) = (first_net, second_net) {
+                    if self.hir[first_net].contents.discipline
+                        != self.hir[second_net].contents.discipline
+                    {
+                        self.errors.push(Error {
+                            error_type: Type::DisciplineMismatch(
+                                self.hir[first_net].contents.discipline,
+                                self.hir[second_net].contents.discipline,
+                            ),
+                            source: first_net_ident.span().extend(second_net_ident.span()),
+                        });
+                    } else {
+                        //doesn't matter which nets discipline we use since we asserted that they are equal
+                        return Ok((
+                            BranchAccess::Unnamed(Branch::Nets(first_net, second_net)),
+                            self.hir[first_net].contents.discipline,
                         ));
                     }
-                );
+                }
             }
             _ => self.errors.push(Error {
                 source: self.ast[parameters[1]]
@@ -384,7 +426,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
 /// The Result in Visitor is there to allow error propagation.
 /// However name resolution doesn't depend on the result of other name resolutions.
 /// Therefore all errors are simply to the errors vector (size > 0 indicates a failure) and Ok(()) is always returned.
-/// If a result of name reolution is required by a caller we use struct field last_resolved_declaration instead
+/// If a result of name resolution is required by a caller we use struct field last_resolved_declaration instead
 impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
     fn visit_module(&mut self, module_id: ModuleId<'tag>, ast: &Ast<'tag>) -> Result {
         let module = &self.ast[module_id];
@@ -460,25 +502,10 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 self.visit_assign(*attr, ident, *value, ast);
             }
             ast::Statement::Contribute(attr, ref nature_name, ref branch, value) => {
-                if let Ok(branch) = self.resolve_branch_access(branch) {
-                    let discipline = match branch {
-                        BranchAccess::Named(id) => {
-                            let res = match self.hir[id].contents.branch {
-                                Branch::Nets(net1, _) => self.hir[net1].contents.discipline,
-                                Branch::Port(port) => {
-                                    self.hir[self.hir[port].net].contents.discipline
-                                }
-                            };
-                            Ok(res)
-                        }
-                        BranchAccess::Unnamed(branch) => self.resolve_branch_discipline(branch),
-                    };
-                    if let Ok(discipline) = discipline {
-                        if let Ok(nature) = self.resolve_discipline_access(nature_name, discipline)
-                        {
-                            self.hir
-                                .push(Statement::Contribute(*attr, nature, branch, *value));
-                        }
+                if let Ok((branch, discipline)) = self.resolve_branch_access(branch) {
+                    if let Ok(nature) = self.resolve_discipline_access(nature_name, discipline) {
+                        self.hir
+                            .push(Statement::Contribute(*attr, nature, branch, *value));
                     }
                 }
                 self.visit_expression(*value, ast);
@@ -508,26 +535,15 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 self.visit_expression(expr, ast);
             }
             ast::Expression::Primary(ast::Primary::BranchAccess(ref nature, ref branch_access)) => {
-                if let Ok(branch_access) = self.resolve_branch_access(branch_access) {
-                    let discipline = match branch_access {
-                        BranchAccess::Named(id) => match self.hir[id].contents.branch {
-                            Branch::Port(portid) => {
-                                Ok(self.hir[self.hir[portid].net].contents.discipline)
-                            }
-                            Branch::Nets(net1, _) => Ok(self.hir[net1].contents.discipline),
-                        },
-                        BranchAccess::Unnamed(branch) => self.resolve_branch_discipline(branch),
-                    };
-                    if let Ok(discipline) = discipline {
-                        if let Ok(nature) = self.resolve_discipline_access(nature, discipline) {
-                            self.hir[expression_id] = Node {
-                                source: expression.source,
-                                contents: Expression::Primary(Primary::BranchAccess(
-                                    nature,
-                                    branch_access,
-                                )),
-                            };
-                        }
+                if let Ok((branch_access, discipline)) = self.resolve_branch_access(branch_access) {
+                    if let Ok(nature) = self.resolve_discipline_access(nature, discipline) {
+                        self.hir[expression_id] = Node {
+                            source: expression.source,
+                            contents: Expression::Primary(Primary::BranchAccess(
+                                nature,
+                                branch_access,
+                            )),
+                        };
                     }
                 }
             }
@@ -544,13 +560,13 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                             source:expression.source,
                             contents:Expression::Primary(Primary::PortReference(pid))
                         }
-                    },
-                    Net(nid) => {
+                    }
+                    /*Net(nid) => {
                         self.hir[expression_id]=Node{
                             source:expression.source,
                             contents:Expression::Primary(Primary::NetReference(nid))
                         }
-                    }
+                    } TODO discrete net access */
                 )
             }
             ast::Expression::Primary(ast::Primary::Integer(val)) => {
@@ -559,48 +575,20 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                     contents: Expression::Primary(Primary::Integer(val)),
                 }
             }
-            ast::Expression::Primary(ast::Primary::Real(val)) => {
-                self.hir[expression_id] = Node {
-                    source: expression.source,
-                    contents: Expression::Primary(Primary::Real(val)),
-                }
-            }
             ast::Expression::Primary(ast::Primary::UnsignedInteger(val)) => {
                 self.hir[expression_id] = Node {
                     source: expression.source,
                     contents: Expression::Primary(Primary::UnsignedInteger(val)),
                 }
             }
-            ast::Expression::Primary(ast::Primary::FunctionCall(ref ident, ref parameters)) => {
-                if ident.names.len() == 1 {
-                    match ident.names[0].name {
-                        keywords::FLOW => {
-                            if let Ok(expr) = self.reinterpret_function_call_as_branch_access(
-                                DisciplineAccess::Flow,
-                                parameters,
-                            ) {
-                                self.hir[expression_id] = Node {
-                                    source: expression.source,
-                                    contents: expr,
-                                }
-                            }
-                            return Ok(());
-                        }
-                        keywords::POTENTIAL => {
-                            if let Ok(expr) = self.reinterpret_function_call_as_branch_access(
-                                DisciplineAccess::Potential,
-                                parameters,
-                            ) {
-                                self.hir[expression_id] = Node {
-                                    source: expression.source,
-                                    contents: expr,
-                                }
-                            }
-                            return Ok(());
-                        }
-                        _ => (),
-                    }
+            ast::Expression::Primary(ast::Primary::Real(val)) => {
+                self.hir[expression_id] = Node {
+                    source: expression.source,
+                    contents: Expression::Primary(Primary::Real(val)),
                 }
+            }
+
+            ast::Expression::Primary(ast::Primary::FunctionCall(ref ident, ref parameters)) => {
                 resolve_hierarchical!(self; ident as
                     Function(fid) => {
                         self.hir[expression_id]=Node{
@@ -609,10 +597,20 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                         };
                     },
                     Nature(nid) => {
-                        if let Ok(expr) = self.reinterpret_function_call_as_branch_access(DisciplineAccess::Unresolved(nid),parameters){
-                            self.hir[expression_id] = Node{
-                                source:expression.source,
-                                contents:expr
+                        if let Ok((branch_access,discipline)) = self.reinterpret_function_call_as_branch_access(parameters.clone()){
+                             let discipline_access = match nid {
+                                id if id == self.hir[discipline].contents.flow_nature => Ok(DisciplineAccess::Flow),
+                                id if id == self.hir[discipline].contents.potential_nature => Ok(DisciplineAccess::Potential),
+                                id => {
+                                    self.errors.push(Error{source:ident.span(),error_type:Type::NatureNotPotentialOrFlow(ident.names[0].name,discipline)});
+                                    Err(())
+                                },
+                            };
+                            if let Ok(discipline_access) = discipline_access{
+                                self.hir[expression_id] = Node{
+                                    source:expression.source,
+                                    contents:Expression::Primary(Primary::BranchAccess(discipline_access,branch_access))
+                                }
                             }
                         }
                     }
@@ -627,7 +625,7 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
         ast: &Ast<'tag>,
     ) -> Result {
         let branch_declaration = &self.ast[branch_declaration_id];
-        if let Ok(resolved_branch) = self.resolve_branch(&branch_declaration.contents.branch) {
+        if let Ok((resolved_branch, _)) = self.resolve_branch(&branch_declaration.contents.branch) {
             self.hir[branch_declaration_id] = AttributeNode {
                 attributes: branch_declaration.attributes,
                 source: branch_declaration.source,

@@ -2,8 +2,15 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
+use crate::ast::VariableType::REAL;
 use crate::ast_lowering::resolve_and_print;
+use crate::compact_arena::SafeRange;
+use crate::ir::ast::NetType;
+use crate::ir::ast::NetType::UNDECLARED;
+use crate::ir::hir::Hir;
+use crate::ir::ModuleId;
 use crate::parser::{insert_electrical_natures_and_disciplines, parse_and_print_errors};
+use crate::util::SafeRangeCreation;
 
 #[test]
 pub fn linear() -> Result<(), ()> {
@@ -16,6 +23,29 @@ pub fn linear() -> Result<(), ()> {
     );
     res?;
     insert_electrical_natures_and_disciplines(&mut ast);
-    resolve_and_print(ast, source_map)?;
+    let hir = resolve_and_print(ast, source_map)?;
+    let module: SafeRange<ModuleId> = hir.full_range();
+    let module = &hir[module][0].contents;
+    let mut ports = hir[module.port_list].iter();
+    let port = ports.next().unwrap();
+    assert_eq!(port.output, true);
+    assert_eq!(port.input, true);
+    let net = hir[port.net].contents;
+    assert_eq!(net.name.as_str(), "A");
+
+    assert_eq!(net.signed, false);
+    assert_eq!(hir[net.discipline].contents.name.as_str(), "electrical");
+    assert_eq!(net.net_type, NetType::UNDECLARED);
+
+    let port = ports.next().unwrap();
+    assert_eq!(port.output, true);
+    assert_eq!(port.input, true);
+    let net = hir[port.net].contents;
+    assert_eq!(net.name.as_str(), "B");
+
+    assert_eq!(net.signed, false);
+    assert_eq!(hir[net.discipline].contents.name.as_str(), "electrical");
+    assert_eq!(net.net_type, NetType::UNDECLARED);
+
     Ok(())
 }

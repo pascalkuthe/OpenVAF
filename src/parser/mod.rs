@@ -252,6 +252,15 @@ pub fn insert_electrical_natures_and_disciplines(ast: &mut Ast) {
             potential_nature: Ident::from_str("V"),
         },
     });
+    let charge = ast.push(AttributeNode {
+        attributes: ast.empty_range_from_end(),
+        source: Span::new(0, 0),
+        contents: Nature {
+            name: Ident::from_str("Charge"),
+        },
+    });
+    ast.top_symbols
+        .insert(Symbol::intern("Q"), SymbolDeclaration::Nature(charge));
     ast.top_symbols.insert(
         Symbol::intern("electrical"),
         SymbolDeclaration::Discipline(electrical),
