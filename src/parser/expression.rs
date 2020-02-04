@@ -190,6 +190,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 let value = parse_unsigned_int_value(self.preprocessor.slice());
                 Node::new(Expression::Primary(Primary::UnsignedInteger(value)), span)
             }
+
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
                 let ident = self.parse_hierarchical_identifier_internal(false)?; //we allow hieraichal identifers here because they are required for functions (but illegal for natures) this will just produce an error at name resolution
                 let start = self.preprocessor.current_start();

@@ -2,9 +2,10 @@ use annotate_snippets::display_list::DisplayList;
 use annotate_snippets::formatter::DisplayListFormatter;
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
 
+use crate::ir::DisciplineId;
 use crate::parser::error::translate_to_inner_snippet_range;
 use crate::span::Index;
-use crate::symbol::Symbol;
+use crate::symbol::{Ident, Symbol};
 use crate::symbol_table::SymbolDeclaration;
 use crate::{Ast, SourceMap, Span};
 
@@ -24,6 +25,8 @@ pub enum Type<'tag> {
     },
     UnexpectedTokenInBranchAccess,
     ImplicitDisciplinesUnsupported,
+    NatureNotPotentialOrFlow(Symbol, DisciplineId<'tag>),
+    DisciplineMismatch(DisciplineId<'tag>, DisciplineId<'tag>),
 }
 impl<'tag> Error<'tag> {
     pub fn print(&self, source_map: &SourceMap, ast: &Ast<'tag>, translate_lines: bool) {
@@ -109,6 +112,45 @@ impl<'tag> Error<'tag> {
                         annotations: vec![SourceAnnotation {
                             range,
                             label: format!("Expected {:?}", expected),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+            Type::NatureNotPotentialOrFlow(name, discipline) => {
+                footer.push(Annotation {
+                    id: None,
+                    label: Some(format!(
+                        "You can only access a branch using its Potential ({}) or Flow ({})",
+                        ast[discipline].contents.potential_nature.name,
+                        ast[discipline].contents.flow_nature.name
+                    )),
+                    annotation_type: AnnotationType::Info,
+                });
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(format!(
+                            "{} can not be accessed by {}",
+                            ast[discipline].contents.name,
+                            &name.as_str(),
+                        )),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: format!(
+                                "Expected {} or {}",
+                                ast[discipline].contents.potential_nature.name,
+                                ast[discipline].contents.flow_nature.name
+                            ),
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,

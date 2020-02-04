@@ -128,10 +128,9 @@ pub struct Net<'hir> {
     pub net_type: NetType,
 }
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub enum DisciplineAccess<'tag> {
+pub enum DisciplineAccess {
     Potential,
     Flow,
-    Unresolved(NatureId<'tag>),
 }
 
 #[derive(Clone)]
@@ -142,7 +141,7 @@ pub enum Statement<'hir> {
     },
     Contribute(
         Attributes<'hir>,
-        DisciplineAccess<'hir>,
+        DisciplineAccess,
         BranchAccess<'hir>,
         ExpressionId<'hir>,
     ),
@@ -167,7 +166,7 @@ pub enum Primary<'hir> {
     PortReference(PortId<'hir>),
     //ParameterReference(ParameterId<'hir>),
     FunctionCall(FunctionId<'hir>, Rc<Vec<ExpressionId<'hir>>>),
-    BranchAccess(DisciplineAccess<'hir>, BranchAccess<'hir>),
+    BranchAccess(DisciplineAccess, BranchAccess<'hir>),
 }
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum BranchAccess<'hir> {

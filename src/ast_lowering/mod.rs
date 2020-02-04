@@ -74,6 +74,25 @@ struct AstToHirFolder<'tag, 'astref> {
     errors: Vec<Error<'tag>>,
 }
 impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
+    fn resolve_branch_discipline(&mut self, branch: Branch<'tag>) -> Result<DisciplineId<'tag>> {
+        match branch {
+            Branch::Port(id) => Ok(self.hir[self.hir[id].net].contents.discipline),
+            Branch::Nets(net1, net2) => {
+                if self.hir[net1].contents.discipline != self.hir[net2].contents.discipline {
+                    self.errors.push(Error {
+                        source: self.hir[net1].source.extend(self.hir[net2].source),
+                        error_type: Type::DisciplineMismatch(
+                            self.hir[net1].contents.discipline,
+                            self.hir[net2].contents.discipline,
+                        ),
+                    });
+                    Err(())
+                } else {
+                    Ok(self.hir[net1].contents.discipline)
+                }
+            }
+        }
+    }
     fn resolve_branch(&mut self, branch: &ast::Branch) -> Result<Branch<'tag>> {
         match branch {
             ast::Branch::Port(ref port) => {
@@ -92,6 +111,10 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                 );
                 resolve_hierarchical!(self; net2 as
                     Net(second_id) => {
+                            if self.hir[first_net?].contents.discipline != self.hir[second_id].contents.discipline{
+                                self.errors.push(Error{error_type:Type::DisciplineMismatch(self.hir[first_net?].contents.discipline,self.hir[second_id].contents.discipline),source:net1.span().extend(net2.span())});
+                                return Err(())
+                            }
                             return Ok(Branch::Nets(first_net?,second_id))
                     },
                     Port(second_id) => {
@@ -117,12 +140,27 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
         Err(())
     }
 
-    fn resolve_nature(&mut self, ident: &Ident) -> Result<DisciplineAccess<'tag>> {
-        match ident.name {
+    fn resolve_discipline_access(
+        &mut self,
+        nature_name: &Ident,
+        discipline: DisciplineId<'tag>,
+    ) -> Result<DisciplineAccess> {
+        match nature_name.name {
             keywords::FLOW => Ok(DisciplineAccess::Flow),
             keywords::POTENTIAL => Ok(DisciplineAccess::Potential),
             _ => {
-                resolve!(self; ident as Nature(id) => {return Ok(DisciplineAccess::Unresolved(id))});
+                resolve!(self; nature_name as
+                    Nature(id) => {
+                        return match id {
+                            id if id == self.hir[discipline].contents.flow_nature => Ok(DisciplineAccess::Flow),
+                            id if id == self.hir[discipline].contents.potential_nature => Ok(DisciplineAccess::Potential),
+                            id => {
+                                self.errors.push(Error{source:nature_name.span,error_type:Type::NatureNotPotentialOrFlow(nature_name.name,discipline)});
+                                Err(())
+                            },
+                        };
+                    }
+                );
                 Err(())
             }
         }
@@ -216,7 +254,25 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
         for port in self.ast.full_range() {
             self.visit_port(port, self.ast);
         }
-
+        for module in self.ast.full_range() {
+            let module: &AttributeNode<ast::Module> = self.ast[module];
+            self.scope_stack.push(&module.contents.symbol_table);
+            for decl in module.contents.symbol_table.values().copied() {
+                match decl {
+                    SymbolDeclaration::Nature(_) => unreachable_unchecked!("Natures can't be declared inside nature so the parser won't ever place this here"),
+                    SymbolDeclaration::Module(_)=>unreachable_unchecked!("Module cant be declared inside modules so the parser won't ever place this here"),
+                    SymbolDeclaration::Discipline(_) => unreachable_unchecked!("Discipline can't be declared inside modules so the parser won't ever place this here"),
+                    SymbolDeclaration::Function(_) => unreachable_unchecked!("Functions can't be declared inside modules so the parser won't ever place this here"),
+                    SymbolDeclaration::Branch(branch) => {self.visit_branch_declaration(branch,self.ast);},
+                    SymbolDeclaration::Block(_) => (),//Blocks are visited later
+                    SymbolDeclaration::Port(_) =>(), //ports had to be visited before
+                    SymbolDeclaration::Net(_) =>(), //nets had to be visited before
+                    SymbolDeclaration::Variable(variableid) => {self.visit_variable(variableid,self.ast);},
+                    //TODO parameters
+                }
+            }
+            self.scope_stack.pop();
+        }
         //Depth first visit of all modules
 
         for module in self.ast.full_range() {
@@ -245,7 +301,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     }
     fn reinterpret_function_call_as_branch_access(
         &mut self,
-        discipline: DisciplineAccess<'tag>,
+        nature: NatureId<'tag>,
         parameters: &Rc<Vec<ExpressionId<'tag>>>,
     ) -> Result<Expression<'tag>> {
         match parameters.len() {
@@ -278,7 +334,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                     }
                 );
             }
-            number => self.errors.push(Error {
+            _ => self.errors.push(Error {
                 source: self.ast[parameters[1]]
                     .source
                     .extend(self.ast[*parameters.last().unwrap()].source),
@@ -334,20 +390,7 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
         let module = &self.ast[module_id];
         let analog_statements = self.hir.empty_range_from_end();
         self.scope_stack.push(&module.contents.symbol_table);
-        for decl in module.contents.symbol_table.values().copied() {
-            match decl {
-                SymbolDeclaration::Nature(_) => unreachable_unchecked!("Natures can't be declared inside nature so the parser won't ever place this here"),
-                SymbolDeclaration::Module(_)=>unreachable_unchecked!("Module cant be declared inside modules so the parser won't ever place this here"),
-                SymbolDeclaration::Discipline(_) => unreachable_unchecked!("Discipline can't be declared inside modules so the parser won't ever place this here"),
-                SymbolDeclaration::Function(_) => unreachable_unchecked!("Functions can't be declared inside modules so the parser won't ever place this here"),
-                SymbolDeclaration::Branch(branch) => self.visit_branch_declaration(branch,ast)?,
-                SymbolDeclaration::Block(_) => (),//Blocks are visited later
-                SymbolDeclaration::Port(_) =>(), //ports had to be visited before
-                SymbolDeclaration::Net(_) =>(), //nets had to be visited before
-                SymbolDeclaration::Variable(variableid) => self.visit_variable(variableid,ast)?,
-                //TODO parameters
-            }
-        }
+
         //TODO parameters
         for module_item in module.contents.children.iter() {
             match module_item {
@@ -417,11 +460,25 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 self.visit_assign(*attr, ident, *value, ast);
             }
             ast::Statement::Contribute(attr, ref nature_name, ref branch, value) => {
-                let nature = self.resolve_nature(nature_name);
                 if let Ok(branch) = self.resolve_branch_access(branch) {
-                    if let Ok(nature) = nature {
-                        self.hir
-                            .push(Statement::Contribute(*attr, nature, branch, *value));
+                    let discipline = match branch {
+                        BranchAccess::Named(id) => {
+                            let res = match self.hir[id].contents.branch {
+                                Branch::Nets(net1, _) => self.hir[net1].contents.discipline,
+                                Branch::Port(port) => {
+                                    self.hir[self.hir[port].net].contents.discipline
+                                }
+                            };
+                            Ok(res)
+                        }
+                        BranchAccess::Unnamed(branch) => self.resolve_branch_discipline(branch),
+                    };
+                    if let Ok(discipline) = discipline {
+                        if let Ok(nature) = self.resolve_discipline_access(nature_name, discipline)
+                        {
+                            self.hir
+                                .push(Statement::Contribute(*attr, nature, branch, *value));
+                        }
                     }
                 }
                 self.visit_expression(*value, ast);
@@ -432,7 +489,6 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
         }
         Ok(())
     }
-
     fn visit_expression(&mut self, expression_id: ExpressionId<'tag>, ast: &Ast<'tag>) -> Result {
         let expression = &self.ast[expression_id];
         match expression.contents {
@@ -452,8 +508,28 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 self.visit_expression(expr, ast);
             }
             ast::Expression::Primary(ast::Primary::BranchAccess(ref nature, ref branch_access)) => {
-                let nature = self.resolve_nature(nature);
-                let branch_access = self.resolve_branch_access(branch_access);
+                if let Ok(branch_access) = self.resolve_branch_access(branch_access) {
+                    let discipline = match branch_access {
+                        BranchAccess::Named(id) => match self.hir[id].contents.branch {
+                            Branch::Port(portid) => {
+                                Ok(self.hir[self.hir[portid].net].contents.discipline)
+                            }
+                            Branch::Nets(net1, _) => Ok(self.hir[net1].contents.discipline),
+                        },
+                        BranchAccess::Unnamed(branch) => self.resolve_branch_discipline(branch),
+                    };
+                    if let Ok(discipline) = discipline {
+                        if let Ok(nature) = self.resolve_discipline_access(nature, discipline) {
+                            self.hir[expression_id] = Node {
+                                source: expression.source,
+                                contents: Expression::Primary(Primary::BranchAccess(
+                                    nature,
+                                    branch_access,
+                                )),
+                            };
+                        }
+                    }
+                }
             }
             ast::Expression::Primary(ast::Primary::VariableOrNetReference(ref ident)) => {
                 resolve_hierarchical!(self; ident as
