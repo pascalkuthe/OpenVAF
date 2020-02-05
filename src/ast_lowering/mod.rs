@@ -562,19 +562,19 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                             source:expression.source,
                             contents:Expression::Primary(Primary::VariableReference(vid))
                         }
-                    },
-                    Port(pid) => {
+                    }
+                    /*Port(pid) => {
                         self.hir[expression_id]=Node{
                             source:expression.source,
                             contents:Expression::Primary(Primary::PortReference(pid))
                         }
-                    }
-                    /*Net(nid) => {
+                    },
+                    Net(nid) => {
                         self.hir[expression_id]=Node{
                             source:expression.source,
                             contents:Expression::Primary(Primary::NetReference(nid))
                         }
-                    } TODO discrete net access */
+                    } TODO discrete net/por access */
                 )
             }
             ast::Expression::Primary(ast::Primary::Integer(val)) => {

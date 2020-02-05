@@ -557,9 +557,26 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             let mut current_arg_body = Vec::new();
             let mut last_colon = start;
             let mut current_arg_start = self.current_source_start;
+            let mut depth = 0;
             loop {
                 match self.current_token {
-                    Token::ParenClose => break,
+                    Token::ParenClose if depth == 0 => break,
+                    Token::ParenOpen => {
+                        depth += 1;
+                        current_arg_body.push(self.current_macro_body_token(
+                            current_arg_start,
+                            parent_macro_args,
+                            macro_call_depth,
+                        )?)
+                    }
+                    Token::ParenClose => {
+                        depth -= 1;
+                        current_arg_body.push(self.current_macro_body_token(
+                            current_arg_start,
+                            parent_macro_args,
+                            macro_call_depth,
+                        )?)
+                    }
                     Token::Comma => {
                         if current_arg_body.is_empty() {
                             return Err(Error {

@@ -341,10 +341,13 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
             })
         };
         let preceding_root_slice_start = self.get_current_root_offset();
-        let preceding_root_slice_end = self.cursor.get().map_or(start as usize, |substitution| {
-            start as usize - preceding_root_slice_start
-                + substitution.original_span.get_end() as usize
-        });
+        let preceding_root_slice_end =
+            self.cursor
+                .get()
+                .map_or(original_span.get_start() as usize, |substitution| {
+                    original_span.get_start() as usize - preceding_root_slice_start
+                        + substitution.original_span.get_end() as usize
+                });
         self.expansion.push_str(
             &self.root_file_contents[preceding_root_slice_start..preceding_root_slice_end],
         );

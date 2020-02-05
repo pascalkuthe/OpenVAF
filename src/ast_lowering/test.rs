@@ -23,6 +23,7 @@ pub fn linear() -> Result<(), ()> {
     );
     res?;
     insert_electrical_natures_and_disciplines(&mut ast);
+
     let hir = resolve_and_print(ast, source_map)?;
     let module: SafeRange<ModuleId> = hir.full_range();
     let module = &hir[module][0].contents;
