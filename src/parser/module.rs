@@ -9,12 +9,25 @@
  */
 
 use std::collections::HashSet;
+use std::ops::Range;
+use test::test::TestResult::TrOk;
+
+use copyless::VecHelper;
 
 use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{AttributeNode, Attributes, Module, ModuleItem};
 use crate::error::Error;
+use crate::ir::ast::{
+    Expression, Node, NumericalParameterBaseType, NumericalParameterRangeBound,
+    NumericalParameterRangeExclude, ParameterType, UnaryOperator,
+};
 use crate::ir::ModuleId;
 use crate::parser::error;
+use crate::parser::error::Expected::ParameterRange;
+use crate::parser::error::Type::{
+    ParameterRangeUnboundedInIllegalDirection, UnexpectedToken, UnexpectedTokens, Unsupported,
+};
+use crate::parser::error::Unsupported::StringParameters;
 use crate::parser::error::{Expected, Result, Type};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
@@ -183,5 +196,137 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             }
         };
         Ok(res)
+    }
+
+    pub fn parse_parameter_decl(&mut self) -> Result {
+        let (token, span) = self.next()?;
+        let parameter_type = match token {
+            Token::Integer => NumericalParameterBaseType::Integer,
+            Token::Real => NumericalParameterBaseType::Real,
+            Token::Realtime => NumericalParameterBaseType::Realtime,
+            Token::Time => NumericalParameterBaseType::Time,
+            Token::String => {
+                return Err(Error {
+                    error_type: Unsupported(StringParameters),
+                    source: span,
+                })
+            }
+            _ => {
+                return Err(Error {
+                    error_type: UnexpectedToken {
+                        expected: vec![
+                            Token::Integer,
+                            Token::Real,
+                            Token::Realtime,
+                            Token::Time,
+                            Token::String,
+                        ],
+                    },
+                    source: span,
+                })
+            }
+        };
+        let default_value = if self.look_ahead() == Token::Assign {
+            self.lookahead.take();
+            Some(self.parse_expression_id())
+        } else {
+            None
+        };
+        let mut include = Vec::new();
+        let mut exclude = Vec::new();
+        loop {
+            match self.next()? {
+                (Token::From, _) => match self.next()? {
+                    (Token::SquareBracketOpen, _) => {
+                        exclude.alloc().init(self.parse_parameter_range(true)?)
+                    }
+                    (Token::ParenOpen, _) => {
+                        exclude.alloc().init(self.parse_parameter_range(false)?)
+                    }
+                    (_, source) => {
+                        return Err(Error {
+                            error_type: UnexpectedTokens {
+                                expected: vec![ParameterRange],
+                            },
+                            source,
+                        })
+                    }
+                },
+                (Token::Exclude, _) => match self.look_ahead()? {
+                    (Token::SquareBracketOpen, _) => {
+                        self.lookahead.take();
+                        exclude.alloc().init(NumericalParameterRangeExclude::Range(
+                            self.parse_parameter_range(true)?,
+                        ))
+                    }
+                    (Token::ParenOpen, _) => {
+                        self.lookahead.take();
+                        exclude.alloc().init(NumericalParameterRangeExclude::Range(
+                            self.parse_parameter_range(false)?,
+                        ))
+                    }
+                    _ => exclude.alloc().init(NumericalParameterRangeExclude::Value(
+                        self.parse_expression_id()?,
+                    )),
+                },
+                (Token::Semicolon, _) => return Ok(()),
+                (_, source) => {
+                    return Err(Error {
+                        error_type: UnexpectedToken {
+                            expected: vec![Token::From, Token::Exclude, Token::Semicolon],
+                        },
+                        source,
+                    })
+                }
+            }
+        }
+    }
+
+    fn parse_parameter_range(
+        &mut self,
+        inclusive: bool,
+    ) -> Result<Range<NumericalParameterRangeBound>> {
+    }
+    fn parse_parameter_range_expression(
+        &mut self,
+        lower_bound: bool,
+        included: bool,
+    ) -> Result<NumericalParameterRangeBound> {
+        let (token, source) = self.next()?;
+        match token {
+            Token::Infinity => {
+                if !lower_bound {
+                    Ok(NumericalParameterRangeBound::Unbounded)
+                } else {
+                    Err(Error {
+                        error_type: ParameterRangeUnboundedInIllegalDirection,
+                        source,
+                    })
+                }
+            }
+            Token::Minus if self.look_ahead().0 == Token::Infinity => {
+                self.lookahead.take();
+                if lower_bound {
+                    Ok(NumericalParameterRangeBound::Unbounded)
+                } else {
+                    Err(Error {
+                        error_type: ParameterRangeUnboundedInIllegalDirection,
+                        source,
+                    })
+                }
+            }
+            Token::Minus => {
+                let expr = self.ast.push(Expression::UnaryOperator(
+                    Node {
+                        source,
+                        contents: UnaryOperator::ArithmeticNegate,
+                    },
+                    self.parse_expression_id()?,
+                ));
+                if included {
+                    NumericalParameterRangeBound::Included(ex)
+                }
+            }
+        }
     }
 }

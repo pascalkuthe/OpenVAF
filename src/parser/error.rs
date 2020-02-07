@@ -60,6 +60,7 @@ pub enum Type {
     UnexpectedTokens {
         expected: Vec<Expected>,
     },
+    ParameterRangeUnboundedInIllegalDirection,
     Unsupported(Unsupported),
 }
 impl From<std::io::Error> for Type {
@@ -69,6 +70,7 @@ impl From<std::io::Error> for Type {
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Unsupported {
+    StringParameters,
     DefaultDiscipline,
 }
 #[derive(Debug, Copy, Clone)]
@@ -83,6 +85,7 @@ pub enum Expected {
     FunctionCall,
     BranchAcess,
     Assign,
+    ParameterRange,
 }
 #[derive(Clone, Debug)]
 pub(crate) enum WarningType {

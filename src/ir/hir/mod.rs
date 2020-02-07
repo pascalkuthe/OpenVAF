@@ -5,15 +5,17 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
-use crate::ir::ast::{
-    Ast, Attribute, AttributeNode, Attributes, BinaryOperator, Function, ModuleItem, Nature,
-    NetType, Node, TopNode, UnaryOperator, Variable,
-};
 use crate::ir::{
     AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId, NetId,
     PortId, StatementId, VariableId,
 };
+use crate::ir::ast::{
+    Ast, Attribute, AttributeNode, Attributes, BinaryOperator, Function, ModuleItem, Nature,
+    NetType, Node, TopNode, UnaryOperator, Variable,
+};
 use crate::symbol::Ident;
+
+//pub mod visitor;
 
 /// An High level (tree) IR representing a Verilog-AMS project;
 /// It provides stable indicies for every Node because the entire Tree is immutable once created;
@@ -116,7 +118,7 @@ pub struct BranchDeclaration<'hir> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub enum Branch<'hir> {
+pub enumBranch<'hir> {
     Port(PortId<'hir>),
     Nets(NetId<'hir>, NetId<'hir>),
 }

@@ -12,7 +12,7 @@
     branch (A,y) ay;\
     branch (x,B) xb;\
     branch (y,B) yb;\
-    branch (x,z) xy;
+    branch (x,y) xy;
 
 `define calculate(a,b)\
     b**a/2;\

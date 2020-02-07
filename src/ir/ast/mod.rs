@@ -178,10 +178,43 @@ pub struct Nature {
 pub struct Module<'ast> {
     pub name: Ident,
     pub port_list: SafeRange<PortId<'ast>>,
-    //    pub parameter_list: Option<Range<ParameterId<'ast>>>
+    pub parameter_list: SafeRange<ParameterId<'ast>>,
     pub symbol_table: SymbolTable<'ast>,
     pub children: Vec<ModuleItem<'ast>>,
 }
+#[derive(Clone)]
+pub struct Parameter<'ast> {
+    pub name: Ident,
+    pub parameter_type: ParameterType<'ast>,
+    pub default_value: Option<ExpressionId<'ast>>,
+}
+
+pub enum ParameterType<'ast> {
+    Numerical {
+        parameter_type: NumericalParameterBaseType,
+        included_ranges: Vec<Range<NumericalParameterRangeBound<'ast>>>,
+        excluded_ranges: Vec<NumericalParameterRangeExclude<'ast>>,
+    },
+    String(
+        //TODO string parameters
+    ),
+}
+pub enum NumericalParameterRangeExclude<'ast> {
+    Value(ExpressionId<'ast>),
+    Range(Range<NumericalParameterRangeBound<'ast>>),
+}
+pub enum NumericalParameterRangeBound<'ast> {
+    Unbounded,
+    Bounded(ExpressionId<'ast>),
+}
+
+pub enum NumericalParameterBaseType {
+    Integer,
+    Real,
+    Realtime,
+    Time,
+}
+
 #[derive(Clone, Copy)]
 pub struct Port {
     pub name: Ident,

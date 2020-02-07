@@ -98,6 +98,10 @@ pub enum Token {
     ParenOpen,
     #[token = ")"]
     ParenClose,
+    #[token = "["]
+    SquareBracketOpen,
+    #[token = "]"]
+    SquareBracketClose,
     #[token = "<+"]
     Contribute,
     #[token = "="]
