@@ -10,7 +10,6 @@
 
 use std::collections::HashSet;
 use std::ops::Range;
-use test::test::TestResult::TrOk;
 
 use copyless::VecHelper;
 
@@ -19,9 +18,9 @@ use crate::ast::{AttributeNode, Attributes, Module, ModuleItem};
 use crate::error::Error;
 use crate::ir::ast::{
     Expression, Node, NumericalParameterBaseType, NumericalParameterRangeBound,
-    NumericalParameterRangeExclude, ParameterType, UnaryOperator,
+    NumericalParameterRangeExclude, Parameter, ParameterType, UnaryOperator,
 };
-use crate::ir::ModuleId;
+use crate::ir::{ExpressionId, ModuleId};
 use crate::parser::error;
 use crate::parser::error::Expected::ParameterRange;
 use crate::parser::error::Type::{
@@ -40,7 +39,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub(super) fn parse_module(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
-        //parameters
+        let parameter_start = self.ast.empty_range_from_end();
         if self.look_ahead()?.0 == Token::Hash {
             self.expect(Token::ParenOpen)?;
             self.parse_parameter_list()?;
@@ -133,6 +132,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             contents: Module {
                 name,
                 port_list: self.ast.extend_range_to_end(port_list),
+                parameter_list: self.ast.extend_range_to_end(parameter_start),
                 symbol_table: self.scope_stack.pop().unwrap(),
                 children: module_items,
             },
@@ -189,6 +189,11 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 self.parse_variable_declaration(TIME, attributes)?;
                 None
             }
+            Token::Parameter => {
+                self.lookahead.take();
+                self.parse_parameter_decl(attributes)?;
+                None
+            }
 
             _ => {
                 self.parse_net_declaration(attributes)?;
@@ -198,7 +203,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         Ok(res)
     }
 
-    pub fn parse_parameter_decl(&mut self) -> Result {
+    pub fn parse_parameter_decl(&mut self, attributes: Attributes<'ast>) -> Result {
         let (token, span) = self.next()?;
         let parameter_type = match token {
             Token::Integer => NumericalParameterBaseType::Integer,
@@ -226,50 +231,83 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 })
             }
         };
-        let default_value = if self.look_ahead() == Token::Assign {
+        self.parse_list(
+            |sel| sel.parse_numerical_parameter_assignment(attributes, parameter_type),
+            Token::Semicolon,
+            true,
+        )?;
+        Ok(())
+    }
+
+    fn parse_numerical_parameter_assignment(
+        &mut self,
+        attributes: Attributes<'ast>,
+        base_type: NumericalParameterBaseType,
+    ) -> Result {
+        let start = self.preprocessor.current_start();
+        let name = self.parse_identifier(false)?;
+        let default_value = if self.look_ahead()?.0 == Token::Assign {
             self.lookahead.take();
-            Some(self.parse_expression_id())
+            Some(self.parse_expression_id()?)
         } else {
             None
         };
-        let mut include = Vec::new();
-        let mut exclude = Vec::new();
+        let mut included_ranges = Vec::new();
+        let mut excluded_ranges = Vec::new();
         loop {
-            match self.next()? {
-                (Token::From, _) => match self.next()? {
-                    (Token::SquareBracketOpen, _) => {
-                        exclude.alloc().init(self.parse_parameter_range(true)?)
+            match self.look_ahead()? {
+                (Token::From, _) => {
+                    self.lookahead.take();
+                    match self.next()? {
+                        (Token::SquareBracketOpen, _) => {
+                            included_ranges
+                                .alloc()
+                                .init(self.parse_parameter_range(true)?);
+                        }
+                        (Token::ParenOpen, _) => {
+                            included_ranges
+                                .alloc()
+                                .init(self.parse_parameter_range(false)?);
+                        }
+                        (_, source) => {
+                            return Err(Error {
+                                error_type: UnexpectedTokens {
+                                    expected: vec![ParameterRange],
+                                },
+                                source,
+                            })
+                        }
                     }
-                    (Token::ParenOpen, _) => {
-                        exclude.alloc().init(self.parse_parameter_range(false)?)
+                }
+                (Token::Exclude, _) => {
+                    self.lookahead.take();
+                    match self.look_ahead()? {
+                        (Token::SquareBracketOpen, _) => {
+                            self.lookahead.take();
+                            excluded_ranges
+                                .alloc()
+                                .init(NumericalParameterRangeExclude::Range(
+                                    self.parse_parameter_range(true)?,
+                                ));
+                        }
+                        (Token::ParenOpen, _) => {
+                            self.lookahead.take();
+                            excluded_ranges
+                                .alloc()
+                                .init(NumericalParameterRangeExclude::Range(
+                                    self.parse_parameter_range(false)?,
+                                ));
+                        }
+                        _ => {
+                            excluded_ranges
+                                .alloc()
+                                .init(NumericalParameterRangeExclude::Value(
+                                    self.parse_expression_id()?,
+                                ));
+                        }
                     }
-                    (_, source) => {
-                        return Err(Error {
-                            error_type: UnexpectedTokens {
-                                expected: vec![ParameterRange],
-                            },
-                            source,
-                        })
-                    }
-                },
-                (Token::Exclude, _) => match self.look_ahead()? {
-                    (Token::SquareBracketOpen, _) => {
-                        self.lookahead.take();
-                        exclude.alloc().init(NumericalParameterRangeExclude::Range(
-                            self.parse_parameter_range(true)?,
-                        ))
-                    }
-                    (Token::ParenOpen, _) => {
-                        self.lookahead.take();
-                        exclude.alloc().init(NumericalParameterRangeExclude::Range(
-                            self.parse_parameter_range(false)?,
-                        ))
-                    }
-                    _ => exclude.alloc().init(NumericalParameterRangeExclude::Value(
-                        self.parse_expression_id()?,
-                    )),
-                },
-                (Token::Semicolon, _) => return Ok(()),
+                }
+                (Token::Semicolon, _) | (Token::Comma, _) => break,
                 (_, source) => {
                     return Err(Error {
                         error_type: UnexpectedToken {
@@ -280,23 +318,60 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 }
             }
         }
+        let parameter_id = self.ast.push(AttributeNode {
+            attributes,
+            source: self.span_to_current_end(start),
+            contents: Parameter {
+                name,
+                parameter_type: ParameterType::Numerical {
+                    parameter_type: base_type,
+                    included_ranges,
+                    excluded_ranges,
+                },
+                default_value,
+            },
+        });
+        self.insert_symbol(name, SymbolDeclaration::Parameter(parameter_id));
+        Ok(())
     }
 
     fn parse_parameter_range(
         &mut self,
         inclusive: bool,
-    ) -> Result<Range<NumericalParameterRangeBound>> {
+    ) -> Result<Range<NumericalParameterRangeBound<'ast>>> {
+        let start = NumericalParameterRangeBound {
+            bound: self.parse_parameter_range_expression(true)?,
+            inclusive,
+        };
+        self.expect(Token::Comma)?;
+        let end = self.parse_parameter_range_expression(false)?;
+        let end_inclusive = match self.next()? {
+            (Token::SquareBracketClose, _) => true,
+            (Token::ParenClose, _) => false,
+            (_, source) => {
+                return Err(Error {
+                    error_type: UnexpectedToken {
+                        expected: vec![Token::ParenClose, Token::SquareBracketClose],
+                    },
+                    source,
+                })
+            }
+        };
+        Ok(start..NumericalParameterRangeBound {
+            bound: end,
+            inclusive: end_inclusive,
+        })
     }
     fn parse_parameter_range_expression(
         &mut self,
         lower_bound: bool,
-        included: bool,
-    ) -> Result<NumericalParameterRangeBound> {
-        let (token, source) = self.next()?;
+    ) -> Result<Option<ExpressionId<'ast>>> {
+        let (token, source) = self.look_ahead()?;
         match token {
             Token::Infinity => {
+                self.lookahead.take();
                 if !lower_bound {
-                    Ok(NumericalParameterRangeBound::Unbounded)
+                    Ok(None)
                 } else {
                     Err(Error {
                         error_type: ParameterRangeUnboundedInIllegalDirection,
@@ -304,10 +379,10 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     })
                 }
             }
-            Token::Minus if self.look_ahead().0 == Token::Infinity => {
+            Token::MinusInfinity => {
                 self.lookahead.take();
                 if lower_bound {
-                    Ok(NumericalParameterRangeBound::Unbounded)
+                    Ok(None)
                 } else {
                     Err(Error {
                         error_type: ParameterRangeUnboundedInIllegalDirection,
@@ -315,18 +390,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     })
                 }
             }
-            Token::Minus => {
-                let expr = self.ast.push(Expression::UnaryOperator(
-                    Node {
-                        source,
-                        contents: UnaryOperator::ArithmeticNegate,
-                    },
-                    self.parse_expression_id()?,
-                ));
-                if included {
-                    NumericalParameterRangeBound::Included(ex)
-                }
-            }
+            _ => Ok(Some(self.parse_expression_id()?)),
         }
     }
 }

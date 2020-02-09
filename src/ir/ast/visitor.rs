@@ -1,12 +1,13 @@
 use crate::ast::Primary::{FunctionCall, Integer, Real, UnsignedInteger, VariableOrNetReference};
 use crate::ast::{
     Ast, AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration, Condition, Expression,
-    HierarchicalId, Module, ModuleItem, NetType, Node, Primary, SeqBlock, Statement, VariableType,
+    HierarchicalId, Module, ModuleItem, NetType, Node, ParameterType, Primary, SeqBlock, Statement,
+    VariableType,
 };
-use crate::ir::ast::{Discipline, Nature, Port};
+use crate::ir::ast::{Discipline, Nature, NumericalParameterRangeExclude, Port};
 use crate::ir::{
-    BlockId, BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId, PortId, StatementId,
-    VariableId,
+    BlockId, BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId, ParameterId, PortId,
+    StatementId, VariableId,
 };
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
@@ -133,6 +134,13 @@ pub trait Visitor<'ast, E = ()>: Sized {
         /*Nothing to do*/
         Ok(())
     }
+    fn visit_parameter(
+        &mut self,
+        parameter_id: ParameterId<'ast>,
+        ast: &Ast<'ast>,
+    ) -> Result<(), E> {
+        walk_parameter(self, parameter_id, ast)
+    }
 }
 
 pub fn walk_module<'ast, E, V: Visitor<'ast, E>>(
@@ -152,7 +160,7 @@ pub fn walk_module<'ast, E, V: Visitor<'ast, E>>(
             SymbolDeclaration::Port(portid) => v.visit_port(portid,ast)?,
             SymbolDeclaration::Net(netid) => v.visit_net(netid,ast)?,
             SymbolDeclaration::Variable(variableid) => v.visit_variable(variableid,ast)?,
-            //TODO parameters
+            SymbolDeclaration::Parameter(parameter_id)=> v.visit_parameter(parameter_id,ast)?,
         }
     }
     //TODO parameters
@@ -300,6 +308,46 @@ fn walk_variable<'ast, E, V: Visitor<'ast, E>>(
 ) -> Result<(), E> {
     if let Some(default) = ast[variable].contents.default_value {
         v.visit_expression(default, ast)?;
+    }
+    Ok(())
+}
+pub fn walk_parameter<'ast, E, V: Visitor<'ast, E>>(
+    v: &mut V,
+    parameter: ParameterId<'ast>,
+    ast: &Ast<'ast>,
+) -> Result<(), E> {
+    if let Some(default) = ast[parameter].contents.default_value {
+        v.visit_expression(default, ast)?;
+    }
+    if let ParameterType::Numerical {
+        parameter_type,
+        included_ranges,
+        excluded_ranges,
+    } = &ast[parameter].contents.parameter_type
+    {
+        for range in included_ranges {
+            if let Some(expr) = range.start.bound {
+                v.visit_expression(expr, ast)?;
+            }
+            if let Some(expr) = range.start.bound {
+                v.visit_expression(expr, ast)?;
+            }
+        }
+        for exclude in excluded_ranges {
+            match exclude {
+                NumericalParameterRangeExclude::Value(val) => v.visit_expression(*val, ast)?,
+                NumericalParameterRangeExclude::Range(range) => {
+                    if let Some(expr) = range.start.bound {
+                        v.visit_expression(expr, ast)?;
+                    }
+                    if let Some(expr) = range.start.bound {
+                        v.visit_expression(expr, ast)?;
+                    }
+                }
+            }
+        }
+    } else {
+        unimplemented!()
     }
     Ok(())
 }

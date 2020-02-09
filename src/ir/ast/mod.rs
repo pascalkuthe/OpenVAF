@@ -16,11 +16,11 @@ pub use visitor::Visitor;
 use crate::compact_arena::{InvariantLifetime, NanoArena, SafeRange, TinyArena};
 use crate::ir::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId,
-    NetId, PortId, StatementId, VariableId,
+    NetId, ParameterId, PortId, StatementId, VariableId,
 };
+use crate::Span;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
-use crate::Span;
 
 /*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License
 
@@ -90,7 +90,7 @@ impl<T: Clone> Node<T> {
 pub struct Ast<'tag> {
     //TODO configure to use different arena sizes
     //Declarations
-    //    parameters: NanoArena<'tag,Parameter>,
+    pub(super) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
     //    nature: NanoArena<'tag,Nature>
     pub(super) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
     pub(super) nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
@@ -103,7 +103,7 @@ pub struct Ast<'tag> {
     //Ast Items
     pub(super) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
     pub(super) blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
-    pub(super) attributes: TinyArena<'tag, Attribute>,
+    pub(super) attributes: TinyArena<'tag, Attribute<'tag>>,
     pub(super) statements: TinyArena<'tag, Statement<'tag>>,
     pub top_symbols: SymbolTable<'tag>,
 }
@@ -138,23 +138,42 @@ impl<'tag> Ast<'tag> {
         );
         Box::from_raw(res.as_ptr())
     }
+    pub unsafe fn dropless_destruction(mut self) {
+        self.attributes.mark_moved();
+        self.parameters.mark_moved();
+        self.nets.mark_moved();
+        self.statements.mark_moved();
+        self.variables.mark_moved();
+        self.parameters.mark_moved();
+        self.ports.mark_moved();
+        self.natures.mark_moved();
+        self.branches.mark_moved();
+        self.blocks.mark_moved();
+        self.modules.mark_moved();
+        self.
+    }
 }
 
 //TODO cfg options for different id sizes/allocs
 impl_id_type!(BranchId in Ast::branches -> AttributeNode<'tag,BranchDeclaration>);
 impl_id_type!(NetId in Ast::nets -> AttributeNode<'tag,Net>);
 impl_id_type!(PortId in Ast::ports -> AttributeNode<'tag,Port>);
+impl_id_type!(ParameterId in Ast::parameters -> AttributeNode<'tag,Parameter<'tag>>);
 impl_id_type!(VariableId in Ast::variables -> AttributeNode<'tag,Variable<'tag>>);
 impl_id_type!(ModuleId in Ast::modules -> AttributeNode<'tag,Module<'tag>>);
 impl_id_type!(FunctionId in Ast::functions -> AttributeNode<'tag,Function<'tag>>);
 impl_id_type!(DisciplineId in Ast::disciplines -> AttributeNode<'tag,Discipline>);
 impl_id_type!(ExpressionId in Ast::expressions -> Node<Expression<'tag>>);
-impl_id_type!(AttributeId in Ast::attributes -> Attribute);
+impl_id_type!(AttributeId in Ast::attributes -> Attribute<'tag>);
 impl_id_type!(StatementId in Ast::statements -> Statement<'tag>);
 impl_id_type!(BlockId in Ast::blocks -> AttributeNode<'tag,SeqBlock<'tag>>);
 impl_id_type!(NatureId in Ast::natures -> AttributeNode<'tag,Nature>);
 
-pub type Attribute = ();
+#[derive(Copy, Clone)]
+pub struct Attribute<'tag> {
+    pub name: Ident,
+    pub value: Option<ExpressionId<'tag>>,
+}
 
 #[derive(Clone, Copy)]
 pub struct AttributeNode<'ast, T: Clone> {
@@ -189,6 +208,7 @@ pub struct Parameter<'ast> {
     pub default_value: Option<ExpressionId<'ast>>,
 }
 
+#[derive(Clone)]
 pub enum ParameterType<'ast> {
     Numerical {
         parameter_type: NumericalParameterBaseType,
@@ -199,15 +219,18 @@ pub enum ParameterType<'ast> {
         //TODO string parameters
     ),
 }
+#[derive(Clone)]
+pub struct NumericalParameterRangeBound<'ast> {
+    pub inclusive: bool,
+    pub bound: Option<ExpressionId<'ast>>,
+}
+#[derive(Clone)]
 pub enum NumericalParameterRangeExclude<'ast> {
     Value(ExpressionId<'ast>),
     Range(Range<NumericalParameterRangeBound<'ast>>),
 }
-pub enum NumericalParameterRangeBound<'ast> {
-    Unbounded,
-    Bounded(ExpressionId<'ast>),
-}
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericalParameterBaseType {
     Integer,
     Real,
@@ -264,7 +287,7 @@ pub struct Discipline {
 #[derive(Clone)]
 pub struct Function<'ast> {
     pub name: Ident,
-    pub args: Rc<Vec<Ident>>,
+    pub args: Vec<Ident>,
     pub body: StatementId<'ast>,
 }
 #[derive(Debug, Clone, Copy)]
@@ -306,11 +329,8 @@ pub enum Statement<'ast> {
     Contribute(Attributes<'ast>, Ident, BranchAccess, ExpressionId<'ast>),
     //  TODO IndirectContribute(),
     Assign(Attributes<'ast>, HierarchicalId, ExpressionId<'ast>),
-    FunctionCall(
-        Attributes<'ast>,
-        HierarchicalId,
-        Rc<Vec<ExpressionId<'ast>>>,
-    ),
+    FunctionCall(Attributes<'ast>, HierarchicalId, Vec<ExpressionId<'ast>>),
+    BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
 }
 #[derive(Clone)]
 pub struct SeqBlock<'ast> {
@@ -350,8 +370,41 @@ pub enum Primary<'ast> {
     UnsignedInteger(u32),
     Real(f64),
     VariableOrNetReference(HierarchicalId),
-    FunctionCall(HierarchicalId, Rc<Vec<ExpressionId<'ast>>>),
+    FunctionCall(HierarchicalId, Vec<ExpressionId<'ast>>),
     BranchAccess(Ident, BranchAccess),
+    BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
+}
+pub enum BuiltInFunctionCall<'ast> {
+    Pow(ExpressionId<'ast>, ExpressionId<'ast>),
+    Sqrt(ExpressionId<'ast>),
+
+    HyPot(ExpressionId<'ast>, ExpressionId<'ast>),
+    Exp(ExpressionId<'ast>),
+    Ln(ExpressionId<'ast>),
+    Log(ExpressionId<'ast>),
+
+    Min(ExpressionId<'ast>, ExpressionId<'ast>),
+    Max(ExpressionId<'ast>, ExpressionId<'ast>),
+    Abs(ExpressionId<'ast>),
+    Floo(ExpressionId<'ast>),
+    Ceil(ExpressionId<'ast>),
+
+    Sin(ExpressionId<'ast>),
+    Cos(ExpressionId<'ast>),
+    Tan(ExpressionId<'ast>),
+
+    ArcSin(ExpressionId<'ast>),
+    ArcCos(ExpressionId<'ast>),
+    ArcTan(ExpressionId<'ast>),
+    ArcTan2(ExpressionId<'ast>),
+
+    SinH(ExpressionId<'ast>),
+    CosH(ExpressionId<'ast>),
+    TanH(ExpressionId<'ast>),
+
+    ArcSinH(ExpressionId<'ast>),
+    ArcCosH(ExpressionId<'ast>),
+    ArcTanH(ExpressionId<'ast>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

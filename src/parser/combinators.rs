@@ -19,7 +19,12 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     /// This function does not parse the first entry as this requires extra logic in some cases
     /// # Example
     /// ,x,y,z;
-    pub fn parse_list<F>(&mut self, mut parse_list_item: F, end: Token, consume_end: bool) -> Result
+    pub fn parse_list_tail<F>(
+        &mut self,
+        mut parse_list_item: F,
+        end: Token,
+        consume_end: bool,
+    ) -> Result
     where
         F: FnMut(&mut Self) -> Result,
     {
@@ -56,5 +61,15 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 }
             }
         }
+    }
+    /// Combinator that parses a list delimited by a comma and terminated by [end].
+    /// # Example
+    /// x,y,z;
+    pub fn parse_list<F>(&mut self, mut parse_list_item: F, end: Token, consume_end: bool) -> Result
+    where
+        F: FnMut(&mut Self) -> Result,
+    {
+        parse_list_item(self)?;
+        self.parse_list_tail(parse_list_item, end, consume_end)
     }
 }

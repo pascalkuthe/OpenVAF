@@ -12,6 +12,8 @@
 //!
 
 #[macro_use]
+extern crate bitflags;
+#[macro_use]
 extern crate intrusive_collections;
 #[macro_use]
 extern crate lazy_static;
@@ -21,6 +23,7 @@ pub use ast_lowering::resolve;
 pub use ir::ast;
 #[macro_use]
 pub use ir::ast::Ast;
+pub use ir::hir;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
@@ -32,7 +35,7 @@ pub mod symbol;
 #[macro_use]
 mod util;
 #[macro_use]
-mod ir;
+pub mod ir;
 pub mod ast_lowering;
 mod error;
 pub mod parser;

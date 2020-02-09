@@ -2,7 +2,8 @@ use ahash::AHashMap as HashMap;
 
 use crate::ast_lowering::error::MockSymbolDeclaration;
 use crate::ir::{
-    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, PortId, VariableId,
+    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, ParameterId, PortId,
+    VariableId,
 };
 use crate::symbol::{Symbol, SymbolStr};
 use crate::Span;
@@ -21,6 +22,7 @@ pub enum SymbolDeclaration<'ast> {
     Function(FunctionId<'ast>),
     Discipline(DisciplineId<'ast>),
     Nature(NatureId<'ast>),
+    Parameter(ParameterId<'ast>),
 }
 impl<'ast> SymbolDeclaration<'ast> {
     pub fn span(self, ast: &Ast<'ast>) -> Span {
@@ -34,6 +36,7 @@ impl<'ast> SymbolDeclaration<'ast> {
             Self::Function(id) => ast[id].source,
             Self::Discipline(id) => ast[id].source,
             Self::Nature(id) => ast[id].source,
+            Self::Parameter(id) => ast[id].source,
         }
     }
     pub fn name<'lt>(self, ast: &'lt Ast<'ast>) -> SymbolStr {
@@ -47,6 +50,7 @@ impl<'ast> SymbolDeclaration<'ast> {
             Self::Function(id) => ast[id].contents.name.name.as_str(),
             Self::Discipline(id) => ast[id].contents.name.name.as_str(),
             Self::Nature(id) => ast[id].contents.name.name.as_str(),
+            Self::Parameter(id) => ast[id].contents.name.name.as_str(),
         }
     }
     pub fn mock(self) -> MockSymbolDeclaration {
@@ -60,6 +64,7 @@ impl<'ast> SymbolDeclaration<'ast> {
             Self::Function(_) => MockSymbolDeclaration::Function,
             Self::Discipline(_) => MockSymbolDeclaration::Discipline,
             Self::Nature(_) => MockSymbolDeclaration::Nature,
+            Self::Parameter(_) => MockSymbolDeclaration::Parameter,
         }
     }
 }

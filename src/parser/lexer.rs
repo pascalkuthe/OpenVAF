@@ -98,6 +98,10 @@ pub enum Token {
     ParenOpen,
     #[token = ")"]
     ParenClose,
+    #[token = "(*"]
+    AttributeStart,
+    #[token = "*)"]
+    AttributeEnd,
     #[token = "["]
     SquareBracketOpen,
     #[token = "]"]
@@ -258,24 +262,75 @@ pub enum Token {
     TimeIntegral,
     #[token = "idtmod"]
     TimeIntegralMod,
-    #[token = "exp"]
-    Exp,
-    #[token = "sqrt"]
-    Sqrt,
-    #[token = "pow"]
-    Pow,
+    #[token = "limexp"]
+    limexp,
     #[token = "white_noise"]
     WhiteNoise,
     #[token = "flicker_noise"]
     FlickerNoise,
+
+    #[token = "pow"]
+    Pow,
+    #[token = "sqrt"]
+    Sqrt,
+
+    #[token = "hypot"]
+    Hypot,
+    #[token = "exp"]
+    Exp,
+    #[token = "ln"]
+    Ln,
+    #[token = "log"]
+    Log,
+    #[token = "min"]
+    Min,
+    #[token = "max"]
+    Max,
     #[token = "abs"]
     Abs,
+    #[token = "floor"]
+    Floor,
+    #[token = "ceil"]
+    Ceil,
+
+    #[token = "sin"]
+    Sin,
+    #[token = "cos"]
+    Cos,
+    #[token = "tan"]
+    Tan,
+
+    #[token = "asin"]
+    ArcSin,
+    #[token = "acos"]
+    ArcCos,
+    #[token = "atan"]
+    ArcTan,
+    #[token = "atan2"]
+    ArcTan2,
+
+    #[token = "sinh"]
+    SinH,
+    #[token = "cosh"]
+    CosH,
+    #[token = "tanh"]
+    TanH,
+
+    #[token = "asinh"]
+    ArcSinH,
+    #[token = "acosh"]
+    ArcCosH,
+    #[token = "atanh"]
+    ArcTanH,
+
     #[token = "from"]
     From,
     #[token = "exclude"]
     Exclude,
     #[token = "inf"]
     Infinity,
+    #[token = "-inf"]
+    MinusInfinity,
 
     #[token = "nature"]
     Nature,

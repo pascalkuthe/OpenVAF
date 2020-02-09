@@ -615,7 +615,27 @@ impl<'tag, T> TinyArena<'tag, T> {
         self.try_add(item).unwrap()
     }
 }
-impl<'tag, T: Copy> TinyArena<'tag, T> {
+impl<'tag, T: Unpin> TinyArena<'tag, T> {
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn move_to(dst: *mut Self, src: &mut TinyArena<T>) {
+        ptr::write(&mut (*dst).len, src.len);
+        ptr::copy_nonoverlapping(&src.data[0], &mut (*dst).data[0], src.len as usize);
+        src.len = 0;
+    }
+    /// # Safety
+    /// When this is called the contents of the arena will not be dropped. This is only Safe in the following conditions:
+    /// - The contents of the arena don't have a drop implementation
+    /// - The contents have the arena have been copied to another arena usinf ptr::copy
+    pub unsafe fn mark_moved(&mut self) {
+        self.len = 0;
+    }
+}
+impl<'tag, T: Copy> TinyArenaArena<'tag, T> {
     /// # Safety
     /// Behavior is undefined if any of the following conditions are violated:
     ///
@@ -743,6 +763,26 @@ impl<'tag, T> NanoArena<'tag, T> {
     /// Add an item to the arena, get an index back
     pub fn add(&mut self, item: T) -> Idx8<'tag> {
         self.try_add(item).unwrap()
+    }
+}
+impl<'tag, T: Unpin> NanoArena<'tag, T> {
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn move_to(dst: *mut Self, src: &mut NanoArena<T>) {
+        ptr::write(&mut (*dst).len, src.len);
+        ptr::copy_nonoverlapping(&src.data[0], &mut (*dst).data[0], src.len as usize);
+        src.len = 0;
+    }
+    /// # Safety
+    /// When this is called the contents of the arena will not be dropped. This is only Safe in the following conditions:
+    /// - The contents of the arena don't have a drop implementation
+    /// - The contents have the arena have been copied to another arena usinf ptr::copy
+    pub unsafe fn mark_moved(&mut self) {
+        self.len = 0;
     }
 }
 impl<'tag, T: Copy> NanoArena<'tag, T> {

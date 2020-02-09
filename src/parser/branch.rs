@@ -20,20 +20,6 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         self.expect(Token::ParenOpen)?;
         let branch = self.parse_branch()?;
         self.expect(Token::ParenClose)?;
-        let name = self.parse_identifier(false)?;
-        let source = self.span_to_current_end(start);
-        let branch_decl = self.ast.push(AttributeNode {
-            attributes,
-            contents: BranchDeclaration {
-                name,
-                branch: branch.clone(),
-            },
-            source,
-        });
-        self.insert_symbol(
-            self.ast[branch_decl].contents.name,
-            SymbolDeclaration::Branch(branch_decl),
-        );
         self.parse_list(
             |sel: &mut Self| {
                 let name = sel.parse_identifier(false)?;

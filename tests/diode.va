@@ -1,5 +1,5 @@
-`define K_b 1.380649E-32;
-`define q 1.602176634E-19;
+`define K_b 1.380649E-32
+`define q 1.602176634E-19
 
 module diode(inout electrical A,inout electrical C);
     branch (A,C) d;

@@ -135,6 +135,7 @@ pub mod hir;
 id_type!(BranchId(Idx8));
 id_type!(NetId(Idx16));
 id_type!(PortId(Idx8));
+id_type!(ParameterId(Idx16));
 id_type!(VariableId(Idx16));
 id_type!(ModuleId(Idx8));
 id_type!(FunctionId(Idx8));

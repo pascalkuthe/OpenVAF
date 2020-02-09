@@ -24,18 +24,6 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         attributes: Attributes<'ast>,
     ) -> Result {
         let start = self.preprocessor.current_start();
-        let (name, default_value) = self.parse_single_declaration_with_opt_default_value()?;
-        let variable = self.ast.push(AttributeNode {
-            attributes,
-            source: self.span_to_current_end(start),
-            contents: Variable {
-                name,
-                variable_type,
-                default_value,
-            },
-        });
-        self.insert_symbol(name, SymbolDeclaration::Variable(variable));
-
         self.parse_list(
             |sel| {
                 let (name, default_value) =

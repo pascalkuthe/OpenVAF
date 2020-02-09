@@ -16,7 +16,7 @@ branch (test2,test3) c;
 
 `ifdef condition
 module  jup(inout electrical test1, input wreal test2,output wreal test3);
-parameter real x = 1  from [-1:1];
+parameter real x = 1  fro [-1:1];
 parameter real y = 2        from [-1:1];
 
 `branches

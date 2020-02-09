@@ -134,7 +134,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         Ok(res)
     }
 
-    fn parse_atom(&mut self) -> Result<Node<Expression<'ast>>> {
+    pub(super) fn parse_atom(&mut self) -> Result<Node<Expression<'ast>>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::Minus => {
@@ -208,7 +208,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                         let mut parameters = Rc::new(vec![self.parse_expression_id()?]);
                         {
                             let parameters = Rc::get_mut(&mut parameters).unwrap();
-                            self.parse_list(
+                            self.parse_list_tail(
                                 |sel| {
                                     parameters.push(sel.parse_expression_id()?);
                                     Ok(())

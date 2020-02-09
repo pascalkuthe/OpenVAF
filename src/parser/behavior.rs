@@ -76,7 +76,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                             }
                             _ => {
                                 let mut arg = vec![self.parse_expression()?];
-                                self.parse_list(
+                                self.parse_list_tail(
                                     |sel| {
                                         arg.push(sel.parse_expression()?);
                                         Ok(())

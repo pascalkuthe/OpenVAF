@@ -1,13 +1,15 @@
 use std::process::exit;
 use std::rc::Rc;
 
+use intrusive_collections::__core::task::Context;
+
 use crate::ast::visitor::*;
 use crate::ast::{Ast, AttributeNode, ModuleItem, Node};
 use crate::ast::{HierarchicalId, TopNode, Visitor};
 use crate::ast_lowering::error::Type::{
     DeclarationTypeMismatch, NotAScope, UnexpectedTokenInBranchAccess,
 };
-use crate::ast_lowering::error::{Error, MockSymbolDeclaration, Type};
+use crate::ast_lowering::error::{Error, MockSymbolDeclaration, NonConstantExpression, Type};
 use crate::compact_arena::SafeRange;
 use crate::ir::hir::{
     Branch, BranchAccess, BranchDeclaration, Condition, Discipline, DisciplineAccess, Expression,
@@ -15,7 +17,8 @@ use crate::ir::hir::{
 };
 use crate::ir::hir::{Hir, Module};
 use crate::ir::{
-    BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId, PortId, StatementId,
+    BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId, ParameterId, PortId,
+    StatementId,
 };
 use crate::symbol::keywords;
 use crate::symbol::Ident;
@@ -71,11 +74,20 @@ macro_rules! resolve_hierarchical {
 //TODO type checking
 pub mod error;
 type Result<T = ()> = std::result::Result<T, ()>;
+bitflags! {
+    struct VerilogContext: u8{
+        const constant = 0b00000001;
+        const conditional = 0b00000010;
+        const analog = 0b00000100;
+
+    }
+}
 struct AstToHirFolder<'tag, 'astref> {
     scope_stack: Vec<&'astref SymbolTable<'tag>>,
     ast: &'astref Ast<'tag>,
     hir: Box<Hir<'tag>>,
     errors: Vec<Error<'tag>>,
+    state: VerilogContext,
 }
 impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     fn resolve_branch(
@@ -251,6 +263,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
             ast,
             scope_stack: vec![&ast.top_symbols],
             errors: Vec::with_capacity(64),
+            state: VerilogContext::analog,
         }
     }
 
@@ -272,6 +285,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
             return;
         }
 
+        self.state.insert(VerilogContext::constant);
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.ast) {
             let module: &AttributeNode<ast::Module> = &self.ast[module];
             self.scope_stack.push(&module.contents.symbol_table);
@@ -286,11 +300,12 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                     SymbolDeclaration::Port(_) =>(), //ports had to be visited before
                     SymbolDeclaration::Net(_) =>(), //nets had to be visited before
                     SymbolDeclaration::Variable(variableid) => {self.visit_variable(variableid,self.ast);},
-                    //TODO parameters
+                    SymbolDeclaration::Parameter(parameter_id) => {self.visit_parameter(parameter_id,self.ast);},
                 }
             }
             self.scope_stack.pop();
         }
+        self.state.remove(VerilogContext::constant);
         if !self.errors.is_empty() {
             return;
         }
@@ -323,7 +338,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     }
     fn reinterpret_function_call_as_branch_access(
         &mut self,
-        parameters: Rc<Vec<ExpressionId<'tag>>>,
+        parameters: Vec<ExpressionId<'tag>>,
     ) -> Result<(BranchAccess<'tag>, DisciplineId<'tag>)> {
         //this has quite a lot of code duplication from resolve_branch_access; This is unavoidable atm because we would need to clone the ident because we cant move out of the ast which is something I'd really like to avoid
         match parameters.len() {
@@ -466,6 +481,22 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
             ast::Statement::Block(id) => {
                 if let Some(scope) = &self.ast[*id].contents.scope {
                     self.scope_stack.push(&scope.symbols);
+                    self.state.insert(VerilogContext::constant);
+                    for decl in scope.symbols.values().copied() {
+                        match decl {
+                            SymbolDeclaration::Nature(_) => unreachable_unchecked!("Natures can't be declared inside nature so the parser won't ever place this here"),
+                            SymbolDeclaration::Module(_)=>unreachable_unchecked!("Module cant be declared inside modules so the parser won't ever place this here"),
+                            SymbolDeclaration::Discipline(_) => unreachable_unchecked!("Discipline can't be declared inside modules so the parser won't ever place this here"),
+                            SymbolDeclaration::Function(_) => unreachable_unchecked!("Functions can't be declared inside modules so the parser won't ever place this here"),
+                            SymbolDeclaration::Branch(branch) => (),
+                            SymbolDeclaration::Block(_) => (),//Blocks are visited later
+                            SymbolDeclaration::Port(_) =>(), //ports had to be visited before
+                            SymbolDeclaration::Net(_) =>(), //nets had to be visited before
+                            SymbolDeclaration::Variable(variableid) => {self.visit_variable(variableid,self.ast);},
+                            SymbolDeclaration::Parameter(parameter_id) => {self.visit_parameter(parameter_id,self.ast);},
+                        }
+                    }
+                    self.state.remove(VerilogContext::constant);
                     self.visit_block(*id, ast);
                     self.scope_stack.pop();
                 } else {
@@ -558,9 +589,23 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
             ast::Expression::Primary(ast::Primary::VariableOrNetReference(ref ident)) => {
                 resolve_hierarchical!(self; ident as
                     Variable(vid) => {
+                        if self.state.contains(VerilogContext::constant){
+                            self.errors.push(Error{
+                                source:expression.source,
+                                error_type:Type::NotAllowedInConstantContext(NonConstantExpression::VariableReference)
+                                });
+                            return Err(())
+                        }else {
+                            self.hir[expression_id]=Node{
+                                source:expression.source,
+                                contents:Expression::Primary(Primary::VariableReference(vid))
+                            }
+                        }
+                    },
+                    Parameter(pid) => {
                         self.hir[expression_id]=Node{
                             source:expression.source,
-                            contents:Expression::Primary(Primary::VariableReference(vid))
+                            contents:Expression::Primary(Primary::ParameterReference(pid))
                         }
                     }
                     /*Port(pid) => {
@@ -597,6 +642,15 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
             }
 
             ast::Expression::Primary(ast::Primary::FunctionCall(ref ident, ref parameters)) => {
+                if self.state.contains(VerilogContext::constant) {
+                    self.errors.push(Error {
+                        source: expression.source,
+                        error_type: Type::NotAllowedInConstantContext(
+                            NonConstantExpression::VariableReference,
+                        ),
+                    });
+                    return Err(());
+                }
                 resolve_hierarchical!(self; ident as
                     Function(fid) => {
                         self.hir[expression_id]=Node{
@@ -645,7 +699,6 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
         }
         Ok(())
     }
-
     fn visit_port(&mut self, port: PortId<'tag>, ast: &Ast<'tag>) -> Result {
         let unresolved_port = &ast[port];
         if let Ok(discipline) = self.resolve_discipline(&unresolved_port.contents.discipline) {

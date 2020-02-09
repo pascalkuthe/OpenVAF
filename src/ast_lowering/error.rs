@@ -27,6 +27,14 @@ pub enum Type<'tag> {
     ImplicitDisciplinesUnsupported,
     NatureNotPotentialOrFlow(Symbol, DisciplineId<'tag>),
     DisciplineMismatch(DisciplineId<'tag>, DisciplineId<'tag>),
+    NotAllowedInConstantContext(NonConstantExpression),
+}
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum NonConstantExpression {
+    VariableReference,
+    BranchAccess,
+    FunctionCall,
+    AnalogFilter,
 }
 impl<'tag> Error<'tag> {
     pub fn print(&self, source_map: &SourceMap, ast: &Ast<'tag>, translate_lines: bool) {
@@ -176,4 +184,5 @@ pub enum MockSymbolDeclaration {
     Function,
     Discipline,
     Nature,
+    Parameter,
 }

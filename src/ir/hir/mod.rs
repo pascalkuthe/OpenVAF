@@ -4,14 +4,15 @@ use std::ptr;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
+use crate::ast::Parameter;
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
-use crate::ir::{
-    AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId, NetId,
-    PortId, StatementId, VariableId,
-};
 use crate::ir::ast::{
     Ast, Attribute, AttributeNode, Attributes, BinaryOperator, Function, ModuleItem, Nature,
     NetType, Node, TopNode, UnaryOperator, Variable,
+};
+use crate::ir::{
+    AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId, NetId,
+    ParameterId, PortId, StatementId, VariableId,
 };
 use crate::symbol::Ident;
 
@@ -27,7 +28,7 @@ pub struct Hir<'tag> {
     //TODO unsized
     //TODO configure to use different arena sizes
     //Declarations
-    //    parameters: NanoArena<'tag,Parameter>,
+    parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
     //    nature: NanoArena<'tag,Nature>
     branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
     nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
@@ -39,7 +40,7 @@ pub struct Hir<'tag> {
     natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
     //Ast Items
     expressions: TinyArena<'tag, Node<Expression<'tag>>>,
-    attributes: TinyArena<'tag, Attribute>,
+    attributes: TinyArena<'tag, Attribute<'tag>>,
     statements: TinyArena<'tag, Statement<'tag>>,
 }
 ///this module contains copys of the definitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
@@ -57,6 +58,7 @@ impl<'tag> Hir<'tag> {
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
         TinyArena::copy_to(&mut res.as_mut().variables, &ast.variables);
         TinyArena::copy_to(&mut res.as_mut().attributes, &ast.attributes);
+        TinyArena::move_to(&mut res.as_mut().parameters, &mut ast.parameters);
         NanoArena::init_from(&mut res.as_mut().branches, &ast.branches);
         TinyArena::init_from(&mut res.as_mut().nets, &ast.nets);
         NanoArena::init_from(&mut res.as_mut().ports, &ast.ports);
@@ -78,10 +80,11 @@ impl_id_type!(ModuleId in Hir::modules -> AttributeNode<'tag,Module<'tag>>);
 impl_id_type!(FunctionId in Hir::functions -> AttributeNode<'tag,Function<'tag>>);
 impl_id_type!(DisciplineId in Hir::disciplines -> AttributeNode<'tag,Discipline<'tag>>);
 impl_id_type!(ExpressionId in Hir::expressions -> Node<Expression<'tag>>);
-impl_id_type!(AttributeId in Hir::attributes -> Attribute);
+impl_id_type!(AttributeId in Hir::attributes -> Attribute<'tag>);
 impl_id_type!(StatementId in Hir::statements -> Statement<'tag>);
 impl_id_type!(NatureId in Hir::natures -> AttributeNode<'tag,Nature>);
 
+impl_id_type!(ParameterId in Hir::parameters -> AttributeNode<'tag,Parameter<'tag>>);
 #[derive(Clone, Copy)]
 pub struct Discipline<'tag> {
     pub name: Ident,
@@ -118,7 +121,7 @@ pub struct BranchDeclaration<'hir> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub enumBranch<'hir> {
+pub enum Branch<'hir> {
     Port(PortId<'hir>),
     Nets(NetId<'hir>, NetId<'hir>),
 }
@@ -166,8 +169,8 @@ pub enum Primary<'hir> {
     VariableReference(VariableId<'hir>),
     NetReference(NetId<'hir>),
     PortReference(PortId<'hir>),
-    //ParameterReference(ParameterId<'hir>),
-    FunctionCall(FunctionId<'hir>, Rc<Vec<ExpressionId<'hir>>>),
+    ParameterReference(ParameterId<'hir>),
+    FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
     BranchAccess(DisciplineAccess, BranchAccess<'hir>),
 }
 #[derive(Copy, Clone, Eq, PartialEq)]

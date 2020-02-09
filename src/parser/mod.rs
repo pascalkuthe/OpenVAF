@@ -7,8 +7,10 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+use std::collections::HashMap;
 use std::path::Path;
 
+use ahash::AHashMap;
 use bumpalo::Bump;
 use copyless::VecHelper;
 
@@ -16,7 +18,8 @@ pub use error::Error;
 pub use error::Result;
 
 use crate::ast::{Ast, Attributes, HierarchicalId, TopNode};
-use crate::ir::ast::{AttributeNode, Discipline, Nature};
+use crate::ir::ast::{Attribute, AttributeNode, Discipline, Nature};
+use crate::ir::AttributeId;
 use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
@@ -168,7 +171,40 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     }
     //todo attributes
     pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
-        Ok(self.ast.empty_range_from_end()) //Attributes are not yet supported
+        let attributes = self.ast.empty_range_from_end();
+        let mut attribute_map: AHashMap<Symbol, AttributeId<'ast>> = AHashMap::new();
+        loop {
+            if self.look_ahead()?.0 != Token::AttributeStart {
+                break;
+            }
+            self.lookahead.take();
+            self.parse_list(
+                |sel| sel.parse_attribute(&mut attribute_map),
+                Token::AttributeEnd,
+                true,
+            )?;
+        }
+        Ok(self.ast.extend_range_to_end(attributes))
+    }
+    fn parse_attribute(
+        &mut self,
+        attribute_map: &mut AHashMap<Symbol, AttributeId<'ast>>,
+    ) -> Result {
+        let name = self.parse_identifier(false)?;
+        let value = if self.look_ahead()?.0 == Token::Assign {
+            self.lookahead.take();
+            Some(self.parse_expression_id()?)
+        } else {
+            None
+        };
+        if let Some(id) = attribute_map.get(&name.name) {
+            self.ast[*id] = Attribute { name, value };
+        //TODO warn
+        } else {
+            let id = self.ast.push(Attribute { name, value });
+            attribute_map.insert(name.name, id);
+        }
+        Ok(())
     }
     pub fn expect(&mut self, token: Token) -> Result {
         let (found, source) = self.look_ahead()?;

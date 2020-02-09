@@ -67,7 +67,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     ) -> Result {
         let first_port = self.parse_port_declaration_base(attributes)?;
         self.insert_port(first_port, port_list, expected);
-        self.parse_list(
+        self.parse_list_tail(
             |sel: &mut Self| {
                 let name = sel.parse_identifier(false)?;
                 let current_port = sel.ast.push(AttributeNode {
@@ -175,7 +175,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             source: self.span_to_current_end(start),
         });
         self.insert_symbol(first_name, SymbolDeclaration::Net(net));
-        self.parse_list(
+        self.parse_list_tail(
             |sel: &mut Self| {
                 let name = sel.parse_identifier(false)?;
                 let source = sel.span_to_current_end(start);
