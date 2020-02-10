@@ -17,10 +17,10 @@ use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{AttributeNode, Attributes, Module, ModuleItem};
 use crate::error::Error;
 use crate::ir::ast::{
-    Expression, Node, NumericalParameterBaseType, NumericalParameterRangeBound,
-    NumericalParameterRangeExclude, Parameter, ParameterType, UnaryOperator,
+    NumericalParameterBaseType, NumericalParameterRangeBound, NumericalParameterRangeExclude,
+    Parameter, ParameterType,
 };
-use crate::ir::{ExpressionId, ModuleId};
+use crate::ir::ExpressionId;
 use crate::parser::error;
 use crate::parser::error::Expected::ParameterRange;
 use crate::parser::error::Type::{
@@ -343,7 +343,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             bound: self.parse_parameter_range_expression(true)?,
             inclusive,
         };
-        self.expect(Token::Comma)?;
+        self.expect(Token::Colon)?;
         let end = self.parse_parameter_range_expression(false)?;
         let end_inclusive = match self.next()? {
             (Token::SquareBracketClose, _) => true,

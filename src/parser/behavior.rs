@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use std::rc::Rc;
+use intrusive_collections::__core::cell::RefCell;
 
 use crate::ast::{
     AttributeNode, Attributes, BlockScope, Branch, BranchAccess, Condition, Expression,
@@ -71,7 +71,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                                 Statement::FunctionCall(
                                     attributes,
                                     identifier.into(),
-                                    Rc::default(),
+                                    RefCell::default(),
                                 )
                             }
                             _ => {
@@ -96,7 +96,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                                     Statement::FunctionCall(
                                         attributes,
                                         identifier.into(),
-                                        Rc::new(
+                                        RefCell::new(
                                             arg.into_iter()
                                                 .map(|expr| self.ast.push(expr))
                                                 .collect(),

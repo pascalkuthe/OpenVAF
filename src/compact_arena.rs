@@ -635,7 +635,7 @@ impl<'tag, T: Unpin> TinyArena<'tag, T> {
         self.len = 0;
     }
 }
-impl<'tag, T: Copy> TinyArenaArena<'tag, T> {
+impl<'tag, T: Copy> TinyArena<'tag, T> {
     /// # Safety
     /// Behavior is undefined if any of the following conditions are violated:
     ///

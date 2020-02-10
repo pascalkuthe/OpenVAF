@@ -263,7 +263,7 @@ pub enum Token {
     #[token = "idtmod"]
     TimeIntegralMod,
     #[token = "limexp"]
-    limexp,
+    LimExp,
     #[token = "white_noise"]
     WhiteNoise,
     #[token = "flicker_noise"]

@@ -11,12 +11,13 @@
 use std::collections::HashSet;
 
 use crate::ast::{AttributeNode, Attributes, Net, NetType, Port};
-use crate::ir::PortId;
-use crate::parser::error::Result;
+use crate::ir::ast::TopNode::Discipline;
+use crate::ir::{NetId, PortId};
 use crate::parser::error::Type::{AlreadyDeclaredInThisScope, PortNotPreDeclaredInModuleHead};
+use crate::parser::error::{Result, Type};
 use crate::parser::lexer::Token;
 use crate::parser::{error, Error, Parser};
-use crate::symbol::Ident;
+use crate::symbol::{keywords, Ident};
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::Push;
 use crate::Span;
@@ -158,13 +159,41 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         Ok(res)
     }
 
+    #[inline]
+    pub fn insert_net(&mut self, declaration: AttributeNode<'ast, Net>) {
+        if let Some(old_declaration) = self.symbol_table().get(&declaration.contents.name.name) {
+            if let SymbolDeclaration::Port(id) = *old_declaration {
+                if self.ast[id].contents.net_type == NetType::UNDECLARED
+                    && self.ast[id].contents.discipline.name == keywords::EMPTY_SYMBOL
+                    && (self.ast[id].contents.signed == declaration.contents.signed
+                        || self.ast[id].contents.signed == false)
+                //TODO range
+                {
+                    self.ast[id].contents.net_type = declaration.contents.net_type;
+                    self.ast[id].contents.discipline = declaration.contents.discipline;
+                    return;
+                }
+            }
+            self.non_critical_errors.push(Error {
+                error_type: Type::AlreadyDeclaredInThisScope {
+                    other_declaration: old_declaration.span(&self.ast),
+                    name: declaration.contents.name.name,
+                },
+                source: declaration.source,
+            });
+        } else {
+            let id = self.ast.push(declaration);
+            self.symbol_table_mut()
+                .insert(declaration.contents.name.name, SymbolDeclaration::Net(id));
+        }
+    }
     pub fn parse_net_declaration(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
         let net_type = self.parse_net_type()?;
         let opt_first_identifier_or_discipline = self.parse_identifier(true);
         let (discipline, signed, first_name) =
             self.parse_net_declaration_end(false, opt_first_identifier_or_discipline)?;
-        let net = self.ast.push(AttributeNode {
+        let net = AttributeNode {
             attributes,
             contents: Net {
                 name: first_name,
@@ -173,13 +202,13 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 net_type,
             },
             source: self.span_to_current_end(start),
-        });
-        self.insert_symbol(first_name, SymbolDeclaration::Net(net));
+        };
+        self.insert_net(net);
         self.parse_list_tail(
             |sel: &mut Self| {
                 let name = sel.parse_identifier(false)?;
                 let source = sel.span_to_current_end(start);
-                let net = sel.ast.push(AttributeNode {
+                let net = AttributeNode {
                     attributes,
                     contents: Net {
                         name,
@@ -188,8 +217,8 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                         net_type,
                     },
                     source,
-                });
-                sel.insert_symbol(sel.ast[net].contents.name, SymbolDeclaration::Net(net));
+                };
+                sel.insert_net(net);
                 Ok(())
             },
             Token::Semicolon,

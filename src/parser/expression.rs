@@ -8,9 +8,10 @@
  * *****************************************************************************************
  */
 
-use std::rc::Rc;
+use intrusive_collections::__core::cell::RefCell;
 
 use crate::ast::{BinaryOperator, BranchAccess, Expression, Node, Primary, UnaryOperator};
+use crate::ir::ast::BuiltInFunctionCall;
 use crate::ir::ExpressionId;
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
@@ -18,7 +19,7 @@ use crate::parser::lexer::Token;
 use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealLiteralType};
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
-use crate::util::{Push, SafeRangeCreation};
+use crate::util::Push;
 
 impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
@@ -203,20 +204,18 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                         )
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
-                        Primary::FunctionCall(ident.into(), Rc::default())
+                        Primary::FunctionCall(ident.into(), RefCell::default())
                     } else {
-                        let mut parameters = Rc::new(vec![self.parse_expression_id()?]);
-                        {
-                            let parameters = Rc::get_mut(&mut parameters).unwrap();
-                            self.parse_list_tail(
-                                |sel| {
-                                    parameters.push(sel.parse_expression_id()?);
-                                    Ok(())
-                                },
-                                Token::ParenClose,
-                                true,
-                            )?;
-                        }
+                        let mut parameters = RefCell::new(vec![self.parse_expression_id()?]);
+                        let mut parameter_ref = parameters.get_mut();
+                        self.parse_list_tail(
+                            |sel| {
+                                parameter_ref.push(sel.parse_expression_id()?);
+                                Ok(())
+                            },
+                            Token::ParenClose,
+                            true,
+                        )?;
                         Primary::FunctionCall(ident.into(), parameters)
                     }
                 } else {
@@ -228,6 +227,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 )
             }
             Token::Potential => {
+                self.lookahead.take();
                 let start = self.preprocessor.current_start();
                 let res = Primary::BranchAccess(
                     Ident::new(keywords::POTENTIAL, span),
@@ -236,6 +236,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
             Token::Flow => {
+                self.lookahead.take();
                 let start = self.preprocessor.current_start();
                 let res = Primary::BranchAccess(
                     Ident::new(keywords::FLOW, span),
@@ -243,6 +244,269 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 );
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
+
+            Token::Min => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let args = self.parse_double_parameter_built_in_function_call()?;
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Min(
+                        args.0, args.1,
+                    ))),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Max => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let args = self.parse_double_parameter_built_in_function_call()?;
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Max(
+                        args.0, args.1,
+                    ))),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Pow => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let args = self.parse_double_parameter_built_in_function_call()?;
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Pow(
+                        args.0, args.1,
+                    ))),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Hypot => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let args = self.parse_double_parameter_built_in_function_call()?;
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Hypot(
+                        args.0, args.1,
+                    ))),
+                    self.span_to_current_end(start),
+                )
+            }
+
+            Token::Sqrt => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::Sqrt(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Exp => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res =
+                    BuiltInFunctionCall::Exp(self.parse_single_parameter_built_in_function_call()?);
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Ln => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res =
+                    BuiltInFunctionCall::Ln(self.parse_single_parameter_built_in_function_call()?);
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Log => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res =
+                    BuiltInFunctionCall::Log(self.parse_single_parameter_built_in_function_call()?);
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+
+            Token::Abs => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res =
+                    BuiltInFunctionCall::Abs(self.parse_single_parameter_built_in_function_call()?);
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Ceil => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::Ceil(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Floor => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::Floor(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+
+            Token::Tan => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res =
+                    BuiltInFunctionCall::Tan(self.parse_single_parameter_built_in_function_call()?);
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Sin => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res =
+                    BuiltInFunctionCall::Sin(self.parse_single_parameter_built_in_function_call()?);
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::Cos => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res =
+                    BuiltInFunctionCall::Cos(self.parse_single_parameter_built_in_function_call()?);
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::ArcTan => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::ArcTan(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::ArcTan2 => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::ArcTan2(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::ArcSin => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::ArcSin(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::ArcCos => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::ArcCos(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+
+            Token::TanH => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::TanH(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::SinH => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::SinH(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::CosH => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::CosH(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::ArcTanH => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::ArcTanH(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::ArcSinH => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::ArcSinH(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::ArcCosH => {
+                self.lookahead.take();
+                let start = self.preprocessor.current_start();
+                let res = BuiltInFunctionCall::ArcCosH(
+                    self.parse_single_parameter_built_in_function_call()?,
+                );
+                Node::new(
+                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    self.span_to_current_end(start),
+                )
+            }
+
             _ => {
                 return Err(Error {
                     source: span,
@@ -265,5 +529,21 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         let expr = self.ast.push(expr);
         let span = unary_op.source.extend(self.ast[expr].source);
         Ok(Node::new(Expression::UnaryOperator(unary_op, expr), span))
+    }
+    pub fn parse_single_parameter_built_in_function_call(&mut self) -> Result<ExpressionId<'ast>> {
+        self.expect(Token::ParenOpen)?;
+        let res = self.parse_expression_id()?;
+        self.expect(Token::ParenClose)?;
+        Ok(res)
+    }
+    pub fn parse_double_parameter_built_in_function_call(
+        &mut self,
+    ) -> Result<(ExpressionId<'ast>, ExpressionId<'ast>)> {
+        self.expect(Token::ParenOpen)?;
+        let arg1 = self.parse_expression_id()?;
+        self.expect(Token::Comma)?;
+        let arg2 = self.parse_expression_id()?;
+        self.expect(Token::ParenClose)?;
+        Ok((arg1, arg2))
     }
 }

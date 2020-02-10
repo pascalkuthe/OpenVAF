@@ -1,14 +1,11 @@
 use std::ops::Range;
-use std::path::Iter;
-use std::ptr;
 use std::ptr::NonNull;
-use std::rc::Rc;
 
 use crate::ast::Parameter;
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::ir::ast::{
-    Ast, Attribute, AttributeNode, Attributes, BinaryOperator, Function, ModuleItem, Nature,
-    NetType, Node, TopNode, UnaryOperator, Variable,
+    Ast, Attribute, AttributeNode, Attributes, BinaryOperator, BuiltInFunctionCall, Function,
+    Nature, NetType, Node, UnaryOperator, Variable,
 };
 use crate::ir::{
     AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId, NetId,
@@ -58,7 +55,6 @@ impl<'tag> Hir<'tag> {
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
         TinyArena::copy_to(&mut res.as_mut().variables, &ast.variables);
         TinyArena::copy_to(&mut res.as_mut().attributes, &ast.attributes);
-        TinyArena::move_to(&mut res.as_mut().parameters, &mut ast.parameters);
         NanoArena::init_from(&mut res.as_mut().branches, &ast.branches);
         TinyArena::init_from(&mut res.as_mut().nets, &ast.nets);
         NanoArena::init_from(&mut res.as_mut().ports, &ast.ports);
@@ -69,6 +65,9 @@ impl<'tag> Hir<'tag> {
         TinyArena::init_from(&mut res.as_mut().expressions, &ast.expressions);
         TinyArena::init(&mut res.as_mut().statements);
         Box::from_raw(res.as_ptr())
+    }
+    pub(crate) unsafe fn finish_partial_initalize<'astref>(&mut self, ast: &'astref mut Ast<'tag>) {
+        TinyArena::move_to(&mut self.parameters, &mut ast.parameters);
     }
 }
 
@@ -153,6 +152,7 @@ pub enum Statement<'hir> {
     //  TODO IndirectContribute(),
     Assignment(Attributes<'hir>, VariableId<'hir>, ExpressionId<'hir>),
     FunctionCall(Attributes<'hir>, FunctionId<'hir>, Vec<ExpressionId<'hir>>),
+    BuiltInFunctionCall(AttributeNode<'hir, BuiltInFunctionCall<'hir>>),
 }
 
 #[derive(Clone)]
@@ -172,6 +172,7 @@ pub enum Primary<'hir> {
     ParameterReference(ParameterId<'hir>),
     FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
     BranchAccess(DisciplineAccess, BranchAccess<'hir>),
+    BuiltInFunctionCall(BuiltInFunctionCall<'hir>),
 }
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum BranchAccess<'hir> {

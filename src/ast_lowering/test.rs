@@ -2,12 +2,9 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
-use crate::ast::VariableType::REAL;
 use crate::ast_lowering::resolve_and_print;
 use crate::compact_arena::SafeRange;
 use crate::ir::ast::NetType;
-use crate::ir::ast::NetType::UNDECLARED;
-use crate::ir::hir::Hir;
 use crate::ir::ModuleId;
 use crate::parser::{insert_electrical_natures_and_disciplines, parse_and_print_errors};
 use crate::util::SafeRangeCreation;
@@ -18,6 +15,17 @@ pub fn diode() -> Result<(), ()> {
     mk_ast!(ast);
     let (source_map, res) =
         parse_and_print_errors(Path::new("tests/diode.va"), &source_map_allocator, &mut ast);
+    res?;
+    insert_electrical_natures_and_disciplines(&mut ast);
+    let hir = resolve_and_print(ast, source_map)?;
+    Ok(())
+}
+#[test]
+pub fn bjt() -> Result<(), ()> {
+    let source_map_allocator = Bump::new();
+    mk_ast!(ast);
+    let (source_map, res) =
+        parse_and_print_errors(Path::new("tests/bjt.va"), &source_map_allocator, &mut ast);
     res?;
     insert_electrical_natures_and_disciplines(&mut ast);
     let hir = resolve_and_print(ast, source_map)?;

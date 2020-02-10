@@ -402,14 +402,14 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 }
                 Token::Newline => {
                     self.source_map_builder.new_line();
-                    self.advance_state()?
                 }
                 Token::EOF => {
                     let error = error::Type::UnclosedConditions(ignore_conditions);
                     return self.token_error(error);
                 }
-                _ => self.advance_state()?,
+                _ => (),
             }
+            self.advance_state()?
         }
     }
 
@@ -453,17 +453,16 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             }
             peek = self.peek();
         }
-        let peek = peek?;
+        let mut peek = peek?;
         let body_start = peek.0.start;
         let line = self.source_map_builder.current_root_line();
         let mut body = Vec::new();
-        let mut peek = peek.1;
-        while peek != Token::Newline && peek != Token::EOF {
+        while peek.1 != Token::Newline && peek.1 != Token::EOF {
             self.advance_state()?;
             body.push(self.current_macro_body_token(body_start, &args, 1)?);
-            peek = self.peek()?.1;
+            peek = self.peek()?;
         }
-        let decl_range = Span::new(body_start, self.current_source_start + self.current_len);
+        let decl_range = Span::new(body_start, peek.0.start);
         let decl_source =
             &self.source()[decl_range.get_start() as usize..decl_range.get_end() as usize];
         let maco_decl = Macro {

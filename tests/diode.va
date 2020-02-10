@@ -3,8 +3,8 @@
 
 module diode(inout electrical A,inout electrical C);
     branch (A,C) d;
-    parameter real I_s0 from [1E-20,1];
-    parameter real m from [0.1,10];
+    parameter real I_s0 from [1E-20:1];
+    parameter real m from [0.1:10];
     parameter real zeta;
     parameter real T, T_0;
     real V_t,I_s;

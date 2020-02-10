@@ -7,23 +7,21 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use std::collections::HashMap;
 use std::path::Path;
 
 use ahash::AHashMap;
 use bumpalo::Bump;
-use copyless::VecHelper;
 
 pub use error::Error;
 pub use error::Result;
 
-use crate::ast::{Ast, Attributes, HierarchicalId, TopNode};
+use crate::ast::{Ast, Attributes, HierarchicalId};
 use crate::ir::ast::{Attribute, AttributeNode, Discipline, Nature};
 use crate::ir::AttributeId;
 use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
-use crate::symbol::{Ident, Symbol, SymbolStr};
+use crate::symbol::{Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::util::{Push, SafeRangeCreation};
 use crate::{Preprocessor, SourceMap, Span};
@@ -241,7 +239,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             .last_mut()
             .unwrap_or(&mut self.ast.top_symbols)
     }
-    pub fn symbol_table(&mut self) -> &SymbolTable<'ast> {
+    pub fn symbol_table(&self) -> &SymbolTable<'ast> {
         self.scope_stack.last().unwrap_or(&self.ast.top_symbols)
     }
 }

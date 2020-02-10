@@ -4,8 +4,7 @@ use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, Sou
 
 use crate::ir::DisciplineId;
 use crate::parser::error::translate_to_inner_snippet_range;
-use crate::span::Index;
-use crate::symbol::{Ident, Symbol};
+use crate::symbol::Symbol;
 use crate::symbol_table::SymbolDeclaration;
 use crate::{Ast, SourceMap, Span};
 

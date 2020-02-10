@@ -7,9 +7,9 @@
 //  * *******************************************************************************************
 
 use core::fmt::Debug;
+use std::cell::RefCell;
 use std::ops::Range;
 use std::ptr::NonNull;
-use std::rc::Rc;
 
 pub use visitor::Visitor;
 
@@ -18,9 +18,9 @@ use crate::ir::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId,
     NetId, ParameterId, PortId, StatementId, VariableId,
 };
-use crate::Span;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
+use crate::Span;
 
 /*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License
 
@@ -68,6 +68,7 @@ macro_rules! mk_ast {
     };
 }
 
+//pub mod printer;
 pub mod visitor;
 
 pub type Attributes<'ast> = SafeRange<AttributeId<'ast>>;
@@ -90,12 +91,11 @@ impl<T: Clone> Node<T> {
 pub struct Ast<'tag> {
     //TODO configure to use different arena sizes
     //Declarations
-    pub(super) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
-    //    nature: NanoArena<'tag,Nature>
     pub(super) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
     pub(super) nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
     pub(super) ports: NanoArena<'tag, AttributeNode<'tag, Port>>,
     pub(super) variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
+    pub(super) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
     pub(super) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
     pub(super) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
     pub(super) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
@@ -124,6 +124,7 @@ impl<'tag> Ast<'tag> {
         TinyArena::init(&mut res.as_mut().nets);
         NanoArena::init(&mut res.as_mut().ports);
         TinyArena::init(&mut res.as_mut().variables);
+        TinyArena::init(&mut res.as_mut().parameters);
         NanoArena::init(&mut res.as_mut().modules);
         NanoArena::init(&mut res.as_mut().functions);
         NanoArena::init(&mut res.as_mut().disciplines);
@@ -137,20 +138,6 @@ impl<'tag> Ast<'tag> {
             SymbolTable::with_capacity(64),
         );
         Box::from_raw(res.as_ptr())
-    }
-    pub unsafe fn dropless_destruction(mut self) {
-        self.attributes.mark_moved();
-        self.parameters.mark_moved();
-        self.nets.mark_moved();
-        self.statements.mark_moved();
-        self.variables.mark_moved();
-        self.parameters.mark_moved();
-        self.ports.mark_moved();
-        self.natures.mark_moved();
-        self.branches.mark_moved();
-        self.blocks.mark_moved();
-        self.modules.mark_moved();
-        self.
     }
 }
 
@@ -219,7 +206,7 @@ pub enum ParameterType<'ast> {
         //TODO string parameters
     ),
 }
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct NumericalParameterRangeBound<'ast> {
     pub inclusive: bool,
     pub bound: Option<ExpressionId<'ast>>,
@@ -329,8 +316,12 @@ pub enum Statement<'ast> {
     Contribute(Attributes<'ast>, Ident, BranchAccess, ExpressionId<'ast>),
     //  TODO IndirectContribute(),
     Assign(Attributes<'ast>, HierarchicalId, ExpressionId<'ast>),
-    FunctionCall(Attributes<'ast>, HierarchicalId, Vec<ExpressionId<'ast>>),
-    BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
+    FunctionCall(
+        Attributes<'ast>,
+        HierarchicalId,
+        RefCell<Vec<ExpressionId<'ast>>>,
+    ),
+    BuiltInFunctionCall(AttributeNode<'ast, BuiltInFunctionCall<'ast>>),
 }
 #[derive(Clone)]
 pub struct SeqBlock<'ast> {
@@ -370,15 +361,16 @@ pub enum Primary<'ast> {
     UnsignedInteger(u32),
     Real(f64),
     VariableOrNetReference(HierarchicalId),
-    FunctionCall(HierarchicalId, Vec<ExpressionId<'ast>>),
+    FunctionCall(HierarchicalId, RefCell<Vec<ExpressionId<'ast>>>),
     BranchAccess(Ident, BranchAccess),
     BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
 }
+#[derive(Copy, Clone)]
 pub enum BuiltInFunctionCall<'ast> {
     Pow(ExpressionId<'ast>, ExpressionId<'ast>),
     Sqrt(ExpressionId<'ast>),
 
-    HyPot(ExpressionId<'ast>, ExpressionId<'ast>),
+    Hypot(ExpressionId<'ast>, ExpressionId<'ast>),
     Exp(ExpressionId<'ast>),
     Ln(ExpressionId<'ast>),
     Log(ExpressionId<'ast>),
@@ -386,7 +378,7 @@ pub enum BuiltInFunctionCall<'ast> {
     Min(ExpressionId<'ast>, ExpressionId<'ast>),
     Max(ExpressionId<'ast>, ExpressionId<'ast>),
     Abs(ExpressionId<'ast>),
-    Floo(ExpressionId<'ast>),
+    Floor(ExpressionId<'ast>),
     Ceil(ExpressionId<'ast>),
 
     Sin(ExpressionId<'ast>),

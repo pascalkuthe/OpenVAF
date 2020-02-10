@@ -1,24 +1,18 @@
-use std::process::exit;
-use std::rc::Rc;
-
-use intrusive_collections::__core::task::Context;
-
 use crate::ast::visitor::*;
 use crate::ast::{Ast, AttributeNode, ModuleItem, Node};
-use crate::ast::{HierarchicalId, TopNode, Visitor};
-use crate::ast_lowering::error::Type::{
-    DeclarationTypeMismatch, NotAScope, UnexpectedTokenInBranchAccess,
-};
-use crate::ast_lowering::error::{Error, MockSymbolDeclaration, NonConstantExpression, Type};
+use crate::ast::{HierarchicalId, Visitor};
+use crate::ast_lowering::error::Type::{NotAScope, UnexpectedTokenInBranchAccess};
+use crate::ast_lowering::error::{Error, NonConstantExpression, Type};
 use crate::compact_arena::SafeRange;
+use crate::ir::ast::{BuiltInFunctionCall, NetType, VariableType};
 use crate::ir::hir::{
     Branch, BranchAccess, BranchDeclaration, Condition, Discipline, DisciplineAccess, Expression,
     Net, Port, Primary, Statement,
 };
 use crate::ir::hir::{Hir, Module};
 use crate::ir::{
-    BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId, ParameterId, PortId,
-    StatementId,
+    AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId,
+    ParameterId, PortId, StatementId, VariableId,
 };
 use crate::symbol::keywords;
 use crate::symbol::Ident;
@@ -299,13 +293,14 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                     SymbolDeclaration::Block(_) => (),//Blocks are visited later
                     SymbolDeclaration::Port(_) =>(), //ports had to be visited before
                     SymbolDeclaration::Net(_) =>(), //nets had to be visited before
-                    SymbolDeclaration::Variable(variableid) => {self.visit_variable(variableid,self.ast);},
+                    SymbolDeclaration::Variable(variable_id) => {self.visit_variable(variable_id,self.ast);},
                     SymbolDeclaration::Parameter(parameter_id) => {self.visit_parameter(parameter_id,self.ast);},
                 }
             }
             self.scope_stack.pop();
         }
         self.state.remove(VerilogContext::constant);
+
         if !self.errors.is_empty() {
             return;
         }
@@ -408,42 +403,6 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
         }
         Err(())
     }
-
-    fn visit_nature(&mut self, nature: NatureId<'tag>, ast: &Ast<'tag>) -> Result {
-        /*Nothing to do*/
-        //TODO advanced natures
-        Ok(())
-    }
-    fn visit_discipline(&mut self, discipline: DisciplineId<'tag>, ast: &Ast<'tag>) -> Result {
-        /*Nothing to do*/
-        let unresolved_discipline = &ast[discipline];
-        let mut flow_nature = Err(());
-        let ident = &unresolved_discipline.contents.flow_nature;
-        resolve!(self; ident as
-            Nature(id) => {
-                flow_nature = Ok(id)
-            }
-        );
-        let mut pot_nature = Err(());
-        let ident = &unresolved_discipline.contents.potential_nature;
-        resolve!(self; ident as
-            Nature(id) => {
-                pot_nature = Ok(id)
-            }
-        );
-        if let (Ok(potential_nature), Ok(flow_nature)) = (pot_nature, flow_nature) {
-            self.hir[discipline] = AttributeNode {
-                attributes: unresolved_discipline.attributes,
-                source: unresolved_discipline.source,
-                contents: Discipline {
-                    name: unresolved_discipline.contents.name,
-                    flow_nature,
-                    potential_nature,
-                },
-            };
-        }
-        Ok(())
-    }
 }
 
 /// The Result in Visitor is there to allow error propagation.
@@ -451,7 +410,17 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
 /// Therefore all errors are simply to the errors vector (size > 0 indicates a failure) and Ok(()) is always returned.
 /// If a result of name resolution is required by a caller we use struct field last_resolved_declaration instead
 impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
-    fn visit_module(&mut self, module_id: ModuleId<'tag>, ast: &Ast<'tag>) -> Result {
+    fn visit_declaration_name(&mut self, ident: &Ident, ast: &Ast<'tag>) {}
+
+    fn visit_reference(&mut self, ident: &Ident, ast: &Ast<'tag>) {}
+
+    fn visit_hierarchical_reference(&mut self, ident: &HierarchicalId, ast: &Ast<'tag>) {}
+
+    fn visit_net_type(&mut self, net_type: NetType, ast: &Ast<'tag>) {}
+
+    fn visit_variable_type(&mut self, variable_type: VariableType, ast: &Ast<'tag>) {}
+
+    fn visit_module(&mut self, module_id: ModuleId<'tag>, ast: &Ast<'tag>) {
         let module = &self.ast[module_id];
         let analog_statements = self.hir.empty_range_from_end();
         self.scope_stack.push(&module.contents.symbol_table);
@@ -459,7 +428,7 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
         //TODO parameters
         for module_item in module.contents.children.iter() {
             match module_item {
-                ModuleItem::AnalogStmt(statement) => self.visit_statement(*statement, ast)?,
+                ModuleItem::AnalogStmt(statement) => self.visit_statement(*statement, ast),
                 ModuleItem::GenerateStatement => unimplemented!("Generate Statement"),
             }
         }
@@ -473,10 +442,9 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
             source: module.source,
             attributes: module.attributes,
         };
-        Ok(())
     }
 
-    fn visit_statement(&mut self, statement: StatementId<'tag>, ast: &Ast<'tag>) -> Result {
+    fn visit_statement(&mut self, statement: StatementId<'tag>, ast: &Ast<'tag>) {
         match &ast[statement] {
             ast::Statement::Block(id) => {
                 if let Some(scope) = &self.ast[*id].contents.scope {
@@ -549,13 +517,66 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 }
                 self.visit_expression(*value, ast);
             }
-            ast::Statement::FunctionCall(ref _attr, ref name, ref args) => {
-                unimplemented!("Functions")
+            ast::Statement::FunctionCall(ref attr, ref name, ref args) => {
+                for expr in args.borrow().iter().copied() {
+                    self.visit_expression(expr, ast);
+                }
+                resolve_hierarchical!(self; name as
+                    Function(fid) => {
+                        self.hir.push(Statement::FunctionCall(*attr,fid,args.replace(Vec::default())));
+                    }
+                )
+            }
+            ast::Statement::BuiltInFunctionCall(function_call) => {
+                walk_builtin_function_call(self, &function_call.contents, ast);
+                self.hir
+                    .push(Statement::BuiltInFunctionCall(*function_call));
             }
         }
-        Ok(())
     }
-    fn visit_expression(&mut self, expression_id: ExpressionId<'tag>, ast: &Ast<'tag>) -> Result {
+
+    fn visit_block(&mut self, block: BlockId<'tag>, ast: &Ast<'tag>) {
+        walk_block(self, &ast[block], ast)
+    }
+
+    fn visit_condition(
+        &mut self,
+        condition: &AttributeNode<'tag, ast::Condition<'tag>>,
+        ast: &Ast<'tag>,
+    ) {
+        unimplemented!()
+    }
+
+    fn visit_assign(
+        &mut self,
+        attributes: SafeRange<AttributeId<'tag>>,
+        ident: &HierarchicalId,
+        value: ExpressionId<'tag>,
+        ast: &Ast<'tag>,
+    ) {
+        walk_assign(self, ident, value, ast)
+    }
+
+    fn visit_contribute(
+        &mut self,
+        attributes: SafeRange<AttributeId<'tag>>,
+        nature: &Ident,
+        branch: &ast::BranchAccess,
+        value: ExpressionId<'tag>,
+        ast: &Ast<'tag>,
+    ) {
+        unimplemented!()
+    }
+
+    fn visit_branch_access(&mut self, nature: &Ident, branch: &ast::BranchAccess, ast: &Ast<'tag>) {
+        unimplemented!()
+    }
+
+    fn visit_branch(&mut self, branch: &ast::Branch, ast: &Ast<'tag>) {
+        unimplemented!()
+    }
+
+    fn visit_expression(&mut self, expression_id: ExpressionId<'tag>, ast: &Ast<'tag>) {
         let expression = &self.ast[expression_id];
         match expression.contents {
             ast::Expression::BinaryOperator(lhs, op, rhs) => {
@@ -594,7 +615,6 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                                 source:expression.source,
                                 error_type:Type::NotAllowedInConstantContext(NonConstantExpression::VariableReference)
                                 });
-                            return Err(())
                         }else {
                             self.hir[expression_id]=Node{
                                 source:expression.source,
@@ -649,24 +669,27 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                             NonConstantExpression::VariableReference,
                         ),
                     });
-                    return Err(());
                 }
+
                 resolve_hierarchical!(self; ident as
                     Function(fid) => {
+                        for expr in parameters.borrow().iter().copied() {
+                            self.visit_expression(expr, ast);
+                        }
                         self.hir[expression_id]=Node{
                             source:expression.source,
-                            contents:Expression::Primary(Primary::FunctionCall(fid,parameters.clone()))
+                            contents:Expression::Primary(Primary::FunctionCall(fid,parameters.replace(Vec::default())))
                         };
                     },
                     Nature(nid) => {
-                        if let Ok((branch_access,discipline)) = self.reinterpret_function_call_as_branch_access(parameters.clone()){
+                        if let Ok((branch_access,discipline)) = self.reinterpret_function_call_as_branch_access(parameters.replace(Vec::default())){
                              let discipline_access = match nid {
                                 id if id == self.hir[discipline].contents.flow_nature => Ok(DisciplineAccess::Flow),
                                 id if id == self.hir[discipline].contents.potential_nature => Ok(DisciplineAccess::Potential),
                                 id => {
                                     self.errors.push(Error{source:ident.span(),error_type:Type::NatureNotPotentialOrFlow(ident.names[0].name,discipline)});
                                     Err(())
-                                },
+                               },
                             };
                             if let Ok(discipline_access) = discipline_access{
                                 self.hir[expression_id] = Node{
@@ -678,14 +701,25 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                     }
                 )
             }
+            ast::Expression::Primary(ast::Primary::BuiltInFunctionCall(
+                ref primary_function_call,
+            )) => {
+                walk_builtin_function_call(self, primary_function_call, ast);
+                self.hir[expression_id] = Node {
+                    contents: Expression::Primary(Primary::BuiltInFunctionCall(
+                        *primary_function_call,
+                    )),
+                    source: expression.source,
+                }
+            }
         }
-        Ok(())
     }
-    fn visit_branch_declaration(
-        &mut self,
-        branch_declaration_id: BranchId<'tag>,
-        ast: &Ast<'tag>,
-    ) -> Result {
+
+    fn visit_expression_primary(&mut self, primary: &ast::Primary<'tag>, ast: &Ast<'tag>) {
+        unimplemented!()
+    }
+
+    fn visit_branch_declaration(&mut self, branch_declaration_id: BranchId<'tag>, ast: &Ast<'tag>) {
         let branch_declaration = &self.ast[branch_declaration_id];
         if let Ok((resolved_branch, _)) = self.resolve_branch(&branch_declaration.contents.branch) {
             self.hir[branch_declaration_id] = AttributeNode {
@@ -697,9 +731,8 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 },
             }
         }
-        Ok(())
     }
-    fn visit_port(&mut self, port: PortId<'tag>, ast: &Ast<'tag>) -> Result {
+    fn visit_port(&mut self, port: PortId<'tag>, ast: &Ast<'tag>) {
         let unresolved_port = &ast[port];
         if let Ok(discipline) = self.resolve_discipline(&unresolved_port.contents.discipline) {
             self.hir[port] = Port {
@@ -717,10 +750,9 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 }),
             };
         }
-        Ok(())
     }
 
-    fn visit_net(&mut self, net: NetId<'tag>, ast: &Ast<'tag>) -> Result {
+    fn visit_net(&mut self, net: NetId<'tag>, ast: &Ast<'tag>) {
         let unresolved_net = &ast[net];
         if let Ok(discipline) = self.resolve_discipline(&unresolved_net.contents.discipline) {
             self.hir[net] = AttributeNode {
@@ -734,7 +766,56 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 },
             }
         }
-        Ok(())
+    }
+
+    fn visit_variable(&mut self, variable: VariableId<'tag>, ast: &Ast<'tag>) {
+        walk_variable(self, variable, ast);
+    }
+
+    fn visit_nature(&mut self, nature: NatureId<'tag>, ast: &Ast<'tag>) {
+        /*Nothing to do*/
+        //TODO advanced natures
+    }
+    fn visit_discipline(&mut self, discipline: DisciplineId<'tag>, ast: &Ast<'tag>) {
+        /*Nothing to do*/
+        let unresolved_discipline = &ast[discipline];
+        let mut flow_nature = Err(());
+        let ident = &unresolved_discipline.contents.flow_nature;
+        resolve!(self; ident as
+            Nature(id) => {
+                flow_nature = Ok(id)
+            }
+        );
+        let mut pot_nature = Err(());
+        let ident = &unresolved_discipline.contents.potential_nature;
+        resolve!(self; ident as
+            Nature(id) => {
+                pot_nature = Ok(id)
+            }
+        );
+        if let (Ok(potential_nature), Ok(flow_nature)) = (pot_nature, flow_nature) {
+            self.hir[discipline] = AttributeNode {
+                attributes: unresolved_discipline.attributes,
+                source: unresolved_discipline.source,
+                contents: Discipline {
+                    name: unresolved_discipline.contents.name,
+                    flow_nature,
+                    potential_nature,
+                },
+            };
+        }
+    }
+
+    fn visit_parameter(&mut self, parameter_id: ParameterId<'tag>, ast: &Ast<'tag>) {
+        walk_parameter(self, parameter_id, ast)
+    }
+
+    fn visit_built_in_function_call(
+        &mut self,
+        function_call: &BuiltInFunctionCall<'tag>,
+        ast: &Ast<'tag>,
+    ) {
+        unimplemented!()
     }
 }
 
@@ -742,7 +823,11 @@ pub fn resolve<'tag>(mut ast: Box<Ast<'tag>>) -> std::result::Result<Box<Hir<'ta
     let mut fold = unsafe { AstToHirFolder::init(&mut ast) }; //this is save since the only thing that made this unsafe way calling only a part of this and expecting a valid hir
     fold.run();
     if fold.errors.is_empty() {
-        Ok(fold.done())
+        let mut hir = fold.done();
+        unsafe {
+            hir.finish_partial_initalize(&mut ast);
+        }
+        Ok(hir)
     } else {
         Err(fold.errors)
     }
@@ -754,7 +839,11 @@ pub fn resolve_and_print<'tag>(
     let mut fold = unsafe { AstToHirFolder::init(&mut ast) }; //this is save since the only thing that made this unsafe way calling only a part of this and expecting a valid hir
     fold.run();
     if fold.errors.is_empty() {
-        Ok(fold.done())
+        let mut hir = fold.done();
+        unsafe {
+            hir.finish_partial_initalize(&mut ast);
+        }
+        Ok(hir)
     } else {
         fold.errors
             .drain(..)
