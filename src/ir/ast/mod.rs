@@ -209,7 +209,7 @@ pub enum ParameterType<'ast> {
 #[derive(Clone, Copy)]
 pub struct NumericalParameterRangeBound<'ast> {
     pub inclusive: bool,
-    pub bound: Option<ExpressionId<'ast>>,
+    pub bound: ExpressionId<'ast>,
 }
 #[derive(Clone)]
 pub enum NumericalParameterRangeExclude<'ast> {

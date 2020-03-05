@@ -1,0 +1,28 @@
+// Copyright(c) 2009-2014 Accellera Systems Initiative Inc.
+// 1370 Trancas Street #163, Napa, CA 94558, USA.
+//
+// The material in driver_access.vams is an essential part of the Accellera Systems
+// Initiative ("Accellera") Verilog-AMS Language Standard. Verbatim copies of
+// the material in this Annex may be used and distributed without restriction.
+// All other uses require permission from Accellera IP Committee
+// (ipr-chair@lists.accellera.org).
+// All other rights reserved.
+//
+// Version 2.4.0
+
+`ifdef DRIVER_ACCESS_VAMS
+`else
+`define DRIVER_ACCESS_VAMS        1
+`define DRIVER_UNKNOWN            32'b00000000000      // No information
+`define DRIVER_DELAYED            32'b00000000001      // driver has fixed delay
+`define DRIVER_GATE               32'b00000000010      // driver is a primitive
+`define DRIVER_UDP                32'b00000000100      // driver is a user defined primitive
+`define DRIVER_ASSIGN             32'b00000001000      // driver is a continuous assignment
+`define DRIVER_BEHAVIORAL         32'b00000010000      // driver is a reg
+`define DRIVER_SDF                32'b00000100000      // driver is from backannotated code
+`define DRIVER_NODELETE           32'b00001000000      // events won't be deleted
+`define DRIVER_NOPREEMPT          32'b00010000000      // events won't be preempted
+`define DRIVER_KERNEL             32'b00100000000      // added by kernel (wor/wand)
+`define DRIVER_WOR                32'b01000000000      // driver is on a wor net
+`define DRIVER_WAND               32'b10000000000      // driver is on a wand net
+`endif

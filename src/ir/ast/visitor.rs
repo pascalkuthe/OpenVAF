@@ -265,12 +265,8 @@ pub fn walk_parameter<'ast, T, V: Visitor<'ast, T>>(
     } = &ast[parameter].contents.parameter_type
     {
         for range in included_ranges {
-            if let Some(expr) = range.start.bound {
-                v.visit_expression(expr, ast);
-            }
-            if let Some(expr) = range.start.bound {
-                v.visit_expression(expr, ast);
-            }
+            v.visit_expression(range.start.bound, ast);
+            v.visit_expression(range.end.bound, ast);
         }
         for exclude in excluded_ranges {
             match exclude {
@@ -278,12 +274,8 @@ pub fn walk_parameter<'ast, T, V: Visitor<'ast, T>>(
                     v.visit_expression(*val, ast);
                 }
                 NumericalParameterRangeExclude::Range(range) => {
-                    if let Some(expr) = range.start.bound {
-                        v.visit_expression(expr, ast);
-                    }
-                    if let Some(expr) = range.start.bound {
-                        v.visit_expression(expr, ast);
-                    }
+                    v.visit_expression(range.start.bound, ast);
+                    v.visit_expression(range.end.bound, ast);
                 }
             }
         }

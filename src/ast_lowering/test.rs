@@ -20,7 +20,7 @@ pub fn diode() -> Result<(), ()> {
     let hir = resolve_and_print(ast, source_map)?;
     Ok(())
 }
-#[test]
+/*#[test]
 pub fn bjt() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
@@ -30,7 +30,7 @@ pub fn bjt() -> Result<(), ()> {
     insert_electrical_natures_and_disciplines(&mut ast);
     let hir = resolve_and_print(ast, source_map)?;
     Ok(())
-}
+}*/
 
 #[test]
 pub fn linear() -> Result<(), ()> {

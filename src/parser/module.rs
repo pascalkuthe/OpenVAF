@@ -17,8 +17,8 @@ use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{AttributeNode, Attributes, Module, ModuleItem};
 use crate::error::Error;
 use crate::ir::ast::{
-    NumericalParameterBaseType, NumericalParameterRangeBound, NumericalParameterRangeExclude,
-    Parameter, ParameterType,
+    Expression, Node, NumericalParameterBaseType, NumericalParameterRangeBound,
+    NumericalParameterRangeExclude, Parameter, ParameterType, Primary,
 };
 use crate::ir::ExpressionId;
 use crate::parser::error;
@@ -365,13 +365,16 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     fn parse_parameter_range_expression(
         &mut self,
         lower_bound: bool,
-    ) -> Result<Option<ExpressionId<'ast>>> {
+    ) -> Result<ExpressionId<'ast>> {
         let (token, source) = self.look_ahead()?;
         match token {
             Token::Infinity => {
                 self.lookahead.take();
                 if !lower_bound {
-                    Ok(None)
+                    Ok(self.ast.push(Node {
+                        contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
+                        source: self.preprocessor.current_span(),
+                    }))
                 } else {
                     Err(Error {
                         error_type: ParameterRangeUnboundedInIllegalDirection,
@@ -382,7 +385,10 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             Token::MinusInfinity => {
                 self.lookahead.take();
                 if lower_bound {
-                    Ok(None)
+                    Ok(self.ast.push(Node {
+                        contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
+                        source: self.preprocessor.current_span(),
+                    }))
                 } else {
                     Err(Error {
                         error_type: ParameterRangeUnboundedInIllegalDirection,
@@ -390,7 +396,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     })
                 }
             }
-            _ => Ok(Some(self.parse_expression_id()?)),
+            _ => Ok(self.parse_expression_id()?),
         }
     }
 }
