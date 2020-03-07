@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::iter::Peekable;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::vec::IntoIter;
 
 use bumpalo::Bump;
@@ -287,8 +287,28 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 Token::Newline => self.source_map_builder.new_line(),
                 Token::Include => {
                     let start = self.current_start;
-                    self.consume(Token::String)?;
-                    let path_str = parse_string(self.slice());
+                    self.advance_state()?;
+                    self.consume(Token::LiteralString)?;
+                    let mut path_str = parse_string(self.slice());
+                    match path_str.as_str() {
+                        "constants.va" | "constants.vams" | "constants.v" => {
+                            let mut path = PathBuf::from(
+                                std::env::var("VAMS_STD")
+                                    .expect("VAMS_STD enviorment variable not set"),
+                            );
+                            path.push("constants.va");
+                            path_str = String::from(path.to_str().unwrap())
+                        }
+                        "disciplines.va" | "disciplines.vams" | "disciplines.v" => {
+                            let mut path = PathBuf::from(
+                                std::env::var("VAMS_STD")
+                                    .expect("VAMS_STD enviorment variable not set"),
+                            );
+                            path.push("disciplines.va");
+                            path_str = String::from(path.to_str().unwrap())
+                        }
+                        _ => (),
+                    };
                     let path = Path::new(&path_str);
                     self.include(
                         path,
@@ -302,7 +322,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     let token_source = self.resolve_reference(
                         unresolved_reference.0,
                         unresolved_reference.1,
-                        true,
+                        self.state_stack.len() == 1,
                     )?;
                     self.state_stack
                         .push(PreprocessorState::new(start, token_source));
@@ -321,7 +341,10 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 Token::EOF if !self.condition_stack.is_empty() => {
                     let error = error::Type::UnclosedConditions(self.condition_stack.clone());
                     self.condition_stack.clear(); //We call this  so this error doesnt reoccur
-                    return self.token_error(error);
+                    return Err(Error {
+                        source: self.span().negative_offset(1),
+                        error_type: error,
+                    });
                 }
                 Token::EOF if self.state_stack.len() != 1 => {
                     unreachable!("Unclosed token_sources! {:?}", self.state_stack);
@@ -367,7 +390,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                         }
                         Token::MacroEndIf => return Ok(()),
                         Token::MacroElse => {
-                            self.condition_stack.push(self.current_span());
+                            self.condition_stack.push(self.span());
                             return Ok(());
                         }
                         Token::UnexpectedEOF => {
@@ -393,9 +416,12 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         let mut ignore_conditions: Vec<Span> = Vec::new();
         loop {
             match self.current_token {
-                Token::MacroEndIf if ignore_conditions.is_empty() => return Ok(()),
+                Token::MacroEndIf if ignore_conditions.is_empty() => {
+                    self.condition_stack.pop();
+                    return Ok(());
+                }
                 Token::MacroIfn | Token::MacroIf => {
-                    ignore_conditions.push(self.current_span());
+                    ignore_conditions.push(self.span());
                 }
                 Token::MacroEndIf => {
                     ignore_conditions.pop();
@@ -405,7 +431,10 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 }
                 Token::EOF => {
                     let error = error::Type::UnclosedConditions(ignore_conditions);
-                    return self.token_error(error);
+                    return Err(Error {
+                        source: self.span().negative_offset(1),
+                        error_type: error,
+                    });
                 }
                 _ => (),
             }
@@ -686,12 +715,12 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
 
     pub fn token_error<T>(&self, etype: error::Type) -> Result<T> {
         Err(Error {
-            source: self.current_span(),
+            source: self.span(),
             error_type: etype,
         })
     }
 
-    pub fn current_span(&self) -> Span {
+    pub fn span(&self) -> Span {
         Span::new_with_length(self.current_start, self.current_len)
     }
 
@@ -722,7 +751,9 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             let error = error::Type::UnexpectedToken {
                 expected: vec![token],
             };
-            self.token_error(error)
+            let error = self.token_error(error);
+            self.advance_state();
+            error
         } else {
             Ok(())
         }

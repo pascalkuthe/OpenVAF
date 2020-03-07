@@ -76,7 +76,7 @@ pub fn macros() -> std::result::Result<(), String> {
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
         assert_eq!(preprocessor.slice(), "Fac1");
-        span = preprocessor.current_span();
+        span = preprocessor.span();
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::OpDiv);
         preprocessor.advance()?;

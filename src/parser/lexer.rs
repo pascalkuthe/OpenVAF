@@ -45,6 +45,8 @@ pub enum Token {
     CommentEnd,
     PreprocessorError,
 
+    #[regex = r"`[a-zA-Z_][[:word:]\$]*"]
+    MacroReference,
     //Compiler directives
     #[token = "`include"]
     Include,
@@ -60,11 +62,9 @@ pub enum Token {
     MacroEndIf,
     #[token = "`define"]
     MacroDef,
-    #[regex = r"`[[:alpha:]_][[:word:]\$]*"]
-    MacroReference,
 
     //Identifiers
-    #[regex = r"[[:alpha:]_][[:word:]\$]*"]
+    #[regex = r"[a-zA-Z_][[:word:]\$]*"]
     SimpleIdentifier,
     #[regex = r"\\[[:print:]&&\S]+\s"]
     EscapedIdentifier,
@@ -499,7 +499,7 @@ mod test {
     }
     #[test]
     pub fn simple_ident() {
-        let mut lexer = Lexer::new_test("test _test  test2  test$\ntest2_$ iftest");
+        let mut lexer = Lexer::new_test("test _test  egta  test$\ntest2_$ iftest");
         assert_eq!(lexer.token(), Token::SimpleIdentifier);
         assert_eq!(lexer.slice(), "test");
         lexer.test_advance();
@@ -507,7 +507,7 @@ mod test {
         assert_eq!(lexer.slice(), "_test");
         lexer.test_advance();
         assert_eq!(lexer.token(), Token::SimpleIdentifier);
-        assert_eq!(lexer.slice(), "test2");
+        assert_eq!(lexer.slice(), "egta");
         lexer.test_advance();
         assert_eq!(lexer.token(), Token::SimpleIdentifier);
         assert_eq!(lexer.slice(), "test$");
@@ -551,7 +551,9 @@ mod test {
     }
     #[test]
     pub fn macro_ref() {
-        let lexer = Lexer::new_test("`lel");
+        let test = "`egta";
+
+        let lexer = Lexer::new_test(test);
         assert_eq!(lexer.token(), Token::MacroReference)
     }
     #[test]

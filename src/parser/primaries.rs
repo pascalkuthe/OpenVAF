@@ -10,7 +10,7 @@
 
 /// This function assumes that source is a valid string matched by the lexer and only strips "" and resolves any escaped characters
 pub(super) fn parse_string(source: &str) -> String {
-    (&source[0..source.len() - 1])
+    (&source[1..source.len() - 1])
         .replace(r"\n", "\n")
         .replace(r"\\", "\\")
         .replace(r"\t", "\t")

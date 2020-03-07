@@ -1,4 +1,4 @@
-`include constants.va
+`include "constants.va"
 module Diode(inout electrical A,inout electrical C);
   branch (A,C) d;
   parameter real I_s0 = 1E-11 from [1E-20:1];

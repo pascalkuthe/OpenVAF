@@ -210,7 +210,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             Token::Real => NumericalParameterBaseType::Real,
             Token::Realtime => NumericalParameterBaseType::Realtime,
             Token::Time => NumericalParameterBaseType::Time,
-            Token::String => {
+            Token::LiteralString => {
                 return Err(Error {
                     error_type: Unsupported(StringParameters),
                     source: span,
@@ -224,7 +224,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                             Token::Real,
                             Token::Realtime,
                             Token::Time,
-                            Token::String,
+                            Token::LiteralString,
                         ],
                     },
                     source: span,
@@ -373,7 +373,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 if !lower_bound {
                     Ok(self.ast.push(Node {
                         contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
-                        source: self.preprocessor.current_span(),
+                        source: self.preprocessor.span(),
                     }))
                 } else {
                     Err(Error {
@@ -387,7 +387,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 if lower_bound {
                     Ok(self.ast.push(Node {
                         contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
-                        source: self.preprocessor.current_span(),
+                        source: self.preprocessor.span(),
                     }))
                 } else {
                     Err(Error {

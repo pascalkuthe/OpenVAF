@@ -28,7 +28,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             match self.parse_binary_operator() {
                 Ok((op, precedence)) => {
                     self.lookahead.take();
-                    let op_span = self.preprocessor.current_span();
+                    let op_span = self.preprocessor.span();
                     let rhs = self.parse_atom()?;
                     let mut rhs = self.ast.push(rhs);
                     loop {
@@ -70,17 +70,32 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     ) -> Result<ExpressionId<'ast>> {
         loop {
             match self.parse_binary_operator() {
+                Ok((BinaryOperator::Condition, precedence)) if precedence >= min_prec => {
+                    self.lookahead.take();
+                    let op = Node::new(BinaryOperator::Condition, self.preprocessor.span());
+                    let if_val = self.parse_expression_id()?;
+                    self.expect(Token::Colon)?;
+                    let either_op = Node::new(BinaryOperator::Either, self.preprocessor.span());
+                    let else_val = self.parse_expression_id()?;
+                    let either = self.ast.push(Node::new(
+                        Expression::BinaryOperator(if_val, op, else_val),
+                        self.ast[if_val].source.extend(self.ast[else_val].source),
+                    ));
+                    lhs = self.ast.push(Node::new(
+                        Expression::BinaryOperator(lhs, op, either),
+                        self.ast[lhs].source.extend(self.ast[either].source),
+                    ))
+                }
                 Ok((op, precedence)) if precedence >= min_prec => {
                     self.lookahead.take();
-                    let op_span = self.preprocessor.current_span();
+                    let op_span = self.preprocessor.span();
                     let rhs = self.parse_atom()?;
                     let mut rhs = self.ast.push(rhs);
                     loop {
                         match self.parse_binary_operator() {
                             Ok((op, right_prec))
                                 if right_prec > precedence
-                                    || ((op == BinaryOperator::Condition
-                                        || op == BinaryOperator::Either)
+                                    || (op == BinaryOperator::Condition
                                         && right_prec == precedence) =>
                             {
                                 rhs = self.precedence_climb_expression_id(precedence, rhs)?
@@ -102,7 +117,6 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::OpCondition => (BinaryOperator::Condition, 1),
-            Token::Colon => (BinaryOperator::Either, 1),
             Token::OpLogicalOr => (BinaryOperator::LogicOr, 2),
             Token::OpLogicAnd => (BinaryOperator::LogicAnd, 3),
             Token::OpBitOr => (BinaryOperator::Or, 4),
@@ -513,16 +527,14 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     error_type: UnexpectedTokens {
                         expected: vec![Expected::Primary, Expected::UnaryOperator],
                     },
-                })
+                });
             }
         };
         Ok(res)
     }
     fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression<'ast>>> {
-        let span = self.look_ahead()?.1;
-        self.lookahead.take();
         let unary_op = Node {
-            source: span,
+            source: self.preprocessor.span(),
             contents: unary_op,
         };
         let expr = self.parse_atom()?;

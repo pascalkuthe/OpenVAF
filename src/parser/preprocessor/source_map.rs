@@ -81,8 +81,8 @@ impl<'source_map> SourceMap<'source_map> {
 
         let start = self.expanded_source[..span.get_start() as usize]
             .rfind('\n')
-            .unwrap_or(0)
-            + 1; //we don't want to include the newline
+            .map_or(0, |line_pos| line_pos + 1);
+        //we don't want to include the newline
         let end = self.expanded_source[span.get_end() as usize..]
             .find('\n')
             .unwrap_or(expansion_end);
@@ -326,6 +326,9 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         let substitution = {
             let name = &*self.source_map_allocator.alloc_str(name);
             let range: Range<usize> = original_span.into();
+            if range.end > self.root_file_contents.len() {
+                panic!("wtf")
+            }
             let original_source = &self.root_file_contents[range];
             let original_lines = bytecount::count(original_source.as_bytes(), b'\n') as LineNumber;
             let root_line = self.root_line;

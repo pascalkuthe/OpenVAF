@@ -66,24 +66,19 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         match self.lookahead.take() {
             None => {
                 self.preprocessor.advance()?;
-                Ok((
-                    self.preprocessor.current_token(),
-                    self.preprocessor.current_span(),
-                ))
+                Ok((self.preprocessor.current_token(), self.preprocessor.span()))
             }
             Some(res) => res,
         }
     }
     fn look_ahead(&mut self) -> Result<(Token, Span)> {
-        if let Some(lookahead) = self.lookahead.clone() {
-            return lookahead;
+        if let Some(ref lookahead) = self.lookahead {
+            return lookahead.clone();
         }
-        let res = self.preprocessor.advance().map(|_| {
-            (
-                self.preprocessor.current_token(),
-                self.preprocessor.current_span(),
-            )
-        });
+        let res = self
+            .preprocessor
+            .advance()
+            .map(|_| (self.preprocessor.current_token(), self.preprocessor.span()));
         self.lookahead = Some(res.clone());
         res
     }
@@ -260,7 +255,7 @@ pub fn parse<'source_map, 'ast, 'astref>(
     let mut parser = Parser::new(preprocessor, ast, errors);
     parser.lookahead = Some(Ok((
         parser.preprocessor.current_token(),
-        parser.preprocessor.current_span(),
+        parser.preprocessor.span(),
     )));
     parser.run();
     Ok((parser.preprocessor.skip_rest(), parser.non_critical_errors))

@@ -228,7 +228,7 @@ impl Error {
                         Slice {
                             source: other_declaration_line.to_string(),
                             line_start: other_declaration_line_number as usize,
-                            origin: origin.clone(),
+                            origin: other_declaration_origin,
                             annotations: vec![SourceAnnotation {
                                 range: other_declaration_range,
                                 label: format!("First declaration of '{}' here", name.as_str()),
@@ -270,6 +270,64 @@ impl Error {
                         annotations: vec![SourceAnnotation {
                             range,
                             label: "Declared here".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+
+            Type::UnclosedConditions(ref conditions) => {
+                let slices = conditions
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .map(|(index, condition)| {
+                        let (src, line_number, origin, range) =
+                            source_map.resolve_span_within_line(condition, translate_lines);
+                        let range = translate_to_inner_snippet_range(range.start, range.end, src);
+                        Slice {
+                            source: src.to_string(),
+                            line_start: line_number as usize,
+                            origin: origin
+                                .or_else(|| Some(source_map.main_file_name().to_string())),
+                            annotations: vec![SourceAnnotation {
+                                range,
+                                label: format!("{}. condition started here", index),
+                                annotation_type: AnnotationType::Error,
+                            }],
+                            fold: false,
+                        }
+                    })
+                    .collect();
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(format!("{} macro conditions where not closed. Conditions should be closed using `endif",{conditions.len()})),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices,
+                }
+            }
+
+            Type::MacroNotFound => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Macro referenced that was not defined before".to_string()),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Reference occurs here".to_string(),
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
