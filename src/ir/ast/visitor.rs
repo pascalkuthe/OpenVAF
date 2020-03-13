@@ -39,12 +39,17 @@ pub trait Visitor<'ast, T = ()>: Sized {
         &mut self,
         attributes: Attributes<'ast>,
         nature: &Ident,
-        branch: &BranchAccess,
+        branch: &Node<BranchAccess>,
         value: ExpressionId<'ast>,
         ast: &Ast<'ast>,
     ) -> T;
 
-    fn visit_branch_access(&mut self, nature: &Ident, branch: &BranchAccess, ast: &Ast<'ast>) -> T;
+    fn visit_branch_access(
+        &mut self,
+        nature: &Ident,
+        branch: &Node<BranchAccess>,
+        ast: &Ast<'ast>,
+    ) -> T;
     fn visit_branch(&mut self, branch: &Branch, ast: &Ast<'ast>) -> T;
     fn visit_expression(&mut self, expr: ExpressionId<'ast>, ast: &Ast<'ast>) -> T;
     fn visit_expression_primary(&mut self, primary: &Primary<'ast>, ast: &Ast<'ast>) -> T;
@@ -191,7 +196,7 @@ pub fn walk_branch_declaration<'ast, T, V: Visitor<'ast, T>>(
 pub fn walk_contribute<'ast, T, V: Visitor<'ast, T>>(
     v: &mut V,
     nature: &Ident,
-    branch: &BranchAccess,
+    branch: &Node<BranchAccess>,
     value: ExpressionId<'ast>,
     ast: &Ast<'ast>,
 ) {
@@ -289,14 +294,17 @@ pub fn walk_builtin_function_call<'ast, T, V: Visitor<'ast, T>>(
     ast: &Ast<'ast>,
 ) {
     match function_call {
-        Pow(expr0, expr1) | Hypot(expr0, expr1) | Min(expr0, expr1) | Max(expr0, expr1) => {
+        Pow(expr0, expr1)
+        | Hypot(expr0, expr1)
+        | Min(expr0, expr1)
+        | Max(expr0, expr1)
+        | ArcTan2(expr0, expr1) => {
             v.visit_expression(*expr0, ast);
             v.visit_expression(*expr1, ast);
         }
         Sqrt(expr) | Exp(expr) | Ln(expr) | Log(expr) | Abs(expr) | Floor(expr) | Ceil(expr)
         | Sin(expr) | Cos(expr) | Tan(expr) | ArcSin(expr) | ArcCos(expr) | ArcTan(expr)
-        | ArcTan2(expr) | SinH(expr) | CosH(expr) | TanH(expr) | ArcSinH(expr) | ArcCosH(expr)
-        | ArcTanH(expr) => {
+        | SinH(expr) | CosH(expr) | TanH(expr) | ArcSinH(expr) | ArcCosH(expr) | ArcTanH(expr) => {
             v.visit_expression(*expr, ast);
         }
     }

@@ -78,7 +78,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     let either_op = Node::new(BinaryOperator::Either, self.preprocessor.span());
                     let else_val = self.parse_expression_id()?;
                     let either = self.ast.push(Node::new(
-                        Expression::BinaryOperator(if_val, op, else_val),
+                        Expression::BinaryOperator(if_val, either_op, else_val),
                         self.ast[if_val].source.extend(self.ast[else_val].source),
                     ));
                     lhs = self.ast.push(Node::new(
@@ -212,16 +212,20 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 let primary = if self.look_ahead()?.0 == Token::ParenOpen {
                     self.lookahead.take();
                     if self.look_ahead()?.0 == Token::OpLess {
+                        let start = self.preprocessor.current_start();
                         Primary::BranchAccess(
                             Self::convert_to_nature_identifier(ident)?,
-                            BranchAccess::Implicit(self.parse_branch()?),
+                            Node::new(
+                                BranchAccess::Implicit(self.parse_branch()?),
+                                self.span_to_current_end(start),
+                            ),
                         )
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
                         Primary::FunctionCall(ident.into(), RefCell::default())
                     } else {
                         let mut parameters = RefCell::new(vec![self.parse_expression_id()?]);
-                        let mut parameter_ref = parameters.get_mut();
+                        let parameter_ref = parameters.get_mut();
                         self.parse_list_tail(
                             |sel| {
                                 parameter_ref.push(sel.parse_expression_id()?);
@@ -420,14 +424,15 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     self.span_to_current_end(start),
                 )
             }
+
             Token::ArcTan2 => {
                 self.lookahead.take();
                 let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::ArcTan2(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
+                let args = self.parse_double_parameter_built_in_function_call()?;
                 Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
+                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Max(
+                        args.0, args.1,
+                    ))),
                     self.span_to_current_end(start),
                 )
             }

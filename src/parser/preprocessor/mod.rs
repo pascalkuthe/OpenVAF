@@ -24,7 +24,7 @@ pub(crate) use source_map::{ArgumentIndex, CallDepth};
 
 use crate::error::Error;
 use crate::parser::error;
-use crate::parser::error::List;
+use crate::parser::error::{Expected, List};
 use crate::parser::lexer::Token;
 use crate::parser::primaries::parse_string;
 use crate::span::{Index, IndexOffset, LineNumber, Range};
@@ -284,7 +284,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     };
                     return self.token_error(error);
                 }
-                Token::Newline => self.source_map_builder.new_line(),
+                Token::Newline | Token::CommentNewline => self.source_map_builder.new_line(),
                 Token::Include => {
                     let start = self.current_start;
                     self.advance_state()?;
@@ -399,7 +399,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                             };
                             return self.token_error(error);
                         }
-                        Token::Newline => {
+                        Token::Newline | Token::CommentNewline => {
                             self.source_map_builder.new_line();
                             self.advance_state()?
                         }
@@ -426,7 +426,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 Token::MacroEndIf => {
                     ignore_conditions.pop();
                 }
-                Token::Newline => {
+                Token::Newline | Token::CommentNewline => {
                     self.source_map_builder.new_line();
                 }
                 Token::EOF => {
@@ -444,45 +444,54 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
 
     fn parse_definition(&mut self) -> Result {
         self.advance_state()?;
-        self.consume(Token::SimpleIdentifier)?;
-        let name = self.slice();
-        let mut args: Vec<&'lt str> = Vec::new();
-        let mut peek = self.peek();
-        if peek.is_ok() && peek.as_ref().unwrap().1 == Token::ParenOpen {
-            self.advance_state()?;
-            self.advance_state()?;
-            self.consume(Token::SimpleIdentifier)?;
-            args.push(self.slice());
-            loop {
+        let (name, args) = match self.current_token {
+            Token::SimpleIdentifier => (self.slice(), Vec::new()),
+
+            Token::SimpleIdentWithBracket => {
+                let name = &self.slice()[..self.slice().len() - 1];
                 self.advance_state()?;
-                match self.current_token {
-                    Token::Newline => {
-                        self.source_map_builder.new_line();
-                        self.advance_state()?
-                    }
-                    Token::ParenClose => {
-                        break;
-                    }
-                    Token::Comma => {
-                        self.advance_state()?;
-                        self.consume(Token::SimpleIdentifier)?;
-                        args.push(self.slice());
-                    }
-                    Token::EOF => {
-                        return self.token_error(error::Type::UnexpectedEof {
-                            expected: vec![Token::ParenClose],
-                        });
-                    }
-                    _ => {
-                        return self.token_error(error::Type::UnexpectedToken {
-                            expected: vec![Token::ParenClose, Token::Comma],
-                        });
+                let mut args = Vec::with_capacity(2);
+                self.consume(Token::SimpleIdentifier)?;
+                args.push(self.slice());
+                loop {
+                    self.advance_state()?;
+                    match self.current_token {
+                        Token::Newline | Token::CommentNewline => {
+                            self.source_map_builder.new_line();
+                            self.advance_state()?
+                        }
+                        Token::ParenClose => {
+                            break;
+                        }
+                        Token::Comma => {
+                            self.advance_state()?;
+                            self.consume(Token::SimpleIdentifier)?;
+                            args.push(self.slice());
+                        }
+                        Token::EOF => {
+                            return self.token_error(error::Type::UnexpectedEof {
+                                expected: vec![Token::ParenClose],
+                            });
+                        }
+                        _ => {
+                            return self.token_error(error::Type::UnexpectedToken {
+                                expected: vec![Token::ParenClose, Token::Comma],
+                            });
+                        }
                     }
                 }
+                (name, args)
             }
-            peek = self.peek();
-        }
-        let mut peek = peek?;
+            _ => {
+                let error = error::Type::UnexpectedToken {
+                    expected: vec![Token::SimpleIdentifier],
+                };
+                let error = self.token_error(error);
+                self.advance_state();
+                return error;
+            }
+        };
+        let mut peek = self.peek()?;
         let body_start = peek.0.start;
         let line = self.source_map_builder.current_root_line();
         let mut body = Vec::new();

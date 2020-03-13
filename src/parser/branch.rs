@@ -7,7 +7,7 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::ast::{AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration};
+use crate::ast::{AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration, Node};
 use crate::parser::error::Result;
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
@@ -56,9 +56,9 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             Ok(Branch::Nets(first_net_name, second_net_name))
         }
     }
-    pub fn parse_branch_access(&mut self) -> Result<BranchAccess> {
+    pub fn parse_branch_access(&mut self) -> Result<Node<BranchAccess>> {
         self.expect(Token::ParenOpen)?;
-
+        let start = self.preprocessor.current_start();
         let res = if self.look_ahead()?.0 == Token::OpLess {
             self.lookahead.take();
             let res = Branch::Port(self.parse_hierarchical_identifier(false)?);
@@ -75,6 +75,6 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         };
 
         self.expect(Token::ParenClose)?;
-        Ok(res)
+        Ok(Node::new(res, self.span_to_current_end(start)))
     }
 }

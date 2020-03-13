@@ -44,9 +44,7 @@ pub struct Hir<'tag> {
 
 impl<'tag> Hir<'tag> {
     /// # Safety
-    /// You should never call this yourself use mk_ast! instead!
-    /// The tag might not be unique to this arena otherwise which would allow using ids from a different arena which is undfined behavior;
-    /// Apart from that this function should be safe all internal unsafe functions calls are there to allow
+    /// You should never call this yourself. Lower an AST created using mk_ast! instead
     pub(crate) unsafe fn partial_initalize<'astref>(ast: &'astref mut Ast<'tag>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
         #[allow(clippy::cast_ptr_alignment)]
@@ -146,7 +144,7 @@ pub enum Statement<'hir> {
     Contribute(
         Attributes<'hir>,
         DisciplineAccess,
-        BranchAccess<'hir>,
+        BranchId<'hir>,
         ExpressionId<'hir>,
     ),
     //  TODO IndirectContribute(),
@@ -171,11 +169,6 @@ pub enum Primary<'hir> {
     PortReference(PortId<'hir>),
     ParameterReference(ParameterId<'hir>),
     FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
-    BranchAccess(DisciplineAccess, BranchAccess<'hir>),
+    BranchAccess(DisciplineAccess, BranchId<'hir>),
     BuiltInFunctionCall(BuiltInFunctionCall<'hir>),
-}
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum BranchAccess<'hir> {
-    Named(BranchId<'hir>),
-    Unnamed(Branch<'hir>),
 }

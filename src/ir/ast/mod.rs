@@ -313,7 +313,12 @@ pub enum NetType {
 pub enum Statement<'ast> {
     Block(BlockId<'ast>),
     Condition(AttributeNode<'ast, Condition<'ast>>),
-    Contribute(Attributes<'ast>, Ident, BranchAccess, ExpressionId<'ast>),
+    Contribute(
+        Attributes<'ast>,
+        Ident,
+        Node<BranchAccess>,
+        ExpressionId<'ast>,
+    ),
     //  TODO IndirectContribute(),
     Assign(Attributes<'ast>, HierarchicalId, ExpressionId<'ast>),
     FunctionCall(
@@ -362,7 +367,7 @@ pub enum Primary<'ast> {
     Real(f64),
     VariableOrNetReference(HierarchicalId),
     FunctionCall(HierarchicalId, RefCell<Vec<ExpressionId<'ast>>>),
-    BranchAccess(Ident, BranchAccess),
+    BranchAccess(Ident, Node<BranchAccess>),
     BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
 }
 #[derive(Copy, Clone)]
@@ -388,7 +393,7 @@ pub enum BuiltInFunctionCall<'ast> {
     ArcSin(ExpressionId<'ast>),
     ArcCos(ExpressionId<'ast>),
     ArcTan(ExpressionId<'ast>),
-    ArcTan2(ExpressionId<'ast>),
+    ArcTan2(ExpressionId<'ast>, ExpressionId<'ast>),
 
     SinH(ExpressionId<'ast>),
     CosH(ExpressionId<'ast>),

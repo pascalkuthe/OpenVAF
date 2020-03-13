@@ -1,3 +1,5 @@
+use ahash::AHashMap;
+
 use crate::ast::visitor::*;
 use crate::ast::{Ast, AttributeNode, ModuleItem, Node};
 use crate::ast::{HierarchicalId, Visitor};
@@ -6,16 +8,16 @@ use crate::ast_lowering::error::{Error, NonConstantExpression, Type};
 use crate::compact_arena::SafeRange;
 use crate::ir::ast::{BuiltInFunctionCall, NetType, VariableType};
 use crate::ir::hir::{
-    Branch, BranchAccess, BranchDeclaration, Condition, Discipline, DisciplineAccess, Expression,
-    Net, Port, Primary, Statement,
+    Branch, BranchDeclaration, Condition, Discipline, DisciplineAccess, Expression, Net, Port,
+    Primary, Statement,
 };
 use crate::ir::hir::{Hir, Module};
 use crate::ir::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId,
     ParameterId, PortId, StatementId, VariableId,
 };
-use crate::symbol::keywords;
 use crate::symbol::Ident;
+use crate::symbol::{keywords, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::util::{Push, SafeRangeCreation};
 use crate::{ast, SourceMap};
@@ -82,6 +84,8 @@ struct AstToHirFolder<'tag, 'astref> {
     hir: Box<Hir<'tag>>,
     errors: Vec<Error<'tag>>,
     state: VerilogContext,
+    unnamed_branches: AHashMap<(NetId<'tag>, NetId<'tag>), BranchId<'tag>>,
+    unnamed_port_branches: AHashMap<PortId<'tag>, BranchId<'tag>>,
 }
 impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     fn resolve_branch(
@@ -138,14 +142,62 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     }
     fn resolve_branch_access(
         &mut self,
-        branch_access: &ast::BranchAccess,
-    ) -> Result<(BranchAccess<'tag>, DisciplineId<'tag>)> {
-        match branch_access {
+        branch_access: &Node<ast::BranchAccess>,
+    ) -> Result<(BranchId<'tag>, DisciplineId<'tag>)> {
+        match branch_access.contents {
             ast::BranchAccess::Implicit(ref branch) => {
                 let (branch, discipline) = self.resolve_branch(branch)?;
-                return Ok((BranchAccess::Unnamed(branch), discipline));
+                match branch {
+                    Branch::Port(port) => match self.unnamed_port_branches.get(&port) {
+                        Some(id) => return Ok((*id, discipline)),
+                        None => {
+                            return Ok((
+                                self.hir.push(AttributeNode {
+                                    attributes: self.hir.empty_range_from_end(), //TODO attributes
+                                    source: branch_access.source,
+                                    contents: BranchDeclaration {
+                                        name: Ident::from_str_and_span(
+                                            format!(
+                                                "unnamed port branch {}",
+                                                self.hir[self.hir[port].net].contents.name
+                                            )
+                                            .as_str(),
+                                            branch_access.source,
+                                        ),
+                                        branch,
+                                    },
+                                }),
+                                discipline,
+                            ));
+                        }
+                    },
+                    Branch::Nets(net1, net2) => match self.unnamed_branches.get(&(net1, net2)) {
+                        Some(id) => return Ok((*id, discipline)),
+                        None => {
+                            return Ok((
+                                self.hir.push(AttributeNode {
+                                    attributes: self.hir.empty_range_from_end(), //TODO attributes
+                                    source: branch_access.source,
+                                    contents: BranchDeclaration {
+                                        name: Ident::from_str_and_span(
+                                            format!(
+                                                "unnamed branch ({},{})",
+                                                self.hir[net1].contents.name.name.as_str(),
+                                                self.hir[net2].contents.name.name.as_str()
+                                            )
+                                            .as_str(),
+                                            branch_access.source,
+                                        ),
+                                        branch,
+                                    },
+                                }),
+                                discipline,
+                            ));
+                        }
+                    },
+                }
             }
-            ast::BranchAccess::Explicit(name) => {
+            ast::BranchAccess::Explicit(ref name) => {
                 resolve_hierarchical!(self; name as Branch(id) => {
                     let discipline = match self.hir[id].contents.branch {
                         Branch::Port(portid) => {
@@ -153,7 +205,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                         }
                         Branch::Nets(net1, _) => self.hir[net1].contents.discipline
                     };
-                    return Ok((BranchAccess::Named(id),discipline))
+                    return Ok((id,discipline))
                 })
             }
         }
@@ -213,7 +265,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     ) -> error::Result<'tag, SymbolDeclaration<'tag>> {
         let mut iter = hierarchical_ident.names.iter();
         let ident = iter.next().unwrap();
-        let mut last_span = ident.span;
+        let last_span = ident.span;
         let mut current = self.resolve(ident)?;
         for ident in iter {
             let symbol_table = match current {
@@ -258,6 +310,8 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
             scope_stack: vec![&ast.top_symbols],
             errors: Vec::with_capacity(64),
             state: VerilogContext::analog,
+            unnamed_branches: AHashMap::with_capacity(64),
+            unnamed_port_branches: AHashMap::with_capacity(64),
         }
     }
 
@@ -334,7 +388,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     fn reinterpret_function_call_as_branch_access(
         &mut self,
         parameters: Vec<ExpressionId<'tag>>,
-    ) -> Result<(BranchAccess<'tag>, DisciplineId<'tag>)> {
+    ) -> Result<(BranchId<'tag>, DisciplineId<'tag>)> {
         //this has quite a lot of code duplication from resolve_branch_access; This is unavoidable atm because we would need to clone the ident because we cant move out of the ast which is something I'd really like to avoid
         match parameters.len() {
             1 => {
@@ -347,7 +401,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                             }
                             Branch::Nets(net1, _) => self.hir[net1].contents.discipline
                          };
-                        return Ok((BranchAccess::Named(bid),discipline));
+                        return Ok((bid,discipline));
                     }
                 );
             }
@@ -386,11 +440,36 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                             source: first_net_ident.span().extend(second_net_ident.span()),
                         });
                     } else {
-                        //doesn't matter which nets discipline we use since we asserted that they are equal
-                        return Ok((
-                            BranchAccess::Unnamed(Branch::Nets(first_net, second_net)),
-                            self.hir[first_net].contents.discipline,
-                        ));
+                        //doesn't matter which nets discipline we use since we asserted that they are equal might get more complicated with proper discipline resolution
+                        match self.unnamed_branches.get(&(first_net, second_net)) {
+                            Some(id) => return Ok((*id, self.hir[first_net].contents.discipline)),
+                            None => {
+                                let span = first_net_ident.span().extend(second_net_ident.span());
+                                return Ok((
+                                    self.hir.push(AttributeNode {
+                                        attributes: self.hir.empty_range_from_end(), //TODO attributes
+                                        source: span,
+                                        contents: BranchDeclaration {
+                                            name: Ident::from_str_and_span(
+                                                format!(
+                                                    "unnamed branch ({},{})",
+                                                    self.hir[first_net].contents.name.name.as_str(),
+                                                    self.hir[second_net]
+                                                        .contents
+                                                        .name
+                                                        .name
+                                                        .as_str()
+                                                )
+                                                .as_str(),
+                                                span,
+                                            ),
+                                            branch: Branch::Nets(first_net, second_net),
+                                        },
+                                    }),
+                                    self.hir[first_net].contents.discipline,
+                                ));
+                            }
+                        }
                     }
                 }
             }
@@ -561,14 +640,19 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
         &mut self,
         attributes: SafeRange<AttributeId<'tag>>,
         nature: &Ident,
-        branch: &ast::BranchAccess,
+        branch: &Node<ast::BranchAccess>,
         value: ExpressionId<'tag>,
         ast: &Ast<'tag>,
     ) {
         unimplemented!()
     }
 
-    fn visit_branch_access(&mut self, nature: &Ident, branch: &ast::BranchAccess, ast: &Ast<'tag>) {
+    fn visit_branch_access(
+        &mut self,
+        nature: &Ident,
+        branch: &Node<ast::BranchAccess>,
+        ast: &Ast<'tag>,
+    ) {
         unimplemented!()
     }
 

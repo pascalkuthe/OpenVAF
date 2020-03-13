@@ -110,6 +110,7 @@ use core::ops::{AddAssign, Sub};
 use core::ops::{Index, IndexMut};
 use core::ptr;
 use std::error::Error;
+use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
 use crate::util::Step;
@@ -239,11 +240,11 @@ impl<'tag, I: Copy + Clone + Sized + Debug> Debug for Idx<'tag, I> {
         f.write_fmt(format_args!("Idx: {:?}", self.index))
     }
 }
-/*impl<'tag, I: Copy + Clone + Sized> Into<I> for Idx<'tag, I> {
-    fn into(self) -> I {
-        self.index
+impl<'tag, I: Hash + Copy + Clone> Hash for Idx<'tag, I> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.index.hash(state)
     }
-}*/
+}
 
 /// The index type for a small arena is 32 bits large. You will usually get the
 /// index from the arena and use it by indexing, e.g. `arena[index]`.

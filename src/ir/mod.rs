@@ -100,7 +100,7 @@ macro_rules! impl_id_type {
 
 macro_rules! id_type {
     ($name:ident($type:ident)) => {
-        #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Debug)]
+        #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Debug, Hash)]
         #[repr(transparent)]
         pub struct $name<'tag>($type<'tag>);
 

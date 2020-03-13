@@ -248,7 +248,10 @@ pub fn parse<'source_map, 'ast, 'astref>(
     let mut errors = Vec::with_capacity(64);
     loop {
         match preprocessor.process_token() {
-            Err(error) => errors.push(error),
+            Err(error) => {
+                print!("lel");
+                errors.push(error)
+            }
             Ok(()) => break,
         }
     }
