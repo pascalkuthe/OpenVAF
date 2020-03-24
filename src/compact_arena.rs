@@ -106,14 +106,13 @@
 use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use core::marker::PhantomData;
 use core::mem::{self, MaybeUninit};
+use core::ops::SubAssign;
 use core::ops::{AddAssign, Sub};
 use core::ops::{Index, IndexMut};
 use core::ptr;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
-
-use core::ops::SubAssign;
 
 use crate::util::Step;
 
@@ -236,8 +235,11 @@ impl<'tag, T: Copy + Clone + SubAssign> Idx<'tag, T> {
     }
 }
 impl<'tag, T: Copy + Clone + Sub<Output = T>> Idx<'tag, T> {
-    pub fn distance(&self, other: Self) -> T {
+    pub fn distance(self, other: Self) -> T {
         self.index - other.index
+    }
+    pub fn index(self) -> T {
+        self.index
     }
 }
 impl<'tag, I: Copy + Clone + Sized + Debug> Debug for Idx<'tag, I> {
@@ -255,7 +257,6 @@ impl<'tag, I: Display + Copy + Clone> Display for Idx<'tag, I> {
         self.index.fmt(f)
     }
 }
-
 /// The index type for a small arena is 32 bits large. You will usually get the
 /// index from the arena and use it by indexing, e.g. `arena[index]`.
 ///

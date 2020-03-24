@@ -444,10 +444,14 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 BinaryOperator::Exponent => Value::Real(lhs.powf(rhs)),
                                 BinaryOperator::Modulus => Value::Real(lhs % rhs),
                                 BinaryOperator::ShiftLeft | BinaryOperator::ShiftRight => {
-                                    return Err(Error {
-                                        error_type: Type::ExpectedIntegerOperands,
+                                    self.errors.push(Error {
+                                        error_type: Type::ExpectedInteger,
                                         source: self.hir[lhs_expr].source,
-                                    })
+                                    });
+                                    return Err(Error {
+                                        error_type: Type::ExpectedInteger,
+                                        source: self.hir[rhs_expr].source,
+                                    });
                                 }
                                 BinaryOperator::LessThen => Value::Integer((lhs < rhs) as i64),
                                 BinaryOperator::LessEqual => Value::Integer((lhs <= rhs) as i64),

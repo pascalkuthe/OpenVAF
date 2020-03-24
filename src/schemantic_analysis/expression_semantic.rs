@@ -99,7 +99,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         Ok(self.mir.push(Node { contents, source }))
     }
 
-    fn fold_integer_expression(
+    pub fn fold_integer_expression(
         &mut self,
         expr: ir::ExpressionId<'tag>,
     ) -> Result<IntegerExpressionId<'tag>, ()> {

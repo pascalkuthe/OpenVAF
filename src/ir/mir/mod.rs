@@ -56,7 +56,7 @@ impl<'tag> Mir<'tag> {
         NanoArena::copy_to(&mut res.as_mut().modules, &hir.modules);
         NanoArena::copy_to(&mut res.as_mut().disciplines, &hir.disciplines);
         NanoArena::copy_to(&mut res.as_mut().natures, &hir.natures);
-        NanoArena::init_from(&mut res.as_mut().functions, &hir.functions);
+        NanoArena::move_to(&mut res.as_mut().functions, &mut hir.functions);
         TinyArena::init_from(&mut res.as_mut().statements, &hir.statements);
         TinyArena::init_from(&mut res.as_mut().parameters, &hir.parameters);
         TinyArena::init(&mut res.as_mut().integer_expressions);
@@ -94,7 +94,6 @@ pub enum Statement<'mir> {
     //  TODO IndirectContribute(),
     Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
     FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
-    BuiltInFunctionCall(AttributeNode<'mir, BuiltInFunctionCall<'mir>>),
 }
 
 #[derive(Clone)]
