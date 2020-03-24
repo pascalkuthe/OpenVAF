@@ -35,6 +35,7 @@ pub enum NonConstantExpression {
     FunctionCall,
     AnalogFilter,
 }
+
 impl<'tag> Error<'tag> {
     pub fn print(&self, source_map: &SourceMap, ast: &Ast<'tag>, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =

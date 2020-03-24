@@ -198,7 +198,7 @@ pub struct Parameter<'ast> {
 #[derive(Clone)]
 pub enum ParameterType<'ast> {
     Numerical {
-        parameter_type: NumericalParameterBaseType,
+        parameter_type: VariableType,
         included_ranges: Vec<Range<NumericalParameterRangeBound<'ast>>>,
         excluded_ranges: Vec<NumericalParameterRangeExclude<'ast>>,
     },
@@ -215,14 +215,6 @@ pub struct NumericalParameterRangeBound<'ast> {
 pub enum NumericalParameterRangeExclude<'ast> {
     Value(ExpressionId<'ast>),
     Range(Range<NumericalParameterRangeBound<'ast>>),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NumericalParameterBaseType {
-    Integer,
-    Real,
-    Realtime,
-    Time,
 }
 
 #[derive(Clone, Copy)]
@@ -351,6 +343,13 @@ pub struct Condition<'ast> {
 pub enum Expression<'ast> {
     BinaryOperator(ExpressionId<'ast>, Node<BinaryOperator>, ExpressionId<'ast>),
     UnaryOperator(Node<UnaryOperator>, ExpressionId<'ast>),
+    Condtion(
+        ExpressionId<'ast>,
+        Span,
+        ExpressionId<'ast>,
+        Span,
+        ExpressionId<'ast>,
+    ),
     Primary(Primary<'ast>),
 }
 
@@ -406,8 +405,6 @@ pub enum BuiltInFunctionCall<'ast> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperator {
-    Condition,
-    Either,
     Sum,
     Subtract,
     Multiply,

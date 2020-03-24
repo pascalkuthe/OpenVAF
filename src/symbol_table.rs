@@ -1,10 +1,10 @@
 use ahash::AHashMap as HashMap;
 
-use crate::ast_lowering::error::MockSymbolDeclaration;
 use crate::ir::{
     BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, ParameterId, PortId,
     VariableId,
 };
+use crate::name_resolution::error::MockSymbolDeclaration;
 use crate::symbol::{Symbol, SymbolStr};
 use crate::Span;
 

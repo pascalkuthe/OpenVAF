@@ -3,8 +3,6 @@ use ahash::AHashMap;
 use crate::ast::visitor::*;
 use crate::ast::{Ast, AttributeNode, ModuleItem, Node};
 use crate::ast::{HierarchicalId, Visitor};
-use crate::ast_lowering::error::Type::{NotAScope, UnexpectedTokenInBranchAccess};
-use crate::ast_lowering::error::{Error, NonConstantExpression, Type};
 use crate::compact_arena::SafeRange;
 use crate::ir::ast::{BuiltInFunctionCall, NetType, VariableType};
 use crate::ir::hir::{
@@ -16,8 +14,10 @@ use crate::ir::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NetId,
     ParameterId, PortId, StatementId, VariableId,
 };
+use crate::name_resolution::error::Type::{NotAScope, UnexpectedTokenInBranchAccess};
+use crate::name_resolution::error::{Error, NonConstantExpression, Type};
+use crate::symbol::keywords;
 use crate::symbol::Ident;
-use crate::symbol::{keywords, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::util::{Push, SafeRangeCreation};
 use crate::{ast, SourceMap};
@@ -33,7 +33,7 @@ macro_rules! resolve {
                 $self.errors.push(error);
             }
             Ok(found) => {
-                use $crate::ast_lowering::error;
+                use $crate::name_resolution::error;
                 $self.errors.push(Error {
                     error_type: error::Type::DeclarationTypeMismatch {
                         found,
@@ -53,7 +53,7 @@ macro_rules! resolve_hierarchical {
                 $self.errors.push(error);
             }
             Ok(found) => {
-                use $crate::ast_lowering::error;
+                use $crate::name_resolution::error;
                 $self.errors.push(Error {
                     error_type: error::Type::DeclarationTypeMismatch {
                         found,
@@ -795,6 +795,21 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                     )),
                     source: expression.source,
                 }
+            }
+            ast::Expression::Condtion(condition, question_span, if_val, colon_span, else_val) => {
+                self.hir[expression_id] = Node {
+                    source: expression.source,
+                    contents: Expression::Condtion(
+                        condition,
+                        question_span,
+                        if_val,
+                        colon_span,
+                        else_val,
+                    ),
+                };
+                self.visit_expression(condition, ast);
+                self.visit_expression(if_val, ast);
+                self.visit_expression(else_val, ast);
             }
         }
     }

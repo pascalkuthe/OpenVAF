@@ -108,10 +108,28 @@ macro_rules! id_type {
             unsafe fn step(&mut self) {
                 self.0.add(1)
             }
+            unsafe fn step_back(&mut self) {
+                self.0.sub(1)
+            }
         }
         impl<'tag> ::std::convert::Into<$type<'tag>> for $name<'tag> {
             fn into(self) -> $type<'tag> {
                 self.0
+            }
+        }
+        impl<'tag> $name<'tag> {
+            pub fn unwrap(self) -> $type<'tag> {
+                self.0
+            }
+        }
+        impl<'tag> $crate::compact_arena::SafeRange<$name<'tag>> {
+            pub fn unwrap(self) -> $crate::compact_arena::SafeRange<$type<'tag>> {
+                self.into()
+            }
+        }
+        impl<'tag> ::core::fmt::Display for $name<'tag> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
             }
         }
         impl<'tag> ::std::convert::Into<$crate::compact_arena::SafeRange<$type<'tag>>>
@@ -129,8 +147,11 @@ macro_rules! id_type {
 
 #[macro_use]
 pub mod ast;
+
 #[macro_use]
 pub mod hir;
+
+pub mod mir;
 
 id_type!(BranchId(Idx8));
 id_type!(NetId(Idx16));
@@ -141,6 +162,8 @@ id_type!(ModuleId(Idx8));
 id_type!(FunctionId(Idx8));
 id_type!(DisciplineId(Idx8));
 id_type!(ExpressionId(Idx16));
+id_type!(RealExpressionId(Idx16));
+id_type!(IntegerExpressionId(Idx16));
 id_type!(BlockId(Idx8));
 id_type!(AttributeId(Idx16));
 id_type!(StatementId(Idx16));

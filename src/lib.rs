@@ -19,11 +19,14 @@ extern crate intrusive_collections;
 extern crate lazy_static;
 extern crate std;
 
-pub use ast_lowering::resolve;
+pub use bumpalo;
+
 pub use ir::ast;
-#[macro_use]
 pub use ir::ast::Ast;
 pub use ir::hir;
+pub use ir::hir::Hir;
+pub use ir::mir;
+pub use name_resolution::resolve;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
@@ -33,11 +36,12 @@ pub use span::Span;
 pub mod compact_arena;
 pub mod symbol;
 #[macro_use]
-mod util;
+pub mod util;
 #[macro_use]
 pub mod ir;
-pub mod ast_lowering;
 mod error;
+pub mod name_resolution;
 pub mod parser;
+mod schemantic_analysis;
 mod span;
 pub mod symbol_table;

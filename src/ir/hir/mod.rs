@@ -12,6 +12,7 @@ use crate::ir::{
     ParameterId, PortId, StatementId, VariableId,
 };
 use crate::symbol::Ident;
+use crate::Span;
 
 //pub mod visitor;
 
@@ -25,20 +26,20 @@ pub struct Hir<'tag> {
     //TODO unsized
     //TODO configure to use different arena sizes
     //Declarations
-    parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
+    pub(super) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
     //    nature: NanoArena<'tag,Nature>
-    branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
-    nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
-    ports: NanoArena<'tag, Port<'tag>>,
-    variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
-    modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
-    functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
-    disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline<'tag>>>,
-    natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
+    pub(super) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
+    pub(super) nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
+    pub(super) ports: NanoArena<'tag, Port<'tag>>,
+    pub(super) variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
+    pub(super) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
+    pub(super) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
+    pub(super) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline<'tag>>>,
+    pub(super) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
     //Ast Items
-    expressions: TinyArena<'tag, Node<Expression<'tag>>>,
-    attributes: TinyArena<'tag, Attribute<'tag>>,
-    statements: TinyArena<'tag, Statement<'tag>>,
+    pub(super) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
+    pub(super) attributes: TinyArena<'tag, Attribute<'tag>>,
+    pub(super) statements: TinyArena<'tag, Statement<'tag>>,
 }
 ///this module contains copys of the definitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
 
@@ -80,8 +81,8 @@ impl_id_type!(ExpressionId in Hir::expressions -> Node<Expression<'tag>>);
 impl_id_type!(AttributeId in Hir::attributes -> Attribute<'tag>);
 impl_id_type!(StatementId in Hir::statements -> Statement<'tag>);
 impl_id_type!(NatureId in Hir::natures -> AttributeNode<'tag,Nature>);
-
 impl_id_type!(ParameterId in Hir::parameters -> AttributeNode<'tag,Parameter<'tag>>);
+
 #[derive(Clone, Copy)]
 pub struct Discipline<'tag> {
     pub name: Ident,
@@ -89,7 +90,7 @@ pub struct Discipline<'tag> {
     pub potential_nature: NatureId<'tag>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Module<'hir> {
     pub name: Ident,
     pub port_list: SafeRange<PortId<'hir>>,
@@ -111,7 +112,7 @@ pub struct Port<'tag> {
     pub net: NetId<'tag>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct BranchDeclaration<'hir> {
     pub name: Ident,
     pub branch: Branch<'hir>,
@@ -129,7 +130,7 @@ pub struct Net<'hir> {
     pub signed: bool,
     pub net_type: NetType,
 }
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum DisciplineAccess {
     Potential,
     Flow,
@@ -157,6 +158,13 @@ pub enum Statement<'hir> {
 pub enum Expression<'hir> {
     BinaryOperator(ExpressionId<'hir>, Node<BinaryOperator>, ExpressionId<'hir>),
     UnaryOperator(Node<UnaryOperator>, ExpressionId<'hir>),
+    Condtion(
+        ExpressionId<'hir>,
+        Span,
+        ExpressionId<'hir>,
+        Span,
+        ExpressionId<'hir>,
+    ),
     Primary(Primary<'hir>),
 }
 #[derive(Clone)]

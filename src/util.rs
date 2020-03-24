@@ -46,4 +46,5 @@ pub trait SafeRangeCreation<Key: Copy + Clone> {
 }
 pub trait Step {
     unsafe fn step(&mut self);
+    unsafe fn step_back(&mut self);
 }

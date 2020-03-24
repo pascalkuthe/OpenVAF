@@ -17,8 +17,8 @@ use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{AttributeNode, Attributes, Module, ModuleItem};
 use crate::error::Error;
 use crate::ir::ast::{
-    Expression, Node, NumericalParameterBaseType, NumericalParameterRangeBound,
-    NumericalParameterRangeExclude, Parameter, ParameterType, Primary,
+    Expression, Node, NumericalParameterRangeBound, NumericalParameterRangeExclude, Parameter,
+    ParameterType, Primary, VariableType,
 };
 use crate::ir::ExpressionId;
 use crate::parser::error;
@@ -206,10 +206,10 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     pub fn parse_parameter_decl(&mut self, attributes: Attributes<'ast>) -> Result {
         let (token, span) = self.next()?;
         let parameter_type = match token {
-            Token::Integer => NumericalParameterBaseType::Integer,
-            Token::Real => NumericalParameterBaseType::Real,
-            Token::Realtime => NumericalParameterBaseType::Realtime,
-            Token::Time => NumericalParameterBaseType::Time,
+            Token::Integer => VariableType::INTEGER,
+            Token::Real => VariableType::REAL,
+            Token::Realtime => VariableType::REALTIME,
+            Token::Time => VariableType::TIME,
             Token::LiteralString => {
                 return Err(Error {
                     error_type: Unsupported(StringParameters),
@@ -242,7 +242,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
     fn parse_numerical_parameter_assignment(
         &mut self,
         attributes: Attributes<'ast>,
-        base_type: NumericalParameterBaseType,
+        base_type: VariableType,
     ) -> Result {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;

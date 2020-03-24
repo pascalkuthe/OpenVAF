@@ -246,14 +246,8 @@ pub fn parse<'source_map, 'ast, 'astref>(
     let allocator = Bump::new();
     let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;
     let mut errors = Vec::with_capacity(64);
-    loop {
-        match preprocessor.process_token() {
-            Err(error) => {
-                print!("lel");
-                errors.push(error)
-            }
-            Ok(()) => break,
-        }
+    while let Err(error) = preprocessor.process_token() {
+        errors.push(error)
     }
     let mut parser = Parser::new(preprocessor, ast, errors);
     parser.lookahead = Some(Ok((

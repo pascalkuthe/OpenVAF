@@ -125,7 +125,7 @@ pub fn walk_statement<'ast, T, V: Visitor<'ast, T>>(
         Statement::Contribute(ref attr, ref nature_name, ref branch, value) => {
             v.visit_contribute(*attr, nature_name, branch, *value, ast)
         }
-        Statement::FunctionCall(ref _attr, ref name, ref args) => unimplemented!("Functions"),
+        Statement::FunctionCall(ref _attr, ref _name, ref _args) => unimplemented!("Functions"),
         Statement::BuiltInFunctionCall(bifc) => v.visit_built_in_function_call(&bifc.contents, ast),
     }
 }
@@ -218,6 +218,11 @@ pub fn walk_expression<'ast, T, V: Visitor<'ast, T>>(
         }
         Expression::Primary(ref primary) => {
             v.visit_expression_primary(primary, ast);
+        }
+        Expression::Condtion(condition, _, if_val, _, else_val) => {
+            v.visit_expression(condition, ast);
+            v.visit_expression(if_val, ast);
+            v.visit_expression(else_val, ast);
         }
     }
 }

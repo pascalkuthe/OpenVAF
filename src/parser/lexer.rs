@@ -362,7 +362,6 @@ pub enum Token {
 #[inline]
 fn ignore_comments<'source, Src: Source<'source>>(lex: &mut logos::Lexer<Token, Src>) {
     //handel comment here since we dont want the resulting token anyway (if i don't do this lexer generation slows to a crawl)
-    use logos::internal::LexerInternal;
 
     if lex.slice().as_bytes() == b"/*" {
         let mut lines = 0;

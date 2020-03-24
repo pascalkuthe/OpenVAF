@@ -113,6 +113,8 @@ use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
+use core::ops::SubAssign;
+
 use crate::util::Step;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -120,14 +122,14 @@ pub struct SafeRange<T: Copy> {
     start: T,
     end: T,
 }
-impl<T: Copy> Into<Range<T>> for SafeRange<T> {
+/*impl<T: Copy> Into<Range<T>> for SafeRange<T> {
     fn into(self) -> Range<T> {
         std::ops::Range {
             start: self.start,
             end: self.end,
         }
     }
-}
+}*/
 impl<T: Copy> From<Range<T>> for SafeRange<T> {
     fn from(org: Range<T>) -> Self {
         Self {
@@ -136,18 +138,6 @@ impl<T: Copy> From<Range<T>> for SafeRange<T> {
         }
     }
 }
-/*
-Not yet possible because this allows From<SafeRange<T>> for SafeRange<T> which is already implemented in core
-and there is not yet a way to say T1!=T2 (but hopefully there will be soon
-impl<T1: Copy, T2: Copy + Into<T1>> From<SafeRange<T1>> for SafeRange<T2> {
-    fn from(other: SafeRange<T1>) -> Self {
-        Self {
-            start: other.start.into(),
-            end: other.end.into(),
-        }
-    }
-}*/
-
 impl<'tag, T: Copy + Clone> From<SafeRange<Idx<'tag, T>>> for SafeRange<T> {
     fn from(other: SafeRange<Idx<'tag, T>>) -> Self {
         Self {
@@ -165,6 +155,16 @@ impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
             let res = Some(self.start);
             unsafe { self.start.step() };
             res
+        } else {
+            None
+        }
+    }
+}
+impl<T: Copy + Step + PartialOrd> DoubleEndedIterator for SafeRange<T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.start < self.end {
+            unsafe { self.end.step_back() };
+            Some(self.end)
         } else {
             None
         }
@@ -194,6 +194,7 @@ impl<'tag, T: Copy + Clone + Sub<Output = T>> SafeRange<Idx<'tag, T>> {
         self.end.distance(self.start)
     }
 }
+
 impl<T: Copy + Clone + PartialEq + Eq> SafeRange<T> {
     pub fn is_empty(self) -> bool {
         self.end == self.start
@@ -220,7 +221,6 @@ pub fn invariant_lifetime<'tag>() -> InvariantLifetime<'tag> {
 /// an `Idx` you can index or mutably index into the arena to observe or mutate
 /// the value.
 #[derive(Copy, Clone, PartialOrd, PartialEq, Eq)]
-#[repr(transparent)]
 pub struct Idx<'tag, I: Copy + Clone> {
     index: I,
     tag: InvariantLifetime<'tag>,
@@ -228,6 +228,11 @@ pub struct Idx<'tag, I: Copy + Clone> {
 impl<'tag, T: Copy + Clone + AddAssign> Idx<'tag, T> {
     pub unsafe fn add(&mut self, delta: T) {
         self.index += delta;
+    }
+}
+impl<'tag, T: Copy + Clone + SubAssign> Idx<'tag, T> {
+    pub unsafe fn sub(&mut self, delta: T) {
+        self.index -= delta;
     }
 }
 impl<'tag, T: Copy + Clone + Sub<Output = T>> Idx<'tag, T> {
@@ -243,6 +248,11 @@ impl<'tag, I: Copy + Clone + Sized + Debug> Debug for Idx<'tag, I> {
 impl<'tag, I: Hash + Copy + Clone> Hash for Idx<'tag, I> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.index.hash(state)
+    }
+}
+impl<'tag, I: Display + Copy + Clone> Display for Idx<'tag, I> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.index.fmt(f)
     }
 }
 
