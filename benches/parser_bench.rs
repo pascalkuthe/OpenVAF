@@ -3,8 +3,8 @@ use std::path::Path;
 use bumpalo::Bump;
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use VARF::ast_lowering::resolve_and_print;
 use VARF::mk_ast;
+use VARF::name_resolution::resolve_and_print;
 use VARF::parser;
 use VARF::parser::insert_electrical_natures_and_disciplines;
 

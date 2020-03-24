@@ -269,7 +269,8 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
 
 pub fn convert_function_call_to_branch_access(
     mut args: Vec<Node<Expression>>,
-) -> Result<BranchAccess> {
+) -> Result<Node<BranchAccess>> {
+    let span = args[0].source.extend(args.last().unwrap().source);
     let res = match args.len() {
         1 => BranchAccess::Explicit(reinterpret_expression_as_identifier(args.pop().unwrap())?),
         2 => {
@@ -284,7 +285,7 @@ pub fn convert_function_call_to_branch_access(
             })
         }
     };
-    Ok(res)
+    Ok(Node::new(res, span))
 }
 pub fn reinterpret_expression_as_identifier(
     expression: Node<Expression>,
