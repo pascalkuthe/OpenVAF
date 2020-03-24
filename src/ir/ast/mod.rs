@@ -198,7 +198,7 @@ pub struct Parameter<'ast> {
 #[derive(Clone)]
 pub enum ParameterType<'ast> {
     Numerical {
-        parameter_type: NumericalParameterBaseType,
+        parameter_type: VariableType,
         included_ranges: Vec<Range<NumericalParameterRangeBound<'ast>>>,
         excluded_ranges: Vec<NumericalParameterRangeExclude<'ast>>,
     },
@@ -215,14 +215,6 @@ pub struct NumericalParameterRangeBound<'ast> {
 pub enum NumericalParameterRangeExclude<'ast> {
     Value(ExpressionId<'ast>),
     Range(Range<NumericalParameterRangeBound<'ast>>),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NumericalParameterBaseType {
-    Integer,
-    Real,
-    Realtime,
-    Time,
 }
 
 #[derive(Clone, Copy)]
@@ -313,7 +305,12 @@ pub enum NetType {
 pub enum Statement<'ast> {
     Block(BlockId<'ast>),
     Condition(AttributeNode<'ast, Condition<'ast>>),
-    Contribute(Attributes<'ast>, Ident, BranchAccess, ExpressionId<'ast>),
+    Contribute(
+        Attributes<'ast>,
+        Ident,
+        Node<BranchAccess>,
+        ExpressionId<'ast>,
+    ),
     //  TODO IndirectContribute(),
     Assign(Attributes<'ast>, HierarchicalId, ExpressionId<'ast>),
     FunctionCall(
@@ -346,6 +343,13 @@ pub struct Condition<'ast> {
 pub enum Expression<'ast> {
     BinaryOperator(ExpressionId<'ast>, Node<BinaryOperator>, ExpressionId<'ast>),
     UnaryOperator(Node<UnaryOperator>, ExpressionId<'ast>),
+    Condtion(
+        ExpressionId<'ast>,
+        Span,
+        ExpressionId<'ast>,
+        Span,
+        ExpressionId<'ast>,
+    ),
     Primary(Primary<'ast>),
 }
 
@@ -362,7 +366,7 @@ pub enum Primary<'ast> {
     Real(f64),
     VariableOrNetReference(HierarchicalId),
     FunctionCall(HierarchicalId, RefCell<Vec<ExpressionId<'ast>>>),
-    BranchAccess(Ident, BranchAccess),
+    BranchAccess(Ident, Node<BranchAccess>),
     BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
 }
 #[derive(Copy, Clone)]
@@ -388,7 +392,7 @@ pub enum BuiltInFunctionCall<'ast> {
     ArcSin(ExpressionId<'ast>),
     ArcCos(ExpressionId<'ast>),
     ArcTan(ExpressionId<'ast>),
-    ArcTan2(ExpressionId<'ast>),
+    ArcTan2(ExpressionId<'ast>, ExpressionId<'ast>),
 
     SinH(ExpressionId<'ast>),
     CosH(ExpressionId<'ast>),
@@ -401,8 +405,6 @@ pub enum BuiltInFunctionCall<'ast> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperator {
-    Condition,
-    Either,
     Sum,
     Subtract,
     Multiply,

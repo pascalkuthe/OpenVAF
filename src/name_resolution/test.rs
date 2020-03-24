@@ -2,10 +2,10 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
-use crate::ast_lowering::resolve_and_print;
 use crate::compact_arena::SafeRange;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
+use crate::name_resolution::resolve_and_print;
 use crate::parser::{insert_electrical_natures_and_disciplines, parse_and_print_errors};
 use crate::util::SafeRangeCreation;
 

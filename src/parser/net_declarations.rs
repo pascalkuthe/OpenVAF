@@ -166,7 +166,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 if self.ast[id].contents.net_type == NetType::UNDECLARED
                     && self.ast[id].contents.discipline.name == keywords::EMPTY_SYMBOL
                     && (self.ast[id].contents.signed == declaration.contents.signed
-                        || self.ast[id].contents.signed == false)
+                        || !self.ast[id].contents.signed)
                 //TODO range
                 {
                     self.ast[id].contents.net_type = declaration.contents.net_type;
