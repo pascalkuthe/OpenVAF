@@ -28,7 +28,7 @@ impl Value {
     }
     pub fn as_integer(self) -> i64 {
         match self {
-            Self::Real(val) => val as i64,
+            Self::Real(val) => val.round() as i64,
             Self::Integer(val) => val,
         }
     }
@@ -36,11 +36,7 @@ impl Value {
         match self {
             Value::Integer(val) => match val {
                 0 => Ok(false),
-                1 => Ok(true),
-                val => Err(Error {
-                    error_type: Type::ExpectedInteger,
-                    source,
-                }),
+                _ => Ok(true),
             },
             Value::Real(val) => Err(Error {
                 error_type: Type::ExpectedInteger,

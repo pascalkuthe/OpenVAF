@@ -5,7 +5,7 @@ use intrusive_collections::__core::convert::TryFrom;
 
 use crate::ast::{
     Attribute, AttributeNode, Attributes, BuiltInFunctionCall, Function, Nature, Node,
-    UnaryOperator, Variable,
+    UnaryOperator,
 };
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Block, BranchDeclaration, Discipline, DisciplineAccess, Module, Net, Port};
@@ -49,7 +49,6 @@ impl<'tag> Mir<'tag> {
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
         NanoArena::copy_to(&mut res.as_mut().natures, &hir.natures);
         TinyArena::copy_to(&mut res.as_mut().attributes, &hir.attributes);
-        TinyArena::copy_to(&mut res.as_mut().variables, &hir.variables);
         NanoArena::copy_to(&mut res.as_mut().branches, &hir.branches);
         TinyArena::copy_to(&mut res.as_mut().nets, &hir.nets);
         NanoArena::copy_to(&mut res.as_mut().ports, &hir.ports);
@@ -58,6 +57,7 @@ impl<'tag> Mir<'tag> {
         NanoArena::copy_to(&mut res.as_mut().natures, &hir.natures);
         NanoArena::move_to(&mut res.as_mut().functions, &mut hir.functions);
         TinyArena::init_from(&mut res.as_mut().parameters, &hir.parameters);
+        TinyArena::init_from(&mut res.as_mut().variables, &hir.variables);
         TinyArena::init(&mut res.as_mut().integer_expressions);
         TinyArena::init(&mut res.as_mut().real_expressions);
         TinyArena::init(&mut res.as_mut().statements);
@@ -69,6 +69,15 @@ impl_id_type!(BranchId in Mir::branches -> AttributeNode<'tag,BranchDeclaration<
 impl_id_type!(NetId in Mir::nets -> AttributeNode<'tag,Net<'tag>>);
 impl_id_type!(PortId in Mir::ports -> Port<'tag>);
 impl_id_type!(VariableId in Mir::variables ->  AttributeNode<'tag,Variable<'tag>>);
+impl<'tag> Write<VariableId<'tag>> for Mir<'tag> {
+    type Data = AttributeNode<'tag, Variable<'tag>>;
+    fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
+        unsafe {
+            self.variables
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(ModuleId in Mir::modules -> AttributeNode<'tag,Module<'tag>>);
 impl_id_type!(FunctionId in Mir::functions -> AttributeNode<'tag,Function<'tag>>);
 impl_id_type!(DisciplineId in Mir::disciplines -> AttributeNode<'tag,Discipline<'tag>>);
@@ -79,6 +88,16 @@ impl_id_type!(StatementId in Mir::statements -> Statement<'tag>);
 impl_id_type!(NatureId in Mir::natures -> AttributeNode<'tag,Nature>);
 impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<'tag,Parameter>);
 
+#[derive(Clone, Copy, Debug)]
+pub struct Variable<'mir> {
+    pub name: Ident,
+    pub variable_type: VariableType<'mir>,
+}
+#[derive(Clone, Copy, Debug)]
+pub enum VariableType<'mir> {
+    Real(Option<RealExpressionId<'mir>>),
+    Integer(Option<IntegerExpressionId<'mir>>),
+}
 #[derive(Clone)]
 pub enum Statement<'mir> {
     Condition(AttributeNode<'mir, Condition<'mir>>),

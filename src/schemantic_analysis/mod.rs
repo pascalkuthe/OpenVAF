@@ -2,10 +2,9 @@ use crate::ast;
 use crate::ast::{AttributeNode, Node};
 use crate::compact_arena::SafeRange;
 use crate::hir::Hir;
-use crate::ir::ast::VariableType;
 use crate::ir::hir::Block;
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
-use crate::ir::{ParameterId, UnsafeWrite};
+use crate::ir::{mir, ParameterId, UnsafeWrite, VariableId, Write};
 use crate::mir::*;
 use crate::schemantic_analysis::error::Error;
 use crate::util::{Push, SafeRangeCreation};
@@ -94,6 +93,64 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 );
             }
         }
+        let variables: SafeRange<VariableId> = self.mir.full_range();
+        for variable in variables {
+            match self.hir[variable].contents.variable_type {
+                ast::VariableType::REAL | ast::VariableType::REALTIME => {
+                    let default_value =
+                        if let Some(default_value) = self.hir[variable].contents.default_value {
+                            if let Ok(expr) = self.fold_real_expression(default_value) {
+                                Some(expr)
+                            } else {
+                                continue;
+                            }
+                        } else {
+                            None
+                        };
+                    self.mir.write(
+                        variable,
+                        AttributeNode {
+                            attributes: self.hir[variable].attributes,
+                            source: self.hir[variable].source,
+                            contents: Variable {
+                                name: self.hir[variable].contents.name,
+                                variable_type: mir::VariableType::Real(default_value),
+                            },
+                        },
+                    );
+                }
+
+                ast::VariableType::INTEGER | ast::VariableType::TIME => {
+                    let default_value =
+                        if let Some(default_value) = self.hir[variable].contents.default_value {
+                            match self.fold_expression(default_value) {
+                                Ok(ExpressionId::Integer(expr)) => Some(expr),
+
+                                Ok(ExpressionId::Real(real_expr)) => Some(self.mir.push(Node {
+                                    source: self.mir[real_expr].source,
+                                    contents: IntegerExpression::RealCast(real_expr),
+                                })),
+
+                                Err(()) => continue,
+                            }
+                        } else {
+                            None
+                        };
+                    self.mir.write(
+                        variable,
+                        AttributeNode {
+                            attributes: self.hir[variable].attributes,
+                            source: self.hir[variable].source,
+                            contents: Variable {
+                                name: self.hir[variable].contents.name,
+                                variable_type: mir::VariableType::Integer(default_value),
+                            },
+                        },
+                    );
+                }
+            }
+        }
+
         self.fold_block(self.hir.full_range());
 
         if self.errors.is_empty() {
@@ -120,7 +177,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 hir::Statement::Assignment(attr, variable, expr)
                     if matches!(
                         self.mir[variable].contents.variable_type,
-                        VariableType::REALTIME | VariableType::TIME
+                        VariableType::Real(..)
                     ) =>
                 {
                     if let Ok(expr) = self.fold_real_expression(expr) {

@@ -7,7 +7,7 @@ use crate::mir::*;
 use crate::schemantic_analysis::error::{Error, Type};
 use crate::schemantic_analysis::HirToMirFold;
 use crate::util::Push;
-use crate::{ast, ir};
+use crate::{ast, ir, mir};
 
 impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     pub fn fold_real_expression(
@@ -48,7 +48,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             hir::Expression::Primary(Primary::VariableReference(variable))
                 if matches!(
                     self.mir[variable].contents.variable_type,
-                    VariableType::REAL | VariableType::REALTIME
+                    mir::VariableType::Real(..)
                 ) =>
             {
                 RealExpression::VariableReference(variable)
@@ -264,7 +264,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
             hir::Expression::Primary(Primary::VariableReference(variable)) => {
                 match self.mir[variable].contents.variable_type {
-                    VariableType::INTEGER | VariableType::TIME => {
+                    crate::mir::VariableType::Integer(..) => {
                         IntegerExpression::VariableReference(variable)
                     }
                     _ => {
@@ -363,7 +363,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             hir::Expression::Primary(Primary::VariableReference(variable))
                 if matches!(
                     self.mir[variable].contents.variable_type,
-                    VariableType::REAL | VariableType::REALTIME
+                    mir::VariableType::Real(..)
                 ) =>
             {
                 RealExpression::VariableReference(variable)
