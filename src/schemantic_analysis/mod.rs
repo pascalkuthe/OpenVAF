@@ -1,20 +1,20 @@
-use std::convert::TryInto;
-
-use crate::ast::{AttributeNode, BuiltInFunctionCall, Node};
+use crate::ast;
+use crate::ast::{AttributeNode, Node};
 use crate::compact_arena::SafeRange;
-use crate::hir::{Expression, Hir, Primary};
-use crate::ir::ast::{BinaryOperator, VariableType};
+use crate::hir::Hir;
+use crate::ir::ast::VariableType;
 use crate::ir::hir::Block;
-use crate::ir::mir::NumericalParameterRangeExclude::Range;
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
-use crate::ir::{IntegerExpressionId, ParameterId, RealExpressionId, StatementId};
+use crate::ir::{ParameterId, UnsafeWrite};
 use crate::mir::*;
-use crate::schemantic_analysis::error::{Error, Type};
+use crate::schemantic_analysis::error::Error;
 use crate::util::{Push, SafeRangeCreation};
-use crate::{ast, ir};
 use crate::{hir, SourceMap};
 
 pub mod error;
+
+#[cfg(test)]
+pub mod test;
 struct HirToMirFold<'tag, 'hirref> {
     pub errors: Vec<Error<'tag>>,
     hir: &'hirref Hir<'tag>,
@@ -31,6 +31,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     pub fn fold(mut self) -> Result<Box<Mir<'tag>>, Vec<Error<'tag>>> {
         let parameters: SafeRange<ParameterId<'tag>> = self.hir.full_range();
         for parameter in parameters {
+            let test = &self.hir[parameter].contents;
             let parameter_type = match self.hir[parameter].contents.parameter_type {
                 ast::ParameterType::String() => todo!("String parameters"),
                 ast::ParameterType::Numerical {
@@ -48,7 +49,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 default_value: type_info.2,
                             }
                         } else {
-                            continue;
+                            //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
+                            // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
+                            ParameterType::Integer {
+                                included_ranges: Vec::new(),
+                                excluded_ranges: Vec::new(),
+                                default_value: 0,
+                            }
                         }
                     }
                     ast::VariableType::REAL | ast::VariableType::REALTIME => {
@@ -61,18 +68,30 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 default_value: type_info.2,
                             }
                         } else {
-                            continue;
+                            //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
+                            // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
+                            ParameterType::Real {
+                                included_ranges: Vec::new(),
+                                excluded_ranges: Vec::new(),
+                                default_value: 0.0,
+                            }
                         }
                     }
                 },
             };
-            self.mir[parameter] = AttributeNode {
-                contents: Parameter {
-                    name: self.hir[parameter].contents.name,
-                    parameter_type,
-                },
-                source: self.hir[parameter].source,
-                attributes: self.hir[parameter].attributes,
+            unsafe {
+                //This is save since we write to all parameters
+                self.mir.write_unsafe(
+                    parameter,
+                    AttributeNode {
+                        contents: Parameter {
+                            name: self.hir[parameter].contents.name,
+                            parameter_type,
+                        },
+                        source: self.hir[parameter].source,
+                        attributes: self.hir[parameter].attributes,
+                    },
+                );
             }
         }
         self.fold_block(self.hir.full_range());
@@ -85,7 +104,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     }
     fn fold_block(&mut self, statements: Block<'tag>) {
         for statement in statements {
-            self.mir[statement] = match self.hir[statement] {
+            let res = match self.hir[statement] {
                 hir::Statement::ConditionStart {
                     condition_info_and_end,
                 } => Statement::ConditionStart {
@@ -164,7 +183,8 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 }
                 hir::Statement::FunctionCall(_, _, _) => todo!("Function Calls"),
                 hir::Statement::BuiltInFunctionCall(call) => todo!("warn useless function calls"),
-            }
+            };
+            self.mir.push(res);
         }
     }
 }

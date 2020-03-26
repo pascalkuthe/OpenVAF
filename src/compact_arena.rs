@@ -622,6 +622,13 @@ impl<'tag, T> TinyArena<'tag, T> {
             tag: self.tag,
         })
     }
+
+    /// Add an item to the arena, get an index or CapacityExceeded back.
+    #[inline]
+    pub unsafe fn write(&mut self, idx: Idx16<'tag>, val: MaybeUninit<T>) {
+        debug_assert!(u32::from(idx.index) < self.len);
+        self.data[idx.index as usize] = val;
+    }
     /// Add an item to the arena, get an index back
     pub fn add(&mut self, item: T) -> Idx16<'tag> {
         self.try_add(item).unwrap()
@@ -770,6 +777,11 @@ impl<'tag, T> NanoArena<'tag, T> {
             index: i as u8,
             tag: self.tag,
         })
+    }
+    #[inline]
+    pub unsafe fn write(&mut self, idx: Idx8<'tag>, val: MaybeUninit<T>) {
+        debug_assert!(u16::from(idx.index) < self.len);
+        self.data[idx.index as usize] = val;
     }
 
     /// Add an item to the arena, get an index back

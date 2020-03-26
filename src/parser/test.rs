@@ -34,6 +34,7 @@ pub fn module() -> Result<(), ()> {
         Path::new("tests/parseunits/module.va"),
         &source_map_allocator,
         &mut ast,
+        true,
     )
     .1?;
     let range: SafeRange<ModuleId> = ast.full_range();
@@ -137,6 +138,7 @@ pub fn branch() -> Result<(), ()> {
         Path::new("tests/parseunits/branch.va"),
         &source_map_allocator,
         &mut ast,
+        true,
     )
     .1?;
     let range: SafeRange<ModuleId> = ast.full_range();
@@ -247,6 +249,7 @@ pub fn variable_decl() -> Result<(), ()> {
         Path::new("tests/parseunits/variable_declaration.va"),
         &source_map_allocator,
         &mut ast,
+        true,
     )
     .1?;
     let symbol_table = get_module_symbol_table(&ast.top_symbols, &ast, "test");
@@ -266,6 +269,7 @@ pub fn net_decl() -> Result<(), ()> {
         Path::new("tests/parseunits/net_declaration.va"),
         &source_map_allocator,
         &mut ast,
+        true,
     )
     .1?;
     let range: SafeRange<ModuleId> = ast.full_range();
@@ -287,6 +291,7 @@ pub fn linear() -> Result<(), ()> {
         Path::new("tests/linear.va"),
         &source_map_allocator,
         &mut ast,
+        true,
     )
     .1?;
 

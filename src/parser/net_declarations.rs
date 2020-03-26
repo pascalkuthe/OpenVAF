@@ -11,8 +11,7 @@
 use std::collections::HashSet;
 
 use crate::ast::{AttributeNode, Attributes, Net, NetType, Port};
-use crate::ir::ast::TopNode::Discipline;
-use crate::ir::{NetId, PortId};
+use crate::ir::PortId;
 use crate::parser::error::Type::{AlreadyDeclaredInThisScope, PortNotPreDeclaredInModuleHead};
 use crate::parser::error::{Result, Type};
 use crate::parser::lexer::Token;
@@ -174,11 +173,12 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                     return;
                 }
             }
+            let error_type = Type::AlreadyDeclaredInThisScope {
+                other_declaration: old_declaration.span(&self.ast),
+                name: declaration.contents.name.name,
+            };
             self.non_critical_errors.push(Error {
-                error_type: Type::AlreadyDeclaredInThisScope {
-                    other_declaration: old_declaration.span(&self.ast),
-                    name: declaration.contents.name.name,
-                },
+                error_type,
                 source: declaration.source,
             });
         } else {

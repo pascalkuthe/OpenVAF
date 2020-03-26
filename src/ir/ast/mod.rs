@@ -7,7 +7,6 @@
 //  * *******************************************************************************************
 
 use core::fmt::Debug;
-use std::cell::RefCell;
 use std::ops::Range;
 use std::ptr::NonNull;
 
@@ -16,7 +15,7 @@ pub use visitor::Visitor;
 use crate::compact_arena::{InvariantLifetime, NanoArena, SafeRange, TinyArena};
 use crate::ir::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId,
-    NetId, ParameterId, PortId, StatementId, VariableId,
+    NetId, ParameterId, PortId, StatementId, VariableId, Write,
 };
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
@@ -147,6 +146,16 @@ impl_id_type!(NetId in Ast::nets -> AttributeNode<'tag,Net>);
 impl_id_type!(PortId in Ast::ports -> AttributeNode<'tag,Port>);
 impl_id_type!(ParameterId in Ast::parameters -> AttributeNode<'tag,Parameter<'tag>>);
 impl_id_type!(VariableId in Ast::variables -> AttributeNode<'tag,Variable<'tag>>);
+impl<'tag> Write<VariableId<'tag>> for Ast<'tag> {
+    type Data = AttributeNode<'tag, Variable<'tag>>;
+    fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
+        unsafe {
+            //this is save for copy types  that dont implement drop
+            self.variables
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(ModuleId in Ast::modules -> AttributeNode<'tag,Module<'tag>>);
 impl_id_type!(FunctionId in Ast::functions -> AttributeNode<'tag,Function<'tag>>);
 impl_id_type!(DisciplineId in Ast::disciplines -> AttributeNode<'tag,Discipline>);
@@ -188,14 +197,14 @@ pub struct Module<'ast> {
     pub symbol_table: SymbolTable<'ast>,
     pub children: Vec<ModuleItem<'ast>>,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Parameter<'ast> {
     pub name: Ident,
     pub parameter_type: ParameterType<'ast>,
     pub default_value: Option<ExpressionId<'ast>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ParameterType<'ast> {
     Numerical {
         parameter_type: VariableType,
@@ -206,12 +215,12 @@ pub enum ParameterType<'ast> {
         //TODO string parameters
     ),
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct NumericalParameterRangeBound<'ast> {
     pub inclusive: bool,
     pub bound: ExpressionId<'ast>,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NumericalParameterRangeExclude<'ast> {
     Value(ExpressionId<'ast>),
     Range(Range<NumericalParameterRangeBound<'ast>>),
@@ -246,7 +255,7 @@ pub struct BranchDeclaration {
     pub branch: Branch,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Branch {
     Port(HierarchicalId),
     Nets(HierarchicalId, HierarchicalId),
@@ -313,11 +322,7 @@ pub enum Statement<'ast> {
     ),
     //  TODO IndirectContribute(),
     Assign(Attributes<'ast>, HierarchicalId, ExpressionId<'ast>),
-    FunctionCall(
-        Attributes<'ast>,
-        HierarchicalId,
-        RefCell<Vec<ExpressionId<'ast>>>,
-    ),
+    FunctionCall(Attributes<'ast>, HierarchicalId, Vec<ExpressionId<'ast>>),
     BuiltInFunctionCall(AttributeNode<'ast, BuiltInFunctionCall<'ast>>),
 }
 #[derive(Clone)]
@@ -339,7 +344,7 @@ pub struct Condition<'ast> {
     pub else_statement: Option<StatementId<'ast>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Expression<'ast> {
     BinaryOperator(ExpressionId<'ast>, Node<BinaryOperator>, ExpressionId<'ast>),
     UnaryOperator(Node<UnaryOperator>, ExpressionId<'ast>),
@@ -353,23 +358,24 @@ pub enum Expression<'ast> {
     Primary(Primary<'ast>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BranchAccess {
     Explicit(HierarchicalId),
     Implicit(Branch),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Primary<'ast> {
     Integer(i64),
     UnsignedInteger(u32),
     Real(f64),
     VariableOrNetReference(HierarchicalId),
-    FunctionCall(HierarchicalId, RefCell<Vec<ExpressionId<'ast>>>),
+    FunctionCall(HierarchicalId, Vec<ExpressionId<'ast>>),
+    SystemFunctionCall(Ident /*TODO args*/),
     BranchAccess(Ident, Node<BranchAccess>),
     BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
 }
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum BuiltInFunctionCall<'ast> {
     Pow(ExpressionId<'ast>, ExpressionId<'ast>),
     Sqrt(ExpressionId<'ast>),

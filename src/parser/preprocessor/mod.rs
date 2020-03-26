@@ -24,7 +24,7 @@ pub(crate) use source_map::{ArgumentIndex, CallDepth};
 
 use crate::error::Error;
 use crate::parser::error;
-use crate::parser::error::{Expected, List};
+use crate::parser::error::List;
 use crate::parser::lexer::Token;
 use crate::parser::primaries::parse_string;
 use crate::span::{Index, IndexOffset, LineNumber, Range};

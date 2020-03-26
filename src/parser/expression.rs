@@ -8,8 +8,6 @@
  * *****************************************************************************************
  */
 
-use intrusive_collections::__core::cell::RefCell;
-
 use crate::ast::{BinaryOperator, BranchAccess, Expression, Node, Primary, UnaryOperator};
 use crate::ir::ast::BuiltInFunctionCall;
 use crate::ir::ExpressionId;
@@ -230,13 +228,12 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                         )
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
-                        Primary::FunctionCall(ident.into(), RefCell::default())
+                        Primary::FunctionCall(ident.into(), Vec::new())
                     } else {
-                        let mut parameters = RefCell::new(vec![self.parse_expression_id()?]);
-                        let parameter_ref = parameters.get_mut();
+                        let mut parameters = vec![self.parse_expression_id()?];
                         self.parse_list_tail(
                             |sel| {
-                                parameter_ref.push(sel.parse_expression_id()?);
+                                parameters.push(sel.parse_expression_id()?);
                                 Ok(())
                             },
                             Token::ParenClose,
@@ -531,6 +528,16 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 Node::new(
                     Expression::Primary(Primary::BuiltInFunctionCall(res)),
                     self.span_to_current_end(start),
+                )
+            }
+            Token::SystemCall => {
+                self.lookahead.take();
+                Node::new(
+                    Expression::Primary(Primary::SystemFunctionCall(Ident::from_str_and_span(
+                        self.preprocessor.slice(),
+                        span,
+                    ))),
+                    span,
                 )
             }
 

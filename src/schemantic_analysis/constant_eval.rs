@@ -1,17 +1,18 @@
 use std::ops::Range;
 
+use float_cmp::{ApproxEq, F64Margin};
+
+use crate::ast;
 use crate::ast::{BinaryOperator, BuiltInFunctionCall, UnaryOperator};
 use crate::hir::{Expression, Primary};
 use crate::ir::mir::ParameterType;
 use crate::ir::{ExpressionId, ParameterId};
 use crate::mir::*;
-use crate::parser::error::Unsupported::DefaultDiscipline;
 use crate::schemantic_analysis::error::Error;
 use crate::schemantic_analysis::error::Result;
 use crate::schemantic_analysis::error::Type;
 use crate::schemantic_analysis::HirToMirFold;
 use crate::Span;
-use crate::{ast, hir, mir};
 
 #[derive(Copy, Clone)]
 pub enum Value {
@@ -93,8 +94,8 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     pub fn eval_parameter_type<T: From<Value> + Default>(
         &mut self,
         parameter: ParameterId<'tag>,
-        included_ranges: &Vec<Range<ast::NumericalParameterRangeBound<'tag>>>,
-        excluded_ranges: &Vec<ast::NumericalParameterRangeExclude<'tag>>,
+        included_ranges: &[Range<ast::NumericalParameterRangeBound<'tag>>],
+        excluded_ranges: &[ast::NumericalParameterRangeExclude<'tag>],
     ) -> std::result::Result<
         (
             Vec<Range<NumericalParameterRangeBound<T>>>,
@@ -112,7 +113,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             .filter_map(|exclude| match exclude {
                 ast::NumericalParameterRangeExclude::Range(range) => self
                     .eval_numerical_range_bound(parameter, range)
-                    .map(|res| NumericalParameterRangeExclude::Range(res)),
+                    .map(NumericalParameterRangeExclude::Range),
                 ast::NumericalParameterRangeExclude::Value(expr) => {
                     match self.eval_constant_parameter_expression(parameter, *expr) {
                         Ok(res) => Some(NumericalParameterRangeExclude::Value(res.into())),
@@ -135,6 +136,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         } else {
             Default::default()
         };
+
         Ok((included_ranges, excluded_ranges, default_value))
     }
 
@@ -457,10 +459,12 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 BinaryOperator::LessEqual => Value::Integer((lhs <= rhs) as i64),
                                 BinaryOperator::GreaterThen => Value::Integer((lhs > rhs) as i64),
                                 BinaryOperator::GreaterEqual => Value::Integer((lhs >= rhs) as i64),
-                                BinaryOperator::LogicEqual => Value::Integer((lhs == rhs) as i64), //Todo discuss f64 comparison precision
-                                BinaryOperator::LogicalNotEqual => {
-                                    Value::Integer((lhs != rhs) as i64)
-                                }
+                                BinaryOperator::LogicEqual => Value::Integer(
+                                    (lhs.approx_eq(rhs, F64Margin::default())) as i64,
+                                ), //Todo discuss f64 comparison precision
+                                BinaryOperator::LogicalNotEqual => Value::Integer(
+                                    (lhs.approx_ne(rhs, F64Margin::default())) as i64,
+                                ),
                                 _ => unreachable_unchecked!("previous match"),
                             }
                         }
@@ -470,7 +474,8 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             Expression::Primary(Primary::VariableReference(_))
             | Expression::Primary(Primary::NetReference(_))
             | Expression::Primary(Primary::PortReference(_))
-            | Expression::Primary(Primary::BranchAccess(_, _)) => {
+            | Expression::Primary(Primary::BranchAccess(_, _))
+            | Expression::Primary(Primary::SystemFunctionCall(_)) => {
                 unreachable_unchecked!("constant checking")
             }
             Expression::Primary(Primary::ParameterReference(parameter)) => {

@@ -1,5 +1,14 @@
 use crate::compact_arena::{Idx16, Idx8};
 
+pub(crate) trait UnsafeWrite<Idx> {
+    type Data;
+    unsafe fn write_unsafe(&mut self, idx: Idx, val: Self::Data);
+}
+pub(crate) trait Write<Idx> {
+    type Data: Copy;
+    fn write(&mut self, idx: Idx, val: Self::Data);
+}
+
 macro_rules! impl_id_type {
     ($name:ident in $container:ident::$sub_container:ident -> $type:ty) => {
         impl<'tag> ::std::ops::Index<$name<'tag>> for $container<'tag> {
@@ -30,6 +39,13 @@ macro_rules! impl_id_type {
         impl<'tag> ::std::ops::IndexMut<$name<'tag>> for $container<'tag> {
             fn index_mut(&mut self, index: $name<'tag>) -> &mut Self::Output {
                 &mut self.$sub_container[index.0]
+            }
+        }
+        impl<'tag> $crate::ir::UnsafeWrite<$name<'tag>> for $container<'tag> {
+            type Data = $type;
+            unsafe fn write_unsafe(&mut self, index: $name<'tag>, value: Self::Data) {
+                self.$sub_container
+                    .write(index.0, ::core::mem::MaybeUninit::new(value))
             }
         }
         impl<'tag> ::std::ops::IndexMut<Range<$name<'tag>>> for $container<'tag> {

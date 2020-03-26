@@ -4,8 +4,8 @@ use std::ptr::NonNull;
 use intrusive_collections::__core::convert::TryFrom;
 
 use crate::ast::{
-    Attribute, AttributeNode, Attributes, BinaryOperator, BuiltInFunctionCall, Function, Nature,
-    Node, UnaryOperator, Variable, VariableType,
+    Attribute, AttributeNode, Attributes, BuiltInFunctionCall, Function, Nature, Node,
+    UnaryOperator, Variable,
 };
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Block, BranchDeclaration, Discipline, DisciplineAccess, Module, Net, Port};
@@ -57,10 +57,10 @@ impl<'tag> Mir<'tag> {
         NanoArena::copy_to(&mut res.as_mut().disciplines, &hir.disciplines);
         NanoArena::copy_to(&mut res.as_mut().natures, &hir.natures);
         NanoArena::move_to(&mut res.as_mut().functions, &mut hir.functions);
-        TinyArena::init_from(&mut res.as_mut().statements, &hir.statements);
         TinyArena::init_from(&mut res.as_mut().parameters, &hir.parameters);
         TinyArena::init(&mut res.as_mut().integer_expressions);
         TinyArena::init(&mut res.as_mut().real_expressions);
+        TinyArena::init(&mut res.as_mut().statements);
         Box::from_raw(res.as_ptr())
     }
 }
@@ -110,7 +110,7 @@ pub struct Parameter {
     pub parameter_type: ParameterType,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ParameterType {
     Integer {
         included_ranges: Vec<Range<NumericalParameterRangeBound<i64>>>,
@@ -127,12 +127,12 @@ pub enum ParameterType {
     ),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct NumericalParameterRangeBound<T> {
     pub inclusive: bool,
     pub bound: T,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NumericalParameterRangeExclude<T> {
     Value(T),
     Range(Range<NumericalParameterRangeBound<T>>),
@@ -261,6 +261,7 @@ pub enum RealExpression<'mir> {
     BranchAccess(DisciplineAccess, BranchId<'mir>),
     BuiltInFunctionCall(RealBuiltInFunctionCall<'mir>),
     IntegerConversion(IntegerExpressionId<'mir>),
+    SystemFunctionCall(Ident),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

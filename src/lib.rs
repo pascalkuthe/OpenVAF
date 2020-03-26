@@ -26,10 +26,10 @@ pub use ir::ast::Ast;
 pub use ir::hir;
 pub use ir::hir::Hir;
 pub use ir::mir;
-pub use name_resolution::resolve;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
+pub use schemantic_analysis::run_semantic;
 pub use span::Span;
 
 #[macro_use]

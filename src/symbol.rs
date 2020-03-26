@@ -217,11 +217,13 @@ pub mod keywords {
     pub const FLOW: Symbol = Symbol(SymbolIndex(1));
     pub(super) static POTENTIAL_STR: &str = "potential";
     pub const POTENTIAL: Symbol = Symbol(SymbolIndex(2));
+    pub(super) static TEMPERATURE_STR: &str = "$temperature";
+    pub const TEMPERATURE: Symbol = Symbol(SymbolIndex(3));
 }
 mod statics {
     use std::sync::Mutex;
 
-    use crate::symbol::keywords::{EMPTY_SYMBOL_STR, FLOW_STR, POTENTIAL_STR};
+    use crate::symbol::keywords::*;
     use crate::symbol::Interner;
 
     lazy_static! {
@@ -229,6 +231,7 @@ mod statics {
             EMPTY_SYMBOL_STR,
             FLOW_STR,
             POTENTIAL_STR,
+            TEMPERATURE_STR
         ]));
     }
     #[inline]

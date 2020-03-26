@@ -79,6 +79,8 @@ pub enum Token {
     SimpleIdentWithBracket, //used for macro defintions where spaces matter (eg `define test(a,b) is not the same as `define test (a,b) as first expands to an empty stringa nd the second to (a,b)
     #[regex = r"\\[[:print:]&&\S]+\s"]
     EscapedIdentifier,
+    #[regex = r"\$[a-zA-Z0-9_\$][a-zA-Z0-9_\$]*"]
+    SystemCall,
 
     //Constants
     #[regex = r#""([^\n"\\]|\\[\\tn"])*""#]

@@ -8,8 +8,6 @@
  * *****************************************************************************************
  */
 
-use intrusive_collections::__core::cell::RefCell;
-
 use crate::ast::{
     AttributeNode, Attributes, BlockScope, Branch, BranchAccess, Condition, Expression,
     HierarchicalId, Node, Primary, SeqBlock, Statement, VariableType,
@@ -68,11 +66,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                             )?,
                             Token::ParenClose => {
                                 self.lookahead.take();
-                                Statement::FunctionCall(
-                                    attributes,
-                                    identifier.into(),
-                                    RefCell::default(),
-                                )
+                                Statement::FunctionCall(attributes, identifier.into(), Vec::new())
                             }
                             _ => {
                                 let mut arg = vec![self.parse_expression()?];
@@ -96,11 +90,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                                     Statement::FunctionCall(
                                         attributes,
                                         identifier.into(),
-                                        RefCell::new(
-                                            arg.into_iter()
-                                                .map(|expr| self.ast.push(expr))
-                                                .collect(),
-                                        ),
+                                        arg.into_iter().map(|expr| self.ast.push(expr)).collect(),
                                     )
                                 }
                             }

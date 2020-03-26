@@ -9,7 +9,7 @@ use crate::ir::ast::{
 };
 use crate::ir::{
     AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId, NetId,
-    ParameterId, PortId, StatementId, VariableId,
+    ParameterId, PortId, StatementId, VariableId, Write,
 };
 use crate::symbol::Ident;
 use crate::Span;
@@ -61,22 +61,66 @@ impl<'tag> Hir<'tag> {
         NanoArena::init_from(&mut res.as_mut().functions, &ast.functions);
         NanoArena::init_from(&mut res.as_mut().disciplines, &ast.disciplines);
         NanoArena::init_from(&mut res.as_mut().natures, &ast.natures);
-        TinyArena::init_from(&mut res.as_mut().expressions, &ast.expressions);
+        TinyArena::init_from(&mut res.as_mut().parameters, &ast.parameters);
+        TinyArena::init(&mut res.as_mut().expressions);
         TinyArena::init(&mut res.as_mut().statements);
         Box::from_raw(res.as_ptr())
-    }
-    pub(crate) unsafe fn finish_partial_initalize<'astref>(&mut self, ast: &'astref mut Ast<'tag>) {
-        TinyArena::move_to(&mut self.parameters, &mut ast.parameters);
     }
 }
 
 impl_id_type!(BranchId in Hir::branches -> AttributeNode<'tag,BranchDeclaration<'tag>>);
+impl<'tag> Write<BranchId<'tag>> for Hir<'tag> {
+    type Data = AttributeNode<'tag, BranchDeclaration<'tag>>;
+    fn write(&mut self, index: BranchId<'tag>, value: Self::Data) {
+        unsafe {
+            //this is save for types that dont implement drop
+            self.branches
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(NetId in Hir::nets -> AttributeNode<'tag,Net<'tag>>);
+impl<'tag> Write<NetId<'tag>> for Hir<'tag> {
+    type Data = AttributeNode<'tag, Net<'tag>>;
+    fn write(&mut self, index: NetId<'tag>, value: Self::Data) {
+        unsafe {
+            self.nets
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(PortId in Hir::ports -> Port<'tag>);
+impl<'tag> Write<PortId<'tag>> for Hir<'tag> {
+    type Data = Port<'tag>;
+    fn write(&mut self, index: PortId<'tag>, value: Self::Data) {
+        unsafe {
+            self.ports
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(VariableId in Hir::variables ->  AttributeNode<'tag,Variable<'tag>>);
 impl_id_type!(ModuleId in Hir::modules -> AttributeNode<'tag,Module<'tag>>);
+impl<'tag> Write<ModuleId<'tag>> for Hir<'tag> {
+    type Data = AttributeNode<'tag, Module<'tag>>;
+    fn write(&mut self, index: ModuleId<'tag>, value: Self::Data) {
+        unsafe {
+            self.modules
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(FunctionId in Hir::functions -> AttributeNode<'tag,Function<'tag>>);
 impl_id_type!(DisciplineId in Hir::disciplines -> AttributeNode<'tag,Discipline<'tag>>);
+impl<'tag> Write<DisciplineId<'tag>> for Hir<'tag> {
+    type Data = AttributeNode<'tag, Discipline<'tag>>;
+    fn write(&mut self, index: DisciplineId<'tag>, value: Self::Data) {
+        unsafe {
+            self.disciplines
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(ExpressionId in Hir::expressions -> Node<Expression<'tag>>);
 impl_id_type!(AttributeId in Hir::attributes -> Attribute<'tag>);
 impl_id_type!(StatementId in Hir::statements -> Statement<'tag>);
@@ -179,4 +223,5 @@ pub enum Primary<'hir> {
     FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
     BranchAccess(DisciplineAccess, BranchId<'hir>),
     BuiltInFunctionCall(BuiltInFunctionCall<'hir>),
+    SystemFunctionCall(Ident /*TODO args*/),
 }

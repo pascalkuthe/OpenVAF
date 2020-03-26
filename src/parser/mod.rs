@@ -261,6 +261,7 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
     ast: &'astref mut Ast<'ast>,
+    translate_lines: bool,
 ) -> (
     &'source_map SourceMap<'source_map>,
     std::result::Result<(), ()>,
@@ -278,7 +279,7 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
     } else {
         errors
             .drain(..)
-            .for_each(|err| err.print(&source_map, true));
+            .for_each(|err| err.print(&source_map, translate_lines));
         (source_map, Err(()))
     }
 }

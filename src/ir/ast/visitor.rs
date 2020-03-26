@@ -70,7 +70,7 @@ pub trait Visitor<'ast, T = ()>: Sized {
     fn visit_parameter(&mut self, parameter_id: ParameterId<'ast>, ast: &Ast<'ast>) -> T;
     fn visit_built_in_function_call(
         &mut self,
-        function_call: &BuiltInFunctionCall<'ast>,
+        function_call: BuiltInFunctionCall<'ast>,
         ast: &Ast<'ast>,
     ) -> T;
 }
@@ -126,7 +126,7 @@ pub fn walk_statement<'ast, T, V: Visitor<'ast, T>>(
             v.visit_contribute(*attr, nature_name, branch, *value, ast)
         }
         Statement::FunctionCall(ref _attr, ref _name, ref _args) => unimplemented!("Functions"),
-        Statement::BuiltInFunctionCall(bifc) => v.visit_built_in_function_call(&bifc.contents, ast),
+        Statement::BuiltInFunctionCall(bifc) => v.visit_built_in_function_call(bifc.contents, ast),
     }
 }
 pub fn walk_block<'ast, T, V: Visitor<'ast, T>>(
@@ -231,7 +231,7 @@ pub fn walk_expression_primary<'ast, T, V: Visitor<'ast, T>>(
     primary: &Primary<'ast>,
     ast: &Ast<'ast>,
 ) {
-    match primary {
+    match *primary {
         Primary::BranchAccess(ref nature, ref branch_access) => {
             v.visit_branch_access(nature, branch_access, ast);
         }
@@ -240,12 +240,15 @@ pub fn walk_expression_primary<'ast, T, V: Visitor<'ast, T>>(
         }
         Primary::FunctionCall(ref ident, ref parameters) => {
             v.visit_hierarchical_reference(ident, ast);
-            for parameter in parameters.borrow().iter().copied() {
+            for parameter in parameters.iter().copied() {
                 v.visit_expression(parameter, ast);
             }
         }
         Primary::BuiltInFunctionCall(built_in_function_call) => {
             v.visit_built_in_function_call(built_in_function_call, ast);
+        }
+        Primary::SystemFunctionCall(_) => {
+            //todo args
         }
         Integer(_) | UnsignedInteger(_) | Real(_) => { /*Nothing to do*/ }
     }
@@ -269,7 +272,7 @@ pub fn walk_parameter<'ast, T, V: Visitor<'ast, T>>(
         v.visit_expression(default, ast);
     }
     if let ParameterType::Numerical {
-        parameter_type,
+        parameter_type: _,
         included_ranges,
         excluded_ranges,
     } = &ast[parameter].contents.parameter_type
@@ -295,7 +298,7 @@ pub fn walk_parameter<'ast, T, V: Visitor<'ast, T>>(
 }
 pub fn walk_builtin_function_call<'ast, T, V: Visitor<'ast, T>>(
     v: &mut V,
-    function_call: &BuiltInFunctionCall<'ast>,
+    function_call: BuiltInFunctionCall<'ast>,
     ast: &Ast<'ast>,
 ) {
     match function_call {
@@ -304,13 +307,13 @@ pub fn walk_builtin_function_call<'ast, T, V: Visitor<'ast, T>>(
         | Min(expr0, expr1)
         | Max(expr0, expr1)
         | ArcTan2(expr0, expr1) => {
-            v.visit_expression(*expr0, ast);
-            v.visit_expression(*expr1, ast);
+            v.visit_expression(expr0, ast);
+            v.visit_expression(expr1, ast);
         }
         Sqrt(expr) | Exp(expr) | Ln(expr) | Log(expr) | Abs(expr) | Floor(expr) | Ceil(expr)
         | Sin(expr) | Cos(expr) | Tan(expr) | ArcSin(expr) | ArcCos(expr) | ArcTan(expr)
         | SinH(expr) | CosH(expr) | TanH(expr) | ArcSinH(expr) | ArcCosH(expr) | ArcTanH(expr) => {
-            v.visit_expression(*expr, ast);
+            v.visit_expression(expr, ast);
         }
     }
 }

@@ -89,6 +89,9 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     rhs?,
                 )
             }
+            hir::Expression::Primary(Primary::SystemFunctionCall(ident)) => {
+                RealExpression::SystemFunctionCall(ident) //TODO delegate type checking using closure
+            }
             hir::Expression::Primary(Primary::BuiltInFunctionCall(call)) => {
                 RealExpression::BuiltInFunctionCall(
                     (call, |expr| self.fold_real_expression(expr)).try_into()?,
@@ -173,7 +176,9 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         | BinaryOperator::LogicalNotEqual
                 ) =>
             {
-                let op = match op.contents {
+                let lhs = self.fold_expression(lhs);
+                let rhs = self.fold_expression(rhs);
+                let comparison_op = match op.contents {
                     BinaryOperator::LessEqual => ComparisonOperator::LessEqual,
                     BinaryOperator::LessThen => ComparisonOperator::LessThen,
                     BinaryOperator::GreaterThen => ComparisonOperator::GreaterThen,
@@ -182,7 +187,30 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     BinaryOperator::LogicalNotEqual => ComparisonOperator::LogicalNotEqual,
                     _ => unreachable!(),
                 };
-                todo!()
+                let op = Node::new(comparison_op, op.source);
+
+                match (lhs?, rhs?) {
+                    (ExpressionId::Integer(lhs), ExpressionId::Integer(rhs)) => {
+                        IntegerExpression::IntegerComparison(lhs, op, rhs)
+                    }
+                    (ExpressionId::Real(lhs), ExpressionId::Real(rhs)) => {
+                        IntegerExpression::RealComparison(lhs, op, rhs)
+                    }
+                    (ExpressionId::Integer(lhs), ExpressionId::Real(rhs)) => {
+                        let lhs = self.mir.push(Node::new(
+                            RealExpression::IntegerConversion(lhs),
+                            self.mir[lhs].source,
+                        ));
+                        IntegerExpression::RealComparison(lhs, op, rhs)
+                    }
+                    (ExpressionId::Real(lhs), ExpressionId::Integer(rhs)) => {
+                        let rhs = self.mir.push(Node::new(
+                            RealExpression::IntegerConversion(rhs),
+                            self.mir[rhs].source,
+                        ));
+                        IntegerExpression::RealComparison(lhs, op, rhs)
+                    }
+                }
             }
 
             hir::Expression::BinaryOperator(lhs, op_node, rhs) => {
@@ -216,7 +244,9 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
 
             hir::Expression::Primary(Primary::FunctionCall(_, _)) => todo!("Function Calls"),
-
+            hir::Expression::Primary(Primary::SystemFunctionCall(_)) => {
+                todo!("System function calls")
+            }
             hir::Expression::Primary(Primary::ParameterReference(parameter)) => {
                 match self.mir[parameter].contents.parameter_type {
                     ParameterType::Integer { .. } => {
@@ -304,6 +334,9 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 RealExpression::Condition(condition?, question_span, if_val, colon_span, else_val)
             }
 
+            hir::Expression::Primary(Primary::SystemFunctionCall(call)) => {
+                RealExpression::SystemFunctionCall(call)
+            }
             hir::Expression::Primary(Primary::Real(val)) => RealExpression::Literal(val),
             hir::Expression::Primary(Primary::FunctionCall(function, ref args)) => {
                 todo!("return type checking");
