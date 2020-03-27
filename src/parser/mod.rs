@@ -16,6 +16,7 @@ pub use error::Error;
 pub use error::Result;
 
 use crate::ast::{Ast, Attributes, HierarchicalId};
+use crate::compact_arena::SafeRange;
 use crate::ir::ast::{Attribute, AttributeNode, Discipline, Nature};
 use crate::ir::AttributeId;
 use crate::parser::error::{Expected, Type};
@@ -183,6 +184,7 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         &mut self,
         attribute_map: &mut AHashMap<Symbol, AttributeId<'ast>>,
     ) -> Result {
+        let range: SafeRange<AttributeId<'ast>> = self.ast.empty_range_from_end();
         let name = self.parse_identifier(false)?;
         let value = if self.look_ahead()?.0 == Token::Assign {
             self.lookahead.take();
@@ -197,6 +199,16 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             let id = self.ast.push(Attribute { name, value });
             attribute_map.insert(name.name, id);
         }
+        /*let range = self.ast.extend_range_to_end(range);
+        self.ast[range].sort_unstable_by(|attribute1, attribute2| {
+            attribute1
+                .name
+                .name
+                .as_u32()
+                .cmp(&attribute2.name.name.as_u32())
+        });
+        sorting probably not worth it since attributes are never used in large quantaties where a sorted algoritehm would be faster
+        */
         Ok(())
     }
     pub fn expect(&mut self, token: Token) -> Result {

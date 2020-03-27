@@ -127,14 +127,14 @@ impl_id_type!(StatementId in Hir::statements -> Statement<'tag>);
 impl_id_type!(NatureId in Hir::natures -> AttributeNode<'tag,Nature>);
 impl_id_type!(ParameterId in Hir::parameters -> AttributeNode<'tag,Parameter<'tag>>);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Discipline<'tag> {
     pub name: Ident,
     pub flow_nature: NatureId<'tag>,
     pub potential_nature: NatureId<'tag>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Module<'hir> {
     pub name: Ident,
     pub port_list: SafeRange<PortId<'hir>>,
@@ -142,32 +142,32 @@ pub struct Module<'hir> {
     pub analog: Block<'hir>,
 }
 pub type Block<'hir> = SafeRange<StatementId<'hir>>;
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Condition<'hir> {
     pub main_condition: ExpressionId<'hir>,
     pub main_condition_statements: Block<'hir>,
     pub else_ifs: Vec<(ExpressionId<'hir>, SafeRange<StatementId<'hir>>)>,
     pub else_statement: SafeRange<StatementId<'hir>>,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Port<'tag> {
     pub input: bool,
     pub output: bool,
     pub net: NetId<'tag>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct BranchDeclaration<'hir> {
     pub name: Ident,
     pub branch: Branch<'hir>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Branch<'hir> {
     Port(PortId<'hir>),
     Nets(NetId<'hir>, NetId<'hir>),
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Net<'hir> {
     pub name: Ident,
     pub discipline: DisciplineId<'hir>,
@@ -180,7 +180,7 @@ pub enum DisciplineAccess {
     Flow,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Statement<'hir> {
     Condition(AttributeNode<'hir, Condition<'hir>>),
     ConditionStart {
@@ -198,7 +198,7 @@ pub enum Statement<'hir> {
     BuiltInFunctionCall(AttributeNode<'hir, BuiltInFunctionCall<'hir>>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Expression<'hir> {
     BinaryOperator(ExpressionId<'hir>, Node<BinaryOperator>, ExpressionId<'hir>),
     UnaryOperator(Node<UnaryOperator>, ExpressionId<'hir>),
@@ -211,7 +211,7 @@ pub enum Expression<'hir> {
     ),
     Primary(Primary<'hir>),
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Primary<'hir> {
     Integer(i64),
     UnsignedInteger(u32),

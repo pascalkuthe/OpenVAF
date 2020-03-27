@@ -831,7 +831,7 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
 
             ast::Statement::Assign(ref attr, ref ident, value) => {
                 resolve_hierarchical!(self; ident as Variable(id) => {
-                    if let Ok(expr) = self.fold_expression(value){
+                    if let Ok(value) = self.fold_expression(value){
                         self.hir.push(Statement::Assignment(*attr, id, value));
                     }
                 });

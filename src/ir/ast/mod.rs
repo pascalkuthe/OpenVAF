@@ -165,20 +165,20 @@ impl_id_type!(StatementId in Ast::statements -> Statement<'tag>);
 impl_id_type!(BlockId in Ast::blocks -> AttributeNode<'tag,SeqBlock<'tag>>);
 impl_id_type!(NatureId in Ast::natures -> AttributeNode<'tag,Nature>);
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Attribute<'tag> {
     pub name: Ident,
     pub value: Option<ExpressionId<'tag>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct AttributeNode<'ast, T: Clone> {
     pub attributes: Attributes<'ast>,
     pub source: Span,
     pub contents: T,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TopNode<'tag> {
     Module(ModuleId<'tag>),
     Nature(NatureId<'tag>),
@@ -226,7 +226,7 @@ pub enum NumericalParameterRangeExclude<'ast> {
     Range(Range<NumericalParameterRangeBound<'ast>>),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Port {
     pub name: Ident,
     pub input: bool,
@@ -249,7 +249,7 @@ impl Default for Port {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BranchDeclaration {
     pub name: Ident,
     pub branch: Branch,
@@ -261,7 +261,7 @@ pub enum Branch {
     Nets(HierarchicalId, HierarchicalId),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ModuleItem<'ast> {
     AnalogStmt(StatementId<'ast>),
     GenerateStatement, //TODO
@@ -272,7 +272,7 @@ pub struct Discipline {
     pub flow_nature: Ident,
     pub potential_nature: Ident,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Function<'ast> {
     pub name: Ident,
     pub args: Vec<Ident>,
@@ -285,7 +285,7 @@ pub struct Net {
     pub signed: bool,
     pub net_type: NetType,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Variable<'ast> {
     pub name: Ident,
     pub variable_type: VariableType,

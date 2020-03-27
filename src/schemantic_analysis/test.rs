@@ -12,7 +12,7 @@ use crate::schemantic_analysis::run_semantic;
 use crate::util::SafeRangeCreation;
 
 #[test]
-pub fn diode() -> Result<(), ()> {
+pub fn schemantic() -> Result<(), ()> {
     // loop {
     let source_map_allocator = Bump::new();
     mk_ast!(ast);

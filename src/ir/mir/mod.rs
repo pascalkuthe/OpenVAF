@@ -156,7 +156,7 @@ pub enum NumericalParameterRangeExclude<T> {
     Value(T),
     Range(Range<NumericalParameterRangeBound<T>>),
 }
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum ExpressionId<'mir> {
     Real(RealExpressionId<'mir>),
     Integer(IntegerExpressionId<'mir>),
@@ -171,7 +171,7 @@ impl<'mir> ExpressionId<'mir> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum IntegerExpression<'mir> {
     BinaryOperator(
         IntegerExpressionId<'mir>,
@@ -258,7 +258,7 @@ pub enum IntegerUnaryOperator {
     ExplicitPositive,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RealExpression<'mir> {
     BinaryOperator(
         RealExpressionId<'mir>,
@@ -293,7 +293,7 @@ pub enum RealBinaryOperator {
     Modulus,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum RealBuiltInFunctionCall<'mir> {
     Pow(RealExpressionId<'mir>, RealExpressionId<'mir>),
     Sqrt(RealExpressionId<'mir>),
