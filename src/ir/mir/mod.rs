@@ -1,6 +1,7 @@
 use std::ops::Range;
 use std::ptr::NonNull;
 
+use intrusive_collections::__core::cmp::Ordering;
 use intrusive_collections::__core::convert::TryFrom;
 
 use crate::ast::{
@@ -146,10 +147,18 @@ pub enum ParameterType {
     ),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericalParameterRangeBound<T> {
     pub inclusive: bool,
     pub bound: T,
+}
+impl<T: PartialOrd> PartialOrd for NumericalParameterRangeBound<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self.bound.partial_cmp(&other.bound) {
+            Some(Ordering::Equal) if self.inclusive != other.inclusive => None,
+            order => order,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub enum NumericalParameterRangeExclude<T> {

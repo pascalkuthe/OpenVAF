@@ -19,6 +19,8 @@ pub enum Type<'hir> {
     ExpectedIntegerVariable(VariableId<'hir>),
     ExpectedNumericParameter(ParameterId<'hir>),
     ParameterDefinedAfterConstantReference(ParameterId<'hir>),
+    InvalidParameterBound,
+    ParameterExcludeNotPartOfRange,
 }
 impl<'tag> Error<'tag> {
     pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
@@ -294,6 +296,56 @@ impl<'tag> Error<'tag> {
                         fold: false,
                     }
                     ],
+                }
+            }
+            Type::InvalidParameterBound => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(
+                            "Invalid parameter range; Lower bound must be smaller than upper bound"
+                                .to_string(),
+                        ),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Lower bound must but smaller than upper bound".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+            Type::ParameterExcludeNotPartOfRange => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(
+                            "Invalid parameter bound. Can not exclude a value that is not part of the bound to begin with"
+                                .to_string(),
+                        ),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "This calue can't be excluded".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
                 }
             }
         };

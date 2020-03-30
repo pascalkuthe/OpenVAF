@@ -58,7 +58,7 @@ impl From<Value> for f64 {
 }
 
 impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
-    pub fn eval_numerical_range_bound<T: From<Value>>(
+    pub fn eval_numerical_range_bound<T: From<Value> + PartialOrd>(
         &mut self,
         current_parameter: ParameterId<'tag>,
         bound: &Range<ast::NumericalParameterRangeBound<'tag>>,
@@ -66,16 +66,29 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         let start = self.eval_constant_parameter_expression(current_parameter, bound.start.bound);
         let end = self.eval_constant_parameter_expression(current_parameter, bound.end.bound);
         match (start, end) {
-            (Ok(start), Ok(end)) => Some(Range {
-                start: NumericalParameterRangeBound {
-                    inclusive: bound.start.inclusive,
-                    bound: start.into(),
-                },
-                end: NumericalParameterRangeBound {
-                    inclusive: bound.end.inclusive,
-                    bound: end.into(),
-                },
-            }),
+            (Ok(start), Ok(end)) => {
+                let res = Range {
+                    start: NumericalParameterRangeBound {
+                        inclusive: bound.start.inclusive,
+                        bound: start.into(),
+                    },
+                    end: NumericalParameterRangeBound {
+                        inclusive: bound.end.inclusive,
+                        bound: end.into(),
+                    },
+                };
+                if res.start.bound > res.end.bound {
+                    self.errors.push(Error {
+                        error_type: Type::InvalidParameterBound,
+                        source: self.hir[bound.start.bound]
+                            .source
+                            .extend(self.hir[bound.end.bound].source),
+                    });
+                    None
+                } else {
+                    Some(res)
+                }
+            }
             (res1, res2) => {
                 if let Err(error) = res1 {
                     self.errors.push(error);
@@ -87,7 +100,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
         }
     }
-    pub fn eval_parameter_type<T: From<Value> + Default>(
+    pub fn eval_parameter_type<T: From<Value> + Default + Clone + PartialOrd>(
         &mut self,
         parameter: ParameterId<'tag>,
         included_ranges: &[Range<ast::NumericalParameterRangeBound<'tag>>],
@@ -100,19 +113,58 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         ),
         (),
     > {
-        let included_ranges = included_ranges
+        let included_ranges: Vec<Range<NumericalParameterRangeBound<T>>> = included_ranges
             .iter()
             .filter_map(|bound| self.eval_numerical_range_bound(parameter, bound))
             .collect();
         let excluded_ranges = excluded_ranges
             .iter()
             .filter_map(|exclude| match exclude {
-                ast::NumericalParameterRangeExclude::Range(range) => self
-                    .eval_numerical_range_bound(parameter, range)
-                    .map(NumericalParameterRangeExclude::Range),
+                ast::NumericalParameterRangeExclude::Range(range_expr) => {
+                    let res: Option<Range<NumericalParameterRangeBound<T>>> =
+                        self.eval_numerical_range_bound(parameter, range_expr);
+                    if let Some(range) = res {
+                        let mut found_start = false;
+                        let mut found_end = false;
+                        for included_range in included_ranges.iter() {
+                            found_start = included_range.contains(&range.start);
+                            found_end = included_range.contains(&range.end);
+                        }
+                        if found_start && found_end {
+                            Some(NumericalParameterRangeExclude::Range(range))
+                        } else {
+                            if !found_start {
+                                self.errors.push(Error {
+                                    error_type: Type::ParameterExcludeNotPartOfRange,
+                                    source: self.hir[range_expr.start.bound].source,
+                                });
+                            }
+                            if !found_end {
+                                self.errors.push(Error {
+                                    error_type: Type::ParameterExcludeNotPartOfRange,
+                                    source: self.hir[range_expr.end.bound].source,
+                                });
+                            }
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
                 ast::NumericalParameterRangeExclude::Value(expr) => {
                     match self.eval_constant_parameter_expression(parameter, *expr) {
-                        Ok(res) => Some(NumericalParameterRangeExclude::Value(res.into())),
+                        Ok(res) => {
+                            let res: T = res.into();
+                            let bound = NumericalParameterRangeBound {
+                                inclusive: true,
+                                bound: res.clone(),
+                            };
+                            let mut found = false;
+                            for range in included_ranges.iter() {
+                                found = range.contains(&bound)
+                            }
+                            Some(NumericalParameterRangeExclude::Value(res))
+                        }
                         Err(error) => {
                             self.errors.push(error);
                             None

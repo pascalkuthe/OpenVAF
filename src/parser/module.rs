@@ -23,9 +23,7 @@ use crate::ir::ast::{
 use crate::ir::ExpressionId;
 use crate::parser::error;
 use crate::parser::error::Expected::ParameterRange;
-use crate::parser::error::Type::{
-    ParameterRangeUnboundedInIllegalDirection, UnexpectedToken, UnexpectedTokens, Unsupported,
-};
+use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens, Unsupported};
 use crate::parser::error::Unsupported::StringParameters;
 use crate::parser::error::{Expected, Result, Type};
 use crate::parser::lexer::Token;
@@ -340,11 +338,11 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         inclusive: bool,
     ) -> Result<Range<NumericalParameterRangeBound<'ast>>> {
         let start = NumericalParameterRangeBound {
-            bound: self.parse_parameter_range_expression(true)?,
+            bound: self.parse_parameter_range_expression()?,
             inclusive,
         };
         self.expect(Token::Colon)?;
-        let end = self.parse_parameter_range_expression(false)?;
+        let end = self.parse_parameter_range_expression()?;
         let end_inclusive = match self.next()? {
             (Token::SquareBracketClose, _) => true,
             (Token::ParenClose, _) => false,
@@ -362,39 +360,22 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
             inclusive: end_inclusive,
         })
     }
-    fn parse_parameter_range_expression(
-        &mut self,
-        lower_bound: bool,
-    ) -> Result<ExpressionId<'ast>> {
+    fn parse_parameter_range_expression(&mut self) -> Result<ExpressionId<'ast>> {
         let (token, source) = self.look_ahead()?;
         match token {
             Token::Infinity => {
                 self.lookahead.take();
-                if !lower_bound {
-                    Ok(self.ast.push(Node {
-                        contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
-                        source: self.preprocessor.span(),
-                    }))
-                } else {
-                    Err(Error {
-                        error_type: ParameterRangeUnboundedInIllegalDirection,
-                        source,
-                    })
-                }
+                Ok(self.ast.push(Node {
+                    contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
+                    source: self.preprocessor.span(),
+                }))
             }
             Token::MinusInfinity => {
                 self.lookahead.take();
-                if lower_bound {
-                    Ok(self.ast.push(Node {
-                        contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
-                        source: self.preprocessor.span(),
-                    }))
-                } else {
-                    Err(Error {
-                        error_type: ParameterRangeUnboundedInIllegalDirection,
-                        source,
-                    })
-                }
+                Ok(self.ast.push(Node {
+                    contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
+                    source: self.preprocessor.span(),
+                }))
             }
             _ => Ok(self.parse_expression_id()?),
         }
