@@ -293,7 +293,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     match path_str.as_str() {
                         "constants.va" | "constants.vams" | "constants.v" => {
                             let mut path = PathBuf::from(
-                                std::env::var("VAMS_STD")
+                                std::env::var_os("VAMS_STD")
                                     .expect("VAMS_STD enviorment variable not set"),
                             );
                             path.push("constants.va");
@@ -301,7 +301,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                         }
                         "disciplines.va" | "disciplines.vams" | "disciplines.v" => {
                             let mut path = PathBuf::from(
-                                std::env::var("VAMS_STD")
+                                std::env::var_os("VAMS_STD")
                                     .expect("VAMS_STD enviorment variable not set"),
                             );
                             path.push("disciplines.va");

@@ -14,3 +14,4 @@ module Diode(inout electrical A,inout electrical C);
         I(d) <+ I_d;
    end
 endmodule
+

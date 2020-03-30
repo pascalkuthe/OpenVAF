@@ -9,6 +9,7 @@
 use annotate_snippets::display_list::DisplayList;
 use annotate_snippets::formatter::DisplayListFormatter;
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
+use log::error;
 
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
@@ -338,7 +339,7 @@ impl Error {
         };
         let display_list = DisplayList::from(snippet);
         let formatter = DisplayListFormatter::new(true, false);
-        println!("{}", formatter.format(&display_list));
+        error!("{}", formatter.format(&display_list));
     }
 }
 impl Warning {
@@ -402,7 +403,7 @@ impl Warning {
         };
         let display_list = DisplayList::from(snippet);
         let formatter = DisplayListFormatter::new(true, false);
-        println!("{}", formatter.format(&display_list));
+        error!("{}", formatter.format(&display_list));
     }
 }
 

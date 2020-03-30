@@ -1049,7 +1049,7 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                             ..range.start
                         },
                         end: NumericalParameterRangeBound {
-                            bound: self.fold_expression(range.start.bound)?,
+                            bound: self.fold_expression(range.end.bound)?,
                             ..range.end
                         },
                     })
