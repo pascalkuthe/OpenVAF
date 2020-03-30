@@ -35,8 +35,7 @@ pub fn module() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )
-    .1?;
+    )?;
     let range: SafeRange<ModuleId> = ast.full_range();
     let modules = &ast[range];
     let first_module = &modules[0].contents;
@@ -139,8 +138,7 @@ pub fn branch() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )
-    .1?;
+    )?;
     let range: SafeRange<ModuleId> = ast.full_range();
     let module = &ast[range][0].contents;
     assert_eq!(module.name.as_str(), "test");
@@ -250,8 +248,7 @@ pub fn variable_decl() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )
-    .1?;
+    )?;
     let symbol_table = get_module_symbol_table(&ast.top_symbols, &ast, "test");
     assert_variable_decl(&symbol_table, &ast, "x", REAL);
     assert_variable_decl(&symbol_table, &ast, "y", INTEGER);
@@ -270,8 +267,7 @@ pub fn net_decl() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )
-    .1?;
+    )?;
     let range: SafeRange<ModuleId> = ast.full_range();
     let module = &ast[range][0].contents;
     let symbol_table = &module.symbol_table;
@@ -292,8 +288,7 @@ pub fn linear() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )
-    .1?;
+    )?;
 
     let range: SafeRange<ModuleId> = ast.full_range();
     let module = &ast[range][0].contents;

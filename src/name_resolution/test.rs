@@ -13,13 +13,12 @@ use crate::util::SafeRangeCreation;
 pub fn diode() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let (source_map, res) = parse_and_print_errors(
+    let source_map = parse_and_print_errors(
         Path::new("tests/diode.va"),
         &source_map_allocator,
         &mut ast,
         true,
-    );
-    res?;
+    )?;
     insert_electrical_natures_and_disciplines(&mut ast);
     let hir = resolve_and_print(ast, source_map, true)?;
     Ok(())
@@ -40,13 +39,12 @@ pub fn bjt() -> Result<(), ()> {
 pub fn linear() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let (source_map, res) = parse_and_print_errors(
+    let source_map = parse_and_print_errors(
         Path::new("tests/linear.va"),
         &source_map_allocator,
         &mut ast,
         true,
-    );
-    res?;
+    )?;
     insert_electrical_natures_and_disciplines(&mut ast);
 
     let hir = resolve_and_print(ast, source_map, true)?;

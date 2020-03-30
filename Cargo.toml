@@ -16,6 +16,7 @@ copyless = "0.1.4"
 bitflags = "1.2.1"
 pretty = "0.9.0"
 float-cmp = "0.6.0"
+ansi_term = "0.12.1"
 
 
 

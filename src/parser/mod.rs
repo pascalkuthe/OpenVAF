@@ -10,7 +10,9 @@
 use std::path::Path;
 
 use ahash::AHashMap;
+use ansi_term::Color::*;
 use bumpalo::Bump;
+use log::error;
 
 pub use error::Error;
 pub use error::Result;
@@ -269,30 +271,33 @@ pub fn parse<'source_map, 'ast, 'astref>(
     parser.run();
     Ok((parser.preprocessor.skip_rest(), parser.non_critical_errors))
 }
+
 pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
     ast: &'astref mut Ast<'ast>,
     translate_lines: bool,
-) -> (
-    &'source_map SourceMap<'source_map>,
-    std::result::Result<(), ()>,
-) {
-    let (source_map, mut errors) =
-        parse(main_file, source_map_allocator, ast).unwrap_or_else(|e| {
-            panic!(
-                "Error while opening {}: {}!",
-                main_file.to_str().unwrap(),
-                e
-            )
-        });
-    if errors.is_empty() {
-        (source_map, Ok(()))
-    } else {
-        errors
-            .drain(..)
-            .for_each(|err| err.print(&source_map, translate_lines));
-        (source_map, Err(()))
+) -> std::result::Result<&'source_map SourceMap<'source_map>, ()> {
+    match parse(main_file, source_map_allocator, ast) {
+        Ok((source_map, errors)) if errors.is_empty() => Ok(source_map),
+        Ok((source_map, mut errors)) => {
+            errors
+                .drain(..)
+                .for_each(|err| err.print(&source_map, translate_lines));
+            Err(())
+        }
+        Err(error) => {
+            error!(
+                "{} {}",
+                Red.bold().paint("error"),
+                Fixed(253).bold().paint(format!(
+                    ": failed to open {}: {}!",
+                    main_file.to_str().unwrap(),
+                    error
+                ))
+            );
+            Err(())
+        }
     }
 }
 pub fn insert_electrical_natures_and_disciplines(ast: &mut Ast) {
