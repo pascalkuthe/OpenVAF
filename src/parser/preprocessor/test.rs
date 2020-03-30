@@ -92,31 +92,7 @@ pub fn macros() -> std::result::Result<(), String> {
         err.print(&source_map, true);
         ""
     })?;
-    //    let (string, lines) = source_map.resolve_span(Span::new(start, end));
-    //    println!("{} at {}", lines, string);
-    //    let (string, lines, range) = source_map.resolve_span_within_line(span);
-    //    let snippet = Snippet {
-    //        title: Some(Annotation {
-    //            id: None,
-    //            label: Some("This is a test".to_string()),
-    //            annotation_type: AnnotationType::Warning,
-    //        }),
-    //        footer,
-    //        slices: vec![Slice {
-    //            source: string,
-    //            line_start: lines as usize,
-    //            origin: Some("macros.va".to_string()),
-    //            annotations: vec![SourceAnnotation {
-    //                range: (range.start, range.end),
-    //                label: "here".to_string(),
-    //                annotation_type: AnnotationType::Warning,
-    //            }],
-    //            fold: false,
-    //        }],
-    //    };
-    //    let dl = DisplayList::from(snippet);
-    //    let dlf = DisplayListFormatter::new(true, false);
-    //    println!("{}", dlf.format(&dl));
+
     Ok(())
 }
 

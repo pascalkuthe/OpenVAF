@@ -1,6 +1,7 @@
 use annotate_snippets::display_list::DisplayList;
 use annotate_snippets::formatter::DisplayListFormatter;
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
+use log::error;
 
 use crate::ir::{ParameterId, VariableId};
 use crate::parser::error::translate_to_inner_snippet_range;
@@ -298,6 +299,6 @@ impl<'tag> Error<'tag> {
         };
         let display_list = DisplayList::from(snippet);
         let formatter = DisplayListFormatter::new(true, false);
-        println!("{}", formatter.format(&display_list));
+        error!("{}", formatter.format(&display_list));
     }
 }

@@ -1,11 +1,10 @@
 [package]
 name = "VARF"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["DSOM"]
 edition = "2018"
-[profile.release]
-debug = true
-opt-level = 3
+
+
 [dependencies]
 log="*"
 intrusive-collections = "0.8.5"

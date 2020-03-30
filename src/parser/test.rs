@@ -325,27 +325,3 @@ pub fn linear() -> Result<(), ()> {
     assert_variable_decl(symbol_table, &ast, "C", REAL);
     Ok(())
 }
-/*
-#[test]
-pub fn print() -> Result<(), ()> {
-    let source_map_allocator = Bump::new();
-    mk_ast!(ast);
-    parse_and_print_errors(
-        Path::new("tests/linear.va"),
-        &source_map_allocator,
-        &mut ast,
-    )
-    .1?;
-    let mut printer_arena = Arena::new();
-    let mut printer = AstPrinter {
-        ast: &ast,
-        doc_allocator: &printer_arena,
-    };
-    let res = printer.visit_hierarchical_reference(
-        &HierarchicalId::from(vec![Ident::from_str("module"), Ident::from_str("branch")]),
-        &ast,
-    );
-    println!("{}", res.1.pretty(80));
-    Ok(())
-}
-*/
