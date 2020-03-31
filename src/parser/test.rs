@@ -28,6 +28,11 @@ use crate::Ast;
 const PARSE_UNIT_DIRECTORY: &'static str = "tests/parseunits/";
 #[test]
 pub fn module() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     parse_and_print_errors(
@@ -131,6 +136,11 @@ pub fn module() -> Result<(), ()> {
 
 #[test]
 pub fn branch() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     parse_and_print_errors(
@@ -236,11 +246,16 @@ fn get_module_symbol_table<'ast, 'astref>(
     if let Some(SymbolDeclaration::Module(module)) = symbol_table.get(&Symbol::intern(name)) {
         &ast[*module].contents.symbol_table
     } else {
-        panic!("Module {} nout found", name)
+        panic!("Module {} not found", name)
     }
 }
 #[test]
 pub fn variable_decl() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     parse_and_print_errors(
@@ -260,6 +275,11 @@ pub fn variable_decl() -> Result<(), ()> {
 
 #[test]
 pub fn net_decl() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     parse_and_print_errors(
@@ -281,6 +301,11 @@ pub fn net_decl() -> Result<(), ()> {
 
 #[test]
 pub fn linear() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     parse_and_print_errors(

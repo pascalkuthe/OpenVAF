@@ -39,18 +39,18 @@ impl<'ast> SymbolDeclaration<'ast> {
             Self::Parameter(id) => ast[id].source,
         }
     }
-    pub fn name<'lt>(self, ast: &'lt Ast<'ast>) -> SymbolStr {
+    pub fn name<'lt>(self, ast: &'lt Ast<'ast>) -> Symbol {
         match self {
-            Self::Module(id) => ast[id].contents.name.name.as_str(),
-            Self::Block(id) => ast[id].contents.scope.as_ref().unwrap().name.name.as_str(),
-            Self::Variable(id) => ast[id].contents.name.name.as_str(),
-            Self::Net(id) => ast[id].contents.name.name.as_str(),
-            Self::Branch(id) => ast[id].contents.name.name.as_str(),
-            Self::Port(id) => ast[id].contents.name.name.as_str(),
-            Self::Function(id) => ast[id].contents.name.name.as_str(),
-            Self::Discipline(id) => ast[id].contents.name.name.as_str(),
-            Self::Nature(id) => ast[id].contents.name.name.as_str(),
-            Self::Parameter(id) => ast[id].contents.name.name.as_str(),
+            Self::Module(id) => ast[id].contents.name.name,
+            Self::Block(id) => ast[id].contents.scope.as_ref().unwrap().name.name,
+            Self::Variable(id) => ast[id].contents.name.name,
+            Self::Net(id) => ast[id].contents.name.name,
+            Self::Branch(id) => ast[id].contents.name.name,
+            Self::Port(id) => ast[id].contents.name.name,
+            Self::Function(id) => ast[id].contents.name.name,
+            Self::Discipline(id) => ast[id].contents.name.name,
+            Self::Nature(id) => ast[id].contents.name.name,
+            Self::Parameter(id) => ast[id].contents.name.name,
         }
     }
     pub fn mock(self) -> MockSymbolDeclaration {

@@ -9,6 +9,9 @@
  */
 use std::fmt::{Debug, Formatter};
 
+use ansi_term::Color::*;
+use log::*;
+
 pub type Index = u32;
 pub type IndexOffset = i64;
 pub type Length = u16;
@@ -38,7 +41,15 @@ impl Span {
                 data: SpanData::Length(len as Length),
             }
         } else {
-            unimplemented!("Spans longer than {} aren't supported yet", std::u16::MAX)
+            error!(
+                "{}{}",
+                Red.bold().paint("error"),
+                Fixed(253).bold().paint(format!(
+                    ": Spans longer than {} aren't supported yet",
+                    std::u16::MAX
+                ))
+            );
+            unimplemented!()
         }
     }
     pub const fn new_short_span(start: Index, len: u16) -> Self {
@@ -50,7 +61,15 @@ impl Span {
     pub fn get_start(self) -> Index {
         match self.data {
             SpanData::LargeSpan => {
-                unimplemented!("Spans longer than {} aren't supported yet", std::u16::MAX)
+                error!(
+                    "{}{}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        ": Spans longer than {} aren't supported yet",
+                        std::u16::MAX
+                    ))
+                );
+                unimplemented!()
             }
             SpanData::Length(_) => self.start_or_large_span_index,
         }
@@ -58,7 +77,15 @@ impl Span {
     pub fn get_end(self) -> Index {
         match self.data {
             SpanData::LargeSpan => {
-                unimplemented!("Spans longer than {} aren't supported yet", std::u16::MAX)
+                error!(
+                    "{}{}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        ": Spans longer than {} aren't supported yet",
+                        std::u16::MAX
+                    ))
+                );
+                unimplemented!()
             }
             SpanData::Length(length) => self.start_or_large_span_index + (length as u32),
         }
@@ -66,7 +93,15 @@ impl Span {
     pub fn get_len(self) -> Index {
         match self.data {
             SpanData::LargeSpan => {
-                unimplemented!("Spans longer than {} aren't supported yet", std::u16::MAX)
+                error!(
+                    "{}{}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        ": Spans longer than {} aren't supported yet",
+                        std::u16::MAX
+                    ))
+                );
+                unimplemented!()
             }
             SpanData::Length(length) => length as Index,
         }
@@ -74,7 +109,15 @@ impl Span {
     pub fn offset(mut self, offset: Index) -> Self {
         match self.data {
             SpanData::LargeSpan => {
-                unimplemented!("Spans longer than {} aren't supported yet", std::u16::MAX)
+                error!(
+                    "{}{}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        ": Spans longer than {} aren't supported yet",
+                        std::u16::MAX
+                    ))
+                );
+                unimplemented!()
             }
             SpanData::Length(_) => self.start_or_large_span_index += offset,
         }
@@ -90,7 +133,15 @@ impl Span {
     pub fn negative_offset(mut self, offset: Index) -> Self {
         match self.data {
             SpanData::LargeSpan => {
-                unimplemented!("Spans longer than {} aren't supported yet", std::u16::MAX)
+                error!(
+                    "{}{}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        ": Spans longer than {} aren't supported yet",
+                        std::u16::MAX
+                    ))
+                );
+                unimplemented!()
             }
             SpanData::Length(_) => self.start_or_large_span_index -= offset,
         }

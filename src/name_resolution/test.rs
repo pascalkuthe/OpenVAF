@@ -11,6 +11,11 @@ use crate::util::SafeRangeCreation;
 
 #[test]
 pub fn diode() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     let source_map = parse_and_print_errors(
@@ -37,6 +42,11 @@ pub fn bjt() -> Result<(), ()> {
 
 #[test]
 pub fn linear() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     let source_map = parse_and_print_errors(

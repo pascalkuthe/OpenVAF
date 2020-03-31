@@ -23,7 +23,8 @@ use crate::ir::{
     ParameterId, PortId, StatementId, UnsafeWrite, VariableId, Write,
 };
 use crate::name_resolution::error::Type::{NotAScope, UnexpectedTokenInBranchAccess};
-use crate::name_resolution::error::{Error, NonConstantExpression, Type};
+use crate::name_resolution::error::{Error, NetInfo, NonConstantExpression, Type};
+use crate::parser::error::Unsupported;
 use crate::symbol::keywords;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
@@ -131,8 +132,16 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                     {
                         self.errors.push(Error {
                             error_type: Type::DisciplineMismatch(
-                                self.hir[first_net].contents.discipline,
-                                self.hir[second_net].contents.discipline,
+                                NetInfo {
+                                    discipline: self.hir[first_net].contents.discipline,
+                                    name: self.hir[first_net].contents.name.name,
+                                    declaration: self.hir[first_net].source,
+                                },
+                                NetInfo {
+                                    discipline: self.hir[second_net].contents.discipline,
+                                    name: self.hir[second_net].contents.name.name,
+                                    declaration: self.hir[second_net].source,
+                                },
                             ),
                             source: net1.span().extend(net2.span()),
                         });
@@ -247,7 +256,13 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
     }
     fn resolve_discipline(&mut self, ident: &Ident) -> Result<DisciplineId<'tag>> {
         match ident.name {
-            keywords::EMPTY_SYMBOL => todo!("Implicit Disciplines are currently not supported"),
+            keywords::EMPTY_SYMBOL => {
+                self.errors.push(Error {
+                    error_type: Type::Unsupported(Unsupported::DefaultDiscipline),
+                    source: ident.span,
+                });
+                todo!("Implicit Disciplines are currently not supported")
+            }
             _ => {
                 resolve!(self; ident as Discipline(id) => {return Ok(id)});
                 Err(())
@@ -283,9 +298,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                         &scope.symbols
                     } else {
                         return Err(Error {
-                            error_type: NotAScope {
-                                declaration: self.ast[block_id].source,
-                            },
+                            error_type: Type::NotFound(ident.name),
                             source: last_span,
                         });
                     }
@@ -294,6 +307,7 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                     return Err(Error {
                         error_type: NotAScope {
                             declaration: found.span(self.ast),
+                            name: found.name(self.ast),
                         },
                         source: last_span,
                     });
@@ -448,8 +462,16 @@ impl<'tag, 'astref> AstToHirFolder<'tag, 'astref> {
                     {
                         self.errors.push(Error {
                             error_type: Type::DisciplineMismatch(
-                                self.hir[first_net].contents.discipline,
-                                self.hir[second_net].contents.discipline,
+                                NetInfo {
+                                    discipline: self.hir[first_net].contents.discipline,
+                                    name: self.hir[first_net].contents.name.name,
+                                    declaration: self.hir[first_net].source,
+                                },
+                                NetInfo {
+                                    discipline: self.hir[second_net].contents.discipline,
+                                    name: self.hir[second_net].contents.name.name,
+                                    declaration: self.hir[second_net].source,
+                                },
                             ),
                             source: first_net_ident.span().extend(second_net_ident.span()),
                         });
@@ -1097,7 +1119,7 @@ impl<'tag, 'astref> Visitor<'tag> for AstToHirFolder<'tag, 'astref> {
                 )
             }
         } else {
-            unimplemented!()
+            unimplemented!("String Parameters")
         }
     }
 

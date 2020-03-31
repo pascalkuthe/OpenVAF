@@ -293,7 +293,7 @@ pub fn walk_parameter<'ast, T, V: Visitor<'ast, T>>(
             }
         }
     } else {
-        unimplemented!()
+        unimplemented!("String Parameters")
     }
 }
 pub fn walk_builtin_function_call<'ast, T, V: Visitor<'ast, T>>(

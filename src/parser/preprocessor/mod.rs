@@ -14,6 +14,7 @@ use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::vec::IntoIter;
 
+use ansi_term::Color::*;
 use bumpalo::Bump;
 use indexmap::map::IndexMap;
 use log::*;
@@ -150,7 +151,14 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
     }
     pub fn done(self) -> &'source_map SourceMap<'source_map> {
         if self.current_token != Token::EOF {
-            panic!("preprocess done called before reaching EOF");
+            error!(
+                "{}{}",
+                Red.bold().paint("error"),
+                Fixed(253)
+                    .bold()
+                    .paint(": preprocessor.done() was called before EOF file reached ")
+            );
+            panic!();
         }
         self.source_map_builder.done()
     }
