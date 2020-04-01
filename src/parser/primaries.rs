@@ -52,6 +52,5 @@ pub fn parse_real_value(slice: &str, literal_type: RealLiteralType) -> f64 {
     }
 }
 pub fn parse_unsigned_int_value(slice: &str) -> u32 {
-    println!("{}", slice);
     slice.replace("_", "").parse::<u32>().unwrap()
 }
