@@ -27,6 +27,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             hir: &*hir,
         }
     }
+
     pub fn fold(mut self) -> Result<Box<Mir<'tag>>, Vec<Error<'tag>>> {
         let parameters: SafeRange<ParameterId<'tag>> = self.hir.full_range();
         for parameter in parameters {
@@ -159,6 +160,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             Err(self.errors)
         }
     }
+
     fn fold_block(&mut self, statements: Block<'tag>) {
         for statement in statements {
             let res = match self.hir[statement] {

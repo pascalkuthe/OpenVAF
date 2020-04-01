@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-use crate::ast::{BinaryOperator, BuiltInFunctionCall, Node, VariableType};
+use crate::ast::{BinaryOperator, BuiltInFunctionCall, Node};
 use crate::hir::Primary;
 use crate::ir::{hir, IntegerExpressionId, RealExpressionId};
 use crate::mir::*;

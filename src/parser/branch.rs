@@ -14,7 +14,7 @@ use crate::parser::Parser;
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::Push;
 
-impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_branch_declaration(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
         self.expect(Token::ParenOpen)?;

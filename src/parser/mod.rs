@@ -44,17 +44,17 @@ mod net_declarations;
 mod primaries;
 mod variables;
 
-pub struct Parser<'lt, 'ast, 'astref, 'source_map> {
+pub struct Parser<'lt, 'ast, 'source_map> {
     pub preprocessor: Preprocessor<'lt, 'source_map>,
     pub scope_stack: Vec<SymbolTable<'ast>>,
     lookahead: Option<Result<(Token, Span)>>,
-    pub ast: &'astref mut Ast<'ast>,
+    pub ast: &'lt mut Ast<'ast>,
     pub non_critical_errors: Vec<Error>,
 }
-impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn new(
         preprocessor: Preprocessor<'lt, 'source_map>,
-        ast: &'astref mut Ast<'ast>,
+        ast: &'lt mut Ast<'ast>,
         errors: Vec<Error>,
     ) -> Self {
         Self {
@@ -252,10 +252,10 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
         self.scope_stack.last().unwrap_or(&self.ast.top_symbols)
     }
 }
-pub fn parse<'source_map, 'ast, 'astref>(
+pub fn parse<'source_map, 'ast, 'lt>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
-    ast: &'astref mut Ast<'ast>,
+    ast: &'lt mut Ast<'ast>,
 ) -> std::io::Result<(&'source_map SourceMap<'source_map>, Vec<Error>)> {
     let allocator = Bump::new();
     let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;
@@ -272,10 +272,10 @@ pub fn parse<'source_map, 'ast, 'astref>(
     Ok((parser.preprocessor.skip_rest(), parser.non_critical_errors))
 }
 
-pub fn parse_and_print_errors<'source_map, 'ast, 'astref>(
+pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
-    ast: &'astref mut Ast<'ast>,
+    ast: &'lt mut Ast<'ast>,
     translate_lines: bool,
 ) -> std::result::Result<&'source_map SourceMap<'source_map>, ()> {
     match parse(main_file, source_map_allocator, ast) {

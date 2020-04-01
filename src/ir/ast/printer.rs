@@ -14,13 +14,13 @@ use crate::ir::ast::{
 use crate::ir::ast::visitor::walk_statement;
 use crate::symbol::Ident;
 
-pub struct AstPrinter<'lt, 'astref, 'ast> {
-    pub ast: &'astref Ast<'ast>,
+pub struct AstPrinter<'lt, 'lt, 'ast> {
+    pub ast: &'lt Ast<'ast>,
     pub doc_allocator: &'lt Arena<'lt>,
     pub ident:usize,
 }
-impl<'lt, 'astref, 'ast> Visitor<'ast, DocBuilder<'lt, Arena<'lt>>>
-    for AstPrinter<'lt, 'astref, 'ast>
+impl<'lt, 'lt, 'ast> Visitor<'ast, DocBuilder<'lt, Arena<'lt>>>
+    for AstPrinter<'lt, 'lt, 'ast>
 {
     fn visit_declaration_name(
         &mut self,

@@ -554,7 +554,6 @@ impl<'tag, T> TinyArena<'tag, T> {
     /// Add an item to the arena, get an index or CapacityExceeded back.
     #[inline]
     pub unsafe fn write(&mut self, idx: Idx16<'tag>, val: MaybeUninit<T>) {
-        debug_assert!(u32::from(idx.index) < self.len);
         self.data[idx.index as usize] = val;
     }
     /// Add an item to the arena, get an index back
@@ -688,7 +687,9 @@ impl<'tag, T> NanoArena<'tag, T> {
     /// * `dst` must be valid for writes.
     ///
     /// * `dst` must be properly aligned
-    pub unsafe fn init_from<O>(dst: *mut Self, src: &NanoArena<O>) {
+    ///
+    /// * If drop is called on the first `src.len` elements of `dst` before they are initialized
+    pub unsafe fn init_from<E>(dst: *mut Self, src: &NanoArena<E>) {
         ptr::write(&mut (*dst).len, src.len);
     }
 
@@ -708,7 +709,6 @@ impl<'tag, T> NanoArena<'tag, T> {
     }
     #[inline]
     pub unsafe fn write(&mut self, idx: Idx8<'tag>, val: MaybeUninit<T>) {
-        debug_assert!(u16::from(idx.index) < self.len);
         self.data[idx.index as usize] = val;
     }
 

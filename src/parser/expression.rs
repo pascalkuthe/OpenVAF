@@ -23,7 +23,7 @@ enum BinaryOperatorOrCondition {
     Condition,
     BinaryOperator(BinaryOperator, u8),
 }
-impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
         let mut lhs = self.parse_atom()?;
         loop {

@@ -39,8 +39,8 @@ pub mod symbol;
 pub mod util;
 #[macro_use]
 pub mod ir;
+pub mod ast_lowering;
 mod error;
-pub mod name_resolution;
 pub mod parser;
 mod schemantic_analysis;
 mod span;

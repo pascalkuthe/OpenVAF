@@ -3,7 +3,7 @@ use std::path::Path;
 use bumpalo::Bump;
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use VARF::name_resolution::resolve_and_print;
+use VARF::ast_lowering::fold_ast_to_hir_and_print_errors;
 use VARF::parser;
 use VARF::parser::insert_electrical_natures_and_disciplines;
 use VARF::{mk_ast, run_semantic};
@@ -25,7 +25,7 @@ pub fn linear() -> Result<(), ()> {
     );
     res?;
     insert_electrical_natures_and_disciplines(&mut ast);
-    let hir = resolve_and_print(ast, source_map, true)?;
+    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
     run_semantic(hir, source_map, true)?;
     Ok(())
 }

@@ -26,43 +26,43 @@ pub struct Hir<'tag> {
     //TODO unsized
     //TODO configure to use different arena sizes
     //Declarations
-    pub(super) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
+    pub(crate) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
     //    nature: NanoArena<'tag,Nature>
-    pub(super) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
-    pub(super) nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
-    pub(super) ports: NanoArena<'tag, Port<'tag>>,
-    pub(super) variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
-    pub(super) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
-    pub(super) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
-    pub(super) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline<'tag>>>,
-    pub(super) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
+    pub(crate) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
+    pub(crate) nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
+    pub(crate) ports: NanoArena<'tag, Port<'tag>>,
+    pub(crate) variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
+    pub(crate) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
+    pub(crate) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
+    pub(crate) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline<'tag>>>,
+    pub(crate) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
     //Ast Items
-    pub(super) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
-    pub(super) attributes: TinyArena<'tag, Attribute<'tag>>,
-    pub(super) statements: TinyArena<'tag, Statement<'tag>>,
+    pub(crate) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
+    pub(crate) attributes: TinyArena<'tag, Attribute<'tag>>,
+    pub(crate) statements: TinyArena<'tag, Statement<'tag>>,
 }
 ///this module contains copys of the definitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
 
 impl<'tag> Hir<'tag> {
     /// # Safety
     /// You should never call this yourself. Lower an AST created using mk_ast! instead
-    pub(crate) unsafe fn partial_initalize<'astref>(ast: &'astref mut Ast<'tag>) -> Box<Self> {
+    pub(crate) unsafe fn init<'lt>(ast: &'lt mut Ast<'tag>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
         #[allow(clippy::cast_ptr_alignment)]
         //the ptr cast below has the right alignment since we are allocation using the right layout
         let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-        TinyArena::copy_to(&mut res.as_mut().variables, &ast.variables);
-        TinyArena::copy_to(&mut res.as_mut().attributes, &ast.attributes);
-        NanoArena::init_from(&mut res.as_mut().branches, &ast.branches);
-        TinyArena::init_from(&mut res.as_mut().nets, &ast.nets);
-        NanoArena::init_from(&mut res.as_mut().ports, &ast.ports);
-        NanoArena::init_from(&mut res.as_mut().modules, &ast.modules);
-        NanoArena::init_from(&mut res.as_mut().functions, &ast.functions);
-        NanoArena::init_from(&mut res.as_mut().disciplines, &ast.disciplines);
-        NanoArena::init_from(&mut res.as_mut().natures, &ast.natures);
-        TinyArena::init_from(&mut res.as_mut().parameters, &ast.parameters);
+        TinyArena::init(&mut res.as_mut().parameters);
+        NanoArena::init(&mut res.as_mut().branches);
+        TinyArena::init(&mut res.as_mut().nets);
+        NanoArena::init(&mut res.as_mut().ports);
+        TinyArena::init(&mut res.as_mut().variables);
+        NanoArena::init(&mut res.as_mut().ports);
+        NanoArena::init(&mut res.as_mut().functions);
+        NanoArena::init(&mut res.as_mut().disciplines);
+        NanoArena::init(&mut res.as_mut().natures);
         TinyArena::init(&mut res.as_mut().expressions);
+        TinyArena::init(&mut res.as_mut().attributes);
         TinyArena::init(&mut res.as_mut().statements);
         Box::from_raw(res.as_ptr())
     }
@@ -100,6 +100,15 @@ impl<'tag> Write<PortId<'tag>> for Hir<'tag> {
     }
 }
 impl_id_type!(VariableId in Hir::variables ->  AttributeNode<'tag,Variable<'tag>>);
+impl<'tag> Write<VariableId<'tag>> for Hir<'tag> {
+    type Data = AttributeNode<'tag, Variable<'tag>>;
+    fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
+        unsafe {
+            self.variables
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
 impl_id_type!(ModuleId in Hir::modules -> AttributeNode<'tag,Module<'tag>>);
 impl<'tag> Write<ModuleId<'tag>> for Hir<'tag> {
     type Data = AttributeNode<'tag, Module<'tag>>;

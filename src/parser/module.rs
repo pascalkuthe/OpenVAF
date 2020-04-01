@@ -32,7 +32,7 @@ use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::util::{Push, SafeRangeCreation};
 
-impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
     pub(super) fn parse_module(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
@@ -78,6 +78,8 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
 
         self.expect(Token::Semicolon)?;
         let mut module_items = Vec::with_capacity(16);
+        let variable_start = self.ast.empty_range_from_end();
+        let branch_start = self.ast.empty_range_from_end();
         loop {
             let attributes = self.parse_attributes()?;
             let (token, span) = self.look_ahead()?;
@@ -131,6 +133,8 @@ impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
                 name,
                 port_list: self.ast.extend_range_to_end(port_list),
                 parameter_list: self.ast.extend_range_to_end(parameter_start),
+                variables: self.ast.extend_range_to_end(variable_start),
+                branches: self.ast.extend_range_to_end(branch_start),
                 symbol_table: self.scope_stack.pop().unwrap(),
                 children: module_items,
             },

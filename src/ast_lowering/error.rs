@@ -8,7 +8,6 @@ use log::error;
 
 use crate::ir::DisciplineId;
 use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};
-use crate::span::Index;
 use crate::symbol::Symbol;
 use crate::symbol_table::SymbolDeclaration;
 use crate::{parser, Ast, SourceMap, Span};
@@ -34,6 +33,7 @@ pub enum Type<'tag> {
         found: SymbolDeclaration<'tag>,
     },
     UnexpectedTokenInBranchAccess,
+    EmptyBranchAccess,
     NatureNotPotentialOrFlow(Symbol, DisciplineId<'tag>),
     DisciplineMismatch(NetInfo<'tag>, NetInfo<'tag>),
     NotAllowedInConstantContext(NonConstantExpression),
@@ -344,6 +344,28 @@ impl<'tag> Error<'tag> {
                     source: self.source,
                 }
                 .print(source_map, translate_lines)
+            }
+            Type::EmptyBranchAccess => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("This refers to a nature but the brackets afterwards are empty (expected branch probe)".to_string()),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Expected a following branch probe".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
             }
         };
         let display_list = DisplayList::from(snippet);

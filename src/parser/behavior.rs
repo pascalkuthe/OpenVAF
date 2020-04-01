@@ -24,7 +24,7 @@ use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::util::Push;
 
-impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_statement(&mut self, attributes: Attributes<'ast>) -> Result<StatementId<'ast>> {
         let (token, span) = self.look_ahead()?;
         let res = match token {

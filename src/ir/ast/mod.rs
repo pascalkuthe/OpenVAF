@@ -90,20 +90,20 @@ impl<T: Clone> Node<T> {
 pub struct Ast<'tag> {
     //TODO configure to use different arena sizes
     //Declarations
-    pub(super) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
-    pub(super) nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
-    pub(super) ports: NanoArena<'tag, AttributeNode<'tag, Port>>,
-    pub(super) variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
-    pub(super) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
-    pub(super) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
-    pub(super) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
-    pub(super) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
-    pub(super) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
+    pub(crate) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
+    pub(crate) nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
+    pub(crate) ports: NanoArena<'tag, AttributeNode<'tag, Port>>,
+    pub(crate) variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
+    pub(crate) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
+    pub(crate) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
+    pub(crate) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
+    pub(crate) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
+    pub(crate) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
     //Ast Items
-    pub(super) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
-    pub(super) blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
-    pub(super) attributes: TinyArena<'tag, Attribute<'tag>>,
-    pub(super) statements: TinyArena<'tag, Statement<'tag>>,
+    pub(crate) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
+    pub(crate) blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
+    pub(crate) attributes: TinyArena<'tag, Attribute<'tag>>,
+    pub(crate) statements: TinyArena<'tag, Statement<'tag>>,
     pub top_symbols: SymbolTable<'tag>,
 }
 ///this module contains copys of the dfinitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
@@ -194,6 +194,8 @@ pub struct Module<'ast> {
     pub name: Ident,
     pub port_list: SafeRange<PortId<'ast>>,
     pub parameter_list: SafeRange<ParameterId<'ast>>,
+    pub variables: SafeRange<VariableId<'ast>>,
+    pub branches: SafeRange<BranchId<'ast>>,
     pub symbol_table: SymbolTable<'ast>,
     pub children: Vec<ModuleItem<'ast>>,
 }

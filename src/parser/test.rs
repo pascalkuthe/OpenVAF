@@ -238,11 +238,11 @@ fn assert_net_decl<'ast>(
     }
 }
 
-fn get_module_symbol_table<'ast, 'astref>(
+fn get_module_symbol_table<'ast, 'lt>(
     symbol_table: &SymbolTable<'ast>,
-    ast: &'astref Ast<'ast>,
+    ast: &'lt Ast<'ast>,
     name: &str,
-) -> &'astref SymbolTable<'ast> {
+) -> &'lt SymbolTable<'ast> {
     if let Some(SymbolDeclaration::Module(module)) = symbol_table.get(&Symbol::intern(name)) {
         &ast[*module].contents.symbol_table
     } else {

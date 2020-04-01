@@ -21,7 +21,7 @@ use crate::symbol_table::SymbolDeclaration;
 use crate::util::Push;
 use crate::Span;
 
-impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_port_declaration_list(&mut self) -> Result {
         let attributes = self.parse_attributes()?;
         let first_port = self.parse_port_declaration_base(attributes)?;

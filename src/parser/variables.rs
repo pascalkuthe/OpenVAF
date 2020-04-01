@@ -17,7 +17,7 @@ use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::Push;
 
-impl<'lt, 'ast, 'astref, 'source_map> Parser<'lt, 'ast, 'astref, 'source_map> {
+impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_variable_declaration(
         &mut self,
         variable_type: VariableType,
