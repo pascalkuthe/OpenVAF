@@ -1,3 +1,13 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 use ahash::AHashMap;
 
 use crate::ast::{AttributeNode, Node};
@@ -32,7 +42,7 @@ impl<'tag, 'lt> BranchResolver<'tag, 'lt> {
     ///
     /// * nature_name - The identifier of the nature (for example V in the case of V(X,Y))
     ///
-    /// * discipline - The id of the Discipline of a BranchAccess ( that has been resolved using [`resolve_branch_access`](VARF::ast_lowering::branch_resolution::BranchResolver::resolve_discipline_access)
+    /// * discipline - The id of the Discipline of a BranchAccess ( that has been resolved using [`resolve_branch_access`](crate::ast_lowering::branch_resolution::BranchResolver::resolve_discipline_access)
 
     pub fn resolve_discipline_access(
         &mut self,

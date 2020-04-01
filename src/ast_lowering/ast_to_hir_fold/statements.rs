@@ -1,3 +1,13 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 use std::ops::Range;
 
 use crate::ast::{
@@ -95,7 +105,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
     /// Folds a statements. StatementIds are not stable because the amount of statements may change during this fold
     /// The way that Statement Blocks are stored also changes. Instead of an Vec<StatementId> we switch to a Range of StatementIds
     /// This is possible because this fold adds Statements in the order they are executed (conditions indicate themselves and their block as a statement before&after their block)
-    /// As such this function doesn't return the new StatementId instead [`empty_range_from_end`](VARF::util::SafeRangeCreation:empty_range_from_end) and [`extend_range_to_end`](VARF::util::SafeRangeCreation:extend_range_to_end) are used to create the range of the folded block by the calle
+    /// As such this function doesn't return the new StatementId instead `empty_range_from_end` and `extend_range_to_end` are used to create the range of the folded block by the calle
     fn fold_statement(&mut self, statement: StatementId<'tag>) {
         match self.base.ast[statement] {
             ast::Statement::Block(id) => {

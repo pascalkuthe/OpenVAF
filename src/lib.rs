@@ -21,6 +21,9 @@ extern crate std;
 
 pub use bumpalo;
 
+pub use ast_lowering::ast_to_hir_fold::Fold;
+pub use ast_lowering::fold_ast_to_hir_and_print_errors;
+pub use ast_lowering::name_resolution::Resolver;
 pub use ir::ast;
 pub use ir::ast::Ast;
 pub use ir::hir;
@@ -29,6 +32,7 @@ pub use ir::mir;
 pub use parser::lexer::Lexer;
 pub use parser::preprocessor::Preprocessor;
 pub use parser::preprocessor::SourceMap;
+pub use parser::Parser;
 pub use schemantic_analysis::run_semantic;
 pub use span::Span;
 
@@ -39,7 +43,7 @@ pub mod symbol;
 pub mod util;
 #[macro_use]
 pub mod ir;
-pub mod ast_lowering;
+mod ast_lowering;
 mod error;
 pub mod parser;
 mod schemantic_analysis;

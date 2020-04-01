@@ -15,7 +15,7 @@ use crate::parser::lexer::Token;
 use crate::parser::Parser;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
-    /// Combinator that parses a list delimited by a comma and terminated by [end].
+    /// Combinator that parses a list delimited by a comma and terminated by `end`.
     /// This function does not parse the first entry as this requires extra logic in some cases
     /// # Example
     /// ,x,y,z;
@@ -62,7 +62,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
         }
     }
-    /// Combinator that parses a list delimited by a comma and terminated by [end].
+    /// Combinator that parses a list delimited by a comma and terminated by `end`.
     /// # Example
     /// x,y,z;
     pub fn parse_list<F>(&mut self, mut parse_list_item: F, end: Token, consume_end: bool) -> Result

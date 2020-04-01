@@ -1,3 +1,13 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 use crate::ast::HierarchicalId;
 use crate::ast_lowering::error::Type::NotAScope;
 use crate::ast_lowering::error::*;
@@ -7,31 +17,28 @@ use crate::Ast;
 
 /// A macro that hides the boiler plate required for name resolution using the resolver struct
 ///
-/// If `$name` wasn't found or doesn't math any [`SymbolDeclaration`](VARF::symbol_table::SymbolDeclaration)::`$declaration` the appropriate error are added to `$self`.errors and execution continuous after the macro
+/// If `$name` wasn't found or doesn't math any [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration)::`$declaration` the appropriate errors are added to `$self`.errors and execution continuous after the macro
 ///
 /// # Arguments
 ///
-/// * `$self` - reference to an ast fold (implementation of the [`Fold`](VARF::ast_lowering::ast_to_hir_fold::Fold) trait)
+/// * `$self` - reference to an ast fold (implementation of the [`Fold`](crate::ast_lowering::ast_to_hir_fold::Fold) trait)
 ///
-/// * `$name` - The Identifier (type [`Ident`](VARF::symbol::Ident)) that should be resolved
+/// * `$name` - The Identifier (type [`Ident`](crate::symbol::Ident)) that should be resolved
 ///
 /// The following three arguments can be repeated as often as necessary (like in a match block)
 ///
-/// * `$declaration` An identifier of an [`SymbolDeclaration`](VARF::symbol_table::SymbolDeclaration) variant which you wish to resolve `$name`as
+/// * `$declaration` An identifier of an [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration) variant which you wish to resolve `$name`as
 ///
 /// * `$id` The identifier under which the ID of the resolved declaration will be available inside the associated `$block
 ///
-/// * `$block` A block (`{`statements`}`) which will be executed when `$name` is resolved as a [`SymbolDeclaration`](VARF::symbol_table::SymbolDeclaration)::`$declaration`  
+/// * `$block` A block (`{`statements`}`) which will be executed when `$name` is resolved as a [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration)::`$declaration`  
 ///
 /// # Examples
 ///
 /// The following tries to resolve ident as a Nature
 /// ```
-/// # use VARF::ast_lowering::name_resolution::resolve;
-/// # let ident = VARF::symbol::Ident::empty();
-/// # VARF::mk_ast!(ast);
-/// # let fold = VARF::ast_lowering::ast_to_hir_fold::Global::new(&ast);
 /// use VARF::symbol_table::SymbolDeclaration::Nature;
+/// use VARF::symbol_table::SymbolDeclaration::Discipline;
 ///
 /// resolve!(fold; ident as
 ///            Nature(id) => {
@@ -44,7 +51,7 @@ use crate::Ast;
 ///
 /// println!("Not found or not a discipline/nature")
 /// ```
-
+#[macro_export]
 macro_rules! resolve {
     ($fold:expr; $name:ident as $($declaration:ident($id:ident) => $block:block),+) => {
         match $fold.resolver.resolve($name) {
@@ -68,32 +75,28 @@ macro_rules! resolve {
 
 /// A macro that hides the boiler plate required for name resolution of hieraichal Identifiers using the resolver struct
 ///
-/// If `$name` wasn't found or doesn't math any [`SymbolDeclaration`](VARF::symbol_table::SymbolDeclaration)::`$declaration` the appropriate error are added to `$self`.errors and execution continuous after the macro
+/// If `$name` wasn't found or doesn't math any [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration)::`$declaration` the appropriate errors are added to `$self`.errors and execution continuous after the macro
 ///
 /// # Arguments
 ///
-/// * `$fold` - identifer refering to an [`Fold`](VARF::ast_lowering::ast_to_hir_fold::Fold) instance
+/// * `$fold` - identifer refering to an [`Fold`](crate::ast_lowering::ast_to_hir_fold::Fold) instance
 ///
-/// * `$name` - The Identifier (type [`Ident`](VARF::symbol::Ident)) that should be resolved
+/// * `$name` - The Identifier (type [`Ident`](crate::symbol::Ident)) that should be resolved
 ///
 /// The following three arguments can be repeated as often as necessary (like in a match block)
 ///
-/// * `$declaration` An identifier of an [`SymbolDeclaration`](VARF::symbol_table::SymbolDeclaration) variant which you wish to resolve `$name`as
+/// * `$declaration` An identifier of an [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration) variant which you wish to resolve `$name`as
 ///
 /// * `$id` The identifier under which the ID of the resolved declaration will be available inside the associated `$block
 ///
-/// * `$block` A block (`{`statements`}`) which will be executed when `$name` is resolved as a [`SymbolDeclaration`](VARF::symbol_table::SymbolDeclaration)::`$declaration`  
+/// * `$block` A block (`{`statements`}`) which will be executed when `$name` is resolved as a [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration)::`$declaration`  
 ///
 /// # Examples
 ///
 /// The following tries to resolve ident as a Nature
 /// ```
-/// # use VARF::ast_lowering::name_resolution::resolve_hierarchical;
-/// # let ident = VARF::symbol::Ident::empty();
-/// # VARF::mk_ast!(ast);
-/// # let fold = VARF::ast_lowering::ast_to_hir_fold::Global::new(&ast);
-/// use VARF::symbol_table::SymbolDeclaration::Nature;
-/// use VARF::symbol_table::SymbolDeclaration::Discipline;
+/// use VARF::symbol_table::SymbolDeclaration::Net;
+/// use VARF::symbol_table::SymbolDeclaration::Port;
 ///
 /// resolve_hierarchical!(fold; ident as
 ///            Net(id) => {
@@ -106,6 +109,7 @@ macro_rules! resolve {
 ///
 /// println!("Not found or not a port/net")
 /// ```
+#[macro_export]
 macro_rules! resolve_hierarchical {
     ($fold:expr; $name:ident as  $($declaration:ident($id:ident) => $block:block),+) => {
         match $fold.resolver.resolve_hierarchical($name) {
@@ -127,7 +131,7 @@ macro_rules! resolve_hierarchical {
     };
 }
 
-/// Allows name resolution with the [`resolve`](VARF::ast_lowering::name_resolution::Resolver::resolve)/[`resolve_hierarchical`](VARF::ast_lowering::name_resolution::Resolver::resolve_hierarchical) methods
+/// Allows name resolution with the [`resolve`](crate::ast_lowering::name_resolution::Resolver::resolve)/[`resolve_hierarchical`](crate::ast_lowering::name_resolution::Resolver::resolve_hierarchical) methods
 pub struct Resolver<'tag, 'lt> {
     pub scope_stack: Vec<&'lt SymbolTable<'tag>>,
     ast: &'lt Ast<'tag>,
@@ -159,7 +163,7 @@ impl<'tag, 'lt> Resolver<'tag, 'lt> {
 
     /// Tries to resolve the Hierarchical Identifer `hierarchical_ident`
     ///
-    /// This functions tires to resolve the first identifier using the [`resolve`](VARF::ast_lowering::name_resolution::Resolver::resolve) function
+    /// This functions tires to resolve the first identifier using the [`resolve`](crate::ast_lowering::name_resolution::Resolver::resolve) function
     /// Afterwards it tries to resolve all following identifier inside the scope of the previously resolved Identifier
     pub fn resolve_hierarchical(
         &self,
@@ -213,7 +217,7 @@ impl<'tag, 'lt> Resolver<'tag, 'lt> {
     }
     /// Enter a new Scope
     ///
-    /// This scope will be the first to be searched for identifiers until it is overshadowed by another enter_scope call or it is removed using [`exit_scope`](VARF::ast_lowering::name_resolution::Resolver::exit_scope)
+    /// This scope will be the first to be searched for identifiers until it is overshadowed by another enter_scope call or it is removed using [`exit_scope`](crate::ast_lowering::name_resolution::Resolver::exit_scope)
     ///
     /// # Arguments
     /// * `scope_symbol_table` - Symbol table in which the resolver will look for definitions in this scope

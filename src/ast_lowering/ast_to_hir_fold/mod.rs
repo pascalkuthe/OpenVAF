@@ -1,3 +1,13 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 pub(super) use branches::Branches;
 pub(super) use expression::ExpressionFolder;
 pub(super) use global::Global;
@@ -13,7 +23,7 @@ mod global;
 mod statements;
 
 /// An internal struct that contains data and functionality all Folds in this module share
-/// It is used for abstracting over functionality/data for the [`resolve!`](VARF::ast_lowering::name_resolution::resolve)/[`resolve_hierarchical!`](VARF::ast_lowering::name_resolution::resolve_hierarchical) macros and [`BranchResolver`](VARF::ast_lowering::branch_resolution::BranchResolver)
+/// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` macros and [`BranchResolver`](crate::ast_lowering::branch_resolution::BranchResolver)
 pub struct Fold<'tag, 'lt> {
     pub resolver: Resolver<'tag, 'lt>,
     pub errors: Vec<Error<'tag>>,

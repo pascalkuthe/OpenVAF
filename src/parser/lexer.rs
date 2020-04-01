@@ -85,6 +85,7 @@ pub enum Token {
     //Constants
     #[regex = r#""([^\n"\\]|\\[\\tn"])*""#]
     LiteralString,
+
     #[regex = r"[0-9][0-9_]*"]
     LiteralUnsignedNumber,
     #[regex = r"[0-9][0-9_]*\.[0-9][0-9_]*[TGMKkmupfa]"]
