@@ -7,7 +7,22 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-
+///! This module is responsible for lowering an HIR to an MIR this entails three main transformations
+///
+///! * Adding explicit type information -
+///!    Code generation generally requires explicit type information.
+///!    This is represented in the MIR with distinct expression types for reals and integers.
+///!    Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules (see [TypeChecking]
+///!    Instead of being implicit type conversions are now distinct expressions that are added when required and legal
+///
+///! * folding compile time constant determined expressions to values
+///!    Constant expressions can generally not ne evaluated as they may depend on parameters.
+///!    However the constant expressions defining parameters may only depend on the default values of previously defined parameters.
+///!    The evaluation of these expressions are evaluated in the [`constant_eval`]  module.
+///!
+///! * TypeChecking -
+///!     VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.
+///!     During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
 use crate::ast;
 use crate::ast::{AttributeNode, Node};
 use crate::compact_arena::SafeRange;
@@ -39,127 +54,12 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     }
 
     pub fn fold(mut self) -> Result<Box<Mir<'tag>>, Vec<Error<'tag>>> {
-        let parameters: SafeRange<ParameterId<'tag>> = self.hir.full_range();
-        for parameter in parameters {
-            let test = &self.hir[parameter].contents;
-            let parameter_type = match self.hir[parameter].contents.parameter_type {
-                ast::ParameterType::String() => todo!("String parameters"),
-                ast::ParameterType::Numerical {
-                    parameter_type,
-                    ref included_ranges,
-                    ref excluded_ranges,
-                } => match parameter_type {
-                    ast::VariableType::INTEGER | ast::VariableType::TIME => {
-                        if let Ok(type_info) =
-                            self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
-                        {
-                            ParameterType::Integer {
-                                included_ranges: type_info.0,
-                                excluded_ranges: type_info.1,
-                                default_value: type_info.2,
-                            }
-                        } else {
-                            //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
-                            // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
-                            ParameterType::Integer {
-                                included_ranges: Vec::new(),
-                                excluded_ranges: Vec::new(),
-                                default_value: 0,
-                            }
-                        }
-                    }
-                    ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                        if let Ok(type_info) =
-                            self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
-                        {
-                            ParameterType::Real {
-                                included_ranges: type_info.0,
-                                excluded_ranges: type_info.1,
-                                default_value: type_info.2,
-                            }
-                        } else {
-                            //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
-                            // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
-                            ParameterType::Real {
-                                included_ranges: Vec::new(),
-                                excluded_ranges: Vec::new(),
-                                default_value: 0.0,
-                            }
-                        }
-                    }
-                },
-            };
-            unsafe {
-                //This is save since we write to all parameters
-                self.mir.write_unsafe(
-                    parameter,
-                    AttributeNode {
-                        contents: Parameter {
-                            name: self.hir[parameter].contents.name,
-                            parameter_type,
-                        },
-                        source: self.hir[parameter].source,
-                        attributes: self.hir[parameter].attributes,
-                    },
-                );
-            }
+        for parameter in self.hir.full_range() {
+            self.fold_parameter(parameter)
         }
-        let variables: SafeRange<VariableId> = self.mir.full_range();
-        for variable in variables {
-            match self.hir[variable].contents.variable_type {
-                ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                    let default_value =
-                        if let Some(default_value) = self.hir[variable].contents.default_value {
-                            if let Ok(expr) = self.fold_real_expression(default_value) {
-                                Some(expr)
-                            } else {
-                                continue;
-                            }
-                        } else {
-                            None
-                        };
-                    self.mir.write(
-                        variable,
-                        AttributeNode {
-                            attributes: self.hir[variable].attributes,
-                            source: self.hir[variable].source,
-                            contents: Variable {
-                                name: self.hir[variable].contents.name,
-                                variable_type: mir::VariableType::Real(default_value),
-                            },
-                        },
-                    );
-                }
 
-                ast::VariableType::INTEGER | ast::VariableType::TIME => {
-                    let default_value =
-                        if let Some(default_value) = self.hir[variable].contents.default_value {
-                            match self.fold_expression(default_value) {
-                                Ok(ExpressionId::Integer(expr)) => Some(expr),
-
-                                Ok(ExpressionId::Real(real_expr)) => Some(self.mir.push(Node {
-                                    source: self.mir[real_expr].source,
-                                    contents: IntegerExpression::RealCast(real_expr),
-                                })),
-
-                                Err(()) => continue,
-                            }
-                        } else {
-                            None
-                        };
-                    self.mir.write(
-                        variable,
-                        AttributeNode {
-                            attributes: self.hir[variable].attributes,
-                            source: self.hir[variable].source,
-                            contents: Variable {
-                                name: self.hir[variable].contents.name,
-                                variable_type: mir::VariableType::Integer(default_value),
-                            },
-                        },
-                    );
-                }
-            }
+        for variable in self.mir.full_range() {
+            self.fold_variable(variable)
         }
 
         self.fold_block(self.hir.full_range());
@@ -168,6 +68,125 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             Ok(self.mir)
         } else {
             Err(self.errors)
+        }
+    }
+    /// folds a variable by foldings its default value (to a typed representation)
+    fn fold_variable(&mut self, variable: VariableId<'tag>) {
+        let variable_type = match self.hir[variable].contents.variable_type {
+            ast::VariableType::REAL | ast::VariableType::REALTIME => {
+                let default_value =
+                    if let Some(default_value) = self.hir[variable].contents.default_value {
+                        if let Ok(expr) = self.fold_real_expression(default_value) {
+                            Some(expr)
+                        } else {
+                            return;
+                        }
+                    } else {
+                        None
+                    };
+                VariableType::Real(default_value)
+            }
+
+            ast::VariableType::INTEGER | ast::VariableType::TIME => {
+                let default_value =
+                    if let Some(default_value) = self.hir[variable].contents.default_value {
+                        match self.fold_expression(default_value) {
+                            Ok(ExpressionId::Integer(expr)) => Some(expr),
+
+                            Ok(ExpressionId::Real(real_expr)) => Some(self.mir.push(Node {
+                                source: self.mir[real_expr].source,
+                                contents: IntegerExpression::RealCast(real_expr),
+                            })),
+
+                            Err(()) => return,
+                        }
+                    } else {
+                        None
+                    };
+                VariableType::Integer(default_value)
+            }
+        };
+
+        self.mir.write(
+            variable,
+            AttributeNode {
+                attributes: self.hir[variable].attributes,
+                source: self.hir[variable].source,
+                contents: Variable {
+                    name: self.hir[variable].contents.name,
+                    variable_type,
+                },
+            },
+        );
+    }
+
+    /// folds a parameter by evaluating the default value and any range bounds
+    /// # Safety
+    /// This function HAS to be called for EVERY Parameter when folding an HIR to an MIR.
+    /// Parameters are not initialized and when the MIR is dropped drop will be called on the parameters.
+    /// This is UB since parameters do implement drop (they contain arrayS)
+    /// Internally this function is very carefully written such that `self.mir[parameter]` is always initialized even when an error occurs
+    fn fold_parameter(&mut self, parameter: ParameterId<'tag>) {
+        let parameter_type = match self.hir[parameter].contents.parameter_type {
+            ast::ParameterType::String() => todo!("String parameters"),
+            ast::ParameterType::Numerical {
+                parameter_type,
+                ref included_ranges,
+                ref excluded_ranges,
+            } => match parameter_type {
+                ast::VariableType::INTEGER | ast::VariableType::TIME => {
+                    if let Ok(type_info) =
+                        self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
+                    {
+                        ParameterType::Integer {
+                            included_ranges: type_info.0,
+                            excluded_ranges: type_info.1,
+                            default_value: type_info.2,
+                        }
+                    } else {
+                        //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
+                        // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
+                        ParameterType::Integer {
+                            included_ranges: Vec::new(),
+                            excluded_ranges: Vec::new(),
+                            default_value: 0,
+                        }
+                    }
+                }
+                ast::VariableType::REAL | ast::VariableType::REALTIME => {
+                    if let Ok(type_info) =
+                        self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
+                    {
+                        ParameterType::Real {
+                            included_ranges: type_info.0,
+                            excluded_ranges: type_info.1,
+                            default_value: type_info.2,
+                        }
+                    } else {
+                        //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
+                        // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
+                        ParameterType::Real {
+                            included_ranges: Vec::new(),
+                            excluded_ranges: Vec::new(),
+                            default_value: 0.0,
+                        }
+                    }
+                }
+            },
+        };
+        unsafe {
+            //This is save since we write to all parameters
+            self.mir.write_unsafe(
+                parameter,
+                AttributeNode {
+                    contents: Parameter {
+                        name: self.hir[parameter].contents.name,
+                        parameter_type,
+                    },
+                    source: self.hir[parameter].source,
+                    attributes: self.hir[parameter].attributes,
+                },
+            );
         }
     }
 
