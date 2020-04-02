@@ -6,7 +6,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use VARF::ast_lowering::fold_ast_to_hir_and_print_errors;
 use VARF::parser;
 use VARF::parser::insert_electrical_natures_and_disciplines;
-use VARF::{mk_ast, run_semantic};
+use VARF::{fold_hir_to_mir, mk_ast};
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("linear", |b| b.iter_with_large_drop(|| linear()));
@@ -25,6 +25,6 @@ pub fn linear() -> Result<(), ()> {
     )?;
     insert_electrical_natures_and_disciplines(&mut ast);
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
-    run_semantic(hir, source_map, true)?;
+    fold_hir_to_mir(hir, source_map, true)?;
     Ok(())
 }

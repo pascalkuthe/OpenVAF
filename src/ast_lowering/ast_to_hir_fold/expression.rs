@@ -12,12 +12,11 @@ use std::result::Result;
 
 use crate::ast::BuiltInFunctionCall::*;
 use crate::ast::{HierarchicalId, Node};
-use crate::ast_lowering::ast_to_hir_fold::Fold;
+use crate::ast_lowering::ast_to_hir_fold::{Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::Type::{EmptyBranchAccess, UnexpectedTokenInBranchAccess};
 use crate::ast_lowering::error::*;
 use crate::ast_lowering::name_resolution::Resolver;
-use crate::ast_lowering::VerilogContext;
 use crate::hir::{Expression, Primary};
 use crate::ir::{BranchId, DisciplineId, ExpressionId};
 use crate::symbol::keywords;
@@ -159,6 +158,7 @@ impl<'tag, 'fold, 'lt> ExpressionFolder<'tag, 'fold, 'lt> {
                 }
                 return Err(());
             }
+
             ast::Expression::Primary(ast::Primary::BuiltInFunctionCall(ref function_call)) => {
                 let function_call = match function_call {
                     Pow(expr0, expr1) => {

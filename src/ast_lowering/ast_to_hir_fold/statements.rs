@@ -14,11 +14,10 @@ use crate::ast::{
     AttributeNode, ModuleItem, Node, NumericalParameterRangeBound, NumericalParameterRangeExclude,
     Parameter, ParameterType, Variable,
 };
-use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold};
+use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::ast_lowering::name_resolution::Resolver;
-use crate::ast_lowering::VerilogContext;
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Condition, Module, Statement};
 use crate::ir::ast::{Attributes, BranchAccess};
@@ -30,7 +29,7 @@ use crate::symbol_table::SymbolDeclaration;
 use crate::util::{Push, SafeRangeCreation};
 use crate::{ast, Ast, Hir};
 
-/// The last fold folds all in textual order
+/// The last fold folds all statements in textual order
 pub struct Statements<'tag, 'lt> {
     pub(super) branch_resolver: BranchResolver<'tag, 'lt>,
     pub(super) state: VerilogContext,
@@ -350,7 +349,11 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                 )
             }
         } else {
-            self.base.hir[parameter_id] = self.base.ast[parameter_id].clone(); //required for safety
+            unsafe {
+                self.base
+                    .hir
+                    .write_unsafe(parameter_id, self.base.ast[parameter_id].clone());
+            } //required for safety
             self.base.error(Error {
                 error_type: Type::Unsupported(Unsupported::StringParameters),
                 source: self.base.ast[parameter_id].source,

@@ -7,33 +7,36 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-//! This module is responsible for lowering an HIR to an MIR executed by the [`run_semantic`] function
+
+//! This module is responsible for lowering an [`Hir`](crate::hir::Hir) to an [`Mir`](crate::mir::Mir)
 //!
 //! This entails three main transformations
 //!
-//! * Adding explicit type information -
+//! * **Adding explicit type information** -
 //!    Code generation generally requires explicit type information.
-//!    This is represented in the MIR with distinct expression types for reals and integers.
-//!    Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules (see [TypeChecking]
+//!    This is represented in the MIR with distinct expression types for [real](crate::mir::RealExpression) and [integers](crate::mir::IntegerExpression).
+//!    Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules
 //!    Instead of being implicit type conversions are now distinct expressions that are added when required and legal
 //!
-//! * folding compile time constant determined expressions to values
-//!    Constant expressions can generally not ne evaluated as they may depend on parameters.
+//! * **folding constant expressions to values** -
+//!    Constant expressions can generally not be evaluated as they may depend on parameters.
 //!    However the constant expressions defining parameters may only depend on the default values of previously defined parameters.
-//!    The evaluation of these expressions are evaluated in the [`constant_eval`]  module.
+//!    The evaluation of these expressions is done in the [`constant_eval`]  module.
 //!
-//! * TypeChecking -
+//! * **TypeChecking** -
 //!     VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.
 //!     During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
+//!
+
 use crate::ast;
 use crate::ast::{AttributeNode, Node};
 use crate::compact_arena::SafeRange;
 use crate::hir::Hir;
+use crate::hir_lowering::error::Error;
 use crate::ir::hir::Block;
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
 use crate::ir::{mir, ParameterId, UnsafeWrite, VariableId, Write};
 use crate::mir::*;
-use crate::schemantic_analysis::error::Error;
 use crate::util::{Push, SafeRangeCreation};
 use crate::{hir, SourceMap};
 
@@ -41,6 +44,7 @@ pub mod error;
 
 #[cfg(test)]
 pub mod test;
+
 struct HirToMirFold<'tag, 'hirref> {
     pub errors: Vec<Error<'tag>>,
     hir: &'hirref Hir<'tag>,
@@ -72,6 +76,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             Err(self.errors)
         }
     }
+
     /// folds a variable by foldings its default value (to a typed representation)
     fn fold_variable(&mut self, variable: VariableId<'tag>) {
         let variable_type = match self.hir[variable].contents.variable_type {
@@ -278,18 +283,24 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         }
     }
 }
+
 mod constant_eval;
 mod expression_semantic;
 
-pub fn run_semantic<'tag>(
+pub fn fold_hir_to_mir(mut hir: Box<Hir>) -> std::result::Result<Box<Mir>, (Vec<Error>, Box<Hir>)> {
+    HirToMirFold::new(&mut hir)
+        .fold()
+        .map_err(|errors| (errors, hir))
+}
+
+pub fn fold_hir_to_mir_and_print_errors<'tag>(
     mut hir: Box<Hir<'tag>>,
     source_map: &SourceMap,
     translate_line: bool,
 ) -> std::result::Result<Box<Mir<'tag>>, ()> {
-    let fold = HirToMirFold::new(&mut hir);
-    fold.fold().map_err(|errors| {
+    fold_hir_to_mir(hir).map_err(|(errors, hir)| {
         errors
-            .iter()
-            .for_each(|error| error.print(&source_map, &hir, translate_line))
+            .into_iter()
+            .for_each(|error| error.print(source_map, &hir, translate_line))
     })
 }

@@ -7,7 +7,14 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-
+//! This module is responsible for evaluating expressions describing parameter bounds and default values a compile time
+//! while also enforcing Type Conversion rules.
+//!
+//!
+//!
+//!
+//!
+//!
 use std::ops::Range;
 
 use float_cmp::{ApproxEq, F64Margin};
@@ -15,13 +22,13 @@ use float_cmp::{ApproxEq, F64Margin};
 use crate::ast;
 use crate::ast::{BinaryOperator, BuiltInFunctionCall, UnaryOperator};
 use crate::hir::{Expression, Primary};
+use crate::hir_lowering::error::Error;
+use crate::hir_lowering::error::Result;
+use crate::hir_lowering::error::Type;
+use crate::hir_lowering::HirToMirFold;
 use crate::ir::mir::ParameterType;
 use crate::ir::{ExpressionId, ParameterId};
 use crate::mir::*;
-use crate::schemantic_analysis::error::Error;
-use crate::schemantic_analysis::error::Result;
-use crate::schemantic_analysis::error::Type;
-use crate::schemantic_analysis::HirToMirFold;
 use crate::Span;
 
 #[derive(Copy, Clone)]

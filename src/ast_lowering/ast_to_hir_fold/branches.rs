@@ -16,11 +16,11 @@ use crate::ast::{
     ParameterType,
 };
 use crate::ast_lowering::ast_to_hir_fold::Statements;
+use crate::ast_lowering::ast_to_hir_fold::VerilogContext;
 use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::ast_lowering::name_resolution::Resolver;
-use crate::ast_lowering::VerilogContext;
 use crate::compact_arena::{NanoArena, TinyArena};
 use crate::hir::BranchDeclaration;
 use crate::ir::ast::Variable;
@@ -29,7 +29,7 @@ use crate::parser::error::Unsupported;
 use crate::util::SafeRangeCreation;
 use crate::{Ast, Hir};
 
-/// The second fold folds Items that are defined on a module lvl (variables, branches) and have not been folded previously
+/// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
 pub struct Branches<'tag, 'lt> {
     pub(super) branch_resolver: BranchResolver<'tag, 'lt>,
@@ -64,21 +64,12 @@ impl<'tag, 'lt> Branches<'tag, 'lt> {
         }
     }
 
-    /// Just a utility method that makes folding expressions a little more ergonomic
-    fn fold_expression(&mut self, expr: ExpressionId<'tag>) -> Result<ExpressionId<'tag>, ()> {
-        let mut fold = ExpressionFolder {
-            base: &mut self.base,
-            state: VerilogContext::constant,
-            branch_resolver: &mut self.branch_resolver,
-        };
-        fold.fold_expression(expr)
-    }
-
     /// Folds a branch declaration (such as branch (a,b) x:) using the branch_resolver
     fn fold_branch_declaration(&mut self, branch_declaration_id: BranchId<'tag>) {
         let branch_declaration = &self.base.ast[branch_declaration_id];
-        if let Ok((resolved_branch, _)) =
-            BranchResolver::resolve_branch(&mut self.base, &branch_declaration.contents.branch)
+        if let Ok((resolved_branch, _)) = self
+            .branch_resolver
+            .resolve_branch(&mut self.base, &branch_declaration.contents.branch)
         {
             self.base.hir.write(
                 branch_declaration_id,

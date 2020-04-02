@@ -12,10 +12,10 @@ use std::convert::TryInto;
 
 use crate::ast::{BinaryOperator, BuiltInFunctionCall, Node};
 use crate::hir::Primary;
+use crate::hir_lowering::error::{Error, Type};
+use crate::hir_lowering::HirToMirFold;
 use crate::ir::{hir, IntegerExpressionId, RealExpressionId};
 use crate::mir::*;
-use crate::schemantic_analysis::error::{Error, Type};
-use crate::schemantic_analysis::HirToMirFold;
 use crate::util::Push;
 use crate::{ast, ir, mir};
 

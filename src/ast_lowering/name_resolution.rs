@@ -11,12 +11,16 @@
 use crate::ast::HierarchicalId;
 use crate::ast_lowering::error::Type::NotAScope;
 use crate::ast_lowering::error::*;
+#[doc(inline)]
+pub use crate::resolve;
+#[doc(inline)]
+pub use crate::resolve_hierarchical;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::Ast;
 
 /// A macro that hides the boiler plate required for name resolution using the resolver struct
-///
+/// It is defined in the [`name_resolution`](crate::ast_lowering::name_resolution) module but due to limitations of rustdoc can't be shown there in the documentation
 /// If `$name` wasn't found or doesn't math any [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration)::`$declaration` the appropriate errors are added to `$self`.errors and execution continuous after the macro
 ///
 /// # Arguments
@@ -51,6 +55,7 @@ use crate::Ast;
 ///
 /// println!("Not found or not a discipline/nature")
 /// ```
+#[doc(inline)]
 #[macro_export]
 macro_rules! resolve {
     ($fold:expr; $name:ident as $($declaration:ident($id:ident) => $block:block),+) => {
@@ -72,9 +77,8 @@ macro_rules! resolve {
         }
     };
 }
-
 /// A macro that hides the boiler plate required for name resolution of hieraichal Identifiers using the resolver struct
-///
+/// It is defined in the [`name_resolution`](crate::ast_lowering::name_resolution) module but due to limitations of rustdoc can't be shown there in the documentation   
 /// If `$name` wasn't found or doesn't math any [`SymbolDeclaration`](crate::symbol_table::SymbolDeclaration)::`$declaration` the appropriate errors are added to `$self`.errors and execution continuous after the macro
 ///
 /// # Arguments
