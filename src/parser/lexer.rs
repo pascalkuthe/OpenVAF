@@ -402,7 +402,7 @@ fn ignore_comments<'source, Src: Source<'source>>(lex: &mut logos::Lexer<Token, 
                 _ => lex.bump(1),
             }
         }
-        lex.token = Token::CommentNewline
+        lex.token = Token::Newline
     }
 }
 #[inline]

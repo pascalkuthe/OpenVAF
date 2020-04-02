@@ -25,7 +25,7 @@ pub(crate) use source_map::{ArgumentIndex, CallDepth};
 
 use crate::error::Error;
 use crate::parser::error;
-use crate::parser::error::List;
+use crate::parser::error::{List, Type, Unsupported};
 use crate::parser::lexer::Token;
 use crate::parser::primaries::parse_string;
 use crate::span::{Index, IndexOffset, LineNumber, Range};
@@ -564,7 +564,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             } //we only do this here to avoid recomputing call depth constantly also this parse is lightly more expensive so its nice for performance too. Not worth it for other directives (except definition; see below) since parsing is trivial for those
             //TODO parse macro definition here
             Token::MacroDef => {
-                unimplemented!("Macro definitions inside macros are currently not supported")
+                return self.token_error(Type::Unsupported(Unsupported::MacroDefinedInMacro))
             }
             Token::UnexpectedEOF => {
                 let error = error::Type::UnexpectedEof {

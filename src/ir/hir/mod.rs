@@ -51,8 +51,6 @@ pub struct Hir<'tag> {
     pub(crate) attributes: TinyArena<'tag, Attribute<'tag>>,
     pub(crate) statements: TinyArena<'tag, Statement<'tag>>,
 }
-///this module contains copys of the definitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
-
 impl<'tag> Hir<'tag> {
     /// # Safety
     /// You should never call this yourself. Lower an AST created using mk_ast! instead

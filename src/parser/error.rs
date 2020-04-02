@@ -75,12 +75,14 @@ impl From<std::io::Error> for Type {
 pub enum Unsupported {
     StringParameters,
     DefaultDiscipline,
+    MacroDefinedInMacro,
 }
 impl Display for Unsupported {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::StringParameters => f.write_str("String parameters"),
             Self::DefaultDiscipline => f.write_str("Implicit Disciplines"),
+            Self::MacroDefinedInMacro => f.write_str("Macros defined inside another Macros"),
         }
     }
 }

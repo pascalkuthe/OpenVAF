@@ -10,8 +10,6 @@ use core::fmt::Debug;
 use std::ops::Range;
 use std::ptr::NonNull;
 
-pub use visitor::Visitor;
-
 use crate::compact_arena::{InvariantLifetime, NanoArena, SafeRange, TinyArena};
 use crate::ir::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId,
@@ -20,6 +18,8 @@ use crate::ir::{
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
 use crate::Span;
+
+// pub use visitor::Visitor;
 
 /*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License
 
@@ -68,7 +68,7 @@ macro_rules! mk_ast {
 }
 
 //pub mod printer;
-pub mod visitor;
+// pub mod visitor;
 
 pub type Attributes<'ast> = SafeRange<AttributeId<'ast>>;
 #[derive(Clone, Copy, Debug)]
@@ -260,6 +260,7 @@ pub struct BranchDeclaration {
 #[derive(Clone, Debug)]
 pub enum Branch {
     Port(HierarchicalId),
+    NetToGround(HierarchicalId),
     Nets(HierarchicalId, HierarchicalId),
 }
 
@@ -310,6 +311,7 @@ pub enum NetType {
     UWIRE,
     WAND,
     WOR,
+    GROUND,
 }
 
 #[derive(Clone)]
@@ -377,6 +379,7 @@ pub enum Primary<'ast> {
     BranchAccess(Ident, Node<BranchAccess>),
     BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
 }
+
 #[derive(Copy, Clone, Debug)]
 pub enum BuiltInFunctionCall<'ast> {
     Pow(ExpressionId<'ast>, ExpressionId<'ast>),
@@ -438,6 +441,7 @@ pub enum BinaryOperator {
     And,
     Or,
 }
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnaryOperator {
     BitNegate,
@@ -453,10 +457,12 @@ pub enum VariableType {
     REAL,
     REALTIME,
 }
+
 #[derive(Clone, Debug)]
 pub struct HierarchicalId {
     pub names: Vec<Ident>,
 }
+
 impl HierarchicalId {
     pub fn span(&self) -> Span {
         self.names[0]

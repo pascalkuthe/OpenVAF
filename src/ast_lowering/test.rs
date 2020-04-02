@@ -38,17 +38,6 @@ pub fn diode() -> Result<(), ()> {
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
     Ok(())
 }
-/*#[test]
-pub fn bjt() -> Result<(), ()> {
-    let source_map_allocator = Bump::new();
-    mk_ast!(ast);
-    let (source_map, res) =
-        parse_and_print_errors(Path::new("tests/bjt.va"), &source_map_allocator, &mut ast);
-    res?;
-    insert_electrical_natures_and_disciplines(&mut ast);
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map)?;
-    Ok(())
-}*/
 
 #[test]
 pub fn linear() -> Result<(), ()> {

@@ -9,8 +9,9 @@
  */
 use crate::ast::{AttributeNode, Attributes, Branch, BranchAccess, BranchDeclaration, Node};
 use crate::parser::error::Result;
+use crate::parser::error::Type::UnexpectedToken;
 use crate::parser::lexer::Token;
-use crate::parser::Parser;
+use crate::parser::{Error, Parser};
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::Push;
 
@@ -51,9 +52,21 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Ok(res)
         } else {
             let first_net_name = self.parse_hierarchical_identifier(false)?;
-            self.expect(Token::Comma)?;
-            let second_net_name = self.parse_hierarchical_identifier(false)?;
-            Ok(Branch::Nets(first_net_name, second_net_name))
+            let (token, source) = self.look_ahead()?;
+            match token {
+                Token::Comma => {
+                    self.lookahead.take();
+                    let second_net_name = self.parse_hierarchical_identifier(false)?;
+                    Ok(Branch::Nets(first_net_name, second_net_name))
+                }
+                Token::ParenClose => Ok(Branch::NetToGround(first_net_name)),
+                _ => Err(Error {
+                    source,
+                    error_type: UnexpectedToken {
+                        expected: vec![token],
+                    },
+                }),
+            }
         }
     }
     pub fn parse_branch_access(&mut self) -> Result<Node<BranchAccess>> {

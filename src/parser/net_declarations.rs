@@ -187,6 +187,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 .insert(declaration.contents.name.name, SymbolDeclaration::Net(id));
         }
     }
+
     pub fn parse_net_declaration(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
         let net_type = self.parse_net_type()?;
