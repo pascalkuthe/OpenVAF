@@ -7,22 +7,24 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-///! This module is responsible for lowering an HIR to an MIR this entails three main transformations
-///
-///! * Adding explicit type information -
-///!    Code generation generally requires explicit type information.
-///!    This is represented in the MIR with distinct expression types for reals and integers.
-///!    Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules (see [TypeChecking]
-///!    Instead of being implicit type conversions are now distinct expressions that are added when required and legal
-///
-///! * folding compile time constant determined expressions to values
-///!    Constant expressions can generally not ne evaluated as they may depend on parameters.
-///!    However the constant expressions defining parameters may only depend on the default values of previously defined parameters.
-///!    The evaluation of these expressions are evaluated in the [`constant_eval`]  module.
-///!
-///! * TypeChecking -
-///!     VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.
-///!     During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
+//! This module is responsible for lowering an HIR to an MIR executed by the [`run_semantic`] function
+//!
+//! This entails three main transformations
+//!
+//! * Adding explicit type information -
+//!    Code generation generally requires explicit type information.
+//!    This is represented in the MIR with distinct expression types for reals and integers.
+//!    Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules (see [TypeChecking]
+//!    Instead of being implicit type conversions are now distinct expressions that are added when required and legal
+//!
+//! * folding compile time constant determined expressions to values
+//!    Constant expressions can generally not ne evaluated as they may depend on parameters.
+//!    However the constant expressions defining parameters may only depend on the default values of previously defined parameters.
+//!    The evaluation of these expressions are evaluated in the [`constant_eval`]  module.
+//!
+//! * TypeChecking -
+//!     VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.
+//!     During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
 use crate::ast;
 use crate::ast::{AttributeNode, Node};
 use crate::compact_arena::SafeRange;
