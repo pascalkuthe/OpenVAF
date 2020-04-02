@@ -86,8 +86,6 @@ pub enum Token {
     #[regex = r#""([^\n"\\]|\\[\\tn"])*""#]
     LiteralString,
 
-    #[regex = r"[0-9][0-9_]*\.[0-9][0-9_]*"]
-    LiteralRealNumberDot,
     #[regex = r"[0-9][0-9_]*"]
     LiteralUnsignedNumber,
     #[regex = r"[0-9][0-9_]*\.[0-9][0-9_]*[TGMKkmupfa]"]
@@ -98,6 +96,8 @@ pub enum Token {
     LiteralRealNumberScaleChar,
     #[regex = r"[0-9][0-9_]*[eE][+-]?[0-9][0-9_]*"]
     LiteralRealNumberExp,
+    #[regex = r"[0-9][0-9_]*\.[0-9][0-9_]*"]
+    LiteralRealNumberDot,
 
     //Symbols
     #[token = "."]
