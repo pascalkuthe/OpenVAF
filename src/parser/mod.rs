@@ -21,7 +21,7 @@ use crate::ast::{Ast, HierarchicalId};
 use crate::ir::ast::{Discipline, Nature};
 use crate::ir::{Attribute, AttributeId, AttributeNode, Attributes};
 use crate::ir::{Push, SafeRangeCreation};
-use crate::parser::error::{Expected, Type};
+use crate::parser::error::{Expected, Type, Warning};
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::symbol::{Ident, Symbol};
@@ -33,9 +33,10 @@ pub(crate) mod preprocessor;
 #[cfg(test)]
 pub mod test;
 
+#[macro_use]
+mod combinators;
 mod behavior;
 mod branch;
-mod combinators;
 pub mod error;
 mod expression;
 mod module;
@@ -49,6 +50,7 @@ pub struct Parser<'lt, 'ast, 'source_map> {
     lookahead: Option<Result<(Token, Span)>>,
     pub ast: &'lt mut Ast<'ast>,
     pub non_critical_errors: Vec<Error>,
+    pub warnings: Vec<Warning>,
 }
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
@@ -63,6 +65,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             lookahead: None,
             ast,
             non_critical_errors: errors,
+            warnings: Vec::with_capacity(32),
         }
     }
 
@@ -89,45 +92,13 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     pub fn run(&mut self) {
-        loop {
-            let error = match self.parse_attributes() {
-                Ok(attributes) => match self.next() {
-                    Ok((token, source)) => match token {
-                        Token::EOF => return,
-                        Token::Module => {
-                            if let Err(error) = self.parse_module(attributes) {
-                                error
-                            } else {
-                                continue;
-                            }
-                        }
-
-                        _ => Error {
-                            error_type: error::Type::UnexpectedToken {
-                                expected: vec![Token::Module],
-                            },
-                            source,
-                        },
-                    },
-                    Err(error) => error,
-                },
-                Err(error) => error,
-            }; //we can sadly not use Result::and_then altough thats exactly what this is for because it doesn't allow return which is needed here
-            self.non_critical_errors.push(error);
-            loop {
-                match self.look_ahead() {
-                    Ok((Token::Module, _)) => break,
-                    Ok((Token::EOF, _)) => return,
-                    Ok(_) => {
-                        self.lookahead.take();
-                    }
-                    Err(error) => {
-                        self.lookahead.take();
-                        self.non_critical_errors.push(error);
-                    }
-                }
+        synchronize!(self;
+            let attributes = self.parse_attributes()?;
+            sync self.next() => {
+                Token::EOF => end,
+                Token::Module => self.parse_module(attributes),
             }
-        }
+        )
     }
 
     pub fn parse_identifier(&mut self, optional: bool) -> Result<Ident> {

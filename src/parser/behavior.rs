@@ -148,6 +148,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub const BLOCK_DEFAULT_SYMTABLE_SIZE: usize = 8;
     pub fn parse_block(&mut self, attributes: Attributes<'ast>) -> Result<BlockId<'ast>> {
         let start = self.preprocessor.current_start();
+
         let scope = if self.look_ahead()?.0 == Token::Colon {
             self.lookahead.take();
             let name = self.parse_identifier(false)?;
@@ -177,12 +178,15 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         } else {
             None
         };
+
         let mut statements = Vec::with_capacity(Self::BLOCK_DEFAULT_STATEMENT_CAPACITY);
 
-        while self.look_ahead()?.0 != Token::End {
-            let attributes = self.parse_attributes()?;
-            statements.push(self.parse_statement(attributes)?);
-        }
+        self.parse_and_recover_on_tokens(Token::Semicolon, Token::End, |parser, token| {
+            let attributes = parser.parse_attributes()?;
+            statements.push(parser.parse_statement(attributes)?);
+            Ok(())
+        })?;
+
         self.lookahead.take();
 
         let res = self.ast.push(AttributeNode {

@@ -33,6 +33,7 @@ use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
+
     pub(super) fn parse_module(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
@@ -79,43 +80,33 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let mut module_items = Vec::with_capacity(16);
         let variable_start = self.ast.empty_range_from_end();
         let branch_start = self.ast.empty_range_from_end();
-        loop {
-            let attributes = self.parse_attributes()?;
-            let (token, span) = self.look_ahead()?;
+
+        self.parse_and_recover_on_tokens(Token::Semicolon, Token::EndModule, |parser, token| {
+            let attributes = parser.parse_attributes()?;
             match token {
                 Token::Inout | Token::Input | Token::Output => {
                     if let Some(ref mut expected) = expected_ports {
-                        self.parse_port_declaration(attributes, expected, port_list_span)?;
+                        parser.parse_port_declaration(attributes, expected, port_list_span)?;
                     } else {
-                        let port_base = self.parse_port_declaration_base(attributes)?;
-                        let source = self.ast[port_base]
+                        let port_base = parser.parse_port_declaration_base(attributes)?;
+                        let source = parser.ast[port_base]
                             .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
                             .negative_offset(start);
-                        self.non_critical_errors.push(Error {
-                            source: self.span_to_current_end(start),
+                        parser.non_critical_errors.push(Error {
+                            source: parser.span_to_current_end(start),
                             error_type: error::Type::PortRedeclaration(source, port_list_span),
                         });
                     }
                 }
-                Token::EOF => {
-                    return Err(Error {
-                        error_type: error::Type::UnexpectedEof {
-                            expected: vec![Token::EndModule],
-                        },
-                        source: span,
-                    })
-                }
-                Token::EndModule => {
-                    self.lookahead.take();
-                    break;
-                }
                 _ => {
-                    if let Some(module_item) = self.parse_module_item(attributes)? {
+                    if let Some(module_item) = parser.parse_module_item(attributes)? {
                         module_items.push(module_item);
                     }
                 }
             }
-        }
+
+            Ok(())
+        })?;
 
         if let Some(expected_ports) = expected_ports {
             for port in expected_ports {

@@ -272,6 +272,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::Uwire => NetType::UWIRE,
             Token::Wand => NetType::WAND,
             Token::Wor => NetType::WOR,
+            Token::Ground => NetType::GROUND,
             _ => return Ok(NetType::UNDECLARED),
         };
         self.lookahead.take();

@@ -262,6 +262,8 @@ pub enum Token {
     Wand,
     #[token = "wor"]
     Wor,
+    #[token = "ground"]
+    Ground,
 
     #[token = "potential"]
     Potential,

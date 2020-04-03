@@ -17,8 +17,10 @@ use crate::parser::Parser;
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     /// Combinator that parses a list delimited by a comma and terminated by `end`.
     /// This function does not parse the first entry as this requires extra logic in some cases
-    /// # Example
+    /// # Examples
     /// ,x,y,z;
+
+    #[inline]
     pub fn parse_list_tail<F>(
         &mut self,
         mut parse_list_item: F,
@@ -62,9 +64,11 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
         }
     }
+
     /// Combinator that parses a list delimited by a comma and terminated by `end`.
     /// # Example
     /// x,y,z;
+    #[inline]
     pub fn parse_list<F>(&mut self, mut parse_list_item: F, end: Token, consume_end: bool) -> Result
     where
         F: FnMut(&mut Self) -> Result,
@@ -72,4 +76,119 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         parse_list_item(self)?;
         self.parse_list_tail(parse_list_item, end, consume_end)
     }
+
+    #[inline]
+    pub fn parse_and_recover_on_tokens<F>(
+        &mut self,
+        recover: Token,
+        end: Token,
+        mut parse: F,
+    ) -> Result
+    where
+        F: FnMut(&mut Self, Token) -> Result,
+    {
+        'mainloop: loop {
+            let error = match self.look_ahead() {
+                Ok((token, _)) if token == end => {
+                    self.lookahead.take();
+                    break 'mainloop;
+                }
+
+                Ok((Token::EOF, source)) => {
+                    self.lookahead.take();
+                    return Err(Error {
+                        error_type: UnexpectedEof {
+                            expected: vec![end],
+                        },
+                        source,
+                    });
+                }
+
+                Ok((token, _)) => {
+                    if let Err(error) = parse(self, token) {
+                        error
+                    } else {
+                        continue;
+                    }
+                }
+
+                Err(error) => error,
+            };
+            self.non_critical_errors.push(error);
+            loop {
+                match self.look_ahead() {
+                    Ok((token, _)) if token == end => {
+                        self.lookahead.take();
+                        break 'mainloop;
+                    }
+
+                    Ok((token, _)) if token == recover => {
+                        self.lookahead.take();
+                        break;
+                    }
+
+                    Ok((Token::EOF, source)) => {
+                        self.lookahead.take();
+                        return Err(Error {
+                            error_type: UnexpectedEof {
+                                expected: vec![end],
+                            },
+                            source,
+                        });
+                    }
+
+                    Ok(_) => {
+                        self.lookahead.take();
+                    }
+
+                    Err(error) => {
+                        self.lookahead.take();
+                        self.non_critical_errors.push(error);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+macro_rules! synchronize {
+    ($parser:expr; $($production:stmt;),* sync $gen_token:expr => {$end_token:path => end , $($token:path => $parse:expr,),+}) => {
+        'mainloop: loop {
+            let mut try_parse = || {
+                $($production),*
+                let (token,source) = $gen_token?;
+                match token {
+                    $end_token => return Ok(true),
+                    $($token => $parse?,),+
+                    _ => return Err(Error {
+                            error_type: error::Type::UnexpectedToken {
+                                expected: vec![$end_token $(,$token),+],
+                            },
+                            source,
+                        }),
+                }
+                Ok(false)
+            };
+            let error = match try_parse() {
+                Ok(true) => break 'mainloop,
+                Ok(false) => continue,
+                Err(error) => error,
+            };
+            $parser.non_critical_errors.push(error);
+            loop {
+                match $parser.look_ahead() {
+                    $(Ok(($token,_)) => break,),+
+                    Ok(($end_token,_)) => break 'mainloop,
+                    Ok(_) => {
+                        $parser.lookahead.take();
+                    }
+                    Err(error) => {
+                        $parser.lookahead.take();
+                        $parser.non_critical_errors.push(error);
+                    }
+                }
+            }
+        }
+    };
 }

@@ -21,7 +21,7 @@ use crate::symbol::{Ident, Symbol};
 use crate::{SourceMap, Span};
 
 pub type Error = crate::error::Error<Type>;
-pub(crate) type Warning = crate::error::Error<WarningType>;
+pub type Warning = crate::error::Error<WarningType>;
 pub type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
@@ -101,7 +101,7 @@ pub enum Expected {
     ParameterRange,
 }
 #[derive(Clone, Debug)]
-pub(crate) enum WarningType {
+pub enum WarningType {
     MacroOverwritten(Span),
 }
 
