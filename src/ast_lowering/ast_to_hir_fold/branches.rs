@@ -8,37 +8,27 @@
  * *****************************************************************************************
  */
 
-use std::ops::Range;
-
 use crate::ast;
-use crate::ast::{
-    AttributeNode, NumericalParameterRangeBound, NumericalParameterRangeExclude, Parameter,
-    ParameterType,
-};
+use crate::ast_lowering::ast_to_hir_fold::Fold;
 use crate::ast_lowering::ast_to_hir_fold::Statements;
 use crate::ast_lowering::ast_to_hir_fold::VerilogContext;
-use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
-use crate::ast_lowering::error::{Error, Type};
-use crate::ast_lowering::name_resolution::Resolver;
-use crate::compact_arena::{NanoArena, TinyArena};
+use crate::ast_lowering::error::Error;
+use crate::compact_arena::NanoArena;
 use crate::hir::BranchDeclaration;
-use crate::ir::ast::Variable;
-use crate::ir::{BranchId, ExpressionId, ModuleId, ParameterId, UnsafeWrite, VariableId, Write};
-use crate::parser::error::Unsupported;
-use crate::util::SafeRangeCreation;
-use crate::{Ast, Hir};
+use crate::ir::SafeRangeCreation;
+use crate::ir::{AttributeNode, BranchId, ModuleId, Write};
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
 pub struct Branches<'tag, 'lt> {
-    pub(super) branch_resolver: BranchResolver<'tag, 'lt>,
+    pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) base: Fold<'tag, 'lt>,
 }
 impl<'tag, 'lt> Branches<'tag, 'lt> {
     pub fn fold(mut self) -> std::result::Result<Statements<'tag, 'lt>, Vec<Error<'tag>>> {
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.base.ast) {
-            let module: &AttributeNode<ast::Module> = &self.base.ast[module];
+            let module = &self.base.ast[module];
             self.base
                 .resolver
                 .enter_scope(&module.contents.symbol_table);
@@ -73,14 +63,10 @@ impl<'tag, 'lt> Branches<'tag, 'lt> {
         {
             self.base.hir.write(
                 branch_declaration_id,
-                AttributeNode {
-                    attributes: branch_declaration.attributes,
-                    source: branch_declaration.source,
-                    contents: BranchDeclaration {
-                        name: branch_declaration.contents.name,
-                        branch: resolved_branch,
-                    },
-                },
+                branch_declaration.map(BranchDeclaration {
+                    name: branch_declaration.contents.name,
+                    branch: resolved_branch,
+                }),
             )
         }
     }

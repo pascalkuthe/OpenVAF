@@ -12,15 +12,11 @@ use std::ops::Range;
 use std::ptr::NonNull;
 
 use crate::ast::Parameter;
+use crate::ast::{
+    BinaryOperator, BuiltInFunctionCall, Function, Nature, NetType, UnaryOperator, Variable,
+};
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
-use crate::ir::ast::{
-    Ast, Attribute, AttributeNode, Attributes, BinaryOperator, BuiltInFunctionCall, Function,
-    Nature, NetType, Node, UnaryOperator, Variable,
-};
-use crate::ir::{
-    AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId, NetId,
-    ParameterId, PortId, StatementId, VariableId, Write,
-};
+use crate::ir::*;
 use crate::symbol::Ident;
 use crate::Span;
 
@@ -54,25 +50,27 @@ pub struct Hir<'tag> {
 impl<'tag> Hir<'tag> {
     /// # Safety
     /// You should never call this yourself. Lower an AST created using mk_ast! instead
-    pub(crate) unsafe fn init<'lt>(ast: &'lt mut Ast<'tag>) -> Box<Self> {
+    pub(crate) fn init() -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
-        #[allow(clippy::cast_ptr_alignment)]
-        //the ptr cast below has the right alignment since we are allocation using the right layout
-        let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
-            .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-        TinyArena::init(&mut res.as_mut().parameters);
-        NanoArena::init(&mut res.as_mut().branches);
-        TinyArena::init(&mut res.as_mut().nets);
-        NanoArena::init(&mut res.as_mut().ports);
-        TinyArena::init(&mut res.as_mut().variables);
-        NanoArena::init(&mut res.as_mut().ports);
-        NanoArena::init(&mut res.as_mut().functions);
-        NanoArena::init(&mut res.as_mut().disciplines);
-        NanoArena::init(&mut res.as_mut().natures);
-        TinyArena::init(&mut res.as_mut().expressions);
-        TinyArena::init(&mut res.as_mut().attributes);
-        TinyArena::init(&mut res.as_mut().statements);
-        Box::from_raw(res.as_ptr())
+        unsafe {
+            #[allow(clippy::cast_ptr_alignment)]
+            //the ptr cast below has the right alignment since we are allocation using the right layout
+            let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
+                .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
+            TinyArena::init(&mut res.as_mut().parameters);
+            NanoArena::init(&mut res.as_mut().branches);
+            TinyArena::init(&mut res.as_mut().nets);
+            NanoArena::init(&mut res.as_mut().ports);
+            TinyArena::init(&mut res.as_mut().variables);
+            NanoArena::init(&mut res.as_mut().ports);
+            NanoArena::init(&mut res.as_mut().functions);
+            NanoArena::init(&mut res.as_mut().disciplines);
+            NanoArena::init(&mut res.as_mut().natures);
+            TinyArena::init(&mut res.as_mut().expressions);
+            TinyArena::init(&mut res.as_mut().attributes);
+            TinyArena::init(&mut res.as_mut().statements);
+            Box::from_raw(res.as_ptr())
+        } //this is save since we just allocated
     }
 }
 

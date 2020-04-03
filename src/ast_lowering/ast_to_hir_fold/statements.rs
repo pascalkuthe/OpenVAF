@@ -11,27 +11,24 @@
 use std::ops::Range;
 
 use crate::ast::{
-    AttributeNode, ModuleItem, Node, NumericalParameterRangeBound, NumericalParameterRangeExclude,
+    BranchAccess, ModuleItem, NumericalParameterRangeBound, NumericalParameterRangeExclude,
     Parameter, ParameterType, Variable,
 };
 use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
-use crate::ast_lowering::name_resolution::Resolver;
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Condition, Module, Statement};
-use crate::ir::ast::{Attributes, BranchAccess};
-use crate::ir::{BlockId, ModuleId, StatementId, Write};
-use crate::ir::{ExpressionId, ParameterId, UnsafeWrite, VariableId};
+use crate::ir::*;
+use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
-use crate::util::{Push, SafeRangeCreation};
-use crate::{ast, Ast, Hir};
+use crate::{ast, Hir};
 
 /// The last fold folds all statements in textual order
 pub struct Statements<'tag, 'lt> {
-    pub(super) branch_resolver: BranchResolver<'tag, 'lt>,
+    pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) state: VerilogContext,
     pub(super) base: Fold<'tag, 'lt>,
 }
@@ -75,15 +72,11 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
             self.base.resolver.exit_scope();
             self.base.hir.write(
                 module_id,
-                AttributeNode {
-                    contents: Module {
-                        name: module.contents.name,
-                        port_list: module.contents.port_list,
-                        analog: self.base.hir.extend_range_to_end(analog_statements),
-                    },
-                    source: module.source,
-                    attributes: module.attributes,
-                },
+                module.map_with(|old| Module {
+                    name: old.name,
+                    port_list: old.port_list,
+                    analog: self.base.hir.extend_range_to_end(analog_statements),
+                }),
             );
         }
 
@@ -95,7 +88,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                 */
                 TinyArena::init_from(&mut self.base.hir.parameters, &self.base.ast.parameters)
             }
-            return Ok(self.base.hir);
+            Ok(self.base.hir)
         } else {
             Err(self.base.errors)
         }
@@ -137,11 +130,9 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
 
             ast::Statement::Condition(ref condition) => {
                 if let Ok(contents) = self.fold_condition(&condition.contents) {
-                    self.base.hir.push(Statement::Condition(AttributeNode {
-                        contents,
-                        source: condition.source,
-                        attributes: condition.attributes,
-                    }));
+                    self.base
+                        .hir
+                        .push(Statement::Condition(condition.map(contents)));
                 }
             }
 
@@ -154,6 +145,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
             }
 
             ast::Statement::Contribute(attr, ref nature_name, ref branch, value) => {
+                #[allow(unused_must_use)]
                 self.fold_contribute(attr, nature_name, branch, value);
             }
 
@@ -171,7 +163,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                     }
                 )
             }
-            ast::Statement::BuiltInFunctionCall(function_call) => {
+            ast::Statement::BuiltInFunctionCall(_function_call) => {
                 //doesnt change the programm flow when we emit this. Might change in the future when stateful functions are introduced
             }
         }
@@ -333,19 +325,15 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                 //this is save since it happens unconditionally for all parameters
                 self.base.hir.write_unsafe(
                     parameter_id,
-                    AttributeNode {
-                        source: self.base.ast[parameter_id].source,
-                        attributes: self.base.ast[parameter_id].attributes,
-                        contents: Parameter {
-                            name: self.base.ast[parameter_id].contents.name,
-                            default_value,
-                            parameter_type: ParameterType::Numerical {
-                                parameter_type,
-                                included_ranges,
-                                excluded_ranges,
-                            },
+                    self.base.ast[parameter_id].map_with(|old| Parameter {
+                        name: old.name,
+                        default_value,
+                        parameter_type: ParameterType::Numerical {
+                            parameter_type,
+                            included_ranges,
+                            excluded_ranges,
                         },
-                    },
+                    }),
                 )
             }
         } else {

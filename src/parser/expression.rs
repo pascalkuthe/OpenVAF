@@ -8,16 +8,16 @@
  * *****************************************************************************************
  */
 
-use crate::ast::{BinaryOperator, BranchAccess, Expression, Node, Primary, UnaryOperator};
+use crate::ast::{BinaryOperator, BranchAccess, Expression, Primary, UnaryOperator};
 use crate::ir::ast::BuiltInFunctionCall;
-use crate::ir::ExpressionId;
+use crate::ir::Push;
+use crate::ir::{ExpressionId, Node};
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealLiteralType};
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
-use crate::util::Push;
 
 enum BinaryOperatorOrCondition {
     Condition,
@@ -35,7 +35,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     let mut rhs = self.ast.push(rhs);
                     loop {
                         match self.parse_binary_operator() {
-                            Ok(BinaryOperatorOrCondition::BinaryOperator(op, right_prec))
+                            Ok(BinaryOperatorOrCondition::BinaryOperator(_, right_prec))
                                 if right_prec > precedence =>
                             {
                                 rhs = self.precedence_climb_expression_id(precedence, rhs)?
@@ -101,7 +101,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     let mut rhs = self.ast.push(rhs);
                     loop {
                         match self.parse_binary_operator() {
-                            Ok(BinaryOperatorOrCondition::BinaryOperator(op, right_prec))
+                            Ok(BinaryOperatorOrCondition::BinaryOperator(_, right_prec))
                                 if right_prec > precedence =>
                             {
                                 rhs = self.precedence_climb_expression_id(precedence, rhs)?

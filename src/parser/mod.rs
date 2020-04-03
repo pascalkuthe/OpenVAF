@@ -17,16 +17,15 @@ use log::error;
 pub use error::Error;
 pub use error::Result;
 
-use crate::ast::{Ast, Attributes, HierarchicalId};
-use crate::compact_arena::SafeRange;
-use crate::ir::ast::{Attribute, AttributeNode, Discipline, Nature};
-use crate::ir::AttributeId;
+use crate::ast::{Ast, HierarchicalId};
+use crate::ir::ast::{Discipline, Nature};
+use crate::ir::{Attribute, AttributeId, AttributeNode, Attributes};
+use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::{Expected, Type};
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::symbol::{Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
-use crate::util::{Push, SafeRangeCreation};
 use crate::{Preprocessor, SourceMap, Span};
 
 pub(crate) mod lexer;
@@ -51,6 +50,7 @@ pub struct Parser<'lt, 'ast, 'source_map> {
     pub ast: &'lt mut Ast<'ast>,
     pub non_critical_errors: Vec<Error>,
 }
+
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn new(
         preprocessor: Preprocessor<'lt, 'source_map>,
@@ -65,6 +65,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             non_critical_errors: errors,
         }
     }
+
     fn next(&mut self) -> Result<(Token, Span)> {
         match self.lookahead.take() {
             None => {
@@ -74,6 +75,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Some(res) => res,
         }
     }
+
     fn look_ahead(&mut self) -> Result<(Token, Span)> {
         if let Some(ref lookahead) = self.lookahead {
             return lookahead.clone();
@@ -85,6 +87,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         self.lookahead = Some(res.clone());
         res
     }
+
     pub fn run(&mut self) {
         loop {
             let error = match self.parse_attributes() {
@@ -126,6 +129,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
         }
     }
+
     pub fn parse_identifier(&mut self, optional: bool) -> Result<Ident> {
         let (token, source) = if optional {
             self.look_ahead()?
@@ -152,11 +156,13 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         }
         Ok(Ident::from_str_and_span(identifier, source))
     }
+
     pub fn parse_hierarchical_identifier(&mut self, optional: bool) -> Result<HierarchicalId> {
         Ok(HierarchicalId {
             names: self.parse_hierarchical_identifier_internal(optional)?,
         })
     }
+
     pub fn parse_hierarchical_identifier_internal(&mut self, optional: bool) -> Result<Vec<Ident>> {
         let mut identifier = vec![self.parse_identifier(optional)?];
         while self.look_ahead()?.0 == Token::Accessor {
@@ -165,7 +171,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         }
         Ok(identifier)
     }
-    //todo attributes
+
     pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
         let attributes = self.ast.empty_range_from_end();
         let mut attribute_map: AHashMap<Symbol, AttributeId<'ast>> = AHashMap::new();
@@ -182,11 +188,11 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         }
         Ok(self.ast.extend_range_to_end(attributes))
     }
+
     fn parse_attribute(
         &mut self,
         attribute_map: &mut AHashMap<Symbol, AttributeId<'ast>>,
     ) -> Result {
-        let range: SafeRange<AttributeId<'ast>> = self.ast.empty_range_from_end();
         let name = self.parse_identifier(false)?;
         let value = if self.look_ahead()?.0 == Token::Assign {
             self.lookahead.take();
@@ -201,18 +207,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             let id = self.ast.push(Attribute { name, value });
             attribute_map.insert(name.name, id);
         }
-        /*let range = self.ast.extend_range_to_end(range);
-        self.ast[range].sort_unstable_by(|attribute1, attribute2| {
-            attribute1
-                .name
-                .name
-                .as_u32()
-                .cmp(&attribute2.name.name.as_u32())
-        });
-        sorting probably not worth it since attributes are never used in large quantaties where a sorted algoritehm would be faster
-        */
         Ok(())
     }
+
     pub fn expect(&mut self, token: Token) -> Result {
         let (found, source) = self.look_ahead()?;
         if found != token {
@@ -227,9 +224,11 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Ok(())
         }
     }
+
     pub fn span_to_current_end(&self, start: Index) -> Span {
         Span::new(start, self.preprocessor.current_end())
     }
+
     #[inline]
     pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration<'ast>) {
         let source = declaration.span(&self.ast);
@@ -243,15 +242,18 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             });
         }
     }
+
     pub fn symbol_table_mut(&mut self) -> &mut SymbolTable<'ast> {
         self.scope_stack
             .last_mut()
             .unwrap_or(&mut self.ast.top_symbols)
     }
+
     pub fn symbol_table(&self) -> &SymbolTable<'ast> {
         self.scope_stack.last().unwrap_or(&self.ast.top_symbols)
     }
 }
+
 pub fn parse<'source_map, 'ast, 'lt>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
@@ -300,6 +302,7 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
         }
     }
 }
+
 pub fn insert_electrical_natures_and_disciplines(ast: &mut Ast) {
     let voltage = ast.push(AttributeNode {
         attributes: ast.empty_range_from_end(),

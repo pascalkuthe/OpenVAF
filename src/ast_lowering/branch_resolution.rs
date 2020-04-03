@@ -11,30 +11,27 @@
 use ahash::AHashMap;
 
 use crate::ast::NetType::GROUND;
-use crate::ast::{AttributeNode, Node};
 use crate::ast_lowering::ast_to_hir_fold::Fold;
 use crate::ast_lowering::error::{Error, NetInfo, Type};
 use crate::hir::Net;
 use crate::hir::{Branch, BranchDeclaration, DisciplineAccess};
-use crate::ir::{BranchId, DisciplineId, NatureId, NetId, PortId};
+use crate::ir::*;
+use crate::ir::{Push, SafeRangeCreation};
 use crate::symbol::{keywords, Ident};
-use crate::util::{Push, SafeRangeCreation};
-use crate::{ast, hir, Ast, Span};
+use crate::{ast, Ast, Span};
 
 /// Handles branch resolution which is more complicated because unnamed branches exist and discipline comparability has to be enforced
 /// # Safety
 /// Branch resolution may only take place after all nets and ports have been folded! UB might occur otherwise.
-pub struct BranchResolver<'tag, 'lt> {
-    ast: &'lt Ast<'tag>,
+pub struct BranchResolver<'tag> {
     unnamed_branches: AHashMap<(NetId<'tag>, NetId<'tag>), BranchId<'tag>>,
     unnamed_port_branches: AHashMap<PortId<'tag>, BranchId<'tag>>,
     implicit_grounds: AHashMap<DisciplineId<'tag>, NetId<'tag>>,
 }
 
-impl<'tag, 'lt> BranchResolver<'tag, 'lt> {
+impl<'tag, 'lt> BranchResolver<'tag> {
     pub fn new(ast: &'lt Ast<'tag>) -> Self {
         Self {
-            ast,
             unnamed_port_branches: AHashMap::with_capacity(16),
             unnamed_branches: AHashMap::with_capacity(32),
             implicit_grounds: AHashMap::with_capacity(ast.disciplines.len as usize),

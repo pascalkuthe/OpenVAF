@@ -18,8 +18,8 @@ use crate::fold_hir_to_mir_and_print_errors;
 use crate::hir_lowering::fold_hir_to_mir;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
+use crate::ir::SafeRangeCreation;
 use crate::parser::{insert_electrical_natures_and_disciplines, parse_and_print_errors};
-use crate::util::SafeRangeCreation;
 
 #[test]
 pub fn schemantic() -> Result<(), ()> {

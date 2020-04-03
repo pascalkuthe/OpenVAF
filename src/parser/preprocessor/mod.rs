@@ -206,7 +206,6 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             let new_state = {
                 match current_state.token_source {
                     TokenSource::File(ref mut lexer) => {
-                        let tmp = lexer.token();
                         lexer.advance();
                         if lexer.token() != Token::EOF || main_file {
                             return Ok((lexer.token(), lexer.range()));

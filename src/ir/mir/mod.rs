@@ -14,18 +14,11 @@ use std::ptr::NonNull;
 use intrusive_collections::__core::cmp::Ordering;
 use intrusive_collections::__core::convert::TryFrom;
 
-use crate::ast::{
-    Attribute, AttributeNode, Attributes, BuiltInFunctionCall, Function, Nature, Node,
-    UnaryOperator,
-};
+use crate::ast::{BuiltInFunctionCall, Function, Nature, UnaryOperator};
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Block, BranchDeclaration, Discipline, DisciplineAccess, Module, Net, Port};
 use crate::ir::hir::Hir;
 use crate::ir::*;
-use crate::ir::{
-    BranchId, FunctionId, IntegerExpressionId, NetId, ParameterId, PortId, RealExpressionId,
-    StatementId, VariableId,
-};
 use crate::symbol::Ident;
 use crate::{ir, Span};
 

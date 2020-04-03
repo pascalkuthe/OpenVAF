@@ -8,14 +8,15 @@
  * *****************************************************************************************
  */
 
-use crate::ast::{AttributeNode, Attributes, Variable, VariableType};
+use crate::ast::{Variable, VariableType};
 use crate::ir::ExpressionId;
+use crate::ir::Push;
+use crate::ir::{AttributeNode, Attributes};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::parser::Result;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
-use crate::util::Push;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_variable_declaration(

@@ -38,7 +38,7 @@ use crate::ast::Ast;
 #[doc(inline)]
 pub use crate::ast_lowering::ast_to_hir_fold::fold as fold_ast_to_hir;
 use crate::ir::hir::Hir;
-use crate::{ast, SourceMap};
+use crate::SourceMap;
 
 #[cfg(test)]
 mod test;
@@ -51,7 +51,7 @@ pub mod error;
 //TODO input/output enforcement
 
 pub fn fold_ast_to_hir_and_print_errors<'tag>(
-    mut ast: Box<Ast<'tag>>,
+    ast: Box<Ast<'tag>>,
     source_map: &SourceMap,
     translate_lines: bool,
 ) -> Result<Box<Hir<'tag>>, ()> {

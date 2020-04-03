@@ -18,11 +18,11 @@ use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{Branch, VariableType};
 use crate::compact_arena::SafeRange;
 use crate::ir::ModuleId;
+use crate::ir::SafeRangeCreation;
 use crate::parser::parse_and_print_errors;
 use crate::symbol::keywords::EMPTY_SYMBOL;
 use crate::symbol::Symbol;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
-use crate::util::SafeRangeCreation;
 use crate::Ast;
 
 const PARSE_UNIT_DIRECTORY: &'static str = "tests/parseunits/";

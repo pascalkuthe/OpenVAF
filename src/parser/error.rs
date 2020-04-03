@@ -313,7 +313,6 @@ impl Error {
                         }
                     })
                     .collect();
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -387,7 +386,7 @@ impl Error {
                 Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!("Ports have to be listed in the Module head fi they are declared in the body")),
+                        label: Some("Ports have to be listed in the Module head fi they are declared in the body".to_string()),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
@@ -422,7 +421,7 @@ impl Error {
                 Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!("Empty macro arguments are not allowed",)),
+                        label: Some("Empty macro arguments are not allowed".to_string()),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,

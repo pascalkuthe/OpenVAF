@@ -44,25 +44,23 @@ impl<'tag, 'lt> Fold<'tag, 'lt> {
     }
 }
 
-/// The Verilog AMS standard uses multiple different grammar rules to enfoce that constants/analog exprerssions only contain items valid in their context
-/// VARF uses flags stored inside this struct instead during the AST to MIR folding process in this module
 bitflags! {
+    /// The Verilog AMS standard uses multiple different grammar rules to enfoce that constants/analog exprerssions only contain items valid in their context
+    /// VARF uses flags stored inside this struct instead during the AST to MIR folding process in this module
     struct VerilogContext: u8{
-        const constant = 0b00000001;
-        const conditional = 0b00000010;
-        const analog = 0b00000100;
+        const constant = 0b0000_0001;
+        const conditional = 0b0000_0010;
+        const analog = 0b0000_0100;
 
     }
 }
 
 ///The point of this entire Module. It lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
-pub fn fold<'tag>(
-    mut ast: Box<Ast<'tag>>,
-) -> Result<Box<Hir<'tag>>, (Vec<Error<'tag>>, Box<Ast<'tag>>)> {
-    try_fold(&mut ast).map_err(|err| (err, ast))
+pub fn fold(ast: Box<Ast>) -> Result<Box<Hir>, (Vec<Error>, Box<Ast>)> {
+    try_fold(&ast).map_err(|err| (err, ast))
 }
 
 /// A Helper method to avoid code duplication until try blocks are stable
-fn try_fold<'tag>(ast: &mut Ast<'tag>) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
+fn try_fold<'tag>(ast: &Ast<'tag>) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
     Ok(Global::new(ast).fold()?.fold()?.fold()?)
 }

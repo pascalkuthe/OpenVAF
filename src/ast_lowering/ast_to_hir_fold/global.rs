@@ -8,7 +8,6 @@
  * *****************************************************************************************
  */
 
-use crate::ast::AttributeNode;
 use crate::ast_lowering::ast_to_hir_fold::{Branches, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
@@ -16,9 +15,9 @@ use crate::ast_lowering::name_resolution::Resolver;
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Discipline, Net, Port};
 use crate::ir::{AttributeId, DisciplineId, NetId, PortId, Write};
+use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
 use crate::symbol::{keywords, Ident};
-use crate::util::{Push, SafeRangeCreation};
 use crate::{Ast, Hir};
 
 /// This is the first fold. All Items that are defined globally or do not reference other items (nets & ports) are folded here
@@ -27,10 +26,10 @@ pub struct Global<'tag, 'lt> {
 }
 
 impl<'tag, 'lt> Global<'tag, 'lt> {
-    pub fn new(ast: &'lt mut Ast<'tag>) -> Self {
+    pub fn new(ast: &'lt Ast<'tag>) -> Self {
         let mut res = Self {
             base: Fold {
-                hir: unsafe { Hir::init(ast) },
+                hir: Hir::init(),
                 ast: &*ast,
                 errors: Vec::with_capacity(32),
                 resolver: Resolver::new(&*ast),
@@ -47,6 +46,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
             //This is save since we get the ptrs using borrows
             TinyArena::copy_to(&mut self.base.hir.attributes, &self.base.ast.attributes);
         }
+
         for attribute in attributes {
             if let Some(expr) = self.base.ast[attribute].value {
                 todo!("Attribute expression")
@@ -57,6 +57,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
             //This is save since we get the ptrs using borrows
             NanoArena::copy_to(&mut self.base.hir.natures, &self.base.ast.natures);
         }
+
         /*for nature in self.base.ast.full_range() {
              TODO advanced natures
         }*/
@@ -65,6 +66,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
             //This is save since we get the ptrs using borrows and drop is never called since they are copy
             NanoArena::init_from(&mut self.base.hir.disciplines, &self.base.ast.disciplines);
         }
+
         for discipline in self.base.ast.full_range() {
             self.fold_discipline(discipline);
         }
@@ -73,6 +75,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
             //This is save since we get the ptrs using borrows and drop is never called since they are copy
             TinyArena::init_from(&mut self.base.hir.nets, &self.base.ast.nets);
         }
+
         for net in self.base.ast.full_range() {
             self.fold_net(net);
         }
@@ -80,6 +83,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
             //This is save since we get the ptrs using borrows and drop is never called since they are copy
             NanoArena::init_from(&mut self.base.hir.ports, &self.base.ast.ports);
         }
+
         for port in self.base.ast.full_range() {
             self.fold_port(port);
         }
@@ -118,15 +122,11 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
         if let (Ok(potential_nature), Ok(flow_nature)) = (pot_nature, flow_nature) {
             self.base.hir.write(
                 discipline,
-                AttributeNode {
-                    attributes: unresolved_discipline.attributes,
-                    source: unresolved_discipline.source,
-                    contents: Discipline {
-                        name: unresolved_discipline.contents.name,
-                        flow_nature,
-                        potential_nature,
-                    },
-                },
+                unresolved_discipline.copy_with(|old| Discipline {
+                    name: old.name,
+                    flow_nature,
+                    potential_nature,
+                }),
             );
         }
     }
@@ -136,16 +136,12 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
     fn fold_port(&mut self, port: PortId<'tag>) {
         let unresolved_port = &self.base.ast[port];
         if let Ok(discipline) = self.resolve_discipline(&unresolved_port.contents.discipline) {
-            let net = self.base.hir.push(AttributeNode {
-                attributes: unresolved_port.attributes,
-                source: unresolved_port.source,
-                contents: Net {
-                    name: unresolved_port.contents.name,
-                    discipline,
-                    signed: unresolved_port.contents.signed,
-                    net_type: unresolved_port.contents.net_type,
-                },
-            });
+            let net = self.base.hir.push(unresolved_port.copy_with(|port| Net {
+                name: port.name,
+                discipline,
+                signed: port.signed,
+                net_type: port.net_type,
+            }));
 
             self.base.hir.write(
                 port,
@@ -164,16 +160,12 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
         if let Ok(discipline) = self.resolve_discipline(&unresolved_net.contents.discipline) {
             self.base.hir.write(
                 net,
-                AttributeNode {
-                    attributes: unresolved_net.attributes,
-                    source: unresolved_net.source,
-                    contents: Net {
-                        name: unresolved_net.contents.name,
-                        discipline,
-                        signed: unresolved_net.contents.signed,
-                        net_type: unresolved_net.contents.net_type,
-                    },
-                },
+                unresolved_net.copy_with(|old| Net {
+                    name: old.name,
+                    discipline,
+                    signed: old.signed,
+                    net_type: old.net_type,
+                }),
             )
         }
     }

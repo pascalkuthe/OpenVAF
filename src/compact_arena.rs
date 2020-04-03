@@ -42,13 +42,12 @@ use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
-use crate::util::Step;
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SafeRange<T: Copy> {
     start: T,
     end: T,
 }
+
 /*impl<T: Copy> Into<Range<T>> for SafeRange<T> {
     fn into(self) -> Range<T> {
         std::ops::Range {
@@ -57,6 +56,7 @@ pub struct SafeRange<T: Copy> {
         }
     }
 }*/
+
 impl<T: Copy> From<Range<T>> for SafeRange<T> {
     fn from(org: Range<T>) -> Self {
         Self {
@@ -65,6 +65,7 @@ impl<T: Copy> From<Range<T>> for SafeRange<T> {
         }
     }
 }
+
 impl<'tag, T: Copy + Clone> From<SafeRange<Idx<'tag, T>>> for SafeRange<T> {
     fn from(other: SafeRange<Idx<'tag, T>>) -> Self {
         Self {
@@ -73,6 +74,7 @@ impl<'tag, T: Copy + Clone> From<SafeRange<Idx<'tag, T>>> for SafeRange<T> {
         }
     }
 }
+
 impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
     type Item = T;
 
@@ -87,6 +89,7 @@ impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
         }
     }
 }
+
 impl<T: Copy + Step + PartialOrd> DoubleEndedIterator for SafeRange<T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.start < self.end {
@@ -97,6 +100,7 @@ impl<T: Copy + Step + PartialOrd> DoubleEndedIterator for SafeRange<T> {
         }
     }
 }
+
 impl<T: Copy + Clone> SafeRange<T> {
     /// You should never call this! This is here to allow access in macros
     pub(crate) unsafe fn get_end(&self) -> T {
@@ -116,6 +120,7 @@ impl<T: Copy + Clone> SafeRange<T> {
         self.end = start;
     }
 }
+
 impl<'tag, T: Copy + Clone + Sub<Output = T>> SafeRange<Idx<'tag, T>> {
     pub fn len(self) -> T {
         self.end.distance(self.start)
@@ -126,6 +131,12 @@ impl<T: Copy + Clone + PartialEq + Eq> SafeRange<T> {
     pub fn is_empty(self) -> bool {
         self.end == self.start
     }
+}
+
+/// A trait used for abstracting over unsafe over iteration of ids
+pub trait Step {
+    unsafe fn step(&mut self);
+    unsafe fn step_back(&mut self);
 }
 
 /// This is one part of the secret sauce that ensures that indices from

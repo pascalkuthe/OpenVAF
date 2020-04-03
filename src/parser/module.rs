@@ -14,13 +14,13 @@ use std::ops::Range;
 use copyless::VecHelper;
 
 use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
-use crate::ast::{AttributeNode, Attributes, Module, ModuleItem};
-use crate::error::Error;
-use crate::ir::ast::{
-    Expression, Node, NumericalParameterRangeBound, NumericalParameterRangeExclude, Parameter,
-    ParameterType, Primary, VariableType,
+use crate::ast::{
+    Expression, Module, ModuleItem, NumericalParameterRangeBound, NumericalParameterRangeExclude,
+    Parameter, ParameterType, Primary, VariableType,
 };
-use crate::ir::ExpressionId;
+use crate::error::Error;
+use crate::ir::{AttributeNode, Attributes, ExpressionId, Node};
+use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error;
 use crate::parser::error::Expected::ParameterRange;
 use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens, Unsupported};
@@ -30,7 +30,6 @@ use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
-use crate::util::{Push, SafeRangeCreation};
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
@@ -371,14 +370,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 self.lookahead.take();
                 Ok(self.ast.push(Node {
                     contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
-                    source: self.preprocessor.span(),
+                    source,
                 }))
             }
             Token::MinusInfinity => {
                 self.lookahead.take();
                 Ok(self.ast.push(Node {
                     contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
-                    source: self.preprocessor.span(),
+                    source,
                 }))
             }
             _ => Ok(self.parse_expression_id()?),

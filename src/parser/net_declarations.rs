@@ -10,15 +10,15 @@
 
 use std::collections::HashSet;
 
-use crate::ast::{AttributeNode, Attributes, Net, NetType, Port};
-use crate::ir::PortId;
+use crate::ast::{Net, NetType, Port};
+use crate::ir::Push;
+use crate::ir::{AttributeNode, Attributes, PortId};
 use crate::parser::error::Type::{AlreadyDeclaredInThisScope, PortNotPreDeclaredInModuleHead};
 use crate::parser::error::{Result, Type};
 use crate::parser::lexer::Token;
 use crate::parser::{error, Error, Parser};
 use crate::symbol::{keywords, Ident};
 use crate::symbol_table::SymbolDeclaration;
-use crate::util::Push;
 use crate::Span;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {

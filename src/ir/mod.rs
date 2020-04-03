@@ -8,189 +8,202 @@
  * *****************************************************************************************
  */
 
-use crate::compact_arena::{Idx16, Idx8};
+//here so that ids don't spam the struct section of this module in docs but can still be imported under the normal path
+#[doc(no_inline)]
+pub use ids::AttributeId;
+#[doc(no_inline)]
+pub use ids::BlockId;
+#[doc(no_inline)]
+pub use ids::BranchId;
+#[doc(no_inline)]
+pub use ids::DisciplineId;
+#[doc(no_inline)]
+pub use ids::ExpressionId;
+#[doc(no_inline)]
+pub use ids::FunctionId;
+#[doc(no_inline)]
+pub use ids::IntegerExpressionId;
+#[doc(no_inline)]
+pub use ids::ModuleId;
+#[doc(no_inline)]
+pub use ids::NatureId;
+#[doc(no_inline)]
+pub use ids::NetId;
+#[doc(no_inline)]
+pub use ids::ParameterId;
+#[doc(no_inline)]
+pub use ids::PortId;
+#[doc(no_inline)]
+pub use ids::RealExpressionId;
+#[doc(no_inline)]
+pub use ids::StatementId;
+#[doc(no_inline)]
+pub use ids::VariableId;
 
-pub(crate) trait UnsafeWrite<Idx> {
-    type Data;
-    unsafe fn write_unsafe(&mut self, idx: Idx, val: Self::Data);
-}
-pub(crate) trait Write<Idx> {
-    type Data: Copy;
-    fn write(&mut self, idx: Idx, val: Self::Data);
-}
+use crate::compact_arena::{Idx16, Idx8, SafeRange};
+use crate::symbol::Ident;
+use crate::Span;
 
-macro_rules! impl_id_type {
-    ($name:ident in $container:ident::$sub_container:ident -> $type:ty) => {
-        impl<'tag> ::std::ops::Index<$name<'tag>> for $container<'tag> {
-            type Output = $type;
-            fn index(&self, index: $name<'tag>) -> &Self::Output {
-                &self.$sub_container[index.0]
-            }
-        }
-        impl<'tag> ::std::ops::Index<Range<$name<'tag>>> for $container<'tag> {
-            type Output = [$type];
-            fn index(&self, range: Range<$name<'tag>>) -> &Self::Output {
-                let range = $crate::compact_arena::SafeRange::new(range.start.0, range.end.0);
-                &self.$sub_container[range]
-            }
-        }
-        impl<'tag> ::std::ops::Index<$crate::compact_arena::SafeRange<$name<'tag>>>
-            for $container<'tag>
-        {
-            type Output = [$type];
-            fn index(&self, range: $crate::compact_arena::SafeRange<$name<'tag>>) -> &Self::Output {
-                let range = unsafe {
-                    $crate::compact_arena::SafeRange::new(range.get_start().0, range.get_end().0)
-                };
-                &self.$sub_container[range]
-            }
-        }
-
-        impl<'tag> ::std::ops::IndexMut<$name<'tag>> for $container<'tag> {
-            fn index_mut(&mut self, index: $name<'tag>) -> &mut Self::Output {
-                &mut self.$sub_container[index.0]
-            }
-        }
-        impl<'tag> $crate::ir::UnsafeWrite<$name<'tag>> for $container<'tag> {
-            type Data = $type;
-            unsafe fn write_unsafe(&mut self, index: $name<'tag>, value: Self::Data) {
-                self.$sub_container
-                    .write(index.0, ::core::mem::MaybeUninit::new(value))
-            }
-        }
-        impl<'tag> ::std::ops::IndexMut<Range<$name<'tag>>> for $container<'tag> {
-            fn index_mut(&mut self, range: Range<$name<'tag>>) -> &mut Self::Output {
-                let range = $crate::compact_arena::SafeRange::new(range.start.0, range.end.0);
-                &mut self.$sub_container[range]
-            }
-        }
-        impl<'tag> ::std::ops::IndexMut<$crate::compact_arena::SafeRange<$name<'tag>>>
-            for $container<'tag>
-        {
-            fn index_mut(
-                &mut self,
-                range: $crate::compact_arena::SafeRange<$name<'tag>>,
-            ) -> &mut Self::Output {
-                let range = unsafe {
-                    $crate::compact_arena::SafeRange::new(range.get_start().0, range.get_end().0)
-                };
-                &mut self.$sub_container[range]
-            }
-        }
-        impl<'tag> $crate::util::Push<$type> for $container<'tag> {
-            type Key = $name<'tag>;
-            fn push(&mut self, val: $type) -> Self::Key {
-                $name(self.$sub_container.add(val))
-            }
-        }
-        impl<'tag> $crate::util::SafeRangeCreation<$name<'tag>> for $container<'tag> {
-            fn range_to_end(&self, from: $name<'tag>) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.range_to_end(from.0);
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
-            }
-            fn empty_range_from_end(&self) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.empty_range_from_end();
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
-            }
-            fn extend_range_to_end(&self, range: SafeRange<$name<'tag>>) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.extend_range_to_end(range.into());
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
-            }
-            fn full_range(&self) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.full_range();
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
-            }
-        }
-    };
-}
-
-macro_rules! id_type {
-    ($name:ident($type:ident)) => {
-        #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Debug, Hash)]
-        #[repr(transparent)]
-        pub struct $name<'tag>($type<'tag>);
-
-        impl<'tag> $crate::util::Step for $name<'tag> {
-            unsafe fn step(&mut self) {
-                self.0.add(1)
-            }
-            unsafe fn step_back(&mut self) {
-                self.0.sub(1)
-            }
-        }
-        impl<'tag> ::std::convert::Into<$type<'tag>> for $name<'tag> {
-            fn into(self) -> $type<'tag> {
-                self.0
-            }
-        }
-        impl<'tag> $name<'tag> {
-            pub fn unwrap(self) -> $type<'tag> {
-                self.0
-            }
-        }
-        impl<'tag> $crate::compact_arena::SafeRange<$name<'tag>> {
-            pub fn unwrap(self) -> $crate::compact_arena::SafeRange<$type<'tag>> {
-                self.into()
-            }
-        }
-        impl<'tag> ::core::fmt::Display for $name<'tag> {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> std::fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-        impl<'tag> ::std::convert::Into<$crate::compact_arena::SafeRange<$type<'tag>>>
-            for $crate::compact_arena::SafeRange<$name<'tag>>
-        {
-            fn into(self) -> $crate::compact_arena::SafeRange<$type<'tag>> {
-                $crate::compact_arena::SafeRange::new(
-                    unsafe { self.get_start() }.0,
-                    unsafe { self.get_end() }.0,
-                )
-            }
-        }
-    };
-}
+#[macro_use]
+pub mod ids;
 
 #[macro_use]
 pub mod ast;
 
-#[macro_use]
 pub mod hir;
 
 pub mod mir;
 
-id_type!(BranchId(Idx8));
-id_type!(NetId(Idx16));
-id_type!(PortId(Idx8));
-id_type!(ParameterId(Idx16));
-id_type!(VariableId(Idx16));
-id_type!(ModuleId(Idx8));
-id_type!(FunctionId(Idx8));
-id_type!(DisciplineId(Idx8));
-id_type!(ExpressionId(Idx16));
-id_type!(RealExpressionId(Idx16));
-id_type!(IntegerExpressionId(Idx16));
-id_type!(BlockId(Idx8));
-id_type!(AttributeId(Idx16));
-id_type!(StatementId(Idx16));
-id_type!(NatureId(Idx8));
+/// Allows adding elements to IRS
+///
+/// # Examples
+///
+/// ## Adding an attriubte to an ast and reading it using its ID
+///
+/// ```
+/// # use VARF::ir::{Node, Attribute};
+/// # use VARF::ir::ast::Statement;
+/// # use VARF::symbol::Ident;
+/// mk_ast!(ast);
+/// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
+/// assert_eq!(ast[id].name,Ident::from_str("foo"));
+///
+/// ```
+///
+///
+pub trait Push<T> {
+    type Key;
+    fn push(&mut self, value: T) -> Self::Key;
+}
+
+/// Allows creating ranges of IDs for an IR. [`SafeRange`](crate::compact_arena::SafeRange)s are returned instead of normal [`Range`](std::ops::Range)s.
+/// See the documentation of [`SafeRange`](crate::compact_arena::SafeRange) for more details.
+pub trait SafeRangeCreation<Key: Copy + Clone> {
+    ///  Creates a range from `start` to the last Element of this type
+    ///
+    /// # Examples
+    /// ```
+    /// # use VARF::ir::{Node, Attribute};
+    /// # use VARF::ir::ast::Statement;
+    /// # use VARF::symbol::Ident;
+    /// mk_ast!(ast);
+    /// let foo = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
+    /// let bar = ast.push(Attribute{name: Ident::from_str("bar"),value:None });
+    /// let range = ast.range_to_end(foo);
+    /// assert_eq!(bar,range.next());
+    /// assert_eq!(None,range.next());
+    ///
+    /// ```
+    fn range_to_end(&self, start: Key) -> SafeRange<Key>;
+
+    /// Extends a range to to the last Element of this type: `x..y`-> `x..end`
+    #[inline]
+    fn extend_range_to_end(&self, range: SafeRange<Key>) -> SafeRange<Key> {
+        //this is save since the result will be a SafeRange once again
+        self.range_to_end(unsafe { range.get_start() })
+    }
+    /// Creates an empty range (start = end) starting at the last Element of the IR
+    fn empty_range_from_end(&self) -> SafeRange<Key>;
+
+    /// Returns a range over all elements of the IR
+    ///
+    /// # Examples
+    /// ```
+    /// # use VARF::ir::{Node, Attribute};
+    /// # use VARF::ir::ast::Statement;
+    /// # use VARF::symbol::Ident;
+    /// mk_ast!(ast);
+    /// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
+    /// let range = ast.full_range();
+    /// assert_eq!(id,range.next());
+    /// assert_eq!(None,range.next());
+    ///
+    /// ```
+    fn full_range(&self) -> SafeRange<Key>;
+}
+
+/// A trait implemented for all id types to abstract over writing to unitized memory (the = operator is not save since drop will be called)
+/// This is an unsafe trait since extra care has to be taken when using this during the folding process for types that implement drop:
+/// * This has to be called for every ID that will be assumed initialized later (even when errors occur)
+/// * This may cause memory leaks if this is used to write using an old id
+pub(crate) trait UnsafeWrite<Idx> {
+    type Data;
+    unsafe fn write_unsafe(&mut self, idx: Idx, val: Self::Data);
+}
+
+/// For most types in this crate drop is not implemented. For those types `UnsafeWrite` is always save.
+/// This crate is implimented for those types.
+pub(crate) trait Write<Idx> {
+    //This should be !Drop but negative trait bounds aren't implemented yet.
+    // While there could be drop implementations for copy types that's very rarely the case (not at all in this crate) so this will do for now
+    type Data: Copy;
+    fn write(&mut self, idx: Idx, val: Self::Data);
+}
+
+/// A Node of an IR. Contains a Span an addition to whatever that node holds
+#[derive(Clone, Copy, Debug)]
+pub struct Node<T: Clone> {
+    pub source: Span,
+    pub contents: T,
+}
+
+impl<T: Clone> Node<T> {
+    pub fn new(contents: T, source: Span) -> Self {
+        Self { contents, source }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Attribute<'tag> {
+    pub name: Ident,
+    pub value: Option<ExpressionId<'tag>>,
+}
+
+pub type Attributes<'ast> = SafeRange<AttributeId<'ast>>;
+
+/// A special type of IR Node. Contains a Span and attributes in addition to whatever that node holds
+#[derive(Clone, Copy, Debug)]
+pub struct AttributeNode<'ast, T: Clone> {
+    pub attributes: Attributes<'ast>,
+    pub source: Span,
+    pub contents: T,
+}
+
+impl<'tag, T: Copy + Clone> AttributeNode<'tag, T> {
+    #[inline]
+    pub fn copy_with<X: Clone>(self, f: impl FnOnce(T) -> X) -> AttributeNode<'tag, X> {
+        AttributeNode {
+            attributes: self.attributes,
+            source: self.source,
+            contents: f(self.contents),
+        }
+    }
+
+    #[inline]
+    pub fn copy_as<X: Clone>(self, contents: X) -> AttributeNode<'tag, X> {
+        AttributeNode {
+            attributes: self.attributes,
+            source: self.source,
+            contents,
+        }
+    }
+}
+impl<'tag, T: Clone> AttributeNode<'tag, T> {
+    #[inline]
+    pub fn map_with<X: Clone>(&self, f: impl FnOnce(&T) -> X) -> AttributeNode<'tag, X> {
+        AttributeNode {
+            attributes: self.attributes,
+            source: self.source,
+            contents: f(&self.contents),
+        }
+    }
+
+    #[inline]
+    pub fn map<X: Clone>(&self, contents: X) -> AttributeNode<'tag, X> {
+        AttributeNode {
+            attributes: self.attributes,
+            source: self.source,
+            contents,
+        }
+    }
+}

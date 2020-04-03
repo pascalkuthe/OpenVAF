@@ -15,9 +15,6 @@ pub struct Error<ErrorType> {
     pub error_type: ErrorType,
     pub source: Span,
 }
-pub enum ErrorType {
-    Parser(parser::Error),
-}
 pub trait PrettyPrintError: Sized {
     fn print<'source>(
         error: &'source Error<Self>,

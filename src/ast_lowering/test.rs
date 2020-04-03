@@ -16,8 +16,8 @@ use crate::ast_lowering::fold_ast_to_hir_and_print_errors;
 use crate::compact_arena::SafeRange;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
+use crate::ir::SafeRangeCreation;
 use crate::parser::{insert_electrical_natures_and_disciplines, parse_and_print_errors};
-use crate::util::SafeRangeCreation;
 
 #[test]
 pub fn diode() -> Result<(), ()> {

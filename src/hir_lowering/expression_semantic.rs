@@ -10,13 +10,13 @@
 
 use std::convert::TryInto;
 
-use crate::ast::{BinaryOperator, BuiltInFunctionCall, Node};
+use crate::ast::{BinaryOperator, BuiltInFunctionCall};
 use crate::hir::Primary;
 use crate::hir_lowering::error::{Error, Type};
 use crate::hir_lowering::HirToMirFold;
-use crate::ir::{hir, IntegerExpressionId, RealExpressionId};
+use crate::ir::Push;
+use crate::ir::{hir, IntegerExpressionId, Node, RealExpressionId};
 use crate::mir::*;
-use crate::util::Push;
 use crate::{ast, ir, mir};
 
 impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
@@ -350,7 +350,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             hir::Expression::Primary(Primary::Real(val)) => RealExpression::Literal(val),
             hir::Expression::Primary(Primary::FunctionCall(function, ref args)) => {
                 todo!("return type checking");
-                todo!("argument type checking")
+                // todo!("argument type checking")
                 /*self.mir.push(Node{
                     source,
                     contents:RealExpression::FunctionCall(function, args.clone())

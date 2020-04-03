@@ -9,10 +9,11 @@
  */
 
 use crate::ast::{
-    AttributeNode, Attributes, BlockScope, Branch, BranchAccess, Condition, Expression,
-    HierarchicalId, Node, Primary, SeqBlock, Statement, VariableType,
+    BlockScope, Branch, BranchAccess, Condition, Expression, HierarchicalId, Primary, SeqBlock,
+    Statement, VariableType,
 };
-use crate::ir::{BlockId, StatementId};
+use crate::ir::Push;
+use crate::ir::{AttributeNode, Attributes, BlockId, Node, StatementId};
 use crate::parser::error::Type::{
     HierarchicalIdNotAllowedAsNature, UnexpectedToken, UnexpectedTokens,
 };
@@ -22,7 +23,6 @@ use crate::parser::Parser;
 use crate::symbol::keywords;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
-use crate::util::Push;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_statement(&mut self, attributes: Attributes<'ast>) -> Result<StatementId<'ast>> {

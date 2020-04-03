@@ -11,21 +11,20 @@
 use std::result::Result;
 
 use crate::ast::BuiltInFunctionCall::*;
-use crate::ast::{HierarchicalId, Node};
+use crate::ast::HierarchicalId;
 use crate::ast_lowering::ast_to_hir_fold::{Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::Type::{EmptyBranchAccess, UnexpectedTokenInBranchAccess};
 use crate::ast_lowering::error::*;
-use crate::ast_lowering::name_resolution::Resolver;
 use crate::hir::{Expression, Primary};
-use crate::ir::{BranchId, DisciplineId, ExpressionId};
+use crate::ir::Push;
+use crate::ir::{BranchId, DisciplineId, ExpressionId, Node};
 use crate::symbol::keywords;
-use crate::util::Push;
-use crate::{ast, Ast, Hir, Span};
+use crate::{ast, Span};
 
 pub struct ExpressionFolder<'tag, 'fold, 'lt> {
     pub(super) state: VerilogContext,
-    pub(super) branch_resolver: &'lt mut BranchResolver<'tag, 'fold>,
+    pub(super) branch_resolver: &'lt mut BranchResolver<'tag>,
     pub(super) base: &'lt mut Fold<'tag, 'fold>,
 }
 
@@ -288,10 +287,8 @@ impl<'tag, 'fold, 'lt> ExpressionFolder<'tag, 'fold, 'lt> {
                 let net2 = self.reinterpret_expression_as_identifier(expr_node);
                 let branch_access =
                     ast::BranchAccess::Implicit(ast::Branch::Nets(net1?.clone(), net2?.clone()));
-                self.branch_resolver.resolve_branch_access(
-                    &mut self.base,
-                    &Node::new(branch_access, expr_node.source),
-                )
+                self.branch_resolver
+                    .resolve_branch_access(&mut self.base, &Node::new(branch_access, span))
             }
             [] => {
                 self.base.error(Error {

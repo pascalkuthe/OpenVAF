@@ -11,17 +11,14 @@ use std::ops::Range;
 use std::ptr::NonNull;
 
 use crate::compact_arena::{InvariantLifetime, NanoArena, SafeRange, TinyArena};
-use crate::ir::{
-    AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, ModuleId, NatureId,
-    NetId, ParameterId, PortId, StatementId, VariableId, Write,
-};
+use crate::ir::*;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
 use crate::Span;
 
 // pub use visitor::Visitor;
 
-/*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License
+/*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License:
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +40,7 @@ use crate::Span;
     IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
     DEALINGS IN THE SOFTWARE.
 */
+
 #[macro_export]
 macro_rules! mk_ast {
     ($name:ident) => {
@@ -70,25 +68,12 @@ macro_rules! mk_ast {
 //pub mod printer;
 // pub mod visitor;
 
-pub type Attributes<'ast> = SafeRange<AttributeId<'ast>>;
-#[derive(Clone, Copy, Debug)]
-pub struct Node<T: Clone> {
-    pub source: Span,
-    pub contents: T,
-}
-impl<T: Clone> Node<T> {
-    pub fn new(contents: T, source: Span) -> Self {
-        Self { contents, source }
-    }
-}
-
 /// An Ast representing a parsed Verilog-AMS project (root file);
 /// It provides stable indicies for every Node because the entire Tree is immutable once created;
 /// It uses preallocated constant size arrays for performance
 
-//TODO make this into a general proc macro with lifetimes like compact arena
+//TODO configure to use different arena sizes
 pub struct Ast<'tag> {
-    //TODO configure to use different arena sizes
     //Declarations
     pub(crate) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration>>,
     pub(crate) nets: TinyArena<'tag, AttributeNode<'tag, Net>>,
@@ -106,13 +91,14 @@ pub struct Ast<'tag> {
     pub(crate) statements: TinyArena<'tag, Statement<'tag>>,
     pub top_symbols: SymbolTable<'tag>,
 }
-///this module contains copys of the dfinitions of tiny/small arena so we are able to acess internal fields for initialisation on the heap using pointers
 
 impl<'tag> Ast<'tag> {
+    /// Initializes a new Ast instance directly on the heap (otherwise this would likely cause a stack overflow)
     /// # Safety
     /// You should never call this yourself use mk_ast! instead!
-    /// The tag might not be unique to this arena otherwise which would allow using ids from a different arena which is undfined behavior;
-    /// Apart from that this function should be safe all internal unsafe functions calls are there to allow
+    /// The tag might not be unique to this arena otherwise which would allow using ids from a different arena which is undefined behavior;
+    /// Apart from that this function is safe. All internal unsafe functions calls are just there because initializing on heap doesn't currently work using safe code
+    ///
     pub unsafe fn new(_tag: InvariantLifetime<'tag>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
         #[allow(clippy::cast_ptr_alignment)]
@@ -142,10 +128,15 @@ impl<'tag> Ast<'tag> {
 
 //TODO cfg options for different id sizes/allocs
 impl_id_type!(BranchId in Ast::branches -> AttributeNode<'tag,BranchDeclaration>);
+
 impl_id_type!(NetId in Ast::nets -> AttributeNode<'tag,Net>);
+
 impl_id_type!(PortId in Ast::ports -> AttributeNode<'tag,Port>);
+
 impl_id_type!(ParameterId in Ast::parameters -> AttributeNode<'tag,Parameter<'tag>>);
+
 impl_id_type!(VariableId in Ast::variables -> AttributeNode<'tag,Variable<'tag>>);
+
 impl<'tag> Write<VariableId<'tag>> for Ast<'tag> {
     type Data = AttributeNode<'tag, Variable<'tag>>;
     fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
@@ -156,27 +147,22 @@ impl<'tag> Write<VariableId<'tag>> for Ast<'tag> {
         }
     }
 }
+
 impl_id_type!(ModuleId in Ast::modules -> AttributeNode<'tag,Module<'tag>>);
+
 impl_id_type!(FunctionId in Ast::functions -> AttributeNode<'tag,Function<'tag>>);
+
 impl_id_type!(DisciplineId in Ast::disciplines -> AttributeNode<'tag,Discipline>);
+
 impl_id_type!(ExpressionId in Ast::expressions -> Node<Expression<'tag>>);
+
 impl_id_type!(AttributeId in Ast::attributes -> Attribute<'tag>);
+
 impl_id_type!(StatementId in Ast::statements -> Statement<'tag>);
+
 impl_id_type!(BlockId in Ast::blocks -> AttributeNode<'tag,SeqBlock<'tag>>);
+
 impl_id_type!(NatureId in Ast::natures -> AttributeNode<'tag,Nature>);
-
-#[derive(Copy, Clone, Debug)]
-pub struct Attribute<'tag> {
-    pub name: Ident,
-    pub value: Option<ExpressionId<'tag>>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct AttributeNode<'ast, T: Clone> {
-    pub attributes: Attributes<'ast>,
-    pub source: Span,
-    pub contents: T,
-}
 
 #[derive(Clone, Debug)]
 pub enum TopNode<'tag> {

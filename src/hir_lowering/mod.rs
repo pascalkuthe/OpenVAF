@@ -29,15 +29,13 @@
 //!
 
 use crate::ast;
-use crate::ast::{AttributeNode, Node};
-use crate::compact_arena::SafeRange;
 use crate::hir::Hir;
 use crate::hir_lowering::error::Error;
 use crate::ir::hir::Block;
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
-use crate::ir::{mir, ParameterId, UnsafeWrite, VariableId, Write};
+use crate::ir::*;
+use crate::ir::{Push, SafeRangeCreation};
 use crate::mir::*;
-use crate::util::{Push, SafeRangeCreation};
 use crate::{hir, SourceMap};
 
 pub mod error;
@@ -116,14 +114,10 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
         self.mir.write(
             variable,
-            AttributeNode {
-                attributes: self.hir[variable].attributes,
-                source: self.hir[variable].source,
-                contents: Variable {
-                    name: self.hir[variable].contents.name,
-                    variable_type,
-                },
-            },
+            self.hir[variable].copy_with(|old| Variable {
+                name: old.name,
+                variable_type,
+            }),
         );
     }
 
@@ -185,15 +179,11 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             //This is save since we write to all parameters
             self.mir.write_unsafe(
                 parameter,
-                AttributeNode {
-                    contents: Parameter {
-                        name: self.hir[parameter].contents.name,
-                        parameter_type,
-                    },
-                    source: self.hir[parameter].source,
-                    attributes: self.hir[parameter].attributes,
-                },
-            );
+                self.hir[parameter].map_with(|old| Parameter {
+                    name: old.name,
+                    parameter_type,
+                }),
+            )
         }
     }
 
@@ -205,6 +195,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 } => Statement::ConditionStart {
                     condition_info_and_end,
                 },
+
                 hir::Statement::Contribute(attributes, discipline_access, branch, expr) => {
                     if let Ok(expr) = self.fold_real_expression(expr) {
                         Statement::Contribute(attributes, discipline_access, branch, expr)
@@ -212,6 +203,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         continue;
                     }
                 }
+
                 hir::Statement::Assignment(attr, variable, expr)
                     if matches!(
                         self.mir[variable].contents.variable_type,
@@ -224,6 +216,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         continue;
                     }
                 }
+
                 hir::Statement::Assignment(attr, variable, expr) => {
                     match self.fold_expression(expr) {
                         Ok(ExpressionId::Integer(id)) => {
@@ -239,11 +232,9 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         Err(()) => continue,
                     }
                 }
-                hir::Statement::Condition(AttributeNode {
-                    attributes,
-                    source,
-                    contents: ref condition,
-                }) => {
+
+                hir::Statement::Condition(ref condition_node) => {
+                    let condition = &condition_node.contents;
                     let main_condition = self.fold_integer_expression(condition.main_condition);
                     self.fold_block(condition.main_condition_statements);
                     let else_ifs = condition
@@ -259,23 +250,23 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             }
                         })
                         .collect();
+
                     self.fold_block(condition.else_statement);
+
                     let main_condition = if let Ok(main_condition) = main_condition {
                         main_condition
                     } else {
                         continue;
                     };
-                    Statement::Condition(AttributeNode {
-                        attributes,
-                        source,
-                        contents: Condition {
-                            main_condition,
-                            main_condition_statements: condition.main_condition_statements,
-                            else_ifs,
-                            else_statement: condition.else_statement,
-                        },
-                    })
+
+                    Statement::Condition(condition_node.map_with(|old| Condition {
+                        main_condition,
+                        main_condition_statements: old.main_condition_statements,
+                        else_ifs,
+                        else_statement: old.else_statement,
+                    }))
                 }
+
                 hir::Statement::FunctionCall(_, _, _) => todo!("Function Calls"),
                 hir::Statement::BuiltInFunctionCall(call) => todo!("warn useless function calls"),
             };
@@ -287,14 +278,18 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 mod constant_eval;
 mod expression_semantic;
 
+/// Folds an hir to an mir by adding and checking type information
+/// Returns any errors that occur
 pub fn fold_hir_to_mir(mut hir: Box<Hir>) -> std::result::Result<Box<Mir>, (Vec<Error>, Box<Hir>)> {
     HirToMirFold::new(&mut hir)
         .fold()
         .map_err(|errors| (errors, hir))
 }
 
+/// Folds an hir to an mir by adding and checking type information
+/// Prints any errors that occur
 pub fn fold_hir_to_mir_and_print_errors<'tag>(
-    mut hir: Box<Hir<'tag>>,
+    hir: Box<Hir<'tag>>,
     source_map: &SourceMap,
     translate_line: bool,
 ) -> std::result::Result<Box<Mir<'tag>>, ()> {

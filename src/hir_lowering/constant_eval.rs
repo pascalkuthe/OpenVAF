@@ -168,6 +168,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         None
                     }
                 }
+
                 ast::NumericalParameterRangeExclude::Value(expr) => {
                     match self.eval_constant_parameter_expression(parameter, *expr) {
                         Ok(res) => {
@@ -179,6 +180,12 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             let mut found = false;
                             for range in included_ranges.iter() {
                                 found = range.contains(&bound)
+                            }
+                            if !found {
+                                self.errors.push(Error {
+                                    error_type: Type::ParameterExcludeNotPartOfRange,
+                                    source: self.hir[*expr].source,
+                                });
                             }
                             Some(NumericalParameterRangeExclude::Value(res))
                         }
@@ -211,7 +218,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         expr: ExpressionId<'tag>,
     ) -> Result<'tag, Value> {
         let res = match self.hir[expr].contents {
-            Expression::Condtion(condition, question_span, if_value, colon_span, else_value) => {
+            Expression::Condtion(condition, _, if_value, _, else_value) => {
                 if self
                     .eval_constant_parameter_expression(current_parameter, condition)?
                     .cast_to_bool(self.hir[condition].source)?
