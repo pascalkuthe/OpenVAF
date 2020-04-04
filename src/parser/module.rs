@@ -34,56 +34,44 @@ use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
 
+    /// Parses a Module and all its items
+    /// If an error occurs while trying to parse a module items the parser tries to recover to the next semicolon
     pub(super) fn parse_module(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
-        let name = self.parse_identifier(false)?;
-        let parameter_start = self.ast.empty_range_from_end();
-        if self.look_ahead()?.0 == Token::Hash {
-            self.expect(Token::ParenOpen)?;
-            self.parse_parameter_list()?;
-            self.expect(Token::ParenClose)?;
-        }
+
+        //Module head
+
+        let name = self.parse_identifier(false);
         self.scope_stack
             .push(SymbolTable::with_capacity(Self::SYMBOL_TABLE_DEFAULT_SIZE));
-        let port_list_start = self.preprocessor.current_start();
-        //ports
-        let port_list = self.ast.empty_range_from_end();
-        let mut expected_ports = if self.look_ahead()?.0 == Token::ParenOpen {
-            self.lookahead.take();
-            let (next_token, next_span) = self.look_ahead()?;
-            let expected_ports = match next_token {
-                Token::ParenClose => None,
-                Token::Input | Token::Output | Token::Inout | Token::ParenOpen => {
-                    self.parse_port_declaration_list()?;
-                    None
-                }
-                Token::SimpleIdentifier | Token::EscapedIdentifier => Some(self.parse_port_list()?),
-                _ => {
-                    return Err(Error {
-                        error_type: error::Type::UnexpectedTokens {
-                            expected: vec![Expected::PortDeclaration, Expected::Port],
-                        },
-                        source: next_span,
-                    })
-                }
-            };
-            self.expect(Token::ParenClose)?;
-            expected_ports
-        } else {
-            None
-        };
-        let port_list_span = self
-            .span_to_current_end(port_list_start)
-            .negative_offset(start);
 
-        self.expect(Token::Semicolon)?;
+        let parameter_list = self.ast.empty_range_from_end();
+        let port_list = self.ast.empty_range_from_end();
+
+        let parameter_list_start = self.preprocessor.current_start();
+        let (port_list_span, mut expected_ports) = if let Err(error) = self.parse_parameter_list() {
+            self.non_critical_errors.push(error);
+            self.recover_on(Token::EndModule, Token::Semicolon, true)?;
+            (self.span_to_current_end(parameter_list_start), None)
+        } else {
+            let port_list_start = self.preprocessor.current_start();
+            let expected_ports = self.parse_module_ports().ok().flatten();
+            let port_list_span = self
+                .span_to_current_end(port_list_start)
+                .negative_offset(start);
+            self.expect(Token::Semicolon)?;
+            (port_list_span, expected_ports)
+        };
+
+        //Module body
+
         let mut module_items = Vec::with_capacity(16);
         let variable_start = self.ast.empty_range_from_end();
         let branch_start = self.ast.empty_range_from_end();
 
-        self.parse_and_recover_on_tokens(Token::Semicolon, Token::EndModule, |parser, token| {
+        self.parse_and_recover_on_tokens(Token::Semicolon, Token::EndModule, true, |parser, _| {
             let attributes = parser.parse_attributes()?;
-            match token {
+            match parser.look_ahead()?.0 {
                 Token::Inout | Token::Input | Token::Output => {
                     if let Some(ref mut expected) = expected_ports {
                         parser.parse_port_declaration(attributes, expected, port_list_span)?;
@@ -98,13 +86,46 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         });
                     }
                 }
+                Token::Analog => {
+                    parser.lookahead.take();
+                    let module_item = ModuleItem::AnalogStmt(parser.parse_statement(attributes)?);
+                    module_items.push(module_item);
+                }
+
+                Token::Branch => {
+                    parser.lookahead.take();
+                    parser.parse_branch_declaration(attributes)?;
+                }
+
+                Token::Integer => {
+                    parser.lookahead.take();
+                    parser.parse_variable_declaration(INTEGER, attributes)?;
+                }
+
+                Token::Real => {
+                    parser.lookahead.take();
+                    parser.parse_variable_declaration(REAL, attributes)?;
+                }
+
+                Token::Realtime => {
+                    parser.lookahead.take();
+                    parser.parse_variable_declaration(REALTIME, attributes)?;
+                }
+
+                Token::Time => {
+                    parser.lookahead.take();
+                    parser.parse_variable_declaration(TIME, attributes)?;
+                }
+
+                Token::Parameter => {
+                    parser.lookahead.take();
+                    parser.parse_parameter_decl(attributes)?;
+                }
+
                 _ => {
-                    if let Some(module_item) = parser.parse_module_item(attributes)? {
-                        module_items.push(module_item);
-                    }
+                    parser.parse_net_declaration(attributes)?;
                 }
             }
-
             Ok(())
         })?;
 
@@ -116,22 +137,60 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 })
             }
         }
-        let module = self.ast.push(AttributeNode {
-            attributes,
-            source: self.span_to_current_end(start),
-            contents: Module {
-                name,
-                port_list: self.ast.extend_range_to_end(port_list),
-                parameter_list: self.ast.extend_range_to_end(parameter_start),
-                variables: self.ast.extend_range_to_end(variable_start),
-                branches: self.ast.extend_range_to_end(branch_start),
-                symbol_table: self.scope_stack.pop().unwrap(),
-                children: module_items,
-            },
-        });
-        self.insert_symbol(name, SymbolDeclaration::Module(module));
+
+        if let Ok(name) = name {
+            let module = self.ast.push(AttributeNode {
+                attributes,
+                source: self.span_to_current_end(start),
+                contents: Module {
+                    name,
+                    port_list: self.ast.extend_range_to_end(port_list),
+                    parameter_list: self.ast.extend_range_to_end(parameter_list),
+                    variables: self.ast.extend_range_to_end(variable_start),
+                    branches: self.ast.extend_range_to_end(branch_start),
+                    symbol_table: self.scope_stack.pop().unwrap(),
+                    children: module_items,
+                },
+            });
+            self.insert_symbol(name, SymbolDeclaration::Module(module));
+        }
+
         Ok(())
     }
+
+    fn parse_module_ports(&mut self) -> Result<Option<HashSet<Ident>>> {
+        let res = if self.look_ahead()?.0 == Token::ParenOpen {
+            self.lookahead.take();
+
+            let (next_token, next_span) = self.look_ahead()?;
+            let expected_ports = match next_token {
+                Token::ParenClose => None,
+
+                Token::Input | Token::Output | Token::Inout | Token::ParenOpen => {
+                    self.parse_port_declaration_list()?;
+                    None
+                }
+
+                Token::SimpleIdentifier | Token::EscapedIdentifier => Some(self.parse_port_list()?),
+
+                _ => {
+                    return Err(Error {
+                        error_type: error::Type::UnexpectedTokens {
+                            expected: vec![Expected::PortDeclaration, Expected::Port],
+                        },
+                        source: next_span,
+                    })
+                }
+            };
+
+            self.expect(Token::ParenClose)?;
+            expected_ports
+        } else {
+            None
+        };
+        Ok(res)
+    }
+
     fn parse_port_list(&mut self) -> Result<HashSet<Ident>> {
         let mut res = HashSet::with_capacity(1);
         res.insert(self.parse_identifier(false)?);
@@ -143,235 +202,19 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     fn parse_parameter_list(&mut self) -> Result {
-        unimplemented!()
-    }
-
-    //TODO avoid code duplication
-    fn parse_module_item(
-        &mut self,
-        attributes: Attributes<'ast>,
-    ) -> Result<Option<ModuleItem<'ast>>> {
-        let res = match self.look_ahead()?.0 {
-            Token::Analog => {
-                self.lookahead.take();
-                Some(ModuleItem::AnalogStmt(self.parse_statement(attributes)?))
-            }
-            Token::Branch => {
-                self.lookahead.take();
-                self.parse_branch_declaration(attributes)?;
-                None
-            }
-            Token::Integer => {
-                self.lookahead.take();
-                self.parse_variable_declaration(INTEGER, attributes)?;
-                None
-            }
-            Token::Real => {
-                self.lookahead.take();
-                self.parse_variable_declaration(REAL, attributes)?;
-                None
-            }
-            Token::Realtime => {
-                self.lookahead.take();
-                self.parse_variable_declaration(REALTIME, attributes)?;
-                None
-            }
-            Token::Time => {
-                self.lookahead.take();
-                self.parse_variable_declaration(TIME, attributes)?;
-                None
-            }
-            Token::Parameter => {
-                self.lookahead.take();
-                self.parse_parameter_decl(attributes)?;
-                None
-            }
-
-            _ => {
-                self.parse_net_declaration(attributes)?;
-                None
-            }
-        };
-        Ok(res)
-    }
-
-    pub fn parse_parameter_decl(&mut self, attributes: Attributes<'ast>) -> Result {
-        let (token, span) = self.next()?;
-        let parameter_type = match token {
-            Token::Integer => VariableType::INTEGER,
-            Token::Real => VariableType::REAL,
-            Token::Realtime => VariableType::REALTIME,
-            Token::Time => VariableType::TIME,
-            Token::LiteralString => {
-                return Err(Error {
-                    error_type: Unsupported(StringParameters),
-                    source: span,
-                })
-            }
-            _ => {
-                return Err(Error {
-                    error_type: UnexpectedToken {
-                        expected: vec![
-                            Token::Integer,
-                            Token::Real,
-                            Token::Realtime,
-                            Token::Time,
-                            Token::LiteralString,
-                        ],
-                    },
-                    source: span,
-                })
-            }
-        };
-        self.parse_list(
-            |sel| sel.parse_numerical_parameter_assignment(attributes, parameter_type),
-            Token::Semicolon,
-            true,
-        )?;
-        Ok(())
-    }
-
-    fn parse_numerical_parameter_assignment(
-        &mut self,
-        attributes: Attributes<'ast>,
-        base_type: VariableType,
-    ) -> Result {
-        let start = self.preprocessor.current_start();
-        let name = self.parse_identifier(false)?;
-        let default_value = if self.look_ahead()?.0 == Token::Assign {
+        if self.look_ahead()?.0 == Token::Hash {
             self.lookahead.take();
-            Some(self.parse_expression_id()?)
-        } else {
-            None
-        };
-        let mut included_ranges = Vec::new();
-        let mut excluded_ranges = Vec::new();
-        loop {
-            match self.look_ahead()? {
-                (Token::From, _) => {
-                    self.lookahead.take();
-                    match self.next()? {
-                        (Token::SquareBracketOpen, _) => {
-                            included_ranges
-                                .alloc()
-                                .init(self.parse_parameter_range(true)?);
-                        }
-                        (Token::ParenOpen, _) => {
-                            included_ranges
-                                .alloc()
-                                .init(self.parse_parameter_range(false)?);
-                        }
-                        (_, source) => {
-                            return Err(Error {
-                                error_type: UnexpectedTokens {
-                                    expected: vec![ParameterRange],
-                                },
-                                source,
-                            })
-                        }
-                    }
-                }
-                (Token::Exclude, _) => {
-                    self.lookahead.take();
-                    match self.look_ahead()? {
-                        (Token::SquareBracketOpen, _) => {
-                            self.lookahead.take();
-                            excluded_ranges
-                                .alloc()
-                                .init(NumericalParameterRangeExclude::Range(
-                                    self.parse_parameter_range(true)?,
-                                ));
-                        }
-                        (Token::ParenOpen, _) => {
-                            self.lookahead.take();
-                            excluded_ranges
-                                .alloc()
-                                .init(NumericalParameterRangeExclude::Range(
-                                    self.parse_parameter_range(false)?,
-                                ));
-                        }
-                        _ => {
-                            excluded_ranges
-                                .alloc()
-                                .init(NumericalParameterRangeExclude::Value(
-                                    self.parse_expression_id()?,
-                                ));
-                        }
-                    }
-                }
-                (Token::Semicolon, _) | (Token::Comma, _) => break,
-                (_, source) => {
-                    return Err(Error {
-                        error_type: UnexpectedToken {
-                            expected: vec![Token::From, Token::Exclude, Token::Semicolon],
-                        },
-                        source,
-                    })
-                }
-            }
-        }
-        let parameter_id = self.ast.push(AttributeNode {
-            attributes,
-            source: self.span_to_current_end(start),
-            contents: Parameter {
-                name,
-                parameter_type: ParameterType::Numerical {
-                    parameter_type: base_type,
-                    included_ranges,
-                    excluded_ranges,
+            self.expect(Token::ParenOpen)?;
+            self.parse_list(
+                |parser| {
+                    let attributes = parser.parse_attributes()?;
+                    parser.parse_parameter_decl(attributes);
+                    Ok(())
                 },
-                default_value,
-            },
-        });
-        self.insert_symbol(name, SymbolDeclaration::Parameter(parameter_id));
-        Ok(())
-    }
-
-    fn parse_parameter_range(
-        &mut self,
-        inclusive: bool,
-    ) -> Result<Range<NumericalParameterRangeBound<'ast>>> {
-        let start = NumericalParameterRangeBound {
-            bound: self.parse_parameter_range_expression()?,
-            inclusive,
-        };
-        self.expect(Token::Colon)?;
-        let end = self.parse_parameter_range_expression()?;
-        let end_inclusive = match self.next()? {
-            (Token::SquareBracketClose, _) => true,
-            (Token::ParenClose, _) => false,
-            (_, source) => {
-                return Err(Error {
-                    error_type: UnexpectedToken {
-                        expected: vec![Token::ParenClose, Token::SquareBracketClose],
-                    },
-                    source,
-                })
-            }
-        };
-        Ok(start..NumericalParameterRangeBound {
-            bound: end,
-            inclusive: end_inclusive,
-        })
-    }
-    fn parse_parameter_range_expression(&mut self) -> Result<ExpressionId<'ast>> {
-        let (token, source) = self.look_ahead()?;
-        match token {
-            Token::Infinity => {
-                self.lookahead.take();
-                Ok(self.ast.push(Node {
-                    contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
-                    source,
-                }))
-            }
-            Token::MinusInfinity => {
-                self.lookahead.take();
-                Ok(self.ast.push(Node {
-                    contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
-                    source,
-                }))
-            }
-            _ => Ok(self.parse_expression_id()?),
+                Token::ParenClose,
+                true,
+            )?;
         }
+        Ok(())
     }
 }

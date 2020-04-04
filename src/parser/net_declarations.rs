@@ -86,6 +86,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         )?;
         Ok(())
     }
+
     fn insert_port(&mut self, port: PortId<'ast>, port_list: Span, expected: &mut HashSet<Ident>) {
         if expected.remove(&self.ast[port].contents.name) {
             self.insert_symbol(self.ast[port].contents.name, SymbolDeclaration::Port(port));

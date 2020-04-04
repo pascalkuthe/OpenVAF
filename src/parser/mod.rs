@@ -21,7 +21,7 @@ use crate::ast::{Ast, HierarchicalId};
 use crate::ir::ast::{Discipline, Nature};
 use crate::ir::{Attribute, AttributeId, AttributeNode, Attributes};
 use crate::ir::{Push, SafeRangeCreation};
-use crate::parser::error::{Expected, Type, Warning};
+use crate::parser::error::{Expected, Type, Warning, WarningType};
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::symbol::{Ident, Symbol};
@@ -41,6 +41,7 @@ pub mod error;
 mod expression;
 mod module;
 mod net_declarations;
+mod parameter;
 mod primaries;
 mod variables;
 
@@ -172,8 +173,12 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             None
         };
         if let Some(id) = attribute_map.get(&name.name) {
+            let old_name = self.ast[*id].name;
+            self.warnings.push(Warning {
+                error_type: WarningType::AttributeOverwrite(old_name, name.span),
+                source: old_name.span.extend(name.span),
+            });
             self.ast[*id] = Attribute { name, value };
-        //TODO warn
         } else {
             let id = self.ast.push(Attribute { name, value });
             attribute_map.insert(name.name, id);
@@ -229,7 +234,11 @@ pub fn parse<'source_map, 'ast, 'lt>(
     main_file: &Path,
     source_map_allocator: &'source_map Bump,
     ast: &'lt mut Ast<'ast>,
-) -> std::io::Result<(&'source_map SourceMap<'source_map>, Vec<Error>)> {
+) -> std::io::Result<(
+    &'source_map SourceMap<'source_map>,
+    Vec<Error>,
+    Vec<Warning>,
+)> {
     let allocator = Bump::new();
     let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;
     let mut errors = Vec::with_capacity(64);
@@ -242,7 +251,11 @@ pub fn parse<'source_map, 'ast, 'lt>(
         parser.preprocessor.span(),
     )));
     parser.run();
-    Ok((parser.preprocessor.skip_rest(), parser.non_critical_errors))
+    Ok((
+        parser.preprocessor.skip_rest(),
+        parser.non_critical_errors,
+        parser.warnings,
+    ))
 }
 
 pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
@@ -252,10 +265,18 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
     translate_lines: bool,
 ) -> std::result::Result<&'source_map SourceMap<'source_map>, ()> {
     match parse(main_file, source_map_allocator, ast) {
-        Ok((source_map, errors)) if errors.is_empty() => Ok(source_map),
-        Ok((source_map, mut errors)) => {
+        Ok((source_map, errors, mut warnings)) if errors.is_empty() => {
+            warnings
+                .into_iter()
+                .for_each(|warning| warning.print(source_map, translate_lines));
+            Ok(source_map)
+        }
+        Ok((source_map, mut errors, mut warnings)) => {
+            warnings
+                .into_iter()
+                .for_each(|warning| warning.print(source_map, translate_lines));
             errors
-                .drain(..)
+                .into_iter()
                 .for_each(|err| err.print(&source_map, translate_lines));
             Err(())
         }

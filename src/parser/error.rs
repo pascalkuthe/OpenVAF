@@ -12,7 +12,7 @@ use annotate_snippets::display_list::DisplayList;
 use annotate_snippets::formatter::DisplayListFormatter;
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
 use intrusive_collections::__core::fmt::Formatter;
-use log::error;
+use log::{error, warn};
 
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
@@ -103,6 +103,7 @@ pub enum Expected {
 #[derive(Clone, Debug)]
 pub enum WarningType {
     MacroOverwritten(Span),
+    AttributeOverwrite(Ident, Span),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -640,9 +641,9 @@ impl Warning {
         };
 
         let line = line.to_string();
-        let range = translate_to_inner_snippet_range(range.start, range.end, &line);
         let snippet = match self.error_type {
             WarningType::MacroOverwritten(first_declaration) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let (original_line, original_line_number, substitution_name, original_range) =
                     source_map.resolve_span_within_line(first_declaration, translate_lines);
                 let original_range = translate_to_inner_snippet_range(
@@ -683,10 +684,52 @@ impl Warning {
                     ],
                 }
             }
+            WarningType::AttributeOverwrite(overwritten_ident, overwrite_span) => {
+                let overwritten_range = translate_to_inner_snippet_range(
+                    range.start,
+                    range.start + overwritten_ident.span.get_end() - self.source.get_start(),
+                    &line,
+                );
+                let overwrite_span = overwrite_span.negative_offset(self.source.get_start());
+                let overwrite_range = translate_to_inner_snippet_range(
+                    range.start + overwrite_span.get_start(),
+                    range.start + overwrite_span.get_end(),
+                    &line,
+                );
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(format!(
+                            "Attribute {} was declared multiple times. First value is ignored",
+                            overwritten_ident.name.as_str()
+                        )),
+                        annotation_type: AnnotationType::Warning,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(origin),
+                        annotations: vec![
+                            SourceAnnotation {
+                                range: overwrite_range,
+                                label: "overwritten here".to_string(),
+                                annotation_type: AnnotationType::Warning,
+                            },
+                            SourceAnnotation {
+                                range: overwritten_range,
+                                label: "First declared here".to_string(),
+                                annotation_type: AnnotationType::Info,
+                            },
+                        ],
+                        fold: false,
+                    }],
+                }
+            }
         };
         let display_list = DisplayList::from(snippet);
         let formatter = DisplayListFormatter::new(true, false);
-        error!("{}", formatter.format(&display_list));
+        warn!("{}", formatter.format(&display_list));
     }
 }
 

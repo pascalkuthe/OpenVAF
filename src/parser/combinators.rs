@@ -31,38 +31,27 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         F: FnMut(&mut Self) -> Result,
     {
         let start = self.preprocessor.current_start();
-        loop {
-            let (token, span) = if consume_end {
-                self.next()?
-            } else {
-                self.look_ahead()?
-            };
-            match token {
-                Token::EOF => {
-                    return Err(Error {
-                        error_type: UnexpectedEof {
-                            expected: vec![end],
-                        },
-                        source: self.span_to_current_end(start),
-                    })
-                }
+        self.parse_and_recover_on_tokens(
+            Token::Comma,
+            end,
+            consume_end,
+            |parser, token| match token {
                 Token::Comma => {
-                    if !consume_end {
-                        self.lookahead.take();
-                    }
-                    parse_list_item(self)?
+                    parser.lookahead.take();
+                    parse_list_item(parser)
                 }
-                token if end == token => return Ok(()),
                 _ => {
-                    return Err(Error {
-                        source: span,
+                    parser.lookahead.take();
+                    Err(Error {
+                        source: parser.preprocessor.span(),
                         error_type: UnexpectedToken {
                             expected: vec![Token::Comma, end],
                         },
                     })
                 }
-            }
-        }
+            },
+        )?;
+        Ok(())
     }
 
     /// Combinator that parses a list delimited by a comma and terminated by `end`.
@@ -73,8 +62,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     where
         F: FnMut(&mut Self) -> Result,
     {
-        parse_list_item(self)?;
-        self.parse_list_tail(parse_list_item, end, consume_end)
+        if let Err(error) = parse_list_item(self) {
+            self.non_critical_errors.push(error);
+            if self.recover_on(Token::Comma, end, consume_end)? {
+                return Ok(());
+            }
+        }
+        self.parse_list_tail(parse_list_item, end, consume_end)?;
+        Ok(())
     }
 
     #[inline]
@@ -82,20 +77,22 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         &mut self,
         recover: Token,
         end: Token,
+        consume_end: bool,
         mut parse: F,
     ) -> Result
     where
         F: FnMut(&mut Self, Token) -> Result,
     {
-        'mainloop: loop {
+        loop {
             let error = match self.look_ahead() {
                 Ok((token, _)) if token == end => {
-                    self.lookahead.take();
-                    break 'mainloop;
+                    if consume_end {
+                        self.lookahead.take();
+                    }
+                    break;
                 }
 
                 Ok((Token::EOF, source)) => {
-                    self.lookahead.take();
                     return Err(Error {
                         error_type: UnexpectedEof {
                             expected: vec![end],
@@ -114,41 +111,51 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
                 Err(error) => error,
             };
+
             self.non_critical_errors.push(error);
-            loop {
-                match self.look_ahead() {
-                    Ok((token, _)) if token == end => {
-                        self.lookahead.take();
-                        break 'mainloop;
-                    }
 
-                    Ok((token, _)) if token == recover => {
-                        self.lookahead.take();
-                        break;
-                    }
+            if self.recover_on(end, recover, consume_end)? {
+                break;
+            }
+        }
 
-                    Ok((Token::EOF, source)) => {
+        Ok(())
+    }
+    pub fn recover_on(&mut self, end: Token, recover: Token, consume_end: bool) -> Result<bool> {
+        loop {
+            match self.look_ahead() {
+                Ok((token, _)) if token == end => {
+                    if consume_end {
                         self.lookahead.take();
-                        return Err(Error {
-                            error_type: UnexpectedEof {
-                                expected: vec![end],
-                            },
-                            source,
-                        });
                     }
+                    return Ok(true);
+                }
 
-                    Ok(_) => {
-                        self.lookahead.take();
-                    }
+                Ok((token, _)) if token == recover => {
+                    self.lookahead.take();
+                    return Ok(false);
+                }
 
-                    Err(error) => {
-                        self.lookahead.take();
-                        self.non_critical_errors.push(error);
-                    }
+                Ok((Token::EOF, source)) => {
+                    self.lookahead.take();
+                    return Err(Error {
+                        error_type: UnexpectedEof {
+                            expected: vec![end],
+                        },
+                        source,
+                    });
+                }
+
+                Ok(_) => {
+                    self.lookahead.take();
+                }
+
+                Err(error) => {
+                    self.lookahead.take();
+                    self.non_critical_errors.push(error);
                 }
             }
         }
-        Ok(())
     }
 }
 

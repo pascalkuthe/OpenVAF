@@ -181,13 +181,11 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
         let mut statements = Vec::with_capacity(Self::BLOCK_DEFAULT_STATEMENT_CAPACITY);
 
-        self.parse_and_recover_on_tokens(Token::Semicolon, Token::End, |parser, token| {
+        self.parse_and_recover_on_tokens(Token::Semicolon, Token::End, true, |parser, token| {
             let attributes = parser.parse_attributes()?;
             statements.push(parser.parse_statement(attributes)?);
             Ok(())
         })?;
-
-        self.lookahead.take();
 
         let res = self.ast.push(AttributeNode {
             attributes,
