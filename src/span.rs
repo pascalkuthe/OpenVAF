@@ -12,8 +12,8 @@ use std::fmt::{Debug, Formatter};
 use ansi_term::Color::*;
 use log::*;
 use crate::compact_arena::{TinyArena, NanoArena};
-use intrusive_collections::__core::mem::MaybeUninit;
 use std::sync::Mutex;
+use core::num::NonZeroU16;
 
 pub type Index = u32;
 pub type IndexOffset = i64;
@@ -23,9 +23,9 @@ pub type LineNumber = u16;
 
 #[derive(Copy, Clone, Debug)]
 enum SpanData {
-    ///This Span is too large to fit its length in an u16
+    ///This Span is too large to fit its length or zero
     LargeSpan,
-    Length(Length),
+    Length(NonZeroU16),
 }
 lazy_static! {
         static ref INTERNER: Mutex<SpanInterner> = Mutex::new(SpanInterner::new());
@@ -38,6 +38,7 @@ impl SpanInterner{
         Self{
             data: Vec::with_capacity(64),
         }
+
     }
     fn add(&mut self,start:u32,end:u32)->usize{
         let idx = self.data.len();
@@ -55,62 +56,91 @@ pub struct Span {
     data: SpanData,
 }
 impl Span {
+    #[inline]
     pub fn new(start: Index, end: Index) -> Self {
         Self::new_with_length(start, end - start)
     }
+
+    #[inline]
     pub fn new_with_length(start: Index, len: Index) -> Self {
-        //we accept index here instead of Length because we want to allow long ranges using special handling (eventually)
-        if len <= std::u16::MAX as u32 {
-            Self {
+        match len{
+            len @ 1..=std::u16::MAX =>  Self {
                 start_or_idx: start,
                 data: SpanData::Length(len as Length),
-            }
-        } else {
-            Self {
-                start_or_idx: INTERNER.lock().unwrap().add(start,start+len) as u32,
+            },
+            0 if start <= 1<<31 -1 => Self {
+                start_or_idx: (start << 1) |1,
                 data: SpanData::LargeSpan
-            }
+            },
+            len => Self {
+                start_or_idx: (INTERNER.lock().unwrap().add(star,start+len) as u32) << 1,
+                data: SpanData::LargeSpan
+            },
+
         }
     }
+
+    #[inline]
     pub const fn new_short_span(start: Index, len: u16) -> Self {
         Self {
             start_or_idx: start,
             data: SpanData::Length(len as Length),
         }
     }
+
+    #[inline]
     pub fn get_start(self) -> Index {
         match self.data {
-            SpanData::LargeSpan =>
-                INTERNER.lock().unwrap().get(self.start_or_idx as usize).0,
-
             SpanData::Length(_) => self.start_or_idx,
+            SpanData::LargeSpan if self.start_or_idx & 1 == 1=>
+                self.start_or_idx >> 1,
+            SpanData::LargeSpan =>{
+                INTERNER.lock().unwrap().get((self.start_or_idx>>1) as usize).0
+            }
         }
     }
+
+    #[inline]
     pub fn get_end(self) -> Index {
         match self.data {
-            SpanData::LargeSpan =>
-                INTERNER.lock().unwrap().get(self.start_or_idx as usize).1,
-
             SpanData::Length(length) => self.start_or_idx + (length as u32),
+            SpanData::LargeSpan if self.start_or_idx & 1 == 1=>
+                self.start_or_idx>>1,
+            SpanData::LargeSpan =>{
+                INTERNER.lock().unwrap().get((self.start_or_idx>>1) as usize).1
+            }
         }
     }
+
+
     pub fn get_len(self) -> Index {
         match self.data {
+            SpanData::Length(length) => length as Index,
+            SpanData::LargeSpan if self.start_or_idx & 1 == 1=>
+                0,
             SpanData::LargeSpan => {
-                let (start,end) = INTERNER.lock().unwrap().get(self.start_or_idx as usize);
+                let (start,end) = INTERNER.lock().unwrap().get((self.start_or_idx >> 1) as usize);
                 end - start
             }
-            SpanData::Length(length) => length as Index,
         }
     }
     pub fn offset(mut self, offset: Index) -> Self {
         match self.data {
-            SpanData::LargeSpan => {
+            SpanData::Length(_) => self.start_or_idx += offset,
+            SpanData::LargeSpan if self.start_or_idx & 1 == 1=>{
+                let new_start= self.start_or_idx>>1 + offset;
+                if new_start + offset <= 1<<31 -1{
+                    self.start_or_idx = new_start
+                }else {
+                    self.start_or_idx = (INTERNER.lock().unwrap().add(new_start,new_start) as u32) << 1
+                }
+
+            }
+            SpanData::LargeSpan=> {
                 let mut inter = INTERNER.lock().unwrap();
-                let (start,end) = inter.get(self.start_or_idx as usize);
+                let (start,end) = inter.get((self.start_or_idx >> 1) as usize);
                 self.start_or_idx = inter.add(start+offset,end+offset) as u32;
             }
-            SpanData::Length(_) => self.start_or_idx += offset,
         }
         self
     }
@@ -123,9 +153,18 @@ impl Span {
     }
     pub fn negative_offset(mut self, offset: Index) -> Self {
         match self.data {
-            SpanData::LargeSpan => {
+            SpanData::LargeSpan if self.start_or_idx & 1 == 1=>{
+                let new_start= self.start_or_idx>>1 - offset;
+                if new_start + offset <= 1<<31 -1{
+                    self.start_or_idx = new_start
+                }else {
+                    self.start_or_idx = (INTERNER.lock().unwrap().add(new_start,new_start) as u32) << 1
+                }
+
+            }
+            SpanData::LargeSpan=> {
                 let mut inter = INTERNER.lock().unwrap();
-                let (start,end) = inter.get(self.start_or_idx as usize);
+                let (start,end) = inter.get((self.start_or_idx >> 1) as usize);
                 self.start_or_idx = inter.add(start-offset,end-offset) as u32;
             }
             SpanData::Length(_) => self.start_or_idx -= offset,
