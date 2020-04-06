@@ -219,13 +219,15 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     self.lookahead.take();
                     if self.look_ahead()?.0 == Token::OpLess {
                         let start = self.preprocessor.current_start();
-                        Primary::BranchAccess(
+                        let res = Primary::BranchAccess(
                             Self::convert_to_nature_identifier(ident)?,
                             Node::new(
                                 BranchAccess::Implicit(self.parse_branch()?),
                                 self.span_to_current_end(start),
                             ),
-                        )
+                        );
+                        self.expect(Token::ParenClose)?;
+                        res
                     } else if self.look_ahead()?.0 == Token::ParenClose {
                         self.lookahead.take();
                         Primary::FunctionCall(ident.into(), Vec::new())

@@ -97,6 +97,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         }
                     }
                     _ => {
+                        self.lookahead.take();
                         return Err(Error {
                             error_type: UnexpectedTokens {
                                 expected: vec![Expected::Statement],
@@ -109,6 +110,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 res
             }
             _ => {
+                self.lookahead.take();
                 return Err(Error {
                     error_type: UnexpectedTokens {
                         expected: vec![
@@ -186,7 +188,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             statements.push(parser.parse_statement(attributes)?);
             Ok(())
         })?;
-
+        let test = self.ast.blocks.len;
+        let test2 = &self.ast.blocks.data;
         let res = self.ast.push(AttributeNode {
             attributes,
             source: self.span_to_current_end(start),
