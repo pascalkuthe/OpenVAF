@@ -8,13 +8,16 @@
  * *****************************************************************************************
  */
 
+use crate::ast_lowering::ast_to_hir_fold::expression::ConstantExpressionFolder;
 use crate::ast_lowering::ast_to_hir_fold::{Branches, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::ast_lowering::name_resolution::Resolver;
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
-use crate::hir::{Discipline, Net, Port};
-use crate::ir::{AttributeId, DisciplineId, NetId, PortId, Write};
+use crate::hir::{Discipline, Nature, Net, Port};
+use crate::ir::{
+    Attribute, AttributeId, DisciplineId, ExpressionId, NatureId, NetId, PortId, Write,
+};
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
 use crate::symbol::{keywords, Ident};
@@ -26,10 +29,10 @@ pub struct Global<'tag, 'lt> {
 }
 
 impl<'tag, 'lt> Global<'tag, 'lt> {
-    pub fn new(ast: &'lt Ast<'tag>) -> Self {
+    pub fn new(ast: &'lt mut Ast<'tag>) -> Self {
         let mut res = Self {
             base: Fold {
-                hir: Hir::init(),
+                hir: Hir::init(ast),
                 ast: &*ast,
                 errors: Vec::with_capacity(32),
                 resolver: Resolver::new(&*ast),
@@ -40,27 +43,33 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
     }
 
     pub fn fold(mut self) -> std::result::Result<Branches<'tag, 'lt>, Vec<Error<'tag>>> {
-        let attributes: SafeRange<AttributeId> = self.base.ast.full_range();
+        unsafe {
+            //This is save since we get the ptrs using borrows and drop is never called since they are copy
+            TinyArena::init_from(&mut self.base.hir.attributes, &self.base.ast.attributes);
+        }
+
+        for attribute in SafeRangeCreation::<AttributeId<'tag>>::full_range(self.base.ast) {
+            let value = self.base.ast[attribute]
+                .value
+                .map(|expr| self.fold_constant_expr(expr).ok())
+                .flatten();
+            self.base.hir.write(
+                attribute,
+                Attribute {
+                    name: self.base.ast[attribute].name,
+                    value,
+                },
+            );
+        }
 
         unsafe {
-            //This is save since we get the ptrs using borrows
-            TinyArena::copy_to(&mut self.base.hir.attributes, &self.base.ast.attributes);
+            //This is save since we get the ptrs using borrows and drop is never called since they are copy
+            NanoArena::init_from(&mut self.base.hir.natures, &self.base.ast.natures);
         }
 
-        for attribute in attributes {
-            if let Some(expr) = self.base.ast[attribute].value {
-                todo!("Attribute expression")
-            }
+        for nature in self.base.ast.full_range() {
+            self.fold_nature(nature)
         }
-
-        unsafe {
-            //This is save since we get the ptrs using borrows
-            NanoArena::copy_to(&mut self.base.hir.natures, &self.base.ast.natures);
-        }
-
-        /*for nature in self.base.ast.full_range() {
-             TODO advanced natures
-        }*/
 
         unsafe {
             //This is save since we get the ptrs using borrows and drop is never called since they are copy
@@ -101,31 +110,90 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
     /// Folds a discipline by resolving its flow and potential natures
     /// This is currently incomplete and doesn't handle other nature properties besides its name and potential/flow natures
     fn fold_discipline(&mut self, discipline: DisciplineId<'tag>) {
-        let unresolved_discipline = &self.base.ast[discipline];
+        let unresolved_discipline = &self.base.ast[discipline].contents;
 
-        let mut flow_nature = Err(());
-        let ident = &unresolved_discipline.contents.flow_nature;
-        resolve!(self.base; ident as
-            Nature(id) => {
-                flow_nature = Ok(id)
-            }
+        let flow_nature = (&unresolved_discipline.flow_nature)
+            .map(|ident| {
+                resolve!(self.base; ident as
+                    Nature(id) => {
+                        return Ok(id)
+                    }
+                );
+                Err(())
+            })
+            .map(Result::ok)
+            .flatten();
+
+        let potential_nature = unresolved_discipline
+            .potential_nature
+            .map(|ident| {
+                resolve!(self.base; ident as
+                    Nature(id) => {
+                        return Ok(id)
+                    }
+                );
+                Err(())
+            })
+            .map(Result::ok)
+            .flatten();
+
+        self.base.hir.write(
+            discipline,
+            self.base.ast[discipline].copy_with(|old| Discipline {
+                name: old.name,
+                flow_nature,
+                potential_nature,
+                continuous: old.continuous,
+            }),
         );
+    }
 
-        let mut pot_nature = Err(());
-        let ident = &unresolved_discipline.contents.potential_nature;
-        resolve!(self.base; ident as
-            Nature(id) => {
-                pot_nature = Ok(id)
-            }
-        );
+    /// Folds a discipline by resolving its flow and potential natures
+    /// This is currently incomplete and doesn't handle other nature properties besides its name and potential/flow natures
+    fn fold_nature(&mut self, nature: NatureId<'tag>) {
+        let unresolved_nature = &self.base.ast[nature].contents;
 
-        if let (Ok(potential_nature), Ok(flow_nature)) = (pot_nature, flow_nature) {
+        let idt_nature = unresolved_nature
+            .idt_nature
+            .map(|ident| {
+                resolve!(self.base; ident as
+                    Nature(id) => {
+                        return Ok(id)
+                    }
+                );
+                Err(())
+            })
+            .map(Result::ok)
+            .flatten()
+            .unwrap_or(nature);
+
+        let ddt_nature = unresolved_nature
+            .ddt_nature
+            .map(|ident| {
+                resolve!(self.base; ident as
+                    Nature(id) => {
+                        return Ok(id)
+                    }
+                );
+                Err(())
+            })
+            .map(Result::ok)
+            .flatten()
+            .unwrap_or(nature);
+
+        let abstol = self.fold_constant_expr(unresolved_nature.abstol);
+        let units = self.fold_constant_expr(unresolved_nature.units);
+
+        if let (Ok(abstol), Ok(units)) = (abstol, units) {
             self.base.hir.write(
-                discipline,
-                unresolved_discipline.copy_with(|old| Discipline {
+                nature,
+                self.base.ast[nature].copy_with(|old| Nature {
                     name: old.name,
-                    flow_nature,
-                    potential_nature,
+                    abstol,
+                    units,
+                    access: old.access,
+                    idt_nature,
+                    ddt_nature,
                 }),
             );
         }
@@ -184,5 +252,15 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
                 Err(())
             }
         }
+    }
+
+    pub fn fold_constant_expr(
+        &mut self,
+        expr: ExpressionId<'tag>,
+    ) -> Result<ExpressionId<'tag>, ()> {
+        let mut folder = ConstantExpressionFolder {
+            base: &mut self.base,
+        };
+        folder.fold(expr)
     }
 }

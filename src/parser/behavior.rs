@@ -103,7 +103,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                                 expected: vec![Expected::Statement],
                             },
                             source: span,
-                        })
+                        });
                     }
                 };
                 self.expect(Token::Semicolon)?;
@@ -120,7 +120,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         ],
                     },
                     source: span,
-                })
+                });
             }
         };
         Ok(self.ast.push(res))
@@ -173,23 +173,28 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     _ => break,
                 };
             }
-            Some(BlockScope {
-                name,
-                symbols: self.scope_stack.pop().unwrap(),
-            })
+            Some(name)
         } else {
             None
         };
 
         let mut statements = Vec::with_capacity(Self::BLOCK_DEFAULT_STATEMENT_CAPACITY);
 
-        self.parse_and_recover_on_tokens(Token::Semicolon, Token::End, true, |parser, token| {
-            let attributes = parser.parse_attributes()?;
-            statements.push(parser.parse_statement(attributes)?);
-            Ok(())
-        })?;
-        let test = self.ast.blocks.len;
-        let test2 = &self.ast.blocks.data;
+        self.parse_and_recover_on_tokens(
+            Token::Semicolon,
+            Token::End,
+            true,
+            true,
+            |parser, token| {
+                let attributes = parser.parse_attributes()?;
+                statements.push(parser.parse_statement(attributes)?);
+                Ok(())
+            },
+        )?;
+        let scope = scope.map(|name| BlockScope {
+            name,
+            symbols: self.scope_stack.pop().unwrap(),
+        });
         let res = self.ast.push(AttributeNode {
             attributes,
             source: self.span_to_current_end(start),

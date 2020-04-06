@@ -42,6 +42,25 @@ use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
+use ansi_term::Color::*;
+use log::error;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct CompressedRange<'tag> {
+    start: Idx32<'tag>,
+    len: u16,
+}
+impl<'tag> From<CompressedRange<'tag>> for SafeRange<Idx32<'tag>> {
+    fn from(val: CompressedRange<'tag>) -> Self {
+        SafeRange {
+            start: val.start,
+            end: Idx {
+                index: val.start.index + val.len as u32,
+                tag: val.start.tag,
+            },
+        }
+    }
+}
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SafeRange<T: Copy> {
     start: T,
@@ -230,9 +249,14 @@ pub type Idx16<'tag> = Idx<'tag, u16>;
 /// ```
 pub type Idx8<'tag> = Idx<'tag, u8>;
 
+pub enum CapactiyExcededOrTooLong<'lt> {
+    CapacityExceeded(CapacityExceeded<&'lt str>),
+    TooLong(TooLong<'lt>),
+}
 /// An error type that gets returned on trying to add an element to an already
 /// full arena. It contains the element so you can reuse it
 pub struct CapacityExceeded<T>(T);
+pub struct TooLong<'lt>(&'lt str);
 
 impl<T> CapacityExceeded<T> {
     /// Consumes self and returns the contained value.
@@ -258,6 +282,169 @@ impl<T> Error for CapacityExceeded<T> {
     }
 }
 
+pub struct StringArena<'tag> {
+    #[allow(dead_code)]
+    tag: InvariantLifetime<'tag>,
+    // TODO: Use a custom structure, forbid resizing over 4G items
+    data: String,
+}
+impl<'tag> StringArena<'tag> {
+    /// Add an item to the arena, get an index or CapacityExceeded back.
+    #[inline]
+    pub fn try_add<'lt>(
+        &mut self,
+        item: &'lt str,
+    ) -> Result<SafeRange<Idx32<'tag>>, CapacityExceeded<&'lt str>> {
+        let i = self.data.len();
+        if i + item.len() >= (core::u32::MAX as usize) {
+            return Err(CapacityExceeded(item));
+        }
+        self.data.push_str(item);
+        Ok(SafeRange::new(
+            Idx {
+                index: (i as u32),
+                tag: self.tag,
+            },
+            Idx {
+                index: self.data.len() as u32,
+                tag: self.tag,
+            },
+        ))
+    }
+    /// Add an item to the arena, get an index or CapacityExceeded back.
+    #[inline]
+    pub fn try_add_small<'lt>(
+        &mut self,
+        item: &'lt str,
+    ) -> Result<CompressedRange<'tag>, CapactiyExcededOrTooLong<'lt>> {
+        let i = self.data.len();
+
+        if i + item.len() >= (core::u32::MAX as usize) {
+            return Err(CapactiyExcededOrTooLong::CapacityExceeded(
+                CapacityExceeded(item),
+            ));
+        }
+
+        if item.len() > std::u16::MAX as usize {
+            return Err(CapactiyExcededOrTooLong::TooLong(TooLong(item)));
+        }
+
+        self.data.push_str(item);
+        Ok(CompressedRange {
+            start: Idx {
+                index: i as u32,
+                tag: self.tag,
+            },
+            len: item.len() as u16,
+        })
+    }
+
+    /// Add an item to the arena, get an index back.
+    #[inline]
+    pub fn add(&mut self, item: &str) -> SafeRange<Idx32<'tag>> {
+        match self.try_add(item) {
+            Ok(res) => res,
+            Err(error) => {
+                error!(
+                    "{} {}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        "Capacity of arena exceeded consider using different compilation options (not yet implemented please open an issue): {:?}",
+                        error
+                    ))
+                );
+                panic!("{:?}", error)
+            }
+        }
+    }
+
+    /// # Safety
+    /// Behavior is undefined if any of the following conditions are violated:
+    ///
+    /// * `dst` must be valid for writes.
+    ///
+    /// * `dst` must be properly aligned
+    pub unsafe fn move_to(dst: *mut Self, src: &mut StringArena) {
+        ptr::write(&mut (*dst).data, String::new());
+        ptr::swap(&mut (*dst).data, &mut src.data);
+    }
+
+    pub unsafe fn init(ptr: *mut Self) {
+        ptr::write(&mut (*ptr).data, String::new())
+    }
+
+    /// Add a string shorter than ~65k characters (u16::MAX) to the arena, get a compressed safe range back
+    #[inline]
+    pub fn add_small<'lt>(
+        &mut self,
+        item: &'lt str,
+    ) -> Result<CompressedRange<'tag>, TooLong<'lt>> {
+        match self.try_add_small(item) {
+            Ok(res) => Ok(res),
+            Err(CapactiyExcededOrTooLong::CapacityExceeded(error)) => {
+                error!(
+                "{} {}",
+                Red.bold().paint("error"),
+                Fixed(253).bold().paint(format!(
+                    "Capacity of arena exceeded consider using different compilation options (not yet implemented please open an issue): {:?}",
+                    error
+                ))
+            );
+                panic!("{:?}", error)
+            }
+            Err(CapactiyExcededOrTooLong::TooLong(error)) => Err(error),
+        }
+    }
+}
+
+impl<'tag> Index<CompressedRange<'tag>> for StringArena<'tag> {
+    type Output = str;
+
+    fn index(&self, range: CompressedRange<'tag>) -> &Self::Output {
+        debug_assert!(range.start.index + (range.len as u32) < self.data.len() as u32);
+        unsafe {
+            //this is save since we use the type system to enfore that this is valid
+            self.data.get_unchecked(
+                range.start.index as usize..range.start.index as usize + range.len as usize,
+            )
+        }
+    }
+}
+impl<'tag> IndexMut<CompressedRange<'tag>> for StringArena<'tag> {
+    fn index_mut(&mut self, range: CompressedRange<'tag>) -> &mut Self::Output {
+        debug_assert!((range.start.index as usize + range.len as usize) < self.data.len());
+        unsafe {
+            //this is save since we use the type system to enfore that this is valid
+            self.data.get_unchecked_mut(
+                range.start.index as usize..range.start.index as usize + range.len as usize,
+            )
+        }
+    }
+}
+impl<'tag> Index<SafeRange<Idx32<'tag>>> for StringArena<'tag> {
+    type Output = str;
+
+    fn index(&self, range: SafeRange<Idx32<'tag>>) -> &Self::Output {
+        debug_assert!((range.end.index as usize) < self.data.len());
+        debug_assert!(range.start.index < range.end.index);
+        unsafe {
+            //this is save since we use the type system to enfore that this is valid
+            self.data
+                .get_unchecked(range.start.index as usize..range.end.index as usize)
+        }
+    }
+}
+impl<'tag> IndexMut<SafeRange<Idx32<'tag>>> for StringArena<'tag> {
+    fn index_mut(&mut self, range: SafeRange<Idx32<'tag>>) -> &mut Self::Output {
+        debug_assert!((range.end.index as usize) < self.data.len());
+        debug_assert!(range.start.index < range.end.index);
+        unsafe {
+            //this is save since we use the type system to enfore that this is valid
+            self.data
+                .get_unchecked_mut(range.start.index as usize..range.end.index as usize)
+        }
+    }
+}
 /// A "Small" arena based on a resizable slice (i.e. a `Vec`) that can be
 /// indexed with 32-bit `Idx32`s. This can help reduce memory overhead when
 /// using many pointer-heavy objects on 64-bit systems.
@@ -266,7 +453,7 @@ impl<T> Error for CapacityExceeded<T> {
 pub struct SmallArena<'tag, T> {
     #[allow(dead_code)]
     tag: InvariantLifetime<'tag>,
-    // TODO: Use a custom structure, forbid resizing over 2G items
+    // TODO: Use a custom structure, forbid resizing over 4G items
     data: Vec<T>,
 }
 
@@ -431,7 +618,20 @@ impl<'tag, T> SmallArena<'tag, T> {
     /// Add an item to the arena, get an index back.
     #[inline]
     pub fn add(&mut self, item: T) -> Idx32<'tag> {
-        self.try_add(item).unwrap()
+        match self.try_add(item) {
+            Ok(res) => res,
+            Err(error) => {
+                error!(
+                    "{} {}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        "Capacity of arena exceeded consider using different compilation options (not yet implemented please open an issue): {:?}",
+                        error
+                    ))
+                );
+                panic!("{:?}", error)
+            }
+        }
     }
 }
 
@@ -569,7 +769,20 @@ impl<'tag, T> TinyArena<'tag, T> {
     }
     /// Add an item to the arena, get an index back
     pub fn add(&mut self, item: T) -> Idx16<'tag> {
-        self.try_add(item).unwrap()
+        match self.try_add(item) {
+            Ok(res) => res,
+            Err(error) => {
+                error!(
+                    "{} {}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        "Capacity of arena exceeded consider using different compilation options (not yet implemented please open an issue): {:?}",
+                        error
+                    ))
+                );
+                panic!("{:?}", error)
+            }
+        }
     }
 }
 impl<'tag, T: Unpin> TinyArena<'tag, T> {
@@ -725,7 +938,20 @@ impl<'tag, T> NanoArena<'tag, T> {
 
     /// Add an item to the arena, get an index back
     pub fn add(&mut self, item: T) -> Idx8<'tag> {
-        self.try_add(item).unwrap()
+        match self.try_add(item) {
+            Ok(res) => res,
+            Err(error) => {
+                error!(
+                    "{} {}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        "Capacity of arena exceeded consider using different compilation options (not yet implemented please open an issue): {:?}",
+                        error
+                    ))
+                );
+                panic!("{:?}", error)
+            }
+        }
     }
 }
 impl<'tag, T: Unpin> NanoArena<'tag, T> {

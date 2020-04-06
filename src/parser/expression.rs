@@ -15,7 +15,9 @@ use crate::ir::{ExpressionId, Node};
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
-use crate::parser::primaries::{parse_real_value, parse_unsigned_int_value, RealLiteralType};
+use crate::parser::primaries::{
+    parse_real_value, parse_string, parse_unsigned_int_value, RealLiteralType,
+};
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
 
@@ -67,6 +69,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
         }
     }
+
     pub fn parse_expression_id(&mut self) -> Result<ExpressionId<'ast>> {
         let lhs = self.parse_atom()?;
         let lhs = self.ast.push(lhs);
@@ -119,6 +122,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
         }
     }
+
     fn parse_binary_operator(&mut self) -> Result<BinaryOperatorOrCondition> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
@@ -179,6 +183,18 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 let res = self.parse_expression()?;
                 self.expect(Token::ParenClose)?;
                 res
+            }
+            Token::LiteralString => {
+                self.lookahead.take();
+                let val = self
+                    .ast
+                    .string_literals
+                    .try_add_small(&parse_string(self.preprocessor.slice()))
+                    .map_err(|_| Error {
+                        error_type: Type::StringTooLong(span.get_len() as usize - 2),
+                        source: span,
+                    })?;
+                Node::new(Expression::Primary(Primary::String(val)), span)
             }
             Token::LiteralRealNumberDot => {
                 self.lookahead.take();

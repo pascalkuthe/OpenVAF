@@ -30,7 +30,7 @@
 
 use crate::ast;
 use crate::hir::Hir;
-use crate::hir_lowering::error::Error;
+use crate::hir_lowering::error::{Error, Type};
 use crate::ir::hir::Block;
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
 use crate::ir::*;
@@ -102,6 +102,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 source: self.mir[real_expr].source,
                                 contents: IntegerExpression::RealCast(real_expr),
                             })),
+                            Ok(ExpressionId::String(_)) => {
+                                self.errors.push(Error {
+                                    error_type: Type::ExpectedNumber,
+                                    source: self.hir[default_value].source,
+                                });
+                                return;
+                            }
 
                             Err(()) => return,
                         }
@@ -228,6 +235,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 contents: IntegerExpression::RealCast(id),
                             });
                             Statement::Assignment(attr, variable, ExpressionId::Integer(expr))
+                        }
+                        Ok(ExpressionId::String(_)) => {
+                            self.errors.push(Error {
+                                error_type: Type::ExpectedNumber,
+                                source: self.hir[expr].source,
+                            });
+                            return;
                         }
                         Err(()) => continue,
                     }

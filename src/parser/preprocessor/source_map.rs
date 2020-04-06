@@ -16,6 +16,7 @@ use bumpalo::Bump;
 use intrusive_collections::__core::cell::Cell;
 use intrusive_collections::rbtree::CursorMut;
 use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
+use logos::Source;
 
 use crate::span::{Index, LineNumber};
 use crate::{Lexer, Span};
@@ -326,6 +327,8 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         let substitution = {
             let name = &*self.source_map_allocator.alloc_str(name);
             let range: Range<usize> = original_span.into();
+            let tmp = self.root_file_contents.len() < range.end;
+            let l = self.root_file_contents.len();
             let original_source = &self.root_file_contents[range];
             let original_lines = bytecount::count(original_source.as_bytes(), b'\n') as LineNumber;
             let root_line = self.root_line;

@@ -24,7 +24,10 @@ pub type Result<'hir, T = ()> = std::result::Result<T, Error<'hir>>;
 #[derive(Clone, Debug)]
 pub enum Type<'hir> {
     ExpectedReal,
+    CannotCompareStringToNumber,
+    CondtionTypeMissmatch,
     ExpectedInteger,
+    ExpectedNumber,
     ExpectedIntegerParameter(ParameterId<'hir>),
     ExpectedIntegerVariable(VariableId<'hir>),
     ExpectedNumericParameter(ParameterId<'hir>),
@@ -70,6 +73,7 @@ impl<'tag> Error<'tag> {
                     }],
                 }
             }
+
             Type::ExpectedInteger => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 Snippet {
@@ -92,6 +96,30 @@ impl<'tag> Error<'tag> {
                     }],
                 }
             }
+
+            Type::ExpectedNumber => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Expected integer an numerical valued expression".to_string()),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Expected numerical value".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+
             Type::ExpectedIntegerVariable(variable) => {
                 let (
                     parameter_line,
@@ -352,6 +380,52 @@ impl<'tag> Error<'tag> {
                         annotations: vec![SourceAnnotation {
                             range,
                             label: "This calue can't be excluded".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+            Type::CannotCompareStringToNumber => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Strings cannot be compared to numbers".to_string()),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "String is compared to number".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+            Type::CondtionTypeMissmatch => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(
+                            "Conditions must ever evaluate to a String or a Number".to_string(),
+                        ),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Evaluates to number or string".to_string(),
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,

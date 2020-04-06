@@ -14,10 +14,11 @@ use std::ptr::NonNull;
 use intrusive_collections::__core::cmp::Ordering;
 use intrusive_collections::__core::convert::TryFrom;
 
-use crate::ast::{BuiltInFunctionCall, Function, Nature, UnaryOperator};
-use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
+use crate::ast::{BuiltInFunctionCall, Function, UnaryOperator};
+use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
 use crate::hir::{Block, BranchDeclaration, Discipline, DisciplineAccess, Module, Net, Port};
 use crate::ir::hir::Hir;
+use crate::ir::ids::StringExpressionId;
 use crate::ir::*;
 use crate::symbol::Ident;
 use crate::{ir, Span};
@@ -35,11 +36,13 @@ pub struct Mir<'tag> {
     modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
     functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
     disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline<'tag>>>,
-    natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
+    natures: NanoArena<'tag, AttributeNode<'tag, Nature<'tag>>>,
     real_expressions: TinyArena<'tag, Node<RealExpression<'tag>>>,
     integer_expressions: TinyArena<'tag, Node<IntegerExpression<'tag>>>,
+    string_expressions: NanoArena<'tag, Node<StringExpression<'tag>>>,
     attributes: TinyArena<'tag, Attribute<'tag>>,
     statements: TinyArena<'tag, Statement<'tag>>,
+    pub(crate) string_literals: StringArena<'tag>,
 }
 
 impl<'tag> Mir<'tag> {
@@ -51,15 +54,16 @@ impl<'tag> Mir<'tag> {
         //the ptr cast below has the right alignment since we are allocation using the right layout
         let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-        NanoArena::copy_to(&mut res.as_mut().natures, &hir.natures);
+        NanoArena::init_from(&mut res.as_mut().natures, &hir.natures);
         TinyArena::copy_to(&mut res.as_mut().attributes, &hir.attributes);
         NanoArena::copy_to(&mut res.as_mut().branches, &hir.branches);
         TinyArena::copy_to(&mut res.as_mut().nets, &hir.nets);
         NanoArena::copy_to(&mut res.as_mut().ports, &hir.ports);
         NanoArena::copy_to(&mut res.as_mut().modules, &hir.modules);
         NanoArena::copy_to(&mut res.as_mut().disciplines, &hir.disciplines);
-        NanoArena::copy_to(&mut res.as_mut().natures, &hir.natures);
+        NanoArena::init_from(&mut res.as_mut().natures, &hir.natures);
         NanoArena::move_to(&mut res.as_mut().functions, &mut hir.functions);
+        StringArena::move_to(&mut res.as_mut().string_literals, &mut hir.string_literals);
         TinyArena::init_from(&mut res.as_mut().parameters, &hir.parameters);
         TinyArena::init_from(&mut res.as_mut().variables, &hir.variables);
         TinyArena::init(&mut res.as_mut().integer_expressions);
@@ -86,10 +90,11 @@ impl_id_type!(ModuleId in Mir::modules -> AttributeNode<'tag,Module<'tag>>);
 impl_id_type!(FunctionId in Mir::functions -> AttributeNode<'tag,Function<'tag>>);
 impl_id_type!(DisciplineId in Mir::disciplines -> AttributeNode<'tag,Discipline<'tag>>);
 impl_id_type!(RealExpressionId in Mir::real_expressions -> Node<RealExpression<'tag>>);
+impl_id_type!(StringExpressionId in Mir::string_expressions -> Node<StringExpression<'tag>>);
 impl_id_type!(IntegerExpressionId in Mir::integer_expressions -> Node<IntegerExpression<'tag>>);
 impl_id_type!(AttributeId in Mir::attributes -> Attribute<'tag>);
 impl_id_type!(StatementId in Mir::statements -> Statement<'tag>);
-impl_id_type!(NatureId in Mir::natures -> AttributeNode<'tag,Nature>);
+impl_id_type!(NatureId in Mir::natures -> AttributeNode<'tag,Nature<'tag>>);
 impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<'tag,Parameter>);
 
 #[derive(Clone, Copy, Debug)]
@@ -97,11 +102,23 @@ pub struct Variable<'mir> {
     pub name: Ident,
     pub variable_type: VariableType<'mir>,
 }
+
+#[derive(Copy, Clone)]
+pub struct Nature<'hir> {
+    pub name: Ident,
+    pub abstol: f64,
+    pub units: CompressedRange<'hir>,
+    pub access: Ident,
+    pub idt_nature: NatureId<'hir>,
+    pub ddt_nature: NatureId<'hir>,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum VariableType<'mir> {
     Real(Option<RealExpressionId<'mir>>),
     Integer(Option<IntegerExpressionId<'mir>>),
 }
+
 #[derive(Clone)]
 pub enum Statement<'mir> {
     Condition(AttributeNode<'mir, Condition<'mir>>),
@@ -155,6 +172,7 @@ pub struct NumericalParameterRangeBound<T> {
     pub inclusive: bool,
     pub bound: T,
 }
+
 impl<T: PartialOrd> PartialOrd for NumericalParameterRangeBound<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self.bound.partial_cmp(&other.bound) {
@@ -163,16 +181,29 @@ impl<T: PartialOrd> PartialOrd for NumericalParameterRangeBound<T> {
         }
     }
 }
+
 #[derive(Clone, Debug)]
 pub enum NumericalParameterRangeExclude<T> {
     Value(T),
     Range(Range<NumericalParameterRangeBound<T>>),
 }
+
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum ExpressionId<'mir> {
     Real(RealExpressionId<'mir>),
     Integer(IntegerExpressionId<'mir>),
+    String(StringExpressionId<'mir>),
 }
+impl<'mir> ExpressionId<'mir> {
+    pub fn source(self, mir: &Mir<'mir>) -> Span {
+        match self {
+            Self::Real(id) => mir[id].source,
+            Self::Integer(id) => mir[id].source,
+            Self::String(id) => mir[id].source,
+        }
+    }
+}
+
 impl<'mir> ExpressionId<'mir> {
     pub fn is_real(self) -> bool {
         matches!(self,Self::Real{..})
@@ -201,6 +232,8 @@ pub enum IntegerExpression<'mir> {
         Node<ComparisonOperator>,
         RealExpressionId<'mir>,
     ),
+    StringEq(StringExpressionId<'mir>, StringExpressionId<'mir>),
+    StringNEq(StringExpressionId<'mir>, StringExpressionId<'mir>),
     Condition(
         IntegerExpressionId<'mir>,
         Span,
@@ -408,4 +441,21 @@ impl<'tag, F: FnMut(ir::ExpressionId<'tag>) -> Result<RealExpressionId<'tag>, ()
         };
         Ok(res)
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum StringExpression<'mir> {
+    Condition(
+        IntegerExpressionId<'mir>,
+        Span,
+        StringExpressionId<'mir>,
+        Span,
+        StringExpressionId<'mir>,
+    ),
+
+    Literal(CompressedRange<'mir>),
+
+    VariableReference(VariableId<'mir>),
+
+    ParameterReference(ParameterId<'mir>),
 }

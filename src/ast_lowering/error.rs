@@ -158,13 +158,29 @@ impl<'tag> Error<'tag> {
                 }
             }
             Type::NatureNotPotentialOrFlow(name, discipline) => {
+                let (msg,expected) = match (ast[discipline].contents.potential_nature,ast[discipline].contents.flow_nature){
+                    (None,None)=> ("Discrete Disciplines can not be accessed using branch Probes".to_string(),"Illegal branch access".to_string()),
+
+                    (Some(nature),None) => (format!(
+                        "This branch can only be accessed using its Potential ({})",
+                        nature.name,
+                    ), format!("Expected {}",nature.name)
+                    ),
+                    (None,Some(nature)) => (format!(
+                        "This branch can only be accessed using its Flow ({})",
+                        nature.name,
+                    ),format!("Expected {}",nature.name)
+                    ),
+                    (Some(pot),Some(flow)) => (format!(
+                        "This branch can only be accessed using its Potential ({}) or its Flow ({})",
+                        pot.name,
+                        flow.name,
+                    ),format!("Expected {} or {}",pot.name,flow.name)
+                    ),
+                };
                 footer.push(Annotation {
                     id: None,
-                    label: Some(format!(
-                        "You can only access a branch using its Potential ({}) or Flow ({})",
-                        ast[discipline].contents.potential_nature.name,
-                        ast[discipline].contents.flow_nature.name
-                    )),
+                    label: Some(msg),
                     annotation_type: AnnotationType::Info,
                 });
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -185,11 +201,7 @@ impl<'tag> Error<'tag> {
                         origin,
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: format!(
-                                "Expected {} or {}",
-                                ast[discipline].contents.potential_nature.name,
-                                ast[discipline].contents.flow_nature.name
-                            ),
+                            label: expected,
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,

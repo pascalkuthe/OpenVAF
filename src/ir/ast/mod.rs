@@ -10,7 +10,11 @@ use core::fmt::Debug;
 use std::ops::Range;
 use std::ptr::NonNull;
 
-use crate::compact_arena::{InvariantLifetime, NanoArena, SafeRange, TinyArena};
+use intrusive_collections::__core::cell::RefCell;
+
+use crate::compact_arena::{
+    CompressedRange, InvariantLifetime, NanoArena, SafeRange, SmallArena, StringArena, TinyArena,
+};
 use crate::ir::*;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
@@ -83,12 +87,13 @@ pub struct Ast<'tag> {
     pub(crate) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
     pub(crate) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
     pub(crate) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline>>,
-    pub(crate) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
+    pub(crate) natures: NanoArena<'tag, AttributeNode<'tag, Nature<'tag>>>,
     //Ast Items
     pub(crate) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
     pub(crate) blocks: TinyArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
     pub(crate) attributes: TinyArena<'tag, Attribute<'tag>>,
     pub(crate) statements: TinyArena<'tag, Statement<'tag>>,
+    pub(crate) string_literals: StringArena<'tag>,
     pub top_symbols: SymbolTable<'tag>,
 }
 
@@ -118,6 +123,7 @@ impl<'tag> Ast<'tag> {
         TinyArena::init(&mut res.as_mut().blocks);
         TinyArena::init(&mut res.as_mut().attributes);
         TinyArena::init(&mut res.as_mut().statements);
+        StringArena::init(&mut res.as_mut().string_literals);
         std::ptr::write(
             &mut res.as_mut().top_symbols,
             SymbolTable::with_capacity(64),
@@ -162,19 +168,31 @@ impl_id_type!(StatementId in Ast::statements -> Statement<'tag>);
 
 impl_id_type!(BlockId in Ast::blocks -> AttributeNode<'tag,SeqBlock<'tag>>);
 
-impl_id_type!(NatureId in Ast::natures -> AttributeNode<'tag,Nature>);
+impl_id_type!(NatureId in Ast::natures -> AttributeNode<'tag,Nature<'tag>>);
 
 #[derive(Clone, Debug)]
-pub enum TopNode<'tag> {
-    Module(ModuleId<'tag>),
-    Nature(NatureId<'tag>),
-    Discipline(DisciplineId<'tag>),
+pub enum TopNode<'ast> {
+    Module(ModuleId<'ast>),
+    Nature(NatureId<'ast>),
+    Discipline(DisciplineId<'ast>),
 }
+
 #[derive(Copy, Clone)]
-pub struct Nature {
+pub struct Nature<'ast> {
     pub name: Ident,
-    //rest todo
+    pub abstol: ExpressionId<'ast>,
+    pub units: ExpressionId<'ast>,
+    pub access: Ident,
+    pub idt_nature: Option<Ident>,
+    pub ddt_nature: Option<Ident>,
 }
+
+pub enum NatureParentType {
+    Nature,
+    DisciplineFlow,
+    DisciplinePotential,
+}
+
 #[derive(Clone)]
 pub struct Module<'ast> {
     pub name: Ident,
@@ -185,6 +203,7 @@ pub struct Module<'ast> {
     pub symbol_table: SymbolTable<'ast>,
     pub children: Vec<ModuleItem<'ast>>,
 }
+
 #[derive(Clone, Debug)]
 pub struct Parameter<'ast> {
     pub name: Ident,
@@ -255,18 +274,22 @@ pub enum ModuleItem<'ast> {
     AnalogStmt(StatementId<'ast>),
     GenerateStatement, //TODO
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct Discipline {
     pub name: Ident,
-    pub flow_nature: Ident,
-    pub potential_nature: Ident,
+    pub flow_nature: Option<Ident>,
+    pub potential_nature: Option<Ident>,
+    pub continuous: Option<bool>,
 }
+
 #[derive(Clone, Debug)]
 pub struct Function<'ast> {
     pub name: Ident,
     pub args: Vec<Ident>,
     pub body: StatementId<'ast>,
 }
+
 #[derive(Debug, Clone, Copy)]
 pub struct Net {
     pub name: Ident,
@@ -274,6 +297,7 @@ pub struct Net {
     pub signed: bool,
     pub net_type: NetType,
 }
+
 #[derive(Clone, Copy, Debug)]
 pub struct Variable<'ast> {
     pub name: Ident,
@@ -320,7 +344,7 @@ pub struct SeqBlock<'ast> {
     pub scope: Option<BlockScope<'ast>>,
     pub statements: Vec<StatementId<'ast>>,
 }
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct BlockScope<'ast> {
     pub name: Ident,
     pub symbols: SymbolTable<'ast>,
@@ -359,6 +383,7 @@ pub enum Primary<'ast> {
     Integer(i64),
     UnsignedInteger(u32),
     Real(f64),
+    String(CompressedRange<'ast>),
     VariableOrNetReference(HierarchicalId),
     FunctionCall(HierarchicalId, Vec<ExpressionId<'ast>>),
     SystemFunctionCall(Ident /*TODO args*/),

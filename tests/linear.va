@@ -1,3 +1,6 @@
+`include "disciplines.va"
+
+
 /*
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.

@@ -293,7 +293,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 }
                 Token::Newline | Token::CommentNewline => self.source_map_builder.new_line(),
                 Token::Include => {
-                    let start = self.current_start;
+                    let start = self.current_source_start;
                     self.advance_state()?;
                     self.consume(Token::LiteralString)?;
                     let mut path_str = parse_string(self.slice());
@@ -319,7 +319,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     let path = Path::new(&path_str);
                     self.include(
                         path,
-                        Span::new(start, self.current_start + self.current_len),
+                        Span::new(start, self.current_source_start + self.current_len),
                     )?;
                 }
                 Token::MacroReference => {

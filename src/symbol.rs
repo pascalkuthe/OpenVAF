@@ -49,7 +49,7 @@ pub struct Ident {
     pub name: Symbol,
     pub span: Span,
 }
-const DUMMY_SPAN: Span = Span::new_short_span(0, 0);
+const DUMMY_SPAN: Span = Span::new_short_empty_span(0);
 impl Ident {
     #[inline]
     /// Constructs a new identifier from a symbol and a span.
@@ -219,6 +219,16 @@ pub mod keywords {
     pub const POTENTIAL: Symbol = Symbol(SymbolIndex(2));
     pub(super) static TEMPERATURE_STR: &str = "$temperature";
     pub const TEMPERATURE: Symbol = Symbol(SymbolIndex(3));
+    pub(super) static ABSTOL_STR: &str = "abstol";
+    pub const ABSTOL: Symbol = Symbol(SymbolIndex(4));
+    pub(super) static ACCESS_STR: &str = "access";
+    pub const ACCESS: Symbol = Symbol(SymbolIndex(5));
+    pub(super) static UNITS_STR: &str = "units";
+    pub const UNITS: Symbol = Symbol(SymbolIndex(6));
+    pub(super) static IDT_NATURE_STR: &str = "idt_nature";
+    pub const IDT_NATURE: Symbol = Symbol(SymbolIndex(7));
+    pub(super) static DDT_NATURE_STR: &str = "ddt_nature";
+    pub const DDT_NATURE: Symbol = Symbol(SymbolIndex(8));
 }
 mod statics {
     use std::sync::Mutex;
@@ -231,7 +241,12 @@ mod statics {
             EMPTY_SYMBOL_STR,
             FLOW_STR,
             POTENTIAL_STR,
-            TEMPERATURE_STR
+            TEMPERATURE_STR,
+            ABSTOL_STR,
+            ACCESS_STR,
+            UNITS_STR,
+            IDT_NATURE_STR,
+            DDT_NATURE_STR,
         ]));
     }
     #[inline]

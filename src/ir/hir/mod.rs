@@ -11,14 +11,14 @@
 use std::ops::Range;
 use std::ptr::NonNull;
 
+use intrusive_collections::__core::cell::RefCell;
+
 use crate::ast::Parameter;
-use crate::ast::{
-    BinaryOperator, BuiltInFunctionCall, Function, Nature, NetType, UnaryOperator, Variable,
-};
-use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
+use crate::ast::{BinaryOperator, BuiltInFunctionCall, Function, NetType, UnaryOperator, Variable};
+use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
 use crate::ir::*;
 use crate::symbol::Ident;
-use crate::Span;
+use crate::{Ast, Span};
 
 //pub mod visitor;
 
@@ -27,13 +27,11 @@ use crate::Span;
 /// It uses preallocated constant size arrays for better performance
 /// Compared to an AST all references are resolved to their respective ids here and unnecessary constructs like blocks are ignored
 
-//TODO make this into a general proc macro with lifetimes like compact arena
 pub struct Hir<'tag> {
     //TODO unsized
     //TODO configure to use different arena sizes
     //Declarations
     pub(crate) parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
-    //    nature: NanoArena<'tag,Nature>
     pub(crate) branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
     pub(crate) nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
     pub(crate) ports: NanoArena<'tag, Port<'tag>>,
@@ -41,16 +39,17 @@ pub struct Hir<'tag> {
     pub(crate) modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
     pub(crate) functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
     pub(crate) disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline<'tag>>>,
-    pub(crate) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
-    //Ast Items
+    pub(crate) natures: NanoArena<'tag, AttributeNode<'tag, Nature<'tag>>>,
+
     pub(crate) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
+    pub(crate) string_literals: StringArena<'tag>,
     pub(crate) attributes: TinyArena<'tag, Attribute<'tag>>,
     pub(crate) statements: TinyArena<'tag, Statement<'tag>>,
 }
 impl<'tag> Hir<'tag> {
     /// # Safety
     /// You should never call this yourself. Lower an AST created using mk_ast! instead
-    pub(crate) fn init() -> Box<Self> {
+    pub(crate) fn init(ast: &mut Ast<'tag>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
         unsafe {
             #[allow(clippy::cast_ptr_alignment)]
@@ -69,12 +68,14 @@ impl<'tag> Hir<'tag> {
             TinyArena::init(&mut res.as_mut().expressions);
             TinyArena::init(&mut res.as_mut().attributes);
             TinyArena::init(&mut res.as_mut().statements);
+            StringArena::move_to(&mut res.as_mut().string_literals, &mut ast.string_literals);
             Box::from_raw(res.as_ptr())
         } //this is save since we just allocated
     }
 }
 
 impl_id_type!(BranchId in Hir::branches -> AttributeNode<'tag,BranchDeclaration<'tag>>);
+
 impl<'tag> Write<BranchId<'tag>> for Hir<'tag> {
     type Data = AttributeNode<'tag, BranchDeclaration<'tag>>;
     fn write(&mut self, index: BranchId<'tag>, value: Self::Data) {
@@ -85,7 +86,9 @@ impl<'tag> Write<BranchId<'tag>> for Hir<'tag> {
         }
     }
 }
+
 impl_id_type!(NetId in Hir::nets -> AttributeNode<'tag,Net<'tag>>);
+
 impl<'tag> Write<NetId<'tag>> for Hir<'tag> {
     type Data = AttributeNode<'tag, Net<'tag>>;
     fn write(&mut self, index: NetId<'tag>, value: Self::Data) {
@@ -95,7 +98,9 @@ impl<'tag> Write<NetId<'tag>> for Hir<'tag> {
         }
     }
 }
+
 impl_id_type!(PortId in Hir::ports -> Port<'tag>);
+
 impl<'tag> Write<PortId<'tag>> for Hir<'tag> {
     type Data = Port<'tag>;
     fn write(&mut self, index: PortId<'tag>, value: Self::Data) {
@@ -105,7 +110,9 @@ impl<'tag> Write<PortId<'tag>> for Hir<'tag> {
         }
     }
 }
+
 impl_id_type!(VariableId in Hir::variables ->  AttributeNode<'tag,Variable<'tag>>);
+
 impl<'tag> Write<VariableId<'tag>> for Hir<'tag> {
     type Data = AttributeNode<'tag, Variable<'tag>>;
     fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
@@ -115,7 +122,9 @@ impl<'tag> Write<VariableId<'tag>> for Hir<'tag> {
         }
     }
 }
+
 impl_id_type!(ModuleId in Hir::modules -> AttributeNode<'tag,Module<'tag>>);
+
 impl<'tag> Write<ModuleId<'tag>> for Hir<'tag> {
     type Data = AttributeNode<'tag, Module<'tag>>;
     fn write(&mut self, index: ModuleId<'tag>, value: Self::Data) {
@@ -125,8 +134,11 @@ impl<'tag> Write<ModuleId<'tag>> for Hir<'tag> {
         }
     }
 }
+
 impl_id_type!(FunctionId in Hir::functions -> AttributeNode<'tag,Function<'tag>>);
+
 impl_id_type!(DisciplineId in Hir::disciplines -> AttributeNode<'tag,Discipline<'tag>>);
+
 impl<'tag> Write<DisciplineId<'tag>> for Hir<'tag> {
     type Data = AttributeNode<'tag, Discipline<'tag>>;
     fn write(&mut self, index: DisciplineId<'tag>, value: Self::Data) {
@@ -136,17 +148,53 @@ impl<'tag> Write<DisciplineId<'tag>> for Hir<'tag> {
         }
     }
 }
+
 impl_id_type!(ExpressionId in Hir::expressions -> Node<Expression<'tag>>);
+
 impl_id_type!(AttributeId in Hir::attributes -> Attribute<'tag>);
+
+impl<'tag> Write<AttributeId<'tag>> for Hir<'tag> {
+    type Data = Attribute<'tag>;
+    fn write(&mut self, index: AttributeId<'tag>, value: Self::Data) {
+        unsafe {
+            self.attributes
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
+
 impl_id_type!(StatementId in Hir::statements -> Statement<'tag>);
-impl_id_type!(NatureId in Hir::natures -> AttributeNode<'tag,Nature>);
+
+impl_id_type!(NatureId in Hir::natures -> AttributeNode<'tag,Nature<'tag>>);
+
+impl<'tag> Write<NatureId<'tag>> for Hir<'tag> {
+    type Data = AttributeNode<'tag, Nature<'tag>>;
+    fn write(&mut self, index: NatureId<'tag>, value: Self::Data) {
+        unsafe {
+            self.natures
+                .write(index.0, ::core::mem::MaybeUninit::new(value))
+        }
+    }
+}
+
 impl_id_type!(ParameterId in Hir::parameters -> AttributeNode<'tag,Parameter<'tag>>);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Discipline<'tag> {
     pub name: Ident,
-    pub flow_nature: NatureId<'tag>,
-    pub potential_nature: NatureId<'tag>,
+    pub flow_nature: Option<NatureId<'tag>>,
+    pub potential_nature: Option<NatureId<'tag>>,
+    pub continuous: Option<bool>,
+}
+
+#[derive(Copy, Clone)]
+pub struct Nature<'hir> {
+    pub name: Ident,
+    pub abstol: ExpressionId<'hir>,
+    pub units: ExpressionId<'hir>,
+    pub access: Ident,
+    pub idt_nature: NatureId<'hir>,
+    pub ddt_nature: NatureId<'hir>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -231,6 +279,7 @@ pub enum Primary<'hir> {
     Integer(i64),
     UnsignedInteger(u32),
     Real(f64),
+    String(CompressedRange<'hir>),
     VariableReference(VariableId<'hir>),
     NetReference(NetId<'hir>),
     PortReference(PortId<'hir>),

@@ -14,6 +14,7 @@ use crate::ast::{
     BranchAccess, ModuleItem, NumericalParameterRangeBound, NumericalParameterRangeExclude,
     Parameter, ParameterType, Variable,
 };
+use crate::ast_lowering::ast_to_hir_fold::expression::ConstantExpressionFolder;
 use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
@@ -229,12 +230,14 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
 
     /// Just a utility method that makes folding expressions a little more ergonomic
     fn fold_expression(&mut self, expr: ExpressionId<'tag>) -> Result<ExpressionId<'tag>, ()> {
-        let mut fold = ExpressionFolder {
-            base: &mut self.base,
+        let mut folder = ExpressionFolder {
+            constant_folder: ConstantExpressionFolder {
+                base: &mut self.base,
+            },
             state: self.state,
             branch_resolver: &mut self.branch_resolver,
         };
-        fold.fold_expression(expr)
+        folder.fold(expr)
     }
 
     fn fold_block(&mut self, block: BlockId<'tag>) {

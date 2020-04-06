@@ -35,6 +35,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::Comma,
             end,
             consume_end,
+            false,
             |parser, token| match token {
                 Token::Comma => {
                     parser.lookahead.take();
@@ -64,7 +65,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     {
         if let Err(error) = parse_list_item(self) {
             self.non_critical_errors.push(error);
-            if self.recover_on(Token::Comma, end, consume_end)? {
+            if self.recover_on(Token::Comma, end, consume_end, false)? {
                 return Ok(());
             }
         }
@@ -78,6 +79,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         recover: Token,
         end: Token,
         consume_end: bool,
+        consume_recover: bool,
         mut parse: F,
     ) -> Result
     where
@@ -114,14 +116,22 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
             self.non_critical_errors.push(error);
 
-            if self.recover_on(end, recover, consume_end)? {
+            if self.recover_on(end, recover, consume_end, consume_recover)? {
                 break;
             }
         }
 
         Ok(())
     }
-    pub fn recover_on(&mut self, end: Token, recover: Token, consume_end: bool) -> Result<bool> {
+
+    #[inline]
+    pub fn recover_on(
+        &mut self,
+        end: Token,
+        recover: Token,
+        consume_end: bool,
+        consume_recover: bool,
+    ) -> Result<bool> {
         loop {
             match self.look_ahead() {
                 Ok((token, _)) if token == end => {
@@ -132,7 +142,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 }
 
                 Ok((token, _)) if token == recover => {
-                    self.lookahead.take();
+                    if consume_recover {
+                        self.lookahead.take();
+                    }
                     return Ok(false);
                 }
 
@@ -160,17 +172,17 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 }
 
 macro_rules! synchronize {
-    ($parser:expr; $($production:stmt;),* sync $gen_token:expr => {$end_token:path => end , $($token:path => $parse:expr,),+}) => {
+    ($parser:expr; $($production:stmt;),* sync $gen_token:expr => {$end_token:path => end , $($token:path => $parse:expr,)+}) => {
         'mainloop: loop {
             let mut try_parse = || {
                 $($production),*
                 let (token,source) = $gen_token?;
                 match token {
                     $end_token => return Ok(true),
-                    $($token => $parse?,),+
+                    $($token => $parse?,)+
                     _ => return Err(Error {
                             error_type: error::Type::UnexpectedToken {
-                                expected: vec![$end_token $(,$token),+],
+                                expected: vec![$end_token $(,$token)+],
                             },
                             source,
                         }),
@@ -185,7 +197,7 @@ macro_rules! synchronize {
             $parser.non_critical_errors.push(error);
             loop {
                 match $parser.look_ahead() {
-                    $(Ok(($token,_)) => break,),+
+                    $(Ok(($token,_)) => break,)+
                     Ok(($end_token,_)) => break 'mainloop,
                     Ok(_) => {
                         $parser.lookahead.take();

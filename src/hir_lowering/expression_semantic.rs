@@ -203,9 +203,11 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     (ExpressionId::Integer(lhs), ExpressionId::Integer(rhs)) => {
                         IntegerExpression::IntegerComparison(lhs, op, rhs)
                     }
+
                     (ExpressionId::Real(lhs), ExpressionId::Real(rhs)) => {
                         IntegerExpression::RealComparison(lhs, op, rhs)
                     }
+
                     (ExpressionId::Integer(lhs), ExpressionId::Real(rhs)) => {
                         let lhs = self.mir.push(Node::new(
                             RealExpression::IntegerConversion(lhs),
@@ -213,12 +215,44 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         ));
                         IntegerExpression::RealComparison(lhs, op, rhs)
                     }
+
                     (ExpressionId::Real(lhs), ExpressionId::Integer(rhs)) => {
                         let rhs = self.mir.push(Node::new(
                             RealExpression::IntegerConversion(rhs),
                             self.mir[rhs].source,
                         ));
                         IntegerExpression::RealComparison(lhs, op, rhs)
+                    }
+
+                    (ExpressionId::String(lhs), ExpressionId::String(rhs))
+                        if op.contents == ComparisonOperator::LogicEqual =>
+                    {
+                        IntegerExpression::StringEq(lhs, rhs)
+                    }
+
+                    (ExpressionId::String(lhs), ExpressionId::String(rhs))
+                        if op.contents == ComparisonOperator::LogicalNotEqual =>
+                    {
+                        IntegerExpression::StringNEq(lhs, rhs)
+                    }
+
+                    (ExpressionId::String(lhs), ExpressionId::String(rhs)) => {
+                        self.errors.push(Error {
+                            error_type: Type::ExpectedNumber,
+                            source: self.mir[lhs].source,
+                        });
+                        self.errors.push(Error {
+                            error_type: Type::ExpectedNumber,
+                            source: self.mir[rhs].source,
+                        });
+                        return Err(());
+                    }
+                    (lhs, rhs) => {
+                        self.errors.push(Error {
+                            error_type: Type::CannotCompareStringToNumber,
+                            source: lhs.source(&self.mir).extend(rhs.source(&self.mir)),
+                        });
+                        return Err(());
                     }
                 }
             }
@@ -287,6 +321,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 }
             }
 
+            hir::Expression::Primary(Primary::String(_)) => {
+                self.errors.push(Error {
+                    error_type: Type::ExpectedInteger,
+                    source,
+                });
+                return Err(());
+            }
             _ => {
                 self.errors.push(Error {
                     error_type: Type::ExpectedInteger,
@@ -340,6 +381,27 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             source,
                         })))
                     }
+
+                    (ExpressionId::String(if_val), ExpressionId::String(else_val)) => {
+                        return Ok(ExpressionId::String(self.mir.push(Node {
+                            contents: StringExpression::Condition(
+                                condition?,
+                                question_span,
+                                if_val,
+                                colon_span,
+                                else_val,
+                            ),
+                            source,
+                        })))
+                    }
+
+                    (ExpressionId::String(str), num) | (num, ExpressionId::String(str)) => {
+                        self.errors.push(Error {
+                            error_type: Type::CondtionTypeMissmatch,
+                            source,
+                        });
+                        return Err(());
+                    }
                 };
                 RealExpression::Condition(condition?, question_span, if_val, colon_span, else_val)
             }
@@ -347,7 +409,15 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             hir::Expression::Primary(Primary::SystemFunctionCall(call)) => {
                 RealExpression::SystemFunctionCall(call)
             }
+
+            hir::Expression::Primary(Primary::String(val)) => {
+                return Ok(ExpressionId::String(self.mir.push(Node {
+                    contents: StringExpression::Literal(val),
+                    source,
+                })))
+            }
             hir::Expression::Primary(Primary::Real(val)) => RealExpression::Literal(val),
+
             hir::Expression::Primary(Primary::FunctionCall(function, ref args)) => {
                 todo!("return type checking");
                 // todo!("argument type checking")
@@ -407,6 +477,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         });
                         (lhs, rhs)
                     }
+
                     (ExpressionId::Integer(lhs), ExpressionId::Real(rhs)) => {
                         let lhs = self.mir.push(Node {
                             source: self.mir[lhs].source,
@@ -414,6 +485,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         });
                         (lhs, rhs)
                     }
+
                     (ExpressionId::Integer(lhs), ExpressionId::Integer(rhs)) => {
                         return Ok(ExpressionId::Integer(self.mir.push(Node {
                             contents: IntegerExpression::BinaryOperator(
@@ -427,7 +499,22 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             source,
                         })))
                     }
+
+                    (ExpressionId::String(val), other) | (other, ExpressionId::String(val)) => {
+                        if let ExpressionId::String(other) = other {
+                            self.errors.push(Error {
+                                error_type: Type::ExpectedNumber,
+                                source: self.mir[other].source,
+                            });
+                        }
+                        self.errors.push(Error {
+                            error_type: Type::ExpectedNumber,
+                            source: self.mir[val].source,
+                        });
+                        return Err(());
+                    }
                 };
+
                 RealExpression::BinaryOperator(
                     lhs,
                     Node {

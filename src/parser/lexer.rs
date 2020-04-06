@@ -195,10 +195,21 @@ pub enum Token {
     Begin,
     #[token = "end"]
     End,
+
     #[token = "module"]
     Module,
     #[token = "endmodule"]
     EndModule,
+    #[token = "discipline"]
+    Discipline,
+    #[token = "enddiscipline"]
+    EndDiscipline,
+
+    #[token = "nature"]
+    Nature,
+    #[token = "endnature"]
+    EndNature,
+
     #[token = "branch"]
     Branch,
     #[token = "parameter"]
@@ -207,10 +218,12 @@ pub enum Token {
     DefineParameter,
     #[token = "defparam"]
     LocalParameter,
+
     #[token = "analog"]
     Analog,
     #[token = "initial"]
     AnalogInitial,
+
     #[token = "input"]
     Input,
     #[token = "inout"]
@@ -269,6 +282,12 @@ pub enum Token {
     Potential,
     #[token = "flow"]
     Flow,
+    #[token = "domain"]
+    Domain,
+    #[token = "discrete"]
+    Discrete,
+    #[token = "continuous"]
+    Continuous,
 
     #[token = "ddt"]
     TimeDerivative,
@@ -348,10 +367,6 @@ pub enum Token {
     #[token = "-inf"]
     MinusInfinity,
 
-    #[token = "nature"]
-    Nature,
-    #[token = "endnature"]
-    EndNature,
     #[token = "abstol"]
     Abstol,
     #[token = "access"]

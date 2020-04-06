@@ -24,7 +24,7 @@ use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::{Expected, Type, Warning, WarningType};
 use crate::parser::lexer::Token;
 use crate::span::Index;
-use crate::symbol::{Ident, Symbol};
+use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::{Preprocessor, SourceMap, Span};
 
@@ -37,9 +37,11 @@ pub mod test;
 mod combinators;
 mod behavior;
 mod branch;
+mod disciplines;
 pub mod error;
 mod expression;
 mod module;
+mod nature;
 mod net_declarations;
 mod parameter;
 mod primaries;
@@ -98,6 +100,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             sync self.next() => {
                 Token::EOF => end,
                 Token::Module => self.parse_module(attributes),
+                Token::Nature => self.parse_nature(attributes),
+                Token::Discipline => self.parse_discipline(attributes),
             }
         )
     }
@@ -165,7 +169,12 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         &mut self,
         attribute_map: &mut AHashMap<Symbol, AttributeId<'ast>>,
     ) -> Result {
-        let name = self.parse_identifier(false)?;
+        let name = if self.look_ahead()?.0 == Token::Units {
+            self.lookahead.take();
+            Ident::new(keywords::UNITS, self.preprocessor.span())
+        } else {
+            self.parse_identifier(false)?
+        };
         let value = if self.look_ahead()?.0 == Token::Assign {
             self.lookahead.take();
             Some(self.parse_expression_id()?)
@@ -189,6 +198,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn expect(&mut self, token: Token) -> Result {
         let (found, source) = self.look_ahead()?;
         if found != token {
+            self.lookahead.take();
             Err(Error {
                 source,
                 error_type: error::Type::UnexpectedToken {
@@ -295,7 +305,7 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
     }
 }
 
-pub fn insert_electrical_natures_and_disciplines(ast: &mut Ast) {
+/*pub fn insert_electrical_natures_and_disciplines(ast: &mut Ast) {
     let voltage = ast.push(AttributeNode {
         attributes: ast.empty_range_from_end(),
         source: Span::new(0, 0),
@@ -336,4 +346,4 @@ pub fn insert_electrical_natures_and_disciplines(ast: &mut Ast) {
         Symbol::intern("electrical"),
         SymbolDeclaration::Discipline(electrical),
     );
-}
+}*/

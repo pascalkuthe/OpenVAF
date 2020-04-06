@@ -19,7 +19,7 @@ use crate::hir_lowering::fold_hir_to_mir;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
 use crate::ir::SafeRangeCreation;
-use crate::parser::{insert_electrical_natures_and_disciplines, parse_and_print_errors};
+use crate::parser::parse_and_print_errors;
 
 #[test]
 pub fn schemantic() -> Result<(), ()> {
@@ -36,7 +36,6 @@ pub fn schemantic() -> Result<(), ()> {
         &mut ast,
         true,
     )?;
-    insert_electrical_natures_and_disciplines(&mut ast);
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
     let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true)?;
     Ok(())
@@ -68,7 +67,6 @@ pub fn linear() -> Result<(), ()> {
         &mut ast,
         true,
     )?;
-    insert_electrical_natures_and_disciplines(&mut ast);
 
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
     let module: SafeRange<ModuleId> = hir.full_range();
@@ -106,12 +104,30 @@ pub fn bjt() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     let source_map = parse_and_print_errors(
-        Path::new("tests/bjt.va"),
+        Path::new("tests/btj.va"),
         &source_map_allocator,
         &mut ast,
         true,
     )?;
-    insert_electrical_natures_and_disciplines(&mut ast);
+    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
+    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true)?;
+    Ok(())
+}
+#[test]
+pub fn hl2() -> Result<(), ()> {
+    fern::Dispatch::new()
+        .format(|out, message, record| out.finish(*message))
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stderr())
+        .apply();
+    let source_map_allocator = Bump::new();
+    mk_ast!(ast);
+    let source_map = parse_and_print_errors(
+        Path::new("tests/hl2.va"),
+        &source_map_allocator,
+        &mut ast,
+        true,
+    )?;
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
     let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true)?;
     Ok(())

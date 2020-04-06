@@ -36,6 +36,10 @@ pub enum Type {
     },
     PortPreDeclaredNotDefined,
     EmptyListEntry(List),
+    AttributeAlreadyDefined,
+    RequiredAttributeNotDefined(Vec<Symbol>),
+    DiscreteDisciplineHasNatures,
+    StringTooLong(usize),
 
     //Preprocessor
     MacroArgumentCount {
@@ -76,6 +80,7 @@ pub enum Unsupported {
     StringParameters,
     DefaultDiscipline,
     MacroDefinedInMacro,
+    NatureInheritance,
 }
 impl Display for Unsupported {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
@@ -83,6 +88,7 @@ impl Display for Unsupported {
             Self::StringParameters => f.write_str("String parameters"),
             Self::DefaultDiscipline => f.write_str("Implicit Disciplines"),
             Self::MacroDefinedInMacro => f.write_str("Macros defined inside another Macros"),
+            Self::NatureInheritance => f.write_str("Derived Natures"),
         }
     }
 }
@@ -614,6 +620,102 @@ impl Error {
                         annotations: vec![SourceAnnotation {
                             range,
                             label: "Io Error occured here".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+            Type::AttributeAlreadyDefined => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("An attribute was redefined".to_string()),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Redefined here".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+
+            Type::RequiredAttributeNotDefined(missing) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(format!(
+                            "Nature is missing the required attributes  {:?}",
+                            missing
+                        )),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: format!("Required attributes {:?} are missing", missing),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+
+            Type::DiscreteDisciplineHasNatures => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Disciplines in the discrete Domain may not define flow/potential natures".to_string()),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Natures may not be defined".to_string(),
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                }
+            }
+            Type::StringTooLong(len) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(format!(
+                            "String literals longer than {} characters are not supported",
+                            std::u16::MAX
+                        )),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin,
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: format!("String literal with {} characters", len),
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,

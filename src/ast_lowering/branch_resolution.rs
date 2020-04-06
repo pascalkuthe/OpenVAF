@@ -78,8 +78,10 @@ impl<'tag, 'lt> BranchResolver<'tag> {
         discipline: DisciplineId<'tag>,
     ) -> Result<DisciplineAccess, ()> {
         match id {
-            id if id == fold.hir[discipline].contents.flow_nature => Ok(DisciplineAccess::Flow),
-            id if id == fold.hir[discipline].contents.potential_nature => {
+            id if Some(id) == fold.hir[discipline].contents.flow_nature => {
+                Ok(DisciplineAccess::Flow)
+            }
+            id if Some(id) == fold.hir[discipline].contents.potential_nature => {
                 Ok(DisciplineAccess::Potential)
             }
             _ => {
@@ -232,7 +234,7 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                                     signed: false,
                                     net_type: GROUND,
                                 },
-                                source: Span::new_short_span(0, 0),
+                                source: Span::new_short_empty_span(0),
                                 attributes: fold.hir.empty_range_from_end(),
                             })
                         });

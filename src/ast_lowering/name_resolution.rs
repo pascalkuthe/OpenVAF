@@ -59,7 +59,7 @@ use crate::Ast;
 #[macro_export]
 macro_rules! resolve {
     ($fold:expr; $name:ident as $($declaration:ident($id:ident) => $block:block),+) => {
-        match $fold.resolver.resolve($name) {
+        match $fold.resolver.resolve(&$name) {
             $(Ok($crate::symbol_table::SymbolDeclaration::$declaration($id)) => $block),+
             Err(error) => {
                 $fold.error(error);

@@ -17,7 +17,7 @@ use crate::compact_arena::SafeRange;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
 use crate::ir::SafeRangeCreation;
-use crate::parser::{insert_electrical_natures_and_disciplines, parse_and_print_errors};
+use crate::parser::parse_and_print_errors;
 
 #[test]
 pub fn diode() -> Result<(), ()> {
@@ -34,7 +34,6 @@ pub fn diode() -> Result<(), ()> {
         &mut ast,
         true,
     )?;
-    insert_electrical_natures_and_disciplines(&mut ast);
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
     Ok(())
 }
@@ -54,7 +53,6 @@ pub fn linear() -> Result<(), ()> {
         &mut ast,
         true,
     )?;
-    insert_electrical_natures_and_disciplines(&mut ast);
 
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
     let module: SafeRange<ModuleId> = hir.full_range();

@@ -51,7 +51,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let parameter_list_start = self.preprocessor.current_start();
         let (port_list_span, mut expected_ports) = if let Err(error) = self.parse_parameter_list() {
             self.non_critical_errors.push(error);
-            self.recover_on(Token::EndModule, Token::Semicolon, true)?;
+            self.recover_on(Token::EndModule, Token::Semicolon, false, false)?;
             (self.span_to_current_end(parameter_list_start), None)
         } else {
             let port_list_start = self.preprocessor.current_start();
@@ -59,9 +59,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             let port_list_span = self
                 .span_to_current_end(port_list_start)
                 .negative_offset(start);
-            self.expect(Token::Semicolon)?;
             (port_list_span, expected_ports)
         };
+
+        self.expect(Token::Semicolon)?;
 
         //Module body
 
@@ -69,65 +70,72 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let variable_start = self.ast.empty_range_from_end();
         let branch_start = self.ast.empty_range_from_end();
 
-        self.parse_and_recover_on_tokens(Token::Semicolon, Token::EndModule, true, |parser, _| {
-            let attributes = parser.parse_attributes()?;
-            match parser.look_ahead()?.0 {
-                Token::Inout | Token::Input | Token::Output => {
-                    if let Some(ref mut expected) = expected_ports {
-                        parser.parse_port_declaration(attributes, expected, port_list_span)?;
-                    } else {
-                        let port_base = parser.parse_port_declaration_base(attributes)?;
-                        let source = parser.ast[port_base]
-                            .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
-                            .negative_offset(start);
-                        parser.non_critical_errors.push(Error {
-                            source: parser.span_to_current_end(start),
-                            error_type: error::Type::PortRedeclaration(source, port_list_span),
-                        });
+        self.parse_and_recover_on_tokens(
+            Token::Semicolon,
+            Token::EndModule,
+            true,
+            true,
+            |parser, _| {
+                let attributes = parser.parse_attributes()?;
+                match parser.look_ahead()?.0 {
+                    Token::Inout | Token::Input | Token::Output => {
+                        if let Some(ref mut expected) = expected_ports {
+                            parser.parse_port_declaration(attributes, expected, port_list_span)?;
+                        } else {
+                            let port_base = parser.parse_port_declaration_base(attributes)?;
+                            let source = parser.ast[port_base]
+                                .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
+                                .negative_offset(start);
+                            parser.non_critical_errors.push(Error {
+                                source: parser.span_to_current_end(start),
+                                error_type: error::Type::PortRedeclaration(source, port_list_span),
+                            });
+                        }
+                    }
+                    Token::Analog => {
+                        parser.lookahead.take();
+                        let module_item =
+                            ModuleItem::AnalogStmt(parser.parse_statement(attributes)?);
+                        module_items.push(module_item);
+                    }
+
+                    Token::Branch => {
+                        parser.lookahead.take();
+                        parser.parse_branch_declaration(attributes)?;
+                    }
+
+                    Token::Integer => {
+                        parser.lookahead.take();
+                        parser.parse_variable_declaration(INTEGER, attributes)?;
+                    }
+
+                    Token::Real => {
+                        parser.lookahead.take();
+                        parser.parse_variable_declaration(REAL, attributes)?;
+                    }
+
+                    Token::Realtime => {
+                        parser.lookahead.take();
+                        parser.parse_variable_declaration(REALTIME, attributes)?;
+                    }
+
+                    Token::Time => {
+                        parser.lookahead.take();
+                        parser.parse_variable_declaration(TIME, attributes)?;
+                    }
+
+                    Token::Parameter => {
+                        parser.lookahead.take();
+                        parser.parse_parameter_decl(attributes)?;
+                    }
+
+                    _ => {
+                        parser.parse_net_declaration(attributes)?;
                     }
                 }
-                Token::Analog => {
-                    parser.lookahead.take();
-                    let module_item = ModuleItem::AnalogStmt(parser.parse_statement(attributes)?);
-                    module_items.push(module_item);
-                }
-
-                Token::Branch => {
-                    parser.lookahead.take();
-                    parser.parse_branch_declaration(attributes)?;
-                }
-
-                Token::Integer => {
-                    parser.lookahead.take();
-                    parser.parse_variable_declaration(INTEGER, attributes)?;
-                }
-
-                Token::Real => {
-                    parser.lookahead.take();
-                    parser.parse_variable_declaration(REAL, attributes)?;
-                }
-
-                Token::Realtime => {
-                    parser.lookahead.take();
-                    parser.parse_variable_declaration(REALTIME, attributes)?;
-                }
-
-                Token::Time => {
-                    parser.lookahead.take();
-                    parser.parse_variable_declaration(TIME, attributes)?;
-                }
-
-                Token::Parameter => {
-                    parser.lookahead.take();
-                    parser.parse_parameter_decl(attributes)?;
-                }
-
-                _ => {
-                    parser.parse_net_declaration(attributes)?;
-                }
-            }
-            Ok(())
-        })?;
+                Ok(())
+            },
+        )?;
 
         if let Some(expected_ports) = expected_ports {
             for port in expected_ports {
