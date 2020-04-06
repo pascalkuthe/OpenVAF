@@ -86,7 +86,7 @@ pub struct Ast<'tag> {
     pub(crate) natures: NanoArena<'tag, AttributeNode<'tag, Nature>>,
     //Ast Items
     pub(crate) expressions: TinyArena<'tag, Node<Expression<'tag>>>,
-    pub(crate) blocks: NanoArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
+    pub(crate) blocks: TinyArena<'tag, AttributeNode<'tag, SeqBlock<'tag>>>,
     pub(crate) attributes: TinyArena<'tag, Attribute<'tag>>,
     pub(crate) statements: TinyArena<'tag, Statement<'tag>>,
     pub top_symbols: SymbolTable<'tag>,
@@ -115,7 +115,7 @@ impl<'tag> Ast<'tag> {
         NanoArena::init(&mut res.as_mut().disciplines);
         NanoArena::init(&mut res.as_mut().natures);
         TinyArena::init(&mut res.as_mut().expressions);
-        NanoArena::init(&mut res.as_mut().blocks);
+        TinyArena::init(&mut res.as_mut().blocks);
         TinyArena::init(&mut res.as_mut().attributes);
         TinyArena::init(&mut res.as_mut().statements);
         std::ptr::write(
@@ -320,7 +320,7 @@ pub struct SeqBlock<'ast> {
     pub scope: Option<BlockScope<'ast>>,
     pub statements: Vec<StatementId<'ast>>,
 }
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct BlockScope<'ast> {
     pub name: Ident,
     pub symbols: SymbolTable<'ast>,

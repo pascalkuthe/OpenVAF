@@ -11,6 +11,9 @@ use std::fmt::{Debug, Formatter};
 
 use ansi_term::Color::*;
 use log::*;
+use crate::compact_arena::{TinyArena, NanoArena};
+use intrusive_collections::__core::mem::MaybeUninit;
+use std::sync::Mutex;
 
 pub type Index = u32;
 pub type IndexOffset = i64;
@@ -24,9 +27,31 @@ enum SpanData {
     LargeSpan,
     Length(Length),
 }
+lazy_static! {
+        static ref INTERNER: Mutex<SpanInterner> = Mutex::new(SpanInterner::new());
+    }
+struct SpanInterner{
+    data: Vec<(u32,u32)>,
+}
+impl SpanInterner{
+    fn new() -> Self{
+        Self{
+            data: Vec::with_capacity(64),
+        }
+    }
+    fn add(&mut self,start:u32,end:u32)->usize{
+        let idx = self.data.len();
+        self.data.push ((start,end));
+        idx
+    }
+    fn get(&self,idx:usize)-> (u32,u32){
+        unsafe { *self.data.get_unchecked(idx) }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Span {
-    start_or_large_span_index: u32,
+    start_or_idx: u32,
     data: SpanData,
 }
 impl Span {
@@ -37,71 +62,43 @@ impl Span {
         //we accept index here instead of Length because we want to allow long ranges using special handling (eventually)
         if len <= std::u16::MAX as u32 {
             Self {
-                start_or_large_span_index: start,
+                start_or_idx: start,
                 data: SpanData::Length(len as Length),
             }
         } else {
-            error!(
-                "{}{}",
-                Red.bold().paint("error"),
-                Fixed(253).bold().paint(format!(
-                    ": Spans longer than {} aren't supported yet",
-                    std::u16::MAX
-                ))
-            );
-            unimplemented!()
+            Self {
+                start_or_idx: INTERNER.lock().unwrap().add(start,start+len) as u32,
+                data: SpanData::LargeSpan
+            }
         }
     }
     pub const fn new_short_span(start: Index, len: u16) -> Self {
         Self {
-            start_or_large_span_index: start,
+            start_or_idx: start,
             data: SpanData::Length(len as Length),
         }
     }
     pub fn get_start(self) -> Index {
         match self.data {
-            SpanData::LargeSpan => {
-                error!(
-                    "{}{}",
-                    Red.bold().paint("error"),
-                    Fixed(253).bold().paint(format!(
-                        ": Spans longer than {} aren't supported yet",
-                        std::u16::MAX
-                    ))
-                );
-                unimplemented!()
-            }
-            SpanData::Length(_) => self.start_or_large_span_index,
+            SpanData::LargeSpan =>
+                INTERNER.lock().unwrap().get(self.start_or_idx as usize).0,
+
+            SpanData::Length(_) => self.start_or_idx,
         }
     }
     pub fn get_end(self) -> Index {
         match self.data {
-            SpanData::LargeSpan => {
-                error!(
-                    "{}{}",
-                    Red.bold().paint("error"),
-                    Fixed(253).bold().paint(format!(
-                        ": Spans longer than {} aren't supported yet",
-                        std::u16::MAX
-                    ))
-                );
-                unimplemented!()
-            }
-            SpanData::Length(length) => self.start_or_large_span_index + (length as u32),
+            SpanData::LargeSpan =>
+                INTERNER.lock().unwrap().get(self.start_or_idx as usize).1,
+
+            SpanData::Length(length) => self.start_or_idx + (length as u32),
         }
     }
     pub fn get_len(self) -> Index {
         match self.data {
             SpanData::LargeSpan => {
-                error!(
-                    "{}{}",
-                    Red.bold().paint("error"),
-                    Fixed(253).bold().paint(format!(
-                        ": Spans longer than {} aren't supported yet",
-                        std::u16::MAX
-                    ))
-                );
-                unimplemented!()
+                let (start,end) = INTERNER.lock().unwrap().get(self.start_or_idx as usize);
+                end - start
             }
             SpanData::Length(length) => length as Index,
         }
@@ -109,17 +106,11 @@ impl Span {
     pub fn offset(mut self, offset: Index) -> Self {
         match self.data {
             SpanData::LargeSpan => {
-                error!(
-                    "{}{}",
-                    Red.bold().paint("error"),
-                    Fixed(253).bold().paint(format!(
-                        ": Spans longer than {} aren't supported yet",
-                        std::u16::MAX
-                    ))
-                );
-                unimplemented!()
+                let mut inter = INTERNER.lock().unwrap();
+                let (start,end) = inter.get(self.start_or_idx as usize);
+                self.start_or_idx = inter.add(start+offset,end+offset) as u32;
             }
-            SpanData::Length(_) => self.start_or_large_span_index += offset,
+            SpanData::Length(_) => self.start_or_idx += offset,
         }
         self
     }
@@ -133,17 +124,11 @@ impl Span {
     pub fn negative_offset(mut self, offset: Index) -> Self {
         match self.data {
             SpanData::LargeSpan => {
-                error!(
-                    "{}{}",
-                    Red.bold().paint("error"),
-                    Fixed(253).bold().paint(format!(
-                        ": Spans longer than {} aren't supported yet",
-                        std::u16::MAX
-                    ))
-                );
-                unimplemented!()
+                let mut inter = INTERNER.lock().unwrap();
+                let (start,end) = inter.get(self.start_or_idx as usize);
+                self.start_or_idx = inter.add(start-offset,end-offset) as u32;
             }
-            SpanData::Length(_) => self.start_or_large_span_index -= offset,
+            SpanData::Length(_) => self.start_or_idx -= offset,
         }
         self
     }

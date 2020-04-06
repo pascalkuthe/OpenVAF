@@ -61,7 +61,7 @@ id_type!(DisciplineId(Idx8));
 id_type!(ExpressionId(Idx16));
 id_type!(RealExpressionId(Idx16));
 id_type!(IntegerExpressionId(Idx16));
-id_type!(BlockId(Idx8));
+id_type!(BlockId(Idx16));
 id_type!(AttributeId(Idx16));
 id_type!(StatementId(Idx16));
 id_type!(NatureId(Idx8));
