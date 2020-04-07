@@ -140,6 +140,10 @@ impl<T: Copy + Clone> SafeRange<T> {
     pub fn set_start(&mut self, start: T) {
         self.end = start;
     }
+    pub fn extend(mut self, other: Self) -> Self {
+        self.end = other.end;
+        self
+    }
 }
 
 impl<'tag, T: Copy + Clone + Sub<Output = T>> SafeRange<Idx<'tag, T>> {
