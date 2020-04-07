@@ -167,6 +167,22 @@ impl<T: Copy + Clone + PartialOrd + Step> SafeRange<T> {
         }
     }
 }
+impl<T: Copy + Clone + PartialEq + PartialOrd + Eq> SafeRange<T> {
+    pub fn enter(&mut self, sub_range: Self) -> Self {
+        if (sub_range.start != self.start || sub_range.end > self.end) && !self.is_empty() {
+            panic!("This is not a sub range")
+        }
+        self.start = sub_range.end;
+        sub_range
+    }
+    pub fn enter_back(&mut self, sub_range: Self) -> Self {
+        if (sub_range.end != self.end || sub_range.start < self.start) && !self.is_empty() {
+            panic!("This is not a sub range")
+        }
+        self.end = sub_range.start;
+        sub_range
+    }
+}
 
 /// A trait used for abstracting over unsafe over iteration of ids
 pub trait Step {

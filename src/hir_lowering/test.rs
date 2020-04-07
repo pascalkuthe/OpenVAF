@@ -17,8 +17,8 @@ use crate::compact_arena::SafeRange;
 use crate::fold_hir_to_mir_and_print_errors;
 use crate::hir_lowering::fold_hir_to_mir;
 use crate::ir::ast::NetType;
-use crate::ir::ModuleId;
 use crate::ir::SafeRangeCreation;
+use crate::ir::{ModuleId, StatementId};
 use crate::parser::parse_and_print_errors;
 
 #[test]
@@ -104,7 +104,7 @@ pub fn bjt() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     let source_map = parse_and_print_errors(
-        Path::new("tests/btj.va"),
+        Path::new("tests/bjt.va"),
         &source_map_allocator,
         &mut ast,
         true,

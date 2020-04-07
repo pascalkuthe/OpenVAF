@@ -214,15 +214,14 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
                     let main_condition = self.fold_integer_expression(condition.main_condition);
 
-                    statements.skip_forward(condition.main_condition_statements.unwrap().len());
-                    self.fold_block(condition.main_condition_statements);
+                    self.fold_block(statements.enter(condition.main_condition_statements));
                     let else_ifs = condition
                         .else_ifs
                         .iter()
                         .copied()
                         .filter_map(|(condition, block)| {
-                            statements.skip_forward(block.unwrap().len());
-                            self.fold_block(block);
+                            self.fold_block(statements.enter(block));
+
                             if let Ok(condition) = self.fold_integer_expression(condition) {
                                 Some((condition, block))
                             } else {
@@ -230,8 +229,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             }
                         })
                         .collect();
-                    statements.skip_forward(condition.else_statement.unwrap().len());
-                    self.fold_block(condition.else_statement);
+                    self.fold_block(statements.enter(condition.else_statement));
 
                     let main_condition = if let Ok(main_condition) = main_condition {
                         main_condition
