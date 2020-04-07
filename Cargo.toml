@@ -1,6 +1,6 @@
 [package]
 name = "VARF"
-version = "0.1.10"
+version = "0.1.11"
 authors = ["DSOM"]
 edition = "2018"
 
