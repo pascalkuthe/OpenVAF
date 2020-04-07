@@ -10,11 +10,14 @@ macro_rules! id_type {
         pub struct $name<'tag>(pub(super) $type<'tag>);
 
         impl<'tag> $crate::compact_arena::Step for $name<'tag> {
-            unsafe fn step(&mut self) {
-                self.0.add(1)
+            type I = <$type<'tag> as $crate::compact_arena::Step>::I;
+            #[inline]
+            unsafe fn step(&mut self, distance: Self::I) {
+                self.0.step(distance)
             }
-            unsafe fn step_back(&mut self) {
-                self.0.sub(1)
+            #[inline]
+            unsafe fn step_back(&mut self, distance: Self::I) {
+                self.0.step_back(distance)
             }
         }
         impl<'tag> ::std::convert::Into<$type<'tag>> for $name<'tag> {

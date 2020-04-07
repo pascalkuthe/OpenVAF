@@ -97,11 +97,12 @@ impl<'tag, T: Copy + Clone> From<SafeRange<Idx<'tag, T>>> for SafeRange<T> {
 impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
     type Item = T;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.start < self.end {
             //Range is inclusive of the end
             let res = Some(self.start);
-            unsafe { self.start.step() };
+            unsafe { self.start.step(1.into()) };
             res
         } else {
             None
@@ -110,9 +111,10 @@ impl<T: Copy + Step + PartialOrd> Iterator for SafeRange<T> {
 }
 
 impl<T: Copy + Step + PartialOrd> DoubleEndedIterator for SafeRange<T> {
+    #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.start < self.end {
-            unsafe { self.end.step_back() };
+            unsafe { self.end.step_back(1.into()) };
             Some(self.end)
         } else {
             None
@@ -151,11 +153,38 @@ impl<T: Copy + Clone + PartialEq + Eq> SafeRange<T> {
         self.end == self.start
     }
 }
+impl<T: Copy + Clone + PartialOrd + Step> SafeRange<T> {
+    pub fn skip_forward(&mut self, distance: <T as Step>::I) {
+        unsafe { self.start.step(distance) }
+        if self.start > self.end {
+            panic!("Can not step forward past the end of the range")
+        }
+    }
+    pub fn skip_backward(&mut self, distance: <T as Step>::I) {
+        unsafe { self.end.step_back(distance) }
+        if self.end < self.start {
+            panic!("Can not step past the start of the range")
+        }
+    }
+}
 
 /// A trait used for abstracting over unsafe over iteration of ids
 pub trait Step {
-    unsafe fn step(&mut self);
-    unsafe fn step_back(&mut self);
+    type I: From<u8>;
+    unsafe fn step(&mut self, distance: Self::I);
+    unsafe fn step_back(&mut self, distance: Self::I);
+}
+
+impl<'tag, I: From<u8> + Copy + Clone + AddAssign + SubAssign> Step for Idx<'tag, I> {
+    type I = I;
+
+    unsafe fn step(&mut self, distance: I) {
+        self.index += distance;
+    }
+
+    unsafe fn step_back(&mut self, distance: I) {
+        self.index -= distance;
+    }
 }
 
 /// This is one part of the secret sauce that ensures that indices from

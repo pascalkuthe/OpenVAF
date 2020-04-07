@@ -194,14 +194,59 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         }
     }
 
-    fn fold_block(&mut self, statements: Block<'tag>) {
-        for statement in statements {
+    fn fold_block(&mut self, mut statements: Block<'tag>) {
+        while let Some(statement) = statements.next() {
             let res = match self.hir[statement] {
                 hir::Statement::ConditionStart {
                     condition_info_and_end,
-                } => Statement::ConditionStart {
-                    condition_info_and_end,
-                },
+                } => {
+                    self.mir.push(Statement::ConditionStart {
+                        condition_info_and_end,
+                    });
+                    let condition_node = if let hir::Statement::Condition(cond) =
+                        &self.hir[condition_info_and_end]
+                    {
+                        cond
+                    } else {
+                        unreachable_unchecked!("Condition starts should only point to conditions")
+                    };
+                    let condition = &condition_node.contents;
+
+                    let main_condition = self.fold_integer_expression(condition.main_condition);
+
+                    statements.skip_forward(condition.main_condition_statements.unwrap().len());
+                    self.fold_block(condition.main_condition_statements);
+                    let else_ifs = condition
+                        .else_ifs
+                        .iter()
+                        .copied()
+                        .filter_map(|(condition, block)| {
+                            statements.skip_forward(block.unwrap().len());
+                            self.fold_block(block);
+                            if let Ok(condition) = self.fold_integer_expression(condition) {
+                                Some((condition, block))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    statements.skip_forward(condition.else_statement.unwrap().len());
+                    self.fold_block(condition.else_statement);
+
+                    let main_condition = if let Ok(main_condition) = main_condition {
+                        main_condition
+                    } else {
+                        continue;
+                    };
+                    statements.skip_forward(1);
+
+                    Statement::Condition(condition_node.map_with(|old| Condition {
+                        main_condition,
+                        main_condition_statements: old.main_condition_statements,
+                        else_ifs,
+                        else_statement: old.else_statement,
+                    }))
+                }
 
                 hir::Statement::Contribute(attributes, discipline_access, branch, expr) => {
                     if let Ok(expr) = self.fold_real_expression(expr) {
@@ -248,37 +293,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 }
 
                 hir::Statement::Condition(ref condition_node) => {
-                    let condition = &condition_node.contents;
-                    let main_condition = self.fold_integer_expression(condition.main_condition);
-                    self.fold_block(condition.main_condition_statements);
-                    let else_ifs = condition
-                        .else_ifs
-                        .iter()
-                        .copied()
-                        .filter_map(|(condition, block)| {
-                            self.fold_block(block);
-                            if let Ok(condition) = self.fold_integer_expression(condition) {
-                                Some((condition, block))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-
-                    self.fold_block(condition.else_statement);
-
-                    let main_condition = if let Ok(main_condition) = main_condition {
-                        main_condition
-                    } else {
-                        continue;
-                    };
-
-                    Statement::Condition(condition_node.map_with(|old| Condition {
-                        main_condition,
-                        main_condition_statements: old.main_condition_statements,
-                        else_ifs,
-                        else_statement: old.else_statement,
-                    }))
+                    unreachable_unchecked!("Condtion start should skip this")
                 }
 
                 hir::Statement::FunctionCall(_, _, _) => todo!("Function Calls"),

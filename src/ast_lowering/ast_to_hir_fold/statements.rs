@@ -130,10 +130,17 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
             }
 
             ast::Statement::Condition(ref condition) => {
+                let start = self.base.hir.push(Statement::ConditionStart {
+                    condition_info_and_end: statement, /*just a place holder*/
+                });
                 if let Ok(contents) = self.fold_condition(&condition.contents) {
-                    self.base
+                    let end = self
+                        .base
                         .hir
                         .push(Statement::Condition(condition.map(contents)));
+                    self.base.hir[start] = Statement::ConditionStart {
+                        condition_info_and_end: end,
+                    };
                 }
             }
 
@@ -198,6 +205,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
         let main_condition = self.fold_expression(condition.main_condition);
 
         let main_condition_statements = self.base.hir.empty_range_from_end();
+
         self.fold_statement(condition.main_condition_statement);
         let main_condition_statements =
             self.base.hir.extend_range_to_end(main_condition_statements);
