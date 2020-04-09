@@ -232,3 +232,9 @@ impl Debug for Span {
         f.write_fmt(format_args!(" [{},{}]", self.get_start(), self.get_end()))
     }
 }
+impl Eq for Span {}
+impl PartialEq for Span {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_start() == other.get_start() && self.get_end() == other.get_end()
+    }
+}
