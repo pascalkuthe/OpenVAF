@@ -23,7 +23,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     pub fn fold_real_expression(
         &mut self,
         expr: ir::ExpressionId<'tag>,
-    ) -> Result<RealExpressionId<'tag>, ()> {
+    ) -> Option<RealExpressionId<'tag>> {
         let source = self.hir[expr].source;
         let contents = match self.hir[expr].contents {
             hir::Expression::Condtion(condition, question_span, if_val, colon_span, else_val) => {
@@ -109,13 +109,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
             _ => RealExpression::IntegerConversion(self.fold_integer_expression(expr)?),
         };
-        Ok(self.mir.push(Node { contents, source }))
+        Some(self.mir.push(Node { contents, source }))
     }
 
     pub fn fold_integer_expression(
         &mut self,
         expr: ir::ExpressionId<'tag>,
-    ) -> Result<IntegerExpressionId<'tag>, ()> {
+    ) -> Option<IntegerExpressionId<'tag>> {
         let source = self.hir[expr].source;
         let contents = match self.hir[expr].contents {
             hir::Expression::Primary(Primary::Integer(val)) => {
@@ -245,14 +245,14 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             error_type: Type::ExpectedNumber,
                             source: self.mir[rhs].source,
                         });
-                        return Err(());
+                        return None;
                     }
                     (lhs, rhs) => {
                         self.errors.push(Error {
                             error_type: Type::CannotCompareStringToNumber,
                             source: lhs.source(&self.mir).extend(rhs.source(&self.mir)),
                         });
-                        return Err(());
+                        return None;
                     }
                 }
             }
@@ -301,7 +301,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             error_type: Type::ExpectedIntegerParameter(parameter),
                             source,
                         });
-                        return Err(());
+                        return None;
                     }
                 }
             }
@@ -316,7 +316,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             error_type: Type::ExpectedIntegerVariable(variable),
                             source,
                         });
-                        return Err(());
+                        return None;
                     }
                 }
             }
@@ -326,14 +326,14 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     error_type: Type::ExpectedInteger,
                     source,
                 });
-                return Err(());
+                return None;
             }
             _ => {
                 self.errors.push(Error {
                     error_type: Type::ExpectedInteger,
                     source,
                 });
-                return Err(());
+                return None;
             }
         };
 
@@ -343,7 +343,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     pub fn fold_expression(
         &mut self,
         expr: ir::ExpressionId<'tag>,
-    ) -> Result<ExpressionId<'tag>, ()> {
+    ) -> Option<ExpressionId<'tag>> {
         let source = self.hir[expr].source;
         let contents = match self.hir[expr].contents {
             hir::Expression::Condtion(condition, question_span, if_val, colon_span, else_val) => {
@@ -400,7 +400,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             error_type: Type::CondtionTypeMissmatch,
                             source,
                         });
-                        return Err(());
+                        return None;
                     }
                 };
                 RealExpression::Condition(condition?, question_span, if_val, colon_span, else_val)
@@ -511,7 +511,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             error_type: Type::ExpectedNumber,
                             source: self.mir[val].source,
                         });
-                        return Err(());
+                        return None;
                     }
                 };
 

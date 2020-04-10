@@ -170,7 +170,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             .source
                             .extend(self.hir[bound.end.bound].source),
                     });
-                    Err(())
+                    None
                 } else {
                     Ok(res)
                 }
@@ -182,7 +182,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 if let Err(error) = res2 {
                     self.errors.push(error);
                 }
-                Err(())
+                None
             }
         }
     }
@@ -317,7 +317,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 source: self.hir[range_expr.end.bound].source,
                             });
                         }
-                        Err(())
+                        None
                     }
                 }
 
@@ -347,7 +347,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         }
                         Err(error) => {
                             self.errors.push(error);
-                            Err(())
+                            None
                         }
                     }
                 }
@@ -363,7 +363,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 Ok(res) => res,
                 Err(error) => {
                     self.errors.push(error);
-                    return Err(());
+                    return None;
                 }
             }
         } else {

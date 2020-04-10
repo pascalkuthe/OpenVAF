@@ -79,16 +79,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     fn fold_variable(&mut self, variable: VariableId<'tag>) {
         let variable_type = match self.hir[variable].contents.variable_type {
             ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                let default_value =
-                    if let Some(default_value) = self.hir[variable].contents.default_value {
-                        if let Ok(expr) = self.fold_real_expression(default_value) {
-                            Some(expr)
-                        } else {
-                            return;
-                        }
-                    } else {
-                        None
-                    };
+                let default_value = self.hir[variable].contents.default_value.and_then(|expr|self.fold_real_expression(expr));
                 VariableType::Real(default_value)
             }
 
@@ -96,13 +87,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 let default_value =
                     if let Some(default_value) = self.hir[variable].contents.default_value {
                         match self.fold_expression(default_value) {
-                            Ok(ExpressionId::Integer(expr)) => Some(expr),
+                            Some(ExpressionId::Integer(expr)) => Some(expr),
 
-                            Ok(ExpressionId::Real(real_expr)) => Some(self.mir.push(Node {
+                            Some(ExpressionId::Real(real_expr)) => Some(self.mir.push(Node {
                                 source: self.mir[real_expr].source,
                                 contents: IntegerExpression::RealCast(real_expr),
                             })),
-                            Ok(ExpressionId::String(_)) => {
+                            Somme(ExpressionId::String(_)) => {
                                 self.errors.push(Error {
                                     error_type: Type::ExpectedNumber,
                                     source: self.hir[default_value].source,
@@ -110,7 +101,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 return;
                             }
 
-                            Err(()) => return,
+                            None => return,
                         }
                     } else {
                         None
@@ -286,7 +277,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                             });
                             return;
                         }
-                        Err(()) => continue,
+                        None => continue,
                     }
                 }
 

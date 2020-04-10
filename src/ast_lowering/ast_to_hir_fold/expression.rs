@@ -208,8 +208,8 @@ pub struct StatementExpressionFolder<'tag, 'lt> {
 }
 
 impl<'tag, 'lt> StatementExpressionFolder<'tag, 'lt> {
-    /// Due to an ambiguous grammar the parser can not determine whether V(x,y) is a function call or a Branch access when it appears inside an expression.
-    /// When the function call is resolved to be to a nature this function is called to reinterpret and resolve the function parameters as a branch access
+    /// Due to an ambiguous grammar the parser cannot determine whether V(x,y) is a functioncall or a Branch access when it appears inside an expression.
+    /// When the function call is resolves to a nature this function is called to reinterpret and resolve the function parameters as a branch access
     fn reinterpret_function_parameters_as_branch_access<'fold>(
         &mut self,
         nature_indent_span: Span,
