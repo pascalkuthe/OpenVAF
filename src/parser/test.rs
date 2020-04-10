@@ -25,7 +25,6 @@ use crate::symbol::Symbol;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::Ast;
 
-const PARSE_UNIT_DIRECTORY: &'static str = "tests/parseunits/";
 #[test]
 pub fn module() -> Result<(), ()> {
     fern::Dispatch::new()

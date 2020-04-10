@@ -372,6 +372,7 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     }
 
     /// This function is called when the end of any substitution (macro / file include) is reached
+    ///
     /// # Returns
     /// The distance between the start and the end position of the substitution.
     /// Note: This is not necessarily the same as the length of the original source text of the substitution
@@ -421,7 +422,7 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         Ok(Lexer::new(contents))
     }
 
-    ///  This function is called by the preprocessor to indicate that a Macro reference has been encountered and that tokens will now be consumed from this Macro
+    ///  The preprocessor calls this function to indicate that a Macro reference has been encountered and that tokens will now be consumed from this Macro
     pub(super) fn enter_macro(
         &mut self,
         start: Index,

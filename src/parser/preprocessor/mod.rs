@@ -182,11 +182,12 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 error_type: io_err.into(),
             })?;
 
+        let offset = self.current_offset();
         self.state_stack.last_mut().unwrap().offset -=
             include_directive_span.get_len() as IndexOffset;
 
         self.state_stack
-            .push(Insertion::new(self.current_start, TokenSource::File(lexer)));
+            .push(Insertion::new((include_directive_span.get_start() as IndexOffset +offset) as Index, TokenSource::File(lexer)));
 
         Ok(())
     }
@@ -289,6 +290,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         self.advance_state()?;
         self.process_token_until_success()
     }
+
+    #[allow(unused_must_use)]
     fn process_token_until_success(&mut self)->Result{
         if let Err(error) = self.process_token() {
             self.advance_state();
@@ -516,7 +519,10 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     expected: vec![Token::SimpleIdentifier],
                 };
                 let error = self.token_error(error);
-                self.advance_state();
+                #[allow(unused_must_use)]
+                {
+                    self.advance_state();
+                }
                 return error;
             }
         };
