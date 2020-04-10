@@ -14,12 +14,13 @@ use crate::ast::{
     BranchAccess, ModuleItem, NumericalParameterRangeBound, NumericalParameterRangeExclude,
     Parameter, ParameterType, Variable,
 };
-use crate::ast_lowering::ast_to_hir_fold::expression::ConstantExpressionFolder;
+use crate::ast_lowering::ast_to_hir_fold::expression::StatementExpressionFolder;
 use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Condition, Module, Statement};
+use crate::ir::hir::DisciplineAccess;
 use crate::ir::*;
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
@@ -133,7 +134,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                 let start = self.base.hir.push(Statement::ConditionStart {
                     condition_info_and_end: statement, /*just a place holder*/
                 });
-                if let Ok(contents) = self.fold_condition(&condition.contents) {
+                if let Some(contents) = self.fold_condition(&condition.contents) {
                     let end = self
                         .base
                         .hir
@@ -146,23 +147,30 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
 
             ast::Statement::Assign(ref attr, ref ident, value) => {
                 resolve_hierarchical!(self.base; ident as Variable(id) => {
-                    if let Ok(value) = self.fold_expression(value){
+                    if let Some(value) = self.fold_expression(value){
                         self.base.hir.push(Statement::Assignment(*attr, id, value));
                     }
                 })
             }
 
             ast::Statement::Contribute(attr, ref nature_name, ref branch, value) => {
-                #[allow(unused_must_use)]
-                self.fold_contribute(attr, nature_name, branch, value);
+                if let Some((discipline_access, branch, value)) =
+                    self.fold_contribute(nature_name, branch, value)
+                {
+                    self.base.hir.push(Statement::Contribute(
+                        attr,
+                        discipline_access,
+                        branch,
+                        value,
+                    ));
+                }
             }
 
             ast::Statement::FunctionCall(attr, ref name, ref parameters) => {
                 let parameters = parameters
                     .iter()
                     .copied()
-                    .map(|expr| self.fold_expression(expr))
-                    .filter_map(Result::ok)
+                    .filter_map(|expr| self.fold_expression(expr))
                     .collect();
 
                 resolve_hierarchical!(self.base; name as
@@ -179,11 +187,10 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
 
     fn fold_contribute(
         &mut self,
-        attr: Attributes<'tag>,
         nature_name: &Ident,
         branch: &Node<BranchAccess>,
         value: ExpressionId<'tag>,
-    ) -> Result<(), ()> {
+    ) -> Option<(DisciplineAccess, BranchId<'tag>, ExpressionId<'tag>)> {
         let (branch, discipline) = self
             .branch_resolver
             .resolve_branch_access(&mut self.base, branch)?;
@@ -193,15 +200,13 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
             nature_name,
             discipline,
         )?;
+
         let value = self.fold_expression(value)?;
-        self.base
-            .hir
-            .push(Statement::Contribute(attr, nature, branch, value));
-        Ok(())
+        Some((nature, branch, value))
     }
 
     /// folds a condition/if statement
-    fn fold_condition(&mut self, condition: &ast::Condition<'tag>) -> Result<Condition<'tag>, ()> {
+    fn fold_condition(&mut self, condition: &ast::Condition<'tag>) -> Option<Condition<'tag>> {
         let main_condition = self.fold_expression(condition.main_condition);
 
         let main_condition_statements = self.base.hir.empty_range_from_end();
@@ -215,7 +220,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
             .iter()
             .copied()
             .filter_map(|(condition, statement)| {
-                let condition = self.fold_expression(condition).ok()?;
+                let condition = self.fold_expression(condition)?;
                 let statements = self.base.hir.empty_range_from_end();
                 self.fold_statement(statement);
                 Some((condition, self.base.hir.extend_range_to_end(statements)))
@@ -228,7 +233,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
         }
         let else_statement = self.base.hir.extend_range_to_end(statements);
 
-        Ok(Condition {
+        Some(Condition {
             main_condition: main_condition?,
             main_condition_statements,
             else_ifs,
@@ -237,15 +242,12 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
     }
 
     /// Just a utility method that makes folding expressions a little more ergonomic
-    fn fold_expression(&mut self, expr: ExpressionId<'tag>) -> Result<ExpressionId<'tag>, ()> {
-        let mut folder = ExpressionFolder {
-            constant_folder: ConstantExpressionFolder {
-                base: &mut self.base,
-            },
+    fn fold_expression(&mut self, expr: ExpressionId<'tag>) -> Option<ExpressionId<'tag>> {
+        StatementExpressionFolder {
             state: self.state,
             branch_resolver: &mut self.branch_resolver,
-        };
-        folder.fold(expr)
+        }
+        .fold(expr, &mut self.base)
     }
 
     fn fold_block(&mut self, block: BlockId<'tag>) {
@@ -260,8 +262,8 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
         let default_value = self.base.ast[variable]
             .contents
             .default_value
-            .map(|expr| self.fold_expression(expr).ok())
-            .flatten();
+            .and_then(|expr| self.fold_expression(expr));
+
         self.base.hir.write(
             variable,
             AttributeNode {
@@ -278,8 +280,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
         let default_value = self.base.ast[parameter_id]
             .contents
             .default_value
-            .map(|expr| self.fold_expression(expr).ok())
-            .flatten();
+            .and_then(|expr| self.fold_expression(expr));
 
         if let ParameterType::Numerical {
             parameter_type,
@@ -289,9 +290,9 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
         {
             let included_ranges = included_ranges
                 .iter()
-                .map(
-                    |range| -> Result<Range<NumericalParameterRangeBound<'tag>>, ()> {
-                        Ok(Range {
+                .filter_map(
+                    |range| -> Option<Range<NumericalParameterRangeBound<'tag>>> {
+                        Some(Range {
                             start: NumericalParameterRangeBound {
                                 bound: self.fold_expression(range.start.bound)?,
                                 ..range.start
@@ -303,33 +304,29 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                         })
                     },
                 )
-                .filter_map(Result::ok)
                 .collect();
 
             let excluded_ranges = excluded_ranges
                 .iter()
-                .map(
-                    |exclude| -> Result<NumericalParameterRangeExclude<'tag>, ()> {
-                        match exclude {
-                            NumericalParameterRangeExclude::Value(val) => Ok(
-                                NumericalParameterRangeExclude::Value(self.fold_expression(*val)?),
-                            ),
-                            NumericalParameterRangeExclude::Range(range) => {
-                                Ok(NumericalParameterRangeExclude::Range(Range {
-                                    start: NumericalParameterRangeBound {
-                                        bound: self.fold_expression(range.start.bound)?,
-                                        ..range.start
-                                    },
-                                    end: NumericalParameterRangeBound {
-                                        bound: self.fold_expression(range.start.bound)?,
-                                        ..range.end
-                                    },
-                                }))
-                            }
+                .filter_map(|exclude| -> Option<NumericalParameterRangeExclude<'tag>> {
+                    match exclude {
+                        NumericalParameterRangeExclude::Value(val) => Some(
+                            NumericalParameterRangeExclude::Value(self.fold_expression(*val)?),
+                        ),
+                        NumericalParameterRangeExclude::Range(range) => {
+                            Some(NumericalParameterRangeExclude::Range(Range {
+                                start: NumericalParameterRangeBound {
+                                    bound: self.fold_expression(range.start.bound)?,
+                                    ..range.start
+                                },
+                                end: NumericalParameterRangeBound {
+                                    bound: self.fold_expression(range.start.bound)?,
+                                    ..range.end
+                                },
+                            }))
                         }
-                    },
-                )
-                .filter_map(Result::ok)
+                    }
+                })
                 .collect();
 
             unsafe {

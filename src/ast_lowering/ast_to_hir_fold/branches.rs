@@ -8,7 +8,6 @@
  * *****************************************************************************************
  */
 
-use crate::ast;
 use crate::ast_lowering::ast_to_hir_fold::Fold;
 use crate::ast_lowering::ast_to_hir_fold::Statements;
 use crate::ast_lowering::ast_to_hir_fold::VerilogContext;
@@ -17,7 +16,7 @@ use crate::ast_lowering::error::Error;
 use crate::compact_arena::NanoArena;
 use crate::hir::BranchDeclaration;
 use crate::ir::SafeRangeCreation;
-use crate::ir::{AttributeNode, BranchId, ModuleId, Write};
+use crate::ir::{BranchId, ModuleId, Write};
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
@@ -57,7 +56,7 @@ impl<'tag, 'lt> Branches<'tag, 'lt> {
     /// Folds a branch declaration (such as branch (a,b) x:) using the branch_resolver
     fn fold_branch_declaration(&mut self, branch_declaration_id: BranchId<'tag>) {
         let branch_declaration = &self.base.ast[branch_declaration_id];
-        if let Ok((resolved_branch, _)) = self
+        if let Some((resolved_branch, _)) = self
             .branch_resolver
             .resolve_branch(&mut self.base, &branch_declaration.contents.branch)
         {

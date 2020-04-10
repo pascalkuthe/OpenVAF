@@ -9,22 +9,13 @@
  */
 
 use std::collections::HashSet;
-use std::ops::Range;
-
-use copyless::VecHelper;
 
 use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
-use crate::ast::{
-    Expression, Module, ModuleItem, NumericalParameterRangeBound, NumericalParameterRangeExclude,
-    Parameter, ParameterType, Primary, VariableType,
-};
+use crate::ast::{Module, ModuleItem};
 use crate::error::Error;
-use crate::ir::{AttributeNode, Attributes, ExpressionId, Node};
+use crate::ir::{AttributeNode, Attributes};
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error;
-use crate::parser::error::Expected::ParameterRange;
-use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens, Unsupported};
-use crate::parser::error::Unsupported::StringParameters;
 use crate::parser::error::{Expected, Result, Type};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;

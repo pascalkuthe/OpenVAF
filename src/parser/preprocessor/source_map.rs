@@ -16,7 +16,6 @@ use bumpalo::Bump;
 use intrusive_collections::__core::cell::Cell;
 use intrusive_collections::rbtree::CursorMut;
 use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
-use logos::Source;
 
 use crate::span::{Index, LineNumber};
 use crate::{Lexer, Span};

@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use crate::{parser, SourceMap, Span};
+use crate::{SourceMap, Span};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Error<ErrorType> {

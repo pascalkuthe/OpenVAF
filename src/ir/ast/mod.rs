@@ -10,10 +10,8 @@ use core::fmt::Debug;
 use std::ops::Range;
 use std::ptr::NonNull;
 
-use intrusive_collections::__core::cell::RefCell;
-
 use crate::compact_arena::{
-    CompressedRange, InvariantLifetime, NanoArena, SafeRange, SmallArena, StringArena, TinyArena,
+    CompressedRange, InvariantLifetime, NanoArena, SafeRange, StringArena, TinyArena,
 };
 use crate::ir::*;
 use crate::symbol::Ident;

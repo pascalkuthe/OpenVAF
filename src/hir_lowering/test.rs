@@ -15,10 +15,9 @@ use bumpalo::Bump;
 use crate::ast_lowering::fold_ast_to_hir_and_print_errors;
 use crate::compact_arena::SafeRange;
 use crate::fold_hir_to_mir_and_print_errors;
-use crate::hir_lowering::fold_hir_to_mir;
 use crate::ir::ast::NetType;
+use crate::ir::ModuleId;
 use crate::ir::SafeRangeCreation;
-use crate::ir::{ModuleId, StatementId};
 use crate::parser::parse_and_print_errors;
 
 #[test]

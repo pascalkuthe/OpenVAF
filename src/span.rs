@@ -11,11 +11,6 @@ use core::num::NonZeroU16;
 use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
 
-use ansi_term::Color::*;
-use log::*;
-
-use crate::compact_arena::{NanoArena, TinyArena};
-
 pub type Index = u32;
 pub type IndexOffset = i64;
 pub type Length = u16;

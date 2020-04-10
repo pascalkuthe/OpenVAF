@@ -8,8 +8,6 @@
  * *****************************************************************************************
  */
 
-use std::result::Result;
-
 use crate::ast::BuiltInFunctionCall::*;
 use crate::ast::HierarchicalId;
 use crate::ast_lowering::ast_to_hir_fold::{Fold, VerilogContext};
@@ -22,118 +20,135 @@ use crate::ir::{BranchId, DisciplineId, ExpressionId, Node};
 use crate::symbol::keywords;
 use crate::{ast, Span};
 
+pub trait ExpressionFolder<'tag, 'lt> {
+    fn fold(
+        &mut self,
+        expression_id: ExpressionId<'tag>,
+        base: &mut Fold<'tag, 'lt>,
+    ) -> Option<ExpressionId<'tag>>;
+}
 /// Folds real constants. These may not even contain references to parameters
-pub struct ConstantExpressionFolder<'tag, 'fold, 'lt> {
-    pub(super) base: &'lt mut Fold<'tag, 'fold>,
+pub struct ConstantExpressionFolder {}
+impl<'tag, 'lt> ExpressionFolder<'tag, 'lt> for ConstantExpressionFolder {
+    #[inline]
+    fn fold(
+        &mut self,
+        expression_id: ExpressionId<'tag>,
+        base: &mut Fold<'tag, 'lt>,
+    ) -> Option<ExpressionId<'tag>> {
+        base.fold_expression(expression_id, self)
+    }
 }
 
-impl<'tag, 'fold, 'lt> ConstantExpressionFolder<'tag, 'fold, 'lt> {
+impl<'tag, 'lt> Fold<'tag, 'lt> {
     #[inline]
-    pub fn fold(&mut self, expression_id: ExpressionId<'tag>) -> Result<ExpressionId<'tag>, ()> {
-        let expression = &self.base.ast[expression_id];
+    fn fold_expression(
+        &mut self,
+        expression_id: ExpressionId<'tag>,
+        expr_folder: &mut impl ExpressionFolder<'tag, 'lt>,
+    ) -> Option<ExpressionId<'tag>> {
+        let expression = &self.ast[expression_id];
         let res = match expression.contents {
             ast::Expression::BinaryOperator(lhs, op, rhs) => {
-                let lhs = self.fold(lhs);
-                let rhs = self.fold(rhs);
-                self.base.hir.push(Node {
+                let lhs = expr_folder.fold(lhs, &mut *self);
+                let rhs = expr_folder.fold(rhs, &mut *self);
+                self.hir.push(Node {
                     source: expression.source,
                     contents: Expression::BinaryOperator(lhs?, op, rhs?),
                 })
             }
 
             ast::Expression::UnaryOperator(unary_op, expr) => {
-                let expr = self.fold(expr)?;
-                self.base.hir.push(Node {
+                let expr = expr_folder.fold(expr, &mut *self)?;
+                self.hir.push(Node {
                     source: expression.source,
                     contents: Expression::UnaryOperator(unary_op, expr),
                 })
             }
 
-            ast::Expression::Primary(ast::Primary::Integer(val)) => self.base.hir.push(Node {
+            ast::Expression::Primary(ast::Primary::Integer(val)) => self.hir.push(Node {
                 source: expression.source,
                 contents: Expression::Primary(Primary::Integer(val)),
             }),
 
-            ast::Expression::Primary(ast::Primary::UnsignedInteger(val)) => {
-                self.base.hir.push(Node {
-                    source: expression.source,
-                    contents: Expression::Primary(Primary::UnsignedInteger(val)),
-                })
-            }
+            ast::Expression::Primary(ast::Primary::UnsignedInteger(val)) => self.hir.push(Node {
+                source: expression.source,
+                contents: Expression::Primary(Primary::UnsignedInteger(val)),
+            }),
 
-            ast::Expression::Primary(ast::Primary::Real(val)) => self.base.hir.push(Node {
+            ast::Expression::Primary(ast::Primary::Real(val)) => self.hir.push(Node {
                 source: expression.source,
                 contents: Expression::Primary(Primary::Real(val)),
             }),
 
-            ast::Expression::Primary(ast::Primary::String(val)) => self.base.hir.push(Node {
+            ast::Expression::Primary(ast::Primary::String(val)) => self.hir.push(Node {
                 source: expression.source,
                 contents: Expression::Primary(Primary::String(val)),
             }),
 
-            ast::Expression::Primary(ast::Primary::BuiltInFunctionCall(ref function_call)) => {
+            ast::Expression::Primary(ast::Primary::BuiltInFunctionCall(function_call)) => {
                 let function_call = match function_call {
                     Pow(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
+                        let expr0 = expr_folder.fold(expr0, &mut *self);
+                        let expr1 = expr_folder.fold(expr1, &mut *self);
                         Pow(expr0?, expr1?)
                     }
 
                     Hypot(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
+                        let expr0 = expr_folder.fold(expr0, &mut *self);
+                        let expr1 = expr_folder.fold(expr1, &mut *self);
                         Hypot(expr0?, expr1?)
                     }
 
                     Min(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
+                        let expr0 = expr_folder.fold(expr0, &mut *self);
+                        let expr1 = expr_folder.fold(expr1, &mut *self);
                         Min(expr0?, expr1?)
                     }
 
                     Max(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
+                        let expr0 = expr_folder.fold(expr0, &mut *self);
+                        let expr1 = expr_folder.fold(expr1, &mut *self);
                         Max(expr0?, expr1?)
                     }
 
                     ArcTan2(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
+                        let expr0 = expr_folder.fold(expr0, &mut *self);
+                        let expr1 = expr_folder.fold(expr1, &mut *self);
                         ArcTan2(expr0?, expr1?)
                     }
 
-                    Sqrt(expr) => Sqrt(self.fold(*expr)?),
-                    Exp(expr) => Exp(self.fold(*expr)?),
-                    Ln(expr) => Ln(self.fold(*expr)?),
-                    Log(expr) => Log(self.fold(*expr)?),
-                    Abs(expr) => Abs(self.fold(*expr)?),
-                    Floor(expr) => Floor(self.fold(*expr)?),
-                    Ceil(expr) => Ceil(self.fold(*expr)?),
-                    Sin(expr) => Sin(self.fold(*expr)?),
-                    Cos(expr) => Cos(self.fold(*expr)?),
-                    Tan(expr) => Tan(self.fold(*expr)?),
-                    ArcSin(expr) => ArcSin(self.fold(*expr)?),
-                    ArcCos(expr) => ArcCos(self.fold(*expr)?),
-                    ArcTan(expr) => ArcTan(self.fold(*expr)?),
-                    SinH(expr) => SinH(self.fold(*expr)?),
-                    CosH(expr) => CosH(self.fold(*expr)?),
-                    TanH(expr) => TanH(self.fold(*expr)?),
-                    ArcSinH(expr) => ArcSinH(self.fold(*expr)?),
-                    ArcCosH(expr) => ArcCosH(self.fold(*expr)?),
-                    ArcTanH(expr) => ArcTanH(self.fold(*expr)?),
+                    Sqrt(expr) => Sqrt(expr_folder.fold(expr, &mut *self)?),
+                    Exp(expr) => Exp(expr_folder.fold(expr, &mut *self)?),
+                    Ln(expr) => Ln(expr_folder.fold(expr, &mut *self)?),
+                    Log(expr) => Log(expr_folder.fold(expr, &mut *self)?),
+                    Abs(expr) => Abs(expr_folder.fold(expr, &mut *self)?),
+                    Floor(expr) => Floor(expr_folder.fold(expr, &mut *self)?),
+                    Ceil(expr) => Ceil(expr_folder.fold(expr, &mut *self)?),
+                    Sin(expr) => Sin(expr_folder.fold(expr, &mut *self)?),
+                    Cos(expr) => Cos(expr_folder.fold(expr, &mut *self)?),
+                    Tan(expr) => Tan(expr_folder.fold(expr, &mut *self)?),
+                    ArcSin(expr) => ArcSin(expr_folder.fold(expr, &mut *self)?),
+                    ArcCos(expr) => ArcCos(expr_folder.fold(expr, &mut *self)?),
+                    ArcTan(expr) => ArcTan(expr_folder.fold(expr, &mut *self)?),
+                    SinH(expr) => SinH(expr_folder.fold(expr, &mut *self)?),
+                    CosH(expr) => CosH(expr_folder.fold(expr, &mut *self)?),
+                    TanH(expr) => TanH(expr_folder.fold(expr, &mut *self)?),
+                    ArcSinH(expr) => ArcSinH(expr_folder.fold(expr, &mut *self)?),
+                    ArcCosH(expr) => ArcCosH(expr_folder.fold(expr, &mut *self)?),
+                    ArcTanH(expr) => ArcTanH(expr_folder.fold(expr, &mut *self)?),
                 };
-                self.base.hir.push(Node {
+                self.hir.push(Node {
                     contents: Expression::Primary(Primary::BuiltInFunctionCall(function_call)),
                     source: expression.source,
                 })
             }
 
             ast::Expression::Condtion(condition, question_span, if_val, colon_span, else_val) => {
-                let condition = self.fold(condition);
-                let if_val = self.fold(if_val);
-                let else_val = self.fold(else_val);
-                self.base.hir.push(Node {
+                let condition = expr_folder.fold(condition, &mut *self);
+                let if_val = expr_folder.fold(if_val, &mut *self);
+                let else_val = expr_folder.fold(else_val, &mut *self);
+                self.hir.push(Node {
                     source: expression.source,
                     contents: Expression::Condtion(
                         condition?,
@@ -147,334 +162,243 @@ impl<'tag, 'fold, 'lt> ConstantExpressionFolder<'tag, 'fold, 'lt> {
 
             //Non constants
             ast::Expression::Primary(ast::Primary::VariableOrNetReference(_)) => {
-                self.base.error(Error {
+                self.error(Error {
                     source: expression.source,
                     error_type: Type::NotAllowedInConstantContext(
                         NonConstantExpression::VariableReference,
                     ),
                 });
-                return Err(());
+                return None;
             }
             ast::Expression::Primary(ast::Primary::FunctionCall(_, _)) => {
-                self.base.error(Error {
+                self.error(Error {
                     source: expression.source,
                     error_type: Type::NotAllowedInConstantContext(
                         NonConstantExpression::VariableReference,
                     ),
                 });
-                return Err(());
+                return None;
             }
             ast::Expression::Primary(ast::Primary::SystemFunctionCall(_)) => {
-                self.base.error(Error {
+                self.error(Error {
                     source: expression.source,
                     error_type: Type::NotAllowedInConstantContext(
                         NonConstantExpression::VariableReference,
                     ),
                 });
-                return Err(());
+                return None;
             }
             ast::Expression::Primary(ast::Primary::BranchAccess(_, _)) => {
-                self.base.error(Error {
+                self.error(Error {
                     source: expression.source,
                     error_type: Type::NotAllowedInConstantContext(
                         NonConstantExpression::VariableReference,
                     ),
                 });
-                return Err(());
+                return None;
             }
         };
-        Ok(res)
+        Some(res)
     }
 }
 
-pub struct ExpressionFolder<'tag, 'fold, 'lt> {
+pub struct StatementExpressionFolder<'tag, 'lt> {
     pub(super) state: VerilogContext,
     pub(super) branch_resolver: &'lt mut BranchResolver<'tag>,
-    pub(super) constant_folder: ConstantExpressionFolder<'tag, 'fold, 'lt>,
 }
 
-impl<'tag, 'fold, 'lt> ExpressionFolder<'tag, 'fold, 'lt> {
-    //TODO refactor fold
-    pub fn fold(&mut self, expression_id: ExpressionId<'tag>) -> Result<ExpressionId<'tag>, ()> {
-        let expression = &self.constant_folder.base.ast[expression_id];
+impl<'tag, 'lt> StatementExpressionFolder<'tag, 'lt> {
+    /// Due to an ambiguous grammar the parser can not determine whether V(x,y) is a function call or a Branch access when it appears inside an expression.
+    /// When the function call is resolved to be to a nature this function is called to reinterpret and resolve the function parameters as a branch access
+    fn reinterpret_function_parameters_as_branch_access<'fold>(
+        &mut self,
+        nature_indent_span: Span,
+        parameters: &[ExpressionId<'tag>],
+        base: &mut Fold<'tag, 'fold>,
+    ) -> Option<(BranchId<'tag>, DisciplineId<'tag>)> {
+        match parameters {
+            [branch] => {
+                let expr_node = &base.ast[*branch];
+                let branch_access = ast::BranchAccess::Explicit(
+                    self.reinterpret_expression_as_identifier(expr_node, base)?
+                        .clone(),
+                );
+                self.branch_resolver
+                    .resolve_branch_access(base, &Node::new(branch_access, expr_node.source))
+            }
+            [net1, net2] => {
+                let expr_node = &base.ast[*net1];
+                let span = expr_node.source;
+                let net1 = self.reinterpret_expression_as_identifier(expr_node, base);
+                let expr_node = &base.ast[*net2];
+                let span = span.extend(expr_node.source);
+                let net2 = self.reinterpret_expression_as_identifier(expr_node, base);
+                let branch_access =
+                    ast::BranchAccess::Implicit(ast::Branch::Nets(net1?.clone(), net2?.clone()));
+                self.branch_resolver
+                    .resolve_branch_access(&mut *base, &Node::new(branch_access, span))
+            }
+            [] => {
+                base.error(Error {
+                    source: nature_indent_span,
+                    error_type: EmptyBranchAccess,
+                });
+                None
+            }
+            [_, _, unexpected, ..] => {
+                base.error(Error {
+                    source: base.ast[*unexpected]
+                        .source
+                        .extend(base.ast[*parameters.last().unwrap()].source),
+                    error_type: UnexpectedTokenInBranchAccess,
+                });
+                None
+            }
+        }
+    }
+
+    fn reinterpret_expression_as_identifier<'fold>(
+        &mut self,
+        expression: &'fold Node<ast::Expression<'tag>>,
+        base: &mut Fold<'tag, 'fold>,
+    ) -> Option<&'fold HierarchicalId> {
+        if let ast::Expression::Primary(ast::Primary::VariableOrNetReference(ref name)) =
+            expression.contents
+        {
+            Some(name)
+        } else {
+            base.error(Error {
+                source: expression.source,
+                error_type: UnexpectedTokenInBranchAccess,
+            });
+            None
+        }
+    }
+}
+
+impl<'tag, 'lt, 'fold> ExpressionFolder<'tag, 'fold> for StatementExpressionFolder<'tag, 'lt> {
+    fn fold(
+        &mut self,
+        expression_id: ExpressionId<'tag>,
+        base: &mut Fold<'tag, 'fold>,
+    ) -> Option<ExpressionId<'tag>> {
+        let expression = &base.ast[expression_id];
         let res = match expression.contents {
-            ast::Expression::BinaryOperator(lhs, op, rhs) => {
-                let lhs = self.fold(lhs);
-                let rhs = self.fold(rhs);
-                self.constant_folder.base.hir.push(Node {
-                    source: expression.source,
-                    contents: Expression::BinaryOperator(lhs?, op, rhs?),
-                })
-            }
-
-            ast::Expression::UnaryOperator(unary_op, expr) => {
-                let expr = self.fold(expr)?;
-                self.constant_folder.base.hir.push(Node {
-                    source: expression.source,
-                    contents: Expression::UnaryOperator(unary_op, expr),
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::BuiltInFunctionCall(ref function_call)) => {
-                let function_call = match function_call {
-                    Pow(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
-                        Pow(expr0?, expr1?)
-                    }
-
-                    Hypot(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
-                        Hypot(expr0?, expr1?)
-                    }
-
-                    Min(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
-                        Min(expr0?, expr1?)
-                    }
-
-                    Max(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
-                        Max(expr0?, expr1?)
-                    }
-
-                    ArcTan2(expr0, expr1) => {
-                        let expr0 = self.fold(*expr0);
-                        let expr1 = self.fold(*expr1);
-                        ArcTan2(expr0?, expr1?)
-                    }
-
-                    Sqrt(expr) => Sqrt(self.fold(*expr)?),
-                    Exp(expr) => Exp(self.fold(*expr)?),
-                    Ln(expr) => Ln(self.fold(*expr)?),
-                    Log(expr) => Log(self.fold(*expr)?),
-                    Abs(expr) => Abs(self.fold(*expr)?),
-                    Floor(expr) => Floor(self.fold(*expr)?),
-                    Ceil(expr) => Ceil(self.fold(*expr)?),
-                    Sin(expr) => Sin(self.fold(*expr)?),
-                    Cos(expr) => Cos(self.fold(*expr)?),
-                    Tan(expr) => Tan(self.fold(*expr)?),
-                    ArcSin(expr) => ArcSin(self.fold(*expr)?),
-                    ArcCos(expr) => ArcCos(self.fold(*expr)?),
-                    ArcTan(expr) => ArcTan(self.fold(*expr)?),
-                    SinH(expr) => SinH(self.fold(*expr)?),
-                    CosH(expr) => CosH(self.fold(*expr)?),
-                    TanH(expr) => TanH(self.fold(*expr)?),
-                    ArcSinH(expr) => ArcSinH(self.fold(*expr)?),
-                    ArcCosH(expr) => ArcCosH(self.fold(*expr)?),
-                    ArcTanH(expr) => ArcTanH(self.fold(*expr)?),
-                };
-                self.constant_folder.base.hir.push(Node {
-                    contents: Expression::Primary(Primary::BuiltInFunctionCall(function_call)),
-                    source: expression.source,
-                })
-            }
-
-            ast::Expression::Condtion(condition, question_span, if_val, colon_span, else_val) => {
-                let condition = self.fold(condition);
-                let if_val = self.fold(if_val);
-                let else_val = self.fold(else_val);
-                self.constant_folder.base.hir.push(Node {
-                    source: expression.source,
-                    contents: Expression::Condtion(
-                        condition?,
-                        question_span,
-                        if_val?,
-                        colon_span,
-                        else_val?,
-                    ),
-                })
-            }
-
             ast::Expression::Primary(ast::Primary::BranchAccess(ref nature, ref branch_access)) => {
                 let (branch_access, discipline) = self
                     .branch_resolver
-                    .resolve_branch_access(&mut self.constant_folder.base, branch_access)?;
-                let nature = self.branch_resolver.resolve_discipline_access(
-                    &mut self.constant_folder.base,
-                    nature,
-                    discipline,
-                )?;
-                self.constant_folder.base.hir.push(Node {
+                    .resolve_branch_access(&mut *base, branch_access)?;
+                let nature = self
+                    .branch_resolver
+                    .resolve_discipline_access(&mut *base, nature, discipline)?;
+                base.hir.push(Node {
                     source: expression.source,
                     contents: Expression::Primary(Primary::BranchAccess(nature, branch_access)),
                 })
             }
 
             ast::Expression::Primary(ast::Primary::VariableOrNetReference(ref ident)) => {
-                resolve_hierarchical! {self.constant_folder.base; ident as
+                resolve_hierarchical! {base; ident as
                     Variable(vid) => {
                         if self.state.contains(VerilogContext::constant){
-                            self.constant_folder.base.error(Error{
+                            base.error(Error{
                                 source:expression.source,
                                 error_type:Type::NotAllowedInConstantContext(NonConstantExpression::VariableReference)
                                 });
                         }else {
-                            return Ok(self.constant_folder.base.hir.push(Node{
+                            return Some(base.hir.push(Node{
                                 source:expression.source,
                                 contents:Expression::Primary(Primary::VariableReference(vid))
                             }))
                         }
                     },
                     Parameter(pid) => {
-                        return Ok(self.constant_folder.base.hir.push(Node{
+                        return Some(base.hir.push(Node{
                             source:expression.source,
                             contents:Expression::Primary(Primary::ParameterReference(pid))
                         }))
                     }
                 /*Port(pid) => {
-                            self.constant_folder.base.hir.push(Node{
+                            base.hir.push(Node{
                                 source:expression.source,
                                 contents:Expression::Primary(Primary::PortReference(pid))
                             })
                     },
                     Net(nid) => {
-                        self.constant_folder.base.hir.push(Node{
+                        base.hir.push(Node{
                             source:expression.source,
                             contents:Expression::Primary(Primary::NetReference(nid))
                         })
                     } TODO discrete net/por access */
                 }
-                return Err(());
+                return None;
             }
 
             ast::Expression::Primary(ast::Primary::FunctionCall(ref ident, ref parameters)) => {
                 if self.state.contains(VerilogContext::constant) {
-                    self.constant_folder.base.error(Error {
+                    base.error(Error {
                         source: expression.source,
                         error_type: Type::NotAllowedInConstantContext(
                             NonConstantExpression::VariableReference,
                         ),
                     });
-                    return Err(());
+                    return None;
                 }
 
-                resolve_hierarchical! { self.constant_folder.base; ident as
+                resolve_hierarchical! { base; ident as
                     Function(fid) => {
                         let parameters = parameters
                             .iter()
                             .copied()
-                            .filter_map(|expr| self.fold(expr).ok())
+                            .filter_map(|expr| self.fold(expr,&mut *base))
                             .collect();
-                        return Ok(self.constant_folder.base.hir.push(Node{
+                        return Some(base.hir.push(Node{
                             source:expression.source,
                             contents:Expression::Primary(Primary::FunctionCall(fid,parameters))
                         }))
 
                     },
                     Nature(nature) => {
-                        let (branch_access,discipline) = self.reinterpret_function_parameters_as_branch_access(ident.span(),parameters)?;
-                        let discipline_access = BranchResolver::resolve_nature_access(&mut self.constant_folder.base,nature,discipline)?;
-                        return Ok(self.constant_folder.base.hir.push(Node{
+                        let (branch_access,discipline) = self.reinterpret_function_parameters_as_branch_access(ident.span(),parameters,&mut *base)?;
+                        let discipline_access = BranchResolver::resolve_nature_access(&mut *base,nature,discipline)?;
+                        return Some(base.hir.push(Node{
                             source:expression.source,
                             contents:Expression::Primary(Primary::BranchAccess(discipline_access,branch_access))
                         }))
 
                     }
                 }
-                return Err(());
+                return None;
             }
 
             ast::Expression::Primary(ast::Primary::SystemFunctionCall(call)) => {
                 if self.state.contains(VerilogContext::constant) {
-                    self.constant_folder.base.error(Error {
+                    base.error(Error {
                         source: expression.source,
                         error_type: Type::NotAllowedInConstantContext(
                             NonConstantExpression::VariableReference,
                         ),
                     });
-                    return Err(());
+                    return None;
                 }
                 if call.name == keywords::TEMPERATURE {
                     //todo more calls
-                    self.constant_folder.base.hir.push(Node::new(
+                    base.hir.push(Node::new(
                         Expression::Primary(Primary::SystemFunctionCall(call)),
                         expression.source,
                     ))
                 } else {
-                    self.constant_folder.base.error(Error {
+                    base.error(Error {
                         error_type: Type::NotFound(call.name),
                         source: call.span,
                     });
-                    return Err(());
+                    return None;
                 }
                 //TODO args
             }
 
-            _ => self.constant_folder.fold(expression_id)?,
+            _ => base.fold_expression(expression_id, self)?,
         };
-        Ok(res)
-    }
-
-    /// Due to an ambiguous grammar the parser can not determine whether V(x,y) is a function call or a Branch access when it appears inside an expression.
-    /// When the function call is resolved to be to a nature this function is called to reinterpret and resolve the function parameters as a branch access
-    fn reinterpret_function_parameters_as_branch_access(
-        &mut self,
-        nature_indent_span: Span,
-        parameters: &[ExpressionId<'tag>],
-    ) -> Result<(BranchId<'tag>, DisciplineId<'tag>), ()> {
-        match parameters {
-            [branch] => {
-                let expr_node = &self.constant_folder.base.ast[*branch];
-                let branch_access = ast::BranchAccess::Explicit(
-                    self.reinterpret_expression_as_identifier(expr_node)?
-                        .clone(),
-                );
-                self.branch_resolver.resolve_branch_access(
-                    self.constant_folder.base,
-                    &Node::new(branch_access, expr_node.source),
-                )
-            }
-            [net1, net2] => {
-                let expr_node = &self.constant_folder.base.ast[*net1];
-                let span = expr_node.source;
-                let net1 = self.reinterpret_expression_as_identifier(expr_node);
-                let expr_node = &self.constant_folder.base.ast[*net2];
-                let span = span.extend(expr_node.source);
-                let net2 = self.reinterpret_expression_as_identifier(expr_node);
-                let branch_access =
-                    ast::BranchAccess::Implicit(ast::Branch::Nets(net1?.clone(), net2?.clone()));
-                self.branch_resolver.resolve_branch_access(
-                    &mut self.constant_folder.base,
-                    &Node::new(branch_access, span),
-                )
-            }
-            [] => {
-                self.constant_folder.base.error(Error {
-                    source: nature_indent_span,
-                    error_type: EmptyBranchAccess,
-                });
-                Err(())
-            }
-            [_, _, unexpected, ..] => {
-                self.constant_folder.base.error(Error {
-                    source: self.constant_folder.base.ast[*unexpected]
-                        .source
-                        .extend(self.constant_folder.base.ast[*parameters.last().unwrap()].source),
-                    error_type: UnexpectedTokenInBranchAccess,
-                });
-                Err(())
-            }
-        }
-    }
-
-    fn reinterpret_expression_as_identifier(
-        &mut self,
-        expression: &'lt Node<ast::Expression<'tag>>,
-    ) -> Result<&'lt HierarchicalId, ()> {
-        if let ast::Expression::Primary(ast::Primary::VariableOrNetReference(ref name)) =
-            expression.contents
-        {
-            Ok(name)
-        } else {
-            self.constant_folder.base.error(Error {
-                source: expression.source,
-                error_type: UnexpectedTokenInBranchAccess,
-            });
-            Err(())
-        }
+        Some(res)
     }
 }

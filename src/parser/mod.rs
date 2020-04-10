@@ -18,8 +18,7 @@ pub use error::Error;
 pub use error::Result;
 
 use crate::ast::{Ast, HierarchicalId};
-use crate::ir::ast::{Discipline, Nature};
-use crate::ir::{Attribute, AttributeId, AttributeNode, Attributes};
+use crate::ir::{Attribute, AttributeId, Attributes};
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::{Expected, Type, Warning, WarningType};
 use crate::parser::lexer::Token;

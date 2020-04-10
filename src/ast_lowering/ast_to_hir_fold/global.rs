@@ -9,11 +9,11 @@
  */
 
 use crate::ast_lowering::ast_to_hir_fold::expression::ConstantExpressionFolder;
-use crate::ast_lowering::ast_to_hir_fold::{Branches, Fold};
+use crate::ast_lowering::ast_to_hir_fold::{Branches, ExpressionFolder, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::ast_lowering::name_resolution::Resolver;
-use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
+use crate::compact_arena::{NanoArena, TinyArena};
 use crate::hir::{Discipline, Nature, Net, Port};
 use crate::ir::{
     Attribute, AttributeId, DisciplineId, ExpressionId, NatureId, NetId, PortId, Write,
@@ -51,7 +51,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
         for attribute in SafeRangeCreation::<AttributeId<'tag>>::full_range(self.base.ast) {
             let value = self.base.ast[attribute]
                 .value
-                .map(|expr| self.fold_constant_expr(expr).ok())
+                .map(|expr| self.fold_constant_expr(expr))
                 .flatten();
             self.base.hir.write(
                 attribute,
@@ -112,30 +112,23 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
     fn fold_discipline(&mut self, discipline: DisciplineId<'tag>) {
         let unresolved_discipline = &self.base.ast[discipline].contents;
 
-        let flow_nature = (&unresolved_discipline.flow_nature)
-            .map(|ident| {
-                resolve!(self.base; ident as
-                    Nature(id) => {
-                        return Ok(id)
-                    }
-                );
-                Err(())
-            })
-            .map(Result::ok)
-            .flatten();
+        let flow_nature = (&unresolved_discipline.flow_nature).and_then(|ident| {
+            resolve!(self.base; ident as
+                Nature(id) => {
+                    return Some(id)
+                }
+            );
+            None
+        });
 
-        let potential_nature = unresolved_discipline
-            .potential_nature
-            .map(|ident| {
-                resolve!(self.base; ident as
-                    Nature(id) => {
-                        return Ok(id)
-                    }
-                );
-                Err(())
-            })
-            .map(Result::ok)
-            .flatten();
+        let potential_nature = unresolved_discipline.potential_nature.and_then(|ident| {
+            resolve!(self.base; ident as
+                Nature(id) => {
+                    return Some(id)
+                }
+            );
+            None
+        });
 
         self.base.hir.write(
             discipline,
@@ -155,36 +148,32 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
 
         let idt_nature = unresolved_nature
             .idt_nature
-            .map(|ident| {
+            .and_then(|ident| {
                 resolve!(self.base; ident as
                     Nature(id) => {
-                        return Ok(id)
+                        return Some(id)
                     }
                 );
-                Err(())
+                None
             })
-            .map(Result::ok)
-            .flatten()
             .unwrap_or(nature);
 
         let ddt_nature = unresolved_nature
             .ddt_nature
-            .map(|ident| {
+            .and_then(|ident| {
                 resolve!(self.base; ident as
                     Nature(id) => {
-                        return Ok(id)
+                        return Some(id)
                     }
                 );
-                Err(())
+                None
             })
-            .map(Result::ok)
-            .flatten()
             .unwrap_or(nature);
 
         let abstol = self.fold_constant_expr(unresolved_nature.abstol);
         let units = self.fold_constant_expr(unresolved_nature.units);
 
-        if let (Ok(abstol), Ok(units)) = (abstol, units) {
+        if let (Some(abstol), Some(units)) = (abstol, units) {
             self.base.hir.write(
                 nature,
                 self.base.ast[nature].copy_with(|old| Nature {
@@ -203,7 +192,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
     /// As such they get folded into a net and the id of that net plus their input/output property become the port
     fn fold_port(&mut self, port: PortId<'tag>) {
         let unresolved_port = &self.base.ast[port];
-        if let Ok(discipline) = self.resolve_discipline(&unresolved_port.contents.discipline) {
+        if let Some(discipline) = self.resolve_discipline(&unresolved_port.contents.discipline) {
             let net = self.base.hir.push(unresolved_port.copy_with(|port| Net {
                 name: port.name,
                 discipline,
@@ -225,7 +214,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
     /// Only the discpline is resolved here the rest is just a copy
     fn fold_net(&mut self, net: NetId<'tag>) {
         let unresolved_net = &self.base.ast[net];
-        if let Ok(discipline) = self.resolve_discipline(&unresolved_net.contents.discipline) {
+        if let Some(discipline) = self.resolve_discipline(&unresolved_net.contents.discipline) {
             self.base.hir.write(
                 net,
                 unresolved_net.copy_with(|old| Net {
@@ -238,7 +227,7 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
         }
     }
 
-    pub fn resolve_discipline(&mut self, ident: &Ident) -> Result<DisciplineId<'tag>, ()> {
+    pub fn resolve_discipline(&mut self, ident: &Ident) -> Option<DisciplineId<'tag>> {
         match ident.name {
             keywords::EMPTY_SYMBOL => {
                 self.base.error(Error {
@@ -248,19 +237,13 @@ impl<'tag, 'lt> Global<'tag, 'lt> {
                 todo!("Implicit Disciplines are currently not supported")
             }
             _ => {
-                resolve!(self.base; ident as Discipline(id) => {return Ok(id)});
-                Err(())
+                resolve!(self.base; ident as Discipline(id) => {return Some(id)});
+                None
             }
         }
     }
 
-    pub fn fold_constant_expr(
-        &mut self,
-        expr: ExpressionId<'tag>,
-    ) -> Result<ExpressionId<'tag>, ()> {
-        let mut folder = ConstantExpressionFolder {
-            base: &mut self.base,
-        };
-        folder.fold(expr)
+    pub fn fold_constant_expr(&mut self, expr: ExpressionId<'tag>) -> Option<ExpressionId<'tag>> {
+        ConstantExpressionFolder {}.fold(expr, &mut self.base)
     }
 }

@@ -290,12 +290,12 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     }
                 }
 
-                hir::Statement::Condition(ref condition_node) => {
+                hir::Statement::Condition(ref _condition_node) => {
                     unreachable_unchecked!("Condtion start should skip this")
                 }
 
                 hir::Statement::FunctionCall(_, _, _) => todo!("Function Calls"),
-                hir::Statement::BuiltInFunctionCall(call) => todo!("warn useless function calls"),
+                hir::Statement::BuiltInFunctionCall(_call) => todo!("warn useless function calls"),
             };
             self.mir.push(res);
         }

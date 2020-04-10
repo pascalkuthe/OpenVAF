@@ -57,17 +57,17 @@ impl<'tag, 'lt> BranchResolver<'tag> {
         fold: &mut Fold<'tag, 'lt>,
         nature_name: &Ident,
         discipline: DisciplineId<'tag>,
-    ) -> Result<DisciplineAccess, ()> {
+    ) -> Option<DisciplineAccess> {
         match nature_name.name {
-            keywords::FLOW => Ok(DisciplineAccess::Flow),
-            keywords::POTENTIAL => Ok(DisciplineAccess::Potential),
+            keywords::FLOW => Some(DisciplineAccess::Flow),
+            keywords::POTENTIAL => Some(DisciplineAccess::Potential),
             _ => {
                 resolve!(fold; nature_name as
                     Nature(id) => {
                         return Self::resolve_nature_access(fold,id,discipline);
                     }
                 );
-                Err(())
+                None
             }
         }
     }
@@ -76,13 +76,13 @@ impl<'tag, 'lt> BranchResolver<'tag> {
         fold: &mut Fold<'tag, 'lt>,
         id: NatureId<'tag>,
         discipline: DisciplineId<'tag>,
-    ) -> Result<DisciplineAccess, ()> {
+    ) -> Option<DisciplineAccess> {
         match id {
             id if Some(id) == fold.hir[discipline].contents.flow_nature => {
-                Ok(DisciplineAccess::Flow)
+                Some(DisciplineAccess::Flow)
             }
             id if Some(id) == fold.hir[discipline].contents.potential_nature => {
-                Ok(DisciplineAccess::Potential)
+                Some(DisciplineAccess::Potential)
             }
             _ => {
                 fold.error(Error {
@@ -92,7 +92,7 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                         discipline,
                     ),
                 });
-                Err(())
+                None
             }
         }
     }
@@ -107,21 +107,18 @@ impl<'tag, 'lt> BranchResolver<'tag> {
     ///
     ///
     /// # Returns
-    ///
-    /// * Err(()) if some error orccured
-    ///
-    /// * The Id of the resolved branch and its Discipline
+    /// The Id of the resolved branch and its Discipline (if the resolution succeeded)
     pub fn resolve_branch_access(
         &mut self,
         fold: &mut Fold<'tag, 'lt>,
         branch_access: &Node<ast::BranchAccess>,
-    ) -> Result<(BranchId<'tag>, DisciplineId<'tag>), ()> {
+    ) -> Option<(BranchId<'tag>, DisciplineId<'tag>)> {
         match branch_access.contents {
             ast::BranchAccess::Implicit(ref branch) => {
                 let (branch, discipline) = self.resolve_branch(fold, branch)?;
                 match branch {
                     Branch::Port(port) => match self.unnamed_port_branches.get(&port) {
-                        Some(id) => return Ok((*id, discipline)),
+                        Some(id) => return Some((*id, discipline)),
                         None => {
                             let branch_id = fold.hir.push(AttributeNode {
                                 attributes: fold.hir.empty_range_from_end(),
@@ -139,12 +136,12 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                                 },
                             });
                             self.unnamed_port_branches.insert(port, branch_id);
-                            return Ok((branch_id, discipline));
+                            return Some((branch_id, discipline));
                         }
                     },
 
                     Branch::Nets(net1, net2) => match self.unnamed_branches.get(&(net1, net2)) {
-                        Some(id) => return Ok((*id, discipline)),
+                        Some(id) => return Some((*id, discipline)),
                         None => {
                             let branch_id = fold.hir.push(AttributeNode {
                                 attributes: fold.hir.empty_range_from_end(),
@@ -163,7 +160,7 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                                 },
                             });
                             self.unnamed_branches.insert((net1, net2), branch_id);
-                            return Ok((branch_id, discipline));
+                            return Some((branch_id, discipline));
                         }
                     },
                 }
@@ -177,12 +174,12 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                         }
                         Branch::Nets(net1, _) => fold.hir[net1].contents.discipline
                     };
-                    return Ok((id,discipline))
+                    return Some((id,discipline))
                 })
             }
         }
 
-        Err(())
+        None
     }
 
     /// Resolves a branch such as (NET1,NET2) or (<PORT>)
@@ -195,33 +192,30 @@ impl<'tag, 'lt> BranchResolver<'tag> {
     ///
     ///
     /// # Returns
-    ///
-    /// * Err(()) if some error orccured
-    ///
-    /// * The Id of the resolved branch and its Discipline
+    /// The Id of the resolved branch and its Discipline  (if the resolution succeeded)
 
     pub fn resolve_branch(
         &mut self,
         fold: &mut Fold<'tag, 'lt>,
         branch: &ast::Branch,
-    ) -> std::result::Result<(Branch<'tag>, DisciplineId<'tag>), ()> {
+    ) -> Option<(Branch<'tag>, DisciplineId<'tag>)> {
         match branch {
             ast::Branch::Port(ref port) => {
                 resolve_hierarchical!(fold; port as Port(port_id) => {
-                    return Ok((Branch::Port(port_id),fold.hir[fold.hir[port_id].net].contents.discipline));
+                    return Some((Branch::Port(port_id),fold.hir[fold.hir[port_id].net].contents.discipline));
                 });
             }
             ast::Branch::NetToGround(ref net_ident) => {
-                let mut net = Err(());
+                let mut net = None;
                 resolve_hierarchical!(fold; net_ident as
                     Net(id) => {
-                        net = Ok(id);
+                        net = Some(id);
                     },
                     Port(id) => {
-                        net = Ok(fold.hir[id].net);
+                        net = Some(fold.hir[id].net);
                     }
                 );
-                if let Ok(net) = net {
+                if let Some(net) = net {
                     let discipline = fold.hir[net].contents.discipline;
                     let ground_net =
                         *self.implicit_grounds.entry(discipline).or_insert_with(|| {
@@ -238,32 +232,32 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                                 attributes: fold.hir.empty_range_from_end(),
                             })
                         });
-                    return Ok((Branch::Nets(net, ground_net), discipline));
+                    return Some((Branch::Nets(net, ground_net), discipline));
                 }
             }
 
             ast::Branch::Nets(ref net1, ref net2) => {
-                let mut first_net = Err(());
+                let mut first_net = None;
                 resolve_hierarchical!(fold; net1 as
                     Net(id) => {
-                        first_net = Ok(id);
+                        first_net = Some(id);
                     },
                     Port(id) => {
-                        first_net = Ok(fold.hir[id].net);
+                        first_net = Some(fold.hir[id].net);
                     }
                 );
 
-                let mut second_net = Err(());
+                let mut second_net = None;
                 resolve_hierarchical!(fold; net2 as
                     Net(second_id) => {
-                        second_net = Ok(second_id)
+                        second_net = Some(second_id)
                     },
                     Port(second_id) => {
-                        second_net = Ok(fold.hir[second_id].net)
+                        second_net = Some(fold.hir[second_id].net)
                     }
                 );
 
-                if let (Ok(first_net), Ok(second_net)) = (first_net, second_net) {
+                if let (Some(first_net), Some(second_net)) = (first_net, second_net) {
                     if fold.hir[first_net].contents.discipline
                         != fold.hir[second_net].contents.discipline
                     {
@@ -284,7 +278,7 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                         });
                     } else {
                         //doesn't matter which nets discipline we use since we asserted that they are equal
-                        return Ok((
+                        return Some((
                             Branch::Nets(first_net, second_net),
                             fold.hir[first_net].contents.discipline,
                         ));
@@ -293,6 +287,6 @@ impl<'tag, 'lt> BranchResolver<'tag> {
             }
         }
 
-        Err(())
+        None
     }
 }

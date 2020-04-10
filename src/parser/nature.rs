@@ -1,13 +1,12 @@
-use crate::ir::ast::{Nature, NatureParentType};
+use crate::ir::ast::Nature;
 use crate::ir::{AttributeNode, Attributes, Push};
 use crate::parser::error::Result;
 use crate::parser::error::Type::{
     AttributeAlreadyDefined, RequiredAttributeNotDefined, UnexpectedToken,
 };
 use crate::parser::lexer::Token;
-use crate::parser::lexer::Token::TriOr;
 use crate::parser::Error;
-use crate::symbol::{keywords, Ident};
+use crate::symbol::keywords;
 use crate::symbol_table::SymbolDeclaration;
 use crate::Parser;
 

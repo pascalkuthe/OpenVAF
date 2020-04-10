@@ -671,7 +671,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
                 UnaryOperator::BitNegate => {
                     match self.eval_constant_parameter_expression(current_parameter, val)? {
-                        Value::Real(val) => {
+                        Value::Real(_val) => {
                             return Err(Error {
                                 error_type: Type::ExpectedInteger,
                                 source: self.hir[expr].source,

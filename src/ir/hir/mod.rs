@@ -11,8 +11,6 @@
 use std::ops::Range;
 use std::ptr::NonNull;
 
-use intrusive_collections::__core::cell::RefCell;
-
 use crate::ast::Parameter;
 use crate::ast::{BinaryOperator, BuiltInFunctionCall, Function, NetType, UnaryOperator, Variable};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
