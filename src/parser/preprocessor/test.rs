@@ -14,7 +14,7 @@ use bumpalo::Bump;
 
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::source_map::SourceMapBuilder;
-use crate::parser::preprocessor::PreprocessorCreator;
+use crate::parser::preprocessor::PreprocessorBuilder;
 use crate::parser::Error;
 use crate::{Preprocessor, Span};
 
@@ -22,7 +22,7 @@ use crate::{Preprocessor, Span};
 pub fn macros() -> std::result::Result<(), String> {
     let source_map_allocator = Bump::new();
     let preprocessor_allocator = Bump::new();
-    let mut preprocessor = PreprocessorCreator::create(
+    let mut preprocessor = PreprocessorBuilder::new(
         &preprocessor_allocator,
         &source_map_allocator,
         Path::new("tests/macros.va"),

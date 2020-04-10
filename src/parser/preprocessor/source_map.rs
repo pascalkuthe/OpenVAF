@@ -52,17 +52,14 @@ pub(crate) enum SourceType {
 }
 #[derive(Debug)]
 pub struct SourceMap<'source_map> {
-    main_file_name: &'source_map str,
-    expanded_source: &'source_map str,
+    pub main_file_name: &'source_map str,
+    pub expanded_source: &'source_map str,
     children: RBTree<SourceMapAdapter<'source_map>>,
     map: RBTree<SourceMapAdapter<'source_map>>,
     _pin_marker: PhantomPinned,
 }
 
 impl<'source_map> SourceMap<'source_map> {
-    pub fn main_file_name(&self) -> &'source_map str {
-        self.main_file_name
-    }
     pub fn new(main_file_name: &'source_map str) -> Self {
         Self {
             main_file_name,
@@ -72,6 +69,7 @@ impl<'source_map> SourceMap<'source_map> {
             _pin_marker: PhantomPinned,
         }
     }
+
     pub fn resolve_span_within_line(
         &self,
         span: Span,

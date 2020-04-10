@@ -78,7 +78,7 @@ impl<'tag> Error<'tag> {
                 annotation_type: AnnotationType::Note
             }])
         } else {
-            (source_map.main_file_name().to_string(), Vec::new())
+            (source_map.main_file_name.to_string(), Vec::new())
         };
         let line = line.to_string(); //necessary because annotate snippet cant work with slices yet
         let origin = Some(origin);

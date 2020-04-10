@@ -23,9 +23,8 @@ pub use source_map::SourceMap;
 use source_map::SourceMapBuilder;
 pub(crate) use source_map::{ArgumentIndex, CallDepth};
 
-use crate::error::Error;
 use crate::parser::error;
-use crate::parser::error::{List, Type, Unsupported};
+use crate::parser::error::{List, Type, Unsupported, Warning,Error};
 use crate::parser::lexer::Token;
 use crate::parser::primaries::parse_string;
 use crate::span::{Index, IndexOffset, LineNumber, Range};
@@ -113,11 +112,11 @@ impl<'lt> MacroArg<'lt> {
         Self { tokens, source }
     }
 }
-pub struct PreprocessorCreator<'lt, 'source_map> {
+pub struct PreprocessorBuilder<'lt, 'source_map> {
     preprocessor: Preprocessor<'lt, 'source_map>,
 }
-impl<'lt, 'source_map> PreprocessorCreator<'lt, 'source_map> {
-    pub fn create(
+impl<'lt, 'source_map> PreprocessorBuilder<'lt, 'source_map> {
+    pub fn new(
         allocator: &'lt Bump,
         source_map_allocator: &'source_map Bump,
         main_file: &Path,
@@ -142,12 +141,7 @@ impl<'lt, 'source_map> PreprocessorCreator<'lt, 'source_map> {
         Ok(Self { preprocessor: res })
     }
     pub fn init(mut self) -> (Result, Preprocessor<'lt, 'source_map>) {
-        if let Err(error) = self.preprocessor.process_token() {
-            self.preprocessor.advance_state();
-            return (Err(error), self.preprocessor);
-        } else {
-            (Ok(()), self.preprocessor)
-        }
+        (self.preprocessor.process_token_until_success(),self.preprocessor)
     }
 }
 pub struct Preprocessor<'lt, 'source_map> {
@@ -179,19 +173,12 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         self.source_map_builder.done()
     }
 
-    pub fn skip_rest(mut self) -> &'source_map SourceMap<'source_map> {
-        while self.current_token != Token::EOF {
-            self.advance();
-        }
-        self.source_map_builder.done()
-    }
-
     fn include(&mut self, file: &Path, include_directive_span: Span) -> Result {
         let lexer = self
             .source_map_builder
             .enter_file(file, self.current_start, include_directive_span)
             .map_err(|io_err| Error {
-                source: include_directive_span,
+                source: include_directive_span.signed_offset(self.current_offset()),
                 error_type: io_err.into(),
             })?;
 
@@ -300,8 +287,14 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
 
     pub fn advance(&mut self) -> Result {
         self.advance_state()?;
+        self.process_token_until_success()
+    }
+    fn process_token_until_success(&mut self)->Result{
         if let Err(error) = self.process_token() {
             self.advance_state();
+            while self.process_token().is_err() {
+                self.advance_state();
+            }
             return Err(error);
         }
         Ok(())
@@ -318,6 +311,10 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     return self.token_error(error);
                 }
                 Token::Newline | Token::CommentNewline => self.source_map_builder.new_line(),
+                Token::MacroDefNewLine => {
+                    self.source_map_builder.new_line();
+                    return self.token_error(Type::UnexpectedToken { expected: vec![] })
+                }
                 Token::Include => {
                     let start = self.current_source_start;
                     self.advance_state()?;
@@ -532,9 +529,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             body.push(self.current_macro_body_token(body_start, &args, 1)?);
             peek = self.peek()?;
         }
-        let decl_range = Span::new(body_start, peek.0.start);
         let decl_source =
-            &self.source()[decl_range.get_start() as usize..decl_range.get_end() as usize];
+            &self.source()[body_start as usize..peek.0.end as usize];
         let maco_decl = Macro {
             body,
             arg_count: args.len() as ArgumentIndex,
@@ -551,8 +547,19 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
     }
 
     fn peek(&mut self) -> Result<(Range, Token)> {
+        let in_main_file = self.state_stack.len() == 1;
         match self.state_stack.last_mut().unwrap().token_source {
-            TokenSource::File(ref lexer) => Ok(lexer.peek()),
+            TokenSource::File(ref lexer) => {
+                let (range,token) = lexer.peek();
+                if token == Token::EOF&&!in_main_file{
+                    Err(Error {
+                        source: Span::new(range.start,range.end),
+                        error_type: error::Type::CompilerDirectiveSplit,
+                    })
+                }else {
+                    Ok((range,token))
+                }
+            }
             TokenSource::Insert(ref mut iter, _) => {
                 let res = iter.peek().unwrap();
                 let token = if let MacroBodyToken::LexerToken(token) = res.1 {
@@ -621,8 +628,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         let source_start = self.current_source_start;
         let mut arg_bindings: Vec<MacroArg> = Vec::new();
         let mut source_end = self.current_source_start + self.current_len;
-        let peek = self.peek();
-        if peek.is_ok() && peek.unwrap().1 == Token::ParenOpen {
+        let peek = self.peek()?.1;
+        if peek == Token::ParenOpen {
             self.advance_state()?; //skip bracket
             self.advance_state()?;
             let mut current_arg_body = Vec::new();

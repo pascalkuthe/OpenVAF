@@ -128,7 +128,7 @@ impl Error {
                 annotation_type: AnnotationType::Note
             }])
         } else {
-            (source_map.main_file_name().to_string(), Vec::new())
+            (source_map.main_file_name.to_string(), Vec::new())
         };
         let line = line.to_string(); //necessary because annotate snippet cant work with slices yet
         let origin = Some(origin);
@@ -310,7 +310,7 @@ impl Error {
                             source: src.to_string(),
                             line_start: line_number as usize,
                             origin: origin
-                                .or_else(|| Some(source_map.main_file_name().to_string())),
+                                .or_else(|| Some(source_map.main_file_name.to_string())),
                             annotations: vec![SourceAnnotation {
                                 range,
                                 label: format!("{}. condition started here", index),
@@ -739,7 +739,7 @@ impl Warning {
                 annotation_type: AnnotationType::Note
             }])
         } else {
-            (source_map.main_file_name().to_string(), Vec::new())
+            (source_map.main_file_name.to_string(), Vec::new())
         };
 
         let line = line.to_string();

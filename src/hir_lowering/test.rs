@@ -144,5 +144,6 @@ pub fn hl2() -> Result<(), ()> {
 
     let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
 
+
     Ok(())
 }

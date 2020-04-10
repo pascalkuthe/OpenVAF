@@ -22,7 +22,7 @@ use crate::ir::{Attribute, AttributeId, Attributes};
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::{Expected, Type, Warning, WarningType};
 use crate::parser::lexer::Token;
-use crate::parser::preprocessor::PreprocessorCreator;
+use crate::parser::preprocessor::PreprocessorBuilder;
 use crate::span::Index;
 use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
@@ -323,14 +323,11 @@ pub fn parse<'source_map, 'ast, 'lt>(
 )> {
     let allocator = Bump::new();
     let mut preprocessor =
-        PreprocessorCreator::create(&allocator, source_map_allocator, main_file)?;
+        PreprocessorBuilder::new(&allocator, source_map_allocator, main_file)?;
     let mut errors = Vec::with_capacity(64);
     let (init_result, mut preprocessor) = preprocessor.init();
     if let Err(error) = init_result {
         errors.push(error);
-        while let Err(error) = preprocessor.advance() {
-            errors.push(error)
-        }
     }
 
     let mut parser = Parser::new(preprocessor, ast, errors);

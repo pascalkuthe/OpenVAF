@@ -46,7 +46,7 @@ impl<'tag> Error<'tag> {
                 annotation_type: AnnotationType::Note
             }])
         } else {
-            (source_map.main_file_name().to_string(), Vec::new())
+            (source_map.main_file_name.to_string(), Vec::new())
         };
         let line = line.to_string(); //necessary because annotate snippet cant work with slices yet
         let origin = Some(origin);
@@ -131,7 +131,7 @@ impl<'tag> Error<'tag> {
                 {
                     Some(substitution_name)
                 } else {
-                    Some(source_map.main_file_name().to_string())
+                    Some(source_map.main_file_name.to_string())
                 };
                 let parameter_range = translate_to_inner_snippet_range(
                     parameter_range.start,
@@ -185,7 +185,7 @@ impl<'tag> Error<'tag> {
                 {
                     Some(substitution_name)
                 } else {
-                    Some(source_map.main_file_name().to_string())
+                    Some(source_map.main_file_name.to_string())
                 };
                 let parameter_range = translate_to_inner_snippet_range(
                     parameter_range.start,
@@ -239,7 +239,7 @@ impl<'tag> Error<'tag> {
                 {
                     Some(substitution_name)
                 } else {
-                    Some(source_map.main_file_name().to_string())
+                    Some(source_map.main_file_name.to_string())
                 };
                 let parameter_range = translate_to_inner_snippet_range(
                     parameter_range.start,
@@ -296,7 +296,7 @@ impl<'tag> Error<'tag> {
                 {
                     Some(substitution_name)
                 } else {
-                    Some(source_map.main_file_name().to_string())
+                    Some(source_map.main_file_name.to_string())
                 };
                 let parameter_range = translate_to_inner_snippet_range(
                     parameter_range.start,
