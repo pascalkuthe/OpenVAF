@@ -240,7 +240,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let signed = self.look_ahead()?.0 == Token::Signed;
 
         if signed {
-            self.lookahead.take();
+            self.consume_lookahead();
             is_discipline = true;
         };
 
@@ -276,7 +276,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::Ground => NetType::GROUND,
             _ => return Ok(NetType::UNDECLARED),
         };
-        self.lookahead.take();
+        self.consume_lookahead();
         Ok(vtype)
     }
 }

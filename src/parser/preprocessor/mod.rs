@@ -82,13 +82,17 @@ struct UnresolvedMacroReference<'lt> {
 }
 
 #[derive(Debug)]
-struct PreprocessorState<'lt> {
+/// Represents something that has been inserted into the preprocessor (macro reference / file inculde / main file)
+/// * `start` - the start of this Insertion in the source map
+/// * `offset` represents the difference between sourcemap- and local location of a token from this insert
+///  (for this first token this is just start but for later tokens this may increase as other things are inserted inside the Intersertion (eg macros inside macros)
+struct Insertion<'lt> {
     start: Index,
     offset: IndexOffset,
     token_source: TokenSource<'lt>,
 }
 
-impl<'lt> PreprocessorState<'lt> {
+impl<'lt> Insertion<'lt> {
     pub fn new(start: Index, token_source: TokenSource<'lt>) -> Self {
         Self {
             start,
@@ -109,30 +113,18 @@ impl<'lt> MacroArg<'lt> {
         Self { tokens, source }
     }
 }
-
-pub struct Preprocessor<'lt, 'source_map> {
-    //internal state
-    macros: HashMap<&'lt str, Macro<'lt>>,
-    called_macros: IndexMap<&'lt str, Vec<MacroArg<'lt>>>,
-    source_map_builder: SourceMapBuilder<'lt, 'source_map>,
-    state_stack: Vec<PreprocessorState<'lt>>,
-    condition_stack: Vec<Span>,
-    /// Start of the current token in the source that contains it. (Either a file or a macro definition)
-    current_source_start: Index,
-    current_start: Index,
-    current_len: Index,
-    current_token: Token,
+pub struct PreprocessorCreator<'lt, 'source_map> {
+    preprocessor: Preprocessor<'lt, 'source_map>,
 }
-
-impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
-    pub fn new(
+impl<'lt, 'source_map> PreprocessorCreator<'lt, 'source_map> {
+    pub fn create(
         allocator: &'lt Bump,
         source_map_allocator: &'source_map Bump,
         main_file: &Path,
     ) -> std::io::Result<Self> {
         let (source_map_builder, main_lexer) =
             SourceMapBuilder::new(source_map_allocator, allocator, main_file)?;
-        let mut res = Self {
+        let mut res = Preprocessor {
             macros: HashMap::new(),
             called_macros: IndexMap::new(),
             source_map_builder,
@@ -146,9 +138,33 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         res.current_token = main_lexer.token();
         res.current_len = main_lexer.token_len();
         res.state_stack
-            .push(PreprocessorState::new(0, TokenSource::File(main_lexer)));
-        Ok(res)
+            .push(Insertion::new(0, TokenSource::File(main_lexer)));
+        Ok(Self { preprocessor: res })
     }
+    pub fn init(mut self) -> (Result, Preprocessor<'lt, 'source_map>) {
+        if let Err(error) = self.preprocessor.process_token() {
+            self.preprocessor.advance_state();
+            return (Err(error), self.preprocessor);
+        } else {
+            (Ok(()), self.preprocessor)
+        }
+    }
+}
+pub struct Preprocessor<'lt, 'source_map> {
+    //internal state
+    macros: HashMap<&'lt str, Macro<'lt>>,
+    called_macros: IndexMap<&'lt str, Vec<MacroArg<'lt>>>,
+    source_map_builder: SourceMapBuilder<'lt, 'source_map>,
+    state_stack: Vec<Insertion<'lt>>,
+    condition_stack: Vec<Span>,
+    // Start of the current token in the source that contains it. (Either a file or a macro definition)
+    current_source_start: Index,
+    current_start: Index,
+    current_len: Index,
+    current_token: Token,
+}
+
+impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
     pub fn done(self) -> &'source_map SourceMap<'source_map> {
         if self.current_token != Token::EOF {
             error!(
@@ -169,6 +185,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         }
         self.source_map_builder.done()
     }
+
     fn include(&mut self, file: &Path, include_directive_span: Span) -> Result {
         let lexer = self
             .source_map_builder
@@ -177,12 +194,13 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 source: include_directive_span,
                 error_type: io_err.into(),
             })?;
+
         self.state_stack.last_mut().unwrap().offset -=
             include_directive_span.get_len() as IndexOffset;
-        self.state_stack.push(PreprocessorState::new(
-            self.current_start,
-            TokenSource::File(lexer),
-        ));
+
+        self.state_stack
+            .push(Insertion::new(self.current_start, TokenSource::File(lexer)));
+
         Ok(())
     }
 
@@ -192,13 +210,13 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         let (token, range) = self.next()?;
         self.current_token = token;
         self.current_source_start = range.start;
-        self.current_start = (range.start as IndexOffset + self.current_offset()) as Index;
+        self.current_start = ((range.start as IndexOffset + self.current_offset()) as Index);
         self.current_len = range.end - range.start;
         Ok(())
     }
 
     /// This function advances to the next token from either a lexical source or an insertion source (macros and their arguments)
-    /// This returns an error if a macro couldnt' be resolved however it always consumes to current token so the same error cant be returned twice
+    /// This returns an error if a macro couldn't be resolved however it always consumes to current token so the same error cant be returned twice
     fn next(&mut self) -> Result<(Token, Range)> {
         loop {
             let main_file = self.state_stack.len() == 1;
@@ -247,7 +265,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                                         + current_state.offset)
                                         as Index;
                                     let token_source =
-                                        self.resolve_reference(span, unresolved_reference, false)?;
+                                        self.resolve_macro_reference(span, unresolved_reference)?;
                                     Some((start, token_source))
                                 }
                             }
@@ -257,34 +275,42 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     }
                 }
             };
+
             //the token source stack can only be mutated here and not inside the match
             if let Some(state) = new_state {
-                self.state_stack
-                    .push(PreprocessorState::new(state.0, state.1))
+                self.state_stack.push(Insertion::new(state.0, state.1))
             } else {
-                let insertion_length = self.source_map_builder.finish_substitution();
-                let old_state = self.state_stack.pop().expect("Main file was popped");
-                match old_state.token_source {
+                let old_insertion = self.state_stack.pop().expect("Main file was popped");
+
+                let original_length = self.source_map_builder.finish_substitution();
+                // This represents the length that was added to the insertion due to other macros/includes being expanded inside it
+                let added_length = old_insertion.offset - old_insertion.start as IndexOffset;
+                self.state_stack.last_mut().unwrap().offset +=
+                    added_length + original_length as IndexOffset;
+
+                match old_insertion.token_source {
                     TokenSource::Insert(_, is_macro) if is_macro => {
                         self.called_macros.pop();
                     }
                     _ => (),
                 };
-                let offset_change = old_state.offset - old_state.start as IndexOffset
-                    + insertion_length as IndexOffset;
-                self.state_stack.last_mut().unwrap().offset += offset_change
             }
         }
     }
+
     pub fn advance(&mut self) -> Result {
         self.advance_state()?;
-        self.process_token()
+        if let Err(error) = self.process_token() {
+            self.advance_state();
+            return Err(error);
+        }
+        Ok(())
     }
+
     pub fn process_token(&mut self) -> Result {
         loop {
             // advance state until error occurs or token not handled by the preprocessor is encountered
             match self.current_token {
-                //TODO handel macro def new line here or are all matches non exhaustive anyway
                 Token::UnexpectedEOF => {
                     let error = error::Type::UnexpectedEof {
                         expected: vec![Token::CommentEnd],
@@ -324,15 +350,14 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 }
                 Token::MacroReference => {
                     let unresolved_reference = self.parse_reference(&Vec::new(), 0)?;
+
                     let start = (unresolved_reference.0.get_start() as IndexOffset
                         + self.current_offset()) as Index;
-                    let token_source = self.resolve_reference(
-                        unresolved_reference.0,
-                        unresolved_reference.1,
-                        self.state_stack.len() == 1,
-                    )?;
-                    self.state_stack
-                        .push(PreprocessorState::new(start, token_source));
+
+                    let token_source = self
+                        .resolve_macro_reference(unresolved_reference.0, unresolved_reference.1)?;
+
+                    self.state_stack.push(Insertion::new(start, token_source));
                 }
                 Token::MacroIf => self.process_condition(false)?,
                 Token::MacroIfn => self.process_condition(true)?,
@@ -524,6 +549,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         }
         Ok(())
     }
+
     fn peek(&mut self) -> Result<(Range, Token)> {
         match self.state_stack.last_mut().unwrap().token_source {
             TokenSource::File(ref lexer) => Ok(lexer.peek()),
@@ -541,6 +567,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             }
         }
     }
+
     fn current_macro_body_token(
         &mut self,
         start: Index,
@@ -675,11 +702,10 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         ))
     }
 
-    fn resolve_reference(
+    fn resolve_macro_reference(
         &mut self,
         source_span: Span,
         reference: UnresolvedMacroReference<'lt>,
-        root: bool,
     ) -> Result<TokenSource<'lt>> {
         let span = source_span.signed_offset(self.current_offset());
         if self.called_macros.contains_key(&reference.name) {
@@ -698,20 +724,17 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     source: span,
                 })
             } else {
-                if root {
-                    self.source_map_builder.enter_root_macro(
-                        span.get_start(),
-                        source_span,
-                        definition.source,
-                        definition.line,
-                        &reference.name,
-                    )
-                } else {
-                    self.source_map_builder
-                        .enter_non_root_substitution(source_span, definition.source)
-                }
+                self.source_map_builder.enter_macro(
+                    span.get_start(),
+                    source_span,
+                    definition.source,
+                    definition.line,
+                    &reference.name,
+                );
+
                 self.called_macros
                     .insert(reference.name, reference.arg_bindings.clone());
+
                 self.state_stack.last_mut().unwrap().offset -= source_span.get_len() as IndexOffset;
                 let token_source =
                     TokenSource::Insert(definition.body.clone().into_iter().peekable(), true);
@@ -729,7 +752,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         self.current_token
     }
 
-    pub fn token_error<T>(&self, etype: error::Type) -> Result<T> {
+    fn token_error<T>(&self, etype: error::Type) -> Result<T> {
         Err(Error {
             source: self.span(),
             error_type: etype,
@@ -743,9 +766,11 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
     pub fn current_start(&self) -> Index {
         self.current_start
     }
+
     pub fn current_end(&self) -> Index {
         self.current_start + self.current_len
     }
+
     pub fn current_len(&self) -> Index {
         self.current_len
     }
@@ -754,21 +779,23 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         self.state_stack.last().unwrap().offset
     }
 
-    pub fn source(&self) -> &'lt str {
+    /// Returns the source text of the current scope (macro / file include / main file)
+    fn source(&self) -> &'lt str {
         self.source_map_builder.source()
     }
+
     pub fn slice(&self) -> &'lt str {
         let source = self.source();
         &source[self.current_source_start as usize
             ..(self.current_source_start + self.current_len) as usize]
     }
+
     fn consume(&mut self, token: Token) -> Result<()> {
         if self.current_token != token {
             let error = error::Type::UnexpectedToken {
                 expected: vec![token],
             };
             let error = self.token_error(error);
-            self.advance_state();
             error
         } else {
             Ok(())

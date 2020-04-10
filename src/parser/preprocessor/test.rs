@@ -14,6 +14,7 @@ use bumpalo::Bump;
 
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::source_map::SourceMapBuilder;
+use crate::parser::preprocessor::PreprocessorCreator;
 use crate::parser::Error;
 use crate::{Preprocessor, Span};
 
@@ -21,7 +22,7 @@ use crate::{Preprocessor, Span};
 pub fn macros() -> std::result::Result<(), String> {
     let source_map_allocator = Bump::new();
     let preprocessor_allocator = Bump::new();
-    let mut preprocessor = Preprocessor::new(
+    let mut preprocessor = PreprocessorCreator::create(
         &preprocessor_allocator,
         &source_map_allocator,
         Path::new("tests/macros.va"),
@@ -30,6 +31,9 @@ pub fn macros() -> std::result::Result<(), String> {
     let mut start = 0;
     let mut end = 0;
     let mut span = Span::new(0, 0);
+
+    let (res, mut preprocessor) = preprocessor.init();
+    res.expect("Init Error");
     let res = Ok(()).and_then(|_| {
         preprocessor.process_token()?;
         assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
@@ -113,7 +117,7 @@ pub fn test_source_map() {
     builder.new_line();
     builder.new_line();
     let span: Span = lexer.range().into();
-    builder.enter_root_macro(lexer.range().start, span, "BAR", 2, "test");
+    builder.enter_macro(lexer.range().start, span, "BAR", 2, "test");
     builder.finish_substitution();
     let source_map = builder.done();
     let span = Span::new_with_length(span.get_start(), 3);

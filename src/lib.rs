@@ -46,7 +46,7 @@ pub use parser::preprocessor::Preprocessor;
 #[doc(inline)]
 pub use parser::preprocessor::SourceMap;
 #[doc(hidden)]
-pub use parser::Parser;
+pub(crate) use parser::Parser;
 #[doc(inline)]
 pub use span::Span;
 

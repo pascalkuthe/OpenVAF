@@ -12,7 +12,7 @@ use crate::Parser;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_nature(&mut self, attributes: Attributes<'ast>) -> Result {
-        self.lookahead.take();
+        self.consume_lookahead();
         let start = self.preprocessor.current_start();
 
         let name = self
@@ -147,7 +147,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let res = if self.look_ahead()?.0 == Token::Colon{
             let ident = self.parse_identifier(false)?;
             let ptype = if self.look_ahead()?.0 == Token::Accessor{
-                self.lookahead.take();
+                self.consume_lookahead();
                 match self.next()?{
                     (Token::Potential,_) => NatureParentType::DisciplinePotential,
                     (Token::Flow,_) => NatureParentType::DisciplineFlow,

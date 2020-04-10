@@ -11,7 +11,7 @@ use crate::Parser;
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_discipline(&mut self, attributes: Attributes<'ast>) -> Result {
         let start = self.preprocessor.current_start();
-        self.lookahead.take();
+        self.consume_lookahead();
         let name = self
             .parse_identifier(false)
             .map_err(|err| self.non_critical_errors.push(err));

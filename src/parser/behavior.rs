@@ -29,27 +29,27 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::If => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 Statement::Condition(self.parse_condition(attributes)?)
             }
             Token::Flow => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 self.parse_contribute_statement(attributes, Ident::new(keywords::FLOW, span))?
             }
             Token::Potential => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 self.parse_contribute_statement(attributes, Ident::new(keywords::POTENTIAL, span))?
             }
             Token::Begin => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 Statement::Block(self.parse_block(attributes)?)
             }
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
-                let identifier = self.parse_hierarchical_identifier_internal(false)?;
+                let identifier = self.parse_hierarchical_identifier()?;
                 let (token, span) = self.look_ahead()?;
                 let res = match token {
                     Token::Assign => {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                         Statement::Assign(
                             attributes,
                             identifier.into(),
@@ -57,16 +57,16 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         )
                     }
                     Token::ParenOpen => {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                         let (token, _) = self.look_ahead()?;
                         match token {
                             Token::OpLess => self.parse_contribute_statement(
                                 attributes,
-                                Self::convert_to_nature_identifier(identifier)?,
+                                Self::convert_to_nature_identifier(identifier.names)?,
                             )?,
                             Token::ParenClose => {
-                                self.lookahead.take();
-                                Statement::FunctionCall(attributes, identifier.into(), Vec::new())
+                                self.consume_lookahead();
+                                Statement::FunctionCall(attributes, identifier, Vec::new())
                             }
                             _ => {
                                 let mut arg = vec![self.parse_expression()?];
@@ -79,17 +79,17 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                                     true,
                                 )?;
                                 if self.look_ahead()?.0 == Token::Contribute {
-                                    self.lookahead.take();
+                                    self.consume_lookahead();
                                     Statement::Contribute(
                                         attributes,
-                                        Self::convert_to_nature_identifier(identifier)?,
+                                        Self::convert_to_nature_identifier(identifier.names)?,
                                         convert_function_call_to_branch_access(arg)?,
                                         self.parse_expression_id()?,
                                     )
                                 } else {
                                     Statement::FunctionCall(
                                         attributes,
-                                        identifier.into(),
+                                        identifier,
                                         arg.into_iter().map(|expr| self.ast.push(expr)).collect(),
                                     )
                                 }
@@ -97,7 +97,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         }
                     }
                     _ => {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                         return Err(Error {
                             error_type: UnexpectedTokens {
                                 expected: vec![Expected::Statement],
@@ -110,7 +110,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 res
             }
             _ => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 return Err(Error {
                     error_type: UnexpectedTokens {
                         expected: vec![
@@ -152,7 +152,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let start = self.preprocessor.current_start();
 
         let scope = if self.look_ahead()?.0 == Token::Colon {
-            self.lookahead.take();
+            self.consume_lookahead();
             let name = self.parse_identifier(false)?;
             self.scope_stack.push(SymbolTable::with_capacity(
                 Self::BLOCK_DEFAULT_SYMTABLE_SIZE,
@@ -162,11 +162,11 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 let token = self.look_ahead()?.0;
                 match token {
                     Token::Integer => {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                         self.parse_variable_declaration(VariableType::INTEGER, attributes)?
                     }
                     Token::Real => {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                         self.parse_variable_declaration(VariableType::REAL, attributes)?
                     }
                     //TODO parameteres
@@ -239,9 +239,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             if self.look_ahead()?.0 != Token::Else {
                 break;
             }
-            self.lookahead.take();
+            self.consume_lookahead();
             if self.look_ahead()?.0 == Token::If {
-                self.lookahead.take();
+                self.consume_lookahead();
                 self.expect(Token::ParenOpen)?;
                 let condition = self.parse_expression_id()?;
                 self.expect(Token::ParenClose)?;

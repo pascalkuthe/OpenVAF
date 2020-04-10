@@ -45,19 +45,20 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         )?;
         Ok(())
     }
+
     pub fn parse_branch(&mut self) -> Result<Branch> {
         if self.look_ahead()?.0 == Token::OpLess {
-            self.lookahead.take();
-            let res = Branch::Port(self.parse_hierarchical_identifier(false)?);
+            self.consume_lookahead();
+            let res = Branch::Port(self.parse_hierarchical_identifier()?);
             self.expect(Token::OpGreater)?;
             Ok(res)
         } else {
-            let first_net_name = self.parse_hierarchical_identifier(false)?;
+            let first_net_name = self.parse_hierarchical_identifier()?;
             let (token, source) = self.look_ahead()?;
             match token {
                 Token::Comma => {
-                    self.lookahead.take();
-                    let second_net_name = self.parse_hierarchical_identifier(false)?;
+                    self.consume_lookahead();
+                    let second_net_name = self.parse_hierarchical_identifier()?;
                     Ok(Branch::Nets(first_net_name, second_net_name))
                 }
                 Token::ParenClose => Ok(Branch::NetToGround(first_net_name)),
@@ -70,18 +71,19 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
         }
     }
+
     pub fn parse_branch_access(&mut self) -> Result<Node<BranchAccess>> {
         self.expect(Token::ParenOpen)?;
         let start = self.preprocessor.current_start();
         let res = if self.look_ahead()?.0 == Token::OpLess {
-            self.lookahead.take();
-            let res = Branch::Port(self.parse_hierarchical_identifier(false)?);
+            self.consume_lookahead();
+            let res = Branch::Port(self.parse_hierarchical_identifier()?);
             self.expect(Token::OpGreater)?;
             BranchAccess::Implicit(res)
         } else {
-            let first_net_name_or_identifer = self.parse_hierarchical_identifier(false)?;
+            let first_net_name_or_identifer = self.parse_hierarchical_identifier()?;
             if self.look_ahead()?.0 == Token::Comma {
-                let second_net_name = self.parse_hierarchical_identifier(false)?;
+                let second_net_name = self.parse_hierarchical_identifier()?;
                 BranchAccess::Implicit(Branch::Nets(first_net_name_or_identifer, second_net_name))
             } else {
                 BranchAccess::Explicit(first_net_name_or_identifer)

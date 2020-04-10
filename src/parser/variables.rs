@@ -52,7 +52,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     ) -> Result<(Ident, Option<ExpressionId<'ast>>)> {
         let name = self.parse_identifier(false)?;
         let default_value = if self.look_ahead()?.0 == Token::Assign {
-            self.lookahead.take();
+            self.consume_lookahead();
             Some(self.parse_expression_id()?)
         } else {
             None

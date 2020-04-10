@@ -89,7 +89,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             let error = match self.look_ahead() {
                 Ok((token, _)) if token == end => {
                     if consume_end {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                     }
                     break;
                 }
@@ -136,20 +136,20 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             match self.look_ahead() {
                 Ok((token, _)) if token == end => {
                     if consume_end {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                     }
                     return Ok(true);
                 }
 
                 Ok((token, _)) if token == recover => {
                     if consume_recover {
-                        self.lookahead.take();
+                        self.consume_lookahead();
                     }
                     return Ok(false);
                 }
 
                 Ok((Token::EOF, source)) => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     return Err(Error {
                         error_type: UnexpectedEof {
                             expected: vec![end],
@@ -159,11 +159,11 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 }
 
                 Ok(_) => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                 }
 
                 Err(error) => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     self.non_critical_errors.push(error);
                 }
             }

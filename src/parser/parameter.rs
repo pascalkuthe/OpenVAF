@@ -61,7 +61,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
         let default_value = if self.look_ahead()?.0 == Token::Assign {
-            self.lookahead.take();
+            self.consume_lookahead();
             Some(self.parse_expression_id()?)
         } else {
             None
@@ -71,7 +71,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         loop {
             match self.look_ahead()? {
                 (Token::From, _) => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     match self.next()? {
                         (Token::SquareBracketOpen, _) => {
                             included_ranges
@@ -94,10 +94,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     }
                 }
                 (Token::Exclude, _) => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     match self.look_ahead()? {
                         (Token::SquareBracketOpen, _) => {
-                            self.lookahead.take();
+                            self.consume_lookahead();
                             excluded_ranges
                                 .alloc()
                                 .init(NumericalParameterRangeExclude::Range(
@@ -105,7 +105,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                                 ));
                         }
                         (Token::ParenOpen, _) => {
-                            self.lookahead.take();
+                            self.consume_lookahead();
                             excluded_ranges
                                 .alloc()
                                 .init(NumericalParameterRangeExclude::Range(
@@ -181,14 +181,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let (token, source) = self.look_ahead()?;
         match token {
             Token::Infinity => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 Ok(self.ast.push(Node {
                     contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
                     source,
                 }))
             }
             Token::MinusInfinity => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 Ok(self.ast.push(Node {
                     contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
                     source,

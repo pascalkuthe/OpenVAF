@@ -299,6 +299,7 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         res.expanded_source = string.into_bump_str();
         &*res
     }
+
     fn get_current_root_offset(&self) -> usize {
         self.cursor.get().map_or(0, |substitution| {
             substitution.original_span.get_end() as usize
@@ -311,6 +312,7 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
             self.root_line += 1;
         }
     }
+
     pub(super) fn current_root_line(&mut self) -> LineNumber {
         self.root_line
     }
@@ -361,6 +363,7 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     }
 
     pub(super) fn enter_non_root_substitution(&mut self, original_span: Span, source: &'lt str) {
+        debug_assert!(self.substitution_stack.len() != 0);
         let parent_src_state = self.substitution_stack.last_mut().unwrap();
         let old_offset = parent_src_state.offset as usize;
         parent_src_state.offset = original_span.get_end();
@@ -370,11 +373,18 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
             .push(SourceMapBuilderState { source, offset: 0 });
     }
 
-    const EMPTY_STACK: &'static str = "SourceBuilder: Substitution stack is empty";
+    /// This function is called when the end of any substitution (macro / file include) is reached
+    /// # Returns
+    /// The distance between the start and the end position of the substitution.
+    /// Note: This is not necessarily the same as the length of the original source text of the substitution
     pub(super) fn finish_substitution(&mut self) -> Index {
-        let SourceMapBuilderState { source, offset } =
-            self.substitution_stack.pop().expect(Self::EMPTY_STACK);
+        let SourceMapBuilderState { source, offset } = self
+            .substitution_stack
+            .pop()
+            .expect("SourceBuilder: Substitution stack is empty");
+
         let remaining_str = &source[offset as usize..];
+
         self.expansion.push_str(remaining_str);
 
         if self.substitution_stack.is_empty() {
@@ -384,8 +394,11 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
                 .end
                 .set(self.expansion.len() as Index);
         }
+
         source.len() as Index
     }
+
+    /// This Function is called when a new File is entered (using the `include` directive).
     pub(crate) fn enter_file(
         &mut self,
         path: &Path,
@@ -394,6 +407,7 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     ) -> std::io::Result<Lexer<'lt>> {
         let contents = std::fs::read_to_string(path)?;
         let contents = &*self.allocator.alloc_str(&contents);
+
         if self.substitution_stack.is_empty() {
             self.enter_root_substitution(
                 start,
@@ -405,10 +419,12 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         } else {
             self.enter_non_root_substitution(original_span, contents)
         }
+
         Ok(Lexer::new(contents))
     }
 
-    pub(super) fn enter_root_macro(
+    ///  This function is called by the preprocessor to indicate that a Macro reference has been encountered and that tokens will now be consumed from this Macro
+    pub(super) fn enter_macro(
         &mut self,
         start: Index,
         original_span: Span,
@@ -416,14 +432,19 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         definition_line: LineNumber,
         name: &str,
     ) {
-        self.enter_root_substitution(
-            start,
-            SourceType::Macro { definition_line },
-            original_span,
-            definition,
-            name,
-        )
+        if self.substitution_stack.is_empty() {
+            self.enter_root_substitution(
+                start,
+                SourceType::Macro { definition_line },
+                original_span,
+                definition,
+                name,
+            )
+        } else {
+            self.enter_non_root_substitution(original_span, definition)
+        }
     }
+
     pub(super) fn source(&self) -> &'lt str {
         if let Some(state) = self.substitution_stack.last() {
             state.source

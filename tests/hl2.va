@@ -236,9 +236,8 @@ organization and externally, subject to the following restrictions.
 
 //VerilogAE
 
-`include "constants.va"
-
-`include "disciplines.va"
+`include "constants.vams"
+`include "disciplines.h"
 
 //////////////Explicit Capacitance and Charge Expression///////////////
 

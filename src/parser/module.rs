@@ -159,7 +159,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
     fn parse_module_ports(&mut self) -> Result<Option<HashSet<Ident>>> {
         let res = if self.look_ahead()?.0 == Token::ParenOpen {
-            self.lookahead.take();
+            self.consume_lookahead();
 
             let (next_token, next_span) = self.look_ahead()?;
             let expected_ports = match next_token {
@@ -194,7 +194,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let mut res = HashSet::with_capacity(1);
         res.insert(self.parse_identifier(false)?);
         while self.look_ahead()?.0 == Token::Comma {
-            self.lookahead.take();
+            self.consume_lookahead();
             res.insert(self.parse_identifier(false)?);
         }
         Ok(res)
@@ -202,7 +202,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
     fn parse_parameter_list(&mut self) -> Result {
         if self.look_ahead()?.0 == Token::Hash {
-            self.lookahead.take();
+            self.consume_lookahead();
             self.expect(Token::ParenOpen)?;
             self.parse_list(
                 |parser| {

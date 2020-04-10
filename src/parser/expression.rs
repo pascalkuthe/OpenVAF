@@ -31,7 +31,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         loop {
             match self.parse_binary_operator() {
                 Ok(BinaryOperatorOrCondition::BinaryOperator(op, precedence)) => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     let op_span = self.preprocessor.span();
                     let rhs = self.parse_atom()?;
                     let mut rhs = self.ast.push(rhs);
@@ -53,7 +53,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     )
                 }
                 Ok(BinaryOperatorOrCondition::Condition) => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     let condition = self.ast.push(lhs);
                     let op_span = self.preprocessor.span();
                     let if_val = self.parse_expression_id()?;
@@ -84,7 +84,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         loop {
             match self.parse_binary_operator() {
                 Ok(BinaryOperatorOrCondition::Condition) if min_prec <= 1 => {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     let op_span = self.preprocessor.span();
                     let if_val = self.parse_expression_id()?;
                     self.expect(Token::Colon)?;
@@ -98,7 +98,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 Ok(BinaryOperatorOrCondition::BinaryOperator(op, precedence))
                     if precedence >= min_prec =>
                 {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     let op_span = self.preprocessor.span();
                     let rhs = self.parse_atom()?;
                     let mut rhs = self.ast.push(rhs);
@@ -163,29 +163,29 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let (token, span) = self.look_ahead()?;
         let res = match token {
             Token::Minus => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 self.parse_unary_operator(UnaryOperator::ArithmeticNegate)?
             }
             Token::Plus => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 self.parse_unary_operator(UnaryOperator::ExplicitPositive)?
             }
             Token::OpLogicNot => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 self.parse_unary_operator(UnaryOperator::LogicNegate)?
             }
             Token::OpBitNot => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 self.parse_unary_operator(UnaryOperator::BitNegate)?
             }
             Token::ParenOpen => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let res = self.parse_expression()?;
                 self.expect(Token::ParenClose)?;
                 res
             }
             Token::LiteralString => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let val = self
                     .ast
                     .string_literals
@@ -197,46 +197,49 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 Node::new(Expression::Primary(Primary::String(val)), span)
             }
             Token::LiteralRealNumberDot => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::Dot);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberDotExp => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::DotExp);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberDotScaleChar => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let value =
                     parse_real_value(self.preprocessor.slice(), RealLiteralType::DotScaleChar);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberExp => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::Exp);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralRealNumberScaleChar => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let value = parse_real_value(self.preprocessor.slice(), RealLiteralType::ScaleChar);
                 Node::new(Expression::Primary(Primary::Real(value)), span)
             }
             Token::LiteralUnsignedNumber => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let value = parse_unsigned_int_value(self.preprocessor.slice());
                 Node::new(Expression::Primary(Primary::UnsignedInteger(value)), span)
             }
 
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
-                let ident = self.parse_hierarchical_identifier_internal(false)?; //we allow hieraichal identifers here because they are required for functions (but illegal for natures) this will just produce an error at name resolution
+                //we allow hieraichal identifers here because they are required for functions
+                // They are illegal for natures so this will just produce an error at name resolution
+
+                let ident = self.parse_hierarchical_identifier()?;
                 let start = self.preprocessor.current_start();
                 let primary = if self.look_ahead()?.0 == Token::ParenOpen {
-                    self.lookahead.take();
+                    self.consume_lookahead();
                     if self.look_ahead()?.0 == Token::OpLess {
                         let start = self.preprocessor.current_start();
                         let res = Primary::BranchAccess(
-                            Self::convert_to_nature_identifier(ident)?,
+                            Self::convert_to_nature_identifier(ident.names)?,
                             Node::new(
                                 BranchAccess::Implicit(self.parse_branch()?),
                                 self.span_to_current_end(start),
@@ -245,8 +248,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         self.expect(Token::ParenClose)?;
                         res
                     } else if self.look_ahead()?.0 == Token::ParenClose {
-                        self.lookahead.take();
-                        Primary::FunctionCall(ident.into(), Vec::new())
+                        self.consume_lookahead();
+                        Primary::FunctionCall(ident, Vec::new())
                     } else {
                         let mut parameters = vec![self.parse_expression_id()?];
                         self.parse_list_tail(
@@ -257,10 +260,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                             Token::ParenClose,
                             true,
                         )?;
-                        Primary::FunctionCall(ident.into(), parameters)
+                        Primary::FunctionCall(ident, parameters)
                     }
                 } else {
-                    Primary::VariableOrNetReference(ident.into())
+                    Primary::VariableOrNetReference(ident)
                 };
                 Node::new(
                     Expression::Primary(primary),
@@ -268,7 +271,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Potential => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = Primary::BranchAccess(
                     Ident::new(keywords::POTENTIAL, span),
@@ -277,7 +280,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
             Token::Flow => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = Primary::BranchAccess(
                     Ident::new(keywords::FLOW, span),
@@ -287,7 +290,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
 
             Token::Min => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let args = self.parse_double_parameter_built_in_function_call()?;
                 Node::new(
@@ -298,7 +301,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Max => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let args = self.parse_double_parameter_built_in_function_call()?;
                 Node::new(
@@ -309,7 +312,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Pow => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let args = self.parse_double_parameter_built_in_function_call()?;
                 Node::new(
@@ -320,7 +323,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Hypot => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let args = self.parse_double_parameter_built_in_function_call()?;
                 Node::new(
@@ -332,7 +335,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
 
             Token::Sqrt => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::Sqrt(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -343,7 +346,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Exp => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res =
                     BuiltInFunctionCall::Exp(self.parse_single_parameter_built_in_function_call()?);
@@ -353,7 +356,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Ln => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res =
                     BuiltInFunctionCall::Ln(self.parse_single_parameter_built_in_function_call()?);
@@ -363,7 +366,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Log => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res =
                     BuiltInFunctionCall::Log(self.parse_single_parameter_built_in_function_call()?);
@@ -374,7 +377,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
 
             Token::Abs => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res =
                     BuiltInFunctionCall::Abs(self.parse_single_parameter_built_in_function_call()?);
@@ -384,7 +387,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Ceil => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::Ceil(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -395,7 +398,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Floor => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::Floor(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -407,7 +410,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
 
             Token::Tan => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res =
                     BuiltInFunctionCall::Tan(self.parse_single_parameter_built_in_function_call()?);
@@ -417,7 +420,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Sin => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res =
                     BuiltInFunctionCall::Sin(self.parse_single_parameter_built_in_function_call()?);
@@ -427,7 +430,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Cos => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res =
                     BuiltInFunctionCall::Cos(self.parse_single_parameter_built_in_function_call()?);
@@ -437,7 +440,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::ArcTan => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::ArcTan(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -449,7 +452,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
 
             Token::ArcTan2 => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let args = self.parse_double_parameter_built_in_function_call()?;
                 Node::new(
@@ -460,7 +463,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::ArcSin => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::ArcSin(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -471,7 +474,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::ArcCos => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::ArcCos(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -483,7 +486,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
 
             Token::TanH => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::TanH(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -494,7 +497,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::SinH => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::SinH(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -505,7 +508,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::CosH => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::CosH(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -516,7 +519,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::ArcTanH => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::ArcTanH(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -527,7 +530,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::ArcSinH => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::ArcSinH(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -538,7 +541,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::ArcCosH => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
                 let res = BuiltInFunctionCall::ArcCosH(
                     self.parse_single_parameter_built_in_function_call()?,
@@ -549,7 +552,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::SystemCall => {
-                self.lookahead.take();
+                self.consume_lookahead();
                 Node::new(
                     Expression::Primary(Primary::SystemFunctionCall(Ident::from_str_and_span(
                         self.preprocessor.slice(),
