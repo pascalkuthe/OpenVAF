@@ -79,7 +79,10 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     fn fold_variable(&mut self, variable: VariableId<'tag>) {
         let variable_type = match self.hir[variable].contents.variable_type {
             ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                let default_value = self.hir[variable].contents.default_value.and_then(|expr|self.fold_real_expression(expr));
+                let default_value = self.hir[variable]
+                    .contents
+                    .default_value
+                    .and_then(|expr| self.fold_real_expression(expr));
                 VariableType::Real(default_value)
             }
 
@@ -93,7 +96,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 source: self.mir[real_expr].source,
                                 contents: IntegerExpression::RealCast(real_expr),
                             })),
-                            Somme(ExpressionId::String(_)) => {
+                            Some(ExpressionId::String(_)) => {
                                 self.errors.push(Error {
                                     error_type: Type::ExpectedNumber,
                                     source: self.hir[default_value].source,
@@ -134,7 +137,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 ref excluded_ranges,
             } => match parameter_type {
                 ast::VariableType::INTEGER | ast::VariableType::TIME => {
-                    if let Ok(type_info) =
+                    if let Some(type_info) =
                         self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
                     {
                         ParameterType::Integer {
@@ -153,7 +156,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     }
                 }
                 ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                    if let Ok(type_info) =
+                    if let Some(type_info) =
                         self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
                     {
                         ParameterType::Real {
@@ -213,7 +216,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         .filter_map(|(condition, block)| {
                             self.fold_block(statements.enter(block));
 
-                            if let Ok(condition) = self.fold_integer_expression(condition) {
+                            if let Some(condition) = self.fold_integer_expression(condition) {
                                 Some((condition, block))
                             } else {
                                 None
@@ -222,7 +225,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         .collect();
                     self.fold_block(statements.enter(condition.else_statement));
 
-                    let main_condition = if let Ok(main_condition) = main_condition {
+                    let main_condition = if let Some(main_condition) = main_condition {
                         main_condition
                     } else {
                         continue;
@@ -238,7 +241,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 }
 
                 hir::Statement::Contribute(attributes, discipline_access, branch, expr) => {
-                    if let Ok(expr) = self.fold_real_expression(expr) {
+                    if let Some(expr) = self.fold_real_expression(expr) {
                         Statement::Contribute(attributes, discipline_access, branch, expr)
                     } else {
                         continue;
@@ -251,7 +254,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         VariableType::Real(..)
                     ) =>
                 {
-                    if let Ok(expr) = self.fold_real_expression(expr) {
+                    if let Some(expr) = self.fold_real_expression(expr) {
                         Statement::Assignment(attr, variable, ExpressionId::Real(expr))
                     } else {
                         continue;
@@ -260,17 +263,17 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
                 hir::Statement::Assignment(attr, variable, expr) => {
                     match self.fold_expression(expr) {
-                        Ok(ExpressionId::Integer(id)) => {
+                        Some(ExpressionId::Integer(id)) => {
                             Statement::Assignment(attr, variable, ExpressionId::Integer(id))
                         }
-                        Ok(ExpressionId::Real(id)) => {
+                        Some(ExpressionId::Real(id)) => {
                             let expr = self.mir.push(Node {
                                 source: self.mir[id].source,
                                 contents: IntegerExpression::RealCast(id),
                             });
                             Statement::Assignment(attr, variable, ExpressionId::Integer(expr))
                         }
-                        Ok(ExpressionId::String(_)) => {
+                        Some(ExpressionId::String(_)) => {
                             self.errors.push(Error {
                                 error_type: Type::ExpectedNumber,
                                 source: self.hir[expr].source,
@@ -310,10 +313,12 @@ pub fn fold_hir_to_mir_and_print_errors<'tag>(
     hir: Box<Hir<'tag>>,
     source_map: &SourceMap,
     translate_line: bool,
-) -> std::result::Result<Box<Mir<'tag>>, ()> {
-    fold_hir_to_mir(hir).map_err(|(errors, hir)| {
-        errors
-            .into_iter()
-            .for_each(|error| error.print(source_map, &hir, translate_line))
-    })
+) -> Option<Box<Mir<'tag>>> {
+    fold_hir_to_mir(hir)
+        .map_err(|(errors, hir)| {
+            errors
+                .into_iter()
+                .for_each(|error| error.print(source_map, &hir, translate_line))
+        })
+        .ok()
 }

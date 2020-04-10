@@ -33,8 +33,10 @@ pub fn diode() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )?;
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
+    )
+    .ok_or(())?;
+    fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+
     Ok(())
 }
 
@@ -52,9 +54,11 @@ pub fn linear() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )?;
+    )
+    .ok_or(())?;
 
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
+    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+
     let module: SafeRange<ModuleId> = hir.full_range();
     let module = &hir[module][0].contents;
     let mut ports = hir[module.port_list].iter();

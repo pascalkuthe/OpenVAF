@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 
 use crate::ast::{BinaryOperator, BuiltInFunctionCall};
 use crate::hir::Primary;
@@ -84,7 +84,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     BinaryOperator::Modulus => RealBinaryOperator::Modulus,
                     _ => {
                         let integer_expr = self.fold_integer_expression(expr)?;
-                        return Ok(self.mir.push(Node {
+                        return Some(self.mir.push(Node {
                             contents: RealExpression::IntegerConversion(integer_expr),
                             source,
                         }));
@@ -104,7 +104,10 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
             hir::Expression::Primary(Primary::BuiltInFunctionCall(call)) => {
                 RealExpression::BuiltInFunctionCall(
-                    (call, |expr| self.fold_real_expression(expr)).try_into()?,
+                    RealBuiltInFunctionCall::try_from((call, |expr| {
+                        self.fold_real_expression(expr).ok_or(())
+                    }))
+                    .ok()?,
                 )
             }
             _ => RealExpression::IntegerConversion(self.fold_integer_expression(expr)?),
@@ -337,13 +340,10 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
         };
 
-        Ok(self.mir.push(Node { source, contents }))
+        Some(self.mir.push(Node { source, contents }))
     }
 
-    pub fn fold_expression(
-        &mut self,
-        expr: ir::ExpressionId<'tag>,
-    ) -> Option<ExpressionId<'tag>> {
+    pub fn fold_expression(&mut self, expr: ir::ExpressionId<'tag>) -> Option<ExpressionId<'tag>> {
         let source = self.hir[expr].source;
         let contents = match self.hir[expr].contents {
             hir::Expression::Condtion(condition, question_span, if_val, colon_span, else_val) => {
@@ -370,7 +370,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         (if_val, else_val)
                     }
                     (ExpressionId::Integer(if_val), ExpressionId::Integer(else_val)) => {
-                        return Ok(ExpressionId::Integer(self.mir.push(Node {
+                        return Some(ExpressionId::Integer(self.mir.push(Node {
                             contents: IntegerExpression::Condition(
                                 condition?,
                                 question_span,
@@ -383,7 +383,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     }
 
                     (ExpressionId::String(if_val), ExpressionId::String(else_val)) => {
-                        return Ok(ExpressionId::String(self.mir.push(Node {
+                        return Some(ExpressionId::String(self.mir.push(Node {
                             contents: StringExpression::Condition(
                                 condition?,
                                 question_span,
@@ -411,7 +411,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
 
             hir::Expression::Primary(Primary::String(val)) => {
-                return Ok(ExpressionId::String(self.mir.push(Node {
+                return Some(ExpressionId::String(self.mir.push(Node {
                     contents: StringExpression::Literal(val),
                     source,
                 })))
@@ -465,7 +465,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     BinaryOperator::Divide => RealBinaryOperator::Divide,
                     BinaryOperator::Exponent => RealBinaryOperator::Exponent,
                     BinaryOperator::Modulus => RealBinaryOperator::Modulus,
-                    _ => return Ok(ExpressionId::Integer(self.fold_integer_expression(expr)?)),
+                    _ => return Some(ExpressionId::Integer(self.fold_integer_expression(expr)?)),
                 };
 
                 let (lhs, rhs) = match (self.fold_expression(lhs)?, self.fold_expression(rhs)?) {
@@ -487,7 +487,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     }
 
                     (ExpressionId::Integer(lhs), ExpressionId::Integer(rhs)) => {
-                        return Ok(ExpressionId::Integer(self.mir.push(Node {
+                        return Some(ExpressionId::Integer(self.mir.push(Node {
                             contents: IntegerExpression::BinaryOperator(
                                 lhs,
                                 Node {
@@ -526,11 +526,14 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
             hir::Expression::Primary(Primary::BuiltInFunctionCall(call)) => {
                 RealExpression::BuiltInFunctionCall(
-                    (call, |expr| self.fold_real_expression(expr)).try_into()?,
+                    RealBuiltInFunctionCall::try_from((call, |expr| {
+                        self.fold_real_expression(expr).ok_or(())
+                    }))
+                    .ok()?,
                 )
             }
-            _ => return Ok(ExpressionId::Integer(self.fold_integer_expression(expr)?)),
+            _ => return Some(ExpressionId::Integer(self.fold_integer_expression(expr)?)),
         };
-        Ok(ExpressionId::Real(self.mir.push(Node { contents, source })))
+        Some(ExpressionId::Real(self.mir.push(Node { contents, source })))
     }
 }

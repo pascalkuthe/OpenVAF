@@ -272,13 +272,13 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
     source_map_allocator: &'source_map Bump,
     ast: &'lt mut Ast<'ast>,
     translate_lines: bool,
-) -> std::result::Result<&'source_map SourceMap<'source_map>, ()> {
+) -> Option<&'source_map SourceMap<'source_map>> {
     match parse(main_file, source_map_allocator, ast) {
         Ok((source_map, errors, mut warnings)) if errors.is_empty() => {
             warnings
                 .into_iter()
                 .for_each(|warning| warning.print(source_map, translate_lines));
-            Ok(source_map)
+            Some(source_map)
         }
         Ok((source_map, mut errors, mut warnings)) => {
             warnings
@@ -287,7 +287,7 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
             errors
                 .into_iter()
                 .for_each(|err| err.print(&source_map, translate_lines));
-            Err(())
+            None
         }
         Err(error) => {
             error!(
@@ -299,7 +299,7 @@ pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
                     error
                 ))
             );
-            Err(())
+            None
         }
     }
 }

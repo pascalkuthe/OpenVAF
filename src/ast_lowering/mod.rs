@@ -31,6 +31,7 @@
 //!
 //! The lowering process happens in a series of folds implemented in the [`ast_to_hir_fold`] module
 //!
+//!
 #[doc(inline)]
 pub use branch_resolution::BranchResolver;
 
@@ -54,10 +55,12 @@ pub fn fold_ast_to_hir_and_print_errors<'tag>(
     ast: Box<Ast<'tag>>,
     source_map: &SourceMap,
     translate_lines: bool,
-) -> Result<Box<Hir<'tag>>, ()> {
-    fold_ast_to_hir(ast).map_err(|(errors, ast)| {
-        errors
-            .into_iter()
-            .for_each(|err| err.print(source_map, &ast, translate_lines))
-    })
+) -> Option<Box<Hir<'tag>>> {
+    fold_ast_to_hir(ast)
+        .map_err(|(errors, ast)| {
+            errors
+                .into_iter()
+                .for_each(|err| err.print(source_map, &ast, translate_lines))
+        })
+        .ok()
 }

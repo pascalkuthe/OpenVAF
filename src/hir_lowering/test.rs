@@ -34,9 +34,13 @@ pub fn schemantic() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )?;
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true)?;
+    )
+    .ok_or(())?;
+
+    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+
+    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
+
     Ok(())
 }
 /*#[test]
@@ -65,9 +69,11 @@ pub fn linear() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )?;
+    )
+    .ok_or(())?;
 
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
+    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+
     let module: SafeRange<ModuleId> = hir.full_range();
     let module = &hir[module][0].contents;
     let mut ports = hir[module.port_list].iter();
@@ -90,7 +96,8 @@ pub fn linear() -> Result<(), ()> {
     assert_eq!(net.signed, false);
     assert_eq!(hir[net.discipline].contents.name.as_str(), "electrical");
     assert_eq!(net.net_type, NetType::UNDECLARED);
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true)?;
+    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
+
     Ok(())
 }
 #[test]
@@ -107,9 +114,13 @@ pub fn bjt() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )?;
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true)?;
+    )
+    .ok_or(())?;
+
+    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+
+    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
+
     Ok(())
 }
 #[test]
@@ -126,8 +137,12 @@ pub fn hl2() -> Result<(), ()> {
         &source_map_allocator,
         &mut ast,
         true,
-    )?;
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true)?;
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true)?;
+    )
+    .ok_or(())?;
+
+    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+
+    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
+
     Ok(())
 }

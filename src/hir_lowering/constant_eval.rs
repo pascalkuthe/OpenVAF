@@ -142,7 +142,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         &mut self,
         current_parameter: ParameterId<'tag>,
         bound: &Range<ast::NumericalParameterRangeBound<'tag>>,
-    ) -> std::result::Result<Range<NumericalParameterRangeBound<T>>, ()> {
+    ) -> Option<Range<NumericalParameterRangeBound<T>>> {
         let start = self
             .eval_constant_parameter_expression(current_parameter, bound.start.bound)
             .and_then(|res| {
@@ -163,6 +163,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         bound: end,
                     },
                 };
+
                 if res.start.bound > res.end.bound {
                     self.errors.push(Error {
                         error_type: Type::InvalidParameterBound,
@@ -172,16 +173,18 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     });
                     None
                 } else {
-                    Ok(res)
+                    Some(res)
                 }
             }
             (res1, res2) => {
                 if let Err(error) = res1 {
                     self.errors.push(error);
                 }
+
                 if let Err(error) = res2 {
                     self.errors.push(error);
                 }
+
                 None
             }
         }
@@ -198,20 +201,16 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         parameter: ParameterId<'tag>,
         included_ranges: &[Range<ast::NumericalParameterRangeBound<'tag>>],
         excluded_ranges: &[ast::NumericalParameterRangeExclude<'tag>],
-    ) -> std::result::Result<
-        (
-            Vec<Range<NumericalParameterRangeBound<T>>>,
-            Vec<NumericalParameterRangeExclude<T>>,
-            T,
-        ),
-        (),
-    > {
+    ) -> Option<(
+        Vec<Range<NumericalParameterRangeBound<T>>>,
+        Vec<NumericalParameterRangeExclude<T>>,
+        T,
+    )> {
         let mut included_ranges: Vec<_> = included_ranges
             .iter()
-            .map(
-                |bound: &Range<ast::NumericalParameterRangeBound<'tag>>| -> std::result::Result<
-                    Range<NumericalParameterRangeBound<<T as IntoSortable>::T>>,
-                    (),
+            .filter_map(
+                |bound: &Range<ast::NumericalParameterRangeBound<'tag>>| -> Option<
+                    Range<NumericalParameterRangeBound<<T as IntoSortable>::T>>
                 > {
                     let (lower_src, upper_src) = (
                         self.hir[bound.start.bound].source,
@@ -219,14 +218,15 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     );
                     let res: Range<NumericalParameterRangeBound<T>> =
                         self.eval_numerical_range_bound(parameter, bound)?;
-                    Ok(Range {
+
+                    Some(Range {
                         start: NumericalParameterRangeBound {
                             inclusive: res.start.inclusive,
                             bound: res
                                 .start
                                 .bound
                                 .into_sortable(lower_src)
-                                .map_err(|err| self.errors.push(err))?,
+                                .map_err(|err| self.errors.push(err)).ok()?,
                         },
                         end: NumericalParameterRangeBound {
                             inclusive: res.end.inclusive,
@@ -234,12 +234,11 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 .end
                                 .bound
                                 .into_sortable(upper_src)
-                                .map_err(|err| self.errors.push(err))?,
+                                .map_err(|err| self.errors.push(err)).ok()?,
                         },
                     })
                 },
             )
-            .filter_map(std::result::Result::ok)
             .collect();
 
         included_ranges.sort_unstable_by(|lhs, rhs| lhs.start.bound.cmp(&rhs.end.bound));
@@ -292,18 +291,21 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
         let excluded_ranges = excluded_ranges
             .iter()
-            .map(|exclude| match exclude {
+            .filter_map(|exclude| match exclude {
                 ast::NumericalParameterRangeExclude::Range(range_expr) => {
                     let range: Range<NumericalParameterRangeBound<T>> =
                         self.eval_numerical_range_bound(parameter, range_expr)?;
+
                     let mut found_start = false;
                     let mut found_end = false;
+
                     for included_range in included_ranges.iter() {
                         found_start = included_range.contains(&range.start);
                         found_end = included_range.contains(&range.end);
                     }
+
                     if found_start && found_end {
-                        Ok(NumericalParameterRangeExclude::Range(range))
+                        Some(NumericalParameterRangeExclude::Range(range))
                     } else {
                         if !found_start {
                             self.errors.push(Error {
@@ -311,12 +313,14 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 source: self.hir[range_expr.start.bound].source,
                             });
                         }
+
                         if !found_end {
                             self.errors.push(Error {
                                 error_type: Type::ParameterExcludeNotPartOfRange,
                                 source: self.hir[range_expr.end.bound].source,
                             });
                         }
+
                         None
                     }
                 }
@@ -343,7 +347,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                                 });
                             }
 
-                            Ok(NumericalParameterRangeExclude::Value(res))
+                            Some(NumericalParameterRangeExclude::Value(res))
                         }
                         Err(error) => {
                             self.errors.push(error);
@@ -352,7 +356,6 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     }
                 }
             })
-            .filter_map(std::result::Result::ok)
             .collect();
 
         let default_value = if let Some(expr) = self.hir[parameter].contents.default_value {
@@ -370,7 +373,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             Default::default()
         };
 
-        Ok((included_ranges, excluded_ranges, default_value))
+        Some((included_ranges, excluded_ranges, default_value))
     }
 
     pub fn eval_constant_parameter_expression(
