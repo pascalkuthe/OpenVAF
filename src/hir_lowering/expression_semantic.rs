@@ -395,7 +395,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         })))
                     }
 
-                    (ExpressionId::String(str), num) | (num, ExpressionId::String(str)) => {
+                    (ExpressionId::String(_), _num) | (_num, ExpressionId::String(_)) => {
                         self.errors.push(Error {
                             error_type: Type::CondtionTypeMissmatch,
                             source,

@@ -12,13 +12,10 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
-use crate::ast_lowering::fold_ast_to_hir_and_print_errors;
 use crate::compact_arena::SafeRange;
-use crate::fold_hir_to_mir_and_print_errors;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
 use crate::ir::SafeRangeCreation;
-use crate::parser::parse_and_print_errors;
 
 #[test]
 pub fn schemantic() -> Result<(), ()> {
@@ -29,17 +26,14 @@ pub fn schemantic() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let source_map = parse_and_print_errors(
-        Path::new("tests/diode.va"),
-        &source_map_allocator,
-        &mut ast,
-        true,
-    )
-    .ok_or(())?;
+    let source_map = ast
+        .parse_from_and_print_errors(Path::new("tests/diode.va"), &source_map_allocator, true)
+        .ok_or(())?;
 
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
-
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
+    ast.lower_and_print_errors(source_map, true)
+        .ok_or(())?
+        .lower_and_print_errors(source_map, true)
+        .ok_or(())?;
 
     Ok(())
 }
@@ -48,7 +42,7 @@ pub fn bjt() -> Result<(), ()> {
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
     let (source_map, res) =
-        parse_and_print_errors(Path::new("tests/bjt.va"), &source_map_allocator, &mut ast);
+        ast.parse_from_and_print_errors(Path::new("tests/bjt.va"), &source_map_allocator, &mut ast);
     res?;
     insert_electrical_natures_and_disciplines(&mut ast);
     let hir = fold_ast_to_hir_and_print_errors(ast, source_map)?;
@@ -64,15 +58,11 @@ pub fn linear() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let source_map = parse_and_print_errors(
-        Path::new("tests/linear.va"),
-        &source_map_allocator,
-        &mut ast,
-        true,
-    )
-    .ok_or(())?;
+    let source_map = ast
+        .parse_from_and_print_errors(Path::new("tests/linear.va"), &source_map_allocator, true)
+        .ok_or(())?;
 
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+    let hir = ast.lower_and_print_errors(source_map, true).ok_or(())?;
 
     let module: SafeRange<ModuleId> = hir.full_range();
     let module = &hir[module][0].contents;
@@ -96,7 +86,7 @@ pub fn linear() -> Result<(), ()> {
     assert_eq!(net.signed, false);
     assert_eq!(hir[net.discipline].contents.name.as_str(), "electrical");
     assert_eq!(net.net_type, NetType::UNDECLARED);
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
+    let mir = hir.lower_and_print_errors(source_map, true).ok_or(())?;
 
     Ok(())
 }
@@ -109,17 +99,14 @@ pub fn bjt() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let source_map = parse_and_print_errors(
-        Path::new("tests/bjt.va"),
-        &source_map_allocator,
-        &mut ast,
-        true,
-    )
-    .ok_or(())?;
+    let source_map = ast
+        .parse_from_and_print_errors(Path::new("tests/bjt.va"), &source_map_allocator, true)
+        .ok_or(())?;
 
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
-
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
+    ast.lower_and_print_errors(source_map, true)
+        .ok_or(())?
+        .lower_and_print_errors(source_map, true)
+        .ok_or(())?;
 
     Ok(())
 }
@@ -132,18 +119,14 @@ pub fn hl2() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let source_map = parse_and_print_errors(
-        Path::new("tests/hl2.va"),
-        &source_map_allocator,
-        &mut ast,
-        true,
-    )
-    .ok_or(())?;
+    let source_map = ast
+        .parse_from_and_print_errors(Path::new("tests/hl2.va"), &source_map_allocator, true)
+        .ok_or(())?;
 
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
-
-    let mir = fold_hir_to_mir_and_print_errors(hir, source_map, true).ok_or(())?;
-
+    ast.lower_and_print_errors(source_map, true)
+        .ok_or(())?
+        .lower_and_print_errors(source_map, true)
+        .ok_or(())?;
 
     Ok(())
 }

@@ -299,26 +299,30 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 mod constant_eval;
 mod expression_semantic;
 
-/// Folds an hir to an mir by adding and checking type information
-/// Returns any errors that occur
-pub fn fold_hir_to_mir(mut hir: Box<Hir>) -> std::result::Result<Box<Mir>, (Vec<Error>, Box<Hir>)> {
-    HirToMirFold::new(&mut hir)
-        .fold()
-        .map_err(|errors| (errors, hir))
-}
+impl<'tag> Hir<'tag> {
+    /// Folds an hir to an mir by adding and checking type information
+    /// Returns any errors that occur
+    pub fn lower(
+        mut self: Box<Self>,
+    ) -> std::result::Result<Box<Mir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
+        HirToMirFold::new(&mut self)
+            .fold()
+            .map_err(|errors| (errors, self))
+    }
 
-/// Folds an hir to an mir by adding and checking type information
-/// Prints any errors that occur
-pub fn fold_hir_to_mir_and_print_errors<'tag>(
-    hir: Box<Hir<'tag>>,
-    source_map: &SourceMap,
-    translate_line: bool,
-) -> Option<Box<Mir<'tag>>> {
-    fold_hir_to_mir(hir)
-        .map_err(|(errors, hir)| {
-            errors
-                .into_iter()
-                .for_each(|error| error.print(source_map, &hir, translate_line))
-        })
-        .ok()
+    /// Folds an hir to an mir by adding and checking type information
+    /// Prints any errors that occur
+    pub fn lower_and_print_errors(
+        mut self: Box<Self>,
+        source_map: &SourceMap,
+        translate_line: bool,
+    ) -> Option<Box<Mir<'tag>>> {
+        self.lower()
+            .map_err(|(errors, hir)| {
+                errors
+                    .into_iter()
+                    .for_each(|error| error.print(source_map, &hir, translate_line))
+            })
+            .ok()
+    }
 }

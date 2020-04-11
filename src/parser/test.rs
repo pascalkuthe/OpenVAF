@@ -19,7 +19,6 @@ use crate::ast::{Branch, VariableType};
 use crate::compact_arena::SafeRange;
 use crate::ir::ModuleId;
 use crate::ir::SafeRangeCreation;
-use crate::parser::parse_and_print_errors;
 use crate::symbol::keywords::EMPTY_SYMBOL;
 use crate::symbol::Symbol;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
@@ -34,10 +33,9 @@ pub fn module() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    parse_and_print_errors(
+    ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/module.va"),
         &source_map_allocator,
-        &mut ast,
         true,
     )
     .ok_or(())?;
@@ -144,10 +142,9 @@ pub fn branch() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    parse_and_print_errors(
+    ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/branch.va"),
         &source_map_allocator,
-        &mut ast,
         true,
     )
     .ok_or(())?;
@@ -261,10 +258,9 @@ pub fn variable_decl() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    parse_and_print_errors(
+    ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/variable_declaration.va"),
         &source_map_allocator,
-        &mut ast,
         true,
     )
     .ok_or(())?;
@@ -286,10 +282,9 @@ pub fn net_decl() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    parse_and_print_errors(
+    ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/net_declaration.va"),
         &source_map_allocator,
-        &mut ast,
         true,
     )
     .ok_or(())?;
@@ -313,13 +308,8 @@ pub fn linear() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    parse_and_print_errors(
-        Path::new("tests/linear.va"),
-        &source_map_allocator,
-        &mut ast,
-        true,
-    )
-    .ok_or(())?;
+    ast.parse_from_and_print_errors(Path::new("tests/linear.va"), &source_map_allocator, true)
+        .ok_or(())?;
 
     let range: SafeRange<ModuleId> = ast.full_range();
     let module = &ast[range][0].contents;

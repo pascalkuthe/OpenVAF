@@ -54,13 +54,3 @@ bitflags! {
 
     }
 }
-
-///The point of this entire Module. It lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
-pub fn fold(mut ast: Box<Ast>) -> Result<Box<Hir>, (Vec<Error>, Box<Ast>)> {
-    try_fold(&mut ast).map_err(|err| (err, ast))
-}
-
-/// A Helper method to avoid code duplication until try blocks are stable
-fn try_fold<'tag>(ast: &mut Ast<'tag>) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
-    Ok(Global::new(ast).fold()?.fold()?.fold()?)
-}

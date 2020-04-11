@@ -374,8 +374,7 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     /// This function is called when the end of any substitution (macro / file include) is reached
     ///
     /// # Returns
-    /// The distance between the start and the end position of the substitution.
-    /// Note: This is not necessarily the same as the length of the original source text of the substitution
+    /// The original length of the substitution
     pub(super) fn finish_substitution(&mut self) -> Index {
         let SourceMapBuilderState { source, offset } = self
             .substitution_stack

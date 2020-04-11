@@ -36,8 +36,8 @@
 pub use branch_resolution::BranchResolver;
 
 use crate::ast::Ast;
-#[doc(inline)]
-pub use crate::ast_lowering::ast_to_hir_fold::fold as fold_ast_to_hir;
+use crate::ast_lowering::ast_to_hir_fold::Global;
+use crate::ast_lowering::error::Error;
 use crate::ir::hir::Hir;
 use crate::SourceMap;
 
@@ -51,16 +51,29 @@ pub mod error;
 
 //TODO input/output enforcement
 
-pub fn fold_ast_to_hir_and_print_errors<'tag>(
-    ast: Box<Ast<'tag>>,
-    source_map: &SourceMap,
-    translate_lines: bool,
-) -> Option<Box<Hir<'tag>>> {
-    fold_ast_to_hir(ast)
-        .map_err(|(errors, ast)| {
-            errors
-                .into_iter()
-                .for_each(|err| err.print(source_map, &ast, translate_lines))
-        })
-        .ok()
+impl<'tag> Ast<'tag> {
+    /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
+    pub fn lower(mut self: Box<Self>) -> Result<Box<Hir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
+        self.try_fold_to_hir().map_err(|err| (err, self))
+    }
+
+    /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability and printing any errors or warnings that might occur
+    pub fn lower_and_print_errors(
+        mut self: Box<Self>,
+        source_map: &SourceMap,
+        translate_lines: bool,
+    ) -> Option<Box<Hir<'tag>>> {
+        self.lower()
+            .map_err(|(errors, ast)| {
+                errors
+                    .into_iter()
+                    .for_each(|err| err.print(source_map, &ast, translate_lines))
+            })
+            .ok()
+    }
+
+    /// A Helper method to avoid code duplication until try blocks are stable
+    fn try_fold_to_hir(&mut self) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
+        Ok(Global::new(self).fold()?.fold()?.fold()?)
+    }
 }

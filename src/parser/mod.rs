@@ -47,7 +47,7 @@ mod parameter;
 mod primaries;
 mod variables;
 
-/// A reclusive decent Parser that parses the tokens created by the [`Preprocessor`](crate::preprocessor::Preprocessor) into an [`Ast`](crate::ast::Ast).
+/// A reclusive decent Parser that parses the tokens created by the [`Preprocessor`](crate::parser::preprocessor::Preprocessor) into an [`Ast`](crate::ast::Ast).
 pub(crate) struct Parser<'lt, 'ast, 'source_map> {
     pub preprocessor: Preprocessor<'lt, 'source_map>,
     pub scope_stack: Vec<SymbolTable<'ast>>,
@@ -294,105 +294,111 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 }
 
-/// The main point of this module. Parses a verilog-ams source file into an ast and returns any errors that occur
-///
-/// # Arguments
-///
-/// * `main_file` - The Verilog-A source file to parse
-///
-/// * `source_map_allocator` - A bump allocator that will be used to allocate the source map.
-/// (`Bump::new()` can be used to create one)
-///
-/// * `ast` - An ast created using the [`mk_ast!`](crate::mk_ast!) Macro
-///
-/// # Returns
-///
-/// * An **Io Error** if the `main_file` could not be read
-/// * A [`SourceMap`](crate::preprocessor::SourceMap) of the parsed file generated during parsing
-/// * A list of all Errors that occurred during parsing
-/// * A list of all Warnings generated during parsing
-///
-pub fn parse<'source_map, 'ast, 'lt>(
-    main_file: &Path,
-    source_map_allocator: &'source_map Bump,
-    ast: &'lt mut Ast<'ast>,
-) -> std::io::Result<(
-    &'source_map SourceMap<'source_map>,
-    Vec<Error>,
-    Vec<Warning>,
-)> {
-    let allocator = Bump::new();
-    let mut preprocessor =
-        PreprocessorBuilder::new(&allocator, source_map_allocator, main_file)?;
-    let mut errors = Vec::with_capacity(64);
-    let (init_result, mut preprocessor) = preprocessor.init();
-    if let Err(error) = init_result {
-        errors.push(error);
+impl<'tag> Ast<'tag> {
+    /// The main point of this module. Parses a verilog-ams source file into an ast and returns any errors that occur
+    ///
+    /// # Arguments
+    ///
+    /// * `main_file` - The Verilog-A source file to parse
+    ///
+    /// * `source_map_allocator` - A bump allocator that will be used to allocate the source map.
+    /// (`Bump::new()` can be used to create one)
+    ///
+    ///
+    /// # Returns
+    ///
+    /// * An **Io Error** if the `main_file` could not be read
+    /// * A [`SourceMap`](crate::parser::preprocessor::SourceMap) of the parsed file generated during parsing
+    /// * A list of all Errors that occurred during parsing
+    /// * A list of all Warnings generated during parsing
+
+    pub fn parse_from<'source_map, 'ast, 'lt>(
+        &'lt mut self,
+        main_file: &Path,
+        source_map_allocator: &'source_map Bump,
+    ) -> std::io::Result<(
+        &'source_map SourceMap<'source_map>,
+        Vec<Error>,
+        Vec<Warning>,
+    )> {
+        let allocator = Bump::new();
+
+        let mut preprocessor =
+            PreprocessorBuilder::new(&allocator, source_map_allocator, main_file)?;
+        let (init_result, mut preprocessor) = preprocessor.init();
+
+        let mut errors = Vec::with_capacity(64);
+        if let Err(error) = init_result {
+            errors.push(error);
+        }
+
+        let mut parser = Parser::new(preprocessor, self, errors);
+
+        // The preprocessors current token is set to the first token after initialization.
+        // Thg parsers lookahead needs to be set to this token as it is skipped otherwise
+        parser.lookahead = Some(Ok((
+            parser.preprocessor.current_token(),
+            parser.preprocessor.span(),
+        )));
+
+        parser.run();
+
+        Ok((
+            parser.preprocessor.done(),
+            parser.non_critical_errors,
+            parser.warnings,
+        ))
     }
 
-    let mut parser = Parser::new(preprocessor, ast, errors);
-    parser.lookahead = Some(Ok((
-        parser.preprocessor.current_token(),
-        parser.preprocessor.span(),
-    )));
-    parser.run();
-    Ok((
-        parser.preprocessor.done(),
-        parser.non_critical_errors,
-        parser.warnings,
-    ))
-}
-
-/// Parses a verilog-ams source file into an ast and prints any errors that occur
-///
-/// # Arguments
-///
-/// * `main_file` - The Verilog-A source file to parse
-///
-/// * `source_map_allocator` - A bump allocator that will be used to allocate the source map.
-/// (`Bump::new()` can be used to create one)
-///
-/// * `ast` - An ast created using the [`mk_ast!`] Macro
-///
-/// * `translate_lines` - When this is set to true the line numbers of printed errors are translated
-/// to reflect the line in the original source file instead of the source that was expanded by the preprocessor
-///
-/// # Returns
-/// * **Parse successful** - A Source Map of the parsed source
-/// * **Errors occurred during** - Prints the errors and returns `None`
-pub fn parse_and_print_errors<'source_map, 'ast, 'lt>(
-    main_file: &Path,
-    source_map_allocator: &'source_map Bump,
-    ast: &'lt mut Ast<'ast>,
-    translate_lines: bool,
-) -> Option<&'source_map SourceMap<'source_map>> {
-    match parse(main_file, source_map_allocator, ast) {
-        Ok((source_map, errors, mut warnings)) if errors.is_empty() => {
-            warnings
-                .into_iter()
-                .for_each(|warning| warning.print(source_map, translate_lines));
-            Some(source_map)
-        }
-        Ok((source_map, mut errors, mut warnings)) => {
-            warnings
-                .into_iter()
-                .for_each(|warning| warning.print(source_map, translate_lines));
-            errors
-                .into_iter()
-                .for_each(|err| err.print(&source_map, translate_lines));
-            None
-        }
-        Err(error) => {
-            error!(
-                "{} {}",
-                Red.bold().paint("error"),
-                Fixed(253).bold().paint(format!(
-                    ": failed to open {}: {}!",
-                    main_file.to_str().unwrap(),
-                    error
-                ))
-            );
-            None
+    /// Parses a verilog-ams source file into an ast and prints any errors that occur
+    ///
+    /// # Arguments
+    ///
+    /// * `main_file` - The Verilog-A source file to parse
+    ///
+    /// * `source_map_allocator` - A bump allocator that will be used to allocate the source map.
+    /// (`Bump::new()` can be used to create one)
+    ///
+    /// * `translate_lines` - When this is set to true the line numbers of printed errors are translated
+    /// to reflect the line in the original source file instead of the source that was expanded by the preprocessor
+    ///
+    /// # Returns
+    /// * **Parse successful** - A Source Map of the parsed source
+    /// * **Errors occurred during** - Prints the errors and returns `None`
+    pub fn parse_from_and_print_errors<'source_map, 'ast, 'lt>(
+        &'lt mut self,
+        main_file: &Path,
+        source_map_allocator: &'source_map Bump,
+        translate_lines: bool,
+    ) -> Option<&'source_map SourceMap<'source_map>> {
+        match self.parse_from(main_file, source_map_allocator) {
+            Ok((source_map, errors, mut warnings)) if errors.is_empty() => {
+                warnings
+                    .into_iter()
+                    .for_each(|warning| warning.print(source_map, translate_lines));
+                Some(source_map)
+            }
+            Ok((source_map, mut errors, mut warnings)) => {
+                warnings
+                    .into_iter()
+                    .for_each(|warning| warning.print(source_map, translate_lines));
+                errors
+                    .into_iter()
+                    .for_each(|err| err.print(&source_map, translate_lines));
+                None
+            }
+            Err(error) => {
+                error!(
+                    "{} {}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        ": failed to open {}: {}!",
+                        main_file.to_str().unwrap(),
+                        error
+                    ))
+                );
+                None
+            }
         }
     }
 }

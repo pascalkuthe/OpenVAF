@@ -12,12 +12,10 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
-use crate::ast_lowering::fold_ast_to_hir_and_print_errors;
 use crate::compact_arena::SafeRange;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
 use crate::ir::SafeRangeCreation;
-use crate::parser::parse_and_print_errors;
 
 #[test]
 pub fn diode() -> Result<(), ()> {
@@ -28,14 +26,10 @@ pub fn diode() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let source_map = parse_and_print_errors(
-        Path::new("tests/diode.va"),
-        &source_map_allocator,
-        &mut ast,
-        true,
-    )
-    .ok_or(())?;
-    fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+    let source_map = ast
+        .parse_from_and_print_errors(Path::new("tests/diode.va"), &source_map_allocator, true)
+        .ok_or(())?;
+    ast.lower_and_print_errors(source_map, true).ok_or(())?;
 
     Ok(())
 }
@@ -49,15 +43,11 @@ pub fn linear() -> Result<(), ()> {
         .apply();
     let source_map_allocator = Bump::new();
     mk_ast!(ast);
-    let source_map = parse_and_print_errors(
-        Path::new("tests/linear.va"),
-        &source_map_allocator,
-        &mut ast,
-        true,
-    )
-    .ok_or(())?;
+    let source_map = ast
+        .parse_from_and_print_errors(Path::new("tests/linear.va"), &source_map_allocator, true)
+        .ok_or(())?;
 
-    let hir = fold_ast_to_hir_and_print_errors(ast, source_map, true).ok_or(())?;
+    let hir = ast.lower_and_print_errors(source_map, true).ok_or(())?;
 
     let module: SafeRange<ModuleId> = hir.full_range();
     let module = &hir[module][0].contents;

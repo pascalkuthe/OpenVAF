@@ -5,9 +5,21 @@
 //  *  No part of VARF, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
-//! A frontend for Verilog AMS that returns an Ast as its endresult
+//! A frontend for Verilog AMS that returns an Tree based IR as its end result
 //!
-//! TODO showoff API
+//! ```
+//! # use bumpalo::Bump;
+//! # use std::path::Path;
+//! let source_map_allocator = Bump::new();
+//!  mk_ast!(ast);
+//!  let source_map = ast
+//!     .parse_from_and_print_errors(Path::new("<File>"), &source_map_allocator, true)?;
+//!  let hir = ast
+//!     .lower_and_print_errors(source_map, true)?;
+//!  let mir = hir
+//!     .lower_and_print_errors(source_map, true)?;
+//! ```
+//!  
 //!
 //!
 
@@ -21,14 +33,6 @@ extern crate std;
 
 pub use bumpalo;
 
-#[doc(inline)]
-pub use ast_lowering::fold_ast_to_hir;
-#[doc(inline)]
-pub use ast_lowering::fold_ast_to_hir_and_print_errors;
-#[doc(inline)]
-pub use hir_lowering::fold_hir_to_mir;
-#[doc(inline)]
-pub use hir_lowering::fold_hir_to_mir_and_print_errors;
 #[doc(inline)]
 pub use ir::ast;
 #[doc(hidden)]

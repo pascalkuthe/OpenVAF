@@ -1647,7 +1647,7 @@ begin : Model_evaluation
             end
             Q_pT    = Q_pT+d_Q;
             l_it    = l_it+1;
-        end //while*/
+        end while*/
 
         I_Tf1   = i_0f/Q_pT;
         a_h     = Oich*I_Tf1;
