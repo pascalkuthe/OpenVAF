@@ -191,6 +191,9 @@ pub enum Token {
     #[token = "else"]
     Else,
 
+    #[token = "while"]
+    While,
+
     #[token = "begin"]
     Begin,
     #[token = "end"]

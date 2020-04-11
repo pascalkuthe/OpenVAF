@@ -12,6 +12,7 @@ use crate::ast::{
     BlockScope, Branch, BranchAccess, Condition, Expression, HierarchicalId, Primary, SeqBlock,
     Statement, VariableType,
 };
+use crate::ir::ast::WhileLoop;
 use crate::ir::Push;
 use crate::ir::{AttributeNode, Attributes, BlockId, Node, StatementId};
 use crate::parser::error::Type::{
@@ -32,18 +33,32 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 self.consume_lookahead();
                 Statement::Condition(self.parse_condition(attributes)?)
             }
+
             Token::Flow => {
                 self.consume_lookahead();
                 self.parse_contribute_statement(attributes, Ident::new(keywords::FLOW, span))?
             }
+
             Token::Potential => {
                 self.consume_lookahead();
                 self.parse_contribute_statement(attributes, Ident::new(keywords::POTENTIAL, span))?
             }
+
             Token::Begin => {
                 self.consume_lookahead();
                 Statement::Block(self.parse_block(attributes)?)
             }
+
+            Token::While => {
+                self.consume_lookahead();
+                let start = self.preprocessor.current_start();
+                Statement::While(AttributeNode {
+                    contents: self.parse_while_loop()?,
+                    attributes,
+                    source: self.span_to_current_end(start),
+                })
+            }
+
             Token::SimpleIdentifier | Token::EscapedIdentifier => {
                 let identifier = self.parse_hierarchical_identifier()?;
                 let (token, span) = self.look_ahead()?;
@@ -96,6 +111,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                             }
                         }
                     }
+
                     _ => {
                         self.consume_lookahead();
                         return Err(Error {
@@ -109,6 +125,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 self.expect(Token::Semicolon)?;
                 res
             }
+
             _ => {
                 self.consume_lookahead();
                 return Err(Error {
@@ -222,6 +239,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             expr,
         ))
     }
+
     pub fn parse_condition(
         &mut self,
         attributes: Attributes<'ast>,
@@ -264,6 +282,15 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 else_statement,
             },
         })
+    }
+
+    pub fn parse_while_loop(&mut self) -> Result<WhileLoop<'ast>> {
+        self.expect(Token::ParenOpen)?;
+        let condition = self.parse_expression_id()?;
+        self.expect(Token::ParenClose)?;
+        let attributes = self.parse_attributes()?;
+        let body = self.parse_statement(attributes)?;
+        Ok(WhileLoop { condition, body })
     }
 }
 

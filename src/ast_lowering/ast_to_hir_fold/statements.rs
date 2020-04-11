@@ -20,7 +20,7 @@ use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
 use crate::hir::{Condition, Module, Statement};
-use crate::ir::hir::DisciplineAccess;
+use crate::ir::hir::{DisciplineAccess, WhileLoop};
 use crate::ir::*;
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
@@ -142,6 +142,28 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                     self.base.hir[start] = Statement::ConditionStart {
                         condition_info_and_end: end,
                     };
+                }
+            }
+
+            ast::Statement::While(while_loop) => {
+                let start = self.base.hir.push(Statement::WhileStart {
+                    while_info_and_start: statement, //just a place holder
+                });
+
+                let condition = self.fold_expression(while_loop.contents.condition);
+                let body = self.base.hir.empty_range_from_end();
+                self.fold_statement(while_loop.contents.body);
+                if let Some(condition) = condition {
+                    let end = self
+                        .base
+                        .hir
+                        .push(Statement::While(while_loop.copy_with(|old| WhileLoop {
+                            condition,
+                            body: self.base.hir.extend_range_to_end(body),
+                        })));
+                    self.base.hir[start] = Statement::WhileStart {
+                        while_info_and_start: end,
+                    }
                 }
             }
 

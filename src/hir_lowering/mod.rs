@@ -197,6 +197,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     self.mir.push(Statement::ConditionStart {
                         condition_info_and_end,
                     });
+
                     let condition_node = if let hir::Statement::Condition(cond) =
                         &self.hir[condition_info_and_end]
                     {
@@ -225,12 +226,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         .collect();
                     self.fold_block(statements.enter(condition.else_statement));
 
+                    statements.skip_forward(1);
+
                     let main_condition = if let Some(main_condition) = main_condition {
                         main_condition
                     } else {
                         continue;
                     };
-                    statements.skip_forward(1);
 
                     Statement::Condition(condition_node.map_with(|old| Condition {
                         main_condition,
@@ -238,6 +240,45 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         else_ifs,
                         else_statement: old.else_statement,
                     }))
+                }
+
+                hir::Statement::Condition(ref _condition_node) => {
+                    unreachable_unchecked!("Condition start should skip this")
+                }
+
+                hir::Statement::WhileStart {
+                    while_info_and_start,
+                } => {
+                    self.mir.push(Statement::WhileStart {
+                        while_info_and_start,
+                    });
+
+                    let while_node = if let hir::Statement::While(while_loop) =
+                        self.hir[while_info_and_start]
+                    {
+                        while_loop
+                    } else {
+                        unreachable_unchecked!("Condition starts should only point to conditions")
+                    };
+
+                    let condition = self.fold_integer_expression(while_node.contents.condition);
+                    self.fold_block(statements.enter(while_node.contents.body));
+                    statements.skip_forward(1);
+
+                    let condition = if let Some(condition) = condition {
+                        condition
+                    } else {
+                        continue;
+                    };
+
+                    Statement::While(while_node.copy_with(|old| WhileLoop {
+                        condition,
+                        body: old.body,
+                    }))
+                }
+
+                hir::Statement::While(while_loop) => {
+                    unreachable_unchecked!("While loop start should skip this")
                 }
 
                 hir::Statement::Contribute(attributes, discipline_access, branch, expr) => {
@@ -282,10 +323,6 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                         }
                         None => continue,
                     }
-                }
-
-                hir::Statement::Condition(ref _condition_node) => {
-                    unreachable_unchecked!("Condtion start should skip this")
                 }
 
                 hir::Statement::FunctionCall(_, _, _) => todo!("Function Calls"),

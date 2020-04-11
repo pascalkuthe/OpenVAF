@@ -48,7 +48,7 @@ pub struct Mir<'tag> {
 impl<'tag> Mir<'tag> {
     /// # Safety
     /// You should never call this yourself
-    pub(crate) unsafe fn partial_initalize<'hirref>(hir: &'hirref mut Hir<'tag>) -> Box<Self> {
+    pub(crate) unsafe fn partial_initalize<'lt>(hir: &'lt mut Hir<'tag>) -> Box<Self> {
         let layout = std::alloc::Layout::new::<Self>();
         #[allow(clippy::cast_ptr_alignment)]
         //the ptr cast below has the right alignment since we are allocation using the right layout
@@ -104,13 +104,13 @@ pub struct Variable<'mir> {
 }
 
 #[derive(Copy, Clone)]
-pub struct Nature<'hir> {
+pub struct Nature<'mir> {
     pub name: Ident,
     pub abstol: f64,
-    pub units: CompressedRange<'hir>,
+    pub units: CompressedRange<'mir>,
     pub access: Ident,
-    pub idt_nature: NatureId<'hir>,
-    pub ddt_nature: NatureId<'hir>,
+    pub idt_nature: NatureId<'mir>,
+    pub ddt_nature: NatureId<'mir>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -125,6 +125,12 @@ pub enum Statement<'mir> {
     ConditionStart {
         condition_info_and_end: StatementId<'mir>,
     },
+
+    While(AttributeNode<'mir, WhileLoop<'mir>>),
+    WhileStart {
+        while_info_and_start: StatementId<'mir>,
+    },
+
     Contribute(
         Attributes<'mir>,
         DisciplineAccess,
@@ -133,7 +139,14 @@ pub enum Statement<'mir> {
     ),
     //  TODO IndirectContribute(),
     Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
+
     FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct WhileLoop<'mir> {
+    pub condition: IntegerExpressionId<'mir>,
+    pub body: Block<'mir>,
 }
 
 #[derive(Clone)]

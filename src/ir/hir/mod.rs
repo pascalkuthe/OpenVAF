@@ -247,6 +247,12 @@ pub enum Statement<'hir> {
     ConditionStart {
         condition_info_and_end: StatementId<'hir>,
     },
+
+    While(AttributeNode<'hir, WhileLoop<'hir>>),
+    WhileStart {
+        while_info_and_start: StatementId<'hir>,
+    },
+
     Contribute(
         Attributes<'hir>,
         DisciplineAccess,
@@ -255,8 +261,16 @@ pub enum Statement<'hir> {
     ),
     //  TODO IndirectContribute(),
     Assignment(Attributes<'hir>, VariableId<'hir>, ExpressionId<'hir>),
+
     FunctionCall(Attributes<'hir>, FunctionId<'hir>, Vec<ExpressionId<'hir>>),
+
     BuiltInFunctionCall(AttributeNode<'hir, BuiltInFunctionCall<'hir>>),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct WhileLoop<'hir> {
+    pub condition: ExpressionId<'hir>,
+    pub body: Block<'hir>,
 }
 
 #[derive(Clone, Debug)]

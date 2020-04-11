@@ -1620,7 +1620,7 @@ begin : Model_evaluation
         Qf      = sqrt(T_f0*itf*Q_fT);
         Q_pT    = Q_0+Qf+Qr;
         d_Q     = Q_pT;
-        /*while (abs(d_Q) >= `RTOLC*abs(Q_pT) && l_it <= `l_itmax) begin
+        while (abs(d_Q) >= `RTOLC*abs(Q_pT) && l_it <= `l_itmax) begin
             d_Q0    = d_Q;
             I_Tf1   = i_0f/Q_pT;
             a_h     = Oich*I_Tf1;
@@ -1647,7 +1647,7 @@ begin : Model_evaluation
             end
             Q_pT    = Q_pT+d_Q;
             l_it    = l_it+1;
-        end while*/
+        end
 
         I_Tf1   = i_0f/Q_pT;
         a_h     = Oich*I_Tf1;

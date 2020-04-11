@@ -336,16 +336,25 @@ pub enum Statement<'ast> {
     Assign(Attributes<'ast>, HierarchicalId, ExpressionId<'ast>),
     FunctionCall(Attributes<'ast>, HierarchicalId, Vec<ExpressionId<'ast>>),
     BuiltInFunctionCall(AttributeNode<'ast, BuiltInFunctionCall<'ast>>),
+    While(AttributeNode<'ast, WhileLoop<'ast>>),
 }
+
 #[derive(Clone)]
 pub struct SeqBlock<'ast> {
     pub scope: Option<BlockScope<'ast>>,
     pub statements: Vec<StatementId<'ast>>,
 }
+
 #[derive(Clone, Debug)]
 pub struct BlockScope<'ast> {
     pub name: Ident,
     pub symbols: SymbolTable<'ast>,
+}
+
+#[derive(Clone, Copy)]
+pub struct WhileLoop<'ast> {
+    pub condition: ExpressionId<'ast>,
+    pub body: StatementId<'ast>,
 }
 
 #[derive(Clone)]
