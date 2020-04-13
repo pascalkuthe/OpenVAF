@@ -210,20 +210,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     let main_condition = self.fold_integer_expression(condition.main_condition);
 
                     self.fold_block(statements.enter(condition.main_condition_statements));
-                    let else_ifs = condition
-                        .else_ifs
-                        .iter()
-                        .copied()
-                        .filter_map(|(condition, block)| {
-                            self.fold_block(statements.enter(block));
 
-                            if let Some(condition) = self.fold_integer_expression(condition) {
-                                Some((condition, block))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
                     self.fold_block(statements.enter(condition.else_statement));
 
                     statements.skip_forward(1);
@@ -235,9 +222,8 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     };
 
                     Statement::Condition(condition_node.map_with(|old| Condition {
-                        main_condition,
-                        main_condition_statements: old.main_condition_statements,
-                        else_ifs,
+                        condition: main_condition,
+                        if_statements: old.main_condition_statements,
                         else_statement: old.else_statement,
                     }))
                 }

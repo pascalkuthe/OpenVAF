@@ -207,7 +207,6 @@ pub type Block<'hir> = SafeRange<StatementId<'hir>>;
 pub struct Condition<'hir> {
     pub main_condition: ExpressionId<'hir>,
     pub main_condition_statements: Block<'hir>,
-    pub else_ifs: Vec<(ExpressionId<'hir>, SafeRange<StatementId<'hir>>)>,
     pub else_statement: SafeRange<StatementId<'hir>>,
 }
 #[derive(Clone, Copy, Debug)]

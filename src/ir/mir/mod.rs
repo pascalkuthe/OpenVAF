@@ -151,9 +151,8 @@ pub struct WhileLoop<'mir> {
 
 #[derive(Clone)]
 pub struct Condition<'mir> {
-    pub main_condition: IntegerExpressionId<'mir>,
-    pub main_condition_statements: Block<'mir>,
-    pub else_ifs: Vec<(IntegerExpressionId<'mir>, SafeRange<StatementId<'mir>>)>,
+    pub condition: IntegerExpressionId<'mir>,
+    pub if_statements: Block<'mir>,
     pub else_statement: SafeRange<StatementId<'mir>>,
 }
 

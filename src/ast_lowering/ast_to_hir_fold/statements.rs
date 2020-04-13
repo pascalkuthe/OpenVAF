@@ -229,25 +229,13 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
 
     /// folds a condition/if statement
     fn fold_condition(&mut self, condition: &ast::Condition<'tag>) -> Option<Condition<'tag>> {
-        let main_condition = self.fold_expression(condition.main_condition);
+        let main_condition = self.fold_expression(condition.condition);
 
         let main_condition_statements = self.base.hir.empty_range_from_end();
 
-        self.fold_statement(condition.main_condition_statement);
+        self.fold_statement(condition.if_statement);
         let main_condition_statements =
             self.base.hir.extend_range_to_end(main_condition_statements);
-
-        let else_ifs: Vec<(ExpressionId<'tag>, SafeRange<StatementId<'tag>>)> = condition
-            .else_ifs
-            .iter()
-            .copied()
-            .filter_map(|(condition, statement)| {
-                let condition = self.fold_expression(condition)?;
-                let statements = self.base.hir.empty_range_from_end();
-                self.fold_statement(statement);
-                Some((condition, self.base.hir.extend_range_to_end(statements)))
-            })
-            .collect();
 
         let statements = self.base.hir.empty_range_from_end();
         if let Some(statement) = condition.else_statement {
@@ -258,7 +246,6 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
         Some(Condition {
             main_condition: main_condition?,
             main_condition_statements,
-            else_ifs,
             else_statement,
         })
     }

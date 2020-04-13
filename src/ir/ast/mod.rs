@@ -359,9 +359,8 @@ pub struct WhileLoop<'ast> {
 
 #[derive(Clone)]
 pub struct Condition<'ast> {
-    pub main_condition: ExpressionId<'ast>,
-    pub main_condition_statement: StatementId<'ast>,
-    pub else_ifs: Vec<(ExpressionId<'ast>, StatementId<'ast>)>,
+    pub condition: ExpressionId<'ast>,
+    pub if_statement: StatementId<'ast>,
     pub else_statement: Option<StatementId<'ast>>,
 }
 
