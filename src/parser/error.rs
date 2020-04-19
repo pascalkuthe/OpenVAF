@@ -1,17 +1,15 @@
 //  * ******************************************************************************************
 //  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
 //  * It is subject to the license terms in the LICENSE file found in the top-level directory
-//  *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+//  *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
 //  *  No part of VARF, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
-use annotate_snippets::display_list::DisplayList;
-use annotate_snippets::formatter::DisplayListFormatter;
+use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
-use intrusive_collections::__core::fmt::Formatter;
 use log::{error, warn};
 
 use crate::parser::lexer::Token;
@@ -19,6 +17,7 @@ use crate::parser::preprocessor::ArgumentIndex;
 use crate::span::Index;
 use crate::symbol::{Ident, Symbol};
 use crate::{SourceMap, Span};
+use beef::lean::Cow;
 
 pub type Error = crate::error::Error<Type>;
 pub type Warning = crate::error::Error<WarningType>;
@@ -122,60 +121,75 @@ impl Error {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
-            (substitution_name,vec![Annotation{
+            (Cow::owned(substitution_name),vec![Annotation{
                 id: None,
-                label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)".to_string()),
+                label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)"),
                 annotation_type: AnnotationType::Note
             }])
         } else {
-            (source_map.main_file_name.to_string(), Vec::new())
+            (Cow::const_str(source_map.main_file_name), Vec::new())
         };
-        let line = line.to_string(); //necessary because annotate snippet cant work with slices yet
-        let origin = Some(origin);
-        let snippet = match self.error_type {
+
+        let opt = FormatOptions {
+            color: true,
+            anonymized_line_numbers: false,
+        };
+
+        match self.error_type {
             Type::UnexpectedToken { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!("expected {:?}", expected);
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Unexpected Token".to_string()),
+                        label: Some("Unexpected Token"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: format!("expected {:?}", expected),
+                            label: &label,
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
+
             Type::UnexpectedTokens { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!("expected {:?}", expected);
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Unexpected Token".to_string()),
+                        label: Some("Unexpected Token"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: format!("expected {:?}", expected),
+                            label: &label,
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::PortRedeclaration(error_span, declaration_list_span) => {
                 let error_range = translate_to_inner_snippet_range(
@@ -188,12 +202,12 @@ impl Error {
                     range.start as Index + declaration_list_span.get_end(),
                     &line,
                 );
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
                         label: Some(
                             "Module ports declared in Module body when already declared in Module Head"
-                                .to_string(),
+                                ,
                         ),
                         annotation_type: AnnotationType::Error,
                     }),
@@ -201,22 +215,24 @@ impl Error {
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin:Some(&*origin),
                         annotations: vec![
                             SourceAnnotation {
                                 range:declaration_list_range,
-                                label: "Ports are declared here".to_string(),
+                                label: "Ports are declared here",
                                 annotation_type: AnnotationType::Info,
                             },
                             SourceAnnotation {
                                 range: error_range,
-                                label: "Port declaration is illegal here".to_string(),
+                                label: "Port declaration is illegal here",
                                 annotation_type: AnnotationType::Error,
                             },
                         ],
                         fold: true,
-                    }],
-                }
+                    }],opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
 
             Type::AlreadyDeclaredInThisScope {
@@ -236,22 +252,36 @@ impl Error {
                     other_declaration_range.end,
                     &other_declaration_line,
                 );
+                let other_declaration_origin = if let Some(other_declaration_origin) =
+                    other_declaration_origin
+                {
+                    footer.push(Annotation{
+                        id: None,
+                        label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)"),
+                        annotation_type: AnnotationType::Note
+                    });
+                    Cow::owned(other_declaration_origin)
+                } else {
+                    Cow::const_str(source_map.main_file_name)
+                };
+                let label = format!("'{}' has already been declared", name.as_str());
+                let inline_label = format!("First declaration of '{}' here", name.as_str());
 
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!("'{}' has already been declared", name.as_str())),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![
                         Slice {
-                            source: other_declaration_line.to_string(),
+                            source: other_declaration_line,
                             line_start: other_declaration_line_number as usize,
-                            origin: other_declaration_origin,
+                            origin: Some(&*other_declaration_origin),
                             annotations: vec![SourceAnnotation {
                                 range: other_declaration_range,
-                                label: format!("First declaration of '{}' here", name.as_str()),
+                                label: &inline_label,
                                 annotation_type: AnnotationType::Info,
                             }],
                             fold: false,
@@ -259,26 +289,29 @@ impl Error {
                         Slice {
                             source: line,
                             line_start: line_number as usize,
-                            origin,
+                            origin: Some(&*origin),
                             annotations: vec![SourceAnnotation {
                                 range,
-                                label: "Item already declared".to_string(),
+                                label: "Item already declared",
                                 annotation_type: AnnotationType::Error,
                             }],
+
                             fold: false,
                         },
                     ],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
 
             Type::PortPreDeclaredNotDefined => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
                         label: Some(
-                            "Port was pre declared in module head but not defined in module body"
-                                .to_string(),
+                            "Port was pre declared in module head but not defined in module body",
                         ),
                         annotation_type: AnnotationType::Error,
                     }),
@@ -286,19 +319,22 @@ impl Error {
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Declared here".to_string(),
+                            label: "Declared here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
 
             Type::UnclosedConditions(ref conditions) => {
-                let slices = conditions
+                let slice_text: Vec<_> = conditions
                     .iter()
                     .copied()
                     .enumerate()
@@ -306,74 +342,100 @@ impl Error {
                         let (src, line_number, origin, range) =
                             source_map.resolve_span_within_line(condition, translate_lines);
                         let range = translate_to_inner_snippet_range(range.start, range.end, src);
-                        Slice {
-                            source: src.to_string(),
-                            line_start: line_number as usize,
-                            origin: origin
-                                .or_else(|| Some(source_map.main_file_name.to_string())),
-                            annotations: vec![SourceAnnotation {
-                                range,
-                                label: format!("{}. condition started here", index),
-                                annotation_type: AnnotationType::Error,
-                            }],
-                            fold: false,
-                        }
+                        (
+                            src,
+                            line_number,
+                            origin.map_or(Cow::const_str(source_map.main_file_name), |val| {
+                                Cow::owned(val)
+                            }),
+                            range,
+                            format!("{}. condition started here", index),
+                        )
                     })
                     .collect();
-                Snippet {
+                let slices = slice_text
+                    .iter()
+                    .map(|(src, line_number, origin, range, label)| Slice {
+                        source: *src,
+                        line_start: *line_number as usize,
+                        origin: Some(&**origin),
+                        annotations: vec![SourceAnnotation {
+                            range: *range,
+                            label,
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    })
+                    .collect();
+
+                let label = format!("{} macro conditions where not closed. Conditions should be closed using `endif",{conditions.len()});
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!("{} macro conditions where not closed. Conditions should be closed using `endif",{conditions.len()})),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices,
-                }
+                    opt,
+                };
+
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
 
             Type::MacroNotFound => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Macro referenced that was not defined before".to_string()),
+                        label: Some("Macro referenced that was not defined before"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Reference occurs here".to_string(),
+                            label: "Reference occurs here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::HierarchicalIdNotAllowedAsNature { hierarchical_id } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Natures can not be hierarchical ".to_string()),
+                        label: Some("Natures can not be hierarchical "),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: ". in Nature identifier is illegal".to_string(),
+                            label: ". in Nature identifier is illegal",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::PortNotPreDeclaredInModuleHead { port_list } => {
                 let (
@@ -383,6 +445,19 @@ impl Error {
                     other_declaration_range,
                 ) = source_map.resolve_span_within_line(port_list, translate_lines);
 
+                let other_declaration_origin = if let Some(other_declaration_origin) =
+                    other_declaration_origin
+                {
+                    footer.push(Annotation{
+                        id: None,
+                        label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)"),
+                        annotation_type: AnnotationType::Note
+                    });
+                    Cow::owned(other_declaration_origin)
+                } else {
+                    Cow::const_str(source_map.main_file_name)
+                };
+
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let other_declaration_range = translate_to_inner_snippet_range(
                     other_declaration_range.start,
@@ -390,21 +465,21 @@ impl Error {
                     &other_declaration_line,
                 );
 
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Ports have to be listed in the Module head fi they are declared in the body".to_string()),
+                        label: Some("Ports have to be listed in the Module head fi they are declared in the body"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![
                         Slice {
-                            source: other_declaration_line.to_string(),
+                            source: other_declaration_line,
                             line_start: other_declaration_line_number as usize,
-                            origin: other_declaration_origin,
+                            origin: Some(&*other_declaration_origin),
                             annotations: vec![SourceAnnotation {
                                 range: other_declaration_range,
-                                label: "Port should have been listed here".to_string(),
+                                label: "Port should have been listed here",
                                 annotation_type: AnnotationType::Info,
                             }],
                             fold: false,
@@ -412,320 +487,366 @@ impl Error {
                         Slice {
                             source: line,
                             line_start: line_number as usize,
-                            origin,
+                            origin:Some(&*origin),
                             annotations: vec![SourceAnnotation {
                                 range,
-                                label: "Port declaration illegal without listing in module head".to_string(),
+                                label: "Port declaration illegal without listing in module head",
                                 annotation_type: AnnotationType::Error,
                             }],
                             fold: false,
                         },
                     ],
-                }
+                    opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::EmptyListEntry(_list_type) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Empty macro arguments are not allowed".to_string()),
+                        label: Some("Empty macro arguments are not allowed"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Expected argument here".to_string(),
+                            label: "Expected argument here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::MacroArgumentCount { expected, found } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!(
+                    "Found wrong number of Macro arguments. Expected {} found {} ",
+                    expected, found
+                );
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "Found wrong number of Macro arguments. Expected {} found {} ",
-                            expected, found
-                        )),
+                        label: Some(&*label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Unexpected `endif".to_string(),
+                            label: "Unexpected `endif",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::ConditionEndWithoutStart => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(
-                            "Unexpected `endif: No condition is currently in Scope ".to_string(),
-                        ),
+                        label: Some("Unexpected `endif: No condition is currently in Scope "),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Unexpected `endif".to_string(),
+                            label: "Unexpected `endif",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::MacroEndTooEarly => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Macro ended too early! One or more compiler directives are still unfinished (macro ends on new line not preceded by \\)".to_string()),
+                        label: Some("Macro ended too early! One or more compiler directives are still unfinished (macro ends on new line not preceded by \\)"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin:Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Recursion detected here".to_string(),
+                            label: "Recursion detected here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::MacroRecursion => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Macro recursion detected! Macros may not call themselves (directly or indirectly)".to_string()),
+                        label: Some("Macro recursion detected! Macros may not call themselves (directly or indirectly)"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin:Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Recursion detected here".to_string(),
+                            label: "Recursion detected here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::CompilerDirectiveSplit => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Compiler directives (such as `define x) can't be split across borders of macros or files".to_string()),
+                        label: Some("Compiler directives (such as `define x) can't be split across borders of macros or files"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin:Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Split detected here".to_string(),
+                            label: "Split detected here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::UnexpectedEof { expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!("Unexpected EOF expected {:?}", expected);
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!("Unexpected EOF expected {:?}", expected)),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Split detected here".to_string(),
+                            label: "Split detected here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::Unsupported(unsupported) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!("{} are currently not supported", unsupported);
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!("{} are currently not supported", unsupported)),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Unsupported feature was used here".to_string(),
+                            label: "Unsupported feature was used here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::IoErr(error) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(error),
+                        label: Some(&error),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Io Error occured here".to_string(),
+                            label: "Io Error occured here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::AttributeAlreadyDefined => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("An attribute was redefined".to_string()),
+                        label: Some("An attribute was redefined"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Redefined here".to_string(),
+                            label: "Redefined here",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
 
             Type::RequiredAttributeNotDefined(missing) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!("Nature is missing the required attributes  {:?}", missing);
+                let inline_label = format!("Required attributes {:?} are missing", missing);
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "Nature is missing the required attributes  {:?}",
-                            missing
-                        )),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: format!("Required attributes {:?} are missing", missing),
+                            label: &inline_label,
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
 
             Type::DiscreteDisciplineHasNatures => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Disciplines in the discrete Domain may not define flow/potential natures".to_string()),
+                        label: Some("Disciplines in the discrete Domain may not define flow/potential natures"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin:Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Natures may not be defined".to_string(),
+                            label: "Natures may not be defined",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::StringTooLong(len) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!(
+                    "String literals longer than {} characters are not supported",
+                    std::u16::MAX
+                );
+                let inline_label = format!("String literal with {} characters", len);
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "String literals longer than {} characters are not supported",
-                            std::u16::MAX
-                        )),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: format!("String literal with {} characters", len),
+                            label: &inline_label,
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
         };
-        let display_list = DisplayList::from(snippet);
-        let formatter = DisplayListFormatter::new(true, false);
-        error!("{}", formatter.format(&display_list));
     }
 }
 impl Warning {
@@ -733,17 +854,20 @@ impl Warning {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
-            (substitution_name,vec![Annotation{
+            (Cow::owned(substitution_name),vec![Annotation{
                 id: None,
-                label: Some("This error occurred inside an expansion of a macro or a file. If additional macros or files are included inside this expansion the line information will be inaccurate and the error output might be hard to track if macros are used extensivly. The fully expanded source could give better insight in that case".to_string()),
+                label: Some("This error occurred inside an expansion of a macro or a file. If additional macros or files are included inside this expansion the line information will be inaccurate and the error output might be hard to track if macros are used extensivly. The fully expanded source could give better insight in that case"),
                 annotation_type: AnnotationType::Note
             }])
         } else {
-            (source_map.main_file_name.to_string(), Vec::new())
+            (Cow::const_str(source_map.main_file_name), Vec::new())
+        };
+        let opt = FormatOptions {
+            color: true,
+            anonymized_line_numbers: false,
         };
 
-        let line = line.to_string();
-        let snippet = match self.error_type {
+        match self.error_type {
             WarningType::MacroOverwritten(first_declaration) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let (original_line, original_line_number, substitution_name, original_range) =
@@ -753,21 +877,21 @@ impl Warning {
                     original_range.end,
                     &original_line,
                 );
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Macro overwritten".to_string()),
+                        label: Some("Macro overwritten"),
                         annotation_type: AnnotationType::Warning,
                     }),
                     footer,
                     slices: vec![
                         Slice {
-                            source: original_line.to_string(),
+                            source: original_line,
                             line_start: original_line_number as usize,
-                            origin: Some(origin.clone()),
+                            origin: Some(&*origin),
                             annotations: vec![SourceAnnotation {
                                 range: original_range,
-                                label: "First_declared here".to_string(),
+                                label: "First_declared here",
                                 annotation_type: AnnotationType::Info,
                             }],
                             fold: false,
@@ -775,16 +899,19 @@ impl Warning {
                         Slice {
                             source: line,
                             line_start: line_number as usize,
-                            origin: Some(origin),
+                            origin: Some(&*origin),
                             annotations: vec![SourceAnnotation {
                                 range,
-                                label: "Later overwritten here".to_string(),
+                                label: "Later overwritten here",
                                 annotation_type: AnnotationType::Warning,
                             }],
                             fold: false,
                         },
                     ],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                warn!("{}", display_list);
             }
             WarningType::AttributeOverwrite(overwritten_ident, overwrite_span) => {
                 let overwritten_range = translate_to_inner_snippet_range(
@@ -798,40 +925,41 @@ impl Warning {
                     range.start + overwrite_span.get_end(),
                     &line,
                 );
-                Snippet {
+                let label = format!(
+                    "Attribute {} was declared multiple times. First value is ignored",
+                    overwritten_ident.name.as_str()
+                );
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "Attribute {} was declared multiple times. First value is ignored",
-                            overwritten_ident.name.as_str()
-                        )),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Warning,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin: Some(origin),
+                        origin: Some(&*origin),
                         annotations: vec![
                             SourceAnnotation {
                                 range: overwrite_range,
-                                label: "overwritten here".to_string(),
+                                label: "overwritten here",
                                 annotation_type: AnnotationType::Warning,
                             },
                             SourceAnnotation {
                                 range: overwritten_range,
-                                label: "First declared here".to_string(),
+                                label: "First declared here",
                                 annotation_type: AnnotationType::Info,
                             },
                         ],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                warn!("{}", display_list);
             }
         };
-        let display_list = DisplayList::from(snippet);
-        let formatter = DisplayListFormatter::new(true, false);
-        warn!("{}", formatter.format(&display_list));
     }
 }
 

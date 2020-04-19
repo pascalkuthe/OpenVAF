@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -17,24 +17,29 @@ use crate::hir::Net;
 use crate::hir::{Branch, BranchDeclaration, DisciplineAccess};
 use crate::ir::*;
 use crate::ir::{Push, SafeRangeCreation};
+use crate::parser::error::Unsupported::DefaultDiscipline;
 use crate::symbol::{keywords, Ident};
 use crate::{ast, Ast, Span};
+use rustc_hash::FxHashMap;
 
 /// Handles branch resolution which is more complicated because unnamed branches exist and discipline comparability has to be enforced
 /// # Safety
 /// Branch resolution may only take place after all nets and ports have been folded! UB might occur otherwise.
 pub struct BranchResolver<'tag> {
-    unnamed_branches: AHashMap<(NetId<'tag>, NetId<'tag>), BranchId<'tag>>,
-    unnamed_port_branches: AHashMap<PortId<'tag>, BranchId<'tag>>,
-    implicit_grounds: AHashMap<DisciplineId<'tag>, NetId<'tag>>,
+    unnamed_branches: FxHashMap<(NetId<'tag>, NetId<'tag>), BranchId<'tag>>,
+    unnamed_port_branches: FxHashMap<PortId<'tag>, BranchId<'tag>>,
+    implicit_grounds: FxHashMap<DisciplineId<'tag>, NetId<'tag>>,
 }
 
 impl<'tag, 'lt> BranchResolver<'tag> {
     pub fn new(ast: &'lt Ast<'tag>) -> Self {
         Self {
-            unnamed_port_branches: AHashMap::with_capacity(16),
-            unnamed_branches: AHashMap::with_capacity(32),
-            implicit_grounds: AHashMap::with_capacity(ast.disciplines.len as usize),
+            unnamed_port_branches: FxHashMap::with_capacity_and_hasher(16, Default::default()),
+            unnamed_branches: FxHashMap::with_capacity_and_hasher(32, Default::default()),
+            implicit_grounds: FxHashMap::with_capacity_and_hasher(
+                ast.disciplines.len as usize,
+                Default::default(),
+            ),
         }
     }
     /// Resolves a DisciplineAccess (for example `V(b)` or `V(x,y)`)

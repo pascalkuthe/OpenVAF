@@ -3,7 +3,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -37,7 +37,7 @@ use std::convert::Into;
 use std::hash::{Hash, Hasher};
 use std::iter::Iterator;
 
-use ahash::AHashMap as HashMap;
+use ahash::AHashMap;
 use bumpalo::Bump;
 
 use crate::symbol::keywords::EMPTY_SYMBOL;
@@ -173,7 +173,7 @@ impl fmt::Display for Symbol {
 #[derive(Default)]
 pub struct Interner {
     arena: Bump,
-    names: HashMap<&'static str, Symbol>,
+    names: AHashMap<&'static str, Symbol>,
     strings: Vec<&'static str>,
 }
 

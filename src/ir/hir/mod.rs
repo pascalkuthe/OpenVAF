@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -12,7 +12,7 @@ use std::ops::Range;
 use std::ptr::NonNull;
 
 use crate::ast::Parameter;
-use crate::ast::{BinaryOperator, BuiltInFunctionCall, Function, NetType, UnaryOperator, Variable};
+use crate::ast::{BinaryOperator, Function, NetType, UnaryOperator, Variable};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
 use crate::ir::*;
 use crate::symbol::Ident;
@@ -199,14 +199,14 @@ pub struct Nature<'hir> {
 pub struct Module<'hir> {
     pub name: Ident,
     pub port_list: SafeRange<PortId<'hir>>,
-    //    pub parameter_list: Option<Range<ParameterId<'ast>>>
+    pub parameter_list: SafeRange<ParameterId<'hir>>,
     pub analog: Block<'hir>,
 }
 pub type Block<'hir> = SafeRange<StatementId<'hir>>;
 #[derive(Clone, Debug)]
 pub struct Condition<'hir> {
-    pub main_condition: ExpressionId<'hir>,
-    pub main_condition_statements: Block<'hir>,
+    pub condition: ExpressionId<'hir>,
+    pub if_statements: Block<'hir>,
     pub else_statement: SafeRange<StatementId<'hir>>,
 }
 #[derive(Clone, Copy, Debug)]
@@ -262,8 +262,6 @@ pub enum Statement<'hir> {
     Assignment(Attributes<'hir>, VariableId<'hir>, ExpressionId<'hir>),
 
     FunctionCall(Attributes<'hir>, FunctionId<'hir>, Vec<ExpressionId<'hir>>),
-
-    BuiltInFunctionCall(AttributeNode<'hir, BuiltInFunctionCall<'hir>>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -297,6 +295,11 @@ pub enum Primary<'hir> {
     ParameterReference(ParameterId<'hir>),
     FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
     BranchAccess(DisciplineAccess, BranchId<'hir>),
-    BuiltInFunctionCall(BuiltInFunctionCall<'hir>),
+    BuiltInFunctionCall1p(BuiltInFunctionCall1p, ExpressionId<'hir>),
+    BuiltInFunctionCall2p(
+        BuiltInFunctionCall2p,
+        ExpressionId<'hir>,
+        ExpressionId<'hir>,
+    ),
     SystemFunctionCall(Ident /*TODO args*/),
 }

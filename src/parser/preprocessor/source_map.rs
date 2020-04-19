@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -13,7 +13,7 @@ use std::path::Path;
 use std::ptr::NonNull;
 
 use bumpalo::Bump;
-use intrusive_collections::__core::cell::Cell;
+use core::cell::Cell;
 use intrusive_collections::rbtree::CursorMut;
 use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
 
@@ -29,7 +29,7 @@ intrusive_adapter!(SourceMapAdapter<'source_map> = &'source_map Substitution<'so
 impl<'source_map, 'lt> KeyAdapter<'lt> for SourceMapAdapter<'source_map> {
     type Key = Index;
 
-    fn get_key(&self, value: &'lt Self::Value) -> Self::Key {
+    fn get_key(&self, value: &'lt Substitution<'source_map>) -> Self::Key {
         value.start
     }
 }
@@ -326,8 +326,6 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         let substitution = {
             let name = &*self.source_map_allocator.alloc_str(name);
             let range: Range<usize> = original_span.into();
-            let tmp = self.root_file_contents.len() < range.end;
-            let l = self.root_file_contents.len();
             let original_source = &self.root_file_contents[range];
             let original_lines = bytecount::count(original_source.as_bytes(), b'\n') as LineNumber;
             let root_line = self.root_line;

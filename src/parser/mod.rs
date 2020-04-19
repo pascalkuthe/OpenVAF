@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -27,6 +27,7 @@ use crate::span::Index;
 use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::{Preprocessor, SourceMap, Span};
+use rustc_hash::FxHashMap;
 
 pub(crate) mod lexer;
 pub(crate) mod preprocessor;
@@ -198,7 +199,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     ///
     pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
         let attributes = self.ast.empty_range_from_end();
-        let mut attribute_map: AHashMap<Symbol, AttributeId<'ast>> = AHashMap::new();
+        let mut attribute_map: FxHashMap<Symbol, AttributeId<'ast>> = FxHashMap::default();
         loop {
             if self.look_ahead()?.0 != Token::AttributeStart {
                 break;
@@ -218,7 +219,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     /// If this Attribute is already defined for the current item it will be overwritten and a Warning will be generated
     fn parse_attribute(
         &mut self,
-        attribute_map: &mut AHashMap<Symbol, AttributeId<'ast>>,
+        attribute_map: &mut FxHashMap<Symbol, AttributeId<'ast>>,
     ) -> Result {
         let name = if self.look_ahead()?.0 == Token::Units {
             self.consume_lookahead();
@@ -312,7 +313,7 @@ impl<'tag> Ast<'tag> {
     /// * A list of all Errors that occurred during parsing
     /// * A list of all Warnings generated during parsing
 
-    pub fn parse_from<'source_map, 'ast, 'lt>(
+    pub fn parse_from<'source_map, 'lt>(
         &'lt mut self,
         main_file: &Path,
         source_map_allocator: &'source_map Bump,
@@ -323,9 +324,8 @@ impl<'tag> Ast<'tag> {
     )> {
         let allocator = Bump::new();
 
-        let mut preprocessor =
-            PreprocessorBuilder::new(&allocator, source_map_allocator, main_file)?;
-        let (init_result, mut preprocessor) = preprocessor.init();
+        let preprocessor = PreprocessorBuilder::new(&allocator, source_map_allocator, main_file)?;
+        let (init_result, preprocessor) = preprocessor.init();
 
         let mut errors = Vec::with_capacity(64);
         if let Err(error) = init_result {
@@ -365,20 +365,20 @@ impl<'tag> Ast<'tag> {
     /// # Returns
     /// * **Parse successful** - A Source Map of the parsed source
     /// * **Errors occurred during** - Prints the errors and returns `None`
-    pub fn parse_from_and_print_errors<'source_map, 'ast, 'lt>(
+    pub fn parse_from_and_print_errors<'source_map, 'lt>(
         &'lt mut self,
         main_file: &Path,
         source_map_allocator: &'source_map Bump,
         translate_lines: bool,
     ) -> Option<&'source_map SourceMap<'source_map>> {
         match self.parse_from(main_file, source_map_allocator) {
-            Ok((source_map, errors, mut warnings)) if errors.is_empty() => {
+            Ok((source_map, errors, warnings)) if errors.is_empty() => {
                 warnings
                     .into_iter()
                     .for_each(|warning| warning.print(source_map, translate_lines));
                 Some(source_map)
             }
-            Ok((source_map, mut errors, mut warnings)) => {
+            Ok((source_map, errors, warnings)) => {
                 warnings
                     .into_iter()
                     .for_each(|warning| warning.print(source_map, translate_lines));

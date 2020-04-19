@@ -2,26 +2,31 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
 
+pub mod control_flow_graph;
+
+pub use control_flow_graph::ControlFlowGraph;
+
 use std::ops::Range;
 use std::ptr::NonNull;
 
-use intrusive_collections::__core::cmp::Ordering;
-use intrusive_collections::__core::convert::TryFrom;
+use core::cmp::Ordering;
+use core::convert::TryFrom;
 
-use crate::ast::{BuiltInFunctionCall, Function, UnaryOperator};
+use crate::ast::{Function, UnaryOperator};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
-use crate::hir::{Block, BranchDeclaration, Discipline, DisciplineAccess, Module, Net, Port};
+use crate::hir::{Block, BranchDeclaration, Discipline, DisciplineAccess, Net, Port};
 use crate::ir::hir::Hir;
 use crate::ir::ids::StringExpressionId;
 use crate::ir::*;
 use crate::symbol::Ident;
 use crate::{ir, Span};
+use control_flow_graph::BasicBlock;
 
 pub struct Mir<'tag> {
     //TODO unsized
@@ -54,20 +59,23 @@ impl<'tag> Mir<'tag> {
         //the ptr cast below has the right alignment since we are allocation using the right layout
         let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-        NanoArena::init_from(&mut res.as_mut().natures, &hir.natures);
         TinyArena::copy_to(&mut res.as_mut().attributes, &hir.attributes);
         NanoArena::copy_to(&mut res.as_mut().branches, &hir.branches);
         TinyArena::copy_to(&mut res.as_mut().nets, &hir.nets);
         NanoArena::copy_to(&mut res.as_mut().ports, &hir.ports);
-        NanoArena::copy_to(&mut res.as_mut().modules, &hir.modules);
         NanoArena::copy_to(&mut res.as_mut().disciplines, &hir.disciplines);
+
+        NanoArena::init(&mut res.as_mut().modules);
         NanoArena::init_from(&mut res.as_mut().natures, &hir.natures);
-        NanoArena::move_to(&mut res.as_mut().functions, &mut hir.functions);
-        StringArena::move_to(&mut res.as_mut().string_literals, &mut hir.string_literals);
         TinyArena::init_from(&mut res.as_mut().parameters, &hir.parameters);
         TinyArena::init_from(&mut res.as_mut().variables, &hir.variables);
+
+        NanoArena::move_to(&mut res.as_mut().functions, &mut hir.functions);
+        StringArena::move_to(&mut res.as_mut().string_literals, &mut hir.string_literals);
+
         TinyArena::init(&mut res.as_mut().integer_expressions);
         TinyArena::init(&mut res.as_mut().real_expressions);
+
         TinyArena::init(&mut res.as_mut().statements);
         Box::from_raw(res.as_ptr())
     }
@@ -112,6 +120,13 @@ pub struct Nature<'mir> {
     pub idt_nature: NatureId<'mir>,
     pub ddt_nature: NatureId<'mir>,
 }
+#[derive(Debug)]
+pub struct Module<'mir> {
+    pub name: Ident,
+    pub port_list: SafeRange<PortId<'mir>>,
+    pub parameter_list: SafeRange<ParameterId<'mir>>,
+    pub analog_cfg: ControlFlowGraph<'mir, 'mir>,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum VariableType<'mir> {
@@ -121,29 +136,34 @@ pub enum VariableType<'mir> {
 
 #[derive(Clone)]
 pub enum Statement<'mir> {
-    Condition(AttributeNode<'mir, Condition<'mir>>),
-    ConditionStart {
-        condition_info_and_end: StatementId<'mir>,
-    },
-
-    While(AttributeNode<'mir, WhileLoop<'mir>>),
-    WhileStart {
-        while_info_and_start: StatementId<'mir>,
-    },
-
     Contribute(
         Attributes<'mir>,
         DisciplineAccess,
         BranchId<'mir>,
         RealExpressionId<'mir>,
     ),
-    //  TODO IndirectContribute(),
-    Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
+    //  TODO IndirectContribute
+    NOP, //No operation. Just here to allow more fast deletion
 
-    FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
+    Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
+    //  FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
 }
 
 #[derive(Clone, Copy, Debug)]
+pub enum AssignmentKind<'mir> {
+    Derivative(core::num::NonZeroU8, Symbol<'mir>),
+    Value,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Symbol<'mir> {
+    Parameter(ParameterId<'mir>),
+    Voltage(BranchId<'mir>),
+    Current(BranchId<'mir>),
+    Time,
+}
+
+/*#[derive(Clone, Copy, Debug)]
 pub struct WhileLoop<'mir> {
     pub condition: IntegerExpressionId<'mir>,
     pub body: Block<'mir>,
@@ -154,7 +174,7 @@ pub struct Condition<'mir> {
     pub condition: IntegerExpressionId<'mir>,
     pub if_statements: Block<'mir>,
     pub else_statement: SafeRange<StatementId<'mir>>,
-}
+}*/
 
 #[derive(Clone)]
 pub struct Parameter {
@@ -335,7 +355,12 @@ pub enum RealExpression<'mir> {
     ParameterReference(ParameterId<'mir>),
     FunctionCall(FunctionId<'mir>, Vec<ExpressionId<'mir>>),
     BranchAccess(DisciplineAccess, BranchId<'mir>),
-    BuiltInFunctionCall(RealBuiltInFunctionCall<'mir>),
+    BuiltInFunctionCall1p(BuiltInFunctionCall1p, RealExpressionId<'mir>),
+    BuiltInFunctionCall2p(
+        BuiltInFunctionCall2p,
+        RealExpressionId<'mir>,
+        RealExpressionId<'mir>,
+    ),
     IntegerConversion(IntegerExpressionId<'mir>),
     SystemFunctionCall(Ident),
 }
@@ -348,111 +373,6 @@ pub enum RealBinaryOperator {
     Divide,
     Exponent,
     Modulus,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum RealBuiltInFunctionCall<'mir> {
-    Pow(RealExpressionId<'mir>, RealExpressionId<'mir>),
-    Sqrt(RealExpressionId<'mir>),
-
-    Hypot(RealExpressionId<'mir>, RealExpressionId<'mir>),
-    Exp(RealExpressionId<'mir>),
-    Ln(RealExpressionId<'mir>),
-    Log(RealExpressionId<'mir>),
-
-    Min(RealExpressionId<'mir>, RealExpressionId<'mir>),
-    Max(RealExpressionId<'mir>, RealExpressionId<'mir>),
-    Abs(RealExpressionId<'mir>),
-    Floor(RealExpressionId<'mir>),
-    Ceil(RealExpressionId<'mir>),
-
-    Sin(RealExpressionId<'mir>),
-    Cos(RealExpressionId<'mir>),
-    Tan(RealExpressionId<'mir>),
-
-    ArcSin(RealExpressionId<'mir>),
-    ArcCos(RealExpressionId<'mir>),
-    ArcTan(RealExpressionId<'mir>),
-    ArcTan2(RealExpressionId<'mir>, RealExpressionId<'mir>),
-
-    SinH(RealExpressionId<'mir>),
-    CosH(RealExpressionId<'mir>),
-    TanH(RealExpressionId<'mir>),
-
-    ArcSinH(RealExpressionId<'mir>),
-    ArcCosH(RealExpressionId<'mir>),
-    ArcTanH(RealExpressionId<'mir>),
-}
-
-impl<'tag, F: FnMut(ir::ExpressionId<'tag>) -> Result<RealExpressionId<'tag>, ()>>
-    TryFrom<(BuiltInFunctionCall<'tag>, F)> for RealBuiltInFunctionCall<'tag>
-{
-    type Error = ();
-    fn try_from(
-        (call, mut parameter_map): (BuiltInFunctionCall<'tag>, F),
-    ) -> Result<Self, Self::Error> {
-        let res = match call {
-            BuiltInFunctionCall::Sqrt(param) => {
-                RealBuiltInFunctionCall::Sqrt(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::Exp(param) => RealBuiltInFunctionCall::Exp(parameter_map(param)?),
-            BuiltInFunctionCall::Ln(param) => RealBuiltInFunctionCall::Ln(parameter_map(param)?),
-            BuiltInFunctionCall::Log(param) => RealBuiltInFunctionCall::Log(parameter_map(param)?),
-            BuiltInFunctionCall::Abs(param) => RealBuiltInFunctionCall::Abs(parameter_map(param)?),
-            BuiltInFunctionCall::Floor(param) => {
-                RealBuiltInFunctionCall::Floor(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::Ceil(param) => {
-                RealBuiltInFunctionCall::Ceil(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::Sin(param) => RealBuiltInFunctionCall::Sin(parameter_map(param)?),
-            BuiltInFunctionCall::Cos(param) => RealBuiltInFunctionCall::Cos(parameter_map(param)?),
-            BuiltInFunctionCall::Tan(param) => RealBuiltInFunctionCall::Tan(parameter_map(param)?),
-            BuiltInFunctionCall::ArcSin(param) => {
-                RealBuiltInFunctionCall::ArcSin(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::ArcCos(param) => {
-                RealBuiltInFunctionCall::ArcCos(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::ArcTan(param) => {
-                RealBuiltInFunctionCall::ArcTan(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::SinH(param) => {
-                RealBuiltInFunctionCall::SinH(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::CosH(param) => {
-                RealBuiltInFunctionCall::CosH(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::TanH(param) => {
-                RealBuiltInFunctionCall::TanH(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::ArcSinH(param) => {
-                RealBuiltInFunctionCall::ArcSinH(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::ArcCosH(param) => {
-                RealBuiltInFunctionCall::ArcCosH(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::ArcTanH(param) => {
-                RealBuiltInFunctionCall::ArcTanH(parameter_map(param)?)
-            }
-            BuiltInFunctionCall::Min(arg1, arg2) => {
-                RealBuiltInFunctionCall::Min(parameter_map(arg1)?, parameter_map(arg2)?)
-            }
-            BuiltInFunctionCall::Max(arg1, arg2) => {
-                RealBuiltInFunctionCall::Max(parameter_map(arg1)?, parameter_map(arg2)?)
-            }
-            BuiltInFunctionCall::ArcTan2(arg1, arg2) => {
-                RealBuiltInFunctionCall::ArcTan2(parameter_map(arg1)?, parameter_map(arg2)?)
-            }
-            BuiltInFunctionCall::Hypot(arg1, arg2) => {
-                RealBuiltInFunctionCall::Hypot(parameter_map(arg1)?, parameter_map(arg2)?)
-            }
-            BuiltInFunctionCall::Pow(arg1, arg2) => {
-                RealBuiltInFunctionCall::Pow(parameter_map(arg1)?, parameter_map(arg2)?)
-            }
-        };
-        Ok(res)
-    }
 }
 
 #[derive(Clone, Debug)]

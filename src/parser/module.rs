@@ -2,13 +2,11 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-
-use std::collections::HashSet;
 
 use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
 use crate::ast::{Module, ModuleItem};
@@ -21,6 +19,7 @@ use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use rustc_hash::FxHashSet;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
@@ -33,8 +32,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         //Module head
 
         let name = self.parse_identifier(false);
-        self.scope_stack
-            .push(SymbolTable::with_capacity(Self::SYMBOL_TABLE_DEFAULT_SIZE));
+        self.scope_stack.push(SymbolTable::with_capacity_and_hasher(
+            Self::SYMBOL_TABLE_DEFAULT_SIZE,
+            Default::default(),
+        ));
 
         let parameter_list = self.ast.empty_range_from_end();
         let port_list = self.ast.empty_range_from_end();
@@ -157,7 +158,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(())
     }
 
-    fn parse_module_ports(&mut self) -> Result<Option<HashSet<Ident>>> {
+    fn parse_module_ports(&mut self) -> Result<Option<FxHashSet<Ident>>> {
         let res = if self.look_ahead()?.0 == Token::ParenOpen {
             self.consume_lookahead();
 
@@ -190,8 +191,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(res)
     }
 
-    fn parse_port_list(&mut self) -> Result<HashSet<Ident>> {
-        let mut res = HashSet::with_capacity(1);
+    fn parse_port_list(&mut self) -> Result<FxHashSet<Ident>> {
+        let mut res = FxHashSet::with_capacity_and_hasher(1, Default::default());
         res.insert(self.parse_identifier(false)?);
         while self.look_ahead()?.0 == Token::Comma {
             self.consume_lookahead();
@@ -207,7 +208,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             self.parse_list(
                 |parser| {
                     let attributes = parser.parse_attributes()?;
-                    parser.parse_parameter_decl(attributes);
+                    parser.parse_parameter_decl(attributes)?;
                     Ok(())
                 },
                 Token::ParenClose,

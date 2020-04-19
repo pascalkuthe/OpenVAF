@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -124,10 +124,12 @@ impl<T: Copy + Step + PartialOrd> DoubleEndedIterator for SafeRange<T> {
 
 impl<T: Copy + Clone> SafeRange<T> {
     /// You should never call this! This is here to allow access in macros
+    #[inline(always)]
     pub(crate) unsafe fn get_end(&self) -> T {
         self.end
     }
     /// You should never call this! This is here to allow access in macros
+    #[inline(always)]
     pub(crate) unsafe fn get_start(&self) -> T {
         self.start
     }
@@ -210,7 +212,7 @@ impl<'tag, I: From<u8> + Copy + Clone + AddAssign + SubAssign> Step for Idx<'tag
 /// This is one part of the secret sauce that ensures that indices from
 /// different arenas cannot be mixed. You should never need to use this type in
 /// your code.
-#[derive(Copy, Clone, PartialOrd, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Debug)]
 pub struct InvariantLifetime<'a>(PhantomData<fn(&'a ()) -> &'a ()>);
 
 /// Create an invariant lifetime. This is one part of the secret sauce that
@@ -231,6 +233,16 @@ pub struct Idx<'tag, I: Copy + Clone> {
     index: I,
     tag: InvariantLifetime<'tag>,
 }
+impl<'tag, I: Copy + Clone> Idx<'tag, I> {
+    #[inline(always)]
+    pub unsafe fn transmute<'newtag>(&self) -> Idx<'newtag, I> {
+        Idx {
+            index: self.index,
+            tag: InvariantLifetime(PhantomData),
+        }
+    }
+}
+
 impl<'tag, T: Copy + Clone + AddAssign> Idx<'tag, T> {
     pub unsafe fn add(&mut self, delta: T) {
         self.index += delta;
@@ -506,6 +518,191 @@ pub struct SmallArena<'tag, T> {
     data: Vec<T>,
 }
 
+#[derive(Debug)]
+pub struct TinyHeapArena<'tag, T> {
+    #[allow(dead_code)]
+    tag: InvariantLifetime<'tag>,
+    data: Vec<T>,
+}
+impl<'tag, T: Copy> TinyHeapArena<'tag, T> {
+    pub fn copy_into<'newtag>(&self, dst: &mut TinyHeapArena<'newtag, T>) {
+        dst.reserve(self.len() - dst.data.capacity() as u16);
+        unsafe {
+            dst.set_length(self.len());
+        }
+        dst.data.copy_from_slice(&self.data)
+    }
+}
+impl<'tag, T: Clone> TinyHeapArena<'tag, T> {
+    pub fn clone_into<'newtag>(&self, dst: &mut TinyHeapArena<'newtag, T>) {
+        dst.data.extend_from_slice(&self.data)
+    }
+}
+impl<'tag, T> TinyHeapArena<'tag, T> {
+    /// create a new SmallArena. Don't do this manually. Use the macro instead.
+    ///
+    /// # Safety
+    ///
+    /// The whole tagged indexing trick relies on the `'tag` you give to this
+    /// constructor. You must never use this value in another arena, lest you
+    /// might be able to mix up the indices of the two, which could lead to
+    /// out of bounds access and thus **Undefined Behavior**!
+    pub unsafe fn new(tag: InvariantLifetime<'tag>, capacity: usize) -> Self {
+        Self {
+            tag,
+            data: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn reserve(&mut self, capacatiy: u16) {
+        debug_assert!(capacatiy as usize + self.data.len() < std::u16::MAX as usize);
+        self.data.reserve(capacatiy as usize)
+    }
+    /// # Safety: Invalidates all ids
+    pub unsafe fn clear(&mut self) {
+        self.data.clear()
+    }
+
+    pub unsafe fn start(&self) -> Idx16<'tag> {
+        Idx16 {
+            index: 0,
+            tag: self.tag,
+        }
+    }
+
+    pub unsafe fn end(&self) -> Idx16<'tag> {
+        Idx16 {
+            index: (self.data.len() - 1) as u16,
+            tag: self.tag,
+        }
+    }
+
+    pub fn len(&self) -> u16 {
+        self.data.len() as u16
+    }
+    pub fn range_to_end(&self, from: Idx16<'tag>) -> SafeRange<Idx16<'tag>> {
+        SafeRange {
+            start: from,
+            end: Idx16 {
+                index: self.data.len() as u16,
+                tag: self.tag,
+            },
+        }
+    }
+    pub fn empty_range_from_end(&self) -> SafeRange<Idx16<'tag>> {
+        let next_id = Idx16 {
+            index: self.data.len() as u16,
+            tag: self.tag,
+        };
+        SafeRange {
+            start: next_id,
+            end: next_id,
+        }
+    }
+    pub fn full_range(&self) -> SafeRange<Idx16<'tag>> {
+        SafeRange {
+            start: Idx16 {
+                index: 0,
+                tag: self.tag,
+            },
+            end: Idx16 {
+                index: self.data.len() as u16,
+                tag: self.tag,
+            },
+        }
+    }
+    pub fn extend_range_to_end(&self, mut range: SafeRange<Idx16<'tag>>) -> SafeRange<Idx16<'tag>> {
+        range.end = Idx16 {
+            index: self.data.len() as u16,
+            tag: self.tag,
+        };
+        range
+    }
+
+    pub unsafe fn set_length(&mut self, len: u16) {
+        self.data.set_len(len as usize);
+    }
+
+    pub unsafe fn write(&mut self, idx: Idx16<'tag>, value: T) {
+        debug_assert!(idx.index <= self.data.len() as u16);
+        ptr::write(
+            self.data.as_mut_ptr().add(idx.index as usize) as *mut T,
+            value,
+        )
+    }
+
+    /// Add an item to the arena, get an index or CapacityExceeded back.
+    #[inline]
+    pub fn try_add(&mut self, item: T) -> Result<Idx16<'tag>, CapacityExceeded<T>> {
+        let i = self.data.len();
+        if i == (core::u16::MAX as usize) {
+            return Err(CapacityExceeded(item));
+        }
+        self.data.push(item);
+        Ok(Idx {
+            index: (i as u16),
+            tag: self.tag,
+        })
+    }
+
+    /// Add an item to the arena, get an index back.
+    #[inline]
+    pub fn add(&mut self, item: T) -> Idx16<'tag> {
+        match self.try_add(item) {
+            Ok(res) => res,
+            Err(error) => {
+                error!(
+                    "{} {}",
+                    Red.bold().paint("error"),
+                    Fixed(253).bold().paint(format!(
+                        "Capacity of arena exceeded consider using different compilation options (not yet implemented please open an issue): {:?}",
+                        error
+                    ))
+                );
+                panic!("{:?}", error)
+            }
+        }
+    }
+}
+
+impl<'tag, T> Index<Idx16<'tag>> for TinyHeapArena<'tag, T> {
+    type Output = T;
+
+    /// Gets an immutable reference to the value at this index.
+    #[inline]
+    fn index(&self, i: Idx16<'tag>) -> &T {
+        if cfg!(debug_assertions) && (i.index as usize) >= self.data.len() {
+            panic!(
+                "Index ({}) should be smaller than arena length ({})",
+                i.index,
+                self.data.len()
+            )
+        }
+        // we can use unchecked indexing here because branding the indices with
+        // the arenas lifetime ensures that the index is always valid & within
+        // bounds
+        unsafe { &self.data.get_unchecked(i.index as usize) }
+    }
+}
+
+impl<'tag, T> IndexMut<Idx16<'tag>> for TinyHeapArena<'tag, T> {
+    /// Gets a mutable reference to the value at this index.
+    #[inline]
+    fn index_mut(&mut self, i: Idx16<'tag>) -> &mut T {
+        if cfg!(debug_assertions) && (i.index as usize) >= self.data.len() {
+            panic!(
+                "Index ({}) should be smaller than arena length ({})",
+                i.index,
+                self.data.len()
+            )
+        }
+        // we can use unchecked indexing here because branding the indices with
+        // the arenas lifetime ensures that the index is always valid & within
+        // bounds
+        unsafe { self.data.get_unchecked_mut(i.index as usize) }
+    }
+}
+
 /// Run code using an arena. The indirection through the macro is required
 /// to safely bind the indices to the arena. The macro takes an identifier that
 /// will be bound to the `&mut Arena<_, _>` and an expression that will be
@@ -535,7 +732,6 @@ pub struct SmallArena<'tag, T> {
 /// The capacity will be extended automatically, so `new_arena!(0)` creates a
 /// valid arena with initially zero capacity that will be extended on the first
 /// `add`.
-#[cfg(feature = "alloc")]
 #[macro_export]
 macro_rules! mk_arena {
     ($name:ident) => {
@@ -563,6 +759,32 @@ macro_rules! mk_arena {
     };
 }
 
+#[macro_export]
+macro_rules! mk_tiny_heap_arena {
+    ($name:ident) => {
+        $crate::mk_tiny_heap_arena!($name, 0) //0 by default reserve more if needed
+    };
+    ($name:ident, $cap:expr) => {
+        let tag = $crate::compact_arena::invariant_lifetime();
+        let _guard;
+        let mut $name = unsafe {
+            // this is not per-se unsafe but we need it to be public and
+            // calling it with a non-unique `tag` would allow arena mixups,
+            // which may introduce UB in `Index`/`IndexMut`
+            $crate::compact_arena::TinyHeapArena::new(tag, $cap)
+        };
+        // this doesn't make it to MIR, but ensures that borrowck will not
+        // unify the lifetimes of two macro calls by binding the lifetime to
+        // drop scope
+        if false {
+            struct Guard<'tag>(&'tag $crate::compact_arena::InvariantLifetime<'tag>);
+            impl<'tag> ::core::ops::Drop for Guard<'tag> {
+                fn drop(&mut self) {}
+            }
+            _guard = Guard(&tag);
+        }
+    };
+}
 /// Create a tiny arena. The indirection through this macro is required
 /// to bind the indices to the arena.
 ///
@@ -583,6 +805,7 @@ macro_rules! mk_tiny_arena {
             // this is not per-se unsafe but we need it to be public and
             // calling it with a non-unique `tag` would allow arena mixups,
             // which may introduce UB in `Index`/`IndexMut`
+
             $crate::compact_arena::TinyArena::new(tag)
         };
         // this doesn't make it to MIR, but ensures that borrowck will not
@@ -633,7 +856,6 @@ macro_rules! mk_nano_arena {
     };
 }
 
-#[cfg(feature = "alloc")]
 impl<'tag, T> SmallArena<'tag, T> {
     /// create a new SmallArena. Don't do this manually. Use the macro instead.
     ///
@@ -684,7 +906,6 @@ impl<'tag, T> SmallArena<'tag, T> {
     }
 }
 
-#[cfg(feature = "alloc")]
 impl<'tag, T> Index<Idx32<'tag>> for SmallArena<'tag, T> {
     type Output = T;
 
@@ -699,7 +920,6 @@ impl<'tag, T> Index<Idx32<'tag>> for SmallArena<'tag, T> {
     }
 }
 
-#[cfg(feature = "alloc")]
 impl<'tag, T> IndexMut<Idx32<'tag>> for SmallArena<'tag, T> {
     /// Gets a mutable reference to the value at this index.
     #[inline]
@@ -739,6 +959,21 @@ impl<'tag, T> TinyArena<'tag, T> {
             len: 0,
         }
     }
+
+    pub unsafe fn start(&self) -> Idx16<'tag> {
+        Idx16 {
+            index: 0,
+            tag: self.tag,
+        }
+    }
+
+    pub unsafe fn end(&self) -> Idx16<'tag> {
+        Idx16 {
+            index: (self.len - 1) as u16,
+            tag: self.tag,
+        }
+    }
+
     pub fn range_to_end(&self, from: Idx16<'tag>) -> SafeRange<Idx16<'tag>> {
         SafeRange {
             start: from,
@@ -777,6 +1012,7 @@ impl<'tag, T> TinyArena<'tag, T> {
         };
         range
     }
+
     /// # Safety
     /// Behavior is undefined if any of the following conditions are violated:
     ///
@@ -811,11 +1047,12 @@ impl<'tag, T> TinyArena<'tag, T> {
         })
     }
 
-    /// Add an item to the arena, get an index or CapacityExceeded back.
+    /// This throws all safety guarantees out of the window please don't use this unless your really know what you are doing
     #[inline]
     pub unsafe fn write(&mut self, idx: Idx16<'tag>, val: MaybeUninit<T>) {
         self.data[idx.index as usize] = val;
     }
+
     /// Add an item to the arena, get an index back
     pub fn add(&mut self, item: T) -> Idx16<'tag> {
         match self.try_add(item) {

@@ -1,7 +1,7 @@
 //  * ******************************************************************************************
 //  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
 //  * It is subject to the license terms in the LICENSE file found in the top-level directory
-//  *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+//  *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
 //  *  No part of VARF, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
@@ -17,6 +17,7 @@ use crate::ir::*;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
 use crate::Span;
+use rustc_hash::FxHasher;
 
 // pub use visitor::Visitor;
 
@@ -124,7 +125,7 @@ impl<'tag> Ast<'tag> {
         StringArena::init(&mut res.as_mut().string_literals);
         std::ptr::write(
             &mut res.as_mut().top_symbols,
-            SymbolTable::with_capacity(64),
+            SymbolTable::with_capacity_and_hasher(64, Default::default()),
         );
         Box::from_raw(res.as_ptr())
     }
@@ -335,7 +336,6 @@ pub enum Statement<'ast> {
     //  TODO IndirectContribute(),
     Assign(Attributes<'ast>, HierarchicalId, ExpressionId<'ast>),
     FunctionCall(Attributes<'ast>, HierarchicalId, Vec<ExpressionId<'ast>>),
-    BuiltInFunctionCall(AttributeNode<'ast, BuiltInFunctionCall<'ast>>),
     While(AttributeNode<'ast, WhileLoop<'ast>>),
 }
 
@@ -394,42 +394,47 @@ pub enum Primary<'ast> {
     FunctionCall(HierarchicalId, Vec<ExpressionId<'ast>>),
     SystemFunctionCall(Ident /*TODO args*/),
     BranchAccess(Ident, Node<BranchAccess>),
-    BuiltInFunctionCall(BuiltInFunctionCall<'ast>),
+    BuiltInFunctionCall1p(BuiltInFunctionCall1p, ExpressionId<'ast>),
+    BuiltInFunctionCall2p(
+        BuiltInFunctionCall2p,
+        ExpressionId<'ast>,
+        ExpressionId<'ast>,
+    ),
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum BuiltInFunctionCall<'ast> {
-    Pow(ExpressionId<'ast>, ExpressionId<'ast>),
-    Sqrt(ExpressionId<'ast>),
-
-    Hypot(ExpressionId<'ast>, ExpressionId<'ast>),
-    Exp(ExpressionId<'ast>),
-    Ln(ExpressionId<'ast>),
-    Log(ExpressionId<'ast>),
-
-    Min(ExpressionId<'ast>, ExpressionId<'ast>),
-    Max(ExpressionId<'ast>, ExpressionId<'ast>),
-    Abs(ExpressionId<'ast>),
-    Floor(ExpressionId<'ast>),
-    Ceil(ExpressionId<'ast>),
-
-    Sin(ExpressionId<'ast>),
-    Cos(ExpressionId<'ast>),
-    Tan(ExpressionId<'ast>),
-
-    ArcSin(ExpressionId<'ast>),
-    ArcCos(ExpressionId<'ast>),
-    ArcTan(ExpressionId<'ast>),
-    ArcTan2(ExpressionId<'ast>, ExpressionId<'ast>),
-
-    SinH(ExpressionId<'ast>),
-    CosH(ExpressionId<'ast>),
-    TanH(ExpressionId<'ast>),
-
-    ArcSinH(ExpressionId<'ast>),
-    ArcCosH(ExpressionId<'ast>),
-    ArcTanH(ExpressionId<'ast>),
-}
+// #[derive(Copy, Clone, Debug)]
+// pub enum BuiltInFunctionCall<'ast> {
+//     Pow(ExpressionId<'ast>, ExpressionId<'ast>),
+//     Sqrt(ExpressionId<'ast>),
+//
+//     Hypot(ExpressionId<'ast>, ExpressionId<'ast>),
+//     Exp(ExpressionId<'ast>),
+//     Ln(ExpressionId<'ast>),
+//     Log(ExpressionId<'ast>),
+//
+//     Min(ExpressionId<'ast>, ExpressionId<'ast>),
+//     Max(ExpressionId<'ast>, ExpressionId<'ast>),
+//     Abs(ExpressionId<'ast>),
+//     Floor(ExpressionId<'ast>),
+//     Ceil(ExpressionId<'ast>),
+//
+//     Sin(ExpressionId<'ast>),
+//     Cos(ExpressionId<'ast>),
+//     Tan(ExpressionId<'ast>),
+//
+//     ArcSin(ExpressionId<'ast>),
+//     ArcCos(ExpressionId<'ast>),
+//     ArcTan(ExpressionId<'ast>),
+//     ArcTan2(ExpressionId<'ast>, ExpressionId<'ast>),
+//
+//     SinH(ExpressionId<'ast>),
+//     CosH(ExpressionId<'ast>),
+//     TanH(ExpressionId<'ast>),
+//
+//     ArcSinH(ExpressionId<'ast>),
+//     ArcCosH(ExpressionId<'ast>),
+//     ArcTanH(ExpressionId<'ast>),
+// }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperator {

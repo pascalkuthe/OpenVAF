@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -10,12 +10,12 @@
 
 use std::convert::{TryFrom, TryInto};
 
-use crate::ast::{BinaryOperator, BuiltInFunctionCall};
+use crate::ast::BinaryOperator;
 use crate::hir::Primary;
 use crate::hir_lowering::error::{Error, Type};
 use crate::hir_lowering::HirToMirFold;
-use crate::ir::Push;
 use crate::ir::{hir, IntegerExpressionId, Node, RealExpressionId};
+use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, Push};
 use crate::mir::*;
 use crate::{ast, ir, mir};
 
@@ -102,13 +102,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             hir::Expression::Primary(Primary::SystemFunctionCall(ident)) => {
                 RealExpression::SystemFunctionCall(ident) //TODO delegate type checking using closure
             }
-            hir::Expression::Primary(Primary::BuiltInFunctionCall(call)) => {
-                RealExpression::BuiltInFunctionCall(
-                    RealBuiltInFunctionCall::try_from((call, |expr| {
-                        self.fold_real_expression(expr).ok_or(())
-                    }))
-                    .ok()?,
-                )
+            hir::Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)) => {
+                RealExpression::BuiltInFunctionCall1p(call, self.fold_real_expression(arg)?)
+            }
+            hir::Expression::Primary(Primary::BuiltInFunctionCall2p(call, arg1, arg2)) => {
+                let arg1 = self.fold_real_expression(arg1);
+                let arg2 = self.fold_real_expression(arg2);
+                RealExpression::BuiltInFunctionCall2p(call, arg1?, arg2?)
             }
             _ => RealExpression::IntegerConversion(self.fold_integer_expression(expr)?),
         };
@@ -141,29 +141,32 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 IntegerExpression::UnaryOperator(op, self.fold_integer_expression(arg)?)
             }
 
-            hir::Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Min(
+            hir::Expression::Primary(Primary::BuiltInFunctionCall2p(
+                BuiltInFunctionCall2p::Min,
                 arg1,
                 arg2,
-            ))) => {
+            )) => {
                 let arg1 = self.fold_integer_expression(arg1);
                 let arg2 = self.fold_integer_expression(arg2);
                 let (arg1, arg2) = (arg1?, arg2?);
                 IntegerExpression::Min(arg1, arg2)
             }
 
-            hir::Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Max(
+            hir::Expression::Primary(Primary::BuiltInFunctionCall2p(
+                BuiltInFunctionCall2p::Max,
                 arg1,
                 arg2,
-            ))) => {
+            )) => {
                 let arg1 = self.fold_integer_expression(arg1);
                 let arg2 = self.fold_integer_expression(arg2);
                 let (arg1, arg2) = (arg1?, arg2?);
                 IntegerExpression::Max(arg1, arg2)
             }
 
-            hir::Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Abs(
+            hir::Expression::Primary(Primary::BuiltInFunctionCall1p(
+                BuiltInFunctionCall1p::Abs,
                 arg,
-            ))) => IntegerExpression::Abs(self.fold_integer_expression(arg)?),
+            )) => IntegerExpression::Abs(self.fold_integer_expression(arg)?),
 
             hir::Expression::Condtion(condition, question_span, if_val, colon_span, else_val) => {
                 let condition = self.fold_integer_expression(condition);
@@ -524,13 +527,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     rhs,
                 )
             }
-            hir::Expression::Primary(Primary::BuiltInFunctionCall(call)) => {
-                RealExpression::BuiltInFunctionCall(
-                    RealBuiltInFunctionCall::try_from((call, |expr| {
-                        self.fold_real_expression(expr).ok_or(())
-                    }))
-                    .ok()?,
-                )
+            hir::Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)) => {
+                RealExpression::BuiltInFunctionCall1p(call, self.fold_real_expression(arg)?)
+            }
+            hir::Expression::Primary(Primary::BuiltInFunctionCall2p(call, arg1, arg2)) => {
+                let arg1 = self.fold_real_expression(arg1);
+                let arg2 = self.fold_real_expression(arg2);
+                RealExpression::BuiltInFunctionCall2p(call, arg1?, arg2?)
             }
             _ => return Some(ExpressionId::Integer(self.fold_integer_expression(expr)?)),
         };

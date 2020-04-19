@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -65,11 +65,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 let res = match token {
                     Token::Assign => {
                         self.consume_lookahead();
-                        Statement::Assign(
-                            attributes,
-                            identifier.into(),
-                            self.parse_expression_id()?,
-                        )
+                        Statement::Assign(attributes, identifier, self.parse_expression_id()?)
                     }
                     Token::ParenOpen => {
                         self.consume_lookahead();
@@ -171,8 +167,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let scope = if self.look_ahead()?.0 == Token::Colon {
             self.consume_lookahead();
             let name = self.parse_identifier(false)?;
-            self.scope_stack.push(SymbolTable::with_capacity(
+            self.scope_stack.push(SymbolTable::with_capacity_and_hasher(
                 Self::BLOCK_DEFAULT_SYMTABLE_SIZE,
+                Default::default(),
             ));
             loop {
                 let attributes = self.parse_attributes()?;
