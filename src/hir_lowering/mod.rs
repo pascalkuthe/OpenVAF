@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -36,16 +36,17 @@ use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
 use crate::ir::*;
 use crate::ir::{Push, SafeRangeCreation};
 use crate::mir::*;
-use crate::{hir, SourceMap};
+use crate::SourceMap;
 
+pub mod control_flow;
 pub mod error;
 
 #[cfg(test)]
 pub mod test;
 
-struct HirToMirFold<'tag, 'hirref> {
+struct HirToMirFold<'tag, 'lt> {
     pub errors: Vec<Error<'tag>>,
-    hir: &'hirref Hir<'tag>,
+    hir: &'lt Hir<'tag>,
     mir: Box<Mir<'tag>>,
 }
 impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
@@ -57,16 +58,24 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         }
     }
 
-    pub fn fold(mut self) -> Result<Box<Mir<'tag>>, Vec<Error<'tag>>> {
+    fn fold(mut self) -> Result<Box<Mir<'tag>>, Vec<Error<'tag>>> {
         for parameter in self.hir.full_range() {
             self.fold_parameter(parameter)
         }
 
-        for variable in self.mir.full_range() {
+        for variable in self.hir.full_range() {
             self.fold_variable(variable)
         }
 
-        self.fold_block(self.hir.full_range());
+        for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.hir) {
+            let res = self.hir[module].map_with(|old| Module {
+                name: old.name,
+                port_list: old.port_list,
+                parameter_list: old.parameter_list,
+                analog_cfg: self.fold_block_into_cfg(old.analog),
+            });
+            self.mir.push(res);
+        }
 
         if self.errors.is_empty() {
             Ok(self.mir)
@@ -187,136 +196,6 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             )
         }
     }
-
-    fn fold_block(&mut self, mut statements: Block<'tag>) {
-        while let Some(statement) = statements.next() {
-            let res = match self.hir[statement] {
-                hir::Statement::ConditionStart {
-                    condition_info_and_end,
-                } => {
-                    self.mir.push(Statement::ConditionStart {
-                        condition_info_and_end,
-                    });
-
-                    let condition_node = if let hir::Statement::Condition(cond) =
-                        &self.hir[condition_info_and_end]
-                    {
-                        cond
-                    } else {
-                        unreachable_unchecked!("Condition starts should only point to conditions")
-                    };
-                    let condition = &condition_node.contents;
-
-                    let main_condition = self.fold_integer_expression(condition.main_condition);
-
-                    self.fold_block(statements.enter(condition.main_condition_statements));
-
-                    self.fold_block(statements.enter(condition.else_statement));
-
-                    statements.skip_forward(1);
-
-                    let main_condition = if let Some(main_condition) = main_condition {
-                        main_condition
-                    } else {
-                        continue;
-                    };
-
-                    Statement::Condition(condition_node.map_with(|old| Condition {
-                        condition: main_condition,
-                        if_statements: old.main_condition_statements,
-                        else_statement: old.else_statement,
-                    }))
-                }
-
-                hir::Statement::Condition(ref _condition_node) => {
-                    unreachable_unchecked!("Condition start should skip this")
-                }
-
-                hir::Statement::WhileStart {
-                    while_info_and_start,
-                } => {
-                    self.mir.push(Statement::WhileStart {
-                        while_info_and_start,
-                    });
-
-                    let while_node = if let hir::Statement::While(while_loop) =
-                        self.hir[while_info_and_start]
-                    {
-                        while_loop
-                    } else {
-                        unreachable_unchecked!("Condition starts should only point to conditions")
-                    };
-
-                    let condition = self.fold_integer_expression(while_node.contents.condition);
-                    self.fold_block(statements.enter(while_node.contents.body));
-                    statements.skip_forward(1);
-
-                    let condition = if let Some(condition) = condition {
-                        condition
-                    } else {
-                        continue;
-                    };
-
-                    Statement::While(while_node.copy_with(|old| WhileLoop {
-                        condition,
-                        body: old.body,
-                    }))
-                }
-
-                hir::Statement::While(while_loop) => {
-                    unreachable_unchecked!("While loop start should skip this")
-                }
-
-                hir::Statement::Contribute(attributes, discipline_access, branch, expr) => {
-                    if let Some(expr) = self.fold_real_expression(expr) {
-                        Statement::Contribute(attributes, discipline_access, branch, expr)
-                    } else {
-                        continue;
-                    }
-                }
-
-                hir::Statement::Assignment(attr, variable, expr)
-                    if matches!(
-                        self.mir[variable].contents.variable_type,
-                        VariableType::Real(..)
-                    ) =>
-                {
-                    if let Some(expr) = self.fold_real_expression(expr) {
-                        Statement::Assignment(attr, variable, ExpressionId::Real(expr))
-                    } else {
-                        continue;
-                    }
-                }
-
-                hir::Statement::Assignment(attr, variable, expr) => {
-                    match self.fold_expression(expr) {
-                        Some(ExpressionId::Integer(id)) => {
-                            Statement::Assignment(attr, variable, ExpressionId::Integer(id))
-                        }
-                        Some(ExpressionId::Real(id)) => {
-                            let expr = self.mir.push(Node {
-                                source: self.mir[id].source,
-                                contents: IntegerExpression::RealCast(id),
-                            });
-                            Statement::Assignment(attr, variable, ExpressionId::Integer(expr))
-                        }
-                        Some(ExpressionId::String(_)) => {
-                            self.errors.push(Error {
-                                error_type: Type::ExpectedNumber,
-                                source: self.hir[expr].source,
-                            });
-                            return;
-                        }
-                        None => continue,
-                    }
-                }
-
-                hir::Statement::FunctionCall(_, _, _) => todo!("Function Calls"),
-                hir::Statement::BuiltInFunctionCall(_call) => todo!("warn useless function calls"),
-            };
-            self.mir.push(res);
-        }
-    }
 }
 
 mod constant_eval;
@@ -336,7 +215,7 @@ impl<'tag> Hir<'tag> {
     /// Folds an hir to an mir by adding and checking type information
     /// Prints any errors that occur
     pub fn lower_and_print_errors(
-        mut self: Box<Self>,
+        self: Box<Self>,
         source_map: &SourceMap,
         translate_line: bool,
     ) -> Option<Box<Mir<'tag>>> {

@@ -2,19 +2,19 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
 
-use crate::ast::BuiltInFunctionCall::*;
 use crate::ast::HierarchicalId;
 use crate::ast_lowering::ast_to_hir_fold::{Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::Type::{EmptyBranchAccess, UnexpectedTokenInBranchAccess};
 use crate::ast_lowering::error::*;
 use crate::hir::{Expression, Primary};
+use crate::ir::BuiltInFunctionCall1p::*;
 use crate::ir::Push;
 use crate::ir::{BranchId, DisciplineId, ExpressionId, Node};
 use crate::symbol::keywords;
@@ -86,60 +86,21 @@ impl<'tag, 'lt> Fold<'tag, 'lt> {
                 contents: Expression::Primary(Primary::String(val)),
             }),
 
-            ast::Expression::Primary(ast::Primary::BuiltInFunctionCall(function_call)) => {
-                let function_call = match function_call {
-                    Pow(expr0, expr1) => {
-                        let expr0 = expr_folder.fold(expr0, &mut *self);
-                        let expr1 = expr_folder.fold(expr1, &mut *self);
-                        Pow(expr0?, expr1?)
-                    }
-
-                    Hypot(expr0, expr1) => {
-                        let expr0 = expr_folder.fold(expr0, &mut *self);
-                        let expr1 = expr_folder.fold(expr1, &mut *self);
-                        Hypot(expr0?, expr1?)
-                    }
-
-                    Min(expr0, expr1) => {
-                        let expr0 = expr_folder.fold(expr0, &mut *self);
-                        let expr1 = expr_folder.fold(expr1, &mut *self);
-                        Min(expr0?, expr1?)
-                    }
-
-                    Max(expr0, expr1) => {
-                        let expr0 = expr_folder.fold(expr0, &mut *self);
-                        let expr1 = expr_folder.fold(expr1, &mut *self);
-                        Max(expr0?, expr1?)
-                    }
-
-                    ArcTan2(expr0, expr1) => {
-                        let expr0 = expr_folder.fold(expr0, &mut *self);
-                        let expr1 = expr_folder.fold(expr1, &mut *self);
-                        ArcTan2(expr0?, expr1?)
-                    }
-
-                    Sqrt(expr) => Sqrt(expr_folder.fold(expr, &mut *self)?),
-                    Exp(expr) => Exp(expr_folder.fold(expr, &mut *self)?),
-                    Ln(expr) => Ln(expr_folder.fold(expr, &mut *self)?),
-                    Log(expr) => Log(expr_folder.fold(expr, &mut *self)?),
-                    Abs(expr) => Abs(expr_folder.fold(expr, &mut *self)?),
-                    Floor(expr) => Floor(expr_folder.fold(expr, &mut *self)?),
-                    Ceil(expr) => Ceil(expr_folder.fold(expr, &mut *self)?),
-                    Sin(expr) => Sin(expr_folder.fold(expr, &mut *self)?),
-                    Cos(expr) => Cos(expr_folder.fold(expr, &mut *self)?),
-                    Tan(expr) => Tan(expr_folder.fold(expr, &mut *self)?),
-                    ArcSin(expr) => ArcSin(expr_folder.fold(expr, &mut *self)?),
-                    ArcCos(expr) => ArcCos(expr_folder.fold(expr, &mut *self)?),
-                    ArcTan(expr) => ArcTan(expr_folder.fold(expr, &mut *self)?),
-                    SinH(expr) => SinH(expr_folder.fold(expr, &mut *self)?),
-                    CosH(expr) => CosH(expr_folder.fold(expr, &mut *self)?),
-                    TanH(expr) => TanH(expr_folder.fold(expr, &mut *self)?),
-                    ArcSinH(expr) => ArcSinH(expr_folder.fold(expr, &mut *self)?),
-                    ArcCosH(expr) => ArcCosH(expr_folder.fold(expr, &mut *self)?),
-                    ArcTanH(expr) => ArcTanH(expr_folder.fold(expr, &mut *self)?),
-                };
+            ast::Expression::Primary(ast::Primary::BuiltInFunctionCall2p(call, arg1, arg2)) => {
+                let arg1 = expr_folder.fold(arg1, &mut *self);
+                let arg2 = expr_folder.fold(arg2, &mut *self);
                 self.hir.push(Node {
-                    contents: Expression::Primary(Primary::BuiltInFunctionCall(function_call)),
+                    contents: Expression::Primary(Primary::BuiltInFunctionCall2p(
+                        call, arg1?, arg2?,
+                    )),
+                    source: expression.source,
+                })
+            }
+
+            ast::Expression::Primary(ast::Primary::BuiltInFunctionCall1p(call, arg)) => {
+                let arg = expr_folder.fold(arg, &mut *self)?;
+                self.hir.push(Node {
+                    contents: Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)),
                     source: expression.source,
                 })
             }

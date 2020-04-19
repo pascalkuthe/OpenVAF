@@ -2,13 +2,11 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-
-use ahash::AHashMap as HashMap;
 
 use crate::ast_lowering::error::MockSymbolDeclaration;
 use crate::ir::{
@@ -17,10 +15,11 @@ use crate::ir::{
 };
 use crate::symbol::Symbol;
 use crate::Span;
+use rustc_hash::FxHashMap;
 
 use super::ast::*;
 
-pub type SymbolTable<'ast> = HashMap<Symbol, SymbolDeclaration<'ast>>;
+pub type SymbolTable<'ast> = FxHashMap<Symbol, SymbolDeclaration<'ast>>;
 #[derive(Clone, Copy, Debug)]
 pub enum SymbolDeclaration<'ast> {
     Module(ModuleId<'ast>),

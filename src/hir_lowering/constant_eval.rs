@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -22,7 +22,7 @@ use std::ops::Range;
 use float_cmp::{ApproxEq, F64Margin};
 
 use crate::ast;
-use crate::ast::{BinaryOperator, BuiltInFunctionCall, UnaryOperator};
+use crate::ast::{BinaryOperator, UnaryOperator};
 use crate::compact_arena::CompressedRange;
 use crate::hir::{Expression, Primary};
 use crate::hir_lowering::error::Error;
@@ -30,7 +30,9 @@ use crate::hir_lowering::error::Result;
 use crate::hir_lowering::error::Type;
 use crate::hir_lowering::HirToMirFold;
 use crate::ir::mir::ParameterType;
-use crate::ir::{ExpressionId, Node, ParameterId};
+use crate::ir::BuiltInFunctionCall1p::*;
+use crate::ir::BuiltInFunctionCall2p::*;
+use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, ExpressionId, Node, ParameterId};
 use crate::mir::*;
 use crate::Span;
 
@@ -401,212 +403,12 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
             Expression::Primary(Primary::Integer(val)) => Value::Integer(val),
 
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Exp(param))) => {
-                match self.eval_constant_parameter_expression(current_parameter, param)? {
-                    Value::Real(val) => Value::Real(val.exp()),
-                    Value::Integer(val) => Value::Real(std::f64::consts::E.powi(val as i32)), //faster than converting to float
-                    Value::String(_) => {
-                        return Err(Error {
-                            error_type: Type::ExpectedNumber,
-                            source: self.hir[param].source,
-                        })
-                    }
-                }
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Ln(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .ln(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Log(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .log10(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Pow(
-                param1,
-                param2,
-            ))) => {
-                match (
-                    self.eval_constant_parameter_expression(current_parameter, param1)?,
-                    self.eval_constant_parameter_expression(current_parameter, param2)?,
-                ) {
-                    (Value::Real(val1), Value::Integer(val2)) => {
-                        Value::Real(val1.powi(val2 as i32)) //faster than conversion
-                    }
-                    (val1, val2) => {
-                        let val1 = val1.as_real(self.hir[param1].source);
-                        let val2 = val2.as_real(self.hir[param2].source);
-                        Value::Real(val1?.powf(val2?))
-                    }
-                }
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Sqrt(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .sqrt(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Hypot(
-                param1,
-                param2,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param1)?
-                    .as_real(self.hir[param1].source)?
-                    .hypot(
-                        self.eval_constant_parameter_expression(current_parameter, param2)?
-                            .as_real(self.hir[param2].source)?,
-                    ),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::ArcCos(
+            Expression::Primary(Primary::BuiltInFunctionCall1p(
+                BuiltInFunctionCall1p::Abs,
                 param,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param)?
-                    .as_real(self.hir[param].source)?
-                    .acos(),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::ArcSin(
-                param,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param)?
-                    .as_real(self.hir[param].source)?
-                    .asin(),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Cos(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .cos(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Sin(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .sin(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Tan(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .tan(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::ArcTan(
-                param,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param)?
-                    .as_real(self.hir[param].source)?
-                    .atan(),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::ArcTan2(
-                param1,
-                param2,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param1)?
-                    .as_real(self.hir[param1].source)?
-                    .atan2(
-                        self.eval_constant_parameter_expression(current_parameter, param2)?
-                            .as_real(self.hir[param2].source)?,
-                    ),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::ArcCosH(
-                param,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param)?
-                    .as_real(self.hir[param].source)?
-                    .acosh(),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::ArcSinH(
-                param,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param)?
-                    .as_real(self.hir[param].source)?
-                    .asinh(),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::CosH(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .cosh(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::SinH(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .sinh(),
-                )
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::TanH(param))) => {
-                Value::Real(
-                    self.eval_constant_parameter_expression(current_parameter, param)?
-                        .as_real(self.hir[param].source)?
-                        .tanh(),
-                )
-            }
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::ArcTanH(
-                param,
-            ))) => Value::Real(
-                self.eval_constant_parameter_expression(current_parameter, param)?
-                    .as_real(self.hir[param].source)?
-                    .atanh(),
-            ),
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Abs(param))) => {
-                match self.eval_constant_parameter_expression(current_parameter, param)? {
-                    Value::Real(val) => Value::Real(val.abs()),
-                    Value::Integer(val) => Value::Integer(val.abs()),
-                    Value::String(_) => {
-                        return Err(Error {
-                            error_type: Type::ExpectedNumber,
-                            source: self.hir[param].source,
-                        })
-                    }
-                }
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Ceil(param))) => {
-                match self.eval_constant_parameter_expression(current_parameter, param)? {
-                    Value::Real(val) => Value::Real(val.ceil()),
-                    Value::Integer(val) => Value::Integer(val),
-                    Value::String(_) => {
-                        return Err(Error {
-                            error_type: Type::ExpectedNumber,
-                            source: self.hir[param].source,
-                        })
-                    }
-                }
-            }
-
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Floor(
-                param,
-            ))) => match self.eval_constant_parameter_expression(current_parameter, param)? {
-                Value::Real(val) => Value::Real(val.floor()),
-                Value::Integer(val) => Value::Integer(val),
+            )) => match self.eval_constant_parameter_expression(current_parameter, param)? {
+                Value::Real(val) => Value::Real(val.abs()),
+                Value::Integer(val) => Value::Integer(val.abs()),
                 Value::String(_) => {
                     return Err(Error {
                         error_type: Type::ExpectedNumber,
@@ -615,10 +417,11 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 }
             },
 
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Max(
+            Expression::Primary(Primary::BuiltInFunctionCall2p(
+                BuiltInFunctionCall2p::Max,
                 param1,
                 param2,
-            ))) => {
+            )) => {
                 match (
                     self.eval_constant_parameter_expression(current_parameter, param1)?,
                     self.eval_constant_parameter_expression(current_parameter, param2)?,
@@ -632,10 +435,11 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 }
             }
 
-            Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Min(
+            Expression::Primary(Primary::BuiltInFunctionCall2p(
+                BuiltInFunctionCall2p::Min,
                 param1,
                 param2,
-            ))) => {
+            )) => {
                 match (
                     self.eval_constant_parameter_expression(current_parameter, param1)?,
                     self.eval_constant_parameter_expression(current_parameter, param2)?,
@@ -648,6 +452,51 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     }
                 }
             }
+
+            Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)) => Value::Real({
+                let arg = self
+                    .eval_constant_parameter_expression(current_parameter, arg)?
+                    .as_real(self.hir[arg].source)?;
+                match call {
+                    Sqrt => arg.sqrt(),
+                    Exp => arg.exp(),
+                    Ln => arg.ln(),
+                    Log => arg.log10(),
+                    Abs => unreachable_unchecked!("Previous match"),
+                    Floor => arg.floor(),
+                    Ceil => arg.ceil(),
+                    Sin => arg.sin(),
+                    Cos => arg.cos(),
+                    Tan => arg.tan(),
+                    ArcSin => arg.asin(),
+                    ArcCos => arg.acos(),
+                    ArcTan => arg.atan(),
+                    SinH => arg.sinh(),
+                    CosH => arg.cosh(),
+                    TanH => arg.tanh(),
+                    ArcSinH => arg.asinh(),
+                    ArcCosH => arg.acosh(),
+                    ArcTanH => arg.atanh(),
+                }
+            }),
+
+            Expression::Primary(Primary::BuiltInFunctionCall2p(call, arg1, arg2)) => Value::Real({
+                let arg1 = self
+                    .eval_constant_parameter_expression(current_parameter, arg1)
+                    .and_then(|val| val.as_real(self.hir[arg1].source));
+                let arg2 = self
+                    .eval_constant_parameter_expression(current_parameter, arg2)
+                    .and_then(|val| val.as_real(self.hir[arg2].source));
+                let arg1 = arg1?;
+                let arg2 = arg2?;
+                match call {
+                    Pow => arg1.powf(arg2),
+                    Hypot => arg1.hypot(arg2),
+                    Min => unreachable_unchecked!("Previous match"),
+                    Max => unreachable_unchecked!("Previous match"),
+                    ArcTan2 => arg1.atan2(arg2),
+                }
+            }),
 
             Expression::UnaryOperator(op, val) => match op.contents {
                 UnaryOperator::ArithmeticNegate => {

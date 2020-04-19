@@ -2,13 +2,12 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
 
-use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
@@ -31,6 +30,7 @@ use crate::span::{Index, IndexOffset, LineNumber, Range};
 use crate::{Lexer, Span};
 
 use super::Result;
+use ahash::AHashMap;
 
 mod source_map;
 
@@ -124,7 +124,7 @@ impl<'lt, 'source_map> PreprocessorBuilder<'lt, 'source_map> {
         let (source_map_builder, main_lexer) =
             SourceMapBuilder::new(source_map_allocator, allocator, main_file)?;
         let mut res = Preprocessor {
-            macros: HashMap::new(),
+            macros: AHashMap::new(),
             called_macros: IndexMap::new(),
             source_map_builder,
             state_stack: Vec::new(),
@@ -149,7 +149,7 @@ impl<'lt, 'source_map> PreprocessorBuilder<'lt, 'source_map> {
 }
 pub struct Preprocessor<'lt, 'source_map> {
     //internal state
-    macros: HashMap<&'lt str, Macro<'lt>>,
+    macros: AHashMap<&'lt str, Macro<'lt>>,
     called_macros: IndexMap<&'lt str, Vec<MacroArg<'lt>>>,
     source_map_builder: SourceMapBuilder<'lt, 'source_map>,
     state_stack: Vec<Insertion<'lt>>,
@@ -203,7 +203,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         let (token, range) = self.next()?;
         self.current_token = token;
         self.current_source_start = range.start;
-        self.current_start = ((range.start as IndexOffset + self.current_offset()) as Index);
+        self.current_start = (range.start as IndexOffset + self.current_offset()) as Index;
         self.current_len = range.end - range.start;
         Ok(())
     }

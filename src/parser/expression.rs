@@ -2,15 +2,16 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
 
 use crate::ast::{BinaryOperator, BranchAccess, Expression, Primary, UnaryOperator};
-use crate::ir::ast::BuiltInFunctionCall;
-use crate::ir::Push;
+use crate::ir::BuiltInFunctionCall1p::*;
+use crate::ir::BuiltInFunctionCall2p::*;
+use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, Push};
 use crate::ir::{ExpressionId, Node};
 use crate::parser::error::Type::UnexpectedTokens;
 use crate::parser::error::*;
@@ -289,268 +290,6 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
 
-            Token::Min => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let args = self.parse_double_parameter_built_in_function_call()?;
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Min(
-                        args.0, args.1,
-                    ))),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Max => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let args = self.parse_double_parameter_built_in_function_call()?;
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Max(
-                        args.0, args.1,
-                    ))),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Pow => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let args = self.parse_double_parameter_built_in_function_call()?;
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Pow(
-                        args.0, args.1,
-                    ))),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Hypot => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let args = self.parse_double_parameter_built_in_function_call()?;
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Hypot(
-                        args.0, args.1,
-                    ))),
-                    self.span_to_current_end(start),
-                )
-            }
-
-            Token::Sqrt => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::Sqrt(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Exp => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res =
-                    BuiltInFunctionCall::Exp(self.parse_single_parameter_built_in_function_call()?);
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Ln => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res =
-                    BuiltInFunctionCall::Ln(self.parse_single_parameter_built_in_function_call()?);
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Log => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res =
-                    BuiltInFunctionCall::Log(self.parse_single_parameter_built_in_function_call()?);
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-
-            Token::Abs => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res =
-                    BuiltInFunctionCall::Abs(self.parse_single_parameter_built_in_function_call()?);
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Ceil => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::Ceil(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Floor => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::Floor(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-
-            Token::Tan => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res =
-                    BuiltInFunctionCall::Tan(self.parse_single_parameter_built_in_function_call()?);
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Sin => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res =
-                    BuiltInFunctionCall::Sin(self.parse_single_parameter_built_in_function_call()?);
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::Cos => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res =
-                    BuiltInFunctionCall::Cos(self.parse_single_parameter_built_in_function_call()?);
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::ArcTan => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::ArcTan(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-
-            Token::ArcTan2 => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let args = self.parse_double_parameter_built_in_function_call()?;
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(BuiltInFunctionCall::Max(
-                        args.0, args.1,
-                    ))),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::ArcSin => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::ArcSin(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::ArcCos => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::ArcCos(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-
-            Token::TanH => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::TanH(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::SinH => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::SinH(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::CosH => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::CosH(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::ArcTanH => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::ArcTanH(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::ArcSinH => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::ArcSinH(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
-            Token::ArcCosH => {
-                self.consume_lookahead();
-                let start = self.preprocessor.current_start();
-                let res = BuiltInFunctionCall::ArcCosH(
-                    self.parse_single_parameter_built_in_function_call()?,
-                );
-                Node::new(
-                    Expression::Primary(Primary::BuiltInFunctionCall(res)),
-                    self.span_to_current_end(start),
-                )
-            }
             Token::SystemCall => {
                 self.consume_lookahead();
                 Node::new(
@@ -561,6 +300,38 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     span,
                 )
             }
+
+            Token::Min => self.parse_double_parameter_built_in_function_call(Min)?,
+            Token::Max => self.parse_double_parameter_built_in_function_call(Max)?,
+
+            Token::Pow => self.parse_double_parameter_built_in_function_call(Pow)?,
+            Token::Hypot => self.parse_double_parameter_built_in_function_call(Hypot)?,
+            Token::Sqrt => self.parse_single_parameter_built_in_function_call(Sqrt)?,
+
+            Token::Exp => self.parse_single_parameter_built_in_function_call(Exp)?,
+            Token::Ln => self.parse_single_parameter_built_in_function_call(Ln)?,
+            Token::Log => self.parse_single_parameter_built_in_function_call(Log)?,
+
+            Token::Abs => self.parse_single_parameter_built_in_function_call(Abs)?,
+            Token::Ceil => self.parse_single_parameter_built_in_function_call(Ceil)?,
+            Token::Floor => self.parse_single_parameter_built_in_function_call(Floor)?,
+
+            Token::Tan => self.parse_single_parameter_built_in_function_call(Tan)?,
+            Token::Sin => self.parse_single_parameter_built_in_function_call(Sin)?,
+            Token::Cos => self.parse_single_parameter_built_in_function_call(Cos)?,
+
+            Token::ArcTan => self.parse_single_parameter_built_in_function_call(ArcTan)?,
+            Token::ArcTan2 => self.parse_double_parameter_built_in_function_call(ArcTan2)?,
+            Token::ArcSin => self.parse_single_parameter_built_in_function_call(ArcSin)?,
+            Token::ArcCos => self.parse_single_parameter_built_in_function_call(ArcCos)?,
+
+            Token::TanH => self.parse_single_parameter_built_in_function_call(TanH)?,
+            Token::SinH => self.parse_single_parameter_built_in_function_call(SinH)?,
+            Token::CosH => self.parse_single_parameter_built_in_function_call(CosH)?,
+
+            Token::ArcTanH => self.parse_single_parameter_built_in_function_call(ArcTanH)?,
+            Token::ArcSinH => self.parse_single_parameter_built_in_function_call(ArcSinH)?,
+            Token::ArcCosH => self.parse_single_parameter_built_in_function_call(ArcCosH)?,
 
             _ => {
                 return Err(Error {
@@ -573,6 +344,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         };
         Ok(res)
     }
+
     fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression<'ast>>> {
         let unary_op = Node {
             source: self.preprocessor.span(),
@@ -583,20 +355,40 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let span = unary_op.source.extend(self.ast[expr].source);
         Ok(Node::new(Expression::UnaryOperator(unary_op, expr), span))
     }
-    pub fn parse_single_parameter_built_in_function_call(&mut self) -> Result<ExpressionId<'ast>> {
+
+    pub fn parse_single_parameter_built_in_function_call(
+        &mut self,
+        call: BuiltInFunctionCall1p,
+    ) -> Result<Node<Expression<'ast>>> {
+        self.consume_lookahead();
+        let start = self.preprocessor.current_start();
+
         self.expect(Token::ParenOpen)?;
-        let res = self.parse_expression_id()?;
+        let arg = self.parse_expression_id()?;
         self.expect(Token::ParenClose)?;
-        Ok(res)
+
+        Ok(Node::new(
+            Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)),
+            self.span_to_current_end(start),
+        ))
     }
+
     pub fn parse_double_parameter_built_in_function_call(
         &mut self,
-    ) -> Result<(ExpressionId<'ast>, ExpressionId<'ast>)> {
+        call: BuiltInFunctionCall2p,
+    ) -> Result<Node<Expression<'ast>>> {
+        self.consume_lookahead();
+        let start = self.preprocessor.current_start();
+
         self.expect(Token::ParenOpen)?;
         let arg1 = self.parse_expression_id()?;
         self.expect(Token::Comma)?;
         let arg2 = self.parse_expression_id()?;
         self.expect(Token::ParenClose)?;
-        Ok((arg1, arg2))
+
+        Ok(Node::new(
+            Expression::Primary(Primary::BuiltInFunctionCall2p(call, arg1, arg2)),
+            self.span_to_current_end(start),
+        ))
     }
 }

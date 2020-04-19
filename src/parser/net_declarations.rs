@@ -2,13 +2,11 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-
-use std::collections::HashSet;
 
 use crate::ast::{Net, NetType, Port};
 use crate::ir::Push;
@@ -20,6 +18,7 @@ use crate::parser::{error, Error, Parser};
 use crate::symbol::{keywords, Ident};
 use crate::symbol_table::SymbolDeclaration;
 use crate::Span;
+use rustc_hash::FxHashSet;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_port_declaration_list(&mut self) -> Result {
@@ -62,7 +61,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_port_declaration(
         &mut self,
         attributes: Attributes<'ast>,
-        expected: &mut HashSet<Ident>,
+        expected: &mut FxHashSet<Ident>,
         port_list: Span,
     ) -> Result {
         let first_port = self.parse_port_declaration_base(attributes)?;
@@ -87,7 +86,12 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(())
     }
 
-    fn insert_port(&mut self, port: PortId<'ast>, port_list: Span, expected: &mut HashSet<Ident>) {
+    fn insert_port(
+        &mut self,
+        port: PortId<'ast>,
+        port_list: Span,
+        expected: &mut FxHashSet<Ident>,
+    ) {
         if expected.remove(&self.ast[port].contents.name) {
             self.insert_symbol(self.ast[port].contents.name, SymbolDeclaration::Port(port));
         } else {

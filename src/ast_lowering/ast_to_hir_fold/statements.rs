@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -18,7 +18,7 @@ use crate::ast_lowering::ast_to_hir_fold::expression::StatementExpressionFolder;
 use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
-use crate::compact_arena::{NanoArena, SafeRange, TinyArena};
+use crate::compact_arena::{NanoArena, TinyArena};
 use crate::hir::{Condition, Module, Statement};
 use crate::ir::hir::{DisciplineAccess, WhileLoop};
 use crate::ir::*;
@@ -77,6 +77,7 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                 module.map_with(|old| Module {
                     name: old.name,
                     port_list: old.port_list,
+                    parameter_list: old.parameter_list,
                     analog: self.base.hir.extend_range_to_end(analog_statements),
                 }),
             );
@@ -201,9 +202,6 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
                     }
                 )
             }
-            ast::Statement::BuiltInFunctionCall(_function_call) => {
-                //doesnt change the programm flow when we emit this. Might change in the future when stateful functions are introduced
-            }
         }
     }
 
@@ -244,8 +242,8 @@ impl<'tag, 'lt> Statements<'tag, 'lt> {
         let else_statement = self.base.hir.extend_range_to_end(statements);
 
         Some(Condition {
-            main_condition: main_condition?,
-            main_condition_statements,
+            condition: main_condition?,
+            if_statements: main_condition_statements,
             else_statement,
         })
     }

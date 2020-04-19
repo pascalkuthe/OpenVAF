@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -10,10 +10,9 @@
 
 use std::fmt::Display;
 
-use annotate_snippets::display_list::DisplayList;
-use annotate_snippets::formatter::DisplayListFormatter;
+use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
-use intrusive_collections::__core::fmt::Formatter;
+use core::fmt::Formatter;
 use log::error;
 
 use crate::ir::DisciplineId;
@@ -21,6 +20,7 @@ use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};
 use crate::symbol::Symbol;
 use crate::symbol_table::SymbolDeclaration;
 use crate::{parser, Ast, SourceMap, Span};
+use beef::lean::Cow;
 
 pub type Error<'tag> = crate::error::Error<Type<'tag>>;
 //pub(crate) type Warning = crate::error::Error<WarningType>;
@@ -72,141 +72,160 @@ impl<'tag> Error<'tag> {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
-            (substitution_name, vec![Annotation {
+            (Cow::owned(substitution_name), vec![Annotation {
                 id: None,
-                label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)".to_string()),
+                label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)"),
                 annotation_type: AnnotationType::Note
             }])
         } else {
-            (source_map.main_file_name.to_string(), Vec::new())
+            (Cow::const_str(source_map.main_file_name), Vec::new())
         };
-        let line = line.to_string(); //necessary because annotate snippet cant work with slices yet
-        let origin = Some(origin);
-        let snippet = match self.error_type {
+        let opt = FormatOptions {
+            color: true,
+            anonymized_line_numbers: false,
+        };
+
+        match self.error_type {
             Type::UnexpectedTokenInBranchAccess => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("Unexpected Token".to_string()),
+                        label: Some("Unexpected Token"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Expected branch reference".to_string(),
+                            label: "Expected branch reference",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::NotFound(sym) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!("cannot find {} in this scope", sym.as_str());
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!("cannot find {} in this scope", sym.as_str())),
+                        label: Some(label.as_str()),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "not found in this Scope".to_string(),
+                            label: "not found in this Scope",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::DeclarationTypeMismatch {
                 ref expected,
                 found,
             } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!(
+                    "Expected {:?} found {:?} {}",
+                    expected,
+                    found.mock(),
+                    found.name(&ast).as_str()
+                );
+                let inline_label = format!("Expected {:?}", expected);
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "Expected {:?} found {:?} {}",
-                            expected,
-                            found.mock(),
-                            found.name(&ast).as_str()
-                        )),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: format!("Expected {:?}", expected),
+                            label: &inline_label,
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::NatureNotPotentialOrFlow(name, discipline) => {
                 let (msg,expected) = match (ast[discipline].contents.potential_nature,ast[discipline].contents.flow_nature){
-                    (None,None)=> ("Discrete Disciplines can not be accessed using branch Probes".to_string(),"Illegal branch access".to_string()),
+                    (None,None)=> (Cow::const_str("Discrete Disciplines can not be accessed using branch Probes"),Cow::const_str("Illegal branch access")),
 
-                    (Some(nature),None) => (format!(
+                    (Some(nature),None) => (Cow::owned(format!(
                         "This branch can only be accessed using its Potential ({})",
                         nature.name,
-                    ), format!("Expected {}",nature.name)
+                    )), Cow::owned(format!("Expected {}",nature.name))
                     ),
-                    (None,Some(nature)) => (format!(
+                    (None,Some(nature)) => (Cow::owned(format!(
                         "This branch can only be accessed using its Flow ({})",
                         nature.name,
-                    ),format!("Expected {}",nature.name)
+                    )),Cow::owned(format!("Expected {}",nature.name))
                     ),
-                    (Some(pot),Some(flow)) => (format!(
+                    (Some(pot),Some(flow)) => (Cow::owned(format!(
                         "This branch can only be accessed using its Potential ({}) or its Flow ({})",
                         pot.name,
                         flow.name,
-                    ),format!("Expected {} or {}",pot.name,flow.name)
+                    )),Cow::owned(format!("Expected {} or {}",pot.name,flow.name))
                     ),
                 };
                 footer.push(Annotation {
                     id: None,
-                    label: Some(msg),
+                    label: Some(&*msg),
                     annotation_type: AnnotationType::Info,
                 });
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!(
+                    "{} can not be accessed by {}",
+                    ast[discipline].contents.name,
+                    &name.as_str(),
+                );
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "{} can not be accessed by {}",
-                            ast[discipline].contents.name,
-                            &name.as_str(),
-                        )),
+                        label: Some(&*label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: expected,
+                            label: &*expected,
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::NotAScope { declaration, name } => {
                 let (
@@ -223,13 +242,17 @@ impl<'tag> Error<'tag> {
                     &other_declaration_line,
                 );
 
-                Snippet {
+                let other_declaration_origin = if let Some(val) = other_declaration_origin {
+                    Cow::owned(val)
+                } else {
+                    Cow::borrowed(source_map.main_file_name)
+                };
+                let label = format!("Expected scope found reference to {}", name.as_str());
+                let inline_label = format!("{} is declared here", name);
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "Expected scope found reference to {}",
-                            name.as_str()
-                        )),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
@@ -237,27 +260,30 @@ impl<'tag> Error<'tag> {
                         Slice {
                             source: line,
                             line_start: line_number as usize,
-                            origin,
+                            origin: Some(&*origin),
                             annotations: vec![SourceAnnotation {
                                 range,
-                                label: "Expected scope".to_string(),
+                                label: "Expected scope",
                                 annotation_type: AnnotationType::Error,
                             }],
                             fold: false,
                         },
                         Slice {
-                            source: other_declaration_line.to_string(),
+                            source: other_declaration_line,
                             line_start: other_declaration_line_number as usize,
-                            origin: other_declaration_origin,
+                            origin: Some(&*other_declaration_origin),
                             annotations: vec![SourceAnnotation {
                                 range: other_declaration_range,
-                                label: format!("{} is declared here", name.as_str()),
+                                label: &inline_label,
                                 annotation_type: AnnotationType::Info,
                             }],
                             fold: false,
                         },
                     ],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::DisciplineMismatch(net1, net2) => {
                 let (
@@ -285,16 +311,32 @@ impl<'tag> Error<'tag> {
                     &other_declaration_line,
                 );
 
-                Snippet {
+                let other_declaration_origin = if let Some(val) = other_declaration_origin {
+                    Cow::owned(val)
+                } else {
+                    Cow::borrowed(source_map.main_file_name)
+                };
+
+                let declaration_origin = if let Some(val) = declaration_origin {
+                    Cow::owned(val)
+                } else {
+                    Cow::borrowed(source_map.main_file_name)
+                };
+                let label = format!(
+                    "Disciplines {} and {} of nets {} and {} are incompatible",
+                    ast[net1.discipline].contents.name.name,
+                    ast[net2.discipline].contents.name.name,
+                    net1.name,
+                    net2.name
+                );
+
+                let inline_label = format!("{} is declared here", net1.name);
+                let inline_label_2 = format!("{} is declared here", net2.name);
+
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "Disciplines {} and {} of nets {} and {} are incompatible",
-                            ast[net1.discipline].contents.name.name.as_str(),
-                            ast[net2.discipline].contents.name.name.as_str(),
-                            net1.name.as_str(),
-                            net2.name.as_str()
-                        )),
+                        label: Some(&label),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
@@ -302,63 +344,70 @@ impl<'tag> Error<'tag> {
                         Slice {
                             source: line,
                             line_start: line_number as usize,
-                            origin,
+                            origin: Some(&*origin),
                             annotations: vec![SourceAnnotation {
                                 range,
-                                label: "Incompatible disciplines".to_string(),
+                                label: "Incompatible disciplines",
                                 annotation_type: AnnotationType::Error,
                             }],
                             fold: false,
                         },
                         Slice {
-                            source: declaration_line.to_string(),
+                            source: declaration_line,
                             line_start: declaration_line_number as usize,
-                            origin: declaration_origin,
+                            origin: Some(&*other_declaration_origin),
                             annotations: vec![SourceAnnotation {
                                 range: declaration_range,
-                                label: format!("{} is declared here", net1.name.as_str()),
+                                label: &inline_label,
                                 annotation_type: AnnotationType::Info,
                             }],
                             fold: false,
                         },
                         Slice {
-                            source: other_declaration_line.to_string(),
+                            source: other_declaration_line,
                             line_start: other_declaration_line_number as usize,
-                            origin: other_declaration_origin,
+                            origin: Some(&*other_declaration_origin),
                             annotations: vec![SourceAnnotation {
                                 range: other_declaration_range,
-                                label: format!("{} is declared here", net2.name.as_str()),
+                                label: &inline_label_2,
                                 annotation_type: AnnotationType::Info,
                             }],
                             fold: false,
                         },
                     ],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::NotAllowedInConstantContext(non_constant_expr) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let label = format!(
+                    "{} are not allowed in a constant context!",
+                    non_constant_expr
+                );
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some(format!(
-                            "{} are not allowed in a constant context!",
-                            non_constant_expr
-                        )),
+                        label: Some(label.as_str()),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Not allowed in a constant expression!".to_string(),
+                            label: "Not allowed in a constant expression!",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
             Type::Unsupported(unsupported) => {
                 return parser::error::Error {
@@ -369,30 +418,30 @@ impl<'tag> Error<'tag> {
             }
             Type::EmptyBranchAccess => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                Snippet {
+                let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
-                        label: Some("This refers to a nature but the brackets afterwards are empty (expected branch probe)".to_string()),
+                        label: Some("This refers to a nature but the brackets afterwards are empty (expected branch probe)"),
                         annotation_type: AnnotationType::Error,
                     }),
                     footer,
                     slices: vec![Slice {
                         source: line,
                         line_start: line_number as usize,
-                        origin,
+                        origin:Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Expected a following branch probe".to_string(),
+                            label: "Expected a following branch probe",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
                     }],
-                }
+                    opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
             }
         };
-        let display_list = DisplayList::from(snippet);
-        let formatter = DisplayListFormatter::new(true, false);
-        error!("{}", formatter.format(&display_list));
     }
 }
 

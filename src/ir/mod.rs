@@ -2,7 +2,7 @@
  * ******************************************************************************************
  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/jamescoding/VARF/blob/master/LICENSE.
+ *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
  *  No part of VARF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
@@ -37,6 +37,8 @@ pub use ids::PortId;
 pub use ids::RealExpressionId;
 #[doc(no_inline)]
 pub use ids::StatementId;
+#[doc(no_inline)]
+pub use ids::StringExpressionId;
 #[doc(no_inline)]
 pub use ids::VariableId;
 
@@ -163,7 +165,7 @@ pub type Attributes<'ast> = SafeRange<AttributeId<'ast>>;
 
 /// A special type of IR Node. Contains a Span and attributes in addition to whatever that node holds
 #[derive(Clone, Copy, Debug)]
-pub struct AttributeNode<'ast, T: Clone> {
+pub struct AttributeNode<'ast, T> {
     pub attributes: Attributes<'ast>,
     pub source: Span,
     pub contents: T,
@@ -188,9 +190,9 @@ impl<'tag, T: Copy + Clone> AttributeNode<'tag, T> {
         }
     }
 }
-impl<'tag, T: Clone> AttributeNode<'tag, T> {
+impl<'tag, T> AttributeNode<'tag, T> {
     #[inline]
-    pub fn map_with<X: Clone>(&self, f: impl FnOnce(&T) -> X) -> AttributeNode<'tag, X> {
+    pub fn map_with<X>(&self, f: impl FnOnce(&T) -> X) -> AttributeNode<'tag, X> {
         AttributeNode {
             attributes: self.attributes,
             source: self.source,
@@ -199,11 +201,47 @@ impl<'tag, T: Clone> AttributeNode<'tag, T> {
     }
 
     #[inline]
-    pub fn map<X: Clone>(&self, contents: X) -> AttributeNode<'tag, X> {
+    pub fn map<X>(&self, contents: X) -> AttributeNode<'tag, X> {
         AttributeNode {
             attributes: self.attributes,
             source: self.source,
             contents,
         }
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum BuiltInFunctionCall1p {
+    Sqrt,
+    Exp,
+    Ln,
+    Log,
+    Abs,
+    Floor,
+    Ceil,
+
+    Sin,
+    Cos,
+    Tan,
+
+    ArcSin,
+    ArcCos,
+    ArcTan,
+
+    SinH,
+    CosH,
+    TanH,
+
+    ArcSinH,
+    ArcCosH,
+    ArcTanH,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum BuiltInFunctionCall2p {
+    Pow,
+    Hypot,
+    Min,
+    Max,
+    ArcTan2,
 }
