@@ -12,9 +12,8 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
-use crate::parser::lexer::Token;
+use crate::parser::lexer::{FollowedByBracket, Token};
 use crate::parser::preprocessor::source_map::SourceMapBuilder;
-use crate::parser::preprocessor::PreprocessorBuilder;
 use crate::parser::Error;
 use crate::{Preprocessor, Span};
 
@@ -22,7 +21,7 @@ use crate::{Preprocessor, Span};
 pub fn macros() -> std::result::Result<(), String> {
     let source_map_allocator = Bump::new();
     let preprocessor_allocator = Bump::new();
-    let mut preprocessor = PreprocessorBuilder::new(
+    let mut preprocessor = Preprocessor::new(
         &preprocessor_allocator,
         &source_map_allocator,
         Path::new("tests/macros.va"),
@@ -32,60 +31,94 @@ pub fn macros() -> std::result::Result<(), String> {
     let mut end = 0;
     let mut span = Span::new(0, 0);
 
-    let (res, mut preprocessor) = preprocessor.init();
-    res.expect("Init Error");
     let res = Ok(()).and_then(|_| {
-        preprocessor.process_token()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        preprocessor.advance()?;
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "OK1");
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::Comma);
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "OK2");
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::Comma);
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "SMS__");
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "OK3");
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "OK3L");
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::Comma);
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "OK4");
         preprocessor.advance()?;
         start = preprocessor.current_start;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "Sum1");
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::Plus);
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "Sum2");
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "Fac1");
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::OpMul);
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "Fac2");
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::Plus);
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "Fac1");
         span = preprocessor.span();
         preprocessor.advance()?;
         assert_eq!(preprocessor.current_token(), Token::OpDiv);
         preprocessor.advance()?;
-        assert_eq!(preprocessor.current_token(), Token::SimpleIdentifier);
+        assert_eq!(
+            preprocessor.current_token(),
+            Token::SimpleIdentifier(FollowedByBracket(false))
+        );
         assert_eq!(preprocessor.slice(), "Fac2");
         end = preprocessor.current_start + preprocessor.current_len;
         preprocessor.advance()?;
@@ -112,10 +145,9 @@ pub fn test_source_map() {
     )
     .expect("IoError");
     for _ in 0..6 {
-        lexer.advance();
+        lexer.next();
     }
-    builder.new_line();
-    builder.new_line();
+    builder.new_lines(2);
     let span: Span = lexer.range().into();
     builder.enter_macro(lexer.range().start, span, "BAR", 2, "test");
     builder.finish_substitution();

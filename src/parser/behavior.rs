@@ -59,7 +59,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 })
             }
 
-            Token::SimpleIdentifier | Token::EscapedIdentifier => {
+            Token::SimpleIdentifier(_) | Token::EscapedIdentifier => {
                 let identifier = self.parse_hierarchical_identifier()?;
                 let (token, span) = self.look_ahead()?;
                 let res = match token {

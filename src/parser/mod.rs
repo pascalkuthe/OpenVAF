@@ -22,7 +22,6 @@ use crate::ir::{Attribute, AttributeId, Attributes};
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::{Expected, Type, Warning, WarningType};
 use crate::parser::lexer::Token;
-use crate::parser::preprocessor::PreprocessorBuilder;
 use crate::span::Index;
 use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
@@ -135,7 +134,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         };
 
         let identifier = match token {
-            Token::SimpleIdentifier => self.preprocessor.slice(),
+            Token::SimpleIdentifier(_) => self.preprocessor.slice(),
 
             Token::EscapedIdentifier => {
                 let raw = self.preprocessor.slice();
@@ -324,11 +323,10 @@ impl<'tag> Ast<'tag> {
     )> {
         let allocator = Bump::new();
 
-        let preprocessor = PreprocessorBuilder::new(&allocator, source_map_allocator, main_file)?;
-        let (init_result, preprocessor) = preprocessor.init();
+        let mut preprocessor = Preprocessor::new(&allocator, source_map_allocator, main_file)?;
 
         let mut errors = Vec::with_capacity(64);
-        if let Err(error) = init_result {
+        if let Err(error) = preprocessor.advance() {
             errors.push(error);
         }
 

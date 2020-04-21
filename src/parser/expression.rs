@@ -229,7 +229,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 Node::new(Expression::Primary(Primary::UnsignedInteger(value)), span)
             }
 
-            Token::SimpleIdentifier | Token::EscapedIdentifier => {
+            Token::SimpleIdentifier(_) | Token::EscapedIdentifier => {
                 //we allow hieraichal identifers here because they are required for functions
                 // They are illegal for natures so this will just produce an error at name resolution
 

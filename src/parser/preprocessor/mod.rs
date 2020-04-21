@@ -24,7 +24,7 @@ pub(crate) use source_map::{ArgumentIndex, CallDepth};
 
 use crate::parser::error;
 use crate::parser::error::{Error, List, Type, Unsupported, Warning};
-use crate::parser::lexer::Token;
+use crate::parser::lexer::{FollowedByBracket, Token};
 use crate::parser::primaries::parse_string;
 use crate::span::{Index, IndexOffset, LineNumber, Range};
 use crate::{Lexer, Span};
@@ -112,41 +112,6 @@ impl<'lt> MacroArg<'lt> {
         Self { tokens, source }
     }
 }
-pub struct PreprocessorBuilder<'lt, 'source_map> {
-    preprocessor: Preprocessor<'lt, 'source_map>,
-}
-impl<'lt, 'source_map> PreprocessorBuilder<'lt, 'source_map> {
-    pub fn new(
-        allocator: &'lt Bump,
-        source_map_allocator: &'source_map Bump,
-        main_file: &Path,
-    ) -> std::io::Result<Self> {
-        let (source_map_builder, main_lexer) =
-            SourceMapBuilder::new(source_map_allocator, allocator, main_file)?;
-        let mut res = Preprocessor {
-            macros: AHashMap::new(),
-            called_macros: IndexMap::new(),
-            source_map_builder,
-            state_stack: Vec::new(),
-            condition_stack: Vec::new(),
-            current_token: Token::EOF,
-            current_source_start: 0,
-            current_start: 0,
-            current_len: 0,
-        };
-        res.current_token = main_lexer.token();
-        res.current_len = main_lexer.token_len();
-        res.state_stack
-            .push(Insertion::new(0, TokenSource::File(main_lexer)));
-        Ok(Self { preprocessor: res })
-    }
-    pub fn init(mut self) -> (Result, Preprocessor<'lt, 'source_map>) {
-        (
-            self.preprocessor.process_token_until_success(),
-            self.preprocessor,
-        )
-    }
-}
 pub struct Preprocessor<'lt, 'source_map> {
     //internal state
     macros: AHashMap<&'lt str, Macro<'lt>>,
@@ -162,6 +127,31 @@ pub struct Preprocessor<'lt, 'source_map> {
 }
 
 impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
+    pub fn new(
+        allocator: &'lt Bump,
+        source_map_allocator: &'source_map Bump,
+        main_file: &Path,
+    ) -> std::io::Result<Self> {
+        let (source_map_builder, main_lexer) =
+            SourceMapBuilder::new(source_map_allocator, allocator, main_file)?;
+        let mut res = Self {
+            macros: AHashMap::new(),
+            called_macros: IndexMap::new(),
+            source_map_builder,
+            state_stack: Vec::new(),
+            condition_stack: Vec::new(),
+            current_token: Token::EOF,
+            current_source_start: 0,
+            current_start: 0,
+            current_len: 0,
+        };
+
+        res.state_stack
+            .push(Insertion::new(0, TokenSource::File(main_lexer)));
+
+        Ok(res)
+    }
+
     pub fn done(self) -> &'source_map SourceMap<'source_map> {
         if self.current_token != Token::EOF {
             error!(
@@ -217,12 +207,20 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             let new_state = {
                 match current_state.token_source {
                     TokenSource::File(ref mut lexer) => {
-                        lexer.advance();
-                        if lexer.token() != Token::EOF || main_file {
-                            return Ok((lexer.token(), lexer.range()));
-                        } else {
-                            None
+                        loop {
+                            match lexer.next() {
+                                None if main_file => return Ok((Token::EOF, lexer.range())),
+
+                                Some(Token::Comment(lines)) => {
+                                    self.source_map_builder.new_lines(lines)
+                                }
+
+                                Some(token) => return Ok((token, lexer.range())),
+
+                                None => break,
+                            }
                         }
+                        None
                     }
                     TokenSource::Insert(ref mut iter, _) => {
                         if let Some(macro_body_element) = iter.next() {
@@ -322,9 +320,9 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     };
                     return self.token_error(error);
                 }
-                Token::Newline | Token::CommentNewline => self.source_map_builder.new_line(),
+                Token::Newline => self.source_map_builder.new_lines(1),
                 Token::MacroDefNewLine => {
-                    self.source_map_builder.new_line();
+                    self.source_map_builder.new_lines(1);
                     return self.token_error(Type::UnexpectedToken { expected: vec![] });
                 }
                 Token::Include => {
@@ -405,7 +403,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         self.advance_state()?;
         let mut start = self.current_start;
         loop {
-            self.consume(Token::SimpleIdentifier)?;
+            self.consume_simple_ident()?;
             let name = self.slice();
             if invert ^ self.macros.contains_key(name) {
                 debug!(
@@ -440,8 +438,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                             };
                             return self.token_error(error);
                         }
-                        Token::Newline | Token::CommentNewline => {
-                            self.source_map_builder.new_line();
+                        Token::Newline => {
+                            self.source_map_builder.new_lines(1);
                             self.advance_state()?
                         }
                         Token::MacroIf | Token::MacroIfn => self.skip_to_condition_end()?,
@@ -467,8 +465,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 Token::MacroEndIf => {
                     ignore_conditions.pop();
                 }
-                Token::Newline | Token::CommentNewline => {
-                    self.source_map_builder.new_line();
+                Token::Newline => {
+                    self.source_map_builder.new_lines(1);
                 }
                 Token::EOF => {
                     let error = error::Type::UnclosedConditions(ignore_conditions);
@@ -486,19 +484,25 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
     fn parse_definition(&mut self) -> Result {
         self.advance_state()?;
         let (name, args) = match self.current_token {
-            Token::SimpleIdentifier => (self.slice(), Vec::new()),
+            Token::SimpleIdentifier(FollowedByBracket(false)) => (self.slice(), Vec::new()),
 
-            Token::SimpleIdentWithBracket => {
-                let name = &self.slice()[..self.slice().len() - 1];
+            Token::SimpleIdentifier(FollowedByBracket(true)) => {
+                let name = self.slice();
                 self.advance_state()?;
+
+                self.consume(Token::ParenOpen)?;
+                self.advance_state()?;
+
+                self.consume_simple_ident()?;
+
                 let mut args = Vec::with_capacity(2);
-                self.consume(Token::SimpleIdentifier)?;
                 args.push(self.slice());
+
                 loop {
                     self.advance_state()?;
                     match self.current_token {
-                        Token::Newline | Token::CommentNewline => {
-                            self.source_map_builder.new_line();
+                        Token::Newline => {
+                            self.source_map_builder.new_lines(1);
                             self.advance_state()?
                         }
                         Token::ParenClose => {
@@ -506,7 +510,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                         }
                         Token::Comma => {
                             self.advance_state()?;
-                            self.consume(Token::SimpleIdentifier)?;
+                            self.consume_simple_ident()?;
                             args.push(self.slice());
                         }
                         Token::EOF => {
@@ -525,7 +529,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             }
             _ => {
                 let error = error::Type::UnexpectedToken {
-                    expected: vec![Token::SimpleIdentifier],
+                    expected: vec![Token::SimpleIdentifier(FollowedByBracket(false))],
                 };
                 let error = self.token_error(error);
                 #[allow(unused_must_use)]
@@ -565,15 +569,16 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         match self.state_stack.last_mut().unwrap().token_source {
             TokenSource::File(ref lexer) => {
                 let (range, token) = lexer.peek();
-                if token == Token::EOF && !in_main_file {
-                    Err(Error {
+                match token {
+                    None if in_main_file => Ok((range, Token::EOF)),
+                    None => Err(Error {
                         source: Span::new(range.start, range.end),
                         error_type: error::Type::CompilerDirectiveSplit,
-                    })
-                } else {
-                    Ok((range, token))
+                    }),
+                    Some(token) => Ok((range, token)),
                 }
             }
+
             TokenSource::Insert(ref mut iter, _) => {
                 let res = iter.peek().unwrap();
                 let token = if let MacroBodyToken::LexerToken(token) = res.1 {
@@ -596,12 +601,12 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         depth: CallDepth,
     ) -> Result<MacroBodyElement<'lt>> {
         let res = match self.current_token {
-            Token::SimpleIdentifier => {
+            Token::SimpleIdentifier(_) => {
                 let identifier = self.slice();
                 if let Some(index) = args.iter().position(|arg_name| *arg_name == identifier) {
                     MacroBodyToken::ArgumentReference(index as ArgumentIndex, depth)
                 } else {
-                    MacroBodyToken::LexerToken(Token::SimpleIdentifier)
+                    MacroBodyToken::LexerToken(self.current_token)
                 }
             }
             Token::MacroReference => {
@@ -620,7 +625,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 return self.token_error(error);
             }
             Token::MacroDefNewLine => {
-                self.source_map_builder.new_line();
+                self.source_map_builder.new_lines(1);
                 MacroBodyToken::LexerToken(Token::Newline)
             } //map to newline so we can keep track of lines inside macros
             Token::Newline => return self.token_error(error::Type::MacroEndTooEarly),
@@ -816,6 +821,17 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         if self.current_token != token {
             let error = error::Type::UnexpectedToken {
                 expected: vec![token],
+            };
+            let error = self.token_error(error);
+            error
+        } else {
+            Ok(())
+        }
+    }
+    fn consume_simple_ident(&mut self) -> Result<()> {
+        if !matches!(self.current_token, Token::SimpleIdentifier(_)) {
+            let error = error::Type::UnexpectedToken {
+                expected: vec![Token::SimpleIdentifier(FollowedByBracket(false))],
             };
             let error = self.token_error(error);
             error

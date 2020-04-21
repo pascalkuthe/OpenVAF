@@ -171,7 +171,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     None
                 }
 
-                Token::SimpleIdentifier | Token::EscapedIdentifier => Some(self.parse_port_list()?),
+                Token::SimpleIdentifier(_) | Token::EscapedIdentifier => {
+                    Some(self.parse_port_list()?)
+                }
 
                 _ => {
                     return Err(Error {

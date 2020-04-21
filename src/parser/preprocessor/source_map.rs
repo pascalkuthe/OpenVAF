@@ -304,10 +304,10 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
         })
     }
 
-    pub(super) fn new_line(&mut self) {
+    pub(super) fn new_lines(&mut self, lines: LineNumber) {
         if self.substitution_stack.is_empty() {
             //we only keep track of macro expansion independent line numbers in the mainfile
-            self.root_line += 1;
+            self.root_line += lines;
         }
     }
 
