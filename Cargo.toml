@@ -47,7 +47,7 @@ harness = false
 
 [features]
 
-default = ["graph_debug"]
+default = []
 
 graph_debug = ["rustc-ap-graphviz"]
 
