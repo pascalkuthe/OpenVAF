@@ -18,3 +18,14 @@ macro_rules! unreachable_unchecked{
         }
     };
 }
+
+pub(crate) trait RefMut<T> {
+    fn ref_mut(&mut self) -> Option<&mut T>;
+}
+
+impl<'t, T> RefMut<T> for Option<&'t mut T> {
+    #[inline]
+    fn ref_mut(&mut self) -> Option<&mut T> {
+        self.as_mut().map(|x| &mut **x)
+    }
+}

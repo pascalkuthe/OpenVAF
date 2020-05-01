@@ -18,7 +18,7 @@ use crate::{Hir, SourceMap};
 use beef::lean::Cow;
 
 pub type Error<'hir> = crate::error::Error<Type<'hir>>;
-//pub(crate) type Warning = crate::error::Error<WarningType>;
+pub(crate) type Warning<'hir> = crate::error::Error<WarningType<'hir>>;
 pub type Result<'hir, T = ()> = std::result::Result<T, Error<'hir>>;
 
 #[derive(Clone, Debug)]
@@ -33,13 +33,14 @@ pub enum Type<'hir> {
     ExpectedNumericParameter(ParameterId<'hir>),
     ParameterDefinedAfterConstantReference(ParameterId<'hir>),
     InvalidParameterBound,
+    OnlyNumericExpressionsCanBeDerived,
     ParameterExcludeNotPartOfRange,
 }
 impl<'tag> Error<'tag> {
     pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
-        let (origin, footer) = if let Some(substitution_name) = substitution_name {
+        let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
             (Cow::owned(substitution_name),vec![Annotation{
                 id: None,
                 label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)"),
@@ -466,6 +467,90 @@ impl<'tag> Error<'tag> {
                             range,
                             label: "Evaluates to number or string",
                             annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
+            }
+            Type::OnlyNumericExpressionsCanBeDerived => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Only numerical expressions can be taken derivatives of"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Tried to derive string",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
+            }
+        };
+    }
+}
+#[derive(Clone, Debug)]
+pub enum WarningType<'hir> {
+    ImplicitDerivative(VariableId<'hir>),
+}
+impl<'tag> Warning<'tag> {
+    pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
+        let (line, line_number, substitution_name, range) =
+            source_map.resolve_span_within_line(self.source, translate_lines);
+        let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
+            (Cow::owned(substitution_name),vec![Annotation{
+                id: None,
+                label: Some("If macros/files are included inside this macro/file the error output might be hard to understand/display incorrect line numbers (See fully expanded source)"),
+                annotation_type: AnnotationType::Note
+            }])
+        } else {
+            (Cow::const_str(source_map.main_file_name), Vec::new())
+        };
+        let opt = FormatOptions {
+            color: true,
+            anonymized_line_numbers: false,
+        };
+
+        match self.error_type {
+            WarningType::ImplicitDerivative(var) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let main_label = format!("Implicit derivatives can not be calculated using automatic differentiation! The derivative of {} is calulated inside a branch that depends on its value",hir[var].contents.name);
+                let inline_label =
+                    format!("Branch depends on the value of {} ", hir[var].contents.name);
+                footer.push(Annotation{
+                    id: None,
+                    label: Some("This is an problem under active development please see https://gitlab.com/DSPOM/verilogae/-/issues/21 for the current status"),
+                    annotation_type: AnnotationType::Note
+                });
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(main_label.as_str()),
+                        annotation_type: AnnotationType::Warning,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: inline_label.as_str(),
+                            annotation_type: AnnotationType::Warning,
                         }],
                         fold: false,
                     }],

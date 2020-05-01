@@ -23,7 +23,7 @@ use source_map::SourceMapBuilder;
 pub(crate) use source_map::{ArgumentIndex, CallDepth};
 
 use crate::parser::error;
-use crate::parser::error::{Error, List, Type, Unsupported, Warning};
+use crate::parser::error::{Error, List, Type, Unsupported};
 use crate::parser::lexer::{FollowedByBracket, Token};
 use crate::parser::primaries::parse_string;
 use crate::span::{Index, IndexOffset, LineNumber, Range};

@@ -282,7 +282,9 @@ pub fn convert_function_call_to_branch_access(
 ) -> Result<Node<BranchAccess>> {
     let span = args[0].source.extend(args.last().unwrap().source);
     let res = match args.len() {
-        1 => BranchAccess::Explicit(reinterpret_expression_as_identifier(args.pop().unwrap())?),
+        1 => BranchAccess::BranchOrNodePotential(reinterpret_expression_as_identifier(
+            args.pop().unwrap(),
+        )?),
         2 => {
             let second_net = reinterpret_expression_as_identifier(args.pop().unwrap())?;
             let first_net = reinterpret_expression_as_identifier(args.pop().unwrap())?;

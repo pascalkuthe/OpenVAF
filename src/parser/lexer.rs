@@ -9,10 +9,9 @@
  */
 
 use logos::internal::LexerInternal;
-use logos::{Logos, Source};
+use logos::Logos;
 
 use crate::span::{Index, LineNumber, Range};
-use bitflags::_core::slice::Iter;
 #[derive(Clone, Debug, PartialEq, Copy, Eq)]
 pub struct FollowedByBracket(pub bool);
 
@@ -445,8 +444,8 @@ impl<'lt> Lexer<'lt> {
     }
 
     pub fn slice(&self) -> &str {
-        unsafe { self.internal.slice() }
-    } //This is save since we know the range of the current token is always within the current source
+        self.internal.slice()
+    }
 }
 impl<'source> Iterator for Lexer<'source> {
     type Item = Token;

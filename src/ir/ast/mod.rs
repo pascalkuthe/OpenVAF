@@ -17,7 +17,6 @@ use crate::ir::*;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
 use crate::Span;
-use rustc_hash::FxHasher;
 
 // pub use visitor::Visitor;
 
@@ -380,7 +379,7 @@ pub enum Expression<'ast> {
 
 #[derive(Clone, Debug)]
 pub enum BranchAccess {
-    Explicit(HierarchicalId),
+    BranchOrNodePotential(HierarchicalId),
     Implicit(Branch),
 }
 
@@ -400,6 +399,8 @@ pub enum Primary<'ast> {
         ExpressionId<'ast>,
         ExpressionId<'ast>,
     ),
+    DerivativeByBranch(ExpressionId<'ast>, Ident, Node<BranchAccess>),
+    // DerivativeByTime(ExpressionId<'ast>) TODO time derivative
 }
 
 // #[derive(Copy, Clone, Debug)]

@@ -71,13 +71,17 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 let attributes = parser.parse_attributes()?;
                 match parser.look_ahead()?.0 {
                     Token::Inout | Token::Input | Token::Output => {
-                        if let Some(ref mut expected) = expected_ports {
-                            parser.parse_port_declaration(attributes, expected, port_list_span)?;
-                        } else {
-                            let port_base = parser.parse_port_declaration_base(attributes)?;
-                            let source = parser.ast[port_base]
-                                .source //we do this here so that the error doesnt just underline the input token but the entire declaration instead
+                        let declaration_start = parser.preprocessor.current_start();
+                        parser.parse_port_declaration(
+                            attributes,
+                            expected_ports.as_mut().unwrap_or(&mut FxHashSet::default()),
+                            port_list_span,
+                        )?;
+                        if expected_ports.is_none() {
+                            let source = parser
+                                .span_to_current_end(declaration_start)
                                 .negative_offset(start);
+
                             parser.non_critical_errors.push(Error {
                                 source: parser.span_to_current_end(start),
                                 error_type: error::Type::PortRedeclaration(source, port_list_span),

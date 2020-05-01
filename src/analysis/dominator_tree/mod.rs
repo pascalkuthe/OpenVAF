@@ -6,14 +6,11 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::compact_arena::{Idx16, TinyArena, TinyHeapArena};
+use crate::compact_arena::{Idx16, TinyHeapArena};
 use crate::ir::mir::ControlFlowGraph;
 use crate::mir::control_flow_graph::{BasicBlockId, Terminator};
-use crate::mir::Mir;
 use bitflags::_core::mem::MaybeUninit;
-use bitflags::_core::ops::{Deref, IndexMut};
-use std::borrow::Cow;
-use std::io::Write;
+use bitflags::_core::ops::IndexMut;
 use std::ops::Index;
 
 #[cfg(feature = "graph_debug")]
@@ -45,7 +42,7 @@ impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
     ) -> Self {
         cfg.for_all_blocks(|block| {
             let node_type = match cfg.blocks[block].terminator {
-                Terminator::Goto(branch) => {
+                Terminator::Merge(branch) => {
                     DominatorTreeNodeType::Leaf(Parent(MaybeUninit::uninit()))
                 }
                 Terminator::End => DominatorTreeNodeType::Leaf(Parent(MaybeUninit::uninit())),
@@ -58,29 +55,33 @@ impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
                     if merge == block {
                         DominatorTreeNodeType::Root(DominatorTreeBranches {
                             main_child: unsafe { false_block.transmute() },
-                            true_child: unsafe { true_block.transmute() },
-                            true_child_main_leaf: MaybeUninit::uninit(),
+                            true_child: unsafe {
+                                Some((true_block.transmute(), MaybeUninit::uninit()))
+                            },
                             false_child: None,
                         })
                     } else if false_block == merge {
                         DominatorTreeNodeType::Root(DominatorTreeBranches {
                             main_child: unsafe { merge.transmute() },
-                            true_child: unsafe { true_block.transmute() },
-                            true_child_main_leaf: MaybeUninit::uninit(),
+                            true_child: unsafe {
+                                Some((true_block.transmute(), MaybeUninit::uninit()))
+                            },
                             false_child: None,
                         })
                     } else if true_block == merge {
                         DominatorTreeNodeType::Root(DominatorTreeBranches {
                             main_child: unsafe { merge.transmute() },
-                            true_child: unsafe { false_block.transmute() },
-                            true_child_main_leaf: MaybeUninit::uninit(),
+                            true_child: unsafe {
+                                Some((true_block.transmute(), MaybeUninit::uninit()))
+                            },
                             false_child: None,
                         })
                     } else {
                         DominatorTreeNodeType::Root(DominatorTreeBranches {
                             main_child: unsafe { merge.transmute() },
-                            true_child: unsafe { true_block.transmute() },
-                            true_child_main_leaf: MaybeUninit::uninit(),
+                            true_child: unsafe {
+                                Some((true_block.transmute(), MaybeUninit::uninit()))
+                            },
                             false_child: Some((
                                 unsafe { false_block.transmute() },
                                 MaybeUninit::uninit(),
@@ -88,6 +89,11 @@ impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
                         })
                     }
                 }
+                Terminator::Goto(next) => DominatorTreeNodeType::Root(DominatorTreeBranches {
+                    main_child: unsafe { next.transmute() },
+                    true_child: None,
+                    false_child: None,
+                }),
             };
 
             allocator.add(DominatorTreeNode {
@@ -97,7 +103,7 @@ impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
         });
 
         let mut res = DominatorTree { data: allocator };
-        res.init_tree(unsafe { cfg.start().transmute() });
+        res.init_tree(res.start());
         res
     }
 
@@ -118,6 +124,7 @@ impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
                     self[current].node_type = DominatorTreeNodeType::Branch(parent, branches);
                     current = next;
                 }
+
                 DominatorTreeNodeType::Leaf(_) => {
                     return current;
                 }
@@ -130,22 +137,29 @@ impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
         node: DominatorTreeId<'tag>,
         mut branches: DominatorTreeBranches<'tag>,
     ) -> DominatorTreeBranches<'tag> {
-        let true_child = branches.true_child;
-        let true_main_leaf = match self[true_child].node_type {
-            DominatorTreeNodeType::Leaf(ref mut parent) => {
-                parent.0 = MaybeUninit::new(node);
-                true_child
-            }
-            DominatorTreeNodeType::Root(branches) => {
-                self[true_child].node_type =
-                    DominatorTreeNodeType::Branch(Parent(MaybeUninit::new(node)), branches);
-                self.init_tree(true_child)
-            }
-            DominatorTreeNodeType::Branch(_, _) => {
-                unreachable_unchecked!("Node already initialized")
-            }
-        };
-        branches.true_child_main_leaf = MaybeUninit::new(true_main_leaf);
+        // TODO refactor the following two conditions into a function
+
+        if let Some((true_child, ref mut true_branch_main_leaf)) = branches.true_child {
+            let false_main_leaf = match self[true_child].node_type {
+                DominatorTreeNodeType::Leaf(ref mut parent) => {
+                    parent.0 = MaybeUninit::new(node);
+                    true_child
+                }
+
+                DominatorTreeNodeType::Root(branches) => {
+                    self[true_child].node_type =
+                        DominatorTreeNodeType::Branch(Parent(MaybeUninit::new(node)), branches);
+                    self.init_tree(true_child)
+                }
+
+                DominatorTreeNodeType::Branch(_, _) => unreachable_unchecked!(format!(
+                    "Node already initialized {:?} \n {:?}",
+                    true_child, self[true_child]
+                )),
+            };
+
+            *true_branch_main_leaf = MaybeUninit::new(false_main_leaf);
+        }
 
         if let Some((false_child, ref mut false_branch_main_leaf)) = branches.false_child {
             let false_main_leaf = match self[false_child].node_type {
@@ -168,6 +182,7 @@ impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
 
             *false_branch_main_leaf = MaybeUninit::new(false_main_leaf);
         }
+
         let main_child = branches.main_child;
         match self[branches.main_child].node_type {
             DominatorTreeNodeType::Leaf(ref mut parent) => {
@@ -229,19 +244,14 @@ pub enum DominatorTreeNodeType<'tag> {
 #[derive(Copy, Clone, Debug)]
 pub struct DominatorTreeBranches<'tag> {
     pub main_child: DominatorTreeId<'tag>,
-    true_child: DominatorTreeId<'tag>,
-    true_child_main_leaf: MaybeUninit<DominatorTreeId<'tag>>,
+    true_child: Option<(DominatorTreeId<'tag>, MaybeUninit<DominatorTreeId<'tag>>)>,
     false_child: Option<(DominatorTreeId<'tag>, MaybeUninit<DominatorTreeId<'tag>>)>,
 }
 impl<'tag> DominatorTreeBranches<'tag> {
     #[inline(always)]
-    pub fn true_child_main_leaf(&self) -> DominatorTreeId<'tag> {
-        unsafe { self.true_child_main_leaf.assume_init() }
-    }
-
-    #[inline(always)]
-    pub fn true_child(&self) -> DominatorTreeId<'tag> {
+    pub fn true_child(&self) -> Option<(DominatorTreeId<'tag>, DominatorTreeId<'tag>)> {
         self.true_child
+            .map(|(start, end)| (start, unsafe { end.assume_init() }))
     }
 
     #[inline(always)]

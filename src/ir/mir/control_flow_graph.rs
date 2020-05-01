@@ -6,18 +6,10 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::compact_arena::{Idx16, SafeRange, Step, TinyArena, TinyHeapArena};
-use crate::ir::hir::Block;
-use crate::ir::mir::Mir;
-use crate::ir::Push;
-use crate::ir::SafeRangeCreation;
-use crate::ir::{BlockId, IntegerExpressionId, StatementId};
-use crate::mir::Statement;
-use ahash::AHashMap;
+use crate::compact_arena::{Idx16, InvariantLifetime, Step, TinyHeapArena};
+use crate::ir::{IntegerExpressionId, StatementId};
 use log::trace;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::borrow::{Borrow, Cow};
-use std::io::Write;
 
 pub type BasicBlockId<'tag> = Idx16<'tag>;
 
@@ -40,17 +32,6 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
     pub fn block_count(&self) -> u16 {
         self.blocks.len()
     }
-
-    /* TODO: Fix ownership issues (or not I don't really need this)
-    /// Retains only the Statements specified by the predicate.
-    ///
-    /// This just uses [`Vec::retain`](std::vec::Vec::retain) on each basic block (see details there)
-    /// You may want to call [`simplify`] afterwards to remove conditions/loops that are empty now
-    pub fn retain(self, mir: &mut Mir<'tag>, mut predicate: impl FnMut(&Statement<'tag>) -> bool) {
-        self.for_all_blocks(mir, |mir, block| {
-            mir[block].statements.retain(|&stmt| predicate(&mir[stmt]))
-        })
-    }*/
 
     // TODO: Use only a single allocator and vector truncation
     pub fn simplify<'newtag>(
@@ -77,7 +58,7 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                 }
                 match old.blocks[block].terminator {
                     Terminator::End => (),
-                    Terminator::Goto(ref mut next) => {
+                    Terminator::Merge(ref mut next) | Terminator::Goto(ref mut next) => {
                         if let Some(&new_next) = replacements.get(&next) {
                             *next = new_next
                         }
@@ -114,11 +95,11 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                         old.blocks[block].terminator = if true_block == false_block {
                             //empty condition
                             changed = true;
-                            Terminator::Goto(merge)
+                            Terminator::Merge(merge)
                         } else if true_block == block {
                             //empty loop
                             changed = true;
-                            Terminator::Goto(false_block)
+                            Terminator::Merge(false_block)
                         } else {
                             Terminator::Split {
                                 condition,
@@ -161,7 +142,8 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         for block in res.blocks.full_range() {
             match res.blocks[block].terminator {
                 Terminator::End => (),
-                Terminator::Goto(ref mut next) => {
+
+                Terminator::Merge(ref mut next) | Terminator::Goto(ref mut next) => {
                     //split into two loops
                     if let Some(&new_next) = new_replacements.get(&next) {
                         *next = new_next
@@ -190,6 +172,52 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         res
     }
 
+    pub unsafe fn retain<'newtag>(
+        mut self,
+        tag: InvariantLifetime<'newtag>,
+        mut predicate: impl FnMut(BasicBlockId<'tag>) -> bool,
+    ) -> ControlFlowGraph<'newtag, 'mir> {
+        let mut replacements = FxHashMap::default();
+        self.blocks.retain(
+            |block| predicate(block),
+            |old_id, new_id| {
+                replacements.insert(old_id, new_id);
+            },
+        );
+
+        for block in self.blocks.full_range() {
+            match self.blocks[block].terminator {
+                Terminator::End => (),
+
+                Terminator::Merge(ref mut next) | Terminator::Goto(ref mut next) => {
+                    //split into two loops
+                    if let Some(&new_next) = replacements.get(&next) {
+                        *next = new_next
+                    }
+                }
+                Terminator::Split {
+                    condition,
+                    ref mut true_block,
+                    ref mut false_block,
+                    ref mut merge,
+                } => {
+                    if let Some(&new_true_block) = replacements.get(true_block) {
+                        *true_block = new_true_block
+                    }
+
+                    if let Some(&new_false_block) = replacements.get(false_block) {
+                        *false_block = new_false_block
+                    }
+
+                    if let Some(&new_merge) = replacements.get(merge) {
+                        *merge = new_merge
+                    }
+                }
+            }
+        }
+        std::mem::transmute(self)
+    }
+
     pub fn clone_into<'newtag>(
         &self,
         allocator: TinyHeapArena<'newtag, BasicBlock<'newtag, 'mir>>,
@@ -205,6 +233,83 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
     pub fn for_all_blocks(&self, mut f: impl FnMut(BasicBlockId<'tag>)) {
         self.blocks.full_range().for_each(|block| f(block));
     }
+
+    pub fn visit_mut_in_execution_order(
+        &mut self,
+        mut f: impl FnMut(&mut Self, BasicBlockId<'tag>),
+    ) {
+        self.partial_visit_mut_in_execution_order(self.start(), None, &mut f)
+    }
+    pub fn partial_visit_mut_in_execution_order(
+        &mut self,
+        start: BasicBlockId<'tag>,
+        end: Option<BasicBlockId<'tag>>,
+        f: &mut impl FnMut(&mut Self, BasicBlockId<'tag>),
+    ) {
+        let mut current = start;
+        loop {
+            f(self, current);
+            current = match self.blocks[current].terminator {
+                Terminator::End => return,
+                Terminator::Merge(next) if Some(next) == end => return,
+
+                Terminator::Goto(next) | Terminator::Merge(next) => next,
+
+                Terminator::Split {
+                    condition: _,
+                    true_block,
+                    false_block,
+                    merge,
+                } => {
+                    self.partial_visit_mut_in_execution_order(true_block, Some(merge), f);
+                    if merge == current {
+                        //loops
+                        false_block
+                    } else {
+                        self.partial_visit_mut_in_execution_order(false_block, Some(merge), f);
+                        merge
+                    }
+                }
+            };
+        }
+    }
+
+    pub fn visit_in_execution_order(&self, mut f: impl FnMut(BasicBlockId<'tag>)) {
+        self.partial_visit_in_execution_order(self.start(), None, &mut f)
+    }
+    pub fn partial_visit_in_execution_order(
+        &self,
+        start: BasicBlockId<'tag>,
+        end: Option<BasicBlockId<'tag>>,
+        f: &mut impl FnMut(BasicBlockId<'tag>),
+    ) {
+        let mut current = start;
+        loop {
+            f(current);
+            current = match self.blocks[current].terminator {
+                Terminator::End => return,
+                Terminator::Merge(next) if Some(next) == end => return,
+
+                Terminator::Goto(next) | Terminator::Merge(next) => next,
+
+                Terminator::Split {
+                    condition: _,
+                    true_block,
+                    false_block,
+                    merge,
+                } => {
+                    self.partial_visit_in_execution_order(true_block, Some(merge), f);
+                    if merge == current {
+                        //loops
+                        false_block
+                    } else {
+                        self.partial_visit_in_execution_order(false_block, Some(merge), f);
+                        merge
+                    }
+                }
+            };
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -216,6 +321,7 @@ pub struct BasicBlock<'tag, 'mir> {
 #[derive(Copy, Clone, Debug)]
 pub enum Terminator<'tag, 'mir> {
     Goto(BasicBlockId<'tag>),
+    Merge(BasicBlockId<'tag>),
     Split {
         condition: IntegerExpressionId<'mir>,
         true_block: BasicBlockId<'tag>,
@@ -230,6 +336,10 @@ impl<'tag, 'mir> Terminator<'tag, 'mir> {
         offset: <BasicBlockId as Step>::I,
     ) -> Terminator<'newtag, 'mir> {
         match self {
+            Self::Merge(mut next) => {
+                next.step(offset);
+                Terminator::Merge(next.transmute())
+            }
             Self::Goto(mut next) => {
                 next.step(offset);
                 Terminator::Goto(next.transmute())
@@ -262,6 +372,10 @@ impl<'tag, 'mir> Terminator<'tag, 'mir> {
                 next.step_back(offset);
                 Terminator::Goto(next.transmute())
             }
+            Self::Merge(mut next) => {
+                next.step_back(offset);
+                Terminator::Merge(next.transmute())
+            }
             Self::Split {
                 condition,
                 mut true_block,
@@ -289,6 +403,8 @@ mod debug {
     use rustc_ap_graphviz as dot;
     use rustc_ap_graphviz::LabelText::{EscStr, LabelStr};
     use rustc_ap_graphviz::{Edges, GraphWalk, Id, LabelText, Labeller, Nodes};
+    use std::borrow::Cow;
+    use std::io::Write;
 
     impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         pub fn render_to<W: Write>(&self, write: &mut W) {
@@ -320,7 +436,7 @@ mod debug {
                     n.index(),
                     self.blocks[n].statements.len()
                 ))),
-                Terminator::Goto(_) => LabelStr(Cow::Owned(format!(
+                Terminator::Merge(_) | Terminator::Goto(_) => LabelStr(Cow::Owned(format!(
                     "BB_{}: {} Statements",
                     n.index(),
                     self.blocks[n].statements.len()
@@ -341,7 +457,7 @@ mod debug {
             &(start, dst): &(BasicBlockId<'tag>, BasicBlockId<'tag>),
         ) -> LabelText<'a> {
             match self.blocks[start].terminator {
-                Terminator::Goto(_) => LabelStr(Cow::Borrowed("GOTO")),
+                Terminator::Merge(_) | Terminator::Goto(_) => LabelStr(Cow::Borrowed("GOTO")),
                 Terminator::End => LabelStr(Cow::Borrowed("ILLEGAL")),
                 Terminator::Split {
                     condition,
@@ -374,7 +490,7 @@ mod debug {
             let mut edges = Vec::new();
             for block in self.blocks.full_range() {
                 match self.blocks[block].terminator {
-                    Terminator::Goto(dst) => edges.push((block, dst)),
+                    Terminator::Merge(dst) | Terminator::Goto(dst) => edges.push((block, dst)),
                     Terminator::Split {
                         condition,
                         true_block,
@@ -421,7 +537,7 @@ mod debug {
                     n.index(),
                     self.cfg.blocks[n].statements.len()
                 ))),
-                Terminator::Goto(nxt) => LabelStr(Cow::Owned(format!(
+                Terminator::Merge(nxt) | Terminator::Goto(nxt) => LabelStr(Cow::Owned(format!(
                     "BB_{}: {} Statements\n GOTO {}",
                     n.index(),
                     self.cfg.blocks[n].statements.len(),
@@ -441,7 +557,7 @@ mod debug {
             &(start, dst): &(BasicBlockId<'tag>, BasicBlockId<'tag>),
         ) -> LabelText<'a> {
             match self.cfg.blocks[start].terminator {
-                Terminator::Goto(_) => LabelStr(Cow::Borrowed("ILLEGAL")),
+                Terminator::Merge(_) | Terminator::Goto(_) => LabelStr(Cow::Borrowed("ILLEGAL")),
                 Terminator::End => LabelStr(Cow::Borrowed("ILLEGAL")),
                 Terminator::Split {
                     condition,
@@ -476,7 +592,7 @@ mod debug {
             let mut edges = Vec::new();
             for block in self.cfg.blocks.full_range() {
                 match self.cfg.blocks[block].terminator {
-                    Terminator::Goto(dst) => (),
+                    Terminator::Merge(dst) | Terminator::Goto(dst) => (),
                     Terminator::Split {
                         condition,
                         true_block,

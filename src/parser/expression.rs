@@ -272,22 +272,63 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
             Token::Potential => {
-                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
+                self.consume_lookahead();
                 let res = Primary::BranchAccess(
                     Ident::new(keywords::POTENTIAL, span),
                     self.parse_branch_access()?,
                 );
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
+
             Token::Flow => {
-                self.consume_lookahead();
                 let start = self.preprocessor.current_start();
+                self.consume_lookahead();
                 let res = Primary::BranchAccess(
                     Ident::new(keywords::FLOW, span),
                     self.parse_branch_access()?,
                 );
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
+            }
+
+            Token::PartialDerivative => {
+                let start = self.preprocessor.current_start();
+                self.consume_lookahead();
+                self.expect(Token::ParenOpen);
+                let expr_to_derive = self.parse_expression_id()?;
+
+                self.expect(Token::Colon);
+
+                let (token, span) = self.next()?;
+                let disciplines_access = match token {
+                    Token::Flow => Ident::new(keywords::FLOW, span),
+                    Token::Potential => Ident::new(keywords::POTENTIAL, span),
+                    Token::SimpleIdentifier(_) => {
+                        Ident::from_str_and_span(self.preprocessor.slice(), span)
+                    }
+                    Token::EscapedIdentifier => Ident::from_str_and_span(
+                        &self.preprocessor.slice()[1..self.preprocessor.slice().len() - 1],
+                        span,
+                    ),
+                    _ => {
+                        return Err(Error {
+                            error_type: Type::UnexpectedTokens {
+                                expected: vec![Expected::BranchAcess],
+                            },
+                            source: span,
+                        })
+                    }
+                };
+                let branch_access = self.parse_branch_access()?;
+                self.expect(Token::ParenClose);
+                Node::new(
+                    Expression::Primary(Primary::DerivativeByBranch(
+                        expr_to_derive,
+                        disciplines_access,
+                        branch_access,
+                    )),
+                    self.span_to_current_end(start),
+                )
             }
 
             Token::SystemCall => {

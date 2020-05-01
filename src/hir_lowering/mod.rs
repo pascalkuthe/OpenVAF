@@ -30,8 +30,8 @@
 
 use crate::ast;
 use crate::hir::Hir;
-use crate::hir_lowering::error::{Error, Type};
-use crate::ir::hir::Block;
+use crate::hir_lowering::derivatives::DerivativeMap;
+use crate::hir_lowering::error::{Error, Type, Warning};
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
 use crate::ir::*;
 use crate::ir::{Push, SafeRangeCreation};
@@ -39,6 +39,7 @@ use crate::mir::*;
 use crate::SourceMap;
 
 pub mod control_flow;
+pub mod derivatives;
 pub mod error;
 
 #[cfg(test)]
@@ -46,19 +47,26 @@ pub mod test;
 
 struct HirToMirFold<'tag, 'lt> {
     pub errors: Vec<Error<'tag>>,
+    pub warnings: Vec<Warning<'tag>>,
     hir: &'lt Hir<'tag>,
     mir: Box<Mir<'tag>>,
+    variable_to_differentiate: DerivativeMap<'tag>,
 }
-impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
-    pub fn new(hir: &'hirref mut Hir<'tag>) -> Self {
+impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
+    pub fn new(hir: &'lt mut Hir<'tag>) -> Self {
         Self {
             errors: Vec::with_capacity(32),
+            warnings: Vec::with_capacity(32),
             mir: unsafe { Mir::partial_initalize(hir) },
             hir: &*hir,
+            variable_to_differentiate: DerivativeMap::with_capacity_and_hasher(
+                64,
+                Default::default(),
+            ),
         }
     }
 
-    fn fold(mut self) -> Result<Box<Mir<'tag>>, Vec<Error<'tag>>> {
+    fn fold(mut self) -> (Result<Box<Mir<'tag>>, Vec<Error<'tag>>>, Vec<Warning<'tag>>) {
         for parameter in self.hir.full_range() {
             self.fold_parameter(parameter)
         }
@@ -77,11 +85,14 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             self.mir.push(res);
         }
 
-        if self.errors.is_empty() {
-            Ok(self.mir)
-        } else {
-            Err(self.errors)
-        }
+        (
+            if self.errors.is_empty() {
+                Ok(self.mir)
+            } else {
+                Err(self.errors)
+            },
+            self.warnings,
+        )
     }
 
     /// folds a variable by foldings its default value (to a typed representation)
@@ -135,7 +146,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
     /// # Safety
     /// This function HAS to be called for EVERY Parameter when folding an HIR to an MIR.
     /// Parameters are not initialized and when the MIR is dropped drop will be called on the parameters.
-    /// This is UB since parameters do implement drop (they contain arrayS)
+    /// This is UB since parameters do implement drop (they contain vectors)
     /// Internally this function is very carefully written such that `self.mir[parameter]` is always initialized even when an error occurs
     fn fold_parameter(&mut self, parameter: ParameterId<'tag>) {
         let parameter_type = match self.hir[parameter].contents.parameter_type {
@@ -185,6 +196,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 }
             },
         };
+
         unsafe {
             //This is save since we write to all parameters
             self.mir.write_unsafe(
@@ -206,25 +218,30 @@ impl<'tag> Hir<'tag> {
     /// Returns any errors that occur
     pub fn lower(
         mut self: Box<Self>,
-    ) -> std::result::Result<Box<Mir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
-        HirToMirFold::new(&mut self)
-            .fold()
-            .map_err(|errors| (errors, self))
+    ) -> (
+        std::result::Result<Box<Mir<'tag>>, (Vec<Error<'tag>>, Box<Self>)>,
+        Vec<Warning<'tag>>,
+    ) {
+        let (res, warnings) = HirToMirFold::new(&mut self).fold();
+        (res.map_err(|errors| (errors, self)), warnings)
     }
 
     /// Folds an hir to an mir by adding and checking type information
     /// Prints any errors that occur
     pub fn lower_and_print_errors(
-        self: Box<Self>,
+        mut self: Box<Self>,
         source_map: &SourceMap,
         translate_line: bool,
     ) -> Option<Box<Mir<'tag>>> {
-        self.lower()
-            .map_err(|(errors, hir)| {
-                errors
-                    .into_iter()
-                    .for_each(|error| error.print(source_map, &hir, translate_line))
-            })
-            .ok()
+        let (res, warnings) = HirToMirFold::new(&mut self).fold();
+        for warning in warnings {
+            warning.print(source_map, &self, translate_line)
+        }
+        res.map_err(|errors| {
+            errors
+                .into_iter()
+                .for_each(|error| error.print(source_map, &self, translate_line))
+        })
+        .ok()
     }
 }

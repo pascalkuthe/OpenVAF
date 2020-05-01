@@ -144,14 +144,31 @@ pub(crate) trait Write<Idx> {
 
 /// A Node of an IR. Contains a Span an addition to whatever that node holds
 #[derive(Clone, Copy, Debug)]
-pub struct Node<T: Clone> {
+pub struct Node<T> {
     pub source: Span,
     pub contents: T,
 }
 
-impl<T: Clone> Node<T> {
+impl<T> Node<T> {
     pub fn new(contents: T, source: Span) -> Self {
         Self { contents, source }
+    }
+}
+
+impl<T: Copy> Node<T> {
+    pub fn copy_as<X>(self, contents: X) -> Node<X> {
+        Node {
+            source: self.source,
+            contents,
+        }
+    }
+}
+impl<T: Clone> Node<T> {
+    pub fn clone_as<X>(&self, contents: X) -> Node<X> {
+        Node {
+            source: self.source,
+            contents,
+        }
     }
 }
 

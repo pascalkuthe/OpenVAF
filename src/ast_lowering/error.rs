@@ -48,6 +48,7 @@ pub enum Type<'tag> {
     DisciplineMismatch(NetInfo<'tag>, NetInfo<'tag>),
     NotAllowedInConstantContext(NonConstantExpression),
     Unsupported(Unsupported),
+    DerivativeNotAllowed,
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NonConstantExpression {
@@ -432,6 +433,31 @@ impl<'tag> Error<'tag> {
                         annotations: vec![SourceAnnotation {
                             range,
                             label: "Expected a following branch probe",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
+            }
+            Type::DerivativeNotAllowed => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Partial derivatives may only be calculated over node potentials (for example V(node))"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin:Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Illegal derivative",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,

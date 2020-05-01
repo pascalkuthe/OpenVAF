@@ -8,8 +8,6 @@
  * *****************************************************************************************
  */
 
-use ahash::AHashMap;
-
 use crate::ast::NetType::GROUND;
 use crate::ast_lowering::ast_to_hir_fold::Fold;
 use crate::ast_lowering::error::{Error, NetInfo, Type};
@@ -17,7 +15,6 @@ use crate::hir::Net;
 use crate::hir::{Branch, BranchDeclaration, DisciplineAccess};
 use crate::ir::*;
 use crate::ir::{Push, SafeRangeCreation};
-use crate::parser::error::Unsupported::DefaultDiscipline;
 use crate::symbol::{keywords, Ident};
 use crate::{ast, Ast, Span};
 use rustc_hash::FxHashMap;
@@ -171,16 +168,27 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                 }
             }
 
-            ast::BranchAccess::Explicit(ref name) => {
-                resolve_hierarchical!(fold; name as Branch(id) => {
-                    let discipline = match fold.hir[id].contents.branch {
-                        Branch::Port(portid) => {
-                            fold.hir[fold.hir[portid].net].contents.discipline
-                        }
-                        Branch::Nets(net1, _) => fold.hir[net1].contents.discipline
-                    };
-                    return Some((id,discipline))
-                })
+            ast::BranchAccess::BranchOrNodePotential(ref name) => {
+                resolve_hierarchical!(fold; name as
+                    Branch(id) => {
+                        let discipline = match fold.hir[id].contents.branch {
+                            Branch::Port(portid) => {
+                                fold.hir[fold.hir[portid].net].contents.discipline
+                            }
+                            Branch::Nets(net1, _) => fold.hir[net1].contents.discipline
+                        };
+                        return Some((id,discipline))
+                    },
+
+                    // Needed to resolve ambiguities. Inefficient but will do
+                    Port(id) => {
+                        return self.resolve_branch_access(fold,&branch_access.clone_as(ast::BranchAccess::Implicit(ast::Branch::Port(name.clone()))))
+                    },
+
+                    Net(id) => {
+                        return self.resolve_branch_access(fold,&branch_access.clone_as(ast::BranchAccess::Implicit(ast::Branch::NetToGround(name.clone()))))
+                    }
+                )
             }
         }
 
