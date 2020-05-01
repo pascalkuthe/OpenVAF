@@ -688,6 +688,9 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
 
             Expression::Primary(Primary::FunctionCall(_, _)) => todo!("function calls"),
+            Expression::Primary(Primary::Derivative(_, _)) => {
+                todo!("Migrate constant folding to work over MIR expressions for greater versatility -> Implement Constant derivatives")
+            }
         };
         Ok(res)
     }

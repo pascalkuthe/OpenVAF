@@ -8,8 +8,6 @@
  * *****************************************************************************************
  */
 
-use std::convert::{TryFrom, TryInto};
-
 use crate::ast::BinaryOperator;
 use crate::hir::Primary;
 use crate::hir_lowering::error::{Error, Type};
@@ -109,6 +107,10 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 let arg1 = self.fold_real_expression(arg1);
                 let arg2 = self.fold_real_expression(arg2);
                 RealExpression::BuiltInFunctionCall2p(call, arg1?, arg2?)
+            }
+            hir::Expression::Primary(Primary::Derivative(expr_to_derive, derivative_by)) => {
+                let expr_to_derive = self.fold_real_expression(expr_to_derive)?;
+                return Some(self.partial_derivative(expr_to_derive, derivative_by)?);
             }
             _ => RealExpression::IntegerConversion(self.fold_integer_expression(expr)?),
         };
@@ -534,6 +536,12 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 let arg1 = self.fold_real_expression(arg1);
                 let arg2 = self.fold_real_expression(arg2);
                 RealExpression::BuiltInFunctionCall2p(call, arg1?, arg2?)
+            }
+            hir::Expression::Primary(Primary::Derivative(expr_to_derive, derivative_by)) => {
+                let expr_to_derive = self.fold_real_expression(expr_to_derive)?;
+                return Some(ExpressionId::Real(
+                    self.partial_derivative(expr_to_derive, derivative_by)?,
+                ));
             }
             _ => return Some(ExpressionId::Integer(self.fold_integer_expression(expr)?)),
         };

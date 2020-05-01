@@ -8,17 +8,21 @@
  * *****************************************************************************************
  */
 
-use crate::ast::HierarchicalId;
+use crate::ast::{BranchAccess, HierarchicalId};
 use crate::ast_lowering::ast_to_hir_fold::{Fold, VerilogContext};
 use crate::ast_lowering::branch_resolution::BranchResolver;
-use crate::ast_lowering::error::Type::{EmptyBranchAccess, UnexpectedTokenInBranchAccess};
+use crate::ast_lowering::error::Type::{
+    DerivativeNotAllowed, EmptyBranchAccess, UnexpectedTokenInBranchAccess,
+};
 use crate::ast_lowering::error::*;
 use crate::hir::{Expression, Primary};
-use crate::ir::BuiltInFunctionCall1p::*;
+use crate::hir_lowering::derivatives::Unknown;
+use crate::ir::ast::Branch;
+use crate::ir::hir::DisciplineAccess;
 use crate::ir::Push;
 use crate::ir::{BranchId, DisciplineId, ExpressionId, Node};
 use crate::symbol::keywords;
-use crate::{ast, Span};
+use crate::{ast, hir, Span};
 
 pub trait ExpressionFolder<'tag, 'lt> {
     fn fold(
@@ -149,11 +153,12 @@ impl<'tag, 'lt> Fold<'tag, 'lt> {
                 });
                 return None;
             }
-            ast::Expression::Primary(ast::Primary::BranchAccess(_, _)) => {
+            ast::Expression::Primary(ast::Primary::BranchAccess(_, _))
+            | ast::Expression::Primary(ast::Primary::DerivativeByBranch(_, _, _)) => {
                 self.error(Error {
                     source: expression.source,
                     error_type: Type::NotAllowedInConstantContext(
-                        NonConstantExpression::VariableReference,
+                        NonConstantExpression::BranchAccess,
                     ),
                 });
                 return None;
@@ -180,7 +185,7 @@ impl<'tag, 'lt> StatementExpressionFolder<'tag, 'lt> {
         match parameters {
             [branch] => {
                 let expr_node = &base.ast[*branch];
-                let branch_access = ast::BranchAccess::Explicit(
+                let branch_access = ast::BranchAccess::BranchOrNodePotential(
                     self.reinterpret_expression_as_identifier(expr_node, base)?
                         .clone(),
                 );
@@ -255,6 +260,116 @@ impl<'tag, 'lt, 'fold> ExpressionFolder<'tag, 'fold> for StatementExpressionFold
                 base.hir.push(Node {
                     source: expression.source,
                     contents: Expression::Primary(Primary::BranchAccess(nature, branch_access)),
+                })
+            }
+            ast::Expression::Primary(ast::Primary::DerivativeByBranch(
+                expr_to_derive,
+                ref nature,
+                ref branch_access,
+            )) => {
+                let expr_to_derive = self.fold(expr_to_derive, base);
+                let derive_by = match (&branch_access.contents, nature) {
+                    (BranchAccess::BranchOrNodePotential(name), nature) => {
+                        let mut res = None;
+                        resolve_hierarchical!(base; name as
+                            Branch(id) => {
+                                let discipline = match base.hir[id].contents.branch {
+                                    hir::Branch::Port(portid) => {
+                                        base.hir[base.hir[portid].net].contents.discipline
+                                    }
+                                    hir::Branch::Nets(net1, _) => base.hir[net1].contents.discipline
+                                };
+                                let discipline_access = self.branch_resolver
+                                        .resolve_discipline_access(base, nature, discipline)?;
+                                if discipline_access == DisciplineAccess::Flow {
+                                    res = Some(Unknown::Flow(id))
+                                }else {
+                                    base.errors.push(Error {
+                                        error_type: DerivativeNotAllowed,
+                                        source: expression.source,
+                                    });
+                                    return None;
+                                }
+                            },
+
+                            // Needed to resolve ambiguities
+                            Port(id) => {
+                                let discipline = base.hir[base.hir[id].net].contents.discipline;
+                                let discipline_access = self.branch_resolver
+                                        .resolve_discipline_access(base, nature, discipline)?;
+                                if discipline_access == DisciplineAccess::Potential {
+                                    res = Some(Unknown::NodePotential(base.hir[id].net))
+                                }else {
+                                    base.errors.push(Error {
+                                        error_type: DerivativeNotAllowed,
+                                        source: expression.source,
+                                    });
+                                    return None;
+                                }
+                            },
+
+                            Net(id) => {
+                                let discipline = base.hir[id].contents.discipline;
+                                let discipline_access = self.branch_resolver
+                                        .resolve_discipline_access(base, nature, discipline)?;
+                                if discipline_access == DisciplineAccess::Potential {
+                                    res = Some(Unknown::NodePotential(id))
+                                }else {
+                                    base.errors.push(Error {
+                                        error_type: DerivativeNotAllowed,
+                                        source: expression.source,
+                                    });
+                                    return None;
+                                }
+                            }
+                        );
+
+                        res?
+                    }
+                    (BranchAccess::Implicit(branch), nature) => {
+                        let (resolved_branch, discipline) =
+                            self.branch_resolver.resolve_branch(base, branch)?;
+
+                        let disciplines_access = self
+                            .branch_resolver
+                            .resolve_discipline_access(base, nature, discipline)?;
+
+                        match resolved_branch {
+                            hir::Branch::Port(port)
+                                if disciplines_access == DisciplineAccess::Flow =>
+                            {
+                                Unknown::PortFlow(base.hir[port].net)
+                            }
+
+                            hir::Branch::Nets(net1, net2)
+                                if disciplines_access == DisciplineAccess::Flow =>
+                            {
+                                let (branch, _) = self
+                                    .branch_resolver
+                                    .resolve_branch_access(base, branch_access)?;
+                                Unknown::Flow(branch)
+                            }
+
+                            hir::Branch::Nets(node, _)
+                                if matches!(branch, Branch::NetToGround(_)) =>
+                            {
+                                Unknown::NodePotential(node)
+                            }
+
+                            _ => {
+                                base.errors.push(Error {
+                                    error_type: DerivativeNotAllowed,
+                                    source: expression.source,
+                                });
+                                return None;
+                            }
+                        }
+                    }
+                };
+
+                base.hir.push(Node {
+                    source: expression.source,
+                    contents: Expression::Primary(Primary::Derivative(expr_to_derive?, derive_by)),
                 })
             }
 

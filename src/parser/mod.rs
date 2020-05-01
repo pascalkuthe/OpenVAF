@@ -9,7 +9,6 @@
  */
 use std::path::Path;
 
-use ahash::AHashMap;
 use ansi_term::Color::*;
 use bumpalo::Bump;
 use log::error;

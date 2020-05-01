@@ -10,6 +10,8 @@ use super::*;
 use rustc_ap_graphviz as dot;
 use rustc_ap_graphviz::LabelText::{EscStr, LabelStr};
 use rustc_ap_graphviz::{Edges, Id, LabelText, Nodes};
+use std::borrow::Cow;
+use std::io::Write;
 
 impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
     pub fn render_to<W: Write>(&self, write: &mut W) {
@@ -35,7 +37,10 @@ impl<'a, 'tag, 'cfg> dot::Labeller<'a> for DominatorTree<'tag, 'cfg> {
         match self[start].node_type {
             DominatorTreeNodeType::Leaf(_) => LabelStr(Cow::Borrowed("ILLEGAL")),
             DominatorTreeNodeType::Root(branches) | DominatorTreeNodeType::Branch(_, branches) => {
-                let true_or_false = if branches.true_child() == dst {
+                let true_or_false = if branches
+                    .true_child()
+                    .map_or(false, |(true_child, _)| true_child == dst)
+                {
                     "TRUE"
                 } else if branches
                     .false_child()
@@ -68,8 +73,10 @@ impl<'a, 'tag, 'cfg> dot::GraphWalk<'a> for DominatorTree<'tag, 'cfg> {
                 DominatorTreeNodeType::Leaf(_) => (),
                 DominatorTreeNodeType::Root(branches)
                 | DominatorTreeNodeType::Branch(_, branches) => {
-                    edges.push((block, branches.true_child()));
                     edges.push((block, branches.main_child));
+                    if let Some((true_child, _)) = branches.true_child() {
+                        edges.push((block, true_child));
+                    }
                     if let Some((false_child, _)) = branches.false_child() {
                         edges.push((block, false_child));
                     }

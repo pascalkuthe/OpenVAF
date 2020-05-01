@@ -86,7 +86,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 let second_net_name = self.parse_hierarchical_identifier()?;
                 BranchAccess::Implicit(Branch::Nets(first_net_name_or_identifer, second_net_name))
             } else {
-                BranchAccess::Explicit(first_net_name_or_identifer)
+                BranchAccess::BranchOrNodePotential(first_net_name_or_identifer)
             }
         };
 

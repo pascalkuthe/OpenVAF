@@ -577,6 +577,35 @@ impl<'tag, T> TinyHeapArena<'tag, T> {
         }
     }
 
+    pub unsafe fn retain(
+        &mut self,
+        mut predicate: impl FnMut(Idx16<'tag>) -> bool,
+        mut register_new_id: impl FnMut(Idx16<'tag>, Idx16<'tag>),
+    ) {
+        let len = self.len();
+        let mut del = 0;
+        {
+            let full_range = self.full_range();
+            let v = &mut *self.data;
+
+            for i in full_range {
+                if !predicate(i) {
+                    del += 1;
+                } else if del > 0 {
+                    let mut new_id = Idx16 {
+                        index: i.index - del,
+                        tag: self.tag,
+                    };
+                    register_new_id(i, new_id);
+                    v.swap((i.index - del) as usize, (i.index) as usize);
+                }
+            }
+        }
+        if del > 0 {
+            self.data.truncate((len - del) as usize);
+        }
+    }
+
     pub fn len(&self) -> u16 {
         self.data.len() as u16
     }
@@ -1342,8 +1371,8 @@ impl<'tag, T> Index<SafeRange<Idx8<'tag>>> for NanoArena<'tag, T> {
 
     fn index(&self, i: SafeRange<Idx8<'tag>>) -> &[T] {
         debug_assert!(u16::from(i.end.index) <= self.len);
-        debug_assert!(u16::from(i.start.index) < self.len);
-        debug_assert!(i.start.index < i.end.index);
+        debug_assert!(u16::from(i.start.index) <= self.len);
+        debug_assert!(i.start.index <= i.end.index);
         // we can use unchecked indexing here because branding the indices with
         // the arenas lifetime ensures that the index is always valid & within
         // bounds
@@ -1355,8 +1384,8 @@ impl<'tag, T> Index<SafeRange<Idx8<'tag>>> for NanoArena<'tag, T> {
 impl<'tag, T> IndexMut<SafeRange<Idx8<'tag>>> for NanoArena<'tag, T> {
     fn index_mut(&mut self, i: SafeRange<Idx8<'tag>>) -> &mut [T] {
         debug_assert!(u16::from(i.end.index) <= self.len);
-        debug_assert!(u16::from(i.start.index) < self.len);
-        debug_assert!(i.start.index < i.end.index);
+        debug_assert!(u16::from(i.start.index) <= self.len);
+        debug_assert!(i.start.index <= i.end.index);
         // we can use unchecked indexing here because branding the indices with
         // the arenas lifetime ensures that the index is always valid & within
         // bounds
@@ -1374,8 +1403,8 @@ impl<'tag, T> Index<SafeRange<Idx16<'tag>>> for TinyArena<'tag, T> {
 
     fn index(&self, i: SafeRange<Idx16<'tag>>) -> &[T] {
         debug_assert!(u32::from(i.end.index) <= self.len);
-        debug_assert!(u32::from(i.start.index) < self.len);
-        debug_assert!(i.start.index < i.end.index);
+        debug_assert!(u32::from(i.start.index) <= self.len);
+        debug_assert!(i.start.index <= i.end.index);
         // we can use unchecked indexing here because branding the indices with
         // the arenas lifetime ensures that the index is always valid & within
         // bounds
@@ -1387,8 +1416,8 @@ impl<'tag, T> Index<SafeRange<Idx16<'tag>>> for TinyArena<'tag, T> {
 impl<'tag, T> IndexMut<SafeRange<Idx16<'tag>>> for TinyArena<'tag, T> {
     fn index_mut(&mut self, i: SafeRange<Idx16<'tag>>) -> &mut [T] {
         debug_assert!(u32::from(i.end.index) <= self.len);
-        debug_assert!(u32::from(i.start.index) < self.len);
-        debug_assert!(i.start.index < i.end.index);
+        debug_assert!(u32::from(i.start.index) <= self.len);
+        debug_assert!(i.start.index <= i.end.index);
         // we can use unchecked indexing here because branding the indices with
         // the arenas lifetime ensures that the index is always valid & within
         // bounds

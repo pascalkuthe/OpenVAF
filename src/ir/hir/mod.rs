@@ -14,6 +14,7 @@ use std::ptr::NonNull;
 use crate::ast::Parameter;
 use crate::ast::{BinaryOperator, Function, NetType, UnaryOperator, Variable};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
+use crate::hir_lowering::derivatives::Unknown;
 use crate::ir::*;
 use crate::symbol::Ident;
 use crate::{Ast, Span};
@@ -289,17 +290,21 @@ pub enum Primary<'hir> {
     UnsignedInteger(u32),
     Real(f64),
     String(CompressedRange<'hir>),
+
     VariableReference(VariableId<'hir>),
     NetReference(NetId<'hir>),
     PortReference(PortId<'hir>),
     ParameterReference(ParameterId<'hir>),
-    FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
+
     BranchAccess(DisciplineAccess, BranchId<'hir>),
+    Derivative(ExpressionId<'hir>, Unknown<'hir>),
+
     BuiltInFunctionCall1p(BuiltInFunctionCall1p, ExpressionId<'hir>),
     BuiltInFunctionCall2p(
         BuiltInFunctionCall2p,
         ExpressionId<'hir>,
         ExpressionId<'hir>,
     ),
+    FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
     SystemFunctionCall(Ident /*TODO args*/),
 }

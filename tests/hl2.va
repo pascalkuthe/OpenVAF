@@ -888,7 +888,8 @@ parameter integer  type = 1		 from [-1:1] exclude 0  `ATTR(info="For transistor 
 
     //Model evaluation
     real Cjci,Cjcit,cc,Cjei,Cjep,CjCx_i,CjCx_ii,Cjs,Cscp;
-    real itf,itr,Tf,Tr,VT_f,i_0f,i_0r,a_bpt,Q_0,Q_p,Q_bpt;
+    (*extract*) real itf;
+    real itr,Tf,Tr,VT_f,i_0f,i_0r,a_bpt,Q_0,Q_p,Q_bpt;
     real Orci0_t,b_q,I_Tf1,Q_fT,T_fT,Q_bf;
     real ICKa,d1,a1,a11,Odelck,ick1,ick2;
     real A,a_h,Q_pT,d_Q,d_Q0;
@@ -1077,10 +1078,8 @@ analog begin
         Tdev    = Tamb+dt;
         if(Tdev < `TMIN + 273.15) begin
             Tdev = `TMIN + 273.15;
-        end else begin
-            if (Tdev > `TMAX + 273.15) begin
-                Tdev = `TMAX + 273.15;
-            end
+        end else if (Tdev > `TMAX + 273.15) begin
+            Tdev = `TMAX + 273.15;
         end
         VT      = `P_K*Tdev /`P_Q;
         dT      = Tdev-Tnom;
@@ -2093,41 +2092,41 @@ end     //of Noise_sources
             BETADC = 0;
         end
 
-        //GMi    = type*ddx(it,V(bi))+`Gmin;
-        //GMS    = -type*ddx(HSI_Tsu,V(ci))+`Gmin;
+        GMi    = type*ddx(it,V(bi))+`Gmin;
+        GMS    = -type*ddx(HSI_Tsu,V(ci))+`Gmin;
 
-        //gPIi = type*ddx(ibei,V(bi))+type*ddx(irei,V(bi))+`Gmin;
-        //gPIx = type*ddx(ibep,V(bp))+type*ddx(irep,V(bp))+`Gmin;
+        gPIi = type*ddx(ibei,V(bi))+type*ddx(irei,V(bi))+`Gmin;
+        gPIx = type*ddx(ibep,V(bp))+type*ddx(irep,V(bp))+`Gmin;
 
         if (tunode == 1) begin
-            //gBt = type*ddx(ibet,V(bp));
+            gBt = type*ddx(ibet,V(bp));
 
             RPIi = 1.0/gPIi;
             RPIx = 1.0/(gPIx-gBt);
         end else begin
-            //gBt = type*ddx(ibet,V(bi));
+            gBt = type*ddx(ibet,V(bi));
 
             RPIi = 1.0/(gPIi-gBt);
             RPIx = 1.0/gPIx;
         end
 
-        //gMUi = -type*ddx(ibci, V(ci))+`Gmin;
-        //gMUx = -type*ddx(ijbcx,V(ci))+`Gmin;
-       // gAVL = type*ddx(iavl, V(ci))+`Gmin;
+        gMUi = -type*ddx(ibci, V(ci))+`Gmin;
+        gMUx = -type*ddx(ijbcx,V(ci))+`Gmin;
+        gAVL = type*ddx(iavl, V(ci))+`Gmin;
 
         RMUi = 1/(gMUi-gAVL);
         RMUx = 1/gMUx;
 
-   //     gOi = type*ddx(it,V(ci));
+        gOi = type*ddx(it,V(ci));
         ROi = 1/(gOi+gAVL);
 
-    //    CdEi_ddx = -type*ddx(Qdei,V(ei));
-    //    CdCi_ddx = -type*ddx(Qdci,V(ci));
+        CdEi_ddx = -type*ddx(Qdei,V(ei));
+        CdCi_ddx = -type*ddx(Qdci,V(ci));
 
         CPIi = Cjei+CdEi_ddx;
         CPIx = Cjep+cbepar;
 
-       // CdS_ddx = -type*ddx(Qdsu,V(ci));
+        CdS_ddx = -type*ddx(Qdsu,V(ci));
 
         CMUi = Cjci+CdCi_ddx;
         CMUx = CjCx_i+CjCx_ii+cbcpar+CdS_ddx;
@@ -2174,7 +2173,7 @@ end     //of Noise_sources
 
         _C_BCi  = cbcpar1;
         _C_BpCi = cbcpar2;
-        //_R_BpCi = type*ddx(_I_BpCi,V(bp));//,ci));
+        _R_BpCi = type*ddx(_I_BpCi,V(bp));//,ci));
         _R_BBp  = rbx_t;
         _R_BpBi = rbi;
         _C_BpBi = Crbi; // not shown in thesis
@@ -2182,7 +2181,7 @@ end     //of Noise_sources
         _C_BE   = cbepar1;
         _C_BiE  = cbepar1;
         _C_BiEi = Cjep;
-        //_R_BiEi = type*ddx(_I_BiEi,V(bi));//,ei));
+        _R_BiEi = type*ddx(_I_BiEi,V(bi));//,ei));
         _R_EiE  = re_t;
         _C_CiE  = Cjs;// according to thesis the internal substrate node is concted to the external emitter
     end

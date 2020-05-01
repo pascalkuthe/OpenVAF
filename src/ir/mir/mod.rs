@@ -16,17 +16,15 @@ use std::ops::Range;
 use std::ptr::NonNull;
 
 use core::cmp::Ordering;
-use core::convert::TryFrom;
 
 use crate::ast::{Function, UnaryOperator};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
-use crate::hir::{Block, BranchDeclaration, Discipline, DisciplineAccess, Net, Port};
+use crate::hir::{BranchDeclaration, Discipline, DisciplineAccess, Net, Port};
 use crate::ir::hir::Hir;
 use crate::ir::ids::StringExpressionId;
 use crate::ir::*;
 use crate::symbol::Ident;
-use crate::{ir, Span};
-use control_flow_graph::BasicBlock;
+use crate::Span;
 
 pub struct Mir<'tag> {
     //TODO unsized
