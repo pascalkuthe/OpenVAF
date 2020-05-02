@@ -462,7 +462,7 @@ impl<'tag> Index<CompressedRange<'tag>> for StringArena<'tag> {
     type Output = str;
 
     fn index(&self, range: CompressedRange<'tag>) -> &Self::Output {
-        debug_assert!(range.start.index + (range.len as u32) < self.data.len() as u32);
+        debug_assert!(range.start.index + (range.len as u32) <= self.data.len() as u32);
         unsafe {
             //this is save since we use the type system to enfore that this is valid
             self.data.get_unchecked(
@@ -473,7 +473,7 @@ impl<'tag> Index<CompressedRange<'tag>> for StringArena<'tag> {
 }
 impl<'tag> IndexMut<CompressedRange<'tag>> for StringArena<'tag> {
     fn index_mut(&mut self, range: CompressedRange<'tag>) -> &mut Self::Output {
-        debug_assert!((range.start.index as usize + range.len as usize) < self.data.len());
+        debug_assert!((range.start.index as usize + range.len as usize) <= self.data.len());
         unsafe {
             //this is save since we use the type system to enfore that this is valid
             self.data.get_unchecked_mut(
@@ -486,8 +486,8 @@ impl<'tag> Index<SafeRange<Idx32<'tag>>> for StringArena<'tag> {
     type Output = str;
 
     fn index(&self, range: SafeRange<Idx32<'tag>>) -> &Self::Output {
-        debug_assert!((range.end.index as usize) < self.data.len());
-        debug_assert!(range.start.index < range.end.index);
+        debug_assert!((range.end.index as usize) <= self.data.len());
+        debug_assert!(range.start.index <= range.end.index);
         unsafe {
             //this is save since we use the type system to enfore that this is valid
             self.data
@@ -497,8 +497,8 @@ impl<'tag> Index<SafeRange<Idx32<'tag>>> for StringArena<'tag> {
 }
 impl<'tag> IndexMut<SafeRange<Idx32<'tag>>> for StringArena<'tag> {
     fn index_mut(&mut self, range: SafeRange<Idx32<'tag>>) -> &mut Self::Output {
-        debug_assert!((range.end.index as usize) < self.data.len());
-        debug_assert!(range.start.index < range.end.index);
+        debug_assert!((range.end.index as usize) <= self.data.len());
+        debug_assert!(range.start.index <= range.end.index);
         unsafe {
             //this is save since we use the type system to enfore that this is valid
             self.data

@@ -229,6 +229,9 @@ pub mod keywords {
     pub const IDT_NATURE: Symbol = Symbol(SymbolIndex(7));
     pub(super) static DDT_NATURE_STR: &str = "ddt_nature";
     pub const DDT_NATURE: Symbol = Symbol(SymbolIndex(8));
+
+    pub(super) static IMPLICIT_SOLVER_STR: &str = "ImplicitFunctionSolver";
+    pub const IMPLICIT_SOLVER: Symbol = Symbol(SymbolIndex(9));
 }
 mod statics {
     use std::sync::Mutex;
@@ -247,6 +250,7 @@ mod statics {
             UNITS_STR,
             IDT_NATURE_STR,
             DDT_NATURE_STR,
+            IMPLICIT_SOLVER_STR
         ]));
     }
     #[inline]

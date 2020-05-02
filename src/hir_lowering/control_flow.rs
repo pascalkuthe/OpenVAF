@@ -17,7 +17,7 @@ use crate::ir::{BranchId, Node, ParameterId, StatementId, VariableId};
 use crate::ir::{Push, SafeRangeCreation};
 use crate::mir::control_flow_graph::{BasicBlock, BasicBlockId, Terminator};
 use crate::mir::{IntegerExpression, VariableType};
-use crate::symbol::Ident;
+use crate::symbol::{keywords, Ident, Symbol};
 use crate::{hir, Span};
 use rustc_hash::FxHashSet;
 
@@ -171,18 +171,61 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         },
                     );
 
-                    if let Some(condition) =
+                    if let Some(mut condition) =
                         self.fold_integer_expression(while_loop.contents.condition)
                     {
-                        self.mir.track_integer_expression(
-                            condition,
-                            &mut FxHashSet::default(),
-                            &mut ImplicitDerivativeCheck {
-                                warnings: &mut self.warnings,
-                                condition_span: self.mir[condition].source,
-                                modified_variables: derived_inside_loop,
-                            },
-                        );
+                        for attr in while_loop.attributes {
+                            if self.mir[attr].name.name == keywords::IMPLICIT_SOLVER {
+                                if let Some(name) = self.mir[attr].value {
+                                    if let ExpressionId::String(name) = name {
+                                        if let Some(name) = self.mir.try_string_constant_fold(
+                                            name,
+                                            &Constants::default(),
+                                            true,
+                                        ) {
+                                            let ident =
+                                                Symbol::intern(&self.mir.string_literals[name]);
+                                            condition = self.or_for_derivative(
+                                                condition,
+                                                ident,
+                                                &derived_inside_loop,
+                                            );
+                                            derived_inside_loop.clear();
+                                        } else {
+                                            self.errors.push(Error {
+                                                error_type:
+                                                    Type::ImplicitSolverDeltaIsNotAValidString,
+                                                source: self.mir[name].source,
+                                            });
+                                        }
+                                    } else {
+                                        self.errors.push(Error {
+                                            error_type: Type::ImplicitSolverDeltaIsNotAValidString,
+                                            source: name.source(&self.mir),
+                                        });
+                                    }
+                                } else {
+                                    self.errors.push(Error {
+                                        error_type: Type::ImplicitSolverDeltaIsNotAValidString,
+                                        source: self.mir[attr].name.span,
+                                    });
+                                }
+
+                                break;
+                            }
+                        }
+
+                        if !derived_inside_loop.is_empty() {
+                            self.mir.track_integer_expression(
+                                condition,
+                                &mut FxHashSet::default(),
+                                &mut ImplicitDerivativeCheck {
+                                    warnings: &mut self.warnings,
+                                    condition_span: self.mir[condition].source,
+                                    modified_variables: derived_inside_loop,
+                                },
+                            );
+                        }
 
                         allocator[condition_block].terminator = Terminator::Split {
                             condition,
@@ -190,6 +233,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             false_block: current_block,
                             merge: condition_block,
                         };
+
                         current_block = allocator.add(BasicBlock {
                             statements: merge_statements,
                             terminator: Terminator::Goto(condition_block),

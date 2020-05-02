@@ -10,10 +10,11 @@
 
 use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
-use log::error;
+use log::*;
 
 use crate::ir::{ParameterId, VariableId};
 use crate::parser::error::translate_to_inner_snippet_range;
+use crate::symbol::Symbol;
 use crate::{Hir, SourceMap};
 use beef::lean::Cow;
 
@@ -35,6 +36,7 @@ pub enum Type<'hir> {
     InvalidParameterBound,
     OnlyNumericExpressionsCanBeDerived,
     ParameterExcludeNotPartOfRange,
+    ImplicitSolverDeltaIsNotAValidString,
 }
 impl<'tag> Error<'tag> {
     pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
@@ -500,12 +502,39 @@ impl<'tag> Error<'tag> {
                 let display_list = DisplayList::from(snippet);
                 error!("{}", display_list);
             }
+
+            Type::ImplicitSolverDeltaIsNotAValidString => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Illegal ImplicitFunctionSolver attribute value. Expected the name of the delta as string constant"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Expected a string constant",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
+            }
         };
     }
 }
 #[derive(Clone, Debug)]
 pub enum WarningType<'hir> {
     ImplicitDerivative(VariableId<'hir>),
+    SpecifiedDeltaIsNotDerived(Symbol),
 }
 impl<'tag> Warning<'tag> {
     pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
@@ -557,7 +586,40 @@ impl<'tag> Warning<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                warn!("{}", display_list);
+            }
+
+            WarningType::SpecifiedDeltaIsNotDerived(name) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let main_label = format!("The delta \"{}\" that was specified for the ImplicitFunctionSolver attribute is not the name of a Variable that is derived inside the loop",name);
+                let inline_label = format!("{} is not derived inside the loop", name);
+                footer.push(Annotation{
+                    id: None,
+                    label: Some("You can ignore this warning if you just added the attribute so that derivatives can potentially be taken in the future"),
+                    annotation_type: AnnotationType::Help
+                });
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(main_label.as_str()),
+                        annotation_type: AnnotationType::Warning,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: inline_label.as_str(),
+                            annotation_type: AnnotationType::Warning,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                warn!("{}", display_list);
             }
         };
     }

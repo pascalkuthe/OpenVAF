@@ -24,9 +24,9 @@ use crate::ir::{
     StatementId, VariableId,
 };
 use crate::mir::{IntegerExpression, Mir, RealBinaryOperator, Statement};
-use crate::symbol::Ident;
+use crate::symbol::{Ident, Symbol};
 use crate::Span;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(super) type PartialDerivativeMap<'tag> = FxHashMap<Unknown<'tag>, VariableId<'tag>>;
 
@@ -1617,6 +1617,55 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             | IntegerExpression::StringNEq(_, _) => todo!("error"),
         };
         Some(self.mir.push(self.mir[expr].clone_as(res)))
+    }
+
+    pub fn or_for_derivative(
+        &mut self,
+        expr: IntegerExpressionId<'tag>,
+        delta_name: Symbol,
+        derivatives_inside_loop: &FxHashSet<VariableId<'tag>>,
+    ) -> IntegerExpressionId<'tag> {
+        for derived_variable in derivatives_inside_loop.iter().copied() {
+            if self.mir[derived_variable].contents.name.name == delta_name {
+                if let Some(partial_derivatives) =
+                    self.variable_to_differentiate.get(&derived_variable)
+                {
+                    let mut res = expr;
+
+                    for (derive_by, _) in partial_derivatives {
+                        let mut replacements = FxHashMap::with_capacity_and_hasher(
+                            derivatives_inside_loop.len(),
+                            Default::default(),
+                        );
+
+                        for (variable, partial_derivatives) in &self.variable_to_differentiate {
+                            if derivatives_inside_loop.contains(variable) {
+                                if let Some(&derivative) = partial_derivatives.get(derive_by) {
+                                    replacements.insert(*variable, derivative);
+                                }
+                            }
+                        }
+
+                        if let Some(derived_condition) = self.mir.map_int_expr(expr, &replacements)
+                        {
+                            let span = self.mir[expr].source;
+                            res = self.mir.push(Node::new(
+                                IntegerExpression::BinaryOperator(
+                                    res,
+                                    Node::new(IntegerBinaryOperator::LogicOr, span),
+                                    derived_condition,
+                                ),
+                                span,
+                            ))
+                        }
+                    }
+
+                    return res;
+                }
+            }
+        }
+        //TODO warning
+        expr
     }
 }
 impl<'tag> Mir<'tag> {

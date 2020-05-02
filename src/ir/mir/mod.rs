@@ -25,6 +25,7 @@ use crate::ir::ids::StringExpressionId;
 use crate::ir::*;
 use crate::symbol::Ident;
 use crate::Span;
+use rustc_hash::FxHashMap;
 
 pub struct Mir<'tag> {
     //TODO unsized
@@ -57,7 +58,6 @@ impl<'tag> Mir<'tag> {
         //the ptr cast below has the right alignment since we are allocation using the right layout
         let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
             .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-        TinyArena::copy_to(&mut res.as_mut().attributes, &hir.attributes);
         NanoArena::copy_to(&mut res.as_mut().branches, &hir.branches);
         TinyArena::copy_to(&mut res.as_mut().nets, &hir.nets);
         NanoArena::copy_to(&mut res.as_mut().ports, &hir.ports);
@@ -109,6 +109,12 @@ pub struct Variable<'mir> {
     pub variable_type: VariableType<'mir>,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Attribute<'tag> {
+    pub name: Ident,
+    pub value: Option<ExpressionId<'tag>>,
+}
+
 #[derive(Copy, Clone)]
 pub struct Nature<'mir> {
     pub name: Ident,
@@ -145,20 +151,6 @@ pub enum Statement<'mir> {
 
     Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
     //  FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum AssignmentKind<'mir> {
-    Derivative(core::num::NonZeroU8, Symbol<'mir>),
-    Value,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Symbol<'mir> {
-    Parameter(ParameterId<'mir>),
-    Voltage(BranchId<'mir>),
-    Current(BranchId<'mir>),
-    Time,
 }
 
 /*#[derive(Clone, Copy, Debug)]
@@ -388,4 +380,253 @@ pub enum StringExpression<'mir> {
     VariableReference(VariableId<'mir>),
 
     ParameterReference(ParameterId<'mir>),
+}
+
+impl<'tag> Mir<'tag> {
+    pub fn map_real_expr(
+        &mut self,
+        expr: RealExpressionId<'tag>,
+        variables_to_replace: &FxHashMap<VariableId<'tag>, VariableId<'tag>>,
+    ) -> Option<RealExpressionId<'tag>> {
+        let new_expr = match self[expr].contents {
+            RealExpression::VariableReference(var) => {
+                let new_var = *variables_to_replace.get(&var)?;
+                RealExpression::VariableReference(new_var)
+            }
+
+            RealExpression::BinaryOperator(lhs, op, rhs) => {
+                let mapped_lhs = self.map_real_expr(lhs, variables_to_replace);
+                let mapped_rhs = self.map_real_expr(rhs, variables_to_replace);
+                let (lhs, rhs) = match (mapped_lhs, mapped_rhs) {
+                    (None, None) => return None,
+                    (Some(lhs), None) => (lhs, rhs),
+                    (None, Some(rhs)) => (lhs, rhs),
+                    (Some(lhs), Some(rhs)) => (lhs, rhs),
+                };
+                RealExpression::BinaryOperator(lhs, op, rhs)
+            }
+
+            RealExpression::Negate(span, expr) => {
+                let expr = self.map_real_expr(expr, variables_to_replace)?;
+                RealExpression::Negate(span, expr)
+            }
+
+            RealExpression::Condition(condition, question_span, arg1, colon_span, arg2) => {
+                let mapped_arg1 = self.map_real_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_real_expr(arg2, variables_to_replace);
+                let mapped_condition = self.map_int_expr(condition, variables_to_replace);
+                if mapped_arg1.is_none() && mapped_arg2.is_none() && mapped_condition.is_none() {
+                    return None;
+                }
+                let arg1 = mapped_arg1.unwrap_or(arg1);
+                let arg2 = mapped_arg2.unwrap_or(arg2);
+                let condition = mapped_condition.unwrap_or(condition);
+                RealExpression::Condition(condition, question_span, arg1, colon_span, arg2)
+            }
+
+            RealExpression::FunctionCall(_, _) => todo!("Function Calls"),
+
+            RealExpression::BuiltInFunctionCall1p(call, expr) => {
+                let expr = self.map_real_expr(expr, variables_to_replace)?;
+                RealExpression::BuiltInFunctionCall1p(call, expr)
+            }
+
+            RealExpression::BuiltInFunctionCall2p(call, arg1, arg2) => {
+                let mapped_arg1 = self.map_real_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_real_expr(arg2, variables_to_replace);
+                let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
+                    (None, None) => return None,
+                    (Some(arg1), None) => (arg1, arg2),
+                    (None, Some(arg2)) => (arg1, arg2),
+                    (Some(arg1), Some(arg2)) => (arg1, arg2),
+                };
+                RealExpression::BuiltInFunctionCall2p(call, arg1, arg2)
+            }
+
+            RealExpression::IntegerConversion(expr) => {
+                let expr = self.map_int_expr(expr, variables_to_replace)?;
+                RealExpression::IntegerConversion(expr)
+            }
+
+            RealExpression::Literal(_)
+            | RealExpression::ParameterReference(_)
+            | RealExpression::BranchAccess(_, _)
+            | RealExpression::SystemFunctionCall(_) => return None,
+        };
+        Some(self.push(self[expr].clone_as(new_expr)))
+    }
+
+    pub fn map_int_expr(
+        &mut self,
+        expr: IntegerExpressionId<'tag>,
+        variables_to_replace: &FxHashMap<VariableId<'tag>, VariableId<'tag>>,
+    ) -> Option<IntegerExpressionId<'tag>> {
+        let new_expr = match self[expr].contents {
+            IntegerExpression::VariableReference(var) => {
+                let new_var = *variables_to_replace.get(&var)?;
+                IntegerExpression::VariableReference(new_var)
+            }
+
+            IntegerExpression::BinaryOperator(lhs, op, rhs) => {
+                let mapped_lhs = self.map_int_expr(lhs, variables_to_replace);
+                let mapped_rhs = self.map_int_expr(rhs, variables_to_replace);
+                let (lhs, rhs) = match (mapped_lhs, mapped_rhs) {
+                    (None, None) => return None,
+                    (Some(lhs), None) => (lhs, rhs),
+                    (None, Some(rhs)) => (lhs, rhs),
+                    (Some(lhs), Some(rhs)) => (lhs, rhs),
+                };
+                IntegerExpression::BinaryOperator(lhs, op, rhs)
+            }
+
+            IntegerExpression::UnaryOperator(op, expr) => {
+                let expr = self.map_int_expr(expr, variables_to_replace)?;
+                IntegerExpression::UnaryOperator(op, expr)
+            }
+
+            IntegerExpression::Condition(condition, question_span, arg1, colon_span, arg2) => {
+                let mapped_arg1 = self.map_int_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_int_expr(arg2, variables_to_replace);
+                let mapped_condition = self.map_int_expr(condition, variables_to_replace);
+                if mapped_arg1.is_none() && mapped_arg2.is_none() && mapped_condition.is_none() {
+                    return None;
+                }
+                let arg1 = mapped_arg1.unwrap_or(arg1);
+                let arg2 = mapped_arg2.unwrap_or(arg2);
+                let condition = mapped_condition.unwrap_or(condition);
+                IntegerExpression::Condition(condition, question_span, arg1, colon_span, arg2)
+            }
+
+            IntegerExpression::FunctionCall(_, _) => todo!("Function Calls"),
+
+            IntegerExpression::Abs(expr) => {
+                let expr = self.map_int_expr(expr, variables_to_replace)?;
+                IntegerExpression::Abs(expr)
+            }
+
+            IntegerExpression::Min(arg1, arg2) => {
+                let mapped_arg1 = self.map_int_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_int_expr(arg2, variables_to_replace);
+                let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
+                    (None, None) => return None,
+                    (Some(arg1), None) => (arg1, arg2),
+                    (None, Some(arg2)) => (arg1, arg2),
+                    (Some(arg1), Some(arg2)) => (arg1, arg2),
+                };
+                IntegerExpression::Min(arg1, arg2)
+            }
+
+            IntegerExpression::Max(arg1, arg2) => {
+                let mapped_arg1 = self.map_int_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_int_expr(arg2, variables_to_replace);
+                let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
+                    (None, None) => return None,
+                    (Some(arg1), None) => (arg1, arg2),
+                    (None, Some(arg2)) => (arg1, arg2),
+                    (Some(arg1), Some(arg2)) => (arg1, arg2),
+                };
+                IntegerExpression::Max(arg1, arg2)
+            }
+
+            IntegerExpression::Min(arg1, arg2) => {
+                let mapped_arg1 = self.map_int_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_int_expr(arg2, variables_to_replace);
+                let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
+                    (None, None) => return None,
+                    (Some(arg1), None) => (arg1, arg2),
+                    (None, Some(arg2)) => (arg1, arg2),
+                    (Some(arg1), Some(arg2)) => (arg1, arg2),
+                };
+                IntegerExpression::Min(arg1, arg2)
+            }
+
+            IntegerExpression::IntegerComparison(lhs, op, rhs) => {
+                let mapped_lhs = self.map_int_expr(lhs, variables_to_replace);
+                let mapped_rhs = self.map_int_expr(rhs, variables_to_replace);
+                let (lhs, rhs) = match (mapped_lhs, mapped_rhs) {
+                    (None, None) => return None,
+                    (Some(lhs), None) => (lhs, rhs),
+                    (None, Some(rhs)) => (lhs, rhs),
+                    (Some(lhs), Some(rhs)) => (lhs, rhs),
+                };
+                IntegerExpression::IntegerComparison(lhs, op, rhs)
+            }
+
+            IntegerExpression::RealComparison(lhs, op, rhs) => {
+                let mapped_lhs = self.map_real_expr(lhs, variables_to_replace);
+                let mapped_rhs = self.map_real_expr(rhs, variables_to_replace);
+                let (lhs, rhs) = match (mapped_lhs, mapped_rhs) {
+                    (None, None) => return None,
+                    (Some(lhs), None) => (lhs, rhs),
+                    (None, Some(rhs)) => (lhs, rhs),
+                    (Some(lhs), Some(rhs)) => (lhs, rhs),
+                };
+                IntegerExpression::RealComparison(lhs, op, rhs)
+            }
+
+            IntegerExpression::StringEq(arg1, arg2) => {
+                let mapped_arg1 = self.map_str_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_str_expr(arg2, variables_to_replace);
+                let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
+                    (None, None) => return None,
+                    (Some(arg1), None) => (arg1, arg2),
+                    (None, Some(arg2)) => (arg1, arg2),
+                    (Some(arg1), Some(arg2)) => (arg1, arg2),
+                };
+                IntegerExpression::StringEq(arg1, arg2)
+            }
+            IntegerExpression::StringNEq(arg1, arg2) => {
+                let mapped_arg1 = self.map_str_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_str_expr(arg2, variables_to_replace);
+                let mapped_arg2 = self.map_str_expr(arg2, variables_to_replace);
+                let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
+                    (None, None) => return None,
+                    (Some(arg1), None) => (arg1, arg2),
+                    (None, Some(arg2)) => (arg1, arg2),
+                    (Some(arg1), Some(arg2)) => (arg1, arg2),
+                };
+                IntegerExpression::StringNEq(arg1, arg2)
+            }
+
+            IntegerExpression::RealCast(expr) => {
+                let expr = self.map_real_expr(expr, variables_to_replace)?;
+                IntegerExpression::RealCast(expr)
+            }
+
+            IntegerExpression::Literal(_)
+            | IntegerExpression::ParameterReference(_)
+            | IntegerExpression::PortReference(_)
+            | IntegerExpression::NetReference(_) => return None,
+        };
+        Some(self.push(self[expr].clone_as(new_expr)))
+    }
+
+    pub fn map_str_expr(
+        &mut self,
+        expr: StringExpressionId<'tag>,
+        variables_to_replace: &FxHashMap<VariableId<'tag>, VariableId<'tag>>,
+    ) -> Option<StringExpressionId<'tag>> {
+        let new_expr = match self[expr].contents {
+            StringExpression::VariableReference(var) => {
+                let new_var = *variables_to_replace.get(&var)?;
+                StringExpression::VariableReference(new_var)
+            }
+
+            StringExpression::Condition(condition, question_span, arg1, colon_span, arg2) => {
+                let mapped_arg1 = self.map_str_expr(arg1, variables_to_replace);
+                let mapped_arg2 = self.map_str_expr(arg2, variables_to_replace);
+                let mapped_condition = self.map_int_expr(condition, variables_to_replace);
+                if mapped_arg1.is_none() && mapped_arg2.is_none() && mapped_condition.is_none() {
+                    return None;
+                }
+                let arg1 = mapped_arg1.unwrap_or(arg1);
+                let arg2 = mapped_arg2.unwrap_or(arg2);
+                let condition = mapped_condition.unwrap_or(condition);
+                StringExpression::Condition(condition, question_span, arg1, colon_span, arg2)
+            }
+
+            StringExpression::Literal(_) | StringExpression::ParameterReference(_) => return None,
+        };
+        Some(self.push(self[expr].clone_as(new_expr)))
+    }
 }

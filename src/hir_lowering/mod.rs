@@ -35,6 +35,7 @@ use crate::hir_lowering::error::{Error, Type, Warning};
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
 use crate::ir::*;
 use crate::ir::{Push, SafeRangeCreation};
+use crate::mir::Attribute;
 use crate::mir::*;
 use crate::SourceMap;
 
@@ -73,6 +74,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
         for variable in self.hir.full_range() {
             self.fold_variable(variable)
+        }
+
+        for attribute in SafeRangeCreation::<AttributeId<'tag>>::full_range(self.hir) {
+            let value = self.hir[attribute]
+                .value
+                .and_then(|val| self.fold_expression(val));
+            self.mir.push(Attribute {
+                name: self.hir[attribute].name,
+                value,
+            });
         }
 
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.hir) {
