@@ -294,10 +294,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::PartialDerivative => {
                 let start = self.preprocessor.current_start();
                 self.consume_lookahead();
-                self.expect(Token::ParenOpen);
+                self.expect(Token::ParenOpen)?;
                 let expr_to_derive = self.parse_expression_id()?;
 
-                self.expect(Token::Colon);
+                self.expect(Token::Comma)?;
 
                 let (token, span) = self.next()?;
                 let disciplines_access = match token {
@@ -320,7 +320,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     }
                 };
                 let branch_access = self.parse_branch_access()?;
-                self.expect(Token::ParenClose);
+                self.expect(Token::ParenClose)?;
                 Node::new(
                     Expression::Primary(Primary::DerivativeByBranch(
                         expr_to_derive,

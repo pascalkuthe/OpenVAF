@@ -43,6 +43,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
 use ansi_term::Color::*;
+use bitflags::_core::convert::TryFrom;
 use log::error;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -238,7 +239,30 @@ impl<'tag, I: Copy + Clone> Idx<'tag, I> {
     pub unsafe fn transmute<'newtag>(&self) -> Idx<'newtag, I> {
         Idx {
             index: self.index,
-            tag: InvariantLifetime(PhantomData),
+            tag: invariant_lifetime(),
+        }
+    }
+
+    /// This violates all safety guarantees of this module use at your own risk
+    #[inline(always)]
+    pub unsafe fn new(idx: I) -> Self {
+        Idx {
+            index: idx,
+            tag: invariant_lifetime(),
+        }
+    }
+}
+impl<'tag, I: Copy + Clone + TryFrom<usize>> Idx<'tag, I> {
+    /// This violates all safety guarantees of this module use at your own risk
+    #[inline(always)]
+    pub unsafe fn new_from_usize(idx: usize) -> Self {
+        if let Ok(idx) = I::try_from(idx) {
+            Self {
+                index: idx,
+                tag: invariant_lifetime(),
+            }
+        } else {
+            panic!("conversion failed")
         }
     }
 }
@@ -537,9 +561,16 @@ impl<'tag, T: Clone> TinyHeapArena<'tag, T> {
     pub fn clone_into<'newtag>(&self, dst: &mut TinyHeapArena<'newtag, T>) {
         dst.data.extend_from_slice(&self.data)
     }
+
+    pub unsafe fn clone(&self) -> Self {
+        Self {
+            data: self.data.clone(),
+            tag: self.tag,
+        }
+    }
 }
-impl<'tag, T> TinyHeapArena<'tag, T> {
-    /// create a new SmallArena. Don't do this manually. Use the macro instead.
+impl<'tag, T: Default> TinyHeapArena<'tag, T> {
+    /// create a new TinyArena. Don't do this manually. Use the macro instead.
     ///
     /// # Safety
     ///
@@ -547,17 +578,50 @@ impl<'tag, T> TinyHeapArena<'tag, T> {
     /// constructor. You must never use this value in another arena, lest you
     /// might be able to mix up the indices of the two, which could lead to
     /// out of bounds access and thus **Undefined Behavior**!
-    pub unsafe fn new(tag: InvariantLifetime<'tag>, capacity: usize) -> Self {
+    pub unsafe fn new_with_default_values(tag: InvariantLifetime<'tag>, len: u16) -> Self {
+        let mut data = Vec::new();
+        data.resize_with(len as usize, T::default);
+        Self { tag, data }
+    }
+}
+impl<'tag, T> TinyHeapArena<'tag, T> {
+    /// create a new TinyArena. Don't do this manually. Use the macro instead.
+    ///
+    /// # Safety
+    ///
+    /// The whole tagged indexing trick relies on the `'tag` you give to this
+    /// constructor. You must never use this value in another arena, lest you
+    /// might be able to mix up the indices of the two, which could lead to
+    /// out of bounds access and thus **Undefined Behavior**!
+    pub unsafe fn new(tag: InvariantLifetime<'tag>, capacity: u16) -> Self {
         Self {
             tag,
-            data: Vec::with_capacity(capacity),
+            data: Vec::with_capacity(capacity as usize),
         }
+    }
+    /// create a new TinyArena. Don't do this manually. Use the macro instead.
+    ///
+    /// # Safety
+    ///
+    /// The whole tagged indexing trick relies on the `'tag` you give to this
+    /// constructor. You must never use this value in another arena, lest you
+    /// might be able to mix up the indices of the two, which could lead to
+    /// out of bounds access and thus **Undefined Behavior**!
+    pub unsafe fn new_with(
+        tag: InvariantLifetime<'tag>,
+        len: u16,
+        init: impl FnMut() -> T,
+    ) -> Self {
+        let mut data = Vec::new();
+        data.resize_with(len as usize, init);
+        Self { tag, data }
     }
 
     pub fn reserve(&mut self, capacatiy: u16) {
         debug_assert!(capacatiy as usize + self.data.len() < std::u16::MAX as usize);
         self.data.reserve(capacatiy as usize)
     }
+
     /// # Safety: Invalidates all ids
     pub unsafe fn clear(&mut self) {
         self.data.clear()
@@ -575,6 +639,15 @@ impl<'tag, T> TinyHeapArena<'tag, T> {
             index: (self.data.len() - 1) as u16,
             tag: self.tag,
         }
+    }
+
+    /// Panics if id1 == id2
+    #[inline(always)]
+    pub fn double_mut_borrow(&mut self, id1: Idx16<'tag>, id2: Idx16<'tag>) -> (&mut T, &mut T) {
+        assert_ne!(id1, id2);
+        let ptr1 = self.data.index_mut(id1.index as usize) as *mut T;
+        let ptr2 = self.data.index_mut(id2.index as usize) as *mut T;
+        unsafe { (&mut *ptr1, &mut *ptr2) }
     }
 
     pub unsafe fn retain(

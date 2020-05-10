@@ -8,14 +8,61 @@
 
 use crate::compact_arena::{Idx16, InvariantLifetime, Step, TinyHeapArena};
 use crate::ir::{IntegerExpressionId, StatementId};
+use bitflags::_core::mem::swap;
+use bitflags::_core::ops::{Index, IndexMut};
+use fixedbitset::FixedBitSet as BitSet;
+use log::debug;
 use log::trace;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
+
+#[macro_export]
+macro_rules! simplify {
+    ($cfg:ident) => {
+        let tag = $crate::compact_arena::invariant_lifetime();
+        let _guard;
+        let mut $cfg = unsafe {
+            // this is not per-se unsafe but we need it to be public and
+            // calling it with a non-unique `tag` would allow arena mixups,
+            // which may introduce UB in `Index`/`IndexMut`
+            $cfg.simplify(tag)
+        };
+        // this doesn't make it to MIR, but ensures that borrowck will not
+        // unify the lifetimes of two macro calls by binding the lifetime to
+        // drop scope
+        if false {
+            struct Guard<'tag>(&'tag $crate::compact_arena::InvariantLifetime<'tag>);
+            impl<'tag> ::core::ops::Drop for Guard<'tag> {
+                fn drop(&mut self) {}
+            }
+            _guard = Guard(&tag);
+        }
+    };
+}
 
 pub type BasicBlockId<'tag> = Idx16<'tag>;
+pub struct SimplifiedControlFlowGraph<'tag, 'mir> {
+    pub blocks: TinyHeapArena<'tag, BasicBlock<'tag, 'mir>>,
+}
 
+impl<'tag, 'mir> SimplifiedControlFlowGraph<'tag, 'mir> {
+    #[inline(always)]
+    pub fn start(&self) -> BasicBlockId<'tag> {
+        unsafe { self.blocks.end() } //This is save since we treat this as an inclusive range
+    }
+
+    #[inline(always)]
+    pub fn end(&self) -> BasicBlockId<'tag> {
+        unsafe { self.blocks.start() } //This is save since we treat this as an inclusive range
+    }
+
+    pub fn block_count(&self) -> u16 {
+        self.blocks.len()
+    }
+}
 #[derive(Debug)]
 pub struct ControlFlowGraph<'tag, 'mir> {
     pub blocks: TinyHeapArena<'tag, BasicBlock<'tag, 'mir>>,
+    pub(crate) dead_blocks: BitSet,
 }
 
 impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
@@ -33,30 +80,23 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         self.blocks.len()
     }
 
-    // TODO: Use only a single allocator and vector truncation
-    pub fn simplify<'newtag>(
+    pub unsafe fn simplify<'newtag>(
         mut self,
-        new_allocator: TinyHeapArena<'newtag, BasicBlock<'newtag, 'mir>>,
-    ) -> ControlFlowGraph<'newtag, 'mir> {
+        new_tag: InvariantLifetime<'newtag>,
+    ) -> SimplifiedControlFlowGraph<'newtag, 'mir> {
         let mut new_replacements: FxHashMap<BasicBlockId, BasicBlockId> = FxHashMap::default();
-        let mut removals: FxHashSet<BasicBlockId> = FxHashSet::default();
-        let mut res = ControlFlowGraph {
-            blocks: new_allocator,
-        };
-        // Transmute so we can switch buffers
-        let mut old: ControlFlowGraph<'newtag, 'mir> = unsafe { std::mem::transmute(self) };
+        let mut replacements = new_replacements.clone();
 
         loop {
-            //TODO more efficient algorithm?
-            let replacements = new_replacements;
-            new_replacements = FxHashMap::default();
-            let mut replacement_targets = FxHashSet::default();
+            let mut replacement_targets = BitSet::with_capacity(self.block_count() as usize);
             let mut changed = false;
-            for block in old.blocks.full_range() {
-                if removals.contains(&block) {
+
+            for block in self.blocks.full_range() {
+                if self.dead_blocks.contains(block.index() as usize) {
                     continue;
                 }
-                match old.blocks[block].terminator {
+
+                match self.blocks[block].terminator {
                     Terminator::End => (),
                     Terminator::Merge(ref mut next) | Terminator::Goto(ref mut next) => {
                         if let Some(&new_next) = replacements.get(&next) {
@@ -64,16 +104,16 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                         }
 
                         let next = *next;
-
-                        if old.blocks[block].statements.is_empty()
-                            && !replacement_targets.contains(&block)
+                        if self.blocks[block].statements.is_empty()
+                            && !replacement_targets.contains(block.index() as usize)
                             && !new_replacements.contains_key(&next)
                         {
                             new_replacements.insert(block, next);
-                            removals.insert(block);
-                            replacement_targets.insert(next);
+                            self.dead_blocks.insert(block.index() as usize);
+                            replacement_targets.insert(next.index() as usize);
                         }
                     }
+
                     Terminator::Split {
                         condition,
                         mut true_block,
@@ -92,7 +132,7 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                             merge = new_merge
                         }
 
-                        old.blocks[block].terminator = if true_block == false_block {
+                        self.blocks[block].terminator = if true_block == false_block {
                             //empty condition
                             changed = true;
                             Terminator::Merge(merge)
@@ -111,75 +151,33 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                     }
                 };
             }
+
+            if new_replacements.is_empty() && !changed {
+                break;
+            }
+
             trace!(
                 "running because changed: {} or replacements: {:#?}",
                 changed,
                 new_replacements
             );
-            if new_replacements.is_empty() && !changed {
-                break;
-            }
+
+            swap(&mut new_replacements, &mut replacements);
+            new_replacements.clear();
         }
+        let res = self.remove_dead_code(new_tag);
 
-        let mut offset = 0u16;
-        for block in old.blocks.full_range() {
-            if removals.contains(&block) {
-                offset += 1;
-                continue;
-            }
-            let mut new_block = block;
-            unsafe { new_block.sub(offset) };
-            new_replacements.insert(block, new_block);
-            res.blocks.add(BasicBlock {
-                statements: std::mem::take(&mut old.blocks[block].statements),
-                terminator: old.blocks[block].terminator,
-            });
-        }
-        unsafe {
-            old.blocks.clear();
-        }
-
-        for block in res.blocks.full_range() {
-            match res.blocks[block].terminator {
-                Terminator::End => (),
-
-                Terminator::Merge(ref mut next) | Terminator::Goto(ref mut next) => {
-                    //split into two loops
-                    if let Some(&new_next) = new_replacements.get(&next) {
-                        *next = new_next
-                    }
-                }
-                Terminator::Split {
-                    condition,
-                    ref mut true_block,
-                    ref mut false_block,
-                    ref mut merge,
-                } => {
-                    if let Some(&new_true_block) = new_replacements.get(true_block) {
-                        *true_block = new_true_block
-                    }
-
-                    if let Some(&new_false_block) = new_replacements.get(false_block) {
-                        *false_block = new_false_block
-                    }
-
-                    if let Some(&new_merge) = new_replacements.get(merge) {
-                        *merge = new_merge
-                    }
-                }
-            }
-        }
-        res
+        SimplifiedControlFlowGraph { blocks: res.blocks }
     }
 
-    pub unsafe fn retain<'newtag>(
+    pub unsafe fn remove_dead_code<'newtag>(
         mut self,
-        tag: InvariantLifetime<'newtag>,
-        mut predicate: impl FnMut(BasicBlockId<'tag>) -> bool,
+        _tag: InvariantLifetime<'newtag>,
     ) -> ControlFlowGraph<'newtag, 'mir> {
         let mut replacements = FxHashMap::default();
+        let dead_blocks = &self.dead_blocks;
         self.blocks.retain(
-            |block| predicate(block),
+            |block| !dead_blocks.contains(block.index() as usize),
             |old_id, new_id| {
                 replacements.insert(old_id, new_id);
             },
@@ -215,6 +213,8 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                 }
             }
         }
+
+        self.dead_blocks.clear();
         std::mem::transmute(self)
     }
 
@@ -227,6 +227,7 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         self.blocks.clone_into(&mut allocator);
         ControlFlowGraph {
             blocks: unsafe { std::mem::transmute(allocator) },
+            dead_blocks: self.dead_blocks.clone(),
         }
     }
 
@@ -234,9 +235,13 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         self.blocks.full_range().for_each(|block| f(block));
     }
 
+    pub fn for_all_blocks_mut(&mut self, mut f: impl FnMut(&mut Self, BasicBlockId<'tag>)) {
+        self.blocks.full_range().for_each(|block| f(self, block));
+    }
+
     pub fn visit_mut_in_execution_order(
         &mut self,
-        mut f: impl FnMut(&mut Self, BasicBlockId<'tag>),
+        mut f: impl FnMut(&mut Self, BasicBlockId<'tag>, Option<BasicBlockId>),
     ) {
         self.partial_visit_mut_in_execution_order(self.start(), None, &mut f)
     }
@@ -244,11 +249,11 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         &mut self,
         start: BasicBlockId<'tag>,
         end: Option<BasicBlockId<'tag>>,
-        f: &mut impl FnMut(&mut Self, BasicBlockId<'tag>),
+        f: &mut impl FnMut(&mut Self, BasicBlockId<'tag>, Option<BasicBlockId<'tag>>),
     ) {
         let mut current = start;
         loop {
-            f(self, current);
+            f(self, current, end);
             current = match self.blocks[current].terminator {
                 Terminator::End => return,
                 Terminator::Merge(next) if Some(next) == end => return,
@@ -277,6 +282,11 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
     pub fn visit_in_execution_order(&self, mut f: impl FnMut(BasicBlockId<'tag>)) {
         self.partial_visit_in_execution_order(self.start(), None, &mut f)
     }
+
+    pub fn mark_block_dead(&mut self, block: BasicBlockId<'tag>) {
+        self.dead_blocks.insert(block.index() as usize)
+    }
+
     pub fn partial_visit_in_execution_order(
         &self,
         start: BasicBlockId<'tag>,
@@ -309,6 +319,20 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                 }
             };
         }
+    }
+}
+
+impl<'cfg, 'mir> Index<BasicBlockId<'cfg>> for ControlFlowGraph<'cfg, 'mir> {
+    type Output = BasicBlock<'cfg, 'mir>;
+
+    fn index(&self, index: BasicBlockId<'cfg>) -> &Self::Output {
+        &self.blocks[index]
+    }
+}
+
+impl<'cfg, 'mir> IndexMut<BasicBlockId<'cfg>> for ControlFlowGraph<'cfg, 'mir> {
+    fn index_mut(&mut self, index: BasicBlockId<'cfg>) -> &mut Self::Output {
+        &mut self.blocks[index]
     }
 }
 
@@ -406,6 +430,12 @@ mod debug {
     use std::borrow::Cow;
     use std::io::Write;
 
+    impl<'tag, 'mir> SimplifiedControlFlowGraph<'tag, 'mir> {
+        pub fn render_to<W: Write>(&self, write: &mut W) {
+            dot::render(self, write).expect("Rendering failed")
+        }
+    }
+
     impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         pub fn render_to<W: Write>(&self, write: &mut W) {
             dot::render(self, write).expect("Rendering failed")
@@ -430,25 +460,29 @@ mod debug {
         }
 
         fn node_label(&'a self, &n: &Self::Node) -> LabelText<'a> {
+            let dead = self.dead_blocks.contains(n.index() as usize);
             match self.blocks[n].terminator {
                 Terminator::End => EscStr(Cow::Owned(format!(
-                    "BB_{}: {} Statements\n END",
+                    "BB_{}: {} Statements\n END{}",
                     n.index(),
-                    self.blocks[n].statements.len()
+                    self.blocks[n].statements.len(),
+                    if dead { "\nDEAD" } else { "" }
                 ))),
                 Terminator::Merge(_) | Terminator::Goto(_) => LabelStr(Cow::Owned(format!(
-                    "BB_{}: {} Statements",
+                    "BB_{}: {} Statements{}",
                     n.index(),
-                    self.blocks[n].statements.len()
+                    self.blocks[n].statements.len(),
+                    if dead { "\nDEAD" } else { "" }
                 ))),
                 Terminator::Split {
                     condition, merge, ..
                 } => LabelStr(Cow::Owned(format!(
-                    "BB_{}: {} Statements\nSplit at {:?}\nMerge at BB_{}",
+                    "BB_{}: {} Statements\nSplit at {:?}\nMerge at BB_{}{}",
                     n.index(),
                     self.blocks[n].statements.len(),
                     condition,
-                    merge.index()
+                    merge.index(),
+                    if dead { "\nDEAD" } else { "" }
                 ))),
             }
         }
@@ -457,7 +491,8 @@ mod debug {
             &(start, dst): &(BasicBlockId<'tag>, BasicBlockId<'tag>),
         ) -> LabelText<'a> {
             match self.blocks[start].terminator {
-                Terminator::Merge(_) | Terminator::Goto(_) => LabelStr(Cow::Borrowed("GOTO")),
+                Terminator::Merge(_) => LabelStr(Cow::Borrowed("MERGE")),
+                Terminator::Goto(_) => LabelStr(Cow::Borrowed("GOTO")),
                 Terminator::End => LabelStr(Cow::Borrowed("ILLEGAL")),
                 Terminator::Split {
                     condition,
@@ -602,6 +637,104 @@ mod debug {
                         edges.push((block, false_block));
                         edges.push((block, true_block));
                         edges.push((block, merge));
+                    }
+                    Terminator::End => (),
+                }
+            }
+            Cow::Owned(edges)
+        }
+
+        fn source(&'a self, edge: &Self::Edge) -> Self::Node {
+            edge.0
+        }
+
+        fn target(&'a self, edge: &Self::Edge) -> Self::Node {
+            edge.1
+        }
+    }
+
+    impl<'a, 'tag, 'mir> dot::Labeller<'a> for SimplifiedControlFlowGraph<'tag, 'mir> {
+        type Node = BasicBlockId<'tag>;
+        type Edge = (BasicBlockId<'tag>, BasicBlockId<'tag>);
+
+        fn graph_id(&'a self) -> Id<'a> {
+            dot::Id::new("ControlFlowGraph").unwrap()
+        }
+
+        fn node_id(&'a self, n: &Self::Node) -> Id<'a> {
+            dot::Id::new(format!("BB_{}", n.index())).unwrap()
+        }
+
+        fn node_label(&'a self, &n: &Self::Node) -> LabelText<'a> {
+            match self.blocks[n].terminator {
+                Terminator::End => EscStr(Cow::Owned(format!(
+                    "BB_{}: {} Statements\n END",
+                    n.index(),
+                    self.blocks[n].statements.len()
+                ))),
+                Terminator::Merge(_) | Terminator::Goto(_) => LabelStr(Cow::Owned(format!(
+                    "BB_{}: {} Statements",
+                    n.index(),
+                    self.blocks[n].statements.len()
+                ))),
+                Terminator::Split {
+                    condition, merge, ..
+                } => LabelStr(Cow::Owned(format!(
+                    "BB_{}: {} Statements\nSplit at {:?}\nMerge at BB_{}",
+                    n.index(),
+                    self.blocks[n].statements.len(),
+                    condition,
+                    merge.index()
+                ))),
+            }
+        }
+        fn edge_label(
+            &'a self,
+            &(start, dst): &(BasicBlockId<'tag>, BasicBlockId<'tag>),
+        ) -> LabelText<'a> {
+            match self.blocks[start].terminator {
+                Terminator::Merge(_) | Terminator::Goto(_) => LabelStr(Cow::Borrowed("GOTO")),
+                Terminator::End => LabelStr(Cow::Borrowed("ILLEGAL")),
+                Terminator::Split {
+                    condition,
+                    true_block,
+                    false_block,
+                    merge,
+                } => {
+                    let true_or_false = if true_block == dst {
+                        "TRUE"
+                    } else if false_block == dst {
+                        "FALSE"
+                    } else {
+                        "ILLEGAL"
+                    };
+                    LabelStr(Cow::Borrowed(true_or_false))
+                }
+            }
+        }
+    }
+
+    impl<'a, 'tag, 'mir> dot::GraphWalk<'a> for SimplifiedControlFlowGraph<'tag, 'mir> {
+        type Node = BasicBlockId<'tag>;
+        type Edge = (BasicBlockId<'tag>, BasicBlockId<'tag>);
+
+        fn nodes(&'a self) -> Nodes<'a, Self::Node> {
+            Cow::Owned(self.blocks.full_range().collect())
+        }
+
+        fn edges(&'a self) -> Edges<'a, Self::Edge> {
+            let mut edges = Vec::new();
+            for block in self.blocks.full_range() {
+                match self.blocks[block].terminator {
+                    Terminator::Merge(dst) | Terminator::Goto(dst) => edges.push((block, dst)),
+                    Terminator::Split {
+                        condition,
+                        true_block,
+                        false_block,
+                        merge,
+                    } => {
+                        edges.push((block, false_block));
+                        edges.push((block, true_block));
                     }
                     Terminator::End => (),
                 }

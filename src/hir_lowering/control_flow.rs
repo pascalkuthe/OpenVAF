@@ -6,19 +6,20 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::analysis::{Constants, ExtractionDependencyHandler};
-use crate::compact_arena::{invariant_lifetime, InvariantLifetime, TinyHeapArena};
+use crate::analysis::{DominatorTree, ExtractionDependencyHandler};
+use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
 use crate::hir::Block;
 use crate::hir_lowering::error::{Error, Type, Warning, WarningType};
 use crate::hir_lowering::HirToMirFold;
 use crate::ir::hir::DisciplineAccess;
 use crate::ir::mir::{ControlFlowGraph, ExpressionId, Statement};
-use crate::ir::{BranchId, Node, ParameterId, StatementId, VariableId};
-use crate::ir::{Push, SafeRangeCreation};
+use crate::ir::Push;
+use crate::ir::{BranchId, Node, ParameterId, VariableId};
 use crate::mir::control_flow_graph::{BasicBlock, BasicBlockId, Terminator};
 use crate::mir::{IntegerExpression, VariableType};
-use crate::symbol::{keywords, Ident, Symbol};
+use crate::symbol::Ident;
 use crate::{hir, Span};
+use fixedbitset::FixedBitSet as BitSet;
 use rustc_hash::FxHashSet;
 
 impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
@@ -26,18 +27,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
     pub fn fold_block_into_cfg<'cfg>(
         &mut self,
         statements: Block<'tag>,
-    ) -> ControlFlowGraph<'tag, 'tag> {
+    ) -> (ControlFlowGraph<'tag, 'tag>, DominatorTree<'tag>) {
         let mut allocator = unsafe { TinyHeapArena::new(invariant_lifetime(), 512) };
+
         self.fold_block_internal(statements, Terminator::End, &mut allocator);
-        let mut res = ControlFlowGraph { blocks: allocator };
-        unsafe {
-            res.constant_fold(
-                &mut self.mir,
-                &mut Constants::default(),
-                true,
-                invariant_lifetime(),
-            )
-        }
+        let mut cfg = ControlFlowGraph {
+            dead_blocks: BitSet::with_capacity(allocator.len() as usize),
+            blocks: allocator,
+        };
+        let dtree = DominatorTree::from_cfg(&cfg);
+        self.generate_derivatives(&mut cfg, &dtree);
+        (cfg, dtree)
     }
 
     fn fold_block_internal(
@@ -57,66 +57,21 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     allocator[current_block].statements.reverse();
                     let terminator = Terminator::Merge(current_block);
 
-                    let mut derived_inside_condition = FxHashSet::default();
-
-                    let mut merge_statements = Vec::with_capacity(16);
-                    let derivatives_before_branch = self.variable_to_differentiate.clone();
-
                     let false_block = self.fold_block_internal(
                         statements.enter_back(condition.contents.else_statement),
                         terminator,
                         allocator,
                     );
-                    let mir = &mut self.mir;
-                    Self::merge_branched_derivatives(
-                        &mut self.variable_to_differentiate,
-                        derivatives_before_branch,
-                        |expected_after_branch, expected_inside_branch| {
-                            merge_statements.push(mir.generate_derivative_alias(
-                                expected_after_branch,
-                                expected_inside_branch,
-                            ))
-                        },
-                        |derived| {
-                            derived_inside_condition.insert(derived);
-                        },
-                    );
 
-                    let derivatives_before_branch = self.variable_to_differentiate.clone();
                     let true_block = self.fold_block_internal(
                         statements.enter_back(condition.contents.if_statements),
                         terminator,
                         allocator,
                     );
 
-                    let mir = &mut self.mir;
-                    Self::merge_branched_derivatives(
-                        &mut self.variable_to_differentiate,
-                        derivatives_before_branch,
-                        |expected_after_branch, expected_inside_branch| {
-                            merge_statements.push(mir.generate_derivative_alias(
-                                expected_after_branch,
-                                expected_inside_branch,
-                            ))
-                        },
-                        |derived| {
-                            derived_inside_condition.insert(derived);
-                        },
-                    );
-
                     let terminator = if let Some(condition) =
-                        self.fold_integer_expression(condition.contents.condition)
+                        self.fold_read_only_integer_expression(condition.contents.condition)
                     {
-                        self.mir.track_integer_expression(
-                            condition,
-                            &mut FxHashSet::default(),
-                            &mut ImplicitDerivativeCheck {
-                                warnings: &mut self.warnings,
-                                condition_span: self.mir[condition].source,
-                                modified_variables: derived_inside_condition,
-                            },
-                        );
-
                         Terminator::Split {
                             condition,
                             true_block,
@@ -128,7 +83,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     };
 
                     current_block = allocator.add(BasicBlock {
-                        statements: merge_statements,
+                        statements: Vec::new(),
                         terminator,
                     });
 
@@ -143,38 +98,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         terminator: Terminator::Goto(current_block), //just a placeholder
                     });
 
-                    let mut derived_inside_loop = FxHashSet::default();
-                    let mut derivatives_before_loop = self.variable_to_differentiate.clone();
-
                     let loop_body = self.fold_block_internal(
                         statements.enter_back(while_loop.contents.body),
                         Terminator::Merge(condition_block),
                         allocator,
                     );
 
-                    let mut merge_statements = Vec::with_capacity(16);
-
-                    let mir = &mut self.mir;
-                    Self::merge_branched_derivatives(
-                        &mut self.variable_to_differentiate,
-                        derivatives_before_loop,
-                        |after_loop, expected_inside_loop| {
-                            allocator[loop_body].statements.push(
-                                mir.generate_derivative_alias(expected_inside_loop, after_loop),
-                            );
-                            merge_statements.push(
-                                mir.generate_derivative_alias(after_loop, expected_inside_loop),
-                            )
-                        },
-                        |derived| {
-                            derived_inside_loop.insert(derived);
-                        },
-                    );
-
                     if let Some(mut condition) =
-                        self.fold_integer_expression(while_loop.contents.condition)
+                        self.fold_read_only_integer_expression(while_loop.contents.condition)
                     {
-                        for attr in while_loop.attributes {
+                        /*for attr in while_loop.attributes {
                             if self.mir[attr].name.name == keywords::IMPLICIT_SOLVER {
                                 if let Some(name) = self.mir[attr].value {
                                     if let ExpressionId::String(name) = name {
@@ -225,7 +158,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                     modified_variables: derived_inside_loop,
                                 },
                             );
-                        }
+                        }*/
 
                         allocator[condition_block].terminator = Terminator::Split {
                             condition,
@@ -235,7 +168,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         };
 
                         current_block = allocator.add(BasicBlock {
-                            statements: merge_statements,
+                            statements: Vec::new(),
                             terminator: Terminator::Goto(condition_block),
                         });
                     } else {
@@ -256,9 +189,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 hir::Statement::Assignment(attr, dst, val)
                     if matches!(self.mir[dst].contents.variable_type, VariableType::Real(..)) =>
                 {
-                    let partial_derivatives = self.variable_to_differentiate.remove(&dst);
-
-                    if let Some(value) = self.fold_real_expression(val) {
+                    if let Some(value) = self.fold_real_assignment_expression(val, dst) {
                         let stmt = self.mir.push(Statement::Assignment(
                             attr,
                             dst,
@@ -266,28 +197,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         ));
 
                         allocator[current_block].statements.push(stmt);
-
-                        if let Some(partial_derivatives) = partial_derivatives {
-                            self.generate_partial_derivative_assignment(
-                                partial_derivatives,
-                                attr,
-                                ExpressionId::Real(value),
-                                &mut allocator[current_block].statements,
-                            );
-                        }
                     }
                 }
 
                 hir::Statement::Assignment(attr, dst, value) => {
-                    let partial_derivatives = self.variable_to_differentiate.remove(&dst);
-
-                    let value = match self.fold_expression(value) {
+                    let value = match self.fold_assignment_expression(value, dst) {
                         Some(ExpressionId::Real(val)) => {
                             let value = ExpressionId::Integer(self.mir.push(Node {
                                 source: self.mir[val].source,
                                 contents: IntegerExpression::RealCast(val),
                             }));
-
                             let stmt = self.mir.push(Statement::Assignment(attr, dst, value));
 
                             allocator[current_block].statements.push(stmt);
@@ -312,19 +231,10 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                         None => continue,
                     };
-
-                    if let Some(partial_derivatives) = partial_derivatives {
-                        self.generate_partial_derivative_assignment(
-                            partial_derivatives,
-                            attr,
-                            value,
-                            &mut allocator[current_block].statements,
-                        );
-                    }
                 }
 
                 hir::Statement::Contribute(attr, access, branch, value) => {
-                    if let Some(value) = self.fold_real_expression(value) {
+                    if let Some(value) = self.fold_read_only_real_expression(value) {
                         let stmt = self
                             .mir
                             .push(Statement::Contribute(attr, access, branch, value));

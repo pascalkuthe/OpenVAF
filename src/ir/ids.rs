@@ -37,6 +37,14 @@ macro_rules! id_type {
             pub fn unwrap(self) -> $type<'tag> {
                 self.0
             }
+
+            pub unsafe fn from_raw_index(id: usize) -> Self {
+                Self($type::new_from_usize(id))
+            }
+
+            pub fn as_usize(self) -> usize {
+                self.0.index() as usize
+            }
         }
         impl<'tag> $crate::compact_arena::SafeRange<$name<'tag>> {
             pub fn unwrap(self) -> $crate::compact_arena::SafeRange<$type<'tag>> {
