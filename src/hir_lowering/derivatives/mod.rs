@@ -8,25 +8,23 @@
  * *****************************************************************************************
 */
 
+use crate::analysis::DominatorTree;
 use crate::ast::UnaryOperator;
 use crate::hir::Branch;
 use crate::hir::DisciplineAccess;
-use crate::hir_lowering::error::Error;
-use crate::hir_lowering::error::Type::OnlyNumericExpressionsCanBeDerived;
 use crate::hir_lowering::HirToMirFold;
-use crate::ir::mir::RealExpression::Literal;
 use crate::ir::mir::{
-    ComparisonOperator, ExpressionId, IntegerBinaryOperator, RealExpression, Variable, VariableType,
+    ComparisonOperator, IntegerBinaryOperator, RealExpression, Variable, VariableType,
 };
 use crate::ir::{
-    AttributeNode, Attributes, BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p,
-    IntegerExpressionId, NetId, Node, ParameterId, Push, RealExpressionId, SafeRangeCreation,
-    StatementId, VariableId,
+    AttributeNode, BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId,
+    NetId, Node, ParameterId, Push, RealExpressionId, SafeRangeCreation, VariableId,
 };
-use crate::mir::{IntegerExpression, Mir, RealBinaryOperator, Statement};
+use crate::mir::{ControlFlowGraph, IntegerExpression, Mir, RealBinaryOperator};
 use crate::symbol::{Ident, Symbol};
-use crate::Span;
 use rustc_hash::{FxHashMap, FxHashSet};
+
+mod solver;
 
 pub(super) type PartialDerivativeMap<'tag> = FxHashMap<Unknown<'tag>, VariableId<'tag>>;
 
@@ -42,106 +40,70 @@ pub enum Unknown<'tag> {
 }
 
 impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
-    pub(super) fn generate_partial_derivative_assignment(
+    pub(super) fn generate_derivatives(
         &mut self,
-        partial_derivatives: PartialDerivativeMap<'tag>,
-        attr: Attributes<'tag>,
-        value: ExpressionId<'tag>,
-        block: &mut Vec<StatementId<'tag>>,
+        cfg: &mut ControlFlowGraph<'tag, 'tag>,
+        dtree: &DominatorTree<'tag>,
     ) {
-        for (derive_by, derivative_variable) in partial_derivatives {
-            let partial_derivatives = self.variable_to_differentiate.remove(&derivative_variable);
-
-            let derivative_expr = match value {
-                ExpressionId::Real(value) => self.partial_derivative(value, derive_by),
-
-                ExpressionId::Integer(value) => {
-                    self.partial_derivative_of_integer_expression(value, derive_by)
-                }
-                ExpressionId::String(value) => {
-                    self.errors.push(Error {
-                        error_type: OnlyNumericExpressionsCanBeDerived,
-                        source: self.mir[value].source,
-                    });
-                    return;
-                }
-            };
-
-            let derivative_expr = ExpressionId::Real(derivative_expr.unwrap_or_else(|| {
-                self.mir
-                    .push(Node::new(Literal(0.0), Span::new_short_empty_span(0)))
-            }));
-
-            let stmt = self.mir.push(Statement::Assignment(
-                attr,
-                derivative_variable,
-                derivative_expr,
-            ));
-            block.push(stmt);
-            if let Some(partial_derivatives) = partial_derivatives {
-                self.generate_partial_derivative_assignment(
-                    partial_derivatives,
-                    attr,
-                    derivative_expr,
-                    block,
-                );
-            }
-        }
+        self.solve(cfg, dtree)
     }
 
-    /// # Args
-    /// * `derivatives_before_branch` - The derivative map of the fold cloned before the branch was folded
-    /// * `merge_variables` - A Closure `(expected_after_branch: VariableId<'tag>, expected_inside_branch: VariableId<'tag>) that is called when two conflicting (same variable derived over the same unknown) derivatives are detected.
-    pub(super) fn merge_branched_derivatives(
-        variable_to_differentiate: &mut DerivativeMap<'tag>,
-        derivatives_before_branch: DerivativeMap<'tag>,
-        mut merge_variables: impl FnMut(VariableId<'tag>, VariableId<'tag>),
-        mut handel_derivative_inside_branch: impl FnMut(VariableId<'tag>) -> (),
-    ) {
-        for (derived_variable, mut partial_derivatives_before_branch) in derivatives_before_branch {
-            variable_to_differentiate
-                .entry(derived_variable)
-                .and_modify(|partial_derivatives| {
-                    for (derived_by, &mut derivative) in partial_derivatives {
-                        if let Some(&old_derivative) =
-                            partial_derivatives_before_branch.get(derived_by)
-                        {
-                            if old_derivative != derivative {
-                                merge_variables(old_derivative, derivative);
-                                handel_derivative_inside_branch(derived_variable);
-                            }
-                        }
-                    }
-                })
-                .or_insert_with(|| {
-                    handel_derivative_inside_branch(derived_variable);
-                    partial_derivatives_before_branch
-                });
+    pub fn derivative_of_assignment_reference(
+        &mut self,
+        reference: VariableId<'tag>,
+        derive_by: Unknown<'tag>,
+        dst: VariableId<'tag>,
+    ) -> VariableId<'tag> {
+        if dst == reference {
+            todo!("error")
         }
+        let mir = &mut self.mir;
+        *self
+            .variable_to_differentiate
+            .entry(reference)
+            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(2, Default::default()))
+            .entry(derive_by)
+            .or_insert_with(|| mir.declare_partial_derivative_variable(reference, derive_by))
+    }
+
+    pub fn derivative_of_reference(
+        &mut self,
+        reference: VariableId<'tag>,
+        derive_by: Unknown<'tag>,
+    ) -> VariableId<'tag> {
+        let mir = &mut self.mir;
+        *self
+            .variable_to_differentiate
+            .entry(reference)
+            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(2, Default::default()))
+            .entry(derive_by)
+            .or_insert_with(|| mir.declare_partial_derivative_variable(reference, derive_by))
+    }
+
+    pub fn partial_derivative_read_only(
+        &mut self,
+        expr: RealExpressionId<'tag>,
+        derive_by: Unknown<'tag>,
+    ) -> Option<RealExpressionId<'tag>> {
+        self.partial_derivative(expr, derive_by, &mut |fold, var| {
+            fold.derivative_of_reference(var, derive_by)
+        })
     }
 
     pub fn partial_derivative(
         &mut self,
         expr: RealExpressionId<'tag>,
         derive_by: Unknown<'tag>,
+        reference_derivative: &mut impl FnMut(&mut Self, VariableId<'tag>) -> VariableId<'tag>,
     ) -> Option<RealExpressionId<'tag>> {
         let res = match self.mir[expr].contents {
             RealExpression::VariableReference(variable) => {
-                let mir = &mut self.mir; //necessary because the borrow checker cant split the borrows inside closures apparently
-                let derivative = *self
-                    .variable_to_differentiate
-                    .entry(variable)
-                    .or_insert_with(|| FxHashMap::with_capacity_and_hasher(2, Default::default()))
-                    .entry(derive_by)
-                    .or_insert_with(|| {
-                        mir.declare_partial_derivative_variable(variable, derive_by)
-                    });
-                RealExpression::VariableReference(derivative)
+                RealExpression::VariableReference(reference_derivative(self, variable))
             }
 
             RealExpression::BinaryOperator(lhs, op, rhs) => {
-                let lhs_derived = self.partial_derivative(lhs, derive_by);
-                let rhs_derived = self.partial_derivative(rhs, derive_by);
+                let lhs_derived = self.partial_derivative(lhs, derive_by, reference_derivative);
+                let rhs_derived = self.partial_derivative(rhs, derive_by, reference_derivative);
                 match (lhs_derived, rhs_derived) {
                     (None, None) => return None,
                     (Some(lhs_derived), Some(rhs_derived)) => {
@@ -340,13 +302,14 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 }
             }
 
-            RealExpression::Negate(span, expr) => {
-                RealExpression::Negate(span, self.partial_derivative(expr, derive_by)?)
-            }
+            RealExpression::Negate(span, expr) => RealExpression::Negate(
+                span,
+                self.partial_derivative(expr, derive_by, reference_derivative)?,
+            ),
 
             RealExpression::Condition(cond, question_span, true_val, colon_span, else_val) => {
-                let true_val = self.partial_derivative(true_val, derive_by);
-                let else_val = self.partial_derivative(else_val, derive_by);
+                let true_val = self.partial_derivative(true_val, derive_by, reference_derivative);
+                let else_val = self.partial_derivative(else_val, derive_by, reference_derivative);
                 if true_val.is_none() && else_val.is_none() {
                     return None;
                 }
@@ -366,7 +329,8 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             RealExpression::FunctionCall(_, _) => todo!("Function calls"),
 
             RealExpression::BuiltInFunctionCall1p(call, arg) => {
-                let inner_derivative = self.partial_derivative(arg, derive_by)?;
+                let inner_derivative =
+                    self.partial_derivative(arg, derive_by, reference_derivative)?;
 
                 match call {
                     BuiltInFunctionCall1p::Ln => RealExpression::BinaryOperator(
@@ -762,8 +726,10 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             }
 
             RealExpression::BuiltInFunctionCall2p(call, arg1, arg2) => {
-                let arg1_derivative = self.partial_derivative(arg1, derive_by);
-                let arg2_derivative = self.partial_derivative(arg2, derive_by);
+                let arg1_derivative =
+                    self.partial_derivative(arg1, derive_by, reference_derivative);
+                let arg2_derivative =
+                    self.partial_derivative(arg2, derive_by, reference_derivative);
 
                 if arg1_derivative.is_none() && arg2_derivative.is_none() {
                     return None;
@@ -943,7 +909,11 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             }
 
             RealExpression::IntegerConversion(expr) => {
-                return self.partial_derivative_of_integer_expression(expr, derive_by)
+                return self.partial_derivative_of_integer_expression(
+                    expr,
+                    derive_by,
+                    reference_derivative,
+                )
             }
 
             RealExpression::ParameterReference(param) if Unknown::Parameter(param) == derive_by => {
@@ -998,19 +968,11 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         &mut self,
         expr: IntegerExpressionId<'tag>,
         derive_by: Unknown<'tag>,
+        reference_derivative: &mut impl FnMut(&mut Self, VariableId<'tag>) -> VariableId<'tag>,
     ) -> Option<RealExpressionId<'tag>> {
         let res = match self.mir[expr].contents {
             IntegerExpression::VariableReference(variable) => {
-                let mir = &mut self.mir; //necessary because the borrow checker cant split the borrows inside closures apparently
-                let derivative = *self
-                    .variable_to_differentiate
-                    .entry(variable)
-                    .or_insert_with(|| FxHashMap::with_capacity_and_hasher(2, Default::default()))
-                    .entry(derive_by)
-                    .or_insert_with(|| {
-                        mir.declare_partial_derivative_variable(variable, derive_by)
-                    });
-                RealExpression::VariableReference(derivative)
+                RealExpression::VariableReference(reference_derivative(self, variable))
             }
 
             IntegerExpression::ParameterReference(param)
@@ -1020,8 +982,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             }
 
             IntegerExpression::BinaryOperator(lhs, op, rhs) => {
-                let lhs_derived = self.partial_derivative_of_integer_expression(lhs, derive_by);
-                let rhs_derived = self.partial_derivative_of_integer_expression(rhs, derive_by);
+                let lhs_derived = self.partial_derivative_of_integer_expression(
+                    lhs,
+                    derive_by,
+                    reference_derivative,
+                );
+                let rhs_derived = self.partial_derivative_of_integer_expression(
+                    rhs,
+                    derive_by,
+                    reference_derivative,
+                );
                 match (lhs_derived, rhs_derived) {
                     (None, None) => return None,
                     (Some(lhs_derived), Some(rhs_derived)) => {
@@ -1486,12 +1456,24 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 expr,
             ) => RealExpression::Negate(
                 source,
-                self.partial_derivative_of_integer_expression(expr, derive_by)?,
+                self.partial_derivative_of_integer_expression(
+                    expr,
+                    derive_by,
+                    reference_derivative,
+                )?,
             ),
 
             IntegerExpression::Condition(cond, question_span, true_val, colon_span, else_val) => {
-                let true_val = self.partial_derivative_of_integer_expression(true_val, derive_by);
-                let else_val = self.partial_derivative_of_integer_expression(else_val, derive_by);
+                let true_val = self.partial_derivative_of_integer_expression(
+                    true_val,
+                    derive_by,
+                    reference_derivative,
+                );
+                let else_val = self.partial_derivative_of_integer_expression(
+                    else_val,
+                    derive_by,
+                    reference_derivative,
+                );
                 if true_val.is_none() && else_val.is_none() {
                     return None;
                 }
@@ -1509,10 +1491,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             }
 
             IntegerExpression::Min(arg1, arg2) => {
-                let arg1_derivative =
-                    self.partial_derivative_of_integer_expression(arg1, derive_by);
-                let arg2_derivative =
-                    self.partial_derivative_of_integer_expression(arg2, derive_by);
+                let arg1_derivative = self.partial_derivative_of_integer_expression(
+                    arg1,
+                    derive_by,
+                    reference_derivative,
+                );
+                let arg2_derivative = self.partial_derivative_of_integer_expression(
+                    arg2,
+                    derive_by,
+                    reference_derivative,
+                );
 
                 if arg1_derivative.is_none() && arg2_derivative.is_none() {
                     return None;
@@ -1542,10 +1530,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             }
 
             IntegerExpression::Max(arg1, arg2) => {
-                let arg1_derivative =
-                    self.partial_derivative_of_integer_expression(arg1, derive_by);
-                let arg2_derivative =
-                    self.partial_derivative_of_integer_expression(arg2, derive_by);
+                let arg1_derivative = self.partial_derivative_of_integer_expression(
+                    arg1,
+                    derive_by,
+                    reference_derivative,
+                );
+                let arg2_derivative = self.partial_derivative_of_integer_expression(
+                    arg2,
+                    derive_by,
+                    reference_derivative,
+                );
 
                 if arg1_derivative.is_none() && arg2_derivative.is_none() {
                     return None;
@@ -1575,7 +1569,11 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             }
 
             IntegerExpression::Abs(arg) => {
-                let arg_derived = self.partial_derivative_of_integer_expression(arg, derive_by)?;
+                let arg_derived = self.partial_derivative_of_integer_expression(
+                    arg,
+                    derive_by,
+                    reference_derivative,
+                )?;
                 let literal_0 = self
                     .mir
                     .push(self.mir[expr].clone_as(IntegerExpression::Literal(0)));
@@ -1693,22 +1691,5 @@ impl<'tag> Mir<'tag> {
         });
         debug_assert!(&self[self[res].attributes].is_empty());
         res
-    }
-
-    pub(super) fn generate_derivative_alias(
-        &mut self,
-        dst: VariableId<'tag>,
-        src: VariableId<'tag>,
-    ) -> StatementId<'tag> {
-        let value = self.push(Node::new(
-            RealExpression::VariableReference(src),
-            Span::new_short_empty_span(0),
-        ));
-
-        self.push(Statement::Assignment(
-            self.empty_range_from_end(),
-            dst,
-            ExpressionId::Real(value), //derivatives are always real
-        ))
     }
 }

@@ -38,6 +38,7 @@ use crate::ir::{Push, SafeRangeCreation};
 use crate::mir::Attribute;
 use crate::mir::*;
 use crate::SourceMap;
+use bitflags::_core::cell::RefCell;
 
 pub mod control_flow;
 pub mod derivatives;
@@ -79,7 +80,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         for attribute in SafeRangeCreation::<AttributeId<'tag>>::full_range(self.hir) {
             let value = self.hir[attribute]
                 .value
-                .and_then(|val| self.fold_expression(val));
+                .and_then(|val| self.fold_expression(val, &mut Self::derivative_of_reference));
             self.mir.push(Attribute {
                 name: self.hir[attribute].name,
                 value,
@@ -87,11 +88,15 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         }
 
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.hir) {
-            let res = self.hir[module].map_with(|old| Module {
-                name: old.name,
-                port_list: old.port_list,
-                parameter_list: old.parameter_list,
-                analog_cfg: self.fold_block_into_cfg(old.analog),
+            let res = self.hir[module].map_with(|old| {
+                let (analog_cfg, analog_dtree) = self.fold_block_into_cfg(old.analog);
+                Module {
+                    name: old.name,
+                    port_list: old.port_list,
+                    parameter_list: old.parameter_list,
+                    analog_cfg,
+                    analog_dtree,
+                }
             });
             self.mir.push(res);
         }
@@ -113,14 +118,14 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 let default_value = self.hir[variable]
                     .contents
                     .default_value
-                    .and_then(|expr| self.fold_real_expression(expr));
+                    .and_then(|expr| self.fold_read_only_real_expression(expr));
                 VariableType::Real(default_value)
             }
 
             ast::VariableType::INTEGER | ast::VariableType::TIME => {
                 let default_value =
                     if let Some(default_value) = self.hir[variable].contents.default_value {
-                        match self.fold_expression(default_value) {
+                        match self.fold_read_only_expression(default_value) {
                             Some(ExpressionId::Integer(expr)) => Some(expr),
 
                             Some(ExpressionId::Real(real_expr)) => Some(self.mir.push(Node {

@@ -13,14 +13,14 @@ use rustc_ap_graphviz::{Edges, Id, LabelText, Nodes};
 use std::borrow::Cow;
 use std::io::Write;
 
-impl<'tag, 'cfg> DominatorTree<'tag, 'cfg> {
+impl<'cfg> DominatorTree<'cfg> {
     pub fn render_to<W: Write>(&self, write: &mut W) {
         dot::render(self, write).expect("Rendering failed")
     }
 }
-impl<'a, 'tag, 'cfg> dot::Labeller<'a> for DominatorTree<'tag, 'cfg> {
-    type Node = DominatorTreeId<'tag>;
-    type Edge = (DominatorTreeId<'tag>, DominatorTreeId<'tag>);
+impl<'a, 'cfg> dot::Labeller<'a> for DominatorTree<'cfg> {
+    type Node = BasicBlockId<'cfg>;
+    type Edge = (BasicBlockId<'cfg>, BasicBlockId<'cfg>);
 
     fn graph_id(&'a self) -> Id<'a> {
         dot::Id::new("DominatorTree").unwrap()
@@ -32,11 +32,11 @@ impl<'a, 'tag, 'cfg> dot::Labeller<'a> for DominatorTree<'tag, 'cfg> {
 
     fn edge_label(
         &'a self,
-        &(start, dst): &(DominatorTreeId<'tag>, DominatorTreeId<'tag>),
+        &(start, dst): &(BasicBlockId<'cfg>, BasicBlockId<'cfg>),
     ) -> LabelText<'a> {
-        match self[start].node_type {
-            DominatorTreeNodeType::Leaf(_) => LabelStr(Cow::Borrowed("ILLEGAL")),
-            DominatorTreeNodeType::Root(branches) | DominatorTreeNodeType::Branch(_, branches) => {
+        match self[start] {
+            DominatorTreeNode::Leaf(_) => LabelStr(Cow::Borrowed("ILLEGAL")),
+            DominatorTreeNode::Root(branches) | DominatorTreeNode::Branch(_, branches) => {
                 let true_or_false = if branches
                     .true_child()
                     .map_or(false, |(true_child, _)| true_child == dst)
@@ -58,9 +58,9 @@ impl<'a, 'tag, 'cfg> dot::Labeller<'a> for DominatorTree<'tag, 'cfg> {
     }
 }
 
-impl<'a, 'tag, 'cfg> dot::GraphWalk<'a> for DominatorTree<'tag, 'cfg> {
-    type Node = DominatorTreeId<'tag>;
-    type Edge = (DominatorTreeId<'tag>, DominatorTreeId<'tag>);
+impl<'a, 'cfg> dot::GraphWalk<'a> for DominatorTree<'cfg> {
+    type Node = BasicBlockId<'cfg>;
+    type Edge = (BasicBlockId<'cfg>, BasicBlockId<'cfg>);
 
     fn nodes(&'a self) -> Nodes<'a, Self::Node> {
         Cow::Owned(self.data.full_range().collect())
@@ -69,10 +69,9 @@ impl<'a, 'tag, 'cfg> dot::GraphWalk<'a> for DominatorTree<'tag, 'cfg> {
     fn edges(&'a self) -> Edges<'a, Self::Edge> {
         let mut edges = Vec::new();
         for block in self.data.full_range() {
-            match self[block].node_type {
-                DominatorTreeNodeType::Leaf(_) => (),
-                DominatorTreeNodeType::Root(branches)
-                | DominatorTreeNodeType::Branch(_, branches) => {
+            match self[block] {
+                DominatorTreeNode::Leaf(_) => (),
+                DominatorTreeNode::Root(branches) | DominatorTreeNode::Branch(_, branches) => {
                     edges.push((block, branches.main_child));
                     if let Some((true_child, _)) = branches.true_child() {
                         edges.push((block, true_child));

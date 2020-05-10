@@ -71,3 +71,6 @@ mod hir_lowering;
 pub mod parser;
 mod span;
 pub mod symbol_table;
+
+pub use fixedbitset;
+pub use fixedbitset::FixedBitSet as BitSet;

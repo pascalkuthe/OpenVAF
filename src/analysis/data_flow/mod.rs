@@ -6,12 +6,6 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-pub mod dominator_tree;
-pub use dominator_tree::DominatorTree;
-mod constant_folding;
-pub use constant_folding::ConstantFold;
-pub mod data_flow;
-mod extraction;
-#[cfg(test)]
-mod test;
-pub use extraction::ExtractionDependencyHandler;
+pub mod definitive_assignment;
+pub mod framework;
+pub mod reaching_variables;

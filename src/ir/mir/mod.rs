@@ -17,6 +17,7 @@ use std::ptr::NonNull;
 
 use core::cmp::Ordering;
 
+use crate::analysis::DominatorTree;
 use crate::ast::{Function, UnaryOperator};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
 use crate::hir::{BranchDeclaration, Discipline, DisciplineAccess, Net, Port};
@@ -130,6 +131,7 @@ pub struct Module<'mir> {
     pub port_list: SafeRange<PortId<'mir>>,
     pub parameter_list: SafeRange<ParameterId<'mir>>,
     pub analog_cfg: ControlFlowGraph<'mir, 'mir>,
+    pub analog_dtree: DominatorTree<'mir>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -147,8 +149,6 @@ pub enum Statement<'mir> {
         RealExpressionId<'mir>,
     ),
     //  TODO IndirectContribute
-    NOP, //No operation. Just here to allow more fast deletion
-
     Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
     //  FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
 }
@@ -526,18 +526,6 @@ impl<'tag> Mir<'tag> {
                     (Some(arg1), Some(arg2)) => (arg1, arg2),
                 };
                 IntegerExpression::Max(arg1, arg2)
-            }
-
-            IntegerExpression::Min(arg1, arg2) => {
-                let mapped_arg1 = self.map_int_expr(arg1, variables_to_replace);
-                let mapped_arg2 = self.map_int_expr(arg2, variables_to_replace);
-                let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
-                    (None, None) => return None,
-                    (Some(arg1), None) => (arg1, arg2),
-                    (None, Some(arg2)) => (arg1, arg2),
-                    (Some(arg1), Some(arg2)) => (arg1, arg2),
-                };
-                IntegerExpression::Min(arg1, arg2)
             }
 
             IntegerExpression::IntegerComparison(lhs, op, rhs) => {

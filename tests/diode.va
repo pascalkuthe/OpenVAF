@@ -11,14 +11,17 @@ module Diode(inout electrical A,inout electrical C);
   real V_t,I_s;
   integer i;
   (*extract*) real I_d;
+  (*extract*) real I_d_ddx;
   analog begin
         I_s = I_s0*($temperature/T_0)**zeta;
         V_t = `P_K*$temperature/`P_Q;
         I_d = I_s;
+        i = 0;
         while (i < 1000) begin
             I_d = I_d * exp( V(d) /(m*V_t) );
+            i = i+1;
         end
-        I_d = ddx(I_d,V(A));
+        I_d_ddx = ddx(I_d,V(A));
    end
 endmodule
 
