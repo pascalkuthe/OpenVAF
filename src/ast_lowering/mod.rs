@@ -32,12 +32,13 @@
 //! The lowering process happens in a series of folds implemented in the [`ast_to_hir_fold`] module
 //!
 //!
+pub use ast_to_hir_fold::Fold;
 #[doc(inline)]
 pub use branch_resolution::BranchResolver;
 
 use crate::ast::Ast;
+use crate::ast_lowering::ast_to_hir_fold::Global;
 use crate::ast_lowering::ast_to_hir_fold::VerilogContext;
-use crate::ast_lowering::ast_to_hir_fold::{Fold, Global};
 use crate::ast_lowering::error::Error;
 use crate::ir::hir::Hir;
 use crate::ir::VariableId;

@@ -67,7 +67,7 @@ pub mod ir;
 pub mod analysis;
 mod ast_lowering;
 mod error;
-mod hir_lowering;
+pub mod hir_lowering;
 pub mod parser;
 mod span;
 pub mod symbol_table;
