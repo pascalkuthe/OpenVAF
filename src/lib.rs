@@ -65,9 +65,9 @@ pub mod util;
 #[macro_use]
 pub mod ir;
 pub mod analysis;
-mod ast_lowering;
+pub mod ast_lowering;
 mod error;
-pub mod hir_lowering;
+mod hir_lowering;
 pub mod parser;
 mod span;
 pub mod symbol_table;
