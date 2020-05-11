@@ -5,7 +5,7 @@ use crate::ir::mir::control_flow_graph::BasicBlockId;
 use crate::ir::mir::{ControlFlowGraph, Mir};
 use crate::ir::{
     BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, ParameterId,
-    RealExpressionId, StatementId, StringExpressionId,
+    RealExpressionId, StatementId, StringExpressionId, VariableId,
 };
 use crate::mir::control_flow_graph::Terminator;
 use crate::mir::{
@@ -17,7 +17,7 @@ use log::*;
 use rustc_hash::FxHashMap;
 
 #[derive(Clone, Debug, Default)]
-pub struct ConstantFold<'tag> {
+pub struct ConstantFoldState<'tag> {
     pub real_definitions: FxHashMap<StatementId<'tag>, f64>,
     pub integer_definitions: FxHashMap<StatementId<'tag>, i64>,
     pub string_definitions: FxHashMap<StatementId<'tag>, CompressedRange<'tag>>,
@@ -26,56 +26,127 @@ pub struct ConstantFold<'tag> {
     pub string_parameters: FxHashMap<ParameterId<'tag>, CompressedRange<'tag>>,
 }
 
+pub struct ConstantPropagator<'lt, 'tag> {
+    known_values: &'lt ConstantFoldState<'tag>,
+    dependencys_before: &'lt DefiningSet,
+    dependencys_after: &'lt mut DefiningSet,
+    variables_assignments: &'lt TinyHeapArena<'tag, DefiningSet>,
+}
+
+impl<'lt, 'tag> ConstantResolver<'tag> for ConstantPropagator<'lt, 'tag> {
+    #[inline]
+    fn get_real_variable_value(&mut self, var: VariableId<'tag>) -> Option<f64> {
+        let mut definitions = self
+            .dependencys_before
+            .0
+            .intersection(&self.variables_assignments[var.unwrap()].0)
+            .map(|id| unsafe {
+                let id = StatementId::from_raw_index(id);
+                self.known_values.real_definitions.get(&id)
+            });
+
+        let value = *definitions.next().flatten()?;
+        if definitions.any(|x| Some(&value) != x) {
+            return None;
+        }
+        self.dependencys_after
+            .0
+            .difference_with(&self.variables_assignments[var.unwrap()].0);
+
+        Some(value)
+    }
+
+    #[inline]
+    fn get_int_variable_value(&mut self, var: VariableId<'tag>) -> Option<i64> {
+        let mut definitions = self
+            .dependencys_before
+            .0
+            .intersection(&self.variables_assignments[var.unwrap()].0)
+            .map(|id| unsafe {
+                let id = StatementId::from_raw_index(id);
+                self.known_values.integer_definitions.get(&id)
+            });
+
+        let value = *definitions.next().flatten()?;
+        if definitions.any(|x| Some(&value) != x) {
+            return None;
+        }
+        self.dependencys_after
+            .0
+            .difference_with(&self.variables_assignments[var.unwrap()].0);
+
+        Some(value)
+    }
+
+    #[inline]
+    fn get_str_variable_value(&mut self, var: VariableId<'tag>) -> Option<CompressedRange<'tag>> {
+        let mut definitions = self
+            .dependencys_before
+            .0
+            .intersection(&self.variables_assignments[var.unwrap()].0)
+            .map(|id| unsafe {
+                let id = StatementId::from_raw_index(id);
+                self.known_values.string_definitions.get(&id)
+            });
+
+        let value = *definitions.next().flatten()?;
+        if definitions.any(|x| Some(&value) != x) {
+            return None;
+        }
+        self.dependencys_after
+            .0
+            .difference_with(&self.variables_assignments[var.unwrap()].0);
+        Some(value)
+    }
+
+    #[inline]
+    fn get_real_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<f64> {
+        self.known_values.real_parameters.get(&param).copied()
+    }
+
+    #[inline]
+    fn get_int_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<i64> {
+        self.known_values.int_parameters.get(&param).copied()
+    }
+
+    #[inline]
+    fn get_str_parameter_value(
+        &mut self,
+        param: ParameterId<'tag>,
+    ) -> Option<CompressedRange<'tag>> {
+        self.known_values.string_parameters.get(&param).copied()
+    }
+}
+
+pub trait ConstantResolver<'tag> {
+    fn get_real_variable_value(&mut self, var: VariableId<'tag>) -> Option<f64>;
+    fn get_int_variable_value(&mut self, var: VariableId<'tag>) -> Option<i64>;
+    fn get_str_variable_value(&mut self, var: VariableId<'tag>) -> Option<CompressedRange<'tag>>;
+    fn get_real_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<f64>;
+    fn get_int_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<i64>;
+    fn get_str_parameter_value(
+        &mut self,
+        param: ParameterId<'tag>,
+    ) -> Option<CompressedRange<'tag>>;
+}
+
 impl<'tag> Mir<'tag> {
-    pub fn try_real_constant_fold(
+    pub fn real_constant_fold(
         &mut self,
         expr: RealExpressionId<'tag>,
-        known_values: &ConstantFold<'tag>,
-        dependencys_before: &DefiningSet,
-        dependencys_after: &mut DefiningSet,
-        variables_assignments: &TinyHeapArena<'tag, DefiningSet>,
+        resolver: &mut impl ConstantResolver<'tag>,
         write_intermediate: bool,
     ) -> Option<f64> {
         let res = match self[expr].contents {
             RealExpression::Literal(val) => return Some(val),
-            RealExpression::VariableReference(var) => {
-                let mut definitions = dependencys_before
-                    .0
-                    .intersection(&variables_assignments[var.unwrap()].0)
-                    .map(|id| unsafe {
-                        let id = StatementId::from_raw_index(id);
-                        known_values.real_definitions.get(&id)
-                    });
-                let value = *definitions.next().flatten()?;
-                if definitions.any(|x| Some(&value) != x) {
-                    return None;
-                }
-                dependencys_after
-                    .0
-                    .difference_with(&variables_assignments[var.unwrap()].0);
-                value
-            }
+            RealExpression::VariableReference(var) => resolver.get_real_variable_value(var)?,
             RealExpression::ParameterReference(param) => {
-                *known_values.real_parameters.get(&param)?
+                resolver.get_real_parameter_value(param)?
             }
 
             RealExpression::BinaryOperator(lhs_id, op, rhs_id) => {
-                let lhs = self.try_real_constant_fold(
-                    lhs_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let rhs = self.try_real_constant_fold(
-                    rhs_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let lhs = self.real_constant_fold(lhs_id, resolver, write_intermediate);
+                let rhs = self.real_constant_fold(rhs_id, resolver, write_intermediate);
                 match op.contents {
                     RealBinaryOperator::Sum => match (lhs, rhs) {
                         (Some(lhs), Some(rhs)) => lhs + rhs,
@@ -144,40 +215,14 @@ impl<'tag> Mir<'tag> {
                 }
             }
 
-            RealExpression::Negate(_, val) => -self.try_real_constant_fold(
-                val,
-                known_values,
-                dependencys_before,
-                dependencys_after,
-                variables_assignments,
-                write_intermediate,
-            )?,
+            RealExpression::Negate(_, val) => {
+                -self.real_constant_fold(val, resolver, write_intermediate)?
+            }
 
             RealExpression::Condition(condition, _, true_val_id, _, false_val_id) => {
-                let condition = self.try_int_constant_fold(
-                    condition,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let true_val = self.try_real_constant_fold(
-                    true_val_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let false_val = self.try_real_constant_fold(
-                    false_val_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let condition = self.int_constant_fold(condition, resolver, write_intermediate);
+                let true_val = self.real_constant_fold(true_val_id, resolver, write_intermediate);
+                let false_val = self.real_constant_fold(false_val_id, resolver, write_intermediate);
 
                 if condition? != 0 {
                     if let Some(true_val) = true_val {
@@ -201,14 +246,7 @@ impl<'tag> Mir<'tag> {
             }
 
             RealExpression::BuiltInFunctionCall1p(call, arg) => {
-                let arg = self.try_real_constant_fold(
-                    arg,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                )?;
+                let arg = self.real_constant_fold(arg, resolver, write_intermediate)?;
                 match call {
                     BuiltInFunctionCall1p::Ln => arg.ln(),
                     BuiltInFunctionCall1p::Sqrt => arg.sqrt(),
@@ -233,22 +271,8 @@ impl<'tag> Mir<'tag> {
             }
 
             RealExpression::BuiltInFunctionCall2p(call, arg1, arg2) => {
-                let arg1 = self.try_real_constant_fold(
-                    arg1,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let arg2 = self.try_real_constant_fold(
-                    arg2,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let arg1 = self.real_constant_fold(arg1, resolver, write_intermediate);
+                let arg2 = self.real_constant_fold(arg2, resolver, write_intermediate);
                 match call {
                     BuiltInFunctionCall2p::Pow => {
                         if arg2 == Some(0.0) {
@@ -266,14 +290,9 @@ impl<'tag> Mir<'tag> {
                 }
             }
 
-            RealExpression::IntegerConversion(expr) => self.try_int_constant_fold(
-                expr,
-                known_values,
-                dependencys_before,
-                dependencys_after,
-                variables_assignments,
-                write_intermediate,
-            )? as f64,
+            RealExpression::IntegerConversion(expr) => {
+                self.int_constant_fold(expr, resolver, write_intermediate)? as f64
+            }
 
             //definitely not doing constant functions. Temperature/Sim parameters/Branches may be an option in the future if there is any use for it
             RealExpression::SystemFunctionCall(_)
@@ -286,107 +305,38 @@ impl<'tag> Mir<'tag> {
         Some(res)
     }
 
-    pub fn try_int_constant_fold(
+    pub fn int_constant_fold(
         &mut self,
         expr: IntegerExpressionId<'tag>,
-        known_values: &ConstantFold<'tag>,
-        dependencys_before: &DefiningSet,
-        dependencys_after: &mut DefiningSet,
-        variables_assignments: &TinyHeapArena<'tag, DefiningSet>,
+        resolver: &mut impl ConstantResolver<'tag>,
         write_intermediate: bool,
     ) -> Option<i64> {
         let res = match self[expr].contents {
             IntegerExpression::Literal(val) => return Some(val),
             IntegerExpression::ParameterReference(param) => {
-                *known_values.int_parameters.get(&param)?
+                resolver.get_int_parameter_value(param)?
             }
-            IntegerExpression::VariableReference(var) => {
-                let mut definitions = dependencys_before
-                    .0
-                    .intersection(&variables_assignments[var.unwrap()].0)
-                    .map(|id| unsafe {
-                        known_values
-                            .integer_definitions
-                            .get(&StatementId::from_raw_index(id))
-                    });
-                let value = *definitions.next().flatten()?;
-                if definitions.any(|x| Some(&value) != x) {
-                    return None;
-                }
-                dependencys_after
-                    .0
-                    .difference_with(&variables_assignments[var.unwrap()].0);
-                value
-            }
+            IntegerExpression::VariableReference(var) => resolver.get_int_variable_value(var)?,
 
             IntegerExpression::Abs(val) => self
-                .try_int_constant_fold(
-                    val,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                )?
+                .int_constant_fold(val, resolver, write_intermediate)?
                 .abs(),
 
             IntegerExpression::Min(arg1, arg2) => {
-                let arg1 = self.try_int_constant_fold(
-                    arg1,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let arg2 = self.try_int_constant_fold(
-                    arg2,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let arg1 = self.int_constant_fold(arg1, resolver, write_intermediate);
+                let arg2 = self.int_constant_fold(arg2, resolver, write_intermediate);
                 arg1?.min(arg2?)
             }
 
             IntegerExpression::Max(arg1, arg2) => {
-                let arg1 = self.try_int_constant_fold(
-                    arg1,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let arg2 = self.try_int_constant_fold(
-                    arg2,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let arg1 = self.int_constant_fold(arg1, resolver, write_intermediate);
+                let arg2 = self.int_constant_fold(arg2, resolver, write_intermediate);
                 arg1?.max(arg2?)
             }
 
             IntegerExpression::BinaryOperator(lhs_id, op, rhs_id) => {
-                let lhs = self.try_int_constant_fold(
-                    lhs_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let rhs = self.try_int_constant_fold(
-                    rhs_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let lhs = self.int_constant_fold(lhs_id, resolver, write_intermediate);
+                let rhs = self.int_constant_fold(rhs_id, resolver, write_intermediate);
                 match op.contents {
                     IntegerBinaryOperator::Sum => match (lhs, rhs) {
                         (Some(lhs), Some(rhs)) => lhs + rhs,
@@ -541,14 +491,7 @@ impl<'tag> Mir<'tag> {
             }
 
             IntegerExpression::UnaryOperator(op, arg) => {
-                let arg = self.try_int_constant_fold(
-                    arg,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                )?;
+                let arg = self.int_constant_fold(arg, resolver, write_intermediate)?;
                 match op.contents {
                     UnaryOperator::BitNegate => !arg,
                     UnaryOperator::LogicNegate => !(arg != 0) as i64,
@@ -558,22 +501,8 @@ impl<'tag> Mir<'tag> {
             }
 
             IntegerExpression::IntegerComparison(lhs, op, rhs) => {
-                let lhs = self.try_int_constant_fold(
-                    lhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let rhs = self.try_int_constant_fold(
-                    rhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let lhs = self.int_constant_fold(lhs, resolver, write_intermediate);
+                let rhs = self.int_constant_fold(rhs, resolver, write_intermediate);
                 let (lhs, rhs) = (lhs?, rhs?);
                 let res = match op.contents {
                     ComparisonOperator::LessThen => lhs < rhs,
@@ -587,22 +516,8 @@ impl<'tag> Mir<'tag> {
             }
 
             IntegerExpression::RealComparison(lhs, op, rhs) => {
-                let lhs = self.try_real_constant_fold(
-                    lhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let rhs = self.try_real_constant_fold(
-                    rhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let lhs = self.real_constant_fold(lhs, resolver, write_intermediate);
+                let rhs = self.real_constant_fold(rhs, resolver, write_intermediate);
                 let (lhs, rhs) = (lhs?, rhs?);
                 let res = match op.contents {
                     ComparisonOperator::LessThen => lhs < rhs,
@@ -616,70 +531,21 @@ impl<'tag> Mir<'tag> {
             }
 
             IntegerExpression::StringEq(lhs, rhs) => {
-                let lhs = self.try_string_constant_fold(
-                    lhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let rhs = self.try_string_constant_fold(
-                    rhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let lhs = self.string_constant_fold(lhs, resolver, write_intermediate);
+                let rhs = self.string_constant_fold(rhs, resolver, write_intermediate);
                 (self.string_literals[lhs?] == self.string_literals[rhs?]) as i64
             }
 
             IntegerExpression::StringNEq(lhs, rhs) => {
-                let lhs = self.try_string_constant_fold(
-                    lhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let rhs = self.try_string_constant_fold(
-                    rhs,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let lhs = self.string_constant_fold(lhs, resolver, write_intermediate);
+                let rhs = self.string_constant_fold(rhs, resolver, write_intermediate);
                 (self.string_literals[lhs?] != self.string_literals[rhs?]) as i64
             }
 
             IntegerExpression::Condition(condition, _, true_val_id, _, false_val_id) => {
-                let condition = self.try_int_constant_fold(
-                    condition,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let true_val = self.try_int_constant_fold(
-                    true_val_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let false_val = self.try_int_constant_fold(
-                    false_val_id,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let condition = self.int_constant_fold(condition, resolver, write_intermediate);
+                let true_val = self.int_constant_fold(true_val_id, resolver, write_intermediate);
+                let false_val = self.int_constant_fold(false_val_id, resolver, write_intermediate);
 
                 if condition? != 0 {
                     if let Some(true_val) = true_val {
@@ -703,14 +569,7 @@ impl<'tag> Mir<'tag> {
             }
 
             IntegerExpression::RealCast(val) => self
-                .try_real_constant_fold(
-                    val,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                )?
+                .real_constant_fold(val, resolver, write_intermediate)?
                 .round() as i64,
 
             IntegerExpression::NetReference(_)
@@ -723,69 +582,23 @@ impl<'tag> Mir<'tag> {
         Some(res)
     }
 
-    pub fn try_string_constant_fold(
+    pub fn string_constant_fold(
         &mut self,
         expr: StringExpressionId<'tag>,
-        known_values: &ConstantFold<'tag>,
-        dependencys_before: &DefiningSet,
-        dependencys_after: &mut DefiningSet,
-        variables_assignments: &TinyHeapArena<'tag, DefiningSet>,
+        resolver: &mut impl ConstantResolver<'tag>,
         write_intermediate: bool,
     ) -> Option<CompressedRange<'tag>> {
         let res = match self[expr].contents {
             StringExpression::Literal(val) => return Some(val),
-            StringExpression::VariableReference(var) => {
-                let mut definitions = dependencys_before
-                    .0
-                    .intersection(&variables_assignments[var.unwrap()].0)
-                    .map(|id| unsafe {
-                        known_values
-                            .string_definitions
-                            .get(&StatementId::from_raw_index(id))
-                    });
-
-                let value = *definitions.next().flatten()?;
-                if definitions.any(|x| {
-                    x.map_or(false, |&x| {
-                        &self.string_literals[x] != &self.string_literals[value]
-                    })
-                }) {
-                    return None;
-                }
-                dependencys_after
-                    .0
-                    .difference_with(&variables_assignments[var.unwrap()].0);
-                value
-            }
+            StringExpression::VariableReference(var) => resolver.get_str_variable_value(var)?,
             StringExpression::ParameterReference(param) => {
-                *known_values.string_parameters.get(&param)?
+                resolver.get_str_parameter_value(param)?
             }
 
             StringExpression::Condition(condition, _, true_val, _, false_val) => {
-                let condition = self.try_int_constant_fold(
-                    condition,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let true_val = self.try_string_constant_fold(
-                    true_val,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
-                let false_val = self.try_string_constant_fold(
-                    false_val,
-                    known_values,
-                    dependencys_before,
-                    dependencys_after,
-                    variables_assignments,
-                    write_intermediate,
-                );
+                let condition = self.int_constant_fold(condition, resolver, write_intermediate);
+                let true_val = self.string_constant_fold(true_val, resolver, write_intermediate);
+                let false_val = self.string_constant_fold(false_val, resolver, write_intermediate);
 
                 if condition? != 0 {
                     true_val?
@@ -806,7 +619,7 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         &mut self,
         mir: &mut Mir<'mir>,
         udg: &mut UseDefGraph<'mir, 'tag>,
-        known_values: &mut ConstantFold<'mir>,
+        known_values: &mut ConstantFoldState<'mir>,
         write_to_mir: bool,
     ) {
         self.constant_fold_internal(
@@ -826,7 +639,7 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         mir: &mut Mir<'mir>,
         udg: &mut UseDefGraph<'mir, 'tag>,
 
-        known_values: &mut ConstantFold<'mir>,
+        known_values: &mut ConstantFoldState<'mir>,
         start: BasicBlockId<'tag>,
         end: Option<BasicBlockId<'tag>>,
         write_to_mir: bool,
@@ -861,12 +674,14 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                             .as_mut_slice()
                             .copy_from_slice(udg.terminator_uses[block].0.as_slice());
 
-                        match mir.try_int_constant_fold(
+                        match mir.int_constant_fold(
                             condition,
-                            known_values,
-                            &udg.terminator_uses[block],
-                            temporary_set,
-                            &udg.variables,
+                            &mut ConstantPropagator {
+                                known_values,
+                                dependencys_before: &udg.terminator_uses[block],
+                                dependencys_after: temporary_set,
+                                variables_assignments: &udg.variables,
+                            },
                             write_to_mir,
                         ) {
                             Some(0) => {
@@ -1002,7 +817,7 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
         block: BasicBlockId<'tag>,
         mir: &mut Mir<'mir>,
         udg: &mut UseDefGraph<'mir, 'tag>,
-        known_values: &mut ConstantFold<'mir>,
+        known_values: &mut ConstantFoldState<'mir>,
         write_to_mir: bool,
         removed_statements: &mut BitSet,
         temporary_set: &mut DefiningSet,
@@ -1019,12 +834,14 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                         .copy_from_slice(udg.uses[stmt.unwrap()].0.as_slice());
                     match val {
                         ExpressionId::Real(val) => {
-                            if let Some(val) = mir.try_real_constant_fold(
+                            if let Some(val) = mir.real_constant_fold(
                                 val,
-                                known_values,
-                                &udg.uses[stmt.unwrap()],
-                                temporary_set,
-                                &udg.variables,
+                                &mut ConstantPropagator {
+                                    known_values,
+                                    dependencys_before: &udg.terminator_uses[block],
+                                    dependencys_after: temporary_set,
+                                    variables_assignments: &udg.variables,
+                                },
                                 write_to_mir,
                             ) {
                                 let old = known_values.real_definitions.insert(stmt, val);
@@ -1040,12 +857,14 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                         }
 
                         ExpressionId::Integer(val) => {
-                            if let Some(val) = mir.try_int_constant_fold(
+                            if let Some(val) = mir.int_constant_fold(
                                 val,
-                                known_values,
-                                &udg.uses[stmt.unwrap()],
-                                temporary_set,
-                                &mut udg.variables,
+                                &mut ConstantPropagator {
+                                    known_values,
+                                    dependencys_before: &udg.terminator_uses[block],
+                                    dependencys_after: temporary_set,
+                                    variables_assignments: &udg.variables,
+                                },
                                 write_to_mir,
                             ) {
                                 let old = known_values.integer_definitions.insert(stmt, val);
@@ -1055,12 +874,14 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                             }
                         }
                         ExpressionId::String(val) => {
-                            if let Some(val) = mir.try_string_constant_fold(
+                            if let Some(val) = mir.string_constant_fold(
                                 val,
-                                known_values,
-                                &udg.uses[stmt.unwrap()],
-                                temporary_set,
-                                &udg.variables,
+                                &mut ConstantPropagator {
+                                    known_values,
+                                    dependencys_before: &udg.terminator_uses[block],
+                                    dependencys_after: temporary_set,
+                                    variables_assignments: &udg.variables,
+                                },
                                 write_to_mir,
                             ) {
                                 let old = known_values.string_definitions.insert(stmt, val);
@@ -1072,12 +893,14 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                 }
 
                 Statement::Contribute(_, _, _, val) if write_to_mir => {
-                    mir.try_real_constant_fold(
+                    mir.real_constant_fold(
                         val,
-                        known_values,
-                        &udg.uses[stmt.unwrap()],
-                        temporary_set,
-                        &udg.variables,
+                        &mut ConstantPropagator {
+                            known_values,
+                            dependencys_before: &udg.terminator_uses[block],
+                            dependencys_after: temporary_set,
+                            variables_assignments: &udg.variables,
+                        },
                         true,
                     );
                 }

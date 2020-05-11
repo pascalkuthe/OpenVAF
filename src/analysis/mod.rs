@@ -9,7 +9,7 @@
 pub mod dominator_tree;
 pub use dominator_tree::DominatorTree;
 mod constant_folding;
-pub use constant_folding::ConstantFold;
+pub use constant_folding::ConstantFoldState;
 pub mod data_flow;
 mod extraction;
 #[cfg(test)]

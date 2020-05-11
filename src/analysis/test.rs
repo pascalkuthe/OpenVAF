@@ -6,7 +6,7 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::analysis::constant_folding::ConstantFold;
+use crate::analysis::constant_folding::ConstantFoldState;
 use crate::analysis::data_flow::reaching_variables::ReachableDefinitionsAnalysis;
 use crate::analysis::dominator_tree::DominatorTree;
 use crate::compact_arena::invariant_lifetime;
@@ -52,7 +52,7 @@ pub fn cfg() -> Result<(), ()> {
             cfg.render_to(&mut file);
         }
 
-        cfg.constant_fold(&mut mir, &mut udg, &mut ConstantFold::default(), true);
+        cfg.constant_fold(&mut mir, &mut udg, &mut ConstantFoldState::default(), true);
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg_constant_fold.dot").unwrap();
