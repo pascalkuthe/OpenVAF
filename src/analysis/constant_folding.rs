@@ -26,6 +26,41 @@ pub struct ConstantFoldState<'tag> {
     pub string_parameters: FxHashMap<ParameterId<'tag>, CompressedRange<'tag>>,
 }
 
+impl<'tag> ConstantResolver<'tag> for () {
+    #[inline(always)]
+    fn get_real_variable_value(&mut self, var: VariableId<'tag>) -> Option<f64> {
+        None
+    }
+
+    #[inline(always)]
+    fn get_int_variable_value(&mut self, var: VariableId<'tag>) -> Option<i64> {
+        None
+    }
+
+    #[inline(always)]
+    fn get_str_variable_value(&mut self, var: VariableId<'tag>) -> Option<CompressedRange<'tag>> {
+        None
+    }
+
+    #[inline(always)]
+    fn get_real_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<f64> {
+        None
+    }
+
+    #[inline(always)]
+    fn get_int_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<i64> {
+        None
+    }
+
+    #[inline(always)]
+    fn get_str_parameter_value(
+        &mut self,
+        param: ParameterId<'tag>,
+    ) -> Option<CompressedRange<'tag>> {
+        None
+    }
+}
+
 pub struct ConstantPropagator<'lt, 'tag> {
     known_values: &'lt ConstantFoldState<'tag>,
     dependencys_before: &'lt DefiningSet,
