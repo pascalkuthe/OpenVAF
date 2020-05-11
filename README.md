@@ -1,5 +1,5 @@
 # VARF
 
-A Verilog-AMS frontend written in rust
+A compiler frontend for the Verilog-A subset of the Verilog-AMS language written in Rust.
 
-Note this project is still in extremly early development and is being developed as a frontend to another Project (name TBD) which will replace ADMS for compact modelling. Therefor the development is focused on supporting the small subset of Verilog-A that ADMS currently supports (with optional future expansion)
+This project is still in development and the primary focus is to provide a frontend to the Verilog-AE Project which is an extraction tool for compact modelling. Therefor the development is focused on supporting the subset of Verilog-A that is used in compact modelling (specifically the HICUM model)
