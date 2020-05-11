@@ -47,7 +47,7 @@ impl<'tag, 'lt> Fold<'tag, 'lt> {
 bitflags! {
     /// The Verilog AMS standard uses multiple different grammar rules to enfoce that constants/analog exprerssions only contain items valid in their context
     /// VARF uses flags stored inside this struct instead during the AST to MIR folding process in this module
-    struct VerilogContext: u8{
+    pub struct VerilogContext: u8{
         const constant = 0b0000_0001;
         const conditional = 0b0000_0010;
         const analog = 0b0000_0100;

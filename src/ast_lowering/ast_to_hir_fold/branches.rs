@@ -15,17 +15,21 @@ use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::Error;
 use crate::compact_arena::NanoArena;
 use crate::hir::BranchDeclaration;
-use crate::ir::SafeRangeCreation;
 use crate::ir::{BranchId, ModuleId, Write};
+use crate::ir::{SafeRangeCreation, VariableId};
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
-pub struct Branches<'tag, 'lt> {
+pub struct Branches<'tag, 'lt, V: FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver)>
+{
     pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) base: Fold<'tag, 'lt>,
+    pub(super) on_variable_declaration: V,
 }
-impl<'tag, 'lt> Branches<'tag, 'lt> {
-    pub fn fold(mut self) -> std::result::Result<Statements<'tag, 'lt>, Vec<Error<'tag>>> {
+impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver)>
+    Branches<'tag, 'lt, V>
+{
+    pub fn fold(mut self) -> std::result::Result<Statements<'tag, 'lt, V>, Vec<Error<'tag>>> {
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.base.ast) {
             let module = &self.base.ast[module];
             self.base
@@ -47,6 +51,7 @@ impl<'tag, 'lt> Branches<'tag, 'lt> {
                 branch_resolver: self.branch_resolver,
                 state: VerilogContext::empty(),
                 base: self.base,
+                on_variable_declaration: self.on_variable_declaration,
             })
         } else {
             Err(self.base.errors)

@@ -36,9 +36,11 @@
 pub use branch_resolution::BranchResolver;
 
 use crate::ast::Ast;
-use crate::ast_lowering::ast_to_hir_fold::Global;
+use crate::ast_lowering::ast_to_hir_fold::VerilogContext;
+use crate::ast_lowering::ast_to_hir_fold::{Fold, Global};
 use crate::ast_lowering::error::Error;
 use crate::ir::hir::Hir;
+use crate::ir::VariableId;
 use crate::SourceMap;
 
 #[cfg(test)]
@@ -57,6 +59,15 @@ impl<'tag> Ast<'tag> {
         self.try_fold_to_hir().map_err(|err| (err, self))
     }
 
+    /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
+    pub fn lower_with_var_decl_handle(
+        mut self: Box<Self>,
+        on_variable_delcaration: impl FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver),
+    ) -> Result<Box<Hir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
+        self.try_fold_to_hir_with_var_decl_handle(on_variable_delcaration)
+            .map_err(|err| (err, self))
+    }
+
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability and printing any errors or warnings that might occur
     pub fn lower_and_print_errors(
         self: Box<Self>,
@@ -72,8 +83,33 @@ impl<'tag> Ast<'tag> {
             .ok()
     }
 
+    /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability and printing any errors or warnings that might occur
+    pub fn lower_and_print_errors_with_var_decl_handle(
+        self: Box<Self>,
+        source_map: &SourceMap,
+        translate_lines: bool,
+        on_variable_delcaration: impl FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver),
+    ) -> Option<Box<Hir<'tag>>> {
+        self.lower_with_var_decl_handle(on_variable_delcaration)
+            .map_err(|(errors, ast)| {
+                errors
+                    .into_iter()
+                    .for_each(|err| err.print(source_map, &ast, translate_lines))
+            })
+            .ok()
+    }
+
     /// A Helper method to avoid code duplication until try blocks are stable
     fn try_fold_to_hir(&mut self) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
-        Ok(Global::new(self).fold()?.fold()?.fold()?)
+        Ok(Global::new(self, |_, _, _, _| ()).fold()?.fold()?.fold()?)
+    }
+    fn try_fold_to_hir_with_var_decl_handle(
+        &mut self,
+        on_variable_delcaration: impl FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver),
+    ) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
+        Ok(Global::new(self, on_variable_delcaration)
+            .fold()?
+            .fold()?
+            .fold()?)
     }
 }
