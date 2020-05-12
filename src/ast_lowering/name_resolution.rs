@@ -122,11 +122,11 @@ macro_rules! resolve_hierarchical {
                 $fold.error(error);
             }
             Ok(found) => {
-                use $crate::ast_lowering::error;
+                use $crate::ast_lowering::error::*;
                 $fold.error(Error {
-                    error_type: error::Type::DeclarationTypeMismatch {
+                    error_type: Type::DeclarationTypeMismatch {
                         found,
-                        expected:  vec![$(error::MockSymbolDeclaration::$declaration),+],
+                        expected:  vec![$(MockSymbolDeclaration::$declaration),+],
                     },
                     source: $name.span(),
                 });
