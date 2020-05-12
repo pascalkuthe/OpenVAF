@@ -31,10 +31,20 @@ mod global;
 mod statements;
 
 pub trait DeclarationHandler<'tag> {
-    fn handle_declaration(&mut self, fold: &mut Fold, declaration: SymbolDeclaration<'tag>);
+    fn handle_declaration(
+        &mut self,
+        fold: &mut Fold<'tag, '_>,
+        declaration: SymbolDeclaration<'tag>,
+    );
 }
+
 impl<'tag> DeclarationHandler<'tag> for () {
-    fn handle_declaration(&mut self, fold: &mut Fold, declaration: SymbolDeclaration<'tag>) {}
+    fn handle_declaration(
+        &mut self,
+        fold: &mut Fold<'tag, '_>,
+        declaration: SymbolDeclaration<'tag>,
+    ) {
+    }
 }
 
 /// A struct that contains data and functionality all ast to hir folds share
