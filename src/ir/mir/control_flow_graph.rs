@@ -58,6 +58,44 @@ impl<'tag, 'mir> SimplifiedControlFlowGraph<'tag, 'mir> {
     pub fn block_count(&self) -> u16 {
         self.blocks.len()
     }
+
+    pub fn visit_in_execution_order(&self, mut f: impl FnMut(BasicBlockId<'tag>)) {
+        self.partial_visit_in_execution_order(self.start(), None, &mut f)
+    }
+
+    pub fn partial_visit_in_execution_order(
+        &self,
+        start: BasicBlockId<'tag>,
+        end: Option<BasicBlockId<'tag>>,
+        f: &mut impl FnMut(BasicBlockId<'tag>),
+    ) {
+        let mut current = start;
+        loop {
+            f(current);
+            current = match self.blocks[current].terminator {
+                Terminator::End => return,
+                Terminator::Merge(next) if Some(next) == end => return,
+
+                Terminator::Goto(next) | Terminator::Merge(next) => next,
+
+                Terminator::Split {
+                    condition: _,
+                    true_block,
+                    false_block,
+                    merge,
+                } => {
+                    self.partial_visit_in_execution_order(true_block, Some(merge), f);
+                    if merge == current {
+                        //loops
+                        false_block
+                    } else {
+                        self.partial_visit_in_execution_order(false_block, Some(merge), f);
+                        merge
+                    }
+                }
+            };
+        }
+    }
 }
 #[derive(Debug)]
 pub struct ControlFlowGraph<'tag, 'mir> {
@@ -278,13 +316,12 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
             };
         }
     }
+    pub fn mark_block_dead(&mut self, block: BasicBlockId<'tag>) {
+        self.dead_blocks.insert(block.index() as usize)
+    }
 
     pub fn visit_in_execution_order(&self, mut f: impl FnMut(BasicBlockId<'tag>)) {
         self.partial_visit_in_execution_order(self.start(), None, &mut f)
-    }
-
-    pub fn mark_block_dead(&mut self, block: BasicBlockId<'tag>) {
-        self.dead_blocks.insert(block.index() as usize)
     }
 
     pub fn partial_visit_in_execution_order(
