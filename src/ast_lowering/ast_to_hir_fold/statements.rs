@@ -48,6 +48,11 @@ impl<'tag, 'lt, H: DeclarationHandler<'tag>> Statements<'tag, 'lt, H> {
         for module_id in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.base.ast) {
             let module = &self.base.ast[module_id];
             self.state.insert(VerilogContext::constant);
+
+            self.base
+                .resolver
+                .enter_scope(&module.contents.symbol_table);
+
             for variable in module.contents.variables {
                 self.fold_variable(variable);
             }
@@ -58,10 +63,6 @@ impl<'tag, 'lt, H: DeclarationHandler<'tag>> Statements<'tag, 'lt, H> {
             self.state.remove(VerilogContext::constant);
 
             let analog_statements = self.base.hir.empty_range_from_end();
-
-            self.base
-                .resolver
-                .enter_scope(&module.contents.symbol_table);
 
             for module_item in module.contents.children.iter() {
                 match module_item {
