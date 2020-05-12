@@ -23,14 +23,17 @@ use crate::ir::{SafeRangeCreation, VariableId};
 pub struct Branches<
     'tag,
     'lt,
-    V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver),
+    V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
 > {
     pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) base: Fold<'tag, 'lt>,
     pub(super) on_variable_declaration: V,
 }
-impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver)>
-    Branches<'tag, 'lt, V>
+impl<
+        'tag,
+        'lt,
+        V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
+    > Branches<'tag, 'lt, V>
 {
     pub fn fold(mut self) -> std::result::Result<Statements<'tag, 'lt, V>, Vec<Error<'tag>>> {
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.base.ast) {

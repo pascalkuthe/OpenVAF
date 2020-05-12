@@ -27,14 +27,17 @@ use crate::{Ast, Hir};
 pub struct Global<
     'tag,
     'lt,
-    V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver),
+    V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
 > {
     pub(super) base: Fold<'tag, 'lt>,
     pub(super) on_variable_declaration: V,
 }
 
-impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver)>
-    Global<'tag, 'lt, V>
+impl<
+        'tag,
+        'lt,
+        V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
+    > Global<'tag, 'lt, V>
 {
     pub fn new(ast: &'lt mut Ast<'tag>, on_variable_declaration: V) -> Self {
         let mut res = Self {

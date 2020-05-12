@@ -32,15 +32,18 @@ use crate::{ast, Hir};
 pub struct Statements<
     'tag,
     'lt,
-    V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver),
+    V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
 > {
     pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) state: VerilogContext,
     pub(super) base: Fold<'tag, 'lt>,
     pub(super) on_variable_declaration: V,
 }
-impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver)>
-    Statements<'tag, 'lt, V>
+impl<
+        'tag,
+        'lt,
+        V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
+    > Statements<'tag, 'lt, V>
 {
     pub fn fold(mut self) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
         unsafe {
