@@ -74,7 +74,8 @@ impl<'tag, 'mir> SimplifiedControlFlowGraph<'tag, 'mir> {
             f(current);
             current = match self.blocks[current].terminator {
                 Terminator::End => return,
-                Terminator::Merge(next) if Some(next) == end => return,
+
+                Terminator::Goto(next) | Terminator::Merge(next) if Some(next) == end => return,
 
                 Terminator::Goto(next) | Terminator::Merge(next) => next,
 
