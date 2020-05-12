@@ -71,6 +71,14 @@ impl<'tag> Hir<'tag> {
             Box::from_raw(res.as_ptr())
         } //this is save since we just allocated
     }
+
+    pub fn get_str(&self, range: CompressedRange<'tag>) -> &str {
+        &self.string_literals[range]
+    }
+
+    pub fn get_str_mut(&mut self, range: CompressedRange<'tag>) -> &mut str {
+        &mut self.string_literals[range]
+    }
 }
 
 impl_id_type!(BranchId in Hir::branches -> AttributeNode<'tag,BranchDeclaration<'tag>>);
