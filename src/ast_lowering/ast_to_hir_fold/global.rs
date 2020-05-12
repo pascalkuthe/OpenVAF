@@ -24,12 +24,16 @@ use crate::symbol::{keywords, Ident};
 use crate::{Ast, Hir};
 
 /// This is the first fold. All Items that are defined globally or do not reference other items (nets & ports) are folded here
-pub struct Global<'tag, 'lt, V: FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver)> {
+pub struct Global<
+    'tag,
+    'lt,
+    V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver),
+> {
     pub(super) base: Fold<'tag, 'lt>,
     pub(super) on_variable_declaration: V,
 }
 
-impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver)>
+impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver)>
     Global<'tag, 'lt, V>
 {
     pub fn new(ast: &'lt mut Ast<'tag>, on_variable_declaration: V) -> Self {

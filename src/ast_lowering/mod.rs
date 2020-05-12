@@ -63,7 +63,12 @@ impl<'tag> Ast<'tag> {
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
     pub fn lower_with_var_decl_handle(
         mut self: Box<Self>,
-        on_variable_delcaration: impl FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver),
+        on_variable_delcaration: impl FnMut(
+            VariableId<'tag>,
+            &mut Fold,
+            &VerilogContext,
+            &BranchResolver,
+        ),
     ) -> Result<Box<Hir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
         self.try_fold_to_hir_with_var_decl_handle(on_variable_delcaration)
             .map_err(|err| (err, self))
@@ -89,7 +94,12 @@ impl<'tag> Ast<'tag> {
         self: Box<Self>,
         source_map: &SourceMap,
         translate_lines: bool,
-        on_variable_delcaration: impl FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver),
+        on_variable_delcaration: impl FnMut(
+            VariableId<'tag>,
+            &mut Fold,
+            &VerilogContext,
+            &BranchResolver,
+        ),
     ) -> Option<Box<Hir<'tag>>> {
         self.lower_with_var_decl_handle(on_variable_delcaration)
             .map_err(|(errors, ast)| {
@@ -106,7 +116,12 @@ impl<'tag> Ast<'tag> {
     }
     fn try_fold_to_hir_with_var_decl_handle(
         &mut self,
-        on_variable_delcaration: impl FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver),
+        on_variable_delcaration: impl FnMut(
+            VariableId<'tag>,
+            &mut Fold,
+            &VerilogContext,
+            &BranchResolver,
+        ),
     ) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
         Ok(Global::new(self, on_variable_delcaration)
             .fold()?

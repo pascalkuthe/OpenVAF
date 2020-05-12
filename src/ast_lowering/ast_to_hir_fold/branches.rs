@@ -20,13 +20,16 @@ use crate::ir::{SafeRangeCreation, VariableId};
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
-pub struct Branches<'tag, 'lt, V: FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver)>
-{
+pub struct Branches<
+    'tag,
+    'lt,
+    V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver),
+> {
     pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) base: Fold<'tag, 'lt>,
     pub(super) on_variable_declaration: V,
 }
-impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &Fold, &VerilogContext, &BranchResolver)>
+impl<'tag, 'lt, V: FnMut(VariableId<'tag>, &mut Fold, &VerilogContext, &BranchResolver)>
     Branches<'tag, 'lt, V>
 {
     pub fn fold(mut self) -> std::result::Result<Statements<'tag, 'lt, V>, Vec<Error<'tag>>> {
