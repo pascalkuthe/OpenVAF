@@ -72,7 +72,7 @@ impl<'cfg, 'mir> ControlFlowGraph<'cfg, 'mir> {
     pub fn eliminate_dead_code(
         &mut self,
         relevant_stmts: &mut DefiningSet,
-        mut predicate: impl FnMut(StatementId<'mir>) -> bool,
+        predicate: impl Fn(StatementId<'mir>) -> bool,
         udg: &UseDefGraph<'mir, 'cfg>,
         dfg: &DataFlowGraph<'cfg>,
         dtree: &DominatorTree<'cfg>,
@@ -81,7 +81,7 @@ impl<'cfg, 'mir> ControlFlowGraph<'cfg, 'mir> {
 
         self.eliminate_dead_code_internal(
             relevant_stmts,
-            &mut predicate,
+            &predicate,
             udg,
             dfg,
             dtree,
@@ -92,14 +92,14 @@ impl<'cfg, 'mir> ControlFlowGraph<'cfg, 'mir> {
         self.for_all_blocks_mut(|cfg, block| {
             cfg[block]
                 .statements
-                .retain(|&stmt| relevant_stmts.contains(stmt))
+                .retain(|&stmt| relevant_stmts.contains(stmt) && predicate(stmt))
         })
     }
 
     fn eliminate_dead_code_internal(
         &self,
         relevant_stmts: &mut DefiningSet,
-        pred: &mut impl FnMut(StatementId<'mir>) -> bool,
+        pred: &impl Fn(StatementId<'mir>) -> bool,
         udg: &UseDefGraph<'mir, 'cfg>,
         dfg: &DataFlowGraph<'cfg>,
         dtree: &DominatorTree<'cfg>,
