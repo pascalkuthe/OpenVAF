@@ -72,7 +72,7 @@ impl<'tag, 'mir> SimplifiedControlFlowGraph<'tag, 'mir> {
         let mut current = start;
         loop {
             f(current);
-            debug!("{;?}", end);
+            debug!("{:?}", end);
             current = match self.blocks[current].terminator {
                 Terminator::End => return,
 
