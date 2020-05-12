@@ -50,14 +50,14 @@ impl<'cfg, 'mir> ControlFlowGraph<'cfg, 'mir> {
 
     pub fn extract_relevant_statements_for_variable_assuming_input_variables(
         &mut self,
-        input: &[VariableId<'mir>],
+        input: impl Iterator<Item = VariableId<'mir>>,
         var: VariableId<'mir>,
         udg: &UseDefGraph<'mir, 'cfg>,
         dfg: &DataFlowGraph<'cfg>,
         dtree: &DominatorTree<'cfg>,
     ) {
         let mut input_statements = BitSet::with_capacity(udg.statement_count as usize);
-        for &variable in input {
+        for variable in input {
             input_statements.union_with(&udg.get_assignments(variable).0)
         }
         self.extract_relevant_statements_for_variable_assuming_input(
