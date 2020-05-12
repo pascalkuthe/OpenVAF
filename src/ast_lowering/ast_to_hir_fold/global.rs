@@ -9,7 +9,9 @@
  */
 
 use crate::ast_lowering::ast_to_hir_fold::expression::ConstantExpressionFolder;
-use crate::ast_lowering::ast_to_hir_fold::{Branches, ExpressionFolder, Fold, VerilogContext};
+use crate::ast_lowering::ast_to_hir_fold::{
+    Branches, DeclarationHandler, ExpressionFolder, Fold, VerilogContext,
+};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::ast_lowering::name_resolution::Resolver;
@@ -21,25 +23,17 @@ use crate::ir::{
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
 use crate::symbol::{keywords, Ident};
+use crate::symbol_table::SymbolDeclaration;
 use crate::{Ast, Hir};
 
 /// This is the first fold. All Items that are defined globally or do not reference other items (nets & ports) are folded here
-pub struct Global<
-    'tag,
-    'lt,
-    V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
-> {
+pub struct Global<'tag, 'lt, H: DeclarationHandler<'tag>> {
     pub(super) base: Fold<'tag, 'lt>,
-    pub(super) on_variable_declaration: V,
+    pub(super) declaration_handler: &'lt mut H,
 }
 
-impl<
-        'tag,
-        'lt,
-        V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
-    > Global<'tag, 'lt, V>
-{
-    pub fn new(ast: &'lt mut Ast<'tag>, on_variable_declaration: V) -> Self {
+impl<'tag, 'lt, H: DeclarationHandler<'tag>> Global<'tag, 'lt, H> {
+    pub fn new(ast: &'lt mut Ast<'tag>, declaration_handler: &'lt mut H) -> Self {
         let mut res = Self {
             base: Fold {
                 hir: Hir::init(ast),
@@ -47,13 +41,13 @@ impl<
                 errors: Vec::with_capacity(32),
                 resolver: Resolver::new(&*ast),
             },
-            on_variable_declaration,
+            declaration_handler,
         };
         res.base.resolver.enter_scope(&ast.top_symbols);
         res
     }
 
-    pub fn fold(mut self) -> std::result::Result<Branches<'tag, 'lt, V>, Vec<Error<'tag>>> {
+    pub fn fold(mut self) -> std::result::Result<Branches<'tag, 'lt, H>, Vec<Error<'tag>>> {
         unsafe {
             //This is save since we get the ptrs using borrows and drop is never called since they are copy
             TinyArena::init_from(&mut self.base.hir.attributes, &self.base.ast.attributes);
@@ -112,7 +106,7 @@ impl<
             Ok(Branches {
                 branch_resolver: BranchResolver::new(self.base.ast),
                 base: self.base,
-                on_variable_declaration: self.on_variable_declaration,
+                declaration_handler: self.declaration_handler,
             })
         } else {
             Err(self.base.errors)
@@ -151,6 +145,8 @@ impl<
                 continuous: old.continuous,
             }),
         );
+        self.declaration_handler
+            .handle_declaration(&mut self.base, SymbolDeclaration::Discipline(discipline))
     }
 
     /// Folds a discipline by resolving its flow and potential natures
@@ -197,6 +193,8 @@ impl<
                     ddt_nature,
                 }),
             );
+            self.declaration_handler
+                .handle_declaration(&mut self.base, SymbolDeclaration::Nature(nature))
         }
     }
 
@@ -220,6 +218,8 @@ impl<
                     net,
                 },
             );
+            self.declaration_handler
+                .handle_declaration(&mut self.base, SymbolDeclaration::Port(port))
         }
     }
 
@@ -235,7 +235,9 @@ impl<
                     signed: old.signed,
                     net_type: old.net_type,
                 }),
-            )
+            );
+            self.declaration_handler
+                .handle_declaration(&mut self.base, SymbolDeclaration::Net(net))
         }
     }
 

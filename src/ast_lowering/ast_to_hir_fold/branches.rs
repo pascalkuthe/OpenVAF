@@ -8,34 +8,26 @@
  * *****************************************************************************************
  */
 
-use crate::ast_lowering::ast_to_hir_fold::Fold;
 use crate::ast_lowering::ast_to_hir_fold::Statements;
 use crate::ast_lowering::ast_to_hir_fold::VerilogContext;
+use crate::ast_lowering::ast_to_hir_fold::{DeclarationHandler, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::Error;
 use crate::compact_arena::NanoArena;
 use crate::hir::BranchDeclaration;
 use crate::ir::{BranchId, ModuleId, Write};
 use crate::ir::{SafeRangeCreation, VariableId};
+use crate::symbol_table::SymbolDeclaration;
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
-pub struct Branches<
-    'tag,
-    'lt,
-    V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
-> {
+pub struct Branches<'tag, 'lt, H: DeclarationHandler<'tag>> {
     pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) base: Fold<'tag, 'lt>,
-    pub(super) on_variable_declaration: V,
+    pub(super) declaration_handler: &'lt mut H,
 }
-impl<
-        'tag,
-        'lt,
-        V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
-    > Branches<'tag, 'lt, V>
-{
-    pub fn fold(mut self) -> std::result::Result<Statements<'tag, 'lt, V>, Vec<Error<'tag>>> {
+impl<'tag, 'lt, H: DeclarationHandler<'tag>> Branches<'tag, 'lt, H> {
+    pub fn fold(mut self) -> std::result::Result<Statements<'tag, 'lt, H>, Vec<Error<'tag>>> {
         for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.base.ast) {
             let module = &self.base.ast[module];
             self.base
@@ -57,7 +49,7 @@ impl<
                 branch_resolver: self.branch_resolver,
                 state: VerilogContext::empty(),
                 base: self.base,
-                on_variable_declaration: self.on_variable_declaration,
+                declaration_handler: self.declaration_handler,
             })
         } else {
             Err(self.base.errors)
@@ -77,6 +69,10 @@ impl<
                     name: branch_declaration.contents.name,
                     branch: resolved_branch,
                 }),
+            );
+            self.declaration_handler.handle_declaration(
+                &mut self.base,
+                SymbolDeclaration::Branch(branch_declaration_id),
             )
         }
     }

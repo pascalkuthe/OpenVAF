@@ -15,7 +15,9 @@ use crate::ast::{
     Parameter, ParameterType, Variable,
 };
 use crate::ast_lowering::ast_to_hir_fold::expression::StatementExpressionFolder;
-use crate::ast_lowering::ast_to_hir_fold::{ExpressionFolder, Fold, VerilogContext};
+use crate::ast_lowering::ast_to_hir_fold::{
+    DeclarationHandler, ExpressionFolder, Fold, VerilogContext,
+};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::compact_arena::{NanoArena, TinyArena};
@@ -29,22 +31,13 @@ use crate::symbol_table::SymbolDeclaration;
 use crate::{ast, Hir};
 
 /// The last fold folds all statements in textual order
-pub struct Statements<
-    'tag,
-    'lt,
-    V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
-> {
+pub struct Statements<'tag, 'lt, H: DeclarationHandler<'tag>> {
     pub(super) branch_resolver: BranchResolver<'tag>,
     pub(super) state: VerilogContext,
     pub(super) base: Fold<'tag, 'lt>,
-    pub(super) on_variable_declaration: V,
+    pub(super) declaration_handler: &'lt mut H,
 }
-impl<
-        'tag,
-        'lt,
-        V: FnMut(VariableId<'tag>, &mut Fold<'tag, '_>, &VerilogContext, &BranchResolver),
-    > Statements<'tag, 'lt, V>
-{
+impl<'tag, 'lt, H: DeclarationHandler<'tag>> Statements<'tag, 'lt, H> {
     pub fn fold(mut self) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
         unsafe {
             //This is save since we get the ptrs using borrows and drop is never called since they are copy
@@ -292,8 +285,8 @@ impl<
             },
         );
 
-        let closure = &mut self.on_variable_declaration;
-        closure(variable, &mut self.base, &self.state, &self.branch_resolver);
+        self.declaration_handler
+            .handle_declaration(&mut self.base, SymbolDeclaration::Variable(variable))
     }
 
     fn fold_parameter(&mut self, parameter_id: ParameterId<'tag>) {
@@ -364,6 +357,8 @@ impl<
                     }),
                 )
             }
+            self.declaration_handler
+                .handle_declaration(&mut self.base, SymbolDeclaration::Parameter(parameter_id))
         } else {
             unsafe {
                 self.base

@@ -18,6 +18,7 @@ pub(super) use statements::Statements;
 
 use crate::ast_lowering::error::Error;
 use crate::ast_lowering::name_resolution::Resolver;
+use crate::symbol_table::SymbolDeclaration;
 use crate::{Ast, Hir};
 
 #[doc(hidden)]
@@ -28,6 +29,13 @@ mod expression;
 mod global;
 #[doc(hidden)]
 mod statements;
+
+pub trait DeclarationHandler<'tag> {
+    fn handle_declaration(&mut self, fold: &mut Fold, declaration: SymbolDeclaration<'tag>);
+}
+impl<'tag> DeclarationHandler<'tag> for () {
+    fn handle_declaration(&mut self, fold: &mut Fold, declaration: SymbolDeclaration<'tag>) {}
+}
 
 /// A struct that contains data and functionality all ast to hir folds share
 /// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` macros and [`BranchResolver`](crate::ast_lowering::branch_resolution::BranchResolver)

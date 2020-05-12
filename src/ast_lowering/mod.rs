@@ -37,8 +37,8 @@ pub use ast_to_hir_fold::Fold;
 pub use branch_resolution::BranchResolver;
 
 use crate::ast::Ast;
-use crate::ast_lowering::ast_to_hir_fold::Global;
 use crate::ast_lowering::ast_to_hir_fold::VerilogContext;
+use crate::ast_lowering::ast_to_hir_fold::{DeclarationHandler, Global};
 use crate::ast_lowering::error::Error;
 use crate::ir::hir::Hir;
 use crate::ir::VariableId;
@@ -61,16 +61,11 @@ impl<'tag> Ast<'tag> {
     }
 
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
-    pub fn lower_with_var_decl_handle(
+    pub fn lower_with_decl_handler(
         mut self: Box<Self>,
-        on_variable_delcaration: impl FnMut(
-            VariableId<'tag>,
-            &mut Fold,
-            &VerilogContext,
-            &BranchResolver,
-        ),
+        declaration_handler: &mut impl DeclarationHandler<'tag>,
     ) -> Result<Box<Hir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
-        self.try_fold_to_hir_with_var_decl_handle(on_variable_delcaration)
+        self.try_fold_to_hir_with_decl_handler(declaration_handler)
             .map_err(|err| (err, self))
     }
 
@@ -94,14 +89,9 @@ impl<'tag> Ast<'tag> {
         self: Box<Self>,
         source_map: &SourceMap,
         translate_lines: bool,
-        on_variable_delcaration: impl FnMut(
-            VariableId<'tag>,
-            &mut Fold,
-            &VerilogContext,
-            &BranchResolver,
-        ),
+        declaration_handler: &mut impl DeclarationHandler<'tag>,
     ) -> Option<Box<Hir<'tag>>> {
-        self.lower_with_var_decl_handle(on_variable_delcaration)
+        self.lower_with_decl_handler(declaration_handler)
             .map_err(|(errors, ast)| {
                 errors
                     .into_iter()
@@ -112,18 +102,13 @@ impl<'tag> Ast<'tag> {
 
     /// A Helper method to avoid code duplication until try blocks are stable
     fn try_fold_to_hir(&mut self) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
-        Ok(Global::new(self, |_, _, _, _| ()).fold()?.fold()?.fold()?)
+        Ok(Global::new(self, &mut ()).fold()?.fold()?.fold()?)
     }
-    fn try_fold_to_hir_with_var_decl_handle(
+    fn try_fold_to_hir_with_decl_handler(
         &mut self,
-        on_variable_delcaration: impl FnMut(
-            VariableId<'tag>,
-            &mut Fold,
-            &VerilogContext,
-            &BranchResolver,
-        ),
+        declaration_handler: &mut impl DeclarationHandler<'tag>,
     ) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
-        Ok(Global::new(self, on_variable_delcaration)
+        Ok(Global::new(self, declaration_handler)
             .fold()?
             .fold()?
             .fold()?)
