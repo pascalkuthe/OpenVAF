@@ -72,7 +72,6 @@ impl<'tag, 'mir> SimplifiedControlFlowGraph<'tag, 'mir> {
         let mut current = start;
         loop {
             f(current);
-            debug!("{:?}", end);
             current = match self.blocks[current].terminator {
                 Terminator::End => return,
 
@@ -89,9 +88,15 @@ impl<'tag, 'mir> SimplifiedControlFlowGraph<'tag, 'mir> {
                     self.partial_visit_in_execution_order(true_block, Some(merge), f);
                     if merge == current {
                         //loops
+                        if Some(false_block) == end {
+                            return;
+                        }
                         false_block
                     } else {
                         self.partial_visit_in_execution_order(false_block, Some(merge), f);
+                        if Some(merge) == end {
+                            return;
+                        }
                         merge
                     }
                 }
