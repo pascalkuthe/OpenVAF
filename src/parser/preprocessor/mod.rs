@@ -567,17 +567,23 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
     fn peek(&mut self) -> Result<(Range, Token)> {
         let in_main_file = self.state_stack.len() == 1;
         match self.state_stack.last_mut().unwrap().token_source {
-            TokenSource::File(ref lexer) => {
+            TokenSource::File(ref mut lexer) => loop {
                 let (range, token) = lexer.peek();
                 match token {
-                    None if in_main_file => Ok((range, Token::EOF)),
-                    None => Err(Error {
-                        source: Span::new(range.start, range.end),
-                        error_type: error::Type::CompilerDirectiveSplit,
-                    }),
-                    Some(token) => Ok((range, token)),
+                    None if in_main_file => return Ok((range, Token::EOF)),
+                    None => {
+                        return Err(Error {
+                            source: Span::new(range.start, range.end),
+                            error_type: error::Type::CompilerDirectiveSplit,
+                        })
+                    }
+                    Some(Token::Comment(lines)) => {
+                        lexer.next();
+                        self.source_map_builder.new_lines(lines)
+                    }
+                    Some(token) => return Ok((range, token)),
                 }
-            }
+            },
 
             TokenSource::Insert(ref mut iter, _) => {
                 let res = iter.peek().unwrap();

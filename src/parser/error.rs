@@ -596,7 +596,7 @@ impl Error {
                         origin:Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Recursion detected here",
+                            label: "Unexpected newline",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,

@@ -19,7 +19,6 @@ beef = "0.4.4"
 rustc-hash = "1.1.0"
 fixedbitset = "0.3.0"
 rustc-ap-graphviz = {version = "656.0.0",optional=true}
-jemallocator-global = "*"
 
 [dependencies.bytecount]
 version = "0.6.0"

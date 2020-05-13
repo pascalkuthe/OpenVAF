@@ -23,9 +23,9 @@ pub enum Token {
     MacroDefNewLine,
 
     #[token("\n")]
-    #[regex(r"//[^\n]*\n")]
     Newline,
 
+    #[regex(r"//[^\n]*\n", single_line_comment)]
     #[token("/*", ignore_multiline_comment)]
     Comment(LineNumber),
 
@@ -366,6 +366,10 @@ pub enum Token {
     TimeIntegralNature,
     #[token("units")]
     Units,
+}
+#[inline(always)]
+fn single_line_comment<'source>(lex: &mut logos::Lexer<'source, Token>) -> LineNumber {
+    1
 }
 
 #[inline]
