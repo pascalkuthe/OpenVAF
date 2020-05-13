@@ -548,7 +548,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             body.push(self.current_macro_body_token(body_start, &args, 1)?);
             peek = self.peek()?;
         }
-        let decl_source = &self.source()[body_start as usize..peek.0.end as usize];
+        let decl_source = &self.source()
+            [body_start as usize..(self.current_source_start + self.current_len) as usize];
         let maco_decl = Macro {
             body,
             arg_count: args.len() as ArgumentIndex,

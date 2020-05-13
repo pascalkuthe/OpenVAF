@@ -19,8 +19,10 @@ use crate::ir::DisciplineId;
 use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};
 use crate::symbol::Symbol;
 use crate::symbol_table::SymbolDeclaration;
+use crate::util::VecFormatter;
 use crate::{parser, Ast, SourceMap, Span};
 use beef::lean::Cow;
+use bitflags::_core::fmt::Debug;
 
 pub type Error<'tag> = crate::error::Error<Type<'tag>>;
 //pub(crate) type Warning = crate::error::Error<WarningType>;
@@ -144,8 +146,8 @@ impl<'tag> Error<'tag> {
             } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let label = format!(
-                    "Expected {:?} found {:?} {}",
-                    expected,
+                    "Expected {} found {} {}",
+                    VecFormatter(expected, ""),
                     found.mock(),
                     found.name(&ast).as_str()
                 );
@@ -484,4 +486,9 @@ pub enum MockSymbolDeclaration {
     Discipline,
     Nature,
     Parameter,
+}
+impl Display for MockSymbolDeclaration {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }

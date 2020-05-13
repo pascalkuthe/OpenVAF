@@ -10,9 +10,10 @@
 
 use crate::error::Error;
 use crate::parser::error::Result;
-use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken};
+use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken, Unrecoverable};
 use crate::parser::lexer::Token;
-use crate::parser::Parser;
+use crate::parser::{error, Parser};
+use crate::Span;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     /// Combinator that parses a list delimited by a comma and terminated by `end`.
@@ -80,6 +81,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         end: Token,
         consume_end: bool,
         consume_recover: bool,
+
         mut parse: F,
     ) -> Result
     where
@@ -95,6 +97,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 }
 
                 Ok((Token::EOF, source)) => {
+                    self.unrecoverable = true;
                     return Err(Error {
                         error_type: UnexpectedEof {
                             expected: vec![end],
@@ -132,6 +135,13 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         consume_end: bool,
         consume_recover: bool,
     ) -> Result<bool> {
+        let start = self.preprocessor.current_start();
+        if self.unrecoverable {
+            return Err(Error {
+                error_type: Unrecoverable,
+                source: Span::new_short_empty_span(0),
+            });
+        }
         loop {
             match self.look_ahead() {
                 Ok((token, _)) if token == end => {
@@ -150,11 +160,12 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
                 Ok((Token::EOF, source)) => {
                     self.consume_lookahead();
+                    self.unrecoverable = true;
                     return Err(Error {
                         error_type: UnexpectedEof {
                             expected: vec![end],
                         },
-                        source,
+                        source: Span::new(start - 1, self.preprocessor.current_start() - 1),
                     });
                 }
 
@@ -166,6 +177,19 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     self.consume_lookahead();
                     self.non_critical_errors.push(error);
                 }
+            }
+        }
+    }
+    #[inline]
+    pub fn unrecoverable_error(&mut self, spanned_error: error::Type) -> error::Error {
+        let start = self.preprocessor.current_start();
+        self.unrecoverable = true;
+        loop {
+            if let Ok((Token::EOF, source)) = self.next() {
+                return Error {
+                    error_type: spanned_error,
+                    source: Span::new(start - 1, self.preprocessor.current_start() - 1),
+                };
             }
         }
     }

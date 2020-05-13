@@ -8,6 +8,7 @@
  * *****************************************************************************************
  */
 
+use bitflags::_core::fmt::{Display, Formatter};
 macro_rules! unreachable_unchecked{
     ($reason:expr) => {
         if cfg!(debug_assertions){
@@ -27,5 +28,38 @@ impl<'t, T> RefMut<T> for Option<&'t mut T> {
     #[inline]
     fn ref_mut(&mut self) -> Option<&mut T> {
         self.as_mut().map(|x| &mut **x)
+    }
+}
+
+pub struct VecFormatter<'lt, T: Display>(pub &'lt Vec<T>, pub &'lt str);
+
+impl<'lt, T: Display> Display for VecFormatter<'lt, T> {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self.0.as_slice() {
+            [] => f.write_str(" "),
+            [x] => {
+                f.write_str(self.1);
+                x.fmt(f)?;
+                f.write_str(self.1);
+                Ok(())
+            }
+            [ref body @ .., second_last, last] => {
+                for x in body {
+                    f.write_str(self.1);
+                    x.fmt(f)?;
+                    f.write_str(self.1);
+                    f.write_str(", ");
+                }
+                f.write_str(self.1);
+                second_last.fmt(f)?;
+                f.write_str(self.1);
+                f.write_str(" or ");
+                f.write_str(self.1);
+                last.fmt(f)?;
+                f.write_str(self.1);
+                Ok(())
+            }
+        }
     }
 }

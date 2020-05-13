@@ -16,6 +16,7 @@ use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
 use crate::span::Index;
 use crate::symbol::{Ident, Symbol};
+use crate::util::VecFormatter;
 use crate::{SourceMap, Span};
 use beef::lean::Cow;
 
@@ -68,12 +69,15 @@ pub enum Type {
         expected: Vec<Expected>,
     },
     Unsupported(Unsupported),
+    Unrecoverable,
 }
+
 impl From<std::io::Error> for Type {
     fn from(io_err: std::io::Error) -> Self {
         Self::IoErr(io_err.to_string())
     }
 }
+
 #[derive(Clone, Copy, Debug)]
 pub enum Unsupported {
     StringParameters,
@@ -81,6 +85,7 @@ pub enum Unsupported {
     MacroDefinedInMacro,
     NatureInheritance,
 }
+
 impl Display for Unsupported {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
@@ -100,11 +105,27 @@ pub enum Expected {
     BinaryOperator,
     Primary,
     Statement,
-    FunctionCall,
     BranchAcess,
-    Assign,
     ParameterRange,
 }
+
+impl Display for Expected {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        // TODO move exampels to webpage
+        match self {
+            Expected::Identifier => f.write_str("identifier"),
+            Expected::PortDeclaration => f.write_str("port declaration"),
+            Expected::Port => f.write_str("port listing"),
+            Expected::UnaryOperator => f.write_str("unary operator (+,-,!)"),
+            Expected::BinaryOperator => f.write_str("binary operator (such as * or +)"),
+            Expected::Primary => f.write_str("expression primary"),
+            Expected::Statement => f.write_str("statement"),
+            Expected::BranchAcess => f.write_str("branch access"),
+            Expected::ParameterRange => f.write_str("parameter range (such as from [0:inf]"),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum WarningType {
     MacroOverwritten(Span),
@@ -138,7 +159,7 @@ impl Error {
         match self.error_type {
             Type::UnexpectedToken { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let label = format!("expected {:?}", expected);
+                let label = format!("expected {}", VecFormatter(expected, "'"));
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -166,7 +187,7 @@ impl Error {
 
             Type::UnexpectedTokens { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let label = format!("expected {:?}", expected);
+                let label = format!("expected {}", VecFormatter(expected, ""));
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -656,9 +677,9 @@ impl Error {
                 let display_list = DisplayList::from(snippet);
                 error!("{}", display_list);
             }
-            Type::UnexpectedEof { expected } => {
+            Type::UnexpectedEof { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let label = format!("Unexpected EOF expected {:?}", expected);
+                let label = format!("Unexpected EOF expected {}", VecFormatter(expected, "'"));
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -673,10 +694,10 @@ impl Error {
                         origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: "Split detected here",
+                            label: "Unexpected EOF",
                             annotation_type: AnnotationType::Error,
                         }],
-                        fold: false,
+                        fold: true,
                     }],
                     opt,
                 };
@@ -761,10 +782,13 @@ impl Error {
                 error!("{}", display_list);
             }
 
-            Type::RequiredAttributeNotDefined(missing) => {
+            Type::RequiredAttributeNotDefined(ref missing) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let label = format!("Nature is missing the required attributes  {:?}", missing);
-                let inline_label = format!("Required attributes {:?} are missing", missing);
+                let label = format!(
+                    "Nature is missing the required attributes {}",
+                    VecFormatter(missing, "'")
+                );
+                let inline_label = format!("Required attributes are missing");
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -846,6 +870,7 @@ impl Error {
                 let display_list = DisplayList::from(snippet);
                 error!("{}", display_list);
             }
+            Type::Unrecoverable => (),
         };
     }
 }

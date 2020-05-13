@@ -13,7 +13,7 @@ use crate::ir::BuiltInFunctionCall1p::*;
 use crate::ir::BuiltInFunctionCall2p::*;
 use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, Push};
 use crate::ir::{ExpressionId, Node};
-use crate::parser::error::Type::UnexpectedTokens;
+use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken, UnexpectedTokens};
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::primaries::{
@@ -21,6 +21,7 @@ use crate::parser::primaries::{
 };
 use crate::parser::Parser;
 use crate::symbol::{keywords, Ident};
+use crate::Span;
 
 enum BinaryOperatorOrCondition {
     Condition,
@@ -179,12 +180,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 self.consume_lookahead();
                 self.parse_unary_operator(UnaryOperator::BitNegate)?
             }
-            Token::ParenOpen => {
-                self.consume_lookahead();
-                let res = self.parse_expression()?;
-                self.expect(Token::ParenClose)?;
-                res
-            }
+            Token::ParenOpen => self.parse_bracketed_expression()?,
             Token::LiteralString => {
                 self.consume_lookahead();
                 let val = self
@@ -386,6 +382,47 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(res)
     }
 
+    pub fn parse_bracketed_expression(&mut self) -> Result<Node<Expression<'ast>>> {
+        if let Err(error) = self.expect_lookahead(Token::ParenOpen) {
+            self.non_critical_errors.push(error);
+            if let Ok(expr) = self.parse_expression_id() {
+                self.recover_expression_on_bracket()
+            } else {
+                let tmp_expr = Node::new(
+                    Expression::Primary(Primary::Integer(0)),
+                    Span::new_short_empty_span(0),
+                );
+                self.recover_on(Token::ParenClose, Token::ParenClose, true, true)?;
+                Ok(tmp_expr)
+            }
+        } else {
+            self.consume_lookahead();
+            self.recover_expression_on_bracket()
+        }
+    }
+
+    fn recover_expression_on_bracket(&mut self) -> Result<Node<Expression<'ast>>> {
+        Ok(match self.parse_expression() {
+            Ok(expr) => {
+                if let Err(error) = self.expect_lookahead(Token::ParenClose) {
+                    return Err(self.unrecoverable_error(UnexpectedEof {
+                        expected: vec![Token::ParenClose],
+                    }));
+                }
+                expr
+            }
+            Err(error) => {
+                self.non_critical_errors.push(error);
+                let tmp_expr = Node::new(
+                    Expression::Primary(Primary::Integer(0)),
+                    Span::new_short_empty_span(0),
+                );
+                self.recover_on(Token::ParenClose, Token::ParenClose, true, true)?;
+                tmp_expr
+            }
+        })
+    }
+
     fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression<'ast>>> {
         let unary_op = Node {
             source: self.preprocessor.span(),
@@ -404,9 +441,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         self.consume_lookahead();
         let start = self.preprocessor.current_start();
 
-        self.expect(Token::ParenOpen)?;
-        let arg = self.parse_expression_id()?;
-        self.expect(Token::ParenClose)?;
+        let arg = self.parse_bracketed_expression()?;
+        let arg = self.ast.push(arg);
 
         Ok(Node::new(
             Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)),

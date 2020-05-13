@@ -13,8 +13,8 @@ use crate::ast::{
     Statement, VariableType,
 };
 use crate::ir::ast::WhileLoop;
-use crate::ir::Push;
 use crate::ir::{AttributeNode, Attributes, BlockId, Node, StatementId};
+use crate::ir::{ExpressionId, Push};
 use crate::parser::error::Type::{
     HierarchicalIdNotAllowedAsNature, UnexpectedToken, UnexpectedTokens,
 };
@@ -24,6 +24,7 @@ use crate::parser::Parser;
 use crate::symbol::keywords;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::Span;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_statement(&mut self, attributes: Attributes<'ast>) -> Result<StatementId<'ast>> {
@@ -126,11 +127,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 self.consume_lookahead();
                 return Err(Error {
                     error_type: UnexpectedTokens {
-                        expected: vec![
-                            Expected::Assign,
-                            Expected::BranchAcess,
-                            Expected::FunctionCall,
-                        ],
+                        expected: vec![Expected::Statement],
                     },
                     source: span,
                 });
@@ -205,15 +202,18 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 Ok(())
             },
         )?;
+
         let scope = scope.map(|name| BlockScope {
             name,
             symbols: self.scope_stack.pop().unwrap(),
         });
+
         let res = self.ast.push(AttributeNode {
             attributes,
             source: self.span_to_current_end(start),
             contents: SeqBlock { scope, statements },
         });
+
         if let Some(BlockScope { name, .. }) = self.ast[res].contents.scope {
             self.insert_symbol(name, SymbolDeclaration::Block(res));
         }
@@ -242,9 +242,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         attributes: Attributes<'ast>,
     ) -> Result<AttributeNode<'ast, Condition<'ast>>> {
         let start = self.preprocessor.current_start();
-        self.expect(Token::ParenOpen)?;
-        let main_condition = self.parse_expression_id()?;
-        self.expect(Token::ParenClose)?;
+        let condition = self.parse_bracketed_expression()?;
+        let condition = self.ast.push(condition);
         let statement_attributes = self.parse_attributes()?;
         let if_statement = self.parse_statement(statement_attributes)?;
 
@@ -260,7 +259,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             attributes,
             source: self.span_to_current_end(start),
             contents: Condition {
-                condition: main_condition,
+                condition,
                 if_statement,
                 else_statement,
             },
@@ -268,9 +267,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     pub fn parse_while_loop(&mut self) -> Result<WhileLoop<'ast>> {
-        self.expect(Token::ParenOpen)?;
-        let condition = self.parse_expression_id()?;
-        self.expect(Token::ParenClose)?;
+        let condition = self.parse_bracketed_expression()?;
+        let condition = self.ast.push(condition);
         let attributes = self.parse_attributes()?;
         let body = self.parse_statement(attributes)?;
         Ok(WhileLoop { condition, body })

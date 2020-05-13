@@ -25,6 +25,7 @@ use crate::span::Index;
 use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::{Preprocessor, SourceMap, Span};
+use bitflags::_core::num::NonZeroU16;
 use rustc_hash::FxHashMap;
 
 pub(crate) mod lexer;
@@ -54,6 +55,7 @@ pub(crate) struct Parser<'lt, 'ast, 'source_map> {
     pub ast: &'lt mut Ast<'ast>,
     pub non_critical_errors: Vec<Error>,
     pub warnings: Vec<Warning>,
+    pub(crate) unrecoverable: bool,
 }
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
@@ -69,6 +71,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             ast,
             non_critical_errors: errors,
             warnings: Vec::with_capacity(32),
+            unrecoverable: false,
         }
     }
 
@@ -257,6 +260,24 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 },
             })
         } else {
+            Ok(())
+        }
+    }
+
+    #[inline]
+    pub fn expect_lookahead(&mut self, token: Token) -> Result {
+        let (found, source) = self.look_ahead()?;
+        if found != token {
+            Err(Error {
+                source: Span::new_short_span(self.preprocessor.current_start(), unsafe {
+                    NonZeroU16::new_unchecked(1)
+                }),
+                error_type: error::Type::UnexpectedToken {
+                    expected: vec![token],
+                },
+            })
+        } else {
+            self.consume_lookahead();
             Ok(())
         }
     }
