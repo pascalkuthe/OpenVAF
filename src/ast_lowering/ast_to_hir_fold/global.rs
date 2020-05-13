@@ -248,7 +248,7 @@ impl<'tag, 'lt, H: DeclarationHandler<'tag>> Global<'tag, 'lt, H> {
                     error_type: Type::Unsupported(Unsupported::DefaultDiscipline),
                     source: ident.span,
                 });
-                todo!("Implicit Disciplines are currently not supported")
+                None
             }
             _ => {
                 resolve!(self.base; ident as Discipline(id) => {return Some(id)});

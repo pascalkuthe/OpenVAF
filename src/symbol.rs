@@ -63,6 +63,14 @@ impl Ident {
             span: DUMMY_SPAN,
         }
     }
+
+    pub const fn spanned_empty(span: Span) -> Ident {
+        Self {
+            name: EMPTY_SYMBOL,
+            span,
+        }
+    }
+
     /// Maps a string to an identifier with a dummy span.
     pub fn from_str(string: &str) -> Ident {
         Self::new(Symbol::intern(string), DUMMY_SPAN)

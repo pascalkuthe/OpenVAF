@@ -18,6 +18,7 @@ use crate::parser::{error, Error, Parser};
 use crate::symbol::{keywords, Ident};
 use crate::symbol_table::SymbolDeclaration;
 use crate::Span;
+use bitflags::_core::num::NonZeroU16;
 use rustc_hash::FxHashSet;
 
 impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
@@ -197,8 +198,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let start = self.preprocessor.current_start();
         let net_type = self.parse_net_type()?;
         let opt_first_identifier_or_discipline = self.parse_identifier(true);
-        let (discipline, signed, first_name) =
-            self.parse_net_declaration_end(false, opt_first_identifier_or_discipline)?;
+        let (discipline, signed, first_name) = self.parse_net_declaration_end(
+            net_type == NetType::UNDECLARED,
+            opt_first_identifier_or_discipline,
+        )?;
         let net = AttributeNode {
             attributes,
             contents: Net {
@@ -233,14 +236,15 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(())
     }
 
-    /// This is a helper method which parses the end of a (port or variable) declaration;
-    /// It specifically handles the identifier/discipline ambiguity and also whether the variable is signed
-    // This cant handle the type because disciplines and types have a different order in port (electrical wire) and variable delcarations (electrical
+    /// This is a helper method which parses the end of a (port or netdycccccccccccccccccccccccc<wcccccccccccccccccccccccccccccccccccccdddey<>frrrrrrrrrrrrrrrrrrrrrrrrrr5tcdews) declaration;
+    /// It specifically handles the identifier/discipline ambiguity 44r33333333w5wtt66fcdsdwqadcxwsy<fcdx sy<sx <<<and also whether the variable is signed
+    // This cant handle the type because disciplines and types have a different order in port (electrical wire) and net delcarations (wire electrical)
     fn parse_net_declaration_end(
         &mut self,
         mut is_discipline: bool,
         opt_first_identifier_or_discipline: Result<Ident>,
     ) -> Result<(Ident, bool, Ident)> {
+        let start = self.preprocessor.current_start();
         let signed = self.look_ahead()?.0 == Token::Signed;
 
         if signed {
@@ -252,12 +256,19 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Ok(discipline) if is_discipline => (self.parse_identifier(false)?, discipline),
             Ok(first_identifier_or_discipline) => {
                 if let Ok(first_identifier) = self.parse_identifier(true) {
+                    self.consume_lookahead();
                     (first_identifier, first_identifier_or_discipline)
                 } else {
-                    (first_identifier_or_discipline, Ident::empty())
+                    (
+                        first_identifier_or_discipline,
+                        Ident::spanned_empty(self.span_to_current_end(start)),
+                    )
                 }
             }
-            Err(_) => (self.parse_identifier(false)?, Ident::empty()),
+            Err(_) => (
+                self.parse_identifier(false)?,
+                Ident::spanned_empty(self.span_to_current_end(start)),
+            ),
         }; //TODO default discipline
         Ok((discipline, signed, name))
     }

@@ -411,11 +411,12 @@ impl<'tag> Error<'tag> {
                 error!("{}", display_list);
             }
             Type::Unsupported(unsupported) => {
+                println!("{:?}", self.source);
                 return parser::error::Error {
                     error_type: parser::error::Type::Unsupported(unsupported),
                     source: self.source,
                 }
-                .print(source_map, translate_lines)
+                .print(source_map, translate_lines);
             }
             Type::EmptyBranchAccess => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);

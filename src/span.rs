@@ -7,6 +7,7 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+use bitflags::_core::fmt::Display;
 use core::num::NonZeroU16;
 use std::fmt::{Debug, Formatter};
 use std::sync::Mutex;
@@ -45,7 +46,7 @@ impl SpanInterner {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Span {
     start_or_idx: u32,
     data: SpanData,
@@ -89,7 +90,7 @@ impl Span {
     pub fn new_empty_span(start: Index) -> Self {
         if start < 1 << 31 {
             Self {
-                start_or_idx: start << 1,
+                start_or_idx: (start << 1) | 1,
                 data: SpanData::LargeSpan,
             }
         } else {
@@ -102,7 +103,7 @@ impl Span {
     #[inline]
     pub const fn new_short_empty_span(start: u16) -> Self {
         Self {
-            start_or_idx: (start as u32) << 1,
+            start_or_idx: ((start as u32) << 1) | 1,
             data: SpanData::LargeSpan,
         }
     }
@@ -222,7 +223,7 @@ impl Into<std::ops::Range<usize>> for Span {
         }
     }
 }
-impl Debug for Span {
+impl Display for Span {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_fmt(format_args!(" [{},{}]", self.get_start(), self.get_end()))
     }
