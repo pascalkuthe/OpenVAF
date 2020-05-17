@@ -1,4 +1,4 @@
-# VARF
+# OpenVAF
 
 A compiler frontend for the Verilog-A subset of the Verilog-AMS language written in Rust.
 

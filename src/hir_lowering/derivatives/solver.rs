@@ -4,7 +4,7 @@ use crate::hir_lowering::error::Error;
 use crate::hir_lowering::error::Type::OnlyNumericExpressionsCanBeDerived;
 use crate::hir_lowering::HirToMirFold;
 use crate::ir::mir::ControlFlowGraph;
-use crate::ir::{IntegerExpressionId, Push, RealExpressionId, VariableId};
+use crate::ir::{IntegerExpressionId, Push, RealExpressionId};
 use crate::mir::{ExpressionId, RealExpression, Statement};
 use log::warn;
 

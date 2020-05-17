@@ -1,9 +1,9 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
@@ -15,8 +15,8 @@ use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::Error;
 use crate::compact_arena::NanoArena;
 use crate::hir::BranchDeclaration;
+use crate::ir::SafeRangeCreation;
 use crate::ir::{BranchId, ModuleId, Write};
-use crate::ir::{SafeRangeCreation, VariableId};
 use crate::symbol_table::SymbolDeclaration;
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding

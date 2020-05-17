@@ -1,14 +1,16 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+
 //! This module is responsible for evaluating expressions describing parameter bounds and default values a compile time
 //! while also enforcing Type Conversion rules.
+//!
 //!
 //!
 //!
@@ -35,6 +37,7 @@ use crate::ir::BuiltInFunctionCall2p::*;
 use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, ExpressionId, Node, ParameterId};
 use crate::mir::*;
 use crate::Span;
+use core::mem::replace;
 
 #[derive(Copy, Clone)]
 pub enum Value<'tag> {
@@ -203,11 +206,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         parameter: ParameterId<'tag>,
         included_ranges: &[Range<ast::NumericalParameterRangeBound<'tag>>],
         excluded_ranges: &[ast::NumericalParameterRangeExclude<'tag>],
-    ) -> Option<(
-        Vec<Range<NumericalParameterRangeBound<T>>>,
-        Vec<NumericalParameterRangeExclude<T>>,
-        T,
-    )> {
+    ) -> Option<(Vec<Range<NumericalParameterRangeBound<T>>>, T)> {
         let mut included_ranges: Vec<_> = included_ranges
             .iter()
             .filter_map(
@@ -245,7 +244,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
 
         included_ranges.sort_unstable_by(|lhs, rhs| lhs.start.bound.cmp(&rhs.end.bound));
         let mut iter = included_ranges.iter();
-        let included_ranges: Vec<Range<NumericalParameterRangeBound<T>>> =
+        let mut included_ranges: Vec<Range<NumericalParameterRangeBound<T>>> =
             if let Some(mut current) = iter.next().cloned() {
                 let mut res = Vec::with_capacity(included_ranges.len());
                 loop {
@@ -291,74 +290,88 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 Vec::new()
             };
 
-        let excluded_ranges = excluded_ranges
-            .iter()
-            .filter_map(|exclude| match exclude {
+        // This has a time complexiety of O(included*excluded) because we are linear serching each entry.
+        //But in practice people use so few of these that any sophisticated algorithm is not worth the effort (and would probably even be slower)
+        'outer: for exclude in excluded_ranges {
+            match exclude {
                 ast::NumericalParameterRangeExclude::Range(range_expr) => {
                     let range: Range<NumericalParameterRangeBound<T>> =
                         self.eval_numerical_range_bound(parameter, range_expr)?;
 
-                    let mut found_start = false;
-                    let mut found_end = false;
+                    let mut i = 0;
+                    while i < included_ranges.len() {
+                        if included_ranges[i].contains(&range.start) {
+                            included_ranges.insert(i, included_ranges[i].clone());
+                            included_ranges[i].end = range.start;
+                            i += 1;
 
-                    for included_range in included_ranges.iter() {
-                        found_start = included_range.contains(&range.start);
-                        found_end = included_range.contains(&range.end);
+                            loop {
+                                if included_ranges[i].contains(&range.end) {
+                                    included_ranges[i].start = range.end;
+                                    continue 'outer;
+                                }
+                                included_ranges.remove(i);
+                                if included_ranges.len() > i {
+                                    self.errors.push(Error {
+                                        error_type: Type::ParameterExcludeNotPartOfRange,
+                                        source: self.hir[range_expr.end.bound].source,
+                                    });
+                                    continue 'outer;
+                                }
+                            }
+                        }
+                        i += 1;
                     }
 
-                    if found_start && found_end {
-                        Some(NumericalParameterRangeExclude::Range(range))
-                    } else {
-                        if !found_start {
-                            self.errors.push(Error {
-                                error_type: Type::ParameterExcludeNotPartOfRange,
-                                source: self.hir[range_expr.start.bound].source,
-                            });
-                        }
-
-                        if !found_end {
-                            self.errors.push(Error {
-                                error_type: Type::ParameterExcludeNotPartOfRange,
-                                source: self.hir[range_expr.end.bound].source,
-                            });
-                        }
-
-                        None
-                    }
+                    self.errors.push(Error {
+                        error_type: Type::ParameterExcludeNotPartOfRange,
+                        source: self.hir[range_expr.start.bound]
+                            .source
+                            .extend(self.hir[range_expr.end.bound].source),
+                    });
                 }
 
                 ast::NumericalParameterRangeExclude::Value(expr) => {
                     let res: Result<'tag, T> = self
                         .eval_constant_parameter_expression(parameter, *expr)
                         .and_then(|res| Node::new(res, self.hir[*expr].source).try_into());
+
                     match res {
                         Ok(res) => {
                             let bound = NumericalParameterRangeBound {
                                 inclusive: true,
                                 bound: res.clone(),
                             };
-                            let mut found = false;
-                            for range in included_ranges.iter() {
-                                found = range.contains(&bound)
+
+                            let mut i = 0;
+                            while i < included_ranges.len() {
+                                if included_ranges[i].contains(&bound) {
+                                    included_ranges.insert(i, included_ranges[i].clone());
+
+                                    included_ranges[i].end = NumericalParameterRangeBound {
+                                        inclusive: false,
+                                        bound: res.clone(),
+                                    };
+
+                                    included_ranges[i + 1].start = included_ranges[i].end.clone();
+                                    continue 'outer;
+                                }
+
+                                i += 1;
                             }
 
-                            if !found {
-                                self.errors.push(Error {
-                                    error_type: Type::ParameterExcludeNotPartOfRange,
-                                    source: self.hir[*expr].source,
-                                });
-                            }
-
-                            Some(NumericalParameterRangeExclude::Value(res))
+                            self.errors.push(Error {
+                                error_type: Type::ParameterExcludeNotPartOfRange,
+                                source: self.hir[*expr].source,
+                            });
                         }
                         Err(error) => {
                             self.errors.push(error);
-                            None
                         }
                     }
                 }
-            })
-            .collect();
+            }
+        }
 
         let default_value = if let Some(expr) = self.hir[parameter].contents.default_value {
             match self
@@ -375,7 +388,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             Default::default()
         };
 
-        Some((included_ranges, excluded_ranges, default_value))
+        Some((included_ranges, default_value))
     }
 
     pub fn eval_constant_parameter_expression(

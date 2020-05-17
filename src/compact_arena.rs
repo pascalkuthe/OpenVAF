@@ -1,9 +1,9 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
@@ -43,7 +43,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 
 use ansi_term::Color::*;
-use bitflags::_core::convert::TryFrom;
+use core::convert::TryFrom;
 use log::error;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -306,7 +306,7 @@ impl<'tag, I: Display + Copy + Clone> Display for Idx<'tag, I> {
 /// # Examples
 ///
 /// ```
-///# use {VARF::compact_arena::Idx32, core::mem::size_of};
+///# use {OpenVAF::compact_arena::Idx32, core::mem::size_of};
 /// assert_eq!(size_of::<Idx32<'_>>(), size_of::<u32>());
 /// ```
 pub type Idx32<'tag> = Idx<'tag, u32>;
@@ -317,7 +317,7 @@ pub type Idx32<'tag> = Idx<'tag, u32>;
 /// # Examples:
 ///
 /// ```
-///# use VARF::compact_arena::Idx16;
+///# use OpenVAF::compact_arena::Idx16;
 ///# use std::mem::size_of;
 /// assert_eq!(size_of::<Idx16<'_>>(), size_of::<u16>());
 /// ```
@@ -329,7 +329,7 @@ pub type Idx16<'tag> = Idx<'tag, u16>;
 /// # Examples:
 ///
 /// ```
-///# use {VARF::compact_arena::Idx8, core::mem::size_of};
+///# use {OpenVAF::compact_arena::Idx8, core::mem::size_of};
 /// assert_eq!(size_of::<Idx8<'_>>(), size_of::<u8>());
 /// ```
 pub type Idx8<'tag> = Idx<'tag, u8>;
@@ -893,7 +893,7 @@ macro_rules! mk_tiny_heap_arena {
 /// # Examples
 ///
 /// ```
-///# use VARF::mk_tiny_arena;
+///# use OpenVAF::mk_tiny_arena;
 /// mk_tiny_arena!(arena);
 /// let idx = arena.add(1usize);
 /// assert_eq!(1, arena[idx]);
@@ -929,7 +929,7 @@ macro_rules! mk_tiny_arena {
 /// # Examples
 ///
 /// ```
-///# use VARF::mk_nano_arena;
+///# use OpenVAF::mk_nano_arena;
 /// mk_nano_arena!(arena);
 /// let idx = arena.add(1usize);
 /// assert_eq!(1, arena[idx]);

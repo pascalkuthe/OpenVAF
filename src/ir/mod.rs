@@ -1,9 +1,9 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
@@ -63,9 +63,9 @@ pub mod mir;
 /// ## Adding an attriubte to an ast and reading it using its ID
 ///
 /// ```
-/// # use VARF::ir::{Node, Attribute};
-/// # use VARF::ir::ast::Statement;
-/// # use VARF::symbol::Ident;
+/// # use OpenVAF::ir::{Node, Attribute};
+/// # use OpenVAF::ir::ast::Statement;
+/// # use OpenVAF::symbol::Ident;
 /// mk_ast!(ast);
 /// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
 /// assert_eq!(ast[id].name,Ident::from_str("foo"));
@@ -85,9 +85,9 @@ pub trait SafeRangeCreation<Key: Copy + Clone> {
     ///
     /// # Examples
     /// ```
-    /// # use VARF::ir::{Node, Attribute};
-    /// # use VARF::ir::ast::Statement;
-    /// # use VARF::symbol::Ident;
+    /// # use OpenVAF::ir::{Node, Attribute};
+    /// # use OpenVAF::ir::ast::Statement;
+    /// # use OpenVAF::symbol::Ident;
     /// mk_ast!(ast);
     /// let foo = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
     /// let bar = ast.push(Attribute{name: Ident::from_str("bar"),value:None });
@@ -111,9 +111,9 @@ pub trait SafeRangeCreation<Key: Copy + Clone> {
     ///
     /// # Examples
     /// ```
-    /// # use VARF::ir::{Node, Attribute};
-    /// # use VARF::ir::ast::Statement;
-    /// # use VARF::symbol::Ident;
+    /// # use OpenVAF::ir::{Node, Attribute};
+    /// # use OpenVAF::ir::ast::Statement;
+    /// # use OpenVAF::symbol::Ident;
     /// mk_ast!(ast);
     /// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
     /// let range = ast.full_range();

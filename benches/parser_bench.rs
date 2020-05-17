@@ -3,7 +3,7 @@ use std::path::Path;
 use bumpalo::Bump;
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use VARF::mk_ast;
+use OpenVAF::mk_ast;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("hicum", |b| b.iter_with_large_drop(|| hicum()));

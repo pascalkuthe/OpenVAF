@@ -1,9 +1,9 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
@@ -64,7 +64,7 @@ impl<'tag, 'lt> Fold<'tag, 'lt> {
 
 bitflags! {
     /// The Verilog AMS standard uses multiple different grammar rules to enfoce that constants/analog exprerssions only contain items valid in their context
-    /// VARF uses flags stored inside this struct instead during the AST to MIR folding process in this module
+    /// OpenVAF uses flags stored inside this struct instead during the AST to MIR folding process in this module
     pub struct VerilogContext: u8{
         const constant = 0b0000_0001;
         const conditional = 0b0000_0010;

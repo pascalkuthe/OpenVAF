@@ -1,9 +1,9 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
@@ -13,7 +13,7 @@ use crate::ir::BuiltInFunctionCall1p::*;
 use crate::ir::BuiltInFunctionCall2p::*;
 use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, Push};
 use crate::ir::{ExpressionId, Node};
-use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken, UnexpectedTokens};
+use crate::parser::error::Type::{UnexpectedEof, UnexpectedTokens};
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
 use crate::parser::primaries::{

@@ -1,9 +1,9 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
@@ -174,7 +174,7 @@ pub struct Condition<'mir> {
     pub else_statement: SafeRange<StatementId<'mir>>,
 }*/
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Parameter {
     pub name: Ident,
     pub parameter_type: ParameterType,
@@ -183,13 +183,11 @@ pub struct Parameter {
 #[derive(Clone, Debug)]
 pub enum ParameterType {
     Integer {
-        included_ranges: Vec<Range<NumericalParameterRangeBound<i64>>>,
-        excluded_ranges: Vec<NumericalParameterRangeExclude<i64>>,
+        valid_ranges: Vec<Range<NumericalParameterRangeBound<i64>>>,
         default_value: i64,
     },
     Real {
-        included_ranges: Vec<Range<NumericalParameterRangeBound<f64>>>,
-        excluded_ranges: Vec<NumericalParameterRangeExclude<f64>>,
+        valid_ranges: Vec<Range<NumericalParameterRangeBound<f64>>>,
         default_value: f64,
     },
     String(

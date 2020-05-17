@@ -1,9 +1,9 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
@@ -38,7 +38,6 @@ use crate::ir::{Push, SafeRangeCreation};
 use crate::mir::Attribute;
 use crate::mir::*;
 use crate::SourceMap;
-use bitflags::_core::cell::RefCell;
 
 pub mod control_flow;
 pub mod derivatives;
@@ -177,16 +176,14 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
                     {
                         ParameterType::Integer {
-                            included_ranges: type_info.0,
-                            excluded_ranges: type_info.1,
-                            default_value: type_info.2,
+                            valid_ranges: type_info.0,
+                            default_value: type_info.1,
                         }
                     } else {
                         //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
                         // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
                         ParameterType::Integer {
-                            included_ranges: Vec::new(),
-                            excluded_ranges: Vec::new(),
+                            valid_ranges: Vec::new(),
                             default_value: 0,
                         }
                     }
@@ -196,16 +193,14 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
                     {
                         ParameterType::Real {
-                            included_ranges: type_info.0,
-                            excluded_ranges: type_info.1,
-                            default_value: type_info.2,
+                            valid_ranges: type_info.0,
+                            default_value: type_info.1,
                         }
                     } else {
                         //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
                         // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
                         ParameterType::Real {
-                            included_ranges: Vec::new(),
-                            excluded_ranges: Vec::new(),
+                            valid_ranges: Vec::new(),
                             default_value: 0.0,
                         }
                     }

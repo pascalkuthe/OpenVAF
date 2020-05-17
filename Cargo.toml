@@ -1,6 +1,6 @@
 [package]
-name = "VARF"
-version = "0.3.0"
+name = "OpenVAF"
+version = "0.3.1"
 authors = ["DSOM"]
 edition = "2018"
 
@@ -9,7 +9,7 @@ log="0.4.8"
 intrusive-collections = "0.9.0"
 logos = "0.11.4"
 indexmap = "1.3.2"
-ahash = "0.3.4"
+ahash = "0.3.5"
 lazy_static = "1.4.0"
 copyless = "0.1.4"
 bitflags = "1.2.1"
@@ -29,7 +29,7 @@ version = "0.8.0"
 features = ["color"]
 
 [dependencies.bumpalo]
-version = "3.2.1"
+version = "3.3.0"
 features=['collections']
 
 #Logging for tests

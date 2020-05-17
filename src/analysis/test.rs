@@ -1,22 +1,17 @@
 //  * ******************************************************************************************
-//  * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+//  * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
 //  * It is subject to the license terms in the LICENSE file found in the top-level directory
-//  *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
-//  *  No part of VARF, including this file, may be copied, modified, propagated, or
+//  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+//  *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
 use crate::analysis::constant_folding::ConstantFoldState;
 use crate::analysis::data_flow::reaching_variables::ReachableDefinitionsAnalysis;
 use crate::analysis::dominator_tree::DominatorTree;
-use crate::compact_arena::invariant_lifetime;
-use crate::ir::mir::ControlFlowGraph;
 use crate::ir::{ModuleId, SafeRangeCreation, VariableId};
 use crate::simplify;
 use bumpalo::Bump;
-use fixedbitset::FixedBitSet;
-use rustc_hash::FxHashSet;
-use std::fs::File;
 use std::path::Path;
 
 #[test]

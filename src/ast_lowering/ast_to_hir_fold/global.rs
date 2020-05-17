@@ -1,24 +1,22 @@
 /*
  * ******************************************************************************************
- * Copyright (c) 2019 Pascal Kuthe. This file is part of the VARF project.
+ * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
  * It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/VARF/blob/master/LICENSE.
- *  No part of VARF, including this file, may be copied, modified, propagated, or
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
 
 use crate::ast_lowering::ast_to_hir_fold::expression::ConstantExpressionFolder;
-use crate::ast_lowering::ast_to_hir_fold::{
-    Branches, DeclarationHandler, ExpressionFolder, Fold, VerilogContext,
-};
+use crate::ast_lowering::ast_to_hir_fold::{Branches, DeclarationHandler, ExpressionFolder, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, Type};
 use crate::ast_lowering::name_resolution::Resolver;
 use crate::compact_arena::{NanoArena, TinyArena};
 use crate::hir::{Discipline, Nature, Net, Port};
 use crate::ir::{
-    Attribute, AttributeId, DisciplineId, ExpressionId, NatureId, NetId, PortId, VariableId, Write,
+    Attribute, AttributeId, DisciplineId, ExpressionId, NatureId, NetId, PortId, Write,
 };
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
