@@ -13,11 +13,10 @@ use crate::hir_lowering::error::{Error, Type, Warning, WarningType};
 use crate::hir_lowering::HirToMirFold;
 use crate::ir::hir::DisciplineAccess;
 use crate::ir::mir::{ControlFlowGraph, ExpressionId, Statement};
-use crate::ir::Push;
 use crate::ir::{BranchId, Node, ParameterId, VariableId};
+use crate::ir::{PortId, Push, RealExpressionId, StringExpressionId, SystemFunctionCall};
 use crate::mir::control_flow_graph::{BasicBlock, BasicBlockId, Terminator};
 use crate::mir::{IntegerExpression, VariableType};
-use crate::symbol::Ident;
 use crate::{hir, Span};
 use fixedbitset::FixedBitSet as BitSet;
 use rustc_hash::FxHashSet;
@@ -178,13 +177,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     statements.skip_backward(1); //skip start
                 }
 
-                hir::Statement::WhileStart {
-                    while_info_and_start,
-                } => unreachable_unchecked!("Should have been skipped"),
+                hir::Statement::WhileStart { .. } => {
+                    unreachable_unchecked!("Should have been skipped")
+                }
 
-                hir::Statement::ConditionStart {
-                    condition_info_and_end,
-                } => unreachable_unchecked!("Should have been skipped"),
+                hir::Statement::ConditionStart { .. } => {
+                    unreachable_unchecked!("Should have been skipped")
+                }
 
                 hir::Statement::Assignment(attr, dst, val)
                     if matches!(self.mir[dst].contents.variable_type, VariableType::Real(..)) =>
@@ -235,9 +234,12 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                 hir::Statement::Contribute(attr, access, branch, value) => {
                     if let Some(value) = self.fold_read_only_real_expression(value) {
-                        let stmt = self
-                            .mir
-                            .push(Statement::Contribute(attr, access, branch, value));
+                        let stmt = self.mir.push(Statement::Contribute(
+                            attr,
+                            access.into(),
+                            branch,
+                            value,
+                        ));
                         allocator[current_block].statements.push(stmt);
                     }
                 }
@@ -265,7 +267,16 @@ impl<'tag, 'lt> ExtractionDependencyHandler<'tag> for ImplicitDerivativeCheck<'t
 
     fn handle_parameter_reference(&mut self, _: ParameterId<'tag>) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'tag>) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'tag>, _: u8) {}
 
-    fn handle_system_function_call(&mut self, _: Ident) {}
+    fn handle_system_function_call(
+        &mut self,
+        _: SystemFunctionCall<
+            RealExpressionId<'_>,
+            StringExpressionId<'_>,
+            PortId<'_>,
+            ParameterId<'_>,
+        >,
+    ) {
+    }
 }

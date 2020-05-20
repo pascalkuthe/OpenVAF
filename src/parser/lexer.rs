@@ -67,8 +67,21 @@ pub enum Token {
     SimpleIdentifier(FollowedByBracket),
     #[regex(r"\\[[:print:]&&\S]+\s")]
     EscapedIdentifier,
+
     #[regex(r"\$[a-zA-Z0-9_\$][a-zA-Z0-9_\$]*")]
     SystemCall,
+    #[token("$temperature")]
+    Temperature,
+    #[token("$vt")]
+    Vt,
+    #[token("$simparam")]
+    SimParam,
+    #[token("$simparam$str")]
+    SimParamStr,
+    #[token("$port_connected")]
+    PortConnected,
+    #[token("$param_given")]
+    ParamGiven,
 
     //Constants
     #[regex(r#""([^\n"\\]|\\[\\tn")])*""#)]
@@ -295,58 +308,82 @@ pub enum Token {
     #[token("flicker_noise")]
     FlickerNoise,
 
+    #[token("$pow")]
     #[token("pow")]
     Pow,
+    #[token("$sqrt")]
     #[token("sqrt")]
     Sqrt,
 
+    #[token("$hypot")]
     #[token("hypot")]
     Hypot,
+    #[token("$exp")]
     #[token("exp")]
     Exp,
+    #[token("$ln")]
     #[token("ln")]
     Ln,
+    #[token("$log10")]
     #[token("log")]
     Log,
+    #[token("$min")]
     #[token("min")]
     Min,
+    #[token("$max")]
     #[token("max")]
     Max,
+    #[token("$abs")]
     #[token("abs")]
     Abs,
+    #[token("$floor")]
     #[token("floor")]
     Floor,
+    #[token("$ceil")]
     #[token("ceil")]
     Ceil,
 
+    #[token("$sin")]
     #[token("sin")]
     Sin,
+    #[token("$cos")]
     #[token("cos")]
     Cos,
     #[token("tan")]
+    #[token("$tan")]
     Tan,
 
+    #[token("$asin")]
     #[token("asin")]
     ArcSin,
+    #[token("$acos")]
     #[token("acos")]
     ArcCos,
     #[token("atan")]
+    #[token("$atan")]
     ArcTan,
     #[token("atan2")]
+    #[token("$atan2")]
     ArcTan2,
 
     #[token("sinh")]
+    #[token("$sinh")]
     SinH,
     #[token("cosh")]
+    #[token("$cosh")]
     CosH,
     #[token("tanh")]
+    #[token("$tanh")]
     TanH,
 
     #[token("asinh")]
+    #[token("$asinh")]
     ArcSinH,
     #[token("acosh")]
+    #[token("$acosh")]
     ArcCosH,
     #[token("atanh")]
+    #[token("$atanh")]
     ArcTanH,
 
     #[token("from")]
@@ -371,7 +408,7 @@ pub enum Token {
 }
 
 #[inline(always)]
-fn single_line_comment<'source>(lex: &mut logos::Lexer<'source, Token>) -> LineNumber {
+fn single_line_comment<'source>(_: &mut logos::Lexer<'source, Token>) -> LineNumber {
     1
 }
 
@@ -768,6 +805,12 @@ impl Display for Token {
             Token::TimeDerivativeNature => f.write_str("ddt_nature"),
             Token::TimeIntegralNature => f.write_str("idt_nature"),
             Token::Units => f.write_str("units"),
+            Token::Temperature => f.write_str("$temperature"),
+            Token::Vt => f.write_str("$vt"),
+            Token::SimParam => f.write_str("$simparam"),
+            Token::SimParamStr => f.write_str("$simparam$str"),
+            Token::PortConnected => f.write_str("$port_connected"),
+            Token::ParamGiven => f.write_str("$param_given"),
         }
     }
 }

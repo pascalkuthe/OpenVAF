@@ -230,7 +230,7 @@ impl<'tag, T> AttributeNode<'tag, T> {
 #[derive(Copy, Clone, Debug)]
 pub enum BuiltInFunctionCall1p {
     Sqrt,
-    Exp,
+    Exp(bool),
     Ln,
     Log,
     Abs,
@@ -261,4 +261,40 @@ pub enum BuiltInFunctionCall2p {
     Min,
     Max,
     ArcTan2,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum NoiseSource<Expr, Table> {
+    White(Expr),
+    Flicker(Expr, Expr),
+    Table(Table),
+    TableLog(Table),
+}
+impl<Expr, Table> NoiseSource<Expr, Table> {
+    pub fn fold<NewExpr, NewTable>(
+        self,
+        mut fold_expr: impl FnMut(Expr) -> NewExpr,
+        mut fold_table: impl FnMut(Table) -> NewTable,
+    ) -> NoiseSource<NewExpr, NewTable> {
+        match self {
+            NoiseSource::White(expr) => NoiseSource::White(fold_expr(expr)),
+            NoiseSource::Flicker(expr1, expr2) => {
+                NoiseSource::Flicker(fold_expr(expr1), fold_expr(expr2))
+            }
+            NoiseSource::Table(table) => NoiseSource::Table(fold_table(table)),
+            NoiseSource::TableLog(table) => NoiseSource::TableLog(fold_table(table)),
+        }
+    }
+}
+
+// TODO add system to generalise (dynamically add more)
+// TODO add a way to constant fold these
+#[derive(Clone, Debug)]
+pub enum SystemFunctionCall<RealExpr, StrExpr, Port, Parameter> {
+    Temperature,
+    Vt(Option<RealExpr>),
+    Simparam(StrExpr, Option<RealExpr>),
+    SimparamStr(StrExpr),
+    PortConnected(Port),
+    ParameterGiven(Parameter),
 }

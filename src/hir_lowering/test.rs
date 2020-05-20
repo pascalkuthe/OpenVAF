@@ -20,7 +20,7 @@ use crate::ir::SafeRangeCreation;
 #[test]
 pub fn schemantic() -> Result<(), ()> {
     fern::Dispatch::new()
-        .format(|out, message, record| out.finish(*message))
+        .format(|out, message, _record| out.finish(*message))
         .level(log::LevelFilter::Info)
         .chain(std::io::stderr())
         .apply();
@@ -52,7 +52,7 @@ pub fn bjt() -> Result<(), ()> {
 #[test]
 pub fn linear() -> Result<(), ()> {
     fern::Dispatch::new()
-        .format(|out, message, record| out.finish(*message))
+        .format(|out, message, _| out.finish(*message))
         .level(log::LevelFilter::Info)
         .chain(std::io::stderr())
         .apply();
@@ -86,10 +86,11 @@ pub fn linear() -> Result<(), ()> {
     assert_eq!(net.signed, false);
     assert_eq!(hir[net.discipline].contents.name.as_str(), "electrical");
     assert_eq!(net.net_type, NetType::UNDECLARED);
-    let mir = hir.lower_and_print_errors(source_map, true).ok_or(())?;
+    let _mir = hir.lower_and_print_errors(source_map, true).ok_or(())?;
 
     Ok(())
 }
+/* TODO figure out how to handle comment new lines
 #[test]
 pub fn bjt() -> Result<(), ()> {
     fern::Dispatch::new()
@@ -109,11 +110,12 @@ pub fn bjt() -> Result<(), ()> {
         .ok_or(())?;
 
     Ok(())
-}
+}*/
+
 #[test]
 pub fn hl2() -> Result<(), ()> {
     fern::Dispatch::new()
-        .format(|out, message, record| out.finish(*message))
+        .format(|out, message, _| out.finish(*message))
         .level(log::LevelFilter::Info)
         .chain(std::io::stderr())
         .apply();

@@ -314,5 +314,11 @@ pub enum Primary<'hir> {
         ExpressionId<'hir>,
     ),
     FunctionCall(FunctionId<'hir>, Vec<ExpressionId<'hir>>),
-    SystemFunctionCall(Ident /*TODO args*/),
+    SystemFunctionCall(
+        SystemFunctionCall<ExpressionId<'hir>, ExpressionId<'hir>, PortId<'hir>, ParameterId<'hir>>,
+    ),
+    Noise(
+        NoiseSource<ExpressionId<'hir>, ()>,
+        Option<CompressedRange<'hir>>,
+    ),
 }

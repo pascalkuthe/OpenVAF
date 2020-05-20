@@ -27,7 +27,7 @@ use crate::Ast;
 #[test]
 pub fn module() -> Result<(), ()> {
     fern::Dispatch::new()
-        .format(|out, message, record| out.finish(*message))
+        .format(|out, message, _| out.finish(*message))
         .level(log::LevelFilter::Info)
         .chain(std::io::stderr())
         .apply();
@@ -136,7 +136,7 @@ pub fn module() -> Result<(), ()> {
 #[test]
 pub fn branch() -> Result<(), ()> {
     fern::Dispatch::new()
-        .format(|out, message, record| out.finish(*message))
+        .format(|out, message, _| out.finish(*message))
         .level(log::LevelFilter::Info)
         .chain(std::io::stderr())
         .apply();

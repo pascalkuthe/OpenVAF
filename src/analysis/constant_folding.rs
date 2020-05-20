@@ -285,7 +285,7 @@ impl<'tag> Mir<'tag> {
                 match call {
                     BuiltInFunctionCall1p::Ln => arg.ln(),
                     BuiltInFunctionCall1p::Sqrt => arg.sqrt(),
-                    BuiltInFunctionCall1p::Exp => arg.exp(),
+                    BuiltInFunctionCall1p::Exp(_) /* Whether this is a limexp or exp doesnt matter for constant eval*/ => arg.exp(),
                     BuiltInFunctionCall1p::Log => arg.log10(),
                     BuiltInFunctionCall1p::Abs => arg.abs(),
                     BuiltInFunctionCall1p::Floor => arg.floor(),
@@ -329,10 +329,19 @@ impl<'tag> Mir<'tag> {
                 self.int_constant_fold(expr, resolver, write_intermediate)? as f64
             }
 
-            //definitely not doing constant functions. Temperature/Sim parameters/Branches may be an option in the future if there is any use for it
-            RealExpression::SystemFunctionCall(_)
-            | RealExpression::BranchAccess(_, _)
-            | RealExpression::FunctionCall(_, _) => return None,
+            RealExpression::Vt(Some(temp)) => {
+                let temp = self.real_constant_fold(temp, resolver, write_intermediate)?;
+                //TODO abstract over system function calls
+                return None;
+            }
+
+            //Temperature/Sim parameters/Branches may be added in the future if there is any demand for it but it doesnt seem useful to me
+            RealExpression::Temperature
+            | RealExpression::SimParam(_, _)
+            | RealExpression::Vt(None)
+            | RealExpression::BranchAccess(_, _, _)
+            | RealExpression::FunctionCall(_, _)
+            | RealExpression::Noise(_, _) => return None,
         };
         if write_intermediate {
             self[expr].contents = RealExpression::Literal(res);
@@ -607,7 +616,10 @@ impl<'tag> Mir<'tag> {
                 .real_constant_fold(val, resolver, write_intermediate)?
                 .round() as i64,
 
-            IntegerExpression::NetReference(_)
+            //TODO system function call constant fold
+            IntegerExpression::PortConnected(_)
+            | IntegerExpression::ParamGiven(_)
+            | IntegerExpression::NetReference(_)
             | IntegerExpression::PortReference(_)
             | IntegerExpression::FunctionCall(_, _) => return None,
         };
@@ -641,6 +653,8 @@ impl<'tag> Mir<'tag> {
                     false_val?
                 }
             }
+            // TODO system function call constant fold
+            StringExpression::SimParam(_) => return None,
         };
         if write_intermediate {
             self[expr].contents = StringExpression::Literal(res);

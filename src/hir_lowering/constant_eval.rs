@@ -37,7 +37,6 @@ use crate::ir::BuiltInFunctionCall2p::*;
 use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, ExpressionId, Node, ParameterId};
 use crate::mir::*;
 use crate::Span;
-use core::mem::replace;
 
 #[derive(Copy, Clone)]
 pub enum Value<'tag> {
@@ -472,7 +471,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     .as_real(self.hir[arg].source)?;
                 match call {
                     Sqrt => arg.sqrt(),
-                    Exp => arg.exp(),
+                    Exp(_)/* Whether this is a limexp or exp doesnt matter for constant eval*/ => arg.exp(),
                     Ln => arg.ln(),
                     Log => arg.log10(),
                     Abs => unreachable_unchecked!("Previous match"),
@@ -674,7 +673,8 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             | Expression::Primary(Primary::NetReference(_))
             | Expression::Primary(Primary::PortReference(_))
             | Expression::Primary(Primary::BranchAccess(_, _))
-            | Expression::Primary(Primary::SystemFunctionCall(_)) => {
+            | Expression::Primary(Primary::SystemFunctionCall(_))
+            | Expression::Primary(Primary::Noise(_,_)) => {
                 unreachable_unchecked!("constant checking")
             }
 

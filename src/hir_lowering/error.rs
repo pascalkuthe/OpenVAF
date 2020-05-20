@@ -25,6 +25,7 @@ pub type Result<'hir, T = ()> = std::result::Result<T, Error<'hir>>;
 #[derive(Clone, Debug)]
 pub enum Type<'hir> {
     ExpectedReal,
+    ExpectedString,
     CannotCompareStringToNumber,
     CondtionTypeMissmatch,
     ExpectedInteger,
@@ -34,6 +35,8 @@ pub enum Type<'hir> {
     ExpectedNumericParameter(ParameterId<'hir>),
     ParameterDefinedAfterConstantReference(ParameterId<'hir>),
     InvalidParameterBound,
+    DerivativeNotDefined,
+    PartialDerivativeOfTimeDerivative,
     OnlyNumericExpressionsCanBeDerived,
     ParameterExcludeNotPartOfRange,
     ImplicitSolverDeltaIsNotAValidString,
@@ -57,6 +60,32 @@ impl<'tag> Error<'tag> {
         };
 
         match self.error_type {
+            Type::ExpectedString => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Expected string valued expression"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Expected string",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
+            }
+
             Type::ExpectedReal => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let snippet = Snippet {
@@ -528,6 +557,63 @@ impl<'tag> Error<'tag> {
                 let display_list = DisplayList::from(snippet);
                 error!("{}", display_list);
             }
+            Type::DerivativeNotDefined => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(
+                            "Derivative of expression whose derivative is not defined is required",
+                        ),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Derivative is not defined",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
+            }
+            Type::PartialDerivativeOfTimeDerivative => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                footer.push(Annotation{
+                    id: None,
+                    label: Some("Partial derivatives of branch time derivatives are not possible because time derivatives of branches are calculated numerically by the Simulator"),
+                    annotation_type: AnnotationType::Info
+                });
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Partial derivative of branch time derivatives are not allowed"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Attempted to take partial derivative of the time derivative of this branch access",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                error!("{}", display_list);
+            }
         };
     }
 }
@@ -535,6 +621,7 @@ impl<'tag> Error<'tag> {
 pub enum WarningType<'hir> {
     ImplicitDerivative(VariableId<'hir>),
     SpecifiedDeltaIsNotDerived(Symbol),
+    StandardNatureConstants(&'static str), // warn!("{}  using NISTQ 2010 for P_Q and P_K. If this doesnt work for you please open an issue");
 }
 impl<'tag> Warning<'tag> {
     pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
@@ -612,6 +699,40 @@ impl<'tag> Warning<'tag> {
                         annotations: vec![SourceAnnotation {
                             range,
                             label: inline_label.as_str(),
+                            annotation_type: AnnotationType::Warning,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                warn!("{}", display_list);
+            }
+            WarningType::StandardNatureConstants(occurance) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let main_label = format!(
+                    "{}. To calculate this the NIST2010 physical constants are used",
+                    occurance
+                );
+                footer.push(Annotation{
+                    id: None,
+                    label: Some("This may cause issues if you use different physical constants. Please open an issue if this causes a problem for you"),
+                    annotation_type: AnnotationType::Note
+                });
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(main_label.as_str()),
+                        annotation_type: AnnotationType::Warning,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "NIST2010 physical constants are used",
                             annotation_type: AnnotationType::Warning,
                         }],
                         fold: false,

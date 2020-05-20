@@ -556,7 +556,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             source: decl_source,
             line,
         };
-        if let Some(old) = self.macros.insert(name, maco_decl) {
+        if let Some(_old) = self.macros.insert(name, maco_decl) {
             /*Warning {
                 error_type: WarningType::MacroOverwritten(old.span),
                 source: decl_range,

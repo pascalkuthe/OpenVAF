@@ -358,7 +358,7 @@ impl<'tag> Error<'tag> {
                         Slice {
                             source: declaration_line,
                             line_start: declaration_line_number as usize,
-                            origin: Some(&*other_declaration_origin),
+                            origin: Some(&*declaration_origin),
                             annotations: vec![SourceAnnotation {
                                 range: declaration_range,
                                 label: &inline_label,

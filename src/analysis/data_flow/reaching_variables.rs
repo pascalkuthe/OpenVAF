@@ -14,10 +14,12 @@ use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
 use crate::ir::hir::DisciplineAccess;
 use crate::ir::mir::control_flow_graph::{BasicBlockId, Terminator};
 use crate::ir::mir::ControlFlowGraph;
-use crate::ir::{BranchId, ParameterId, SafeRangeCreation, StatementId, VariableId};
+use crate::ir::{
+    BranchId, ParameterId, PortId, RealExpressionId, SafeRangeCreation, StatementId,
+    StringExpressionId, SystemFunctionCall, VariableId,
+};
 use crate::mir::Mir;
 use crate::mir::Statement;
-use crate::symbol::Ident;
 use fixedbitset::FixedBitSet as BitSet;
 
 pub struct UseDefGraph<'mir, 'cfg> {
@@ -277,9 +279,18 @@ impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir> for UseDefBuilder<'lt, '
 
     fn handle_parameter_reference(&mut self, _: ParameterId<'mir>) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>, _: u8) {}
 
-    fn handle_system_function_call(&mut self, _: Ident) {}
+    fn handle_system_function_call(
+        &mut self,
+        _: SystemFunctionCall<
+            RealExpressionId<'mir>,
+            StringExpressionId<'mir>,
+            PortId<'mir>,
+            ParameterId<'mir>,
+        >,
+    ) {
+    }
 }
 
 struct UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
@@ -298,7 +309,16 @@ impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir>
 
     fn handle_parameter_reference(&mut self, _: ParameterId<'mir>) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>, _: u8) {}
 
-    fn handle_system_function_call(&mut self, _: Ident) {}
+    fn handle_system_function_call(
+        &mut self,
+        _: SystemFunctionCall<
+            RealExpressionId<'mir>,
+            StringExpressionId<'mir>,
+            PortId<'mir>,
+            ParameterId<'mir>,
+        >,
+    ) {
+    }
 }

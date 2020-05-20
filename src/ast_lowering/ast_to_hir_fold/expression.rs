@@ -19,9 +19,8 @@ use crate::hir::{Expression, Primary};
 use crate::hir_lowering::derivatives::Unknown;
 use crate::ir::ast::Branch;
 use crate::ir::hir::DisciplineAccess;
-use crate::ir::Push;
-use crate::ir::{BranchId, DisciplineId, ExpressionId, Node};
-use crate::symbol::keywords;
+use crate::ir::{BranchId, DisciplineId, ExpressionId, Node, SystemFunctionCall};
+use crate::ir::{NoiseSource, Push};
 use crate::{ast, hir, Span};
 
 pub trait ExpressionFolder<'tag, 'lt> {
@@ -154,7 +153,9 @@ impl<'tag, 'lt> Fold<'tag, 'lt> {
                 return None;
             }
             ast::Expression::Primary(ast::Primary::BranchAccess(_, _))
-            | ast::Expression::Primary(ast::Primary::DerivativeByBranch(_, _, _)) => {
+            | ast::Expression::Primary(ast::Primary::DerivativeByBranch(_, _, _))
+            | ast::Expression::Primary(ast::Primary::DerivativeByTime(_))
+            | ast::Expression::Primary(ast::Primary::Noise(_, _)) => {
                 self.error(Error {
                     source: expression.source,
                     error_type: Type::NotAllowedInConstantContext(
@@ -262,6 +263,28 @@ impl<'tag, 'lt, 'fold> ExpressionFolder<'tag, 'fold> for StatementExpressionFold
                     contents: Expression::Primary(Primary::BranchAccess(nature, branch_access)),
                 })
             }
+            ast::Expression::Primary(ast::Primary::DerivativeByTime(expr)) => {
+                let expr = self.fold(expr, base)?;
+                base.hir.push(Node {
+                    source: expression.source,
+                    contents: Expression::Primary(Primary::Derivative(expr, Unknown::Time)),
+                })
+            }
+
+            ast::Expression::Primary(ast::Primary::Noise(source, src)) => {
+                let source = match source {
+                    NoiseSource::White(expr) => NoiseSource::White(self.fold(expr, base)?),
+                    NoiseSource::Flicker(expr1, expr2) => {
+                        NoiseSource::Flicker(self.fold(expr1, base)?, self.fold(expr2, base)?)
+                    }
+                    NoiseSource::Table(_) | NoiseSource::TableLog(_) => todo!(),
+                };
+                base.hir.push(Node {
+                    source: expression.source,
+                    contents: Expression::Primary(Primary::Noise(source, src)),
+                })
+            }
+
             ast::Expression::Primary(ast::Primary::DerivativeByBranch(
                 expr_to_derive,
                 ref nature,
@@ -447,7 +470,7 @@ impl<'tag, 'lt, 'fold> ExpressionFolder<'tag, 'fold> for StatementExpressionFold
                 return None;
             }
 
-            ast::Expression::Primary(ast::Primary::SystemFunctionCall(call)) => {
+            ast::Expression::Primary(ast::Primary::SystemFunctionCall(ref call)) => {
                 if self.state.contains(VerilogContext::constant) {
                     base.error(Error {
                         source: expression.source,
@@ -457,20 +480,35 @@ impl<'tag, 'lt, 'fold> ExpressionFolder<'tag, 'fold> for StatementExpressionFold
                     });
                     return None;
                 }
-                if call.name == keywords::TEMPERATURE {
-                    //todo more calls
-                    base.hir.push(Node::new(
-                        Expression::Primary(Primary::SystemFunctionCall(call)),
-                        expression.source,
-                    ))
-                } else {
-                    base.error(Error {
-                        error_type: Type::NotFound(call.name),
-                        source: call.span,
-                    });
-                    return None;
-                }
-                //TODO args
+
+                let new_call = match call {
+                    SystemFunctionCall::Temperature => SystemFunctionCall::Temperature,
+                    SystemFunctionCall::Vt(temp) => {
+                        SystemFunctionCall::Vt(temp.map(|temp| self.fold(temp, base)).flatten())
+                    }
+                    SystemFunctionCall::Simparam(name, default) => {
+                        let default = default.map(|default| self.fold(default, base)).flatten();
+                        SystemFunctionCall::Simparam(self.fold(*name, base)?, default)
+                    }
+                    SystemFunctionCall::SimparamStr(name) => {
+                        SystemFunctionCall::SimparamStr(self.fold(*name, base)?)
+                    }
+                    SystemFunctionCall::PortConnected(ref port) => {
+                        let mut res = None;
+                        resolve_hierarchical!(base; port as Port(port) => {res = Some(SystemFunctionCall::PortConnected(port))});
+                        res?
+                    }
+                    SystemFunctionCall::ParameterGiven(ref parameter) => {
+                        let mut res = None;
+                        resolve_hierarchical!(base; parameter as Parameter(param) => {res = Some(SystemFunctionCall::ParameterGiven(param))});
+                        res?
+                    }
+                };
+
+                base.hir.push(Node {
+                    source: expression.source,
+                    contents: Expression::Primary(Primary::SystemFunctionCall(new_call)),
+                })
             }
 
             _ => base.fold_expression(expression_id, self)?,

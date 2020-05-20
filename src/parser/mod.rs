@@ -266,7 +266,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
     #[inline]
     pub fn expect_lookahead(&mut self, token: Token) -> Result {
-        let (found, source) = self.look_ahead()?;
+        let (found, _source) = self.look_ahead()?;
         if found != token {
             Err(Error {
                 source: Span::new_short_span(self.preprocessor.current_start(), unsafe {

@@ -399,7 +399,9 @@ pub enum Primary<'ast> {
     String(CompressedRange<'ast>),
     VariableOrNetReference(HierarchicalId),
     FunctionCall(HierarchicalId, Vec<ExpressionId<'ast>>),
-    SystemFunctionCall(Ident /*TODO args*/),
+    SystemFunctionCall(
+        SystemFunctionCall<ExpressionId<'ast>, ExpressionId<'ast>, HierarchicalId, HierarchicalId>,
+    ),
     BranchAccess(Ident, Node<BranchAccess>),
     BuiltInFunctionCall1p(BuiltInFunctionCall1p, ExpressionId<'ast>),
     BuiltInFunctionCall2p(
@@ -407,43 +409,13 @@ pub enum Primary<'ast> {
         ExpressionId<'ast>,
         ExpressionId<'ast>,
     ),
+    Noise(
+        NoiseSource<ExpressionId<'ast>, ()>,
+        Option<CompressedRange<'ast>>,
+    ),
     DerivativeByBranch(ExpressionId<'ast>, Ident, Node<BranchAccess>),
-    // DerivativeByTime(ExpressionId<'ast>) TODO time derivative
+    DerivativeByTime(ExpressionId<'ast>),
 }
-
-// #[derive(Copy, Clone, Debug)]
-// pub enum BuiltInFunctionCall<'ast> {
-//     Pow(ExpressionId<'ast>, ExpressionId<'ast>),
-//     Sqrt(ExpressionId<'ast>),
-//
-//     Hypot(ExpressionId<'ast>, ExpressionId<'ast>),
-//     Exp(ExpressionId<'ast>),
-//     Ln(ExpressionId<'ast>),
-//     Log(ExpressionId<'ast>),
-//
-//     Min(ExpressionId<'ast>, ExpressionId<'ast>),
-//     Max(ExpressionId<'ast>, ExpressionId<'ast>),
-//     Abs(ExpressionId<'ast>),
-//     Floor(ExpressionId<'ast>),
-//     Ceil(ExpressionId<'ast>),
-//
-//     Sin(ExpressionId<'ast>),
-//     Cos(ExpressionId<'ast>),
-//     Tan(ExpressionId<'ast>),
-//
-//     ArcSin(ExpressionId<'ast>),
-//     ArcCos(ExpressionId<'ast>),
-//     ArcTan(ExpressionId<'ast>),
-//     ArcTan2(ExpressionId<'ast>, ExpressionId<'ast>),
-//
-//     SinH(ExpressionId<'ast>),
-//     CosH(ExpressionId<'ast>),
-//     TanH(ExpressionId<'ast>),
-//
-//     ArcSinH(ExpressionId<'ast>),
-//     ArcCosH(ExpressionId<'ast>),
-//     ArcTanH(ExpressionId<'ast>),
-// }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperator {
