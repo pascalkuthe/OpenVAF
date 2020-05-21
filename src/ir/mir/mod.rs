@@ -80,9 +80,32 @@ impl<'tag> Mir<'tag> {
     pub fn get_str(&self, range: CompressedRange<'tag>) -> &str {
         &self.string_literals[range]
     }
-
     pub fn get_str_mut(&mut self, range: CompressedRange<'tag>) -> &mut str {
         &mut self.string_literals[range]
+    }
+    pub fn parameter_count(&self) -> u32 {
+        self.parameters.len
+    }
+    pub fn variable_count(&self) -> u32 {
+        self.variables.len
+    }
+    pub fn branch_count(&self) -> u16 {
+        self.branches.len
+    }
+    pub fn net_count(&self) -> u32 {
+        self.nets.len
+    }
+    pub fn port_count(&self) -> u16 {
+        self.ports.len
+    }
+    pub fn module_count(&self) -> u16 {
+        self.modules.len
+    }
+    pub fn natures_count(&self) -> u16 {
+        self.natures.len
+    }
+    pub fn discipline_count(&self) -> u16 {
+        self.disciplines.len
     }
 }
 
