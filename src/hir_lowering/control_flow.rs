@@ -6,7 +6,7 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::analysis::{DominatorTree, ExtractionDependencyHandler};
+use crate::analysis::{DependencyHandler, DominatorTree};
 use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
 use crate::hir::Block;
 use crate::hir_lowering::error::{Error, Type, Warning, WarningType};
@@ -255,7 +255,7 @@ struct ImplicitDerivativeCheck<'tag, 'lt> {
     modified_variables: FxHashSet<VariableId<'tag>>,
     condition_span: Span,
 }
-impl<'tag, 'lt> ExtractionDependencyHandler<'tag> for ImplicitDerivativeCheck<'tag, 'lt> {
+impl<'tag, 'lt> DependencyHandler<'tag> for ImplicitDerivativeCheck<'tag, 'lt> {
     fn handle_variable_reference(&mut self, var: VariableId<'tag>) {
         if self.modified_variables.remove(&var) {
             self.warnings.push(Warning {

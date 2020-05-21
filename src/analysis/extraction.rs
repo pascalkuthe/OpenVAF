@@ -173,7 +173,7 @@ impl<'tag> Mir<'tag> {
     pub fn track_expression(
         &self,
         expr: ExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match expr {
             ExpressionId::Real(expr) => self.track_real_expression(expr, dependency_handler),
@@ -185,7 +185,7 @@ impl<'tag> Mir<'tag> {
     pub fn track_real_expression(
         &self,
         expr: RealExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match self[expr].contents {
             RealExpression::Literal(_) => (),
@@ -242,7 +242,7 @@ impl<'tag> Mir<'tag> {
     pub fn track_integer_expression(
         &self,
         expr: IntegerExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match self[expr].contents {
             IntegerExpression::Literal(_) => (),
@@ -301,7 +301,7 @@ impl<'tag> Mir<'tag> {
     pub fn track_string_expression(
         &self,
         expr: StringExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match self[expr].contents {
             StringExpression::Literal(val) => (),
@@ -322,7 +322,7 @@ impl<'tag> Mir<'tag> {
     }
 }
 
-pub trait ExtractionDependencyHandler<'tag> {
+pub trait DependencyHandler<'tag> {
     fn handle_variable_reference(&mut self, var: VariableId<'tag>);
     fn handle_parameter_reference(&mut self, param: ParameterId<'tag>);
     fn handle_branch_reference(
@@ -342,7 +342,7 @@ pub trait ExtractionDependencyHandler<'tag> {
     );
 }
 
-impl ExtractionDependencyHandler<'_> for () {
+impl DependencyHandler<'_> for () {
     fn handle_variable_reference(&mut self, _: VariableId<'_>) {}
 
     fn handle_parameter_reference(&mut self, _: ParameterId<'_>) {}

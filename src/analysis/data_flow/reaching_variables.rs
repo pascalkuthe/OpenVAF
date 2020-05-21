@@ -9,7 +9,7 @@
 use crate::analysis::data_flow::framework::{
     Analysis, DataFlowGraph, Engine, ForwardEngine, GenKillAnalysis, GenKillEngine, GenKillSet,
 };
-use crate::analysis::ExtractionDependencyHandler;
+use crate::analysis::DependencyHandler;
 use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
 use crate::ir::hir::DisciplineAccess;
 use crate::ir::mir::control_flow_graph::{BasicBlockId, Terminator};
@@ -269,7 +269,7 @@ struct UseDefBuilder<'lt, 'mir, 'cfg> {
     use_stmt: StatementId<'mir>,
 }
 
-impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir> for UseDefBuilder<'lt, 'mir, 'cfg> {
+impl<'lt, 'mir, 'cfg> DependencyHandler<'mir> for UseDefBuilder<'lt, 'mir, 'cfg> {
     fn handle_variable_reference(&mut self, var: VariableId<'mir>) {
         self.graph.uses[self.use_stmt.unwrap()]
             .0
@@ -298,9 +298,7 @@ struct UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
     use_terminator_block: BasicBlockId<'cfg>,
 }
 
-impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir>
-    for UseDefTerminatorBuilder<'lt, 'mir, 'cfg>
-{
+impl<'lt, 'mir, 'cfg> DependencyHandler<'mir> for UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
     fn handle_variable_reference(&mut self, var: VariableId<'mir>) {
         self.graph.terminator_uses[self.use_terminator_block]
             .0
