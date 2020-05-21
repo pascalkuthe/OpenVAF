@@ -214,18 +214,18 @@ pub struct Module<'ast> {
 pub struct Parameter<'ast> {
     pub name: Ident,
     pub parameter_type: ParameterType<'ast>,
-    pub default_value: Option<ExpressionId<'ast>>,
+    pub default_value: ExpressionId<'ast>,
 }
 
 #[derive(Clone, Debug)]
 pub enum ParameterType<'ast> {
     Numerical {
         parameter_type: VariableType,
-        included_ranges: Vec<Range<NumericalParameterRangeBound<ExpressionId<'ast>>>>,
-        excluded_ranges: Vec<NumericalParameterRangeExclude<ExpressionId<'ast>>>,
+        from_ranges: Vec<Range<NumericalParameterRangeBound<ExpressionId<'ast>>>>,
+        excluded: Vec<NumericalParameterRangeExclude<ExpressionId<'ast>>>,
     },
     String(
-        //TODO string parameters
+        //TODO string parameter from/exlude
     ),
 }
 

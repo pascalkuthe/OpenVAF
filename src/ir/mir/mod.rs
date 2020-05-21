@@ -193,16 +193,16 @@ pub struct Parameter<'tag> {
 #[derive(Clone, Debug)]
 pub enum ParameterType<'tag> {
     Integer {
-        included_ranges: Vec<Range<NumericalParameterRangeBound<IntegerExpressionId<'tag>>>>,
-        excluded_ranges: Vec<NumericalParameterRangeExclude<IntegerExpressionId<'tag>>>,
-        default_value: Option<IntegerExpressionId<'tag>>,
+        from_ranges: Vec<Range<NumericalParameterRangeBound<IntegerExpressionId<'tag>>>>,
+        excluded: Vec<NumericalParameterRangeExclude<IntegerExpressionId<'tag>>>,
+        default_value: IntegerExpressionId<'tag>,
     },
     Real {
-        included_ranges: Vec<Range<NumericalParameterRangeBound<RealExpressionId<'tag>>>>,
-        excluded_ranges: Vec<NumericalParameterRangeExclude<RealExpressionId<'tag>>>,
-        default_value: Option<RealExpressionId<'tag>>,
+        from_ranges: Vec<Range<NumericalParameterRangeBound<RealExpressionId<'tag>>>>,
+        excluded: Vec<NumericalParameterRangeExclude<RealExpressionId<'tag>>>,
+        default_value: RealExpressionId<'tag>,
     },
-    String(Option<StringExpressionId<'tag>>),
+    String(StringExpressionId<'tag>),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]

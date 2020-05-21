@@ -289,18 +289,21 @@ impl<'tag, 'lt, H: DeclarationHandler<'tag>> Statements<'tag, 'lt, H> {
     }
 
     fn fold_parameter(&mut self, parameter_id: ParameterId<'tag>) {
-        let default_value = self.base.ast[parameter_id]
-            .contents
-            .default_value
-            .and_then(|expr| self.fold_expression(expr));
+        let default_value = self
+            .fold_expression(self.base.ast[parameter_id].contents.default_value)
+            .unwrap_or(unsafe {
+                // This is only a placholder used when folding has failed
+                // This cant be read so its safe
+                ExpressionId::from_raw_index(0)
+            });
 
         if let ParameterType::Numerical {
             parameter_type,
-            ref included_ranges,
-            ref excluded_ranges,
+            ref from_ranges,
+            ref excluded,
         } = self.base.ast[parameter_id].contents.parameter_type
         {
-            let included_ranges = included_ranges
+            let from_ranges = from_ranges
                 .iter()
                 .filter_map(|range| {
                     Some(Range {
@@ -316,7 +319,7 @@ impl<'tag, 'lt, H: DeclarationHandler<'tag>> Statements<'tag, 'lt, H> {
                 })
                 .collect();
 
-            let excluded_ranges = excluded_ranges
+            let excluded = excluded
                 .iter()
                 .filter_map(|exclude| match exclude {
                     NumericalParameterRangeExclude::Value(val) => Some(
@@ -345,8 +348,8 @@ impl<'tag, 'lt, H: DeclarationHandler<'tag>> Statements<'tag, 'lt, H> {
                         default_value,
                         parameter_type: ParameterType::Numerical {
                             parameter_type,
-                            included_ranges,
-                            excluded_ranges,
+                            from_ranges,
+                            excluded,
                         },
                     }),
                 )

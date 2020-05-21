@@ -173,11 +173,11 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             ast::ParameterType::String() => todo!("String parameters"),
             ast::ParameterType::Numerical {
                 parameter_type,
-                ref included_ranges,
-                ref excluded_ranges,
+                ref from_ranges,
+                ref excluded,
             } => match parameter_type {
                 ast::VariableType::INTEGER | ast::VariableType::TIME => {
-                    let included_ranges = included_ranges
+                    let from_ranges = from_ranges
                         .iter()
                         .filter_map(|range| {
                             let start = range.start.try_copy_with(&mut |expr| {
@@ -190,7 +190,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         })
                         .collect();
 
-                    let excluded_ranges = excluded_ranges
+                    let excluded = excluded
                         .iter()
                         .filter_map(|exclude| {
                             exclude
@@ -198,19 +198,23 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         })
                         .collect();
 
-                    let default_value = self.hir[parameter]
-                        .contents
-                        .default_value
-                        .map(|expr| self.fold_read_only_integer_expression(expr))
-                        .flatten();
+                    let default_value = self
+                        .fold_read_only_integer_expression(
+                            self.hir[parameter].contents.default_value,
+                        )
+                        .unwrap_or(unsafe {
+                            // Just a plcaholder so that something can be written in the error case
+                            // This can never be read so its save
+                            IntegerExpressionId::from_raw_index(0)
+                        });
                     ParameterType::Integer {
-                        included_ranges,
-                        excluded_ranges,
+                        from_ranges,
+                        excluded,
                         default_value,
                     }
                 }
                 ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                    let included_ranges = included_ranges
+                    let from_ranges = from_ranges
                         .iter()
                         .filter_map(|range| {
                             let start = range.start.try_copy_with(&mut |expr| {
@@ -223,21 +227,23 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         })
                         .collect();
 
-                    let excluded_ranges = excluded_ranges
+                    let excluded = excluded
                         .iter()
                         .filter_map(|exclude| {
                             exclude.try_clone_with(|expr| self.fold_read_only_real_expression(expr))
                         })
                         .collect();
 
-                    let default_value = self.hir[parameter]
-                        .contents
-                        .default_value
-                        .map(|expr| self.fold_read_only_real_expression(expr))
-                        .flatten();
+                    let default_value = self
+                        .fold_read_only_real_expression(self.hir[parameter].contents.default_value)
+                        .unwrap_or(unsafe {
+                            //Safe in practice but we can make this prettier
+                            //TODO remove unnecessary unsafety
+                            RealExpressionId::from_raw_index(0)
+                        });
                     ParameterType::Real {
-                        included_ranges,
-                        excluded_ranges,
+                        from_ranges,
+                        excluded,
                         default_value,
                     }
                 }

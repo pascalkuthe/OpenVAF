@@ -68,28 +68,20 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     ) -> Result {
         let start = self.preprocessor.current_start();
         let name = self.parse_identifier(false)?;
-        let default_value = if self.look_ahead()?.0 == Token::Assign {
-            self.consume_lookahead();
-            Some(self.parse_expression_id()?)
-        } else {
-            None
-        };
-        let mut included_ranges = Vec::new();
-        let mut excluded_ranges = Vec::new();
+        self.expect(Token::Assign)?;
+        let default_value = self.parse_expression_id()?;
+        let mut from_ranges = Vec::new();
+        let mut excluded = Vec::new();
         loop {
             match self.look_ahead()? {
                 (Token::From, _) => {
                     self.consume_lookahead();
                     match self.next()? {
                         (Token::SquareBracketOpen, _) => {
-                            included_ranges
-                                .alloc()
-                                .init(self.parse_parameter_range(true)?);
+                            from_ranges.alloc().init(self.parse_parameter_range(true)?);
                         }
                         (Token::ParenOpen, _) => {
-                            included_ranges
-                                .alloc()
-                                .init(self.parse_parameter_range(false)?);
+                            from_ranges.alloc().init(self.parse_parameter_range(false)?);
                         }
                         (_, source) => {
                             return Err(Error {
@@ -106,26 +98,20 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     match self.look_ahead()? {
                         (Token::SquareBracketOpen, _) => {
                             self.consume_lookahead();
-                            excluded_ranges
-                                .alloc()
-                                .init(NumericalParameterRangeExclude::Range(
-                                    self.parse_parameter_range(true)?,
-                                ));
+                            excluded.alloc().init(NumericalParameterRangeExclude::Range(
+                                self.parse_parameter_range(true)?,
+                            ));
                         }
                         (Token::ParenOpen, _) => {
                             self.consume_lookahead();
-                            excluded_ranges
-                                .alloc()
-                                .init(NumericalParameterRangeExclude::Range(
-                                    self.parse_parameter_range(false)?,
-                                ));
+                            excluded.alloc().init(NumericalParameterRangeExclude::Range(
+                                self.parse_parameter_range(false)?,
+                            ));
                         }
                         _ => {
-                            excluded_ranges
-                                .alloc()
-                                .init(NumericalParameterRangeExclude::Value(
-                                    self.parse_expression_id()?,
-                                ));
+                            excluded.alloc().init(NumericalParameterRangeExclude::Value(
+                                self.parse_expression_id()?,
+                            ));
                         }
                     }
                 }
@@ -147,8 +133,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 name,
                 parameter_type: ParameterType::Numerical {
                     parameter_type: base_type,
-                    included_ranges,
-                    excluded_ranges,
+                    from_ranges,
+                    excluded,
                 },
                 default_value,
             },
