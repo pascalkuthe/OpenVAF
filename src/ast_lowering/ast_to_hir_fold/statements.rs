@@ -10,10 +10,7 @@
 
 use std::ops::Range;
 
-use crate::ast::{
-    BranchAccess, ModuleItem, NumericalParameterRangeBound, NumericalParameterRangeExclude,
-    Parameter, ParameterType, Variable,
-};
+use crate::ast::{BranchAccess, ModuleItem, Parameter, ParameterType, Variable};
 use crate::ast_lowering::ast_to_hir_fold::expression::StatementExpressionFolder;
 use crate::ast_lowering::ast_to_hir_fold::{
     DeclarationHandler, ExpressionFolder, Fold, VerilogContext,
@@ -24,6 +21,7 @@ use crate::compact_arena::{NanoArena, TinyArena};
 use crate::hir::{Condition, Module, Statement};
 use crate::ir::hir::{DisciplineAccess, WhileLoop};
 use crate::ir::*;
+use crate::ir::{NumericalParameterRangeBound, NumericalParameterRangeExclude};
 use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::Unsupported;
 use crate::symbol::Ident;
@@ -304,41 +302,36 @@ impl<'tag, 'lt, H: DeclarationHandler<'tag>> Statements<'tag, 'lt, H> {
         {
             let included_ranges = included_ranges
                 .iter()
-                .filter_map(
-                    |range| -> Option<Range<NumericalParameterRangeBound<'tag>>> {
-                        Some(Range {
-                            start: NumericalParameterRangeBound {
-                                bound: self.fold_expression(range.start.bound)?,
-                                ..range.start
-                            },
-                            end: NumericalParameterRangeBound {
-                                bound: self.fold_expression(range.end.bound)?,
-                                ..range.end
-                            },
-                        })
-                    },
-                )
+                .filter_map(|range| {
+                    Some(Range {
+                        start: NumericalParameterRangeBound {
+                            bound: self.fold_expression(range.start.bound)?,
+                            ..range.start
+                        },
+                        end: NumericalParameterRangeBound {
+                            bound: self.fold_expression(range.end.bound)?,
+                            ..range.end
+                        },
+                    })
+                })
                 .collect();
 
             let excluded_ranges = excluded_ranges
                 .iter()
-                .filter_map(|exclude| -> Option<NumericalParameterRangeExclude<'tag>> {
-                    match exclude {
-                        NumericalParameterRangeExclude::Value(val) => Some(
-                            NumericalParameterRangeExclude::Value(self.fold_expression(*val)?),
-                        ),
-                        NumericalParameterRangeExclude::Range(range) => {
-                            Some(NumericalParameterRangeExclude::Range(Range {
-                                start: NumericalParameterRangeBound {
-                                    bound: self.fold_expression(range.start.bound)?,
-                                    ..range.start
-                                },
-                                end: NumericalParameterRangeBound {
-                                    bound: self.fold_expression(range.start.bound)?,
-                                    ..range.end
-                                },
-                            }))
-                        }
+                .filter_map(|exclude| match exclude {
+                    NumericalParameterRangeExclude::Value(val) => Some(
+                        NumericalParameterRangeExclude::Value(self.fold_expression(*val)?),
+                    ),
+                    NumericalParameterRangeExclude::Range(range) => {
+                        Some(NumericalParameterRangeExclude::Range(
+                            NumericalParameterRangeBound {
+                                bound: self.fold_expression(range.start.bound)?,
+                                ..range.start
+                            }..NumericalParameterRangeBound {
+                                bound: self.fold_expression(range.start.bound)?,
+                                ..range.end
+                            },
+                        ))
                     }
                 })
                 .collect();

@@ -12,11 +12,6 @@ pub mod control_flow_graph;
 
 pub use control_flow_graph::ControlFlowGraph;
 
-use std::ops::Range;
-use std::ptr::NonNull;
-
-use core::cmp::Ordering;
-
 use crate::analysis::DominatorTree;
 use crate::ast::{Function, UnaryOperator};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
@@ -26,13 +21,16 @@ use crate::ir::ids::StringExpressionId;
 use crate::ir::*;
 use crate::symbol::Ident;
 use crate::Span;
+use bitflags::_core::mem::MaybeUninit;
 use rustc_hash::FxHashMap;
+use std::ops::Range;
+use std::ptr::NonNull;
 
 pub struct Mir<'tag> {
     //TODO unsized
     //TODO configure to use different arena sizes
     //Declarations
-    parameters: TinyArena<'tag, AttributeNode<'tag, Parameter>>,
+    parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
     //    nature: NanoArena<'tag,Nature>
     branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
     nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
@@ -95,10 +93,7 @@ impl_id_type!(VariableId in Mir::variables ->  AttributeNode<'tag,Variable<'tag>
 impl<'tag> Write<VariableId<'tag>> for Mir<'tag> {
     type Data = AttributeNode<'tag, Variable<'tag>>;
     fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
-        unsafe {
-            self.variables
-                .write(index.0, ::core::mem::MaybeUninit::new(value))
-        }
+        unsafe { self.variables.write(index.0, MaybeUninit::new(value)) }
     }
 }
 impl_id_type!(ModuleId in Mir::modules -> AttributeNode<'tag,Module<'tag>>);
@@ -110,7 +105,13 @@ impl_id_type!(IntegerExpressionId in Mir::integer_expressions -> Node<IntegerExp
 impl_id_type!(AttributeId in Mir::attributes -> Attribute<'tag>);
 impl_id_type!(StatementId in Mir::statements -> Statement<'tag>);
 impl_id_type!(NatureId in Mir::natures -> AttributeNode<'tag,Nature<'tag>>);
-impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<'tag,Parameter>);
+impl<'tag> Write<NatureId<'tag>> for Mir<'tag> {
+    type Data = AttributeNode<'tag, Nature<'tag>>;
+    fn write(&mut self, index: NatureId<'tag>, value: Self::Data) {
+        unsafe { self.natures.write(index.0, MaybeUninit::new(value)) }
+    }
+}
+impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<'tag,Parameter<'tag>>);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Variable<'mir> {
@@ -158,62 +159,27 @@ pub enum Statement<'mir> {
     ),
     //  TODO IndirectContribute
     Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
-    //  FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
 }
-
-/*#[derive(Clone, Copy, Debug)]
-pub struct WhileLoop<'mir> {
-    pub condition: IntegerExpressionId<'mir>,
-    pub body: Block<'mir>,
-}
-
-#[derive(Clone)]
-pub struct Condition<'mir> {
-    pub condition: IntegerExpressionId<'mir>,
-    pub if_statements: Block<'mir>,
-    pub else_statement: SafeRange<StatementId<'mir>>,
-}*/
 
 #[derive(Clone, Debug)]
-pub struct Parameter {
+pub struct Parameter<'tag> {
     pub name: Ident,
-    pub parameter_type: ParameterType,
+    pub parameter_type: ParameterType<'tag>,
 }
 
 #[derive(Clone, Debug)]
-pub enum ParameterType {
+pub enum ParameterType<'tag> {
     Integer {
-        valid_ranges: Vec<Range<NumericalParameterRangeBound<i64>>>,
-        default_value: i64,
+        included_ranges: Vec<Range<NumericalParameterRangeBound<IntegerExpressionId<'tag>>>>,
+        excluded_ranges: Vec<NumericalParameterRangeExclude<IntegerExpressionId<'tag>>>,
+        default_value: Option<IntegerExpressionId<'tag>>,
     },
     Real {
-        valid_ranges: Vec<Range<NumericalParameterRangeBound<f64>>>,
-        default_value: f64,
+        included_ranges: Vec<Range<NumericalParameterRangeBound<RealExpressionId<'tag>>>>,
+        excluded_ranges: Vec<NumericalParameterRangeExclude<RealExpressionId<'tag>>>,
+        default_value: Option<RealExpressionId<'tag>>,
     },
-    String(
-        //TODO string parameters
-    ),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct NumericalParameterRangeBound<T> {
-    pub inclusive: bool,
-    pub bound: T,
-}
-
-impl<T: PartialOrd> PartialOrd for NumericalParameterRangeBound<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.bound.partial_cmp(&other.bound) {
-            Some(Ordering::Equal) if self.inclusive != other.inclusive => None,
-            order => order,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum NumericalParameterRangeExclude<T> {
-    Value(T),
-    Range(Range<NumericalParameterRangeBound<T>>),
+    String(Option<StringExpressionId<'tag>>),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -222,6 +188,7 @@ pub enum ExpressionId<'mir> {
     Integer(IntegerExpressionId<'mir>),
     String(StringExpressionId<'mir>),
 }
+
 impl<'mir> ExpressionId<'mir> {
     pub fn source(self, mir: &Mir<'mir>) -> Span {
         match self {

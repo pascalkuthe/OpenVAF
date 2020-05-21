@@ -10,11 +10,11 @@ use std::ops::Range;
 
 use copyless::VecHelper;
 
-use crate::ast::{
-    Expression, NumericalParameterRangeBound, NumericalParameterRangeExclude, Parameter,
-    ParameterType, Primary, VariableType,
+use crate::ast::{Expression, Parameter, ParameterType, Primary, VariableType};
+use crate::ir::{
+    AttributeNode, Attributes, ExpressionId, Node, NumericalParameterRangeBound,
+    NumericalParameterRangeExclude, Push,
 };
-use crate::ir::{AttributeNode, Attributes, ExpressionId, Node, Push};
 use crate::parser::error::Expected::ParameterRange;
 use crate::parser::error::Result;
 use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens, Unsupported};
@@ -160,7 +160,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     fn parse_parameter_range(
         &mut self,
         inclusive: bool,
-    ) -> Result<Range<NumericalParameterRangeBound<'ast>>> {
+    ) -> Result<Range<NumericalParameterRangeBound<ExpressionId<'ast>>>> {
         let start = NumericalParameterRangeBound {
             bound: self.parse_parameter_range_expression()?,
             inclusive,

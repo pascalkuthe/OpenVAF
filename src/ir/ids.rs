@@ -53,7 +53,7 @@ macro_rules! id_type {
         }
         impl<'tag> ::core::fmt::Display for $name<'tag> {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> std::fmt::Result {
-                self.0.fmt(f)
+                ::core::fmt::Display::fmt(&self.0, f)
             }
         }
         impl<'tag> ::std::convert::Into<$crate::compact_arena::SafeRange<$type<'tag>>>

@@ -14,7 +14,8 @@ use crate::hir_lowering::derivatives::Unknown;
 use crate::hir_lowering::error::{Error, Type};
 use crate::hir_lowering::HirToMirFold;
 use crate::ir::{
-    hir, IntegerExpressionId, Node, NoiseSource, RealExpressionId, SystemFunctionCall, VariableId,
+    hir, IntegerExpressionId, Node, NoiseSource, RealExpressionId, StringExpressionId,
+    SystemFunctionCall, VariableId,
 };
 use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, Push};
 use crate::mir::*;
@@ -33,6 +34,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         expr: ir::ExpressionId<'tag>,
     ) -> Option<IntegerExpressionId<'tag>> {
         self.fold_integer_expression(expr, &mut Self::derivative_of_reference)
+    }
+
+    pub fn fold_read_only_string_expression(
+        &mut self,
+        expr: ir::ExpressionId<'tag>,
+    ) -> Option<StringExpressionId<'tag>> {
+        self.fold_string_expression(expr, &mut Self::derivative_of_reference)
     }
 
     pub fn fold_read_only_expression(
@@ -468,6 +476,27 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         };
 
         Some(self.mir.push(Node { source, contents }))
+    }
+
+    pub fn fold_string_expression(
+        &mut self,
+        expr: ir::ExpressionId<'tag>,
+        reference_derivative: &mut impl FnMut(
+            &mut Self,
+            VariableId<'tag>,
+            Unknown<'tag>,
+        ) -> VariableId<'tag>,
+    ) -> Option<StringExpressionId<'tag>> {
+        //TODO make this into a real fold like the other ones for improved error reporting (then again strings are so rare who cares)
+        if let ExpressionId::String(res) = self.fold_expression(expr, reference_derivative)? {
+            Some(res)
+        } else {
+            self.errors.push(Error {
+                error_type: Type::ExpectedString,
+                source: self.hir[expr].source,
+            });
+            None
+        }
     }
 
     pub fn fold_expression(

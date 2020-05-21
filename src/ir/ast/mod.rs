@@ -221,22 +221,12 @@ pub struct Parameter<'ast> {
 pub enum ParameterType<'ast> {
     Numerical {
         parameter_type: VariableType,
-        included_ranges: Vec<Range<NumericalParameterRangeBound<'ast>>>,
-        excluded_ranges: Vec<NumericalParameterRangeExclude<'ast>>,
+        included_ranges: Vec<Range<NumericalParameterRangeBound<ExpressionId<'ast>>>>,
+        excluded_ranges: Vec<NumericalParameterRangeExclude<ExpressionId<'ast>>>,
     },
     String(
         //TODO string parameters
     ),
-}
-#[derive(Clone, Copy, Debug)]
-pub struct NumericalParameterRangeBound<'ast> {
-    pub inclusive: bool,
-    pub bound: ExpressionId<'ast>,
-}
-#[derive(Clone, Debug)]
-pub enum NumericalParameterRangeExclude<'ast> {
-    Value(ExpressionId<'ast>),
-    Range(Range<NumericalParameterRangeBound<'ast>>),
 }
 
 #[derive(Clone, Copy, Debug)]
