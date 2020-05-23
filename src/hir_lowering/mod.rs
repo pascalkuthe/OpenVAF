@@ -28,6 +28,7 @@
 //!     During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
 //!
 
+use crate::analysis::constant_folding::{ConstantFolder, ReadingConstantFold};
 use crate::ast;
 use crate::hir::Hir;
 use crate::hir_lowering::derivatives::DerivativeMap;
@@ -38,7 +39,6 @@ use crate::ir::{Push, SafeRangeCreation};
 use crate::mir::Attribute;
 use crate::mir::*;
 use crate::SourceMap;
-use std::ops::Range;
 
 pub mod control_flow;
 pub mod derivatives;
@@ -265,10 +265,10 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
     pub fn fold_nature(&mut self, nature: NatureId<'tag>) {
         let units = self
             .fold_read_only_string_expression(self.hir[nature].contents.units)
-            .and_then(|expr| self.mir.string_constant_fold(expr, &mut (), false));
+            .and_then(|expr| ReadingConstantFold(&self.mir).string_constant_fold(&mut (), expr));
         let abstol = self
             .fold_read_only_real_expression(self.hir[nature].contents.abstol)
-            .and_then(|expr| self.mir.real_constant_fold(expr, &mut (), false));
+            .and_then(|expr| ReadingConstantFold(&self.mir).real_constant_fold(&mut (), expr));
 
         let units = if let Some(units) = units {
             units
