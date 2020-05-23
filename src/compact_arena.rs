@@ -51,6 +51,15 @@ pub struct CompressedRange<'tag> {
     start: Idx32<'tag>,
     len: u16,
 }
+impl<'tag> CompressedRange<'tag> {
+    pub fn empty() -> Self {
+        Self {
+            start: unsafe { Idx32::new_from_usize(0) },
+            len: 0,
+        }
+    }
+}
+
 impl<'tag> From<CompressedRange<'tag>> for SafeRange<Idx32<'tag>> {
     fn from(val: CompressedRange<'tag>) -> Self {
         SafeRange {
@@ -62,6 +71,7 @@ impl<'tag> From<CompressedRange<'tag>> for SafeRange<Idx32<'tag>> {
         }
     }
 }
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SafeRange<T: Copy> {
     start: T,

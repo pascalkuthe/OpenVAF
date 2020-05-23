@@ -83,6 +83,7 @@ impl<'tag> Mir<'tag> {
     pub fn get_str_mut(&mut self, range: CompressedRange<'tag>) -> &mut str {
         &mut self.string_literals[range]
     }
+
     pub fn parameter_count(&self) -> u32 {
         self.parameters.len
     }
