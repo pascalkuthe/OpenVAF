@@ -191,6 +191,12 @@ pub struct Parameter<'tag> {
     pub parameter_type: ParameterType<'tag>,
 }
 
+impl<'tag> ParameterType<'tag> {
+    pub fn is_numeric(&self) -> bool {
+        !matches!(self, ParameterType::String(_))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum ParameterType<'tag> {
     Integer {
