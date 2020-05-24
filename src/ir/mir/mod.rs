@@ -12,11 +12,6 @@ pub mod control_flow_graph;
 
 pub use control_flow_graph::ControlFlowGraph;
 
-use std::ops::Range;
-use std::ptr::NonNull;
-
-use core::cmp::Ordering;
-
 use crate::analysis::DominatorTree;
 use crate::ast::{Function, UnaryOperator};
 use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
@@ -26,13 +21,16 @@ use crate::ir::ids::StringExpressionId;
 use crate::ir::*;
 use crate::symbol::Ident;
 use crate::Span;
+use bitflags::_core::mem::MaybeUninit;
 use rustc_hash::FxHashMap;
+use std::ops::Range;
+use std::ptr::NonNull;
 
 pub struct Mir<'tag> {
     //TODO unsized
     //TODO configure to use different arena sizes
     //Declarations
-    parameters: TinyArena<'tag, AttributeNode<'tag, Parameter>>,
+    parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
     //    nature: NanoArena<'tag,Nature>
     branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
     nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
@@ -82,9 +80,33 @@ impl<'tag> Mir<'tag> {
     pub fn get_str(&self, range: CompressedRange<'tag>) -> &str {
         &self.string_literals[range]
     }
-
     pub fn get_str_mut(&mut self, range: CompressedRange<'tag>) -> &mut str {
         &mut self.string_literals[range]
+    }
+
+    pub fn parameter_count(&self) -> u32 {
+        self.parameters.len
+    }
+    pub fn variable_count(&self) -> u32 {
+        self.variables.len
+    }
+    pub fn branch_count(&self) -> u16 {
+        self.branches.len
+    }
+    pub fn net_count(&self) -> u32 {
+        self.nets.len
+    }
+    pub fn port_count(&self) -> u16 {
+        self.ports.len
+    }
+    pub fn module_count(&self) -> u16 {
+        self.modules.len
+    }
+    pub fn natures_count(&self) -> u16 {
+        self.natures.len
+    }
+    pub fn discipline_count(&self) -> u16 {
+        self.disciplines.len
     }
 }
 
@@ -95,10 +117,7 @@ impl_id_type!(VariableId in Mir::variables ->  AttributeNode<'tag,Variable<'tag>
 impl<'tag> Write<VariableId<'tag>> for Mir<'tag> {
     type Data = AttributeNode<'tag, Variable<'tag>>;
     fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
-        unsafe {
-            self.variables
-                .write(index.0, ::core::mem::MaybeUninit::new(value))
-        }
+        unsafe { self.variables.write(index.0, MaybeUninit::new(value)) }
     }
 }
 impl_id_type!(ModuleId in Mir::modules -> AttributeNode<'tag,Module<'tag>>);
@@ -110,7 +129,13 @@ impl_id_type!(IntegerExpressionId in Mir::integer_expressions -> Node<IntegerExp
 impl_id_type!(AttributeId in Mir::attributes -> Attribute<'tag>);
 impl_id_type!(StatementId in Mir::statements -> Statement<'tag>);
 impl_id_type!(NatureId in Mir::natures -> AttributeNode<'tag,Nature<'tag>>);
-impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<'tag,Parameter>);
+impl<'tag> Write<NatureId<'tag>> for Mir<'tag> {
+    type Data = AttributeNode<'tag, Nature<'tag>>;
+    fn write(&mut self, index: NatureId<'tag>, value: Self::Data) {
+        unsafe { self.natures.write(index.0, MaybeUninit::new(value)) }
+    }
+}
+impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<'tag,Parameter<'tag>>);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Variable<'mir> {
@@ -158,62 +183,33 @@ pub enum Statement<'mir> {
     ),
     //  TODO IndirectContribute
     Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
-    //  FunctionCall(Attributes<'mir>, FunctionId<'mir>, Vec<ExpressionId<'mir>>),
 }
-
-/*#[derive(Clone, Copy, Debug)]
-pub struct WhileLoop<'mir> {
-    pub condition: IntegerExpressionId<'mir>,
-    pub body: Block<'mir>,
-}
-
-#[derive(Clone)]
-pub struct Condition<'mir> {
-    pub condition: IntegerExpressionId<'mir>,
-    pub if_statements: Block<'mir>,
-    pub else_statement: SafeRange<StatementId<'mir>>,
-}*/
 
 #[derive(Clone, Debug)]
-pub struct Parameter {
+pub struct Parameter<'tag> {
     pub name: Ident,
-    pub parameter_type: ParameterType,
+    pub parameter_type: ParameterType<'tag>,
 }
 
-#[derive(Clone, Debug)]
-pub enum ParameterType {
-    Integer {
-        valid_ranges: Vec<Range<NumericalParameterRangeBound<i64>>>,
-        default_value: i64,
-    },
-    Real {
-        valid_ranges: Vec<Range<NumericalParameterRangeBound<f64>>>,
-        default_value: f64,
-    },
-    String(
-        //TODO string parameters
-    ),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct NumericalParameterRangeBound<T> {
-    pub inclusive: bool,
-    pub bound: T,
-}
-
-impl<T: PartialOrd> PartialOrd for NumericalParameterRangeBound<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.bound.partial_cmp(&other.bound) {
-            Some(Ordering::Equal) if self.inclusive != other.inclusive => None,
-            order => order,
-        }
+impl<'tag> ParameterType<'tag> {
+    pub fn is_numeric(&self) -> bool {
+        !matches!(self, ParameterType::String(_))
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum NumericalParameterRangeExclude<T> {
-    Value(T),
-    Range(Range<NumericalParameterRangeBound<T>>),
+pub enum ParameterType<'tag> {
+    Integer {
+        from_ranges: Vec<Range<NumericalParameterRangeBound<IntegerExpressionId<'tag>>>>,
+        excluded: Vec<NumericalParameterRangeExclude<IntegerExpressionId<'tag>>>,
+        default_value: IntegerExpressionId<'tag>,
+    },
+    Real {
+        from_ranges: Vec<Range<NumericalParameterRangeBound<RealExpressionId<'tag>>>>,
+        excluded: Vec<NumericalParameterRangeExclude<RealExpressionId<'tag>>>,
+        default_value: RealExpressionId<'tag>,
+    },
+    String(StringExpressionId<'tag>),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -222,6 +218,7 @@ pub enum ExpressionId<'mir> {
     Integer(IntegerExpressionId<'mir>),
     String(StringExpressionId<'mir>),
 }
+
 impl<'mir> ExpressionId<'mir> {
     pub fn source(self, mir: &Mir<'mir>) -> Span {
         match self {
@@ -279,6 +276,9 @@ pub enum IntegerExpression<'mir> {
     Min(IntegerExpressionId<'mir>, IntegerExpressionId<'mir>),
     Max(IntegerExpressionId<'mir>, IntegerExpressionId<'mir>),
     Abs(IntegerExpressionId<'mir>),
+
+    ParamGiven(ParameterId<'mir>),
+    PortConnected(PortId<'mir>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -350,7 +350,11 @@ pub enum RealExpression<'mir> {
     VariableReference(VariableId<'mir>),
     ParameterReference(ParameterId<'mir>),
     FunctionCall(FunctionId<'mir>, Vec<ExpressionId<'mir>>),
-    BranchAccess(DisciplineAccess, BranchId<'mir>),
+    BranchAccess(DisciplineAccess, BranchId<'mir>, u8),
+    Noise(
+        NoiseSource<RealExpressionId<'mir>, ()>,
+        Option<CompressedRange<'mir>>,
+    ),
     BuiltInFunctionCall1p(BuiltInFunctionCall1p, RealExpressionId<'mir>),
     BuiltInFunctionCall2p(
         BuiltInFunctionCall2p,
@@ -358,7 +362,10 @@ pub enum RealExpression<'mir> {
         RealExpressionId<'mir>,
     ),
     IntegerConversion(IntegerExpressionId<'mir>),
-    SystemFunctionCall(Ident),
+
+    Temperature,
+    Vt(Option<RealExpressionId<'mir>>),
+    SimParam(StringExpressionId<'mir>, Option<RealExpressionId<'mir>>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -382,6 +389,7 @@ pub enum StringExpression<'mir> {
     ),
 
     Literal(CompressedRange<'mir>),
+    SimParam(StringExpressionId<'mir>),
 
     VariableReference(VariableId<'mir>),
 
@@ -417,6 +425,12 @@ impl<'tag> Mir<'tag> {
                 RealExpression::Negate(span, expr)
             }
 
+            RealExpression::Vt(arg) => {
+                let arg =
+                    arg.map(|arg| self.map_real_expr(arg, variables_to_replace).unwrap_or(arg));
+                RealExpression::Vt(arg)
+            }
+
             RealExpression::Condition(condition, question_span, arg1, colon_span, arg2) => {
                 let mapped_arg1 = self.map_real_expr(arg1, variables_to_replace);
                 let mapped_arg2 = self.map_real_expr(arg2, variables_to_replace);
@@ -449,6 +463,20 @@ impl<'tag> Mir<'tag> {
                 RealExpression::BuiltInFunctionCall2p(call, arg1, arg2)
             }
 
+            RealExpression::Noise(source, src) => {
+                let source = match source {
+                    NoiseSource::White(expr) => {
+                        NoiseSource::White(self.map_real_expr(expr, variables_to_replace)?)
+                    }
+                    NoiseSource::Flicker(expr1, expr2) => NoiseSource::Flicker(
+                        self.map_real_expr(expr1, variables_to_replace)?,
+                        self.map_real_expr(expr2, variables_to_replace)?,
+                    ),
+                    NoiseSource::Table(_) | NoiseSource::TableLog(_) => todo!(),
+                };
+                RealExpression::Noise(source, src)
+            }
+
             RealExpression::IntegerConversion(expr) => {
                 let expr = self.map_int_expr(expr, variables_to_replace)?;
                 RealExpression::IntegerConversion(expr)
@@ -456,8 +484,21 @@ impl<'tag> Mir<'tag> {
 
             RealExpression::Literal(_)
             | RealExpression::ParameterReference(_)
-            | RealExpression::BranchAccess(_, _)
-            | RealExpression::SystemFunctionCall(_) => return None,
+            | RealExpression::BranchAccess(_, _, _)
+            | RealExpression::Temperature => return None,
+
+            RealExpression::SimParam(name, default) => {
+                let new_name = self.map_str_expr(name, variables_to_replace);
+                if let Some(default) = default {
+                    if let Some(new_default) = self.map_real_expr(default, variables_to_replace) {
+                        RealExpression::SimParam(new_name.unwrap_or(name), Some(new_default))
+                    } else {
+                        RealExpression::SimParam(new_name?, Some(default))
+                    }
+                } else {
+                    RealExpression::SimParam(new_name?, None)
+                }
+            }
         };
         Some(self.push(self[expr].clone_as(new_expr)))
     }
@@ -588,6 +629,8 @@ impl<'tag> Mir<'tag> {
             }
 
             IntegerExpression::Literal(_)
+            | IntegerExpression::ParamGiven(_)
+            | IntegerExpression::PortConnected(_)
             | IntegerExpression::ParameterReference(_)
             | IntegerExpression::PortReference(_)
             | IntegerExpression::NetReference(_) => return None,
@@ -619,6 +662,9 @@ impl<'tag> Mir<'tag> {
                 StringExpression::Condition(condition, question_span, arg1, colon_span, arg2)
             }
 
+            StringExpression::SimParam(name) => {
+                StringExpression::SimParam(self.map_str_expr(expr, variables_to_replace)?)
+            }
             StringExpression::Literal(_) | StringExpression::ParameterReference(_) => return None,
         };
         Some(self.push(self[expr].clone_as(new_expr)))

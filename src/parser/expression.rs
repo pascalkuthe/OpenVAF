@@ -11,11 +11,14 @@
 use crate::ast::{BinaryOperator, BranchAccess, Expression, Primary, UnaryOperator};
 use crate::ir::BuiltInFunctionCall1p::*;
 use crate::ir::BuiltInFunctionCall2p::*;
-use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, Push};
+use crate::ir::{
+    BuiltInFunctionCall1p, BuiltInFunctionCall2p, NoiseSource, Push, SystemFunctionCall,
+};
 use crate::ir::{ExpressionId, Node};
 use crate::parser::error::Type::{UnexpectedEof, UnexpectedTokens};
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
+use crate::parser::lexer::Token::ParenOpen;
 use crate::parser::primaries::{
     parse_real_value, parse_string, parse_unsigned_int_value, RealLiteralType,
 };
@@ -115,7 +118,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         }
                     }
                     let op = Node::new(op, op_span);
-                    let span = self.ast[lhs].source.extend(self.ast[rhs].source);
+                    let tmp = &self.ast[rhs];
+                    let span = self.ast[lhs].source.extend(tmp.source);
                     lhs = self
                         .ast
                         .push(Node::new(Expression::BinaryOperator(lhs, op, rhs), span))
@@ -287,7 +291,79 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 Node::new(Expression::Primary(res), self.span_to_current_end(start))
             }
 
+            Token::WhiteNoise => {
+                let start = self.preprocessor.current_start();
+                self.consume_lookahead();
+                self.expect(Token::ParenOpen);
+
+                let expr = self.parse_expression_id()?;
+
+                let src = if self.look_ahead()?.0 == Token::Comma {
+                    self.lookahead.take();
+                    self.expect(Token::LiteralString)?;
+                    let src = self
+                        .ast
+                        .string_literals
+                        .try_add_small(&parse_string(self.preprocessor.slice()))
+                        .map_err(|_| Error {
+                            error_type: Type::StringTooLong(span.get_len() as usize - 2),
+                            source: span,
+                        })?;
+                    Some(src)
+                } else {
+                    None
+                };
+                self.expect(Token::ParenClose);
+
+                Node::new(
+                    Expression::Primary(Primary::Noise(NoiseSource::White(expr), src)),
+                    self.span_to_current_end(start),
+                )
+            }
+
+            Token::FlickerNoise => {
+                let start = self.preprocessor.current_start();
+                self.consume_lookahead();
+                //TODO multiarg function call recovery
+                self.expect(Token::ParenOpen)?;
+                let expr1 = self.parse_expression_id()?;
+                self.expect(Token::Comma)?;
+                let expr2 = self.parse_expression_id()?;
+                let src = if self.look_ahead()?.0 == Token::Comma {
+                    self.lookahead.take();
+                    self.expect(Token::LiteralString)?;
+                    let src = self
+                        .ast
+                        .string_literals
+                        .try_add_small(&parse_string(self.preprocessor.slice()))
+                        .map_err(|_| Error {
+                            error_type: Type::StringTooLong(span.get_len() as usize - 2),
+                            source: span,
+                        })?;
+                    Some(src)
+                } else {
+                    None
+                };
+                self.expect(Token::ParenClose)?;
+                Node::new(
+                    Expression::Primary(Primary::Noise(NoiseSource::Flicker(expr1, expr2), src)),
+                    self.span_to_current_end(start),
+                )
+            }
+
+            Token::TimeDerivative => {
+                let start = self.preprocessor.current_start();
+                self.consume_lookahead();
+                let expr = self.parse_bracketed_expression()?;
+                let expr = self.ast.push(expr);
+                Node::new(
+                    Expression::Primary(Primary::DerivativeByTime(expr)),
+                    self.span_to_current_end(start),
+                )
+            }
+
             Token::PartialDerivative => {
+                //TODO multiarg function call recovery
                 let start = self.preprocessor.current_start();
                 self.consume_lookahead();
                 self.expect(Token::ParenOpen)?;
@@ -329,11 +405,87 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
             Token::SystemCall => {
                 self.consume_lookahead();
+                todo!("Error")
+            }
+            Token::Temperature => {
+                self.consume_lookahead();
                 Node::new(
-                    Expression::Primary(Primary::SystemFunctionCall(Ident::from_str_and_span(
-                        self.preprocessor.slice(),
-                        span,
+                    Expression::Primary(Primary::SystemFunctionCall(
+                        SystemFunctionCall::Temperature,
+                    )),
+                    span,
+                )
+            }
+
+            Token::Vt => {
+                self.consume_lookahead();
+                let temp_arg = if self.look_ahead()?.0 == Token::ParenOpen {
+                    let expr = self.parse_bracketed_expression()?;
+                    Some(self.ast.push(expr))
+                } else {
+                    None
+                };
+                Node::new(
+                    Expression::Primary(Primary::SystemFunctionCall(SystemFunctionCall::Vt(
+                        temp_arg,
                     ))),
+                    span,
+                )
+            }
+
+            Token::SimParam => {
+                self.consume_lookahead();
+                self.expect(ParenOpen)?;
+                let name = self.parse_expression_id()?;
+                let default = if self.look_ahead()?.0 == Token::Comma {
+                    self.consume_lookahead();
+                    Some(self.parse_expression_id()?)
+                } else {
+                    None
+                };
+                self.expect(Token::ParenClose)?;
+                Node::new(
+                    Expression::Primary(Primary::SystemFunctionCall(SystemFunctionCall::Simparam(
+                        name, default,
+                    ))),
+                    span,
+                )
+            }
+
+            Token::SimParamStr => {
+                self.consume_lookahead();
+                let expr = self.parse_bracketed_expression()?;
+                let expr = self.ast.push(expr);
+                Node::new(
+                    Expression::Primary(Primary::SystemFunctionCall(
+                        SystemFunctionCall::SimparamStr(expr),
+                    )),
+                    span,
+                )
+            }
+
+            Token::PortConnected => {
+                self.consume_lookahead();
+                self.expect(Token::ParenOpen)?;
+                let name = self.parse_hierarchical_identifier()?;
+                self.expect(Token::ParenClose)?;
+                Node::new(
+                    Expression::Primary(Primary::SystemFunctionCall(
+                        SystemFunctionCall::PortConnected(name),
+                    )),
+                    span,
+                )
+            }
+
+            Token::ParamGiven => {
+                self.consume_lookahead();
+                self.expect(Token::ParenOpen)?;
+                let name = self.parse_hierarchical_identifier()?;
+                self.expect(Token::ParenClose)?;
+                Node::new(
+                    Expression::Primary(Primary::SystemFunctionCall(
+                        SystemFunctionCall::ParameterGiven(name),
+                    )),
                     span,
                 )
             }
@@ -345,7 +497,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::Hypot => self.parse_double_parameter_built_in_function_call(Hypot)?,
             Token::Sqrt => self.parse_single_parameter_built_in_function_call(Sqrt)?,
 
-            Token::Exp => self.parse_single_parameter_built_in_function_call(Exp)?,
+            Token::LimExp => self.parse_single_parameter_built_in_function_call(Exp(true))?,
+            Token::Exp => self.parse_single_parameter_built_in_function_call(Exp(false))?,
             Token::Ln => self.parse_single_parameter_built_in_function_call(Ln)?,
             Token::Log => self.parse_single_parameter_built_in_function_call(Log)?,
 

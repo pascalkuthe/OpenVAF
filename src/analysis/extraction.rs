@@ -5,13 +5,12 @@ use crate::analysis::DominatorTree;
 use crate::ir::hir::DisciplineAccess;
 use crate::ir::mir::ControlFlowGraph;
 use crate::ir::{
-    BranchId, IntegerExpressionId, ParameterId, RealExpressionId, StatementId, StringExpressionId,
-    VariableId,
+    BranchId, IntegerExpressionId, NoiseSource, ParameterId, PortId, RealExpressionId, StatementId,
+    StringExpressionId, SystemFunctionCall, VariableId,
 };
 use crate::mir::control_flow_graph::BasicBlockId;
 use crate::mir::{ExpressionId, Mir, StringExpression};
 use crate::mir::{IntegerExpression, RealExpression};
-use crate::symbol::Ident;
 use crate::BitSet;
 
 impl<'cfg, 'mir> ControlFlowGraph<'cfg, 'mir> {
@@ -174,7 +173,7 @@ impl<'tag> Mir<'tag> {
     pub fn track_expression(
         &self,
         expr: ExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match expr {
             ExpressionId::Real(expr) => self.track_real_expression(expr, dependency_handler),
@@ -186,7 +185,7 @@ impl<'tag> Mir<'tag> {
     pub fn track_real_expression(
         &self,
         expr: RealExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match self[expr].contents {
             RealExpression::Literal(_) => (),
@@ -196,9 +195,23 @@ impl<'tag> Mir<'tag> {
             RealExpression::ParameterReference(param) => {
                 dependency_handler.handle_parameter_reference(param)
             }
-            RealExpression::SystemFunctionCall(ident) => {
-                dependency_handler.handle_system_function_call(ident)
+            RealExpression::Vt(temp) => {
+                dependency_handler.handle_system_function_call(SystemFunctionCall::Vt(temp))
             }
+            RealExpression::SimParam(name, default) => dependency_handler
+                .handle_system_function_call(SystemFunctionCall::Simparam(name, default)),
+            RealExpression::Temperature => {
+                dependency_handler.handle_system_function_call(SystemFunctionCall::Temperature)
+            }
+
+            RealExpression::Noise(source, _) => match source {
+                NoiseSource::White(expr) => self.track_real_expression(expr, dependency_handler),
+                NoiseSource::Flicker(expr1, expr2) => {
+                    self.track_real_expression(expr1, dependency_handler);
+                    self.track_real_expression(expr2, dependency_handler);
+                }
+                NoiseSource::Table(_) | NoiseSource::TableLog(_) => todo!(),
+            },
 
             RealExpression::BuiltInFunctionCall2p(_, arg1, arg2)
             | RealExpression::BinaryOperator(arg1, _, arg2) => {
@@ -212,8 +225,8 @@ impl<'tag> Mir<'tag> {
                 self.track_real_expression(val2, dependency_handler);
             }
 
-            RealExpression::BranchAccess(discipline, branch) => {
-                dependency_handler.handle_branch_reference(discipline, branch)
+            RealExpression::BranchAccess(discipline, branch, order) => {
+                dependency_handler.handle_branch_reference(discipline, branch, order)
             }
 
             RealExpression::Negate(_, expr) | RealExpression::BuiltInFunctionCall1p(_, expr) => {
@@ -229,7 +242,7 @@ impl<'tag> Mir<'tag> {
     pub fn track_integer_expression(
         &self,
         expr: IntegerExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match self[expr].contents {
             IntegerExpression::Literal(_) => (),
@@ -278,13 +291,17 @@ impl<'tag> Mir<'tag> {
                 self.track_integer_expression(val1, dependency_handler);
                 self.track_integer_expression(val2, dependency_handler);
             }
+            IntegerExpression::ParamGiven(param) => dependency_handler
+                .handle_system_function_call(SystemFunctionCall::ParameterGiven(param)),
+            IntegerExpression::PortConnected(port) => dependency_handler
+                .handle_system_function_call(SystemFunctionCall::PortConnected(port)),
         }
     }
 
     pub fn track_string_expression(
         &self,
         expr: StringExpressionId<'tag>,
-        dependency_handler: &mut impl ExtractionDependencyHandler<'tag>,
+        dependency_handler: &mut impl DependencyHandler<'tag>,
     ) {
         match self[expr].contents {
             StringExpression::Literal(val) => (),
@@ -299,23 +316,47 @@ impl<'tag> Mir<'tag> {
             StringExpression::ParameterReference(param) => {
                 dependency_handler.handle_parameter_reference(param)
             }
+            StringExpression::SimParam(name) => dependency_handler
+                .handle_system_function_call(SystemFunctionCall::SimparamStr(name)),
         }
     }
 }
 
-pub trait ExtractionDependencyHandler<'tag> {
+pub trait DependencyHandler<'tag> {
     fn handle_variable_reference(&mut self, var: VariableId<'tag>);
     fn handle_parameter_reference(&mut self, param: ParameterId<'tag>);
-    fn handle_branch_reference(&mut self, access: DisciplineAccess, branch: BranchId<'tag>);
-    fn handle_system_function_call(&mut self, name: Ident);
+    fn handle_branch_reference(
+        &mut self,
+        access: DisciplineAccess,
+        branch: BranchId<'tag>,
+        order: u8,
+    );
+    fn handle_system_function_call(
+        &mut self,
+        call: SystemFunctionCall<
+            RealExpressionId<'tag>,
+            StringExpressionId<'tag>,
+            PortId<'tag>,
+            ParameterId<'tag>,
+        >,
+    );
 }
 
-impl ExtractionDependencyHandler<'_> for () {
+impl DependencyHandler<'_> for () {
     fn handle_variable_reference(&mut self, _: VariableId<'_>) {}
 
     fn handle_parameter_reference(&mut self, _: ParameterId<'_>) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'_>) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'_>, _: u8) {}
 
-    fn handle_system_function_call(&mut self, _: Ident) {}
+    fn handle_system_function_call(
+        &mut self,
+        _: SystemFunctionCall<
+            RealExpressionId<'_>,
+            StringExpressionId<'_>,
+            PortId<'_>,
+            ParameterId<'_>,
+        >,
+    ) {
+    }
 }

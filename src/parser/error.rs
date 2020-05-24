@@ -431,7 +431,7 @@ impl Error {
                 let display_list = DisplayList::from(snippet);
                 error!("{}", display_list);
             }
-            Type::HierarchicalIdNotAllowedAsNature { hierarchical_id } => {
+            Type::HierarchicalIdNotAllowedAsNature { .. } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
 
                 let snippet = Snippet {

@@ -9,15 +9,17 @@
 use crate::analysis::data_flow::framework::{
     Analysis, DataFlowGraph, Engine, ForwardEngine, GenKillAnalysis, GenKillEngine, GenKillSet,
 };
-use crate::analysis::ExtractionDependencyHandler;
+use crate::analysis::DependencyHandler;
 use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
 use crate::ir::hir::DisciplineAccess;
 use crate::ir::mir::control_flow_graph::{BasicBlockId, Terminator};
 use crate::ir::mir::ControlFlowGraph;
-use crate::ir::{BranchId, ParameterId, SafeRangeCreation, StatementId, VariableId};
+use crate::ir::{
+    BranchId, ParameterId, PortId, RealExpressionId, SafeRangeCreation, StatementId,
+    StringExpressionId, SystemFunctionCall, VariableId,
+};
 use crate::mir::Mir;
 use crate::mir::Statement;
-use crate::symbol::Ident;
 use fixedbitset::FixedBitSet as BitSet;
 
 pub struct UseDefGraph<'mir, 'cfg> {
@@ -267,7 +269,7 @@ struct UseDefBuilder<'lt, 'mir, 'cfg> {
     use_stmt: StatementId<'mir>,
 }
 
-impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir> for UseDefBuilder<'lt, 'mir, 'cfg> {
+impl<'lt, 'mir, 'cfg> DependencyHandler<'mir> for UseDefBuilder<'lt, 'mir, 'cfg> {
     fn handle_variable_reference(&mut self, var: VariableId<'mir>) {
         self.graph.uses[self.use_stmt.unwrap()]
             .0
@@ -277,9 +279,18 @@ impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir> for UseDefBuilder<'lt, '
 
     fn handle_parameter_reference(&mut self, _: ParameterId<'mir>) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>, _: u8) {}
 
-    fn handle_system_function_call(&mut self, _: Ident) {}
+    fn handle_system_function_call(
+        &mut self,
+        _: SystemFunctionCall<
+            RealExpressionId<'mir>,
+            StringExpressionId<'mir>,
+            PortId<'mir>,
+            ParameterId<'mir>,
+        >,
+    ) {
+    }
 }
 
 struct UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
@@ -287,9 +298,7 @@ struct UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
     use_terminator_block: BasicBlockId<'cfg>,
 }
 
-impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir>
-    for UseDefTerminatorBuilder<'lt, 'mir, 'cfg>
-{
+impl<'lt, 'mir, 'cfg> DependencyHandler<'mir> for UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
     fn handle_variable_reference(&mut self, var: VariableId<'mir>) {
         self.graph.terminator_uses[self.use_terminator_block]
             .0
@@ -298,7 +307,16 @@ impl<'lt, 'mir, 'cfg> ExtractionDependencyHandler<'mir>
 
     fn handle_parameter_reference(&mut self, _: ParameterId<'mir>) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>, _: u8) {}
 
-    fn handle_system_function_call(&mut self, _: Ident) {}
+    fn handle_system_function_call(
+        &mut self,
+        _: SystemFunctionCall<
+            RealExpressionId<'mir>,
+            StringExpressionId<'mir>,
+            PortId<'mir>,
+            ParameterId<'mir>,
+        >,
+    ) {
+    }
 }

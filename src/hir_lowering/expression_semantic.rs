@@ -13,7 +13,10 @@ use crate::hir::Primary;
 use crate::hir_lowering::derivatives::Unknown;
 use crate::hir_lowering::error::{Error, Type};
 use crate::hir_lowering::HirToMirFold;
-use crate::ir::{hir, IntegerExpressionId, Node, RealExpressionId, VariableId};
+use crate::ir::{
+    hir, IntegerExpressionId, Node, NoiseSource, RealExpressionId, StringExpressionId,
+    SystemFunctionCall, VariableId,
+};
 use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, Push};
 use crate::mir::*;
 use crate::{ast, ir, mir};
@@ -31,6 +34,13 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         expr: ir::ExpressionId<'tag>,
     ) -> Option<IntegerExpressionId<'tag>> {
         self.fold_integer_expression(expr, &mut Self::derivative_of_reference)
+    }
+
+    pub fn fold_read_only_string_expression(
+        &mut self,
+        expr: ir::ExpressionId<'tag>,
+    ) -> Option<StringExpressionId<'tag>> {
+        self.fold_string_expression(expr, &mut Self::derivative_of_reference)
     }
 
     pub fn fold_read_only_expression(
@@ -87,8 +97,39 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 })*/
             }
 
+            hir::Expression::Primary(Primary::SystemFunctionCall(
+                SystemFunctionCall::Temperature,
+            )) => RealExpression::Temperature,
+
+            hir::Expression::Primary(Primary::SystemFunctionCall(SystemFunctionCall::Vt(arg))) => {
+                RealExpression::Vt(
+                    arg.map(|arg| self.fold_real_expression(arg, reference_derivative))
+                        .flatten(),
+                )
+            }
+
+            hir::Expression::Primary(Primary::SystemFunctionCall(
+                SystemFunctionCall::Simparam(name, default),
+            )) => {
+                let default = default
+                    .map(|default| self.fold_real_expression(default, reference_derivative))
+                    .flatten();
+                let name = if let ExpressionId::String(str) =
+                    self.fold_expression(name, reference_derivative)?
+                {
+                    str
+                } else {
+                    self.errors.push(Error {
+                        error_type: Type::ExpectedString,
+                        source: self.hir[name].source,
+                    });
+                    return None;
+                };
+                RealExpression::SimParam(name, default)
+            }
+
             hir::Expression::Primary(Primary::BranchAccess(discipline_access, branch)) => {
-                RealExpression::BranchAccess(discipline_access, branch)
+                RealExpression::BranchAccess(discipline_access, branch, 0)
             }
 
             hir::Expression::Primary(Primary::ParameterReference(parameter))
@@ -148,20 +189,20 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     rhs?,
                 )
             }
-            hir::Expression::Primary(Primary::SystemFunctionCall(ident)) => {
-                RealExpression::SystemFunctionCall(ident) //TODO delegate type checking using closure
-            }
+
             hir::Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)) => {
                 RealExpression::BuiltInFunctionCall1p(
                     call,
                     self.fold_real_expression(arg, reference_derivative)?,
                 )
             }
+
             hir::Expression::Primary(Primary::BuiltInFunctionCall2p(call, arg1, arg2)) => {
                 let arg1 = self.fold_real_expression(arg1, reference_derivative);
                 let arg2 = self.fold_real_expression(arg2, reference_derivative);
                 RealExpression::BuiltInFunctionCall2p(call, arg1?, arg2?)
             }
+
             hir::Expression::Primary(Primary::Derivative(expr_to_derive, derive_by)) => {
                 let expr_to_derive =
                     self.fold_real_expression(expr_to_derive, reference_derivative)?;
@@ -171,6 +212,22 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                     &mut |fold, var| reference_derivative(fold, var, derive_by),
                 )?);
             }
+
+            hir::Expression::Primary(Primary::Noise(source, name)) => {
+                let source = match source {
+                    NoiseSource::White(expr) => {
+                        NoiseSource::White(self.fold_real_expression(expr, reference_derivative)?)
+                    }
+                    NoiseSource::Flicker(expr1, expr2) => {
+                        let expr1 = self.fold_real_expression(expr1, reference_derivative);
+                        let expr2 = self.fold_real_expression(expr2, reference_derivative);
+                        NoiseSource::Flicker(expr1?, expr2?)
+                    }
+                    NoiseSource::Table(_) | NoiseSource::TableLog(_) => todo!(),
+                };
+                RealExpression::Noise(source, name)
+            }
+
             _ => RealExpression::IntegerConversion(
                 self.fold_integer_expression(expr, reference_derivative)?,
             ),
@@ -363,9 +420,15 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
 
             hir::Expression::Primary(Primary::FunctionCall(_, _)) => todo!("Function Calls"),
-            hir::Expression::Primary(Primary::SystemFunctionCall(_)) => {
-                todo!("System function calls")
-            }
+
+            hir::Expression::Primary(Primary::SystemFunctionCall(
+                SystemFunctionCall::ParameterGiven(param),
+            )) => IntegerExpression::ParamGiven(param),
+
+            hir::Expression::Primary(Primary::SystemFunctionCall(
+                SystemFunctionCall::PortConnected(port),
+            )) => IntegerExpression::PortConnected(port),
+
             hir::Expression::Primary(Primary::ParameterReference(parameter)) => {
                 match self.mir[parameter].contents.parameter_type {
                     ParameterType::Integer { .. } => {
@@ -413,6 +476,27 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
         };
 
         Some(self.mir.push(Node { source, contents }))
+    }
+
+    pub fn fold_string_expression(
+        &mut self,
+        expr: ir::ExpressionId<'tag>,
+        reference_derivative: &mut impl FnMut(
+            &mut Self,
+            VariableId<'tag>,
+            Unknown<'tag>,
+        ) -> VariableId<'tag>,
+    ) -> Option<StringExpressionId<'tag>> {
+        //TODO make this into a real fold like the other ones for improved error reporting (then again strings are so rare who cares)
+        if let ExpressionId::String(res) = self.fold_expression(expr, reference_derivative)? {
+            Some(res)
+        } else {
+            self.errors.push(Error {
+                error_type: Type::ExpectedString,
+                source: self.hir[expr].source,
+            });
+            None
+        }
     }
 
     pub fn fold_expression(
@@ -486,8 +570,55 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
                 RealExpression::Condition(condition?, question_span, if_val, colon_span, else_val)
             }
 
-            hir::Expression::Primary(Primary::SystemFunctionCall(call)) => {
-                RealExpression::SystemFunctionCall(call)
+            hir::Expression::Primary(Primary::SystemFunctionCall(
+                SystemFunctionCall::Temperature,
+            )) => RealExpression::Temperature,
+
+            hir::Expression::Primary(Primary::SystemFunctionCall(SystemFunctionCall::Vt(arg))) => {
+                RealExpression::Vt(
+                    arg.map(|arg| self.fold_real_expression(arg, reference_derivative))
+                        .flatten(),
+                )
+            }
+
+            hir::Expression::Primary(Primary::SystemFunctionCall(
+                SystemFunctionCall::Simparam(name, default),
+            )) => {
+                let default = default
+                    .map(|default| self.fold_real_expression(default, reference_derivative))
+                    .flatten();
+                let name = if let ExpressionId::String(str) =
+                    self.fold_expression(name, reference_derivative)?
+                {
+                    str
+                } else {
+                    self.errors.push(Error {
+                        error_type: Type::ExpectedString,
+                        source: self.hir[name].source,
+                    });
+                    return None;
+                };
+                RealExpression::SimParam(name, default)
+            }
+
+            hir::Expression::Primary(Primary::SystemFunctionCall(
+                SystemFunctionCall::SimparamStr(name),
+            )) => {
+                let name = if let ExpressionId::String(str) =
+                    self.fold_expression(name, reference_derivative)?
+                {
+                    str
+                } else {
+                    self.errors.push(Error {
+                        error_type: Type::ExpectedString,
+                        source: self.hir[name].source,
+                    });
+                    return None;
+                };
+                return Some(ExpressionId::String(self.mir.push(Node {
+                    contents: StringExpression::SimParam(name),
+                    source,
+                })));
             }
 
             hir::Expression::Primary(Primary::String(val)) => {
@@ -508,7 +639,7 @@ impl<'tag, 'hirref> HirToMirFold<'tag, 'hirref> {
             }
 
             hir::Expression::Primary(Primary::BranchAccess(discipline_access, branch)) => {
-                RealExpression::BranchAccess(discipline_access, branch)
+                RealExpression::BranchAccess(discipline_access, branch, 0)
             }
 
             hir::Expression::Primary(Primary::ParameterReference(parameter))

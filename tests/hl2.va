@@ -223,21 +223,16 @@ organization and externally, subject to the following restrictions.
 `define LN_EXP_LIMIT    11.0
 `define MIN_R           0.001
 //`define Gmin            1.0e-12
-`define Gmin      1e-12  //Simpararms are unsupported for now
+`define Gmin      $simparam("gmin",1e-12)  //suggested by L.L
 
 //ADS
-//`include "constants.vams"
-//`include "disciplines.vams"
+`include "constants.vams"
+`include "disciplines.vams"
 //`include "compact.vams"
 
 //Spectre
 //`include "constants.h"
 //`include "discipline.h"
-
-//VerilogAE
-
-`include "constants.vams"
-`include "disciplines.vams"
 
 //////////////Explicit Capacitance and Charge Expression///////////////
 
@@ -549,6 +544,9 @@ organization and externally, subject to the following restrictions.
         Q_bf    = FFdQbfb+FFdQbfc;\
       end
 
+
+
+
 // IDEAL DIODE (WITHOUT CAPACITANCE):
 // conductance calculation not required
 // INPUT:
@@ -568,7 +566,7 @@ organization and externally, subject to the following restrictions.
         end else begin\
             le      = 1;\
         end\
-        le      = le*exp(DIOY);\
+        le      = le*limexp(DIOY);\
         Iz      = IST*(le-1.0);\
         if(DIOY <= -14.0) begin\
             Iz      = -IST;\
@@ -888,9 +886,8 @@ parameter integer  type = 1		 from [-1:1] exclude 0  `ATTR(info="For transistor 
 
     //Model evaluation
     real Cjci,Cjcit,cc,Cjei,Cjep,CjCx_i,CjCx_ii,Cjs,Cscp;
-    (*extract*) real itf;
-    real itr,Tf,Tr,VT_f,i_0f,i_0r,a_bpt,Q_0,Q_p,Q_bpt;
-    real Orci0_t,b_q,I_Tf1,Q_fT,T_fT,Q_bf;
+    real itf,itr,Tf,Tr,VT_f,i_0f,i_0r,a_bpt,Q_0,Q_p,Q_bpt;
+    real Orci0_t,b_q,I_Tf1,T_f0,Q_fT,T_fT,Q_bf;
     real ICKa,d1,a1,a11,Odelck,ick1,ick2;
     real A,a_h,Q_pT,d_Q,d_Q0;
     real Qf,Cdei,Qr,Cdci,Crbi;
@@ -932,10 +929,8 @@ parameter integer  type = 1		 from [-1:1] exclude 0  `ATTR(info="For transistor 
         (* desc="Emitter series resistance",                               units="Ohm" *) real re_t;
         (* desc="Internal base resistance as calculated in the model",     units="Ohm" *) real rbi;
         (* desc="Total base resistance as calculated in the model",        units="Ohm" *) real rb;
-        (* desc="Zero current transit time",                               units="s"   *) real T_f0;
     `else
         real rcx_t, re_t, rbi;
-        real T_f0;
     `endif
 
     `ifdef CALC_OP
@@ -969,42 +964,6 @@ parameter integer  type = 1		 from [-1:1] exclude 0  `ATTR(info="For transistor 
 
         (* desc="Actual device temperature",                               units="K"   *) real TK;
         (* desc="Temperature increase due to self-heating",                units="K"   *) real DTSH;
-
-        // all circuit elements for extraction of the intrinsic transistor according to (Rosenbaum, diploma thesis, 2011, p.27)
-        (* desc="BE voltage",                                              units="V"   *) real _V_BE;
-        (* desc="CE voltage",                                              units="V"   *) real _V_CE;
-        (* desc="perimeter base-E voltage",                                units="V"   *) real _V_BpE;
-        (* desc="internal base-E voltage",                                 units="V"   *) real _V_BiE;
-        (* desc="internal collector-E voltage",                            units="V"   *) real _V_CiE;
-        (* desc="internal emitter-E voltage",                              units="V"   *) real _V_EiE;
-
-        (* desc=" ", units="A"   *) real _I_BE;
-        (* desc=" ", units="A"   *) real _I_BBp;
-        (* desc=" ", units="A"   *) real _I_BCi;
-        (* desc=" ", units="A"   *) real _I_BpBi;
-        (* desc=" ", units="A"   *) real _I_BpE;
-        (* desc=" ", units="A"   *) real _I_BpEi;
-        (* desc=" ", units="A"   *) real _I_BpCi;
-        (* desc=" ", units="A"   *) real _I_BiEi;
-        (* desc=" ", units="A"   *) real _I_BiCi;
-        (* desc=" ", units="A"   *) real _I_CiEi;
-        (* desc=" ", units="A"   *) real _I_CiC;
-        (* desc=" ", units="A"   *) real _I_CiE;
-        (* desc=" ", units="A"   *) real _I_EiE;
-
-        (* desc=" ", units="F"   *) real _C_BCi;
-        (* desc=" ", units="F"   *) real _C_BpCi;
-        (* desc=" ", units="Ohm" *) real _R_BpCi;
-        (* desc=" ", units="Ohm" *) real _R_BBp;
-        (* desc=" ", units="Ohm" *) real _R_BpBi;
-        (* desc=" ", units="C"   *) real _C_BpBi; // not shown in thesis
-        (* desc=" ", units="Ohm" *) real _R_CiC;
-        (* desc=" ", units="F"   *) real _C_BE;
-        (* desc=" ", units="F"   *) real _C_BiE;
-        (* desc=" ", units="F"   *) real _C_BiEi;
-        (* desc=" ", units="Ohm" *) real _R_BiEi;
-        (* desc=" ", units="Ohm" *) real _R_EiE;
-        (* desc=" ", units="F"   *) real _C_CiE;
     `endif
 
 
@@ -1078,8 +1037,10 @@ analog begin
         Tdev    = Tamb+dt;
         if(Tdev < `TMIN + 273.15) begin
             Tdev = `TMIN + 273.15;
-        end else if (Tdev > `TMAX + 273.15) begin
-            Tdev = `TMAX + 273.15;
+        end else begin
+            if (Tdev > `TMAX + 273.15) begin
+                Tdev = `TMAX + 273.15;
+            end
         end
         VT      = `P_K*Tdev /`P_Q;
         dT      = Tdev-Tnom;
@@ -1516,8 +1477,8 @@ begin : Model_evaluation
 
     Tr      = tr;
     VT_f    = mcf*VT;
-    i_0f    = c10_t * exp(Vbiei/VT_f);
-    i_0r    = c10_t * exp(Vbici/VT);
+    i_0f    = c10_t * limexp(Vbiei/VT_f);
+    i_0r    = c10_t * limexp(Vbici/VT);
 
     //Internal b-e and b-c junction capacitances and charges
     //`QJMODF(cjei0_t,vdei_t,zei,ajei_t,V(br_biei),Qjei)
@@ -1619,7 +1580,7 @@ begin : Model_evaluation
         Qf      = sqrt(T_f0*itf*Q_fT);
         Q_pT    = Q_0+Qf+Qr;
         d_Q     = Q_pT;
-        (*ImplicitFunctionSolver="d_Q"*) while (abs(d_Q) >= `RTOLC*abs(Q_pT) && l_it <= `l_itmax) begin
+        while (abs(d_Q) >= `RTOLC*abs(Q_pT) && l_it <= `l_itmax) begin
             d_Q0    = d_Q;
             I_Tf1   = i_0f/Q_pT;
             a_h     = Oich*I_Tf1;
@@ -1646,7 +1607,7 @@ begin : Model_evaluation
             end
             Q_pT    = Q_pT+d_Q;
             l_it    = l_it+1;
-        end
+        end //while
 
         I_Tf1   = i_0f/Q_pT;
         a_h     = Oich*I_Tf1;
@@ -1799,8 +1760,8 @@ begin : Model_evaluation
     //Parasitic substrate transistor transfer current and diffusion charge
     if(itss > 0.0) begin : Sub_Transfer
         HSUM    = msf*VT;
-        HSa     = exp(Vbpci/HSUM);
-        HSb     = exp(Vsici/HSUM);
+        HSa     = limexp(Vbpci/HSUM);
+        HSb     = limexp(Vsici/HSUM);
         HSI_Tsu = itss_t*(HSa-HSb);
         if(tsf > 0.0) begin
             Qdsu    = tsf_t*itss_t*HSa;
@@ -1878,9 +1839,9 @@ begin : Load_sources
     I(br_bici)      <+ `Gmin*V(br_bici);
     I(br_ciei)	    <+ `Gmin*V(br_ciei);
 
-    // I(br_bci)       <+ ddt(type*qjcx0_t_i);
-    // I(br_bci)       <+ ddt(cbcpar1*V(br_bci));
-    // I(br_bpci)      <+ ddt(cbcpar2*V(br_bpci));
+    I(br_bci)       <+ ddt(type*qjcx0_t_i);
+    I(br_bci)       <+ ddt(cbcpar1*V(br_bci));
+    I(br_bpci)      <+ ddt(cbcpar2*V(br_bpci));
     if (rbx >= `MIN_R) begin
         I(br_bbp_i)     <+ V(br_bbp_i)/rbx_t;
     end else begin
@@ -1888,7 +1849,7 @@ begin : Load_sources
     end
     if(rbi0 >= `MIN_R) begin
         I(br_bpbi_i)    <+ V(br_bpbi_i)/rbi;
-        // I(br_bpbi_i)    <+ ddt(qrbi);
+        I(br_bpbi_i)    <+ ddt(qrbi);
     end else begin
         V(br_bpbi_v)    <+ 0.0;
     end
@@ -1899,21 +1860,21 @@ begin : Load_sources
     end
     I(br_bpei)      <+ type*ibep;
     I(br_bpei)      <+ type*irep;
-//    I(br_bpei)      <+ ddt(type*Qjep);
+    I(br_bpei)      <+ ddt(type*Qjep);
     I(br_biei)      <+ type*ibei;
     I(br_biei)      <+ type*irei;
     I(br_biei)      <+ type*ibh_rec;
-//    I(br_biei)      <+ ddt(type*(Qdeix+Qjei));
+    I(br_biei)      <+ ddt(type*(Qdeix+Qjei));
     I(br_bpsi)      <+ type*HSI_Tsu;
     I(br_bpci)      <+ type*ijbcx;
-//    I(br_bpci)      <+ ddt(type*(qjcx0_t_ii+Qdsu));
-//    I(br_be)        <+ ddt(cbepar1*V(br_be));
-//    I(br_bpe)       <+ ddt(cbepar2*V(br_bpe));
+    I(br_bpci)      <+ ddt(type*(qjcx0_t_ii+Qdsu));
+    I(br_be)        <+ ddt(cbepar1*V(br_be));
+    I(br_bpe)       <+ ddt(cbepar2*V(br_bpe));
     I(br_bici)      <+ type*(ibci-iavl);
-//    I(br_bici)      <+ ddt(type*(Qdci+Qjci));
+    I(br_bici)      <+ ddt(type*(Qdci+Qjci));
     I(br_sici)      <+ type*ijsc;
-//    I(br_sici)      <+ ddt(type*Qjs);
-//    I(br_sc)        <+ ddt(type*Qscp);
+    I(br_sici)      <+ ddt(type*Qjs);
+    I(br_sc)        <+ ddt(type*Qscp);
     I(br_ciei)      <+ type*Itxf;
     I(br_eici)      <+ type*itr;
     if (rcx >= `MIN_R) begin
@@ -1928,7 +1889,7 @@ begin : Load_sources
     end
     if(rsu >= `MIN_R) begin
         I(br_sis_i)     <+ V(br_sis_i)/rsu;
-        //I(br_sis_i)     <+ ddt(csu*V(br_sis_i));
+        I(br_sis_i)     <+ ddt(csu*V(br_sis_i));
     end else begin
         V(br_sis_v)     <+ 0.0;
     end
@@ -1953,18 +1914,18 @@ begin : Load_sources
         V(br_sht)       <+ 0.0;
     end else begin
         I(br_sht)       <+ V(br_sht)/rth_t-pterm;
-       // I(br_sht)       <+ ddt(cth*V(br_sht));
+        I(br_sht)       <+ ddt(cth*V(br_sht));
     end
     // ********************************************
 
     // NQS effect
     I(br_bxf1) <+ Ixf1;
-//    I(br_cxf1) <+ ddt(Qxf1);
+    I(br_cxf1) <+ ddt(Qxf1);
     I(br_bxf2) <+ Ixf2;
-    //I(br_cxf2) <+ ddt(Qxf2);
+    I(br_cxf2) <+ ddt(Qxf2);
 
     I(br_bxf) <+  Ixf;         //for RC nw
-   // I(br_cxf) <+  ddt(Qxf);    //for RC nw
+    I(br_cxf) <+  ddt(Qxf);    //for RC nw
 
 end //of Load_sources
 
@@ -1973,7 +1934,7 @@ end //of Load_sources
 
     //Thermal noise
     fourkt  = 4.0 * `P_K * Tdev;
-   /* if(rbx >= `MIN_R) begin
+    if(rbx >= `MIN_R) begin
         I(br_bbp_i)     <+ white_noise(fourkt/rbx_t,    "rbx");
     end
     if(rbi0 >= `MIN_R) begin
@@ -1987,34 +1948,34 @@ end //of Load_sources
     end
     if(rsu >= `MIN_R) begin
         I(br_sis_i)     <+ white_noise(fourkt/rsu,      "rsu");
-    end*/
+    end
 
     //Flicker noise : Fully correlated between the perimeter and internal base-node
     flicker_Pwr     = kf*pow(abs(ibei+ibep),af);
-    /*if (cfbe == -1) begin
+    if (cfbe == -1) begin
         I(br_biei)      <+ flicker_noise(flicker_Pwr,1.0, "flicker");
     end else begin
         I(br_bpei)      <+ flicker_noise(flicker_Pwr,1.0, "flicker");
-    end*/
+    end
 
     if (re >= `MIN_R) begin
         i_re     = V(br_eie_i)/re_t;
         flicker_Pwr     = kfre*pow(abs(i_re),afre);
-        //I(br_eie_i)     <+ flicker_noise(flicker_Pwr,1.0, "flicker_re");
+        I(br_eie_i)     <+ flicker_noise(flicker_Pwr,1.0, "flicker_re");
     end
 
     //Shot noise
 
     twoq    = 2.0 * `P_Q;
-    //I(br_cibi)      <+ white_noise(twoq*iavl,       "iavl");
+    I(br_cibi)      <+ white_noise(twoq*iavl,       "iavl");
 
-    //I(br_bici)      <+ white_noise(twoq*abs(ibci),  "ibci");
+    I(br_bici)      <+ white_noise(twoq*abs(ibci),  "ibci");
 
-    //I(br_bpei)      <+ white_noise(twoq*abs(ibep),  "ibep");
+    I(br_bpei)      <+ white_noise(twoq*abs(ibep),  "ibep");
 
-    //I(br_bpci)      <+ white_noise(twoq*abs(ijbcx), "ijbcx");
+    I(br_bpci)      <+ white_noise(twoq*abs(ijbcx), "ijbcx");
 
-    //I(br_sici)      <+ white_noise(twoq*abs(ijsc),  "ijsc");
+    I(br_sici)      <+ white_noise(twoq*abs(ijsc),  "ijsc");
 
     // Code section for correlated noise
 
@@ -2033,17 +1994,17 @@ end //of Load_sources
 
 
     // realization  of modified base shot noise source I1(bi,ei)
-        //I(b_n1)  <+ white_noise(2*`P_Q*abs(ibei),"ibei");
+        I(b_n1)  <+ white_noise(2*`P_Q*abs(ibei),"ibei");
         I(b_n1)  <+ -V(b_n1);
-        //I(bi,ei) <+ V(b_n1)+n_2/n_w*ddt(n_w*V(b_n1));
+        I(bi,ei) <+ V(b_n1)+n_2/n_w*ddt(n_w*V(b_n1));
 
     // realization of controlled base noise source I2(bi,ei)
 
-        //I(bi,ei) <+ n_1/n_w*ddt(n_w*V(b_n2));
+        I(bi,ei) <+ n_1/n_w*ddt(n_w*V(b_n2));
 
     // realization of modified collector shot noise source I(ci,ei) (uncontrolled)
 
-        //I(b_n2)  <+ white_noise(2*`P_Q*abs(it),"it");
+        I(b_n2)  <+ white_noise(2*`P_Q*abs(it),"it");
         I(b_n2)  <+ -V(b_n2);
         I(ci,ei) <+ V(b_n2);
 
@@ -2055,8 +2016,8 @@ end //of Load_sources
 
     // Applying the base & collector shot noise sources to appropriate branches
 
-        //I(br_ciei)  <+ white_noise(twoq*abs(it),         "it");
-        //I(br_biei)  <+ white_noise(twoq*abs(ibei),       "ibei");
+        I(br_ciei)  <+ white_noise(twoq*abs(it),         "it");
+        I(br_biei)  <+ white_noise(twoq*abs(ibei),       "ibei");
         I(b_n1)     <+ V(b_n1);
         I(b_n2)     <+ V(b_n2);
 
@@ -2148,42 +2109,6 @@ end     //of Noise_sources
 
         TK = Tdev;
         DTSH = V(br_sht);
-
-        // all circuit elements for extraction of the intrinsic transistor according to (Rosenbaum, diploma thesis, 2011, p.27)
-        _V_BE  = V(b,e);
-        _V_CE  = V(c,e);
-        _V_BpE = V(bp,e);
-        _V_BiE = V(bi,e);
-        _V_CiE = V(ci,e);
-        _V_EiE = V(ei,e);
-
-        _I_BE   = I(br_be);
-        _I_BBp  = I(br_bbp_i);
-        _I_BCi  = I(br_bci);
-        _I_BpBi = I(br_bci);
-        _I_BpE  = I(br_bpe);
-        _I_BpEi = I(br_bpei);
-        _I_BpCi = I(br_bpci);
-        _I_BiEi = I(br_biei);
-        _I_BiCi = I(br_bici);
-        _I_CiEi = I(br_ciei);
-        _I_CiC  = I(br_cic_i);
-        _I_CiE  = -I(br_sici); // according to thesis the internal substrate node is concted to the external emitter
-        _I_EiE  = I(br_eie_i);
-
-        _C_BCi  = cbcpar1;
-        _C_BpCi = cbcpar2;
-        _R_BpCi = type*ddx(_I_BpCi,V(bp));//,ci));
-        _R_BBp  = rbx_t;
-        _R_BpBi = rbi;
-        _C_BpBi = Crbi; // not shown in thesis
-        _R_CiC  = rcx_t;
-        _C_BE   = cbepar1;
-        _C_BiE  = cbepar1;
-        _C_BiEi = Cjep;
-        _R_BiEi = type*ddx(_I_BiEi,V(bi));//,ei));
-        _R_EiE  = re_t;
-        _C_CiE  = Cjs;// according to thesis the internal substrate node is concted to the external emitter
     end
 `endif
 

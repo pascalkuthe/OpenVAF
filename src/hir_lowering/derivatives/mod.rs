@@ -12,6 +12,7 @@ use crate::analysis::DominatorTree;
 use crate::ast::UnaryOperator;
 use crate::hir::Branch;
 use crate::hir::DisciplineAccess;
+use crate::hir_lowering::error::{Error, Type, Warning, WarningType};
 use crate::hir_lowering::HirToMirFold;
 use crate::ir::mir::{
     ComparisonOperator, IntegerBinaryOperator, RealExpression, Variable, VariableType,
@@ -37,6 +38,7 @@ pub enum Unknown<'tag> {
     PortFlow(NetId<'tag>),
     Flow(BranchId<'tag>),
     Temperature,
+    Time,
 }
 
 impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
@@ -204,7 +206,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                 )
                             }
 
-                            RealBinaryOperator::Modulus => todo!("Error"),
+                            RealBinaryOperator::Modulus => {
+                                self.errors.push(Error {
+                                    error_type: Type::DerivativeNotDefined,
+                                    source: self.mir[expr].source,
+                                });
+                                return None;
+                            }
                         }
                     }
 
@@ -260,7 +268,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                                 RealExpression::BinaryOperator(top, op, bottom)
                             }
-                            RealBinaryOperator::Modulus => todo!("Error"),
+                            RealBinaryOperator::Modulus => {
+                                self.errors.push(Error {
+                                    error_type: Type::DerivativeNotDefined,
+                                    source: self.mir[expr].source,
+                                });
+                                return None;
+                            }
                         }
                     }
                     (Some(lhs_derived), None) => {
@@ -296,10 +310,24 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                 )
                             }
 
-                            RealBinaryOperator::Modulus => todo!("Error"),
+                            RealBinaryOperator::Modulus => {
+                                self.errors.push(Error {
+                                    error_type: Type::DerivativeNotDefined,
+                                    source: self.mir[expr].source,
+                                });
+                                return None;
+                            }
                         }
                     }
                 }
+            }
+
+            RealExpression::Noise(_, _) => {
+                self.errors.push(Error {
+                    error_type: Type::DerivativeNotDefined,
+                    source: self.mir[expr].source,
+                });
+                return None;
             }
 
             RealExpression::Negate(span, expr) => RealExpression::Negate(
@@ -339,7 +367,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         arg,
                     ),
 
-                    BuiltInFunctionCall1p::Exp => RealExpression::BinaryOperator(
+                    BuiltInFunctionCall1p::Exp(_) /* Whether this is a limexp or exp doesnt affect how the derivative is calculated*/ => RealExpression::BinaryOperator(
                         inner_derivative,
                         self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                         expr,
@@ -920,12 +948,43 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 RealExpression::Literal(1.0)
             }
 
-            RealExpression::SystemFunctionCall(_) if Unknown::Temperature == derive_by => {
+            RealExpression::Temperature if Unknown::Temperature == derive_by => {
                 RealExpression::Literal(1.0)
             } //TODO other system function calls
 
+            RealExpression::Vt(None) if Unknown::Temperature == derive_by => {
+                //TODO add a way to customize constants
+                self.warnings.push(Warning {
+                    error_type: WarningType::StandardNatureConstants(
+                        "Derivative of '$vt' by temperature encountered",
+                    ),
+                    source: self.mir[expr].source,
+                });
+                RealExpression::Literal(1.3806488e-23 / 1.602176565e-19)
+            }
+
+            RealExpression::Vt(Some(temp)) => {
+                //TODO add a way to customize constants
+                self.warnings.push(Warning {
+                    error_type: WarningType::StandardNatureConstants(
+                        "Derivative of '$vt(T)' encountered",
+                    ),
+                    source: self.mir[expr].source,
+                });
+                let dtemp = self.partial_derivative(temp, derive_by, reference_derivative)?;
+                let p_q_p_k = self.mir.push(
+                    self.mir[expr]
+                        .clone_as(RealExpression::Literal(1.3806488e-23 / 1.602176565e-19)),
+                );
+                RealExpression::BinaryOperator(
+                    p_q_p_k,
+                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                    dtemp,
+                )
+            }
+
             //TODO branch temperature dependence
-            RealExpression::BranchAccess(DisciplineAccess::Potential, branch) => {
+            RealExpression::BranchAccess(DisciplineAccess::Potential, branch, 0) => {
                 if let Unknown::NodePotential(net) = derive_by {
                     match self.mir[branch].contents.branch {
                         Branch::Nets(high, _) if high == net => RealExpression::Literal(1.0),
@@ -937,13 +996,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 }
             }
 
-            RealExpression::BranchAccess(DisciplineAccess::Flow, branch)
+            RealExpression::BranchAccess(DisciplineAccess::Flow, branch, 0)
                 if Unknown::Flow(branch) == derive_by =>
             {
                 RealExpression::Literal(1.0)
             }
 
-            RealExpression::BranchAccess(DisciplineAccess::Flow, branch) => {
+            RealExpression::BranchAccess(access, branch, order) if Unknown::Time == derive_by => {
+                RealExpression::BranchAccess(access, branch, order + 1)
+            }
+
+            RealExpression::BranchAccess(DisciplineAccess::Flow, branch, 0) => {
                 if let Unknown::PortFlow(net) = derive_by {
                     match self.mir[branch].contents.branch {
                         // the other way around because the node being low potential means current flows in
@@ -958,8 +1021,18 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
             RealExpression::Literal(_)
             | RealExpression::ParameterReference(_)
-            | RealExpression::SystemFunctionCall(_)
-            | RealExpression::BranchAccess(_, _) => return None,
+            | RealExpression::SimParam(_, _)
+            | RealExpression::Temperature
+            | RealExpression::Vt(None)
+            | RealExpression::BranchAccess(_, _, 0) => return None,
+
+            RealExpression::BranchAccess(_, _, _) => {
+                self.errors.push(Error {
+                    error_type: Type::PartialDerivativeOfTimeDerivative,
+                    source: self.mir[expr].source,
+                });
+                return None;
+            }
         };
         Some(self.mir.push(self.mir[expr].clone_as(res)))
     }
@@ -1129,7 +1202,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             | IntegerBinaryOperator::And
                             | IntegerBinaryOperator::Or
                             | IntegerBinaryOperator::LogicOr
-                            | IntegerBinaryOperator::LogicAnd => todo!("Error"),
+                            | IntegerBinaryOperator::LogicAnd => {
+                                self.errors.push(Error {
+                                    error_type: Type::DerivativeNotDefined,
+                                    source: self.mir[expr].source,
+                                });
+                                return None;
+                            }
 
                             IntegerBinaryOperator::ShiftLeft => {
                                 // ( lhs'+ln(2)*lhs*rhs' )* 2 ** rhs
@@ -1301,7 +1380,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             | IntegerBinaryOperator::And
                             | IntegerBinaryOperator::Or
                             | IntegerBinaryOperator::LogicOr
-                            | IntegerBinaryOperator::LogicAnd => todo!("Error"),
+                            | IntegerBinaryOperator::LogicAnd => {
+                                self.errors.push(Error {
+                                    error_type: Type::DerivativeNotDefined,
+                                    source: self.mir[expr].source,
+                                });
+                                return None;
+                            }
 
                             IntegerBinaryOperator::ShiftLeft => {
                                 // ln(2)*rhs' * expr
@@ -1399,7 +1484,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             | IntegerBinaryOperator::And
                             | IntegerBinaryOperator::Or
                             | IntegerBinaryOperator::LogicOr
-                            | IntegerBinaryOperator::LogicAnd => todo!("Error"),
+                            | IntegerBinaryOperator::LogicAnd => {
+                                self.errors.push(Error {
+                                    error_type: Type::DerivativeNotDefined,
+                                    source: self.mir[expr].source,
+                                });
+                                return None;
+                            }
 
                             IntegerBinaryOperator::ShiftLeft => {
                                 //  lhs'* 2 ** rhs
@@ -1601,7 +1692,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             }
 
             // rounding undefined at 0.5 + n for any integer n rest is zero TODO warn (or error?)
-            IntegerExpression::RealCast(expr) => return None,
+            IntegerExpression::RealCast(_) => return None,
 
             IntegerExpression::FunctionCall(_, _) => todo!("Function calls"),
             IntegerExpression::NetReference(_) | IntegerExpression::PortReference(_) => {
@@ -1612,7 +1703,15 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             | IntegerExpression::RealComparison(_, _, _)
             | IntegerExpression::StringEq(_, _)
             | IntegerExpression::UnaryOperator(_, _)
-            | IntegerExpression::StringNEq(_, _) => todo!("error"),
+            | IntegerExpression::StringNEq(_, _) => {
+                self.errors.push(Error {
+                    error_type: Type::DerivativeNotDefined,
+                    source: self.mir[expr].source,
+                });
+                return None;
+            }
+
+            IntegerExpression::PortConnected(_) | IntegerExpression::ParamGiven(_) => return None,
         };
         Some(self.mir.push(self.mir[expr].clone_as(res)))
     }
@@ -1677,7 +1776,8 @@ impl<'tag> Mir<'tag> {
             Unknown::NodePotential(net) => format!("pot({})", self[net].contents.name),
             Unknown::Flow(branch) => format!("flow({})", self[branch].contents.name),
             Unknown::PortFlow(net) => format!("flow(<{}>)", self[net].contents.name),
-            Unknown::Temperature => "T".to_string(),
+            Unknown::Temperature => "Temp".to_string(),
+            Unknown::Time => "t".to_string(),
         };
         let name =
             Ident::from_str(format!("∂{}/∂{}", self[variable].contents.name, derive_by).as_str());

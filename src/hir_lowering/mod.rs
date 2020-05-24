@@ -28,6 +28,7 @@
 //!     During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
 //!
 
+use crate::analysis::constant_folding::{ConstantFolder, ReadingConstantFold};
 use crate::ast;
 use crate::hir::Hir;
 use crate::hir_lowering::derivatives::DerivativeMap;
@@ -42,6 +43,7 @@ use crate::SourceMap;
 pub mod control_flow;
 pub mod derivatives;
 pub mod error;
+mod expression_semantic;
 
 #[cfg(test)]
 pub mod test;
@@ -68,6 +70,9 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
     }
 
     fn fold(mut self) -> (Result<Box<Mir<'tag>>, Vec<Error<'tag>>>, Vec<Warning<'tag>>) {
+        for nature in self.hir.full_range() {
+            self.fold_nature(nature)
+        }
         for parameter in self.hir.full_range() {
             self.fold_parameter(parameter)
         }
@@ -168,48 +173,85 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             ast::ParameterType::String() => todo!("String parameters"),
             ast::ParameterType::Numerical {
                 parameter_type,
-                ref included_ranges,
-                ref excluded_ranges,
+                ref from_ranges,
+                ref excluded,
             } => match parameter_type {
                 ast::VariableType::INTEGER | ast::VariableType::TIME => {
-                    if let Some(type_info) =
-                        self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
-                    {
-                        ParameterType::Integer {
-                            valid_ranges: type_info.0,
-                            default_value: type_info.1,
-                        }
-                    } else {
-                        //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
-                        // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
-                        ParameterType::Integer {
-                            valid_ranges: Vec::new(),
-                            default_value: 0,
-                        }
+                    let from_ranges = from_ranges
+                        .iter()
+                        .filter_map(|range| {
+                            let start = range.start.try_copy_with(&mut |expr| {
+                                self.fold_read_only_integer_expression(expr)
+                            });
+                            let end = range.end.try_copy_with(&mut |expr| {
+                                self.fold_read_only_integer_expression(expr)
+                            });
+                            Some(start?..end?)
+                        })
+                        .collect();
+
+                    let excluded = excluded
+                        .iter()
+                        .filter_map(|exclude| {
+                            exclude
+                                .try_clone_with(|expr| self.fold_read_only_integer_expression(expr))
+                        })
+                        .collect();
+
+                    let default_value = self
+                        .fold_read_only_integer_expression(
+                            self.hir[parameter].contents.default_value,
+                        )
+                        .unwrap_or(unsafe {
+                            // Just a plcaholder so that something can be written in the error case
+                            // This can never be read so its save
+                            IntegerExpressionId::from_raw_index(0)
+                        });
+                    ParameterType::Integer {
+                        from_ranges,
+                        excluded,
+                        default_value,
                     }
                 }
                 ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                    if let Some(type_info) =
-                        self.eval_parameter_type(parameter, included_ranges, excluded_ranges)
-                    {
-                        ParameterType::Real {
-                            valid_ranges: type_info.0,
-                            default_value: type_info.1,
-                        }
-                    } else {
-                        //dummy values in case of errors to ensure every parameter gets initalized to prevent UB during drop.
-                        // This is okay since self.errors is not empty anymore and therefore self.mir won't be returned
-                        ParameterType::Real {
-                            valid_ranges: Vec::new(),
-                            default_value: 0.0,
-                        }
+                    let from_ranges = from_ranges
+                        .iter()
+                        .filter_map(|range| {
+                            let start = range.start.try_copy_with(&mut |expr| {
+                                self.fold_read_only_real_expression(expr)
+                            });
+                            let end = range.end.try_copy_with(&mut |expr| {
+                                self.fold_read_only_real_expression(expr)
+                            });
+                            Some(start?..end?)
+                        })
+                        .collect();
+
+                    let excluded = excluded
+                        .iter()
+                        .filter_map(|exclude| {
+                            exclude.try_clone_with(|expr| self.fold_read_only_real_expression(expr))
+                        })
+                        .collect();
+
+                    let default_value = self
+                        .fold_read_only_real_expression(self.hir[parameter].contents.default_value)
+                        .unwrap_or(unsafe {
+                            //Safe in practice but we can make this prettier
+                            //TODO remove unnecessary unsafety
+                            RealExpressionId::from_raw_index(0)
+                        });
+                    ParameterType::Real {
+                        from_ranges,
+                        excluded,
+                        default_value,
                     }
                 }
             },
         };
 
         unsafe {
-            //This is save since we write to all parameters
+            //This is save since we write to all parameters unconditionally
             self.mir.write_unsafe(
                 parameter,
                 self.hir[parameter].map_with(|old| Parameter {
@@ -219,10 +261,43 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             )
         }
     }
-}
 
-mod constant_eval;
-mod expression_semantic;
+    pub fn fold_nature(&mut self, nature: NatureId<'tag>) {
+        let units = self
+            .fold_read_only_string_expression(self.hir[nature].contents.units)
+            .and_then(|expr| ReadingConstantFold(&self.mir).string_constant_fold(&mut (), expr));
+        let abstol = self
+            .fold_read_only_real_expression(self.hir[nature].contents.abstol)
+            .and_then(|expr| ReadingConstantFold(&self.mir).real_constant_fold(&mut (), expr));
+
+        let units = if let Some(units) = units {
+            units
+        } else {
+            unreachable_unchecked!(
+                "Constant fold failed during HIR Lowering! This is a compiler bug please report this"
+            );
+        };
+        let abstol = if let Some(abstol) = abstol {
+            abstol
+        } else {
+            unreachable_unchecked!(
+                "Constant fold failed during HIR Lowering! This is a compiler bug please report this"
+            );
+        };
+
+        self.mir.write(
+            nature,
+            self.hir[nature].copy_with(|old| Nature {
+                name: old.name,
+                abstol,
+                units,
+                access: old.access,
+                idt_nature: old.idt_nature,
+                ddt_nature: old.ddt_nature,
+            }),
+        )
+    }
+}
 
 impl<'tag> Hir<'tag> {
     /// Folds an hir to an mir by adding and checking type information

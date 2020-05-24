@@ -45,6 +45,8 @@ pub use ids::VariableId;
 use crate::compact_arena::{Idx16, Idx8, SafeRange};
 use crate::symbol::Ident;
 use crate::Span;
+use bitflags::_core::fmt::Debug;
+use std::ops::Range;
 
 #[macro_use]
 pub mod ids;
@@ -66,6 +68,8 @@ pub mod mir;
 /// # use OpenVAF::ir::{Node, Attribute};
 /// # use OpenVAF::ir::ast::Statement;
 /// # use OpenVAF::symbol::Ident;
+/// # use open_vaf::symbol::Ident;
+/// # use open_vaf::ir::Attribute;
 /// mk_ast!(ast);
 /// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
 /// assert_eq!(ast[id].name,Ident::from_str("foo"));
@@ -88,6 +92,8 @@ pub trait SafeRangeCreation<Key: Copy + Clone> {
     /// # use OpenVAF::ir::{Node, Attribute};
     /// # use OpenVAF::ir::ast::Statement;
     /// # use OpenVAF::symbol::Ident;
+    /// # use open_vaf::ir::Attribute;
+    /// # use open_vaf::symbol::Ident;
     /// mk_ast!(ast);
     /// let foo = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
     /// let bar = ast.push(Attribute{name: Ident::from_str("bar"),value:None });
@@ -114,6 +120,8 @@ pub trait SafeRangeCreation<Key: Copy + Clone> {
     /// # use OpenVAF::ir::{Node, Attribute};
     /// # use OpenVAF::ir::ast::Statement;
     /// # use OpenVAF::symbol::Ident;
+    /// # use open_vaf::ir::Attribute;
+    /// # use open_vaf::symbol::Ident;
     /// mk_ast!(ast);
     /// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
     /// let range = ast.full_range();
@@ -230,7 +238,7 @@ impl<'tag, T> AttributeNode<'tag, T> {
 #[derive(Copy, Clone, Debug)]
 pub enum BuiltInFunctionCall1p {
     Sqrt,
-    Exp,
+    Exp(bool),
     Ln,
     Log,
     Abs,
@@ -261,4 +269,111 @@ pub enum BuiltInFunctionCall2p {
     Min,
     Max,
     ArcTan2,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum NoiseSource<Expr, Table> {
+    White(Expr),
+    Flicker(Expr, Expr),
+    Table(Table),
+    TableLog(Table),
+}
+impl<Expr, Table> NoiseSource<Expr, Table> {
+    pub fn fold<NewExpr, NewTable>(
+        self,
+        mut fold_expr: impl FnMut(Expr) -> NewExpr,
+        mut fold_table: impl FnMut(Table) -> NewTable,
+    ) -> NoiseSource<NewExpr, NewTable> {
+        match self {
+            NoiseSource::White(expr) => NoiseSource::White(fold_expr(expr)),
+            NoiseSource::Flicker(expr1, expr2) => {
+                NoiseSource::Flicker(fold_expr(expr1), fold_expr(expr2))
+            }
+            NoiseSource::Table(table) => NoiseSource::Table(fold_table(table)),
+            NoiseSource::TableLog(table) => NoiseSource::TableLog(fold_table(table)),
+        }
+    }
+}
+
+// TODO add system to generalise (dynamically add more)
+// TODO add a way to constant fold these
+#[derive(Clone, Debug)]
+pub enum SystemFunctionCall<RealExpr, StrExpr, Port, Parameter> {
+    Temperature,
+    Vt(Option<RealExpr>),
+    Simparam(StrExpr, Option<RealExpr>),
+    SimparamStr(StrExpr),
+    PortConnected(Port),
+    ParameterGiven(Parameter),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumericalParameterRangeBound<T> {
+    pub inclusive: bool,
+    pub bound: T,
+}
+impl<T: Copy> NumericalParameterRangeBound<T> {
+    pub fn copy_with<N>(self, f: impl FnOnce(T) -> N) -> NumericalParameterRangeBound<N> {
+        NumericalParameterRangeBound {
+            inclusive: self.inclusive,
+            bound: f(self.bound),
+        }
+    }
+
+    pub fn copy_with_ref<N>(self, f: &mut impl FnMut(T) -> N) -> NumericalParameterRangeBound<N> {
+        NumericalParameterRangeBound {
+            inclusive: self.inclusive,
+            bound: f(self.bound),
+        }
+    }
+
+    pub fn try_copy_with<N>(
+        self,
+        f: impl FnOnce(T) -> Option<N>,
+    ) -> Option<NumericalParameterRangeBound<N>> {
+        Some(NumericalParameterRangeBound {
+            inclusive: self.inclusive,
+            bound: f(self.bound)?,
+        })
+    }
+
+    pub fn try_copy_with_ref<N>(
+        self,
+        f: &mut impl FnMut(T) -> Option<N>,
+    ) -> Option<NumericalParameterRangeBound<N>> {
+        Some(NumericalParameterRangeBound {
+            inclusive: self.inclusive,
+            bound: f(self.bound)?,
+        })
+    }
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum NumericalParameterRangeExclude<T> {
+    Value(T),
+    Range(Range<NumericalParameterRangeBound<T>>),
+}
+impl<T: Copy> NumericalParameterRangeExclude<T> {
+    pub fn clone_with<N>(&self, mut f: impl FnMut(T) -> N) -> NumericalParameterRangeExclude<N> {
+        match self {
+            NumericalParameterRangeExclude::Value(val) => {
+                NumericalParameterRangeExclude::Value(f(*val))
+            }
+            NumericalParameterRangeExclude::Range(range) => NumericalParameterRangeExclude::Range(
+                range.start.copy_with_ref(&mut f)..range.end.copy_with_ref(&mut f),
+            ),
+        }
+    }
+    pub fn try_clone_with<N>(
+        &self,
+        mut f: impl FnMut(T) -> Option<N>,
+    ) -> Option<NumericalParameterRangeExclude<N>> {
+        Some(match self {
+            NumericalParameterRangeExclude::Value(val) => {
+                NumericalParameterRangeExclude::Value(f(*val)?)
+            }
+            NumericalParameterRangeExclude::Range(range) => NumericalParameterRangeExclude::Range(
+                range.start.try_copy_with_ref(&mut f)?..range.end.try_copy_with_ref(&mut f)?,
+            ),
+        })
+    }
 }

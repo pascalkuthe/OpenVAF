@@ -199,7 +199,11 @@ impl Span {
         self
     }
     pub fn extend(self, to: Self) -> Self {
-        Self::new(self.get_start(), to.get_end())
+        if to.get_end() > self.get_start() {
+            Self::new(self.get_start(), to.get_end())
+        } else {
+            self
+        }
     }
 }
 impl From<Range> for Span {
