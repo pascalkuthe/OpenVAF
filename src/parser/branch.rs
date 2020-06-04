@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 use crate::ast::{Branch, BranchAccess, BranchDeclaration};
-use crate::ir::Push;
+
 use crate::ir::{AttributeNode, Attributes, Node};
 use crate::parser::error::Result;
 use crate::parser::error::Type::UnexpectedToken;
@@ -16,8 +16,8 @@ use crate::parser::lexer::Token;
 use crate::parser::{Error, Parser};
 use crate::symbol_table::SymbolDeclaration;
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
-    pub fn parse_branch_declaration(&mut self, attributes: Attributes<'ast>) -> Result {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_branch_declaration(&mut self, attributes: Attributes) -> Result {
         let start = self.preprocessor.current_start();
         self.expect(Token::ParenOpen)?;
         let branch = self.parse_branch()?;
@@ -26,7 +26,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             |sel: &mut Self| {
                 let name = sel.parse_identifier(false)?;
                 let source = sel.span_to_current_end(start);
-                let branch_decl = sel.ast.push(AttributeNode {
+                let branch_decl = sel.ast.branches.push(AttributeNode {
                     attributes,
                     contents: BranchDeclaration {
                         name,
@@ -47,14 +47,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     pub fn parse_branch(&mut self) -> Result<Branch> {
-        if self.look_ahead()?.0 == Token::OpLess {
+        if self.look_ahead()? == Token::OpLess {
             self.consume_lookahead();
             let res = Branch::Port(self.parse_hierarchical_identifier()?);
             self.expect(Token::OpGreater)?;
             Ok(res)
         } else {
             let first_net_name = self.parse_hierarchical_identifier()?;
-            let (token, source) = self.look_ahead()?;
+            let (token, source) = self.look_ahead_with_span()?;
             match token {
                 Token::Comma => {
                     self.consume_lookahead();
@@ -65,7 +65,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 _ => Err(Error {
                     source,
                     error_type: UnexpectedToken {
-                        expected: vec![token],
+                        expected: vec![Token::Comma],
                     },
                 }),
             }
@@ -75,14 +75,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_branch_access(&mut self) -> Result<Node<BranchAccess>> {
         self.expect(Token::ParenOpen)?;
         let start = self.preprocessor.current_start();
-        let res = if self.look_ahead()?.0 == Token::OpLess {
+        let res = if self.look_ahead()? == Token::OpLess {
             self.consume_lookahead();
             let res = Branch::Port(self.parse_hierarchical_identifier()?);
             self.expect(Token::OpGreater)?;
             BranchAccess::Implicit(res)
         } else {
             let first_net_name_or_identifer = self.parse_hierarchical_identifier()?;
-            if self.look_ahead()?.0 == Token::Comma {
+            if self.look_ahead()? == Token::Comma {
                 let second_net_name = self.parse_hierarchical_identifier()?;
                 BranchAccess::Implicit(Branch::Nets(first_net_name_or_identifer, second_net_name))
             } else {

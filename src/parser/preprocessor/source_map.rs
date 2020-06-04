@@ -19,6 +19,7 @@ use intrusive_collections::{Bound, KeyAdapter, RBTree, RBTreeLink};
 
 use crate::span::{Index, LineNumber};
 use crate::{Lexer, Span};
+use pretty_assertions::assert_ne;
 
 pub type ArgumentIndex = u8;
 pub type CallDepth = u8;
@@ -359,7 +360,8 @@ impl<'lt, 'source_map> SourceMapBuilder<'lt, 'source_map> {
     }
 
     pub(super) fn enter_non_root_substitution(&mut self, original_span: Span, source: &'lt str) {
-        debug_assert!(self.substitution_stack.len() != 0);
+        #[cfg(debug_assertions)]
+        assert_ne!(self.substitution_stack.len(), 0);
         let parent_src_state = self.substitution_stack.last_mut().unwrap();
         let old_offset = parent_src_state.offset as usize;
         parent_src_state.offset = original_span.get_end();

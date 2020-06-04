@@ -12,8 +12,8 @@ use std::fmt::{Debug, Formatter};
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::vec::IntoIter;
+use yansi_term::Color::*;
 
-use ansi_term::Color::*;
 use bumpalo::Bump;
 use indexmap::map::IndexMap;
 use log::*;
@@ -154,14 +154,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
 
     pub fn done(self) -> &'source_map SourceMap<'source_map> {
         if self.current_token != Token::EOF {
-            error!(
-                "{}{}",
-                Red.bold().paint("error"),
-                Fixed(253)
-                    .bold()
-                    .paint(": preprocessor.done() was called before EOF file reached ")
-            );
-            panic!();
+            panic!("preprocessor.done() was called before EOF file reached ");
         }
         self.source_map_builder.done()
     }
@@ -323,11 +316,9 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 Token::Newline => self.source_map_builder.new_lines(1),
                 Token::MacroDefNewLine => {
                     self.source_map_builder.new_lines(1);
-                    return self.token_error(Type::UnexpectedToken { expected: vec![] });
                 }
                 Token::Include => {
                     let start = self.current_source_start;
-                    self.advance_state()?;
                     self.consume(Token::LiteralString)?;
                     let mut path_str = parse_string(self.slice());
                     match path_str.as_str() {
@@ -407,7 +398,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             let name = self.slice();
             if invert ^ self.macros.contains_key(name) {
                 debug!(
-                    "Condition if{}def {} is fulfilled",
+                    "Preprocessor: Condition if{}def {} is fulfilled",
                     if invert { "n" } else { "" },
                     self.slice()
                 );
@@ -416,15 +407,16 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                 return Ok(());
             } else {
                 debug!(
-                    "Condition if{}def {} is not fulfilled",
+                    "Preprocessor: Condition if{}def {} is not fulfilled",
                     if invert { "n" } else { "" },
                     self.slice()
                 );
                 loop {
                     match self.current_token {
                         Token::MacroElsif => {
-                            invert = false; //elsif is never inverted according to standard (the compiler should (hopefully) figure out that after this point invert ^ x = x)
+                            invert = false; // there is no elseinfdef
                             start = self.current_start;
+                            self.advance_state()?;
                             break;
                         }
                         Token::MacroEndIf => return Ok(()),
@@ -488,17 +480,16 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
 
             Token::SimpleIdentifier(FollowedByBracket(true)) => {
                 let name = self.slice();
-                self.advance_state()?;
 
                 self.consume(Token::ParenOpen)?;
+
                 self.advance_state()?;
-
                 self.consume_simple_ident()?;
-
                 let mut args = Vec::with_capacity(2);
                 args.push(self.slice());
 
                 loop {
+                    let expected_at = self.current_end();
                     self.advance_state()?;
                     match self.current_token {
                         Token::Newline => {
@@ -519,8 +510,9 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                             });
                         }
                         _ => {
-                            return self.token_error(error::Type::UnexpectedToken {
+                            return self.token_error(error::Type::MissingOrUnexpectedToken {
                                 expected: vec![Token::ParenClose, Token::Comma],
+                                expected_at,
                             });
                         }
                     }
@@ -825,12 +817,12 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
     }
 
     fn consume(&mut self, token: Token) -> Result<()> {
+        self.advance_state()?;
         if self.current_token != token {
             let error = error::Type::UnexpectedToken {
                 expected: vec![token],
             };
-            let error = self.token_error(error);
-            error
+            self.token_error(error)
         } else {
             Ok(())
         }
@@ -840,8 +832,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             let error = error::Type::UnexpectedToken {
                 expected: vec![Token::SimpleIdentifier(FollowedByBracket(false))],
             };
-            let error = self.token_error(error);
-            error
+            self.token_error(error)
         } else {
             Ok(())
         }

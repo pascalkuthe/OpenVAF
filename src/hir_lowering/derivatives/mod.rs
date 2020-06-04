@@ -8,7 +8,6 @@
  * *****************************************************************************************
 */
 
-use crate::analysis::DominatorTree;
 use crate::ast::UnaryOperator;
 use crate::hir::Branch;
 use crate::hir::DisciplineAccess;
@@ -18,61 +17,41 @@ use crate::ir::mir::{
     ComparisonOperator, IntegerBinaryOperator, RealExpression, Variable, VariableType,
 };
 use crate::ir::{
-    AttributeNode, BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId,
-    NetId, Node, ParameterId, Push, RealExpressionId, SafeRangeCreation, VariableId,
+    AttributeNode, Attributes, BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p,
+    IntegerExpressionId, NetId, Node, ParameterId, RealExpressionId, VariableId,
 };
-use crate::mir::{ControlFlowGraph, IntegerExpression, Mir, RealBinaryOperator};
+
+use crate::mir::{IntegerExpression, Mir, RealBinaryOperator};
 use crate::symbol::{Ident, Symbol};
+use crate::ControlFlowGraph;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 mod solver;
 
-pub(super) type PartialDerivativeMap<'tag> = FxHashMap<Unknown<'tag>, VariableId<'tag>>;
+pub(super) type PartialDerivativeMap = FxHashMap<Unknown, VariableId>;
 
-pub(super) type DerivativeMap<'tag> = FxHashMap<VariableId<'tag>, PartialDerivativeMap<'tag>>;
+pub(super) type DerivativeMap = FxHashMap<VariableId, PartialDerivativeMap>;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Unknown<'tag> {
-    Parameter(ParameterId<'tag>),
-    NodePotential(NetId<'tag>),
-    PortFlow(NetId<'tag>),
-    Flow(BranchId<'tag>),
+pub enum Unknown {
+    Parameter(ParameterId),
+    NodePotential(NetId),
+    PortFlow(NetId),
+    Flow(BranchId),
     Temperature,
     Time,
 }
 
-impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
-    pub(super) fn generate_derivatives(
-        &mut self,
-        cfg: &mut ControlFlowGraph<'tag, 'tag>,
-        dtree: &DominatorTree<'tag>,
-    ) {
-        self.solve(cfg, dtree)
-    }
-
-    pub fn derivative_of_assignment_reference(
-        &mut self,
-        reference: VariableId<'tag>,
-        derive_by: Unknown<'tag>,
-        dst: VariableId<'tag>,
-    ) -> VariableId<'tag> {
-        if dst == reference {
-            todo!("error")
-        }
-        let mir = &mut self.mir;
-        *self
-            .variable_to_differentiate
-            .entry(reference)
-            .or_insert_with(|| FxHashMap::with_capacity_and_hasher(2, Default::default()))
-            .entry(derive_by)
-            .or_insert_with(|| mir.declare_partial_derivative_variable(reference, derive_by))
+impl<'lt> HirToMirFold<'lt> {
+    pub(super) fn generate_derivatives(&mut self, cfg: &mut ControlFlowGraph) {
+        self.solve(cfg)
     }
 
     pub fn derivative_of_reference(
         &mut self,
-        reference: VariableId<'tag>,
-        derive_by: Unknown<'tag>,
-    ) -> VariableId<'tag> {
+        reference: VariableId,
+        derive_by: Unknown,
+    ) -> VariableId {
         let mir = &mut self.mir;
         *self
             .variable_to_differentiate
@@ -84,9 +63,9 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
     pub fn partial_derivative_read_only(
         &mut self,
-        expr: RealExpressionId<'tag>,
-        derive_by: Unknown<'tag>,
-    ) -> Option<RealExpressionId<'tag>> {
+        expr: RealExpressionId,
+        derive_by: Unknown,
+    ) -> Option<RealExpressionId> {
         self.partial_derivative(expr, derive_by, &mut |fold, var| {
             fold.derivative_of_reference(var, derive_by)
         })
@@ -94,10 +73,10 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
     pub fn partial_derivative(
         &mut self,
-        expr: RealExpressionId<'tag>,
-        derive_by: Unknown<'tag>,
-        reference_derivative: &mut impl FnMut(&mut Self, VariableId<'tag>) -> VariableId<'tag>,
-    ) -> Option<RealExpressionId<'tag>> {
+        expr: RealExpressionId,
+        derive_by: Unknown,
+        reference_derivative: &mut impl FnMut(&mut Self, VariableId) -> VariableId,
+    ) -> Option<RealExpressionId> {
         let res = match self.mir[expr].contents {
             RealExpression::VariableReference(variable) => {
                 RealExpression::VariableReference(reference_derivative(self, variable))
@@ -114,10 +93,10 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                 RealExpression::BinaryOperator(lhs_derived, op, rhs_derived)
                             }
                             RealBinaryOperator::Multiply => {
-                                let sum1 = self.mir.push(self.mir[expr].clone_as(
+                                let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(lhs_derived, op, rhs),
                                 ));
-                                let sum2 = self.mir.push(self.mir[expr].clone_as(
+                                let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(lhs, op, rhs_derived),
                                 ));
                                 RealExpression::BinaryOperator(
@@ -129,47 +108,47 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                             RealBinaryOperator::Divide => {
                                 // (lhs'*rhs-lhs * rhs') / (rhs*rhs)
-                                let sum1 = self.mir.push(self.mir[expr].clone_as(
+                                let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs_derived,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs,
                                     ),
                                 ));
-                                let sum2 = self.mir.push(self.mir[expr].clone_as(
+                                let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
                                     ),
                                 ));
-                                let top = self.mir.push(self.mir[expr].clone_as(
+                                let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         sum1,
                                         op.copy_as(RealBinaryOperator::Subtract),
                                         sum2,
                                     ),
                                 ));
-                                let bottom = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let bottom = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs,
-                                    ),
-                                ));
+                                    )),
+                                );
                                 RealExpression::BinaryOperator(top, op, bottom)
                             }
 
                             RealBinaryOperator::Exponent => {
                                 // (rhs/lhs * lhs' + ln (lhs) * rhs')*expr
-                                let ratio = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ratio = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Divide),
                                         lhs,
-                                    ),
-                                ));
-                                let sum1 = self.mir.push(self.mir[expr].clone_as(
+                                    )),
+                                );
+                                let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         ratio,
                                         op.copy_as(RealBinaryOperator::Multiply),
@@ -177,13 +156,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                     ),
                                 ));
 
-                                let ln_lhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BuiltInFunctionCall1p(
+                                let ln_lhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BuiltInFunctionCall1p(
                                         BuiltInFunctionCall1p::Ln,
                                         lhs,
-                                    ),
-                                ));
-                                let sum2 = self.mir.push(self.mir[expr].clone_as(
+                                    )),
+                                );
+                                let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         ln_lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
@@ -191,13 +170,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                     ),
                                 ));
 
-                                let inner_derivative = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let inner_derivative = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         sum1,
                                         op.copy_as(RealBinaryOperator::Sum),
                                         sum2,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(
                                     inner_derivative,
@@ -227,19 +206,19 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             }
                             RealBinaryOperator::Exponent => {
                                 // (ln (lhs) * rhs') * expr
-                                let ln_lhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BuiltInFunctionCall1p(
+                                let ln_lhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BuiltInFunctionCall1p(
                                         BuiltInFunctionCall1p::Ln,
                                         lhs,
-                                    ),
-                                ));
-                                let inner_derivative = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                    )),
+                                );
+                                let inner_derivative = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ln_lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(
                                     inner_derivative,
@@ -250,7 +229,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             RealBinaryOperator::Divide => {
                                 // lhs * rhs' / (rhs*rhs)
 
-                                let top = self.mir.push(self.mir[expr].clone_as(
+                                let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
@@ -258,13 +237,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                     ),
                                 ));
 
-                                let bottom = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let bottom = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(top, op, bottom)
                             }
@@ -289,20 +268,20 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                             RealBinaryOperator::Exponent => {
                                 // (rhs/lhs*lhs') * expr
-                                let ratio = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ratio = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Divide),
                                         lhs,
-                                    ),
-                                ));
-                                let inner_derivative = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                    )),
+                                );
+                                let inner_derivative = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ratio,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         lhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
                                 RealExpression::BinaryOperator(
                                     inner_derivative,
                                     op.copy_as(RealBinaryOperator::Multiply),
@@ -341,20 +320,20 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 if true_val.is_none() && else_val.is_none() {
                     return None;
                 }
-                let else_val = else_val.unwrap_or(
+                let else_val = else_val.unwrap_or_else(|| {
                     self.mir
-                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0))),
-                );
+                        .real_expressions
+                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
+                });
 
-                let true_val = true_val.unwrap_or(
+                let true_val = true_val.unwrap_or_else(|| {
                     self.mir
-                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0))),
-                );
+                        .real_expressions
+                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
+                });
 
                 RealExpression::Condition(cond, question_span, true_val, colon_span, else_val)
             }
-
-            RealExpression::FunctionCall(_, _) => todo!("Function calls"),
 
             RealExpression::BuiltInFunctionCall1p(call, arg) => {
                 let inner_derivative =
@@ -376,11 +355,9 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::Sqrt => {
                         // f'/(2*sqrt(f))
                         let two = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(2.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(2.0)));
                         let bottom =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     two,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     expr,
@@ -395,14 +372,12 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::Log => {
                         // (f'/f)*log10_e
                         let log10_e =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::Literal(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(
                                     std::f64::consts::E.log10(),
                                 )));
 
                         let outer =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     log10_e,
                                     self.mir[expr].clone_as(RealBinaryOperator::Divide),
                                     expr,
@@ -417,10 +392,9 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                     BuiltInFunctionCall1p::Abs => {
                         let literal_0 = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)));
                         RealExpression::Condition(
-                            self.mir.push(self.mir[expr].clone_as(
+                            self.mir.integer_expressions.push(self.mir[expr].clone_as(
                                 IntegerExpression::RealComparison(
                                     arg,
                                     self.mir[expr].clone_as(ComparisonOperator::GreaterThen),
@@ -430,8 +404,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             self.mir[expr].source,
                             inner_derivative,
                             self.mir[expr].source,
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::Negate(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Negate(
                                     self.mir[expr].source,
                                     inner_derivative,
                                 ))),
@@ -443,7 +416,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::Floor | BuiltInFunctionCall1p::Ceil => return None,
 
                     BuiltInFunctionCall1p::Sin => {
-                        let outer_derivative = self.mir.push(self.mir[expr].clone_as(
+                        let outer_derivative = self.mir.real_expressions.push(self.mir[expr].clone_as(
                             RealExpression::BuiltInFunctionCall1p(BuiltInFunctionCall1p::Cos, arg),
                         ));
                         RealExpression::BinaryOperator(
@@ -454,10 +427,10 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     }
 
                     BuiltInFunctionCall1p::Cos => {
-                        let sin = self.mir.push(self.mir[expr].clone_as(
+                        let sin = self.mir.real_expressions.push(self.mir[expr].clone_as(
                             RealExpression::BuiltInFunctionCall1p(BuiltInFunctionCall1p::Sin, arg),
                         ));
-                        let neg_sin = self.mir.push(
+                        let neg_sin = self.mir.real_expressions.push(
                             self.mir[expr]
                                 .clone_as(RealExpression::Negate(self.mir[expr].source, sin)),
                         );
@@ -472,19 +445,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::Tan => {
                         // f'*(1+tan^2(f))
                         let squared =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     expr,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     expr,
                                 )));
                         let one = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
 
                         let outer =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     one,
                                     self.mir[expr].clone_as(RealBinaryOperator::Sum),
                                     squared,
@@ -500,26 +470,23 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::ArcSin => {
                         // f' / sqrt(1-f^2)
                         let one = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
 
                         let squared =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     arg,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     arg,
                                 )));
 
                         let diff =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     one,
                                     self.mir[expr].clone_as(RealBinaryOperator::Subtract),
                                     squared,
                                 )));
 
-                        let root = self.mir.push(self.mir[expr].clone_as(
+                        let root = self.mir.real_expressions.push(self.mir[expr].clone_as(
                             RealExpression::BuiltInFunctionCall1p(
                                 BuiltInFunctionCall1p::Sqrt,
                                 diff,
@@ -536,26 +503,23 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::ArcCos => {
                         // - f' / sqrt(1-f^2)
                         let one = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
 
                         let squared =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     arg,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     arg,
                                 )));
 
                         let diff =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     one,
                                     self.mir[expr].clone_as(RealBinaryOperator::Subtract),
                                     squared,
                                 )));
 
-                        let root = self.mir.push(self.mir[expr].clone_as(
+                        let root = self.mir.real_expressions.push(self.mir[expr].clone_as(
                             RealExpression::BuiltInFunctionCall1p(
                                 BuiltInFunctionCall1p::Sqrt,
                                 diff,
@@ -563,8 +527,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         ));
 
                         let top = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Negate(
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Negate(
                                 self.mir[expr].source,
                                 inner_derivative,
                             )));
@@ -579,20 +542,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::ArcTan => {
                         //  f' / ( 1 + f*f )
                         let one = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
 
                         let squared =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     arg,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     arg,
                                 )));
 
                         let bottom =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     one,
                                     self.mir[expr].clone_as(RealBinaryOperator::Sum),
                                     squared,
@@ -608,20 +568,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::ArcSinH => {
                         //  f' / ( 1 + f*f )
                         let one = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
 
                         let squared =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     arg,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     arg,
                                 )));
 
                         let bottom =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     one,
                                     self.mir[expr].clone_as(RealBinaryOperator::Sum),
                                     squared,
@@ -637,26 +594,23 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::ArcCosH => {
                         //  f' / sqrt( f*f - 1 )
                         let one = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
 
                         let squared =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     arg,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     arg,
                                 )));
 
                         let bottom =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     squared,
                                     self.mir[expr].clone_as(RealBinaryOperator::Subtract),
                                     one,
                                 )));
 
-                        let root = self.mir.push(self.mir[expr].clone_as(
+                        let root = self.mir.real_expressions.push(self.mir[expr].clone_as(
                             RealExpression::BuiltInFunctionCall1p(
                                 BuiltInFunctionCall1p::Sqrt,
                                 bottom,
@@ -673,20 +627,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall1p::ArcTanH => {
                         //  f' / ( f*f - 1 )
                         let one = self
-                            .mir
-                            .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::Literal(1.0)));
 
                         let squared =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     arg,
                                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
                                     arg,
                                 )));
 
                         let bottom =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                     one,
                                     self.mir[expr].clone_as(RealBinaryOperator::Subtract),
                                     squared,
@@ -700,7 +651,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     }
 
                     BuiltInFunctionCall1p::SinH => {
-                        let outer = self.mir.push(self.mir[expr].clone_as(
+                        let outer = self.mir.real_expressions.push(self.mir[expr].clone_as(
                             RealExpression::BuiltInFunctionCall1p(BuiltInFunctionCall1p::CosH, arg),
                         ));
 
@@ -712,7 +663,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     }
 
                     BuiltInFunctionCall1p::CosH => {
-                        let outer = self.mir.push(self.mir[arg].clone_as(
+                        let outer = self.mir.real_expressions.push(self.mir[arg].clone_as(
                             RealExpression::BuiltInFunctionCall1p(BuiltInFunctionCall1p::SinH, arg),
                         ));
 
@@ -725,20 +676,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                     BuiltInFunctionCall1p::TanH => {
                         let one = self
-                            .mir
-                            .push(self.mir[arg].clone_as(RealExpression::Literal(1.0)));
+                            .mir.real_expressions .push(self.mir[arg].clone_as(RealExpression::Literal(1.0)));
 
                         let squared =
-                            self.mir
-                                .push(self.mir[arg].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[arg].clone_as(RealExpression::BinaryOperator(
                                     arg,
                                     self.mir[arg].clone_as(RealBinaryOperator::Multiply),
                                     arg,
                                 )));
 
                         let outer =
-                            self.mir
-                                .push(self.mir[arg].clone_as(RealExpression::BinaryOperator(
+                            self.mir.real_expressions .push(self.mir[arg].clone_as(RealExpression::BinaryOperator(
                                     one,
                                     self.mir[arg].clone_as(RealBinaryOperator::Subtract),
                                     squared,
@@ -764,51 +712,53 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 }
                 let arg1_derivative = arg1_derivative.unwrap_or_else(|| {
                     self.mir
+                        .real_expressions
                         .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
                 });
                 let arg2_derivative = arg2_derivative.unwrap_or_else(|| {
                     self.mir
+                        .real_expressions
                         .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
                 });
 
                 match call {
                     BuiltInFunctionCall2p::Pow => {
                         // (rhs/lhs * lhs' + ln (lhs) * rhs')*expr
-                        let ratio =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    arg2,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Divide),
-                                    arg1,
-                                )));
+                        let ratio = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                arg2,
+                                self.mir[expr].clone_as(RealBinaryOperator::Divide),
+                                arg1,
+                            ),
+                        ));
 
-                        let sum1 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    ratio,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg1_derivative,
-                                )));
+                        let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                ratio,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg1_derivative,
+                            ),
+                        ));
 
-                        let ln_lhs = self.mir.push(self.mir[expr].clone_as(
+                        let ln_lhs = self.mir.real_expressions.push(self.mir[expr].clone_as(
                             RealExpression::BuiltInFunctionCall1p(BuiltInFunctionCall1p::Ln, arg1),
                         ));
 
-                        let sum2 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    ln_lhs,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg2_derivative,
-                                )));
+                        let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                ln_lhs,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg2_derivative,
+                            ),
+                        ));
 
-                        let inner_derivative =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    sum1,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Sum),
-                                    sum2,
-                                )));
+                        let inner_derivative = self.mir.real_expressions.push(
+                            self.mir[expr].clone_as(RealExpression::BinaryOperator(
+                                sum1,
+                                self.mir[expr].clone_as(RealBinaryOperator::Sum),
+                                sum2,
+                            )),
+                        );
 
                         RealExpression::BinaryOperator(
                             inner_derivative,
@@ -818,12 +768,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     }
 
                     BuiltInFunctionCall2p::Min => RealExpression::Condition(
-                        self.mir
-                            .push(self.mir[expr].clone_as(IntegerExpression::RealComparison(
+                        self.mir.integer_expressions.push(self.mir[expr].clone_as(
+                            IntegerExpression::RealComparison(
                                 arg1,
                                 self.mir[expr].clone_as(ComparisonOperator::LessThen),
                                 arg2,
-                            ))),
+                            ),
+                        )),
                         self.mir[expr].source,
                         arg1_derivative,
                         self.mir[expr].source,
@@ -831,12 +782,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     ),
 
                     BuiltInFunctionCall2p::Max => RealExpression::Condition(
-                        self.mir
-                            .push(self.mir[expr].clone_as(IntegerExpression::RealComparison(
+                        self.mir.integer_expressions.push(self.mir[expr].clone_as(
+                            IntegerExpression::RealComparison(
                                 arg1,
                                 self.mir[expr].clone_as(ComparisonOperator::GreaterThen),
                                 arg2,
-                            ))),
+                            ),
+                        )),
                         self.mir[expr].source,
                         arg1_derivative,
                         self.mir[expr].source,
@@ -846,53 +798,53 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     BuiltInFunctionCall2p::ArcTan2 => {
                         // (arg1'arg2 - arg2'*arg1)/(arg1*arg1+arg2*arg2)
 
-                        let sum1 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    arg1_derivative,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg2,
-                                )));
+                        let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                arg1_derivative,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg2,
+                            ),
+                        ));
 
-                        let sum2 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    arg2_derivative,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg1,
-                                )));
+                        let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                arg2_derivative,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg1,
+                            ),
+                        ));
 
-                        let top =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    sum1,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Subtract),
-                                    sum2,
-                                )));
+                        let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                sum1,
+                                self.mir[expr].clone_as(RealBinaryOperator::Subtract),
+                                sum2,
+                            ),
+                        ));
 
-                        let sum1 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    arg1_derivative,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg2,
-                                )));
+                        let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                arg1_derivative,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg2,
+                            ),
+                        ));
 
-                        let sum2 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    arg2_derivative,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg1,
-                                )));
+                        let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                arg2_derivative,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg1,
+                            ),
+                        ));
 
-                        let bottom =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    sum1,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Sum),
-                                    sum2,
-                                )));
+                        let bottom = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                sum1,
+                                self.mir[expr].clone_as(RealBinaryOperator::Sum),
+                                sum2,
+                            ),
+                        ));
 
                         RealExpression::BinaryOperator(
                             top,
@@ -903,29 +855,29 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                     BuiltInFunctionCall2p::Hypot => {
                         // (  arg1 * arg1' +  arg2 * arg2' ) /  expr
-                        let sum1 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    arg1_derivative,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg1,
-                                )));
+                        let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                arg1_derivative,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg1,
+                            ),
+                        ));
 
-                        let sum2 =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    arg2_derivative,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                                    arg2,
-                                )));
+                        let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                arg2_derivative,
+                                self.mir[expr].clone_as(RealBinaryOperator::Multiply),
+                                arg2,
+                            ),
+                        ));
 
-                        let top =
-                            self.mir
-                                .push(self.mir[expr].clone_as(RealExpression::BinaryOperator(
-                                    sum1,
-                                    self.mir[expr].clone_as(RealBinaryOperator::Sum),
-                                    sum2,
-                                )));
+                        let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                            RealExpression::BinaryOperator(
+                                sum1,
+                                self.mir[expr].clone_as(RealBinaryOperator::Sum),
+                                sum2,
+                            ),
+                        ));
 
                         RealExpression::BinaryOperator(
                             top,
@@ -972,7 +924,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     source: self.mir[expr].source,
                 });
                 let dtemp = self.partial_derivative(temp, derive_by, reference_derivative)?;
-                let p_q_p_k = self.mir.push(
+                let p_q_p_k = self.mir.real_expressions.push(
                     self.mir[expr]
                         .clone_as(RealExpression::Literal(1.3806488e-23 / 1.602176565e-19)),
                 );
@@ -1023,8 +975,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             | RealExpression::ParameterReference(_)
             | RealExpression::SimParam(_, _)
             | RealExpression::Temperature
-            | RealExpression::Vt(None)
-            | RealExpression::BranchAccess(_, _, 0) => return None,
+            | RealExpression::Vt(None) => return None,
 
             RealExpression::BranchAccess(_, _, _) => {
                 self.errors.push(Error {
@@ -1034,15 +985,15 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 return None;
             }
         };
-        Some(self.mir.push(self.mir[expr].clone_as(res)))
+        Some(self.mir.real_expressions.push(self.mir[expr].clone_as(res)))
     }
 
     pub fn partial_derivative_of_integer_expression(
         &mut self,
-        expr: IntegerExpressionId<'tag>,
-        derive_by: Unknown<'tag>,
-        reference_derivative: &mut impl FnMut(&mut Self, VariableId<'tag>) -> VariableId<'tag>,
-    ) -> Option<RealExpressionId<'tag>> {
+        expr: IntegerExpressionId,
+        derive_by: Unknown,
+        reference_derivative: &mut impl FnMut(&mut Self, VariableId) -> VariableId,
+    ) -> Option<RealExpressionId> {
         let res = match self.mir[expr].contents {
             IntegerExpression::VariableReference(variable) => {
                 RealExpression::VariableReference(reference_derivative(self, variable))
@@ -1070,9 +1021,11 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     (Some(lhs_derived), Some(rhs_derived)) => {
                         let lhs = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(lhs)));
                         let rhs = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(rhs)));
 
                         match op.contents {
@@ -1089,14 +1042,14 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             ),
 
                             IntegerBinaryOperator::Multiply => {
-                                let sum1 = self.mir.push(self.mir[expr].clone_as(
+                                let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs_derived,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs,
                                     ),
                                 ));
-                                let sum2 = self.mir.push(self.mir[expr].clone_as(
+                                let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
@@ -1112,34 +1065,34 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                             IntegerBinaryOperator::Divide => {
                                 // (lhs'*rhs-lhs * rhs') / (rhs*rhs)
-                                let sum1 = self.mir.push(self.mir[expr].clone_as(
+                                let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs_derived,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs,
                                     ),
                                 ));
-                                let sum2 = self.mir.push(self.mir[expr].clone_as(
+                                let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
                                     ),
                                 ));
-                                let top = self.mir.push(self.mir[expr].clone_as(
+                                let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         sum1,
                                         op.copy_as(RealBinaryOperator::Subtract),
                                         sum2,
                                     ),
                                 ));
-                                let bottom = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let bottom = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs,
-                                    ),
-                                ));
+                                    )),
+                                );
                                 RealExpression::BinaryOperator(
                                     top,
                                     op.copy_as(RealBinaryOperator::Divide),
@@ -1149,14 +1102,14 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                             IntegerBinaryOperator::Exponent => {
                                 // (rhs/lhs * lhs' + ln (lhs) * rhs')*expr
-                                let ratio = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ratio = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Divide),
                                         lhs,
-                                    ),
-                                ));
-                                let sum1 = self.mir.push(self.mir[expr].clone_as(
+                                    )),
+                                );
+                                let sum1 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         ratio,
                                         op.copy_as(RealBinaryOperator::Multiply),
@@ -1164,13 +1117,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                     ),
                                 ));
 
-                                let ln_lhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BuiltInFunctionCall1p(
+                                let ln_lhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BuiltInFunctionCall1p(
                                         BuiltInFunctionCall1p::Ln,
                                         lhs,
-                                    ),
-                                ));
-                                let sum2 = self.mir.push(self.mir[expr].clone_as(
+                                    )),
+                                );
+                                let sum2 = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         ln_lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
@@ -1178,18 +1131,18 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                     ),
                                 ));
 
-                                let inner_derivative = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let inner_derivative = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         sum1,
                                         op.copy_as(RealBinaryOperator::Sum),
                                         sum2,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(
                                     inner_derivative,
                                     op.copy_as(RealBinaryOperator::Multiply),
-                                    self.mir.push(
+                                    self.mir.real_expressions.push(
                                         self.mir[expr]
                                             .clone_as(RealExpression::IntegerConversion(expr)),
                                     ),
@@ -1212,25 +1165,25 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                             IntegerBinaryOperator::ShiftLeft => {
                                 // ( lhs'+ln(2)*lhs*rhs' )* 2 ** rhs
-                                let ln2 = self.mir.push(
+                                let ln2 = self.mir.real_expressions.push(
                                     self.mir[expr].clone_as(RealExpression::Literal(2f64.ln())),
                                 );
-                                let ln2_lhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ln2_lhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ln2,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         lhs,
-                                    ),
-                                ));
-                                let product = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                    )),
+                                );
+                                let product = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ln2_lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
 
-                                let sum = self.mir.push(self.mir[expr].clone_as(
+                                let sum = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         product,
                                         op.copy_as(RealBinaryOperator::Sum),
@@ -1240,8 +1193,9 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                                 let literal2 = self
                                     .mir
+                                    .real_expressions
                                     .push(self.mir[expr].clone_as(RealExpression::Literal(2f64)));
-                                let pow = self.mir.push(self.mir[expr].clone_as(
+                                let pow = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BuiltInFunctionCall2p(
                                         BuiltInFunctionCall2p::Pow,
                                         literal2,
@@ -1257,25 +1211,25 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             }
                             IntegerBinaryOperator::ShiftRight => {
                                 // ( lhs' - ln(2)*lhs*rhs' ) * 2 ** (- rhs)
-                                let ln2 = self.mir.push(
+                                let ln2 = self.mir.real_expressions.push(
                                     self.mir[expr].clone_as(RealExpression::Literal(2f64.ln())),
                                 );
-                                let ln2_lhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ln2_lhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ln2,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         lhs,
-                                    ),
-                                ));
-                                let product = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                    )),
+                                );
+                                let product = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ln2_lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
 
-                                let sum = self.mir.push(self.mir[expr].clone_as(
+                                let sum = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs_derived,
                                         op.copy_as(RealBinaryOperator::Subtract),
@@ -1285,11 +1239,12 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                                 let literal2 = self
                                     .mir
+                                    .real_expressions
                                     .push(self.mir[expr].clone_as(RealExpression::Literal(2f64)));
-                                let neg_rhs = self.mir.push(
+                                let neg_rhs = self.mir.real_expressions.push(
                                     self.mir[expr].clone_as(RealExpression::Negate(op.source, rhs)),
                                 );
-                                let pow = self.mir.push(self.mir[expr].clone_as(
+                                let pow = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BuiltInFunctionCall2p(
                                         BuiltInFunctionCall2p::Pow,
                                         literal2,
@@ -1309,12 +1264,15 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     (None, Some(rhs_derived)) => {
                         let lhs = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(lhs)));
                         let rhs = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(rhs)));
                         let expr_as_real = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(expr)));
 
                         match op.contents {
@@ -1329,19 +1287,19 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             ),
                             IntegerBinaryOperator::Exponent => {
                                 // (ln (lhs) * rhs') * expr
-                                let ln_lhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BuiltInFunctionCall1p(
+                                let ln_lhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BuiltInFunctionCall1p(
                                         BuiltInFunctionCall1p::Ln,
                                         lhs,
-                                    ),
-                                ));
-                                let inner_derivative = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                    )),
+                                );
+                                let inner_derivative = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ln_lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(
                                     inner_derivative,
@@ -1352,7 +1310,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             IntegerBinaryOperator::Divide => {
                                 // lhs * rhs' / (rhs*rhs)
 
-                                let top = self.mir.push(self.mir[expr].clone_as(
+                                let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
@@ -1360,13 +1318,13 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                     ),
                                 ));
 
-                                let bottom = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let bottom = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(
                                     top,
@@ -1390,16 +1348,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                             IntegerBinaryOperator::ShiftLeft => {
                                 // ln(2)*rhs' * expr
-                                let ln2 = self.mir.push(
+                                let ln2 = self.mir.real_expressions.push(
                                     self.mir[expr].clone_as(RealExpression::Literal(2f64.ln())),
                                 );
-                                let ln2_drhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ln2_drhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ln2,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(
                                     ln2_drhs,
@@ -1409,16 +1367,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                             }
                             IntegerBinaryOperator::ShiftRight => {
                                 // ( - ln(2)*rhs' ) * expr
-                                let neg_ln2 = self.mir.push(
+                                let neg_ln2 = self.mir.real_expressions.push(
                                     self.mir[expr].clone_as(RealExpression::Literal(-(2f64.ln()))),
                                 );
-                                let ln2_drhs = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ln2_drhs = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         neg_ln2,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
 
                                 RealExpression::BinaryOperator(
                                     ln2_drhs,
@@ -1431,12 +1389,15 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     (Some(lhs_derived), None) => {
                         let lhs = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(lhs)));
                         let rhs = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(rhs)));
                         let expr_as_real = self
                             .mir
+                            .real_expressions
                             .push(self.mir[lhs].clone_as(RealExpression::IntegerConversion(expr)));
 
                         match op.contents {
@@ -1457,20 +1418,20 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                             IntegerBinaryOperator::Exponent => {
                                 // (rhs/lhs*lhs') * expr
-                                let ratio = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                let ratio = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         rhs,
                                         op.copy_as(RealBinaryOperator::Divide),
                                         lhs,
-                                    ),
-                                ));
-                                let inner_derivative = self.mir.push(self.mir[expr].clone_as(
-                                    RealExpression::BinaryOperator(
+                                    )),
+                                );
+                                let inner_derivative = self.mir.real_expressions.push(
+                                    self.mir[expr].clone_as(RealExpression::BinaryOperator(
                                         ratio,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         lhs_derived,
-                                    ),
-                                ));
+                                    )),
+                                );
                                 RealExpression::BinaryOperator(
                                     inner_derivative,
                                     op.copy_as(RealBinaryOperator::Multiply),
@@ -1497,8 +1458,9 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
                                 let literal2 = self
                                     .mir
+                                    .real_expressions
                                     .push(self.mir[expr].clone_as(RealExpression::Literal(2f64)));
-                                let pow = self.mir.push(self.mir[expr].clone_as(
+                                let pow = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BuiltInFunctionCall2p(
                                         BuiltInFunctionCall2p::Pow,
                                         literal2,
@@ -1516,11 +1478,12 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                 // ( lhs'  * 2 ** (- rhs)
                                 let literal2 = self
                                     .mir
+                                    .real_expressions
                                     .push(self.mir[expr].clone_as(RealExpression::Literal(2f64)));
-                                let neg_rhs = self.mir.push(
+                                let neg_rhs = self.mir.real_expressions.push(
                                     self.mir[expr].clone_as(RealExpression::Negate(op.source, rhs)),
                                 );
-                                let pow = self.mir.push(self.mir[expr].clone_as(
+                                let pow = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BuiltInFunctionCall2p(
                                         BuiltInFunctionCall2p::Pow,
                                         literal2,
@@ -1568,15 +1531,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 if true_val.is_none() && else_val.is_none() {
                     return None;
                 }
-                let else_val = else_val.unwrap_or(
+                let else_val = else_val.unwrap_or_else(|| {
                     self.mir
-                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0))),
-                );
+                        .real_expressions
+                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
+                });
 
-                let true_val = true_val.unwrap_or(
+                let true_val = true_val.unwrap_or_else(|| {
                     self.mir
-                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0))),
-                );
+                        .real_expressions
+                        .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
+                });
 
                 RealExpression::Condition(cond, question_span, true_val, colon_span, else_val)
             }
@@ -1598,21 +1563,23 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 }
                 let arg1_derivative = arg1_derivative.unwrap_or_else(|| {
                     self.mir
+                        .real_expressions
                         .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
                 });
                 let arg2_derivative = arg2_derivative.unwrap_or_else(|| {
                     self.mir
+                        .real_expressions
                         .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
                 });
 
                 RealExpression::Condition(
-                    self.mir.push(
-                        self.mir[expr].clone_as(IntegerExpression::IntegerComparison(
+                    self.mir.integer_expressions.push(self.mir[expr].clone_as(
+                        IntegerExpression::IntegerComparison(
                             arg1,
                             self.mir[expr].clone_as(ComparisonOperator::LessThen),
                             arg2,
-                        )),
-                    ),
+                        ),
+                    )),
                     self.mir[expr].source,
                     arg1_derivative,
                     self.mir[expr].source,
@@ -1637,21 +1604,23 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 }
                 let arg1_derivative = arg1_derivative.unwrap_or_else(|| {
                     self.mir
+                        .real_expressions
                         .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
                 });
                 let arg2_derivative = arg2_derivative.unwrap_or_else(|| {
                     self.mir
+                        .real_expressions
                         .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
                 });
 
                 RealExpression::Condition(
-                    self.mir.push(
-                        self.mir[expr].clone_as(IntegerExpression::IntegerComparison(
+                    self.mir.integer_expressions.push(self.mir[expr].clone_as(
+                        IntegerExpression::IntegerComparison(
                             arg1,
                             self.mir[expr].clone_as(ComparisonOperator::GreaterThen),
                             arg2,
-                        )),
-                    ),
+                        ),
+                    )),
                     self.mir[expr].source,
                     arg1_derivative,
                     self.mir[expr].source,
@@ -1667,20 +1636,21 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 )?;
                 let literal_0 = self
                     .mir
+                    .integer_expressions
                     .push(self.mir[expr].clone_as(IntegerExpression::Literal(0)));
 
                 RealExpression::Condition(
-                    self.mir.push(
-                        self.mir[expr].clone_as(IntegerExpression::IntegerComparison(
+                    self.mir.integer_expressions.push(self.mir[expr].clone_as(
+                        IntegerExpression::IntegerComparison(
                             arg,
                             self.mir[expr].clone_as(ComparisonOperator::GreaterThen),
                             literal_0,
-                        )),
-                    ),
+                        ),
+                    )),
                     self.mir[expr].source,
                     arg_derived,
                     self.mir[expr].source,
-                    self.mir.push(
+                    self.mir.real_expressions.push(
                         self.mir[expr]
                             .clone_as(RealExpression::Negate(self.mir[expr].source, arg_derived)),
                     ),
@@ -1713,15 +1683,15 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
 
             IntegerExpression::PortConnected(_) | IntegerExpression::ParamGiven(_) => return None,
         };
-        Some(self.mir.push(self.mir[expr].clone_as(res)))
+        Some(self.mir.real_expressions.push(self.mir[expr].clone_as(res)))
     }
 
     pub fn or_for_derivative(
         &mut self,
-        expr: IntegerExpressionId<'tag>,
+        expr: IntegerExpressionId,
         delta_name: Symbol,
-        derivatives_inside_loop: &FxHashSet<VariableId<'tag>>,
-    ) -> IntegerExpressionId<'tag> {
+        derivatives_inside_loop: &FxHashSet<VariableId>,
+    ) -> IntegerExpressionId {
         for derived_variable in derivatives_inside_loop.iter().copied() {
             if self.mir[derived_variable].contents.name.name == delta_name {
                 if let Some(partial_derivatives) =
@@ -1729,7 +1699,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 {
                     let mut res = expr;
 
-                    for (derive_by, _) in partial_derivatives {
+                    for derive_by in partial_derivatives.keys() {
                         let mut replacements = FxHashMap::with_capacity_and_hasher(
                             derivatives_inside_loop.len(),
                             Default::default(),
@@ -1746,7 +1716,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         if let Some(derived_condition) = self.mir.map_int_expr(expr, &replacements)
                         {
                             let span = self.mir[expr].source;
-                            res = self.mir.push(Node::new(
+                            res = self.mir.integer_expressions.push(Node::new(
                                 IntegerExpression::BinaryOperator(
                                     res,
                                     Node::new(IntegerBinaryOperator::LogicOr, span),
@@ -1765,12 +1735,12 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         expr
     }
 }
-impl<'tag> Mir<'tag> {
+impl Mir {
     pub fn declare_partial_derivative_variable(
         &mut self,
-        variable: VariableId<'tag>,
-        derive_by: Unknown<'tag>,
-    ) -> VariableId<'tag> {
+        variable: VariableId,
+        derive_by: Unknown,
+    ) -> VariableId {
         let derive_by = match derive_by {
             Unknown::Parameter(parameter) => self[parameter].contents.name.to_string(),
             Unknown::NodePotential(net) => format!("pot({})", self[net].contents.name),
@@ -1781,15 +1751,15 @@ impl<'tag> Mir<'tag> {
         };
         let name =
             Ident::from_str(format!("∂{}/∂{}", self[variable].contents.name, derive_by).as_str());
-        let res = self.push(AttributeNode {
-            attributes: self.empty_range_from_end(),
+        let res = self.variables.push(AttributeNode {
+            attributes: Attributes::empty(),
             source: self[variable].source,
             contents: Variable {
                 name,
                 variable_type: VariableType::Real(None),
             },
         });
-        debug_assert!(&self[self[res].attributes].is_empty());
+        debug_assert!(&self[self[res].attributes.as_range()].is_empty());
         res
     }
 }

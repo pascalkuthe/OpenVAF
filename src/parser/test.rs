@@ -14,11 +14,10 @@ use bumpalo::Bump;
 
 use crate::ast::NetType;
 use crate::ast::NetType::{UNDECLARED, WIRE};
-use crate::ast::VariableType::{INTEGER, REAL, REALTIME, TIME};
+use crate::ast::VariableType::{INTEGER, REAL};
 use crate::ast::{Branch, VariableType};
-use crate::compact_arena::SafeRange;
+
 use crate::ir::ModuleId;
-use crate::ir::SafeRangeCreation;
 use crate::symbol::keywords::EMPTY_SYMBOL;
 use crate::symbol::Symbol;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
@@ -32,7 +31,8 @@ pub fn module() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+
+    let mut ast = Ast::new();
     ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/module.va"),
         &source_map_allocator,
@@ -40,13 +40,12 @@ pub fn module() -> Result<(), ()> {
     )
     .ok_or(())?;
 
-    let range: SafeRange<ModuleId> = ast.full_range();
-    let modules = &ast[range];
+    let modules = ast.modules.as_slice();
     let first_module = &modules[0].contents;
     assert_eq!(first_module.name.as_str(), "test1");
     let second_module = &modules[1].contents;
     assert_eq!(second_module.name.as_str(), "test2");
-    let mut ports = ast[second_module.port_list].iter();
+    let mut ports = ast[second_module.port_list.clone()].iter();
 
     let port = ports.next().unwrap().contents;
     assert_eq!(port.name.as_str(), "a");
@@ -106,7 +105,7 @@ pub fn module() -> Result<(), ()> {
 
     let third_module = &modules[2].contents;
     assert_eq!(third_module.name.as_str(), "test3");
-    let mut ports = ast[third_module.port_list].iter();
+    let mut ports = ast[third_module.port_list.clone()].iter();
     let port = ports.next().unwrap().contents;
     assert_eq!(port.name.as_str(), "a");
     assert_eq!(port.output, true);
@@ -141,7 +140,8 @@ pub fn branch() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+
+    let mut ast = Ast::new();
     ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/branch.va"),
         &source_map_allocator,
@@ -149,10 +149,9 @@ pub fn branch() -> Result<(), ()> {
     )
     .ok_or(())?;
 
-    let range: SafeRange<ModuleId> = ast.full_range();
-    let module = &ast[range][0].contents;
+    let module = &ast.modules[0].contents;
     assert_eq!(module.name.as_str(), "test");
-    let ports = &ast[module.port_list];
+    let ports = &ast[module.port_list.clone()];
 
     let port = ports[0].contents;
     assert_eq!(port.name.as_str(), "a");
@@ -171,9 +170,9 @@ pub fn branch() -> Result<(), ()> {
     Ok(())
 }
 
-fn assert_branch_decl<'ast>(
-    symbol_table: &SymbolTable<'ast>,
-    ast: &Ast<'ast>,
+fn assert_branch_decl(
+    symbol_table: &SymbolTable,
+    ast: &Ast,
     name: &str,
     net1_name: &str,
     net2_name: &str,
@@ -190,12 +189,7 @@ fn assert_branch_decl<'ast>(
         panic!("Branch {} not found", name);
     }
 }
-fn assert_port_branch_decl<'ast>(
-    symbol_table: &SymbolTable<'ast>,
-    ast: &Ast<'ast>,
-    name: &str,
-    port_name: &str,
-) {
+fn assert_port_branch_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, port_name: &str) {
     if let Some(SymbolDeclaration::Branch(branchid)) = symbol_table.get(&Symbol::intern(name)) {
         let branch = &ast[*branchid].contents;
         if let Branch::Port(ref port) = branch.branch {
@@ -207,12 +201,7 @@ fn assert_port_branch_decl<'ast>(
         panic!("Branch {} not found", name)
     }
 }
-fn assert_variable_decl<'ast>(
-    symbol_table: &SymbolTable<'ast>,
-    ast: &Ast<'ast>,
-    name: &str,
-    vtype: VariableType,
-) {
+fn assert_variable_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, vtype: VariableType) {
     if let Some(SymbolDeclaration::Variable(variableid)) = symbol_table.get(&Symbol::intern(name)) {
         let variable = &ast[*variableid].contents;
         assert_eq!(variable.variable_type, vtype)
@@ -220,9 +209,9 @@ fn assert_variable_decl<'ast>(
         panic!("Variable {} not found", name)
     }
 }
-fn assert_net_decl<'ast>(
-    symbol_table: &SymbolTable<'ast>,
-    ast: &Ast<'ast>,
+fn assert_net_decl(
+    symbol_table: &SymbolTable,
+    ast: &Ast,
     name: &str,
     net_type: NetType,
     discipline: &str,
@@ -238,11 +227,11 @@ fn assert_net_decl<'ast>(
     }
 }
 
-fn get_module_symbol_table<'ast, 'lt>(
-    symbol_table: &SymbolTable<'ast>,
-    ast: &'lt Ast<'ast>,
+fn get_module_symbol_table<'lt>(
+    symbol_table: &SymbolTable,
+    ast: &'lt Ast,
     name: &str,
-) -> &'lt SymbolTable<'ast> {
+) -> &'lt SymbolTable {
     if let Some(SymbolDeclaration::Module(module)) = symbol_table.get(&Symbol::intern(name)) {
         &ast[*module].contents.symbol_table
     } else {
@@ -257,7 +246,7 @@ pub fn variable_decl() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+    let mut ast = Ast::new();
     ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/variable_declaration.va"),
         &source_map_allocator,
@@ -268,8 +257,8 @@ pub fn variable_decl() -> Result<(), ()> {
     assert_variable_decl(&symbol_table, &ast, "x", REAL);
     assert_variable_decl(&symbol_table, &ast, "y", INTEGER);
     assert_variable_decl(&symbol_table, &ast, "z", INTEGER);
-    assert_variable_decl(&symbol_table, &ast, "t", TIME);
-    assert_variable_decl(&symbol_table, &ast, "rt", REALTIME);
+    assert_variable_decl(&symbol_table, &ast, "t", INTEGER);
+    assert_variable_decl(&symbol_table, &ast, "rt", REAL);
     Ok(())
 }
 
@@ -281,15 +270,15 @@ pub fn net_decl() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+    let mut ast = Ast::new();
     ast.parse_from_and_print_errors(
         Path::new("tests/parseunits/net_declaration.va"),
         &source_map_allocator,
         true,
     )
     .ok_or(())?;
-    let range: SafeRange<ModuleId> = ast.full_range();
-    let module = &ast[range][0].contents;
+
+    let module = &ast.modules[0].contents;
     let symbol_table = &module.symbol_table;
     assert_eq!(module.name.as_str(), "test");
     assert_net_decl(symbol_table, &ast, "x", WIRE, " ", false);
@@ -307,14 +296,14 @@ pub fn linear() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+
+    let mut ast = Ast::new();
     ast.parse_from_and_print_errors(Path::new("tests/linear.va"), &source_map_allocator, true)
         .ok_or(())?;
 
-    let range: SafeRange<ModuleId> = ast.full_range();
-    let module = &ast[range][0].contents;
+    let module = &ast.modules[0].contents;
 
-    let mut ports = ast[module.port_list].iter();
+    let mut ports = ast[module.port_list.clone()].iter();
     let port = ports.next().unwrap().contents;
     assert_eq!(port.name.as_str(), "A");
     assert_eq!(port.output, true);

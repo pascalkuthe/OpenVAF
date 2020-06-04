@@ -11,10 +11,9 @@
 use crate::ast::{BinaryOperator, BranchAccess, Expression, Primary, UnaryOperator};
 use crate::ir::BuiltInFunctionCall1p::*;
 use crate::ir::BuiltInFunctionCall2p::*;
-use crate::ir::{
-    BuiltInFunctionCall1p, BuiltInFunctionCall2p, NoiseSource, Push, SystemFunctionCall,
-};
+use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, NoiseSource, SystemFunctionCall};
 use crate::ir::{ExpressionId, Node};
+use crate::literals::StringLiteral;
 use crate::parser::error::Type::{UnexpectedEof, UnexpectedTokens};
 use crate::parser::error::*;
 use crate::parser::lexer::Token;
@@ -30,8 +29,8 @@ enum BinaryOperatorOrCondition {
     Condition,
     BinaryOperator(BinaryOperator, u8),
 }
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
-    pub fn parse_expression(&mut self) -> Result<Node<Expression<'ast>>> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_expression(&mut self) -> Result<Node<Expression>> {
         let mut lhs = self.parse_atom()?;
         loop {
             match self.parse_binary_operator() {
@@ -39,7 +38,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     self.consume_lookahead();
                     let op_span = self.preprocessor.span();
                     let rhs = self.parse_atom()?;
-                    let mut rhs = self.ast.push(rhs);
+                    let mut rhs = self.ast.expressions.push(rhs);
                     loop {
                         match self.parse_binary_operator() {
                             Ok(BinaryOperatorOrCondition::BinaryOperator(_, right_prec))
@@ -53,13 +52,13 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     let op = Node::new(op, op_span);
                     let span = lhs.source.extend(self.ast[rhs].source);
                     lhs = Node::new(
-                        Expression::BinaryOperator(self.ast.push(lhs), op, rhs),
+                        Expression::BinaryOperator(self.ast.expressions.push(lhs), op, rhs),
                         span,
                     )
                 }
                 Ok(BinaryOperatorOrCondition::Condition) => {
                     self.consume_lookahead();
-                    let condition = self.ast.push(lhs);
+                    let condition = self.ast.expressions.push(lhs);
                     let op_span = self.preprocessor.span();
                     let if_val = self.parse_expression_id()?;
                     self.expect(Token::Colon)?;
@@ -75,17 +74,17 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         }
     }
 
-    pub fn parse_expression_id(&mut self) -> Result<ExpressionId<'ast>> {
+    pub fn parse_expression_id(&mut self) -> Result<ExpressionId> {
         let lhs = self.parse_atom()?;
-        let lhs = self.ast.push(lhs);
+        let lhs = self.ast.expressions.push(lhs);
         self.precedence_climb_expression_id(0, lhs)
     }
 
     pub(super) fn precedence_climb_expression_id(
         &mut self,
         min_prec: u8,
-        mut lhs: ExpressionId<'ast>,
-    ) -> Result<ExpressionId<'ast>> {
+        mut lhs: ExpressionId,
+    ) -> Result<ExpressionId> {
         loop {
             match self.parse_binary_operator() {
                 Ok(BinaryOperatorOrCondition::Condition) if min_prec <= 1 => {
@@ -95,7 +94,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     self.expect(Token::Colon)?;
                     let eiter_op_span = self.preprocessor.span();
                     let else_val = self.parse_expression_id()?;
-                    lhs = self.ast.push(Node::new(
+                    lhs = self.ast.expressions.push(Node::new(
                         Expression::Condtion(lhs, op_span, if_val, eiter_op_span, else_val),
                         self.ast[lhs].source.extend(self.ast[else_val].source),
                     ))
@@ -106,7 +105,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     self.consume_lookahead();
                     let op_span = self.preprocessor.span();
                     let rhs = self.parse_atom()?;
-                    let mut rhs = self.ast.push(rhs);
+                    let mut rhs = self.ast.expressions.push(rhs);
                     loop {
                         match self.parse_binary_operator() {
                             Ok(BinaryOperatorOrCondition::BinaryOperator(_, right_prec))
@@ -122,6 +121,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     let span = self.ast[lhs].source.extend(tmp.source);
                     lhs = self
                         .ast
+                        .expressions
                         .push(Node::new(Expression::BinaryOperator(lhs, op, rhs), span))
                 }
                 _ => return Ok(lhs),
@@ -130,7 +130,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     fn parse_binary_operator(&mut self) -> Result<BinaryOperatorOrCondition> {
-        let (token, span) = self.look_ahead()?;
+        let (token, span) = self.look_ahead_with_span()?;
         let res = match token {
             Token::OpCondition => return Ok(BinaryOperatorOrCondition::Condition),
             Token::OpLogicalOr => (BinaryOperator::LogicOr, 2),
@@ -165,8 +165,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(BinaryOperatorOrCondition::BinaryOperator(res.0, res.1))
     }
 
-    pub(super) fn parse_atom(&mut self) -> Result<Node<Expression<'ast>>> {
-        let (token, span) = self.look_ahead()?;
+    pub(super) fn parse_atom(&mut self) -> Result<Node<Expression>> {
+        let (token, span) = self.look_ahead_with_span()?;
         let res = match token {
             Token::Minus => {
                 self.consume_lookahead();
@@ -187,13 +187,12 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::ParenOpen => self.parse_bracketed_expression()?,
             Token::LiteralString => {
                 self.consume_lookahead();
-                let val = self
-                    .ast
-                    .string_literals
-                    .try_add_small(&parse_string(self.preprocessor.slice()))
-                    .map_err(|_| Error {
-                        error_type: Type::StringTooLong(span.get_len() as usize - 2),
-                        source: span,
+                let val =
+                    StringLiteral::new(&parse_string(self.preprocessor.slice())).map_err(|_| {
+                        Error {
+                            error_type: Type::StringTooLong(span.get_len() as usize - 2),
+                            source: span,
+                        }
                     })?;
                 Node::new(Expression::Primary(Primary::String(val)), span)
             }
@@ -235,9 +234,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
                 let ident = self.parse_hierarchical_identifier()?;
                 let start = self.preprocessor.current_start();
-                let primary = if self.look_ahead()?.0 == Token::ParenOpen {
+                let primary = if self.look_ahead()? == Token::ParenOpen {
                     self.consume_lookahead();
-                    if self.look_ahead()?.0 == Token::OpLess {
+                    if self.look_ahead()? == Token::OpLess {
                         let start = self.preprocessor.current_start();
                         let res = Primary::BranchAccess(
                             Self::convert_to_nature_identifier(ident.names)?,
@@ -248,7 +247,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         );
                         self.expect(Token::ParenClose)?;
                         res
-                    } else if self.look_ahead()?.0 == Token::ParenClose {
+                    } else if self.look_ahead()? == Token::ParenClose {
                         self.consume_lookahead();
                         Primary::FunctionCall(ident, Vec::new())
                     } else {
@@ -294,17 +293,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::WhiteNoise => {
                 let start = self.preprocessor.current_start();
                 self.consume_lookahead();
-                self.expect(Token::ParenOpen);
+                self.expect(Token::ParenOpen)?;
 
                 let expr = self.parse_expression_id()?;
 
-                let src = if self.look_ahead()?.0 == Token::Comma {
+                let src = if self.look_ahead()? == Token::Comma {
                     self.lookahead.take();
                     self.expect(Token::LiteralString)?;
-                    let src = self
-                        .ast
-                        .string_literals
-                        .try_add_small(&parse_string(self.preprocessor.slice()))
+                    let src = StringLiteral::new(&parse_string(self.preprocessor.slice()))
                         .map_err(|_| Error {
                             error_type: Type::StringTooLong(span.get_len() as usize - 2),
                             source: span,
@@ -313,7 +309,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 } else {
                     None
                 };
-                self.expect(Token::ParenClose);
+                self.expect(Token::ParenClose)?;
 
                 Node::new(
                     Expression::Primary(Primary::Noise(NoiseSource::White(expr), src)),
@@ -329,13 +325,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 let expr1 = self.parse_expression_id()?;
                 self.expect(Token::Comma)?;
                 let expr2 = self.parse_expression_id()?;
-                let src = if self.look_ahead()?.0 == Token::Comma {
+                let src = if self.look_ahead()? == Token::Comma {
                     self.lookahead.take();
                     self.expect(Token::LiteralString)?;
-                    let src = self
-                        .ast
-                        .string_literals
-                        .try_add_small(&parse_string(self.preprocessor.slice()))
+                    let src = StringLiteral::new(&parse_string(self.preprocessor.slice()))
                         .map_err(|_| Error {
                             error_type: Type::StringTooLong(span.get_len() as usize - 2),
                             source: span,
@@ -355,7 +348,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 let start = self.preprocessor.current_start();
                 self.consume_lookahead();
                 let expr = self.parse_bracketed_expression()?;
-                let expr = self.ast.push(expr);
+                let expr = self.ast.expressions.push(expr);
                 Node::new(
                     Expression::Primary(Primary::DerivativeByTime(expr)),
                     self.span_to_current_end(start),
@@ -371,7 +364,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
                 self.expect(Token::Comma)?;
 
-                let (token, span) = self.next()?;
+                let (token, span) = self.next_with_span()?;
                 let disciplines_access = match token {
                     Token::Flow => Ident::new(keywords::FLOW, span),
                     Token::Potential => Ident::new(keywords::POTENTIAL, span),
@@ -403,10 +396,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 )
             }
 
-            Token::SystemCall => {
+            /*Token::SystemCall => {
                 self.consume_lookahead();
                 todo!("Error")
-            }
+            }*/
             Token::Temperature => {
                 self.consume_lookahead();
                 Node::new(
@@ -419,9 +412,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
             Token::Vt => {
                 self.consume_lookahead();
-                let temp_arg = if self.look_ahead()?.0 == Token::ParenOpen {
+                let temp_arg = if self.look_ahead()? == Token::ParenOpen {
                     let expr = self.parse_bracketed_expression()?;
-                    Some(self.ast.push(expr))
+                    Some(self.ast.expressions.push(expr))
                 } else {
                     None
                 };
@@ -437,7 +430,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 self.consume_lookahead();
                 self.expect(ParenOpen)?;
                 let name = self.parse_expression_id()?;
-                let default = if self.look_ahead()?.0 == Token::Comma {
+                let default = if self.look_ahead()? == Token::Comma {
                     self.consume_lookahead();
                     Some(self.parse_expression_id()?)
                 } else {
@@ -455,7 +448,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::SimParamStr => {
                 self.consume_lookahead();
                 let expr = self.parse_bracketed_expression()?;
-                let expr = self.ast.push(expr);
+                let expr = self.ast.expressions.push(expr);
                 Node::new(
                     Expression::Primary(Primary::SystemFunctionCall(
                         SystemFunctionCall::SimparamStr(expr),
@@ -535,29 +528,21 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(res)
     }
 
-    pub fn parse_bracketed_expression(&mut self) -> Result<Node<Expression<'ast>>> {
+    pub fn parse_bracketed_expression(&mut self) -> Result<Node<Expression>> {
         if let Err(error) = self.expect_lookahead(Token::ParenOpen) {
             self.non_critical_errors.push(error);
-            if let Ok(expr) = self.parse_expression_id() {
-                self.recover_expression_on_bracket()
-            } else {
-                let tmp_expr = Node::new(
-                    Expression::Primary(Primary::Integer(0)),
-                    Span::new_short_empty_span(0),
-                );
-                self.recover_on(Token::ParenClose, Token::ParenClose, true, true)?;
-                Ok(tmp_expr)
-            }
+            self.recover_expression_on_bracket()
         } else {
             self.consume_lookahead();
             self.recover_expression_on_bracket()
         }
     }
 
-    fn recover_expression_on_bracket(&mut self) -> Result<Node<Expression<'ast>>> {
+    fn recover_expression_on_bracket(&mut self) -> Result<Node<Expression>> {
         Ok(match self.parse_expression() {
             Ok(expr) => {
                 if let Err(error) = self.expect_lookahead(Token::ParenClose) {
+                    self.non_critical_errors.push(error);
                     return Err(self.unrecoverable_error(UnexpectedEof {
                         expected: vec![Token::ParenClose],
                     }));
@@ -576,13 +561,13 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         })
     }
 
-    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression<'ast>>> {
+    fn parse_unary_operator(&mut self, unary_op: UnaryOperator) -> Result<Node<Expression>> {
         let unary_op = Node {
             source: self.preprocessor.span(),
             contents: unary_op,
         };
         let expr = self.parse_atom()?;
-        let expr = self.ast.push(expr);
+        let expr = self.ast.expressions.push(expr);
         let span = unary_op.source.extend(self.ast[expr].source);
         Ok(Node::new(Expression::UnaryOperator(unary_op, expr), span))
     }
@@ -590,12 +575,12 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_single_parameter_built_in_function_call(
         &mut self,
         call: BuiltInFunctionCall1p,
-    ) -> Result<Node<Expression<'ast>>> {
+    ) -> Result<Node<Expression>> {
         self.consume_lookahead();
         let start = self.preprocessor.current_start();
 
         let arg = self.parse_bracketed_expression()?;
-        let arg = self.ast.push(arg);
+        let arg = self.ast.expressions.push(arg);
 
         Ok(Node::new(
             Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)),
@@ -606,7 +591,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn parse_double_parameter_built_in_function_call(
         &mut self,
         call: BuiltInFunctionCall2p,
-    ) -> Result<Node<Expression<'ast>>> {
+    ) -> Result<Node<Expression>> {
         self.consume_lookahead();
         let start = self.preprocessor.current_start();
 

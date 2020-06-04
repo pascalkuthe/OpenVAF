@@ -1,20 +1,19 @@
-use crate::analysis::DominatorTree;
 use crate::hir_lowering::derivatives::{DerivativeMap, PartialDerivativeMap, Unknown};
 use crate::hir_lowering::error::Error;
 use crate::hir_lowering::error::Type::OnlyNumericExpressionsCanBeDerived;
 use crate::hir_lowering::HirToMirFold;
-use crate::ir::mir::ControlFlowGraph;
-use crate::ir::{IntegerExpressionId, Push, RealExpressionId};
+use crate::ir::{IntegerExpressionId, RealExpressionId};
 use crate::mir::{ExpressionId, RealExpression, Statement};
+use crate::ControlFlowGraph;
 use log::warn;
 
-impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
+impl<'lt> HirToMirFold<'lt> {
     fn partial_derivative_assignment(
         &mut self,
-        new_derivatives: &mut DerivativeMap<'tag>,
-        expr: RealExpressionId<'tag>,
-        derive_by: Unknown<'tag>,
-    ) -> RealExpressionId<'tag> {
+        new_derivatives: &mut DerivativeMap,
+        expr: RealExpressionId,
+        derive_by: Unknown,
+    ) -> RealExpressionId {
         self.partial_derivative(expr, derive_by, &mut |fold, var| {
             let mir = &mut fold.mir;
             *fold
@@ -37,16 +36,17 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         })
         .unwrap_or_else(|| {
             self.mir
+                .real_expressions
                 .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
         })
     }
 
     fn partial_derivative_integer_assignment(
         &mut self,
-        new_derivatives: &mut DerivativeMap<'tag>,
-        expr: IntegerExpressionId<'tag>,
-        derive_by: Unknown<'tag>,
-    ) -> RealExpressionId<'tag> {
+        new_derivatives: &mut DerivativeMap,
+        expr: IntegerExpressionId,
+        derive_by: Unknown,
+    ) -> RealExpressionId {
         self.partial_derivative_of_integer_expression(expr, derive_by, &mut |fold, var| {
             let mir = &mut fold.mir;
             *fold
@@ -69,40 +69,35 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         })
         .unwrap_or_else(|| {
             self.mir
+                .real_expressions
                 .push(self.mir[expr].clone_as(RealExpression::Literal(0.0)))
         })
     }
 
-    pub(super) fn solve(
-        &mut self,
-        cfg: &mut ControlFlowGraph<'tag, 'tag>,
-        dtree: &DominatorTree<'tag>,
-    ) {
+    pub(super) fn solve(&mut self, cfg: &mut ControlFlowGraph) {
         let mut new_variable_to_differentiate = DerivativeMap::default();
         let mut working_set = self.variable_to_differentiate.clone();
         let mut iteration_range = 0..u16::MAX;
         while !working_set.is_empty() && iteration_range.next().is_some() {
-            dtree.postorder_cfg_visit(|block| {
-                let mut idx = cfg[block].statements.len();
+            for (_, block) in cfg.postorder_itermut() {
+                let mut idx = block.statements.len();
                 while idx > 0 {
                     idx -= 1;
-                    let statements = &mut cfg[block].statements;
-                    // statements only ever grows so this is save
-                    let stmt = unsafe { *statements.get_unchecked(idx) };
+                    let stmt = block.statements[idx];
                     if let Statement::Assignment(attr, dst, val) = self.mir[stmt] {
                         if let Some(partials) = working_set.get(&dst) {
                             match val {
                                 ExpressionId::Real(val) => {
                                     let added = partials.len();
-                                    statements.splice(
+                                    block.statements.splice(
                                         idx..idx,
-                                        partials.into_iter().map(|(&derive_by, &variable)| {
+                                        partials.iter().map(|(&derive_by, &variable)| {
                                             let expr = self.partial_derivative_assignment(
                                                 &mut new_variable_to_differentiate,
                                                 val,
                                                 derive_by,
                                             );
-                                            self.mir.push(Statement::Assignment(
+                                            self.mir.statements.push(Statement::Assignment(
                                                 attr,
                                                 variable,
                                                 ExpressionId::Real(expr),
@@ -113,15 +108,15 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                                 }
                                 ExpressionId::Integer(val) => {
                                     let added = partials.len();
-                                    statements.splice(
+                                    block.statements.splice(
                                         idx..idx,
-                                        partials.into_iter().map(|(&derive_by, &variable)| {
+                                        partials.iter().map(|(&derive_by, &variable)| {
                                             let expr = self.partial_derivative_integer_assignment(
                                                 &mut new_variable_to_differentiate,
                                                 val,
                                                 derive_by,
                                             );
-                                            self.mir.push(Statement::Assignment(
+                                            self.mir.statements.push(Statement::Assignment(
                                                 attr,
                                                 variable,
                                                 ExpressionId::Real(expr),
@@ -140,7 +135,8 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                         }
                     }
                 }
-            });
+            }
+
             std::mem::swap(&mut working_set, &mut new_variable_to_differentiate);
             new_variable_to_differentiate.clear();
         }
@@ -150,7 +146,7 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 .map(|&var| self.mir[var].contents.name)
                 .collect();
             warn!(
-                "The derivative solver reached no solution.\\ This is a bug please report this\\ Still processing {:#?}",
+                "The derivative solver reached no solution.\n This is a bug please report this\n Still processing {:#?}",
                 names
             )
         }

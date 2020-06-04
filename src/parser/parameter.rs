@@ -13,25 +13,27 @@ use copyless::VecHelper;
 use crate::ast::{Expression, Parameter, ParameterType, Primary, VariableType};
 use crate::ir::{
     AttributeNode, Attributes, ExpressionId, Node, NumericalParameterRangeBound,
-    NumericalParameterRangeExclude, Push,
+    NumericalParameterRangeExclude,
 };
 use crate::parser::error::Expected::ParameterRange;
 use crate::parser::error::Result;
-use crate::parser::error::Type::{UnexpectedToken, UnexpectedTokens, Unsupported};
+use crate::parser::error::Type::{
+    MissingOrUnexpectedToken, UnexpectedToken, UnexpectedTokens, Unsupported,
+};
 use crate::parser::error::Unsupported::StringParameters;
 use crate::parser::lexer::Token;
 use crate::parser::Error;
 use crate::symbol_table::SymbolDeclaration;
 use crate::Parser;
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
-    pub fn parse_parameter_decl(&mut self, attributes: Attributes<'ast>) -> Result {
-        let (token, span) = self.next()?;
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_parameter_decl(&mut self, attributes: Attributes) -> Result {
+        let (token, span) = self.next_with_span()?;
         let parameter_type = match token {
             Token::Integer => VariableType::INTEGER,
             Token::Real => VariableType::REAL,
-            Token::Realtime => VariableType::REALTIME,
-            Token::Time => VariableType::TIME,
+            Token::Realtime => VariableType::REAL,
+            Token::Time => VariableType::INTEGER,
             Token::LiteralString => {
                 return Err(Error {
                     error_type: Unsupported(StringParameters),
@@ -63,7 +65,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
     fn parse_numerical_parameter_assignment(
         &mut self,
-        attributes: Attributes<'ast>,
+        attributes: Attributes,
         base_type: VariableType,
     ) -> Result {
         let start = self.preprocessor.current_start();
@@ -73,10 +75,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let mut from_ranges = Vec::new();
         let mut excluded = Vec::new();
         loop {
-            match self.look_ahead()? {
+            match self.look_ahead_with_span()? {
                 (Token::From, _) => {
                     self.consume_lookahead();
-                    match self.next()? {
+                    match self.next_with_span()? {
                         (Token::SquareBracketOpen, _) => {
                             from_ranges.alloc().init(self.parse_parameter_range(true)?);
                         }
@@ -95,7 +97,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 }
                 (Token::Exclude, _) => {
                     self.consume_lookahead();
-                    match self.look_ahead()? {
+                    match self.look_ahead_with_span()? {
                         (Token::SquareBracketOpen, _) => {
                             self.consume_lookahead();
                             excluded.alloc().init(NumericalParameterRangeExclude::Range(
@@ -126,7 +128,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 }
             }
         }
-        let parameter_id = self.ast.push(AttributeNode {
+        let parameter_id = self.ast.parameters.push(AttributeNode {
             attributes,
             source: self.span_to_current_end(start),
             contents: Parameter {
@@ -146,20 +148,21 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     fn parse_parameter_range(
         &mut self,
         inclusive: bool,
-    ) -> Result<Range<NumericalParameterRangeBound<ExpressionId<'ast>>>> {
+    ) -> Result<Range<NumericalParameterRangeBound<ExpressionId>>> {
         let start = NumericalParameterRangeBound {
             bound: self.parse_parameter_range_expression()?,
             inclusive,
         };
         self.expect(Token::Colon)?;
         let end = self.parse_parameter_range_expression()?;
-        let end_inclusive = match self.next()? {
-            (Token::SquareBracketClose, _) => true,
-            (Token::ParenClose, _) => false,
-            (_, source) => {
+        let end_inclusive = match self.next_with_span_and_previous_end()? {
+            (Token::SquareBracketClose, _, _) => true,
+            (Token::ParenClose, _, _) => false,
+            (_, source, expected_at) => {
                 return Err(Error {
-                    error_type: UnexpectedToken {
+                    error_type: MissingOrUnexpectedToken {
                         expected: vec![Token::ParenClose, Token::SquareBracketClose],
+                        expected_at,
                     },
                     source,
                 })
@@ -171,19 +174,19 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         })
     }
 
-    fn parse_parameter_range_expression(&mut self) -> Result<ExpressionId<'ast>> {
-        let (token, source) = self.look_ahead()?;
+    fn parse_parameter_range_expression(&mut self) -> Result<ExpressionId> {
+        let (token, source) = self.look_ahead_with_span()?;
         match token {
             Token::Infinity => {
                 self.consume_lookahead();
-                Ok(self.ast.push(Node {
+                Ok(self.ast.expressions.push(Node {
                     contents: Expression::Primary(Primary::Real(core::f64::INFINITY)),
                     source,
                 }))
             }
             Token::MinusInfinity => {
                 self.consume_lookahead();
-                Ok(self.ast.push(Node {
+                Ok(self.ast.expressions.push(Node {
                     contents: Expression::Primary(Primary::Real(core::f64::NEG_INFINITY)),
                     source,
                 }))

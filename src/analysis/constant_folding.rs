@@ -1,84 +1,90 @@
-use crate::analysis::data_flow::reaching_variables::{DefiningSet, UseDefGraph};
+//  * ******************************************************************************************
+//  * Copyright (c) 2019 Pascal Kuthe. This file is part of the OpenVAF project.
+//  * It is subject to the license terms in the LICENSE file found in the top-level directory
+//  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+//  *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
+//  *  distributed except according to the terms contained in the LICENSE file.
+//  * *******************************************************************************************
+
+#![allow(clippy::float_cmp)]
+
+use crate::analysis::data_flow::reaching_variables::UseDefGraph;
 use crate::ast::UnaryOperator;
-use crate::compact_arena::{CompressedRange, TinyHeapArena};
-use crate::ir::mir::control_flow_graph::BasicBlockId;
-use crate::ir::mir::{ControlFlowGraph, Mir};
+
+use crate::cfg::{BasicBlock, Terminator};
+use crate::data_structures::BitSet;
+use crate::ir::cfg::{BasicBlockId, ControlFlowGraph};
+use crate::ir::mir::Mir;
 use crate::ir::{
     BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, ParameterId,
     RealExpressionId, StatementId, StringExpressionId, VariableId,
 };
-use crate::mir::control_flow_graph::Terminator;
+use crate::literals::StringLiteral;
 use crate::mir::{
     ComparisonOperator, ExpressionId, IntegerBinaryOperator, IntegerExpression, RealBinaryOperator,
     RealExpression, Statement, StringExpression,
 };
-use fixedbitset::FixedBitSet as BitSet;
+use bitflags::_core::option::Option::Some;
+use index_vec::IndexVec;
 use log::*;
 use rustc_hash::FxHashMap;
 
 #[derive(Clone, Debug, Default)]
-pub struct ConstantFoldState<'tag> {
-    pub real_definitions: FxHashMap<StatementId<'tag>, f64>,
-    pub integer_definitions: FxHashMap<StatementId<'tag>, i64>,
-    pub string_definitions: FxHashMap<StatementId<'tag>, CompressedRange<'tag>>,
-    pub real_parameters: FxHashMap<ParameterId<'tag>, f64>,
-    pub int_parameters: FxHashMap<ParameterId<'tag>, i64>,
-    pub string_parameters: FxHashMap<ParameterId<'tag>, CompressedRange<'tag>>,
+pub struct ConstantFoldState {
+    pub real_definitions: FxHashMap<StatementId, f64>,
+    pub integer_definitions: FxHashMap<StatementId, i64>,
+    pub string_definitions: FxHashMap<StatementId, StringLiteral>,
+    pub real_parameters: FxHashMap<ParameterId, f64>,
+    pub int_parameters: FxHashMap<ParameterId, i64>,
+    pub string_parameters: FxHashMap<ParameterId, StringLiteral>,
 }
 
-impl<'tag> ConstantResolver<'tag> for () {
+impl ConstantResolver for () {
     #[inline(always)]
-    fn get_real_variable_value(&mut self, var: VariableId<'tag>) -> Option<f64> {
+    fn get_real_variable_value(&mut self, _var: VariableId) -> Option<f64> {
         None
     }
 
     #[inline(always)]
-    fn get_int_variable_value(&mut self, var: VariableId<'tag>) -> Option<i64> {
+    fn get_int_variable_value(&mut self, _var: VariableId) -> Option<i64> {
         None
     }
 
     #[inline(always)]
-    fn get_str_variable_value(&mut self, var: VariableId<'tag>) -> Option<CompressedRange<'tag>> {
+    fn get_str_variable_value(&mut self, _var: VariableId) -> Option<StringLiteral> {
         None
     }
 
     #[inline(always)]
-    fn get_real_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<f64> {
+    fn get_real_parameter_value(&mut self, _param: ParameterId) -> Option<f64> {
         None
     }
 
     #[inline(always)]
-    fn get_int_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<i64> {
+    fn get_int_parameter_value(&mut self, _param: ParameterId) -> Option<i64> {
         None
     }
 
     #[inline(always)]
-    fn get_str_parameter_value(
-        &mut self,
-        param: ParameterId<'tag>,
-    ) -> Option<CompressedRange<'tag>> {
+    fn get_str_parameter_value(&mut self, _param: ParameterId) -> Option<StringLiteral> {
         None
     }
 }
 
-pub struct ConstantPropagator<'lt, 'tag> {
-    known_values: &'lt ConstantFoldState<'tag>,
-    dependencys_before: &'lt DefiningSet,
-    dependencys_after: &'lt mut DefiningSet,
-    variables_assignments: &'lt TinyHeapArena<'tag, DefiningSet>,
+pub struct ConstantPropagator<'lt> {
+    known_values: &'lt ConstantFoldState,
+    dependencys_before: &'lt BitSet<StatementId>,
+    dependencys_after: &'lt mut BitSet<StatementId>,
+    variables_assignments: &'lt IndexVec<VariableId, BitSet<StatementId>>,
 }
 
-impl<'lt, 'tag> ConstantResolver<'tag> for ConstantPropagator<'lt, 'tag> {
+impl<'lt> ConstantResolver for ConstantPropagator<'lt> {
     #[inline]
-    fn get_real_variable_value(&mut self, var: VariableId<'tag>) -> Option<f64> {
+    fn get_real_variable_value(&mut self, var: VariableId) -> Option<f64> {
         let mut definitions = self
             .dependencys_before
-            .0
-            .intersection(&self.variables_assignments[var.unwrap()].0)
-            .map(|id| unsafe {
-                let id = StatementId::from_raw_index(id);
-                self.known_values.real_definitions.get(&id)
-            });
+            .intersection(&self.variables_assignments[var])
+            .map(|id| self.known_values.real_definitions.get(&id));
 
         // TODO constant fold default values
         let value = *definitions.next().flatten()?;
@@ -86,22 +92,17 @@ impl<'lt, 'tag> ConstantResolver<'tag> for ConstantPropagator<'lt, 'tag> {
             return None;
         }
         self.dependencys_after
-            .0
-            .difference_with(&self.variables_assignments[var.unwrap()].0);
+            .difference_with(&self.variables_assignments[var]);
 
         Some(value)
     }
 
     #[inline]
-    fn get_int_variable_value(&mut self, var: VariableId<'tag>) -> Option<i64> {
+    fn get_int_variable_value(&mut self, var: VariableId) -> Option<i64> {
         let mut definitions = self
             .dependencys_before
-            .0
-            .intersection(&self.variables_assignments[var.unwrap()].0)
-            .map(|id| unsafe {
-                let id = StatementId::from_raw_index(id);
-                self.known_values.integer_definitions.get(&id)
-            });
+            .intersection(&self.variables_assignments[var])
+            .map(|id| self.known_values.integer_definitions.get(&id));
 
         // TODO constant fold default values
         let value = *definitions.next().flatten()?;
@@ -109,68 +110,56 @@ impl<'lt, 'tag> ConstantResolver<'tag> for ConstantPropagator<'lt, 'tag> {
             return None;
         }
         self.dependencys_after
-            .0
-            .difference_with(&self.variables_assignments[var.unwrap()].0);
+            .difference_with(&self.variables_assignments[var]);
 
         Some(value)
     }
 
     #[inline]
-    fn get_str_variable_value(&mut self, var: VariableId<'tag>) -> Option<CompressedRange<'tag>> {
+    fn get_str_variable_value(&mut self, var: VariableId) -> Option<StringLiteral> {
         let mut definitions = self
             .dependencys_before
-            .0
-            .intersection(&self.variables_assignments[var.unwrap()].0)
-            .map(|id| unsafe {
-                let id = StatementId::from_raw_index(id);
-                self.known_values.string_definitions.get(&id)
-            });
+            .intersection(&self.variables_assignments[var])
+            .map(|id| self.known_values.string_definitions.get(&id));
 
         let value = *definitions.next().flatten()?;
         if definitions.any(|x| Some(&value) != x) {
             return None;
         }
         self.dependencys_after
-            .0
-            .difference_with(&self.variables_assignments[var.unwrap()].0);
+            .difference_with(&self.variables_assignments[var]);
         Some(value)
     }
 
     #[inline]
-    fn get_real_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<f64> {
+    fn get_real_parameter_value(&mut self, param: ParameterId) -> Option<f64> {
         self.known_values.real_parameters.get(&param).copied()
     }
 
     #[inline]
-    fn get_int_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<i64> {
+    fn get_int_parameter_value(&mut self, param: ParameterId) -> Option<i64> {
         self.known_values.int_parameters.get(&param).copied()
     }
 
     #[inline]
-    fn get_str_parameter_value(
-        &mut self,
-        param: ParameterId<'tag>,
-    ) -> Option<CompressedRange<'tag>> {
+    fn get_str_parameter_value(&mut self, param: ParameterId) -> Option<StringLiteral> {
         self.known_values.string_parameters.get(&param).copied()
     }
 }
 
-pub trait ConstantResolver<'tag> {
-    fn get_real_variable_value(&mut self, var: VariableId<'tag>) -> Option<f64>;
-    fn get_int_variable_value(&mut self, var: VariableId<'tag>) -> Option<i64>;
-    fn get_str_variable_value(&mut self, var: VariableId<'tag>) -> Option<CompressedRange<'tag>>;
-    fn get_real_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<f64>;
-    fn get_int_parameter_value(&mut self, param: ParameterId<'tag>) -> Option<i64>;
-    fn get_str_parameter_value(
-        &mut self,
-        param: ParameterId<'tag>,
-    ) -> Option<CompressedRange<'tag>>;
+pub trait ConstantResolver {
+    fn get_real_variable_value(&mut self, var: VariableId) -> Option<f64>;
+    fn get_int_variable_value(&mut self, var: VariableId) -> Option<i64>;
+    fn get_str_variable_value(&mut self, var: VariableId) -> Option<StringLiteral>;
+    fn get_real_parameter_value(&mut self, param: ParameterId) -> Option<f64>;
+    fn get_int_parameter_value(&mut self, param: ParameterId) -> Option<i64>;
+    fn get_str_parameter_value(&mut self, param: ParameterId) -> Option<StringLiteral>;
 }
 
-pub fn real_constant_fold<'tag>(
-    fold: &mut impl ConstantFolder<'tag>,
-    resolver: &mut impl ConstantResolver<'tag>,
-    expr: RealExpressionId<'tag>,
+pub fn real_constant_fold(
+    fold: &mut impl ConstantFolder,
+    resolver: &mut impl ConstantResolver,
+    expr: RealExpressionId,
 ) -> Option<f64> {
     let res = match fold.mir()[expr].contents {
         RealExpression::Literal(val) => return Some(val),
@@ -297,13 +286,11 @@ pub fn real_constant_fold<'tag>(
                     fold.resolve_to_real_subexpressions(expr, true_val_id);
                     return None;
                 }
+            } else if let Some(false_val) = false_val {
+                false_val
             } else {
-                if let Some(false_val) = false_val {
-                    false_val
-                } else {
-                    fold.resolve_to_real_subexpressions(expr, false_val_id);
-                    return None;
-                }
+                fold.resolve_to_real_subexpressions(expr, false_val_id);
+                return None;
             }
         }
 
@@ -366,8 +353,7 @@ pub fn real_constant_fold<'tag>(
 
         RealExpression::IntegerConversion(expr) => fold.int_constant_fold(resolver, expr)? as f64,
 
-        RealExpression::Vt(Some(temp)) => {
-            let temp = fold.real_constant_fold(resolver, temp);
+        RealExpression::Vt(Some(_temp)) => {
             //TODO abstract over constants
             return None;
         }
@@ -377,16 +363,15 @@ pub fn real_constant_fold<'tag>(
         | RealExpression::SimParam(_, _)
         | RealExpression::Vt(None)
         | RealExpression::BranchAccess(_, _, _)
-        | RealExpression::FunctionCall(_, _)
         | RealExpression::Noise(_, _) => return None,
     };
     Some(res)
 }
 
-pub fn int_constant_fold<'tag>(
-    fold: &mut impl ConstantFolder<'tag>,
-    resolver: &mut impl ConstantResolver<'tag>,
-    expr: IntegerExpressionId<'tag>,
+pub fn int_constant_fold(
+    fold: &mut impl ConstantFolder,
+    resolver: &mut impl ConstantResolver,
+    expr: IntegerExpressionId,
 ) -> Option<i64> {
     let res = match fold.mir()[expr].contents {
         IntegerExpression::Literal(val) => return Some(val),
@@ -468,7 +453,7 @@ pub fn int_constant_fold<'tag>(
                     // TODO Proper error on overflow
                     (Some(lhs), Some(rhs)) if rhs >= 0 => lhs.pow(rhs as u32),
 
-                    (Some(lhs), Some(rhs)) => 0,
+                    (Some(_), Some(_)) => 0,
 
                     (_, _) => return None,
                 },
@@ -515,7 +500,7 @@ pub fn int_constant_fold<'tag>(
                         fold.resolve_to_int_subexpressions(expr, rhs_id);
                         return None;
                     } else if rhs == Some(0) && lhs.is_none() {
-                        fold.resolve_to_int_subexpressions(expr, rhs_id);
+                        fold.resolve_to_int_subexpressions(expr, lhs_id);
                         return None;
                     } else {
                         lhs? | rhs?
@@ -523,7 +508,7 @@ pub fn int_constant_fold<'tag>(
                 }
                 IntegerBinaryOperator::LogicOr => match (lhs, rhs) {
                     (Some(0), Some(0)) => 0,
-                    (Some(lhs), Some(rhs)) => 1,
+                    (Some(_), Some(_)) => 1,
                     (None, None) => return None,
                     (Some(0), None) => {
                         fold.resolve_to_int_subexpressions(expr, rhs_id);
@@ -533,7 +518,7 @@ pub fn int_constant_fold<'tag>(
                         fold.resolve_to_int_subexpressions(expr, lhs_id);
                         return None;
                     }
-                    (Some(val), None) | (None, Some(val)) => 1,
+                    (Some(_), None) | (None, Some(_)) => 1,
                 },
                 IntegerBinaryOperator::LogicAnd => match (lhs, rhs) {
                     (Some(0), Some(0)) => 0,
@@ -556,7 +541,7 @@ pub fn int_constant_fold<'tag>(
             let arg = fold.int_constant_fold(resolver, arg)?;
             match op.contents {
                 UnaryOperator::BitNegate => !arg,
-                UnaryOperator::LogicNegate => !(arg != 0) as i64,
+                UnaryOperator::LogicNegate => (arg == 0) as i64,
                 UnaryOperator::ArithmeticNegate => -arg,
                 UnaryOperator::ExplicitPositive => arg,
             }
@@ -595,13 +580,13 @@ pub fn int_constant_fold<'tag>(
         IntegerExpression::StringEq(lhs, rhs) => {
             let lhs = fold.string_constant_fold(resolver, lhs);
             let rhs = fold.string_constant_fold(resolver, rhs);
-            (fold.mir().string_literals[lhs?] == fold.mir().string_literals[rhs?]) as i64
+            (lhs? == rhs?) as i64
         }
 
         IntegerExpression::StringNEq(lhs, rhs) => {
             let lhs = fold.string_constant_fold(resolver, lhs);
             let rhs = fold.string_constant_fold(resolver, rhs);
-            (fold.mir().string_literals[lhs?] != fold.mir().string_literals[rhs?]) as i64
+            (lhs? != rhs?) as i64
         }
 
         IntegerExpression::Condition(condition, _, true_val_id, _, false_val_id) => {
@@ -616,13 +601,11 @@ pub fn int_constant_fold<'tag>(
                     fold.resolve_to_int_subexpressions(expr, true_val_id);
                     return None;
                 }
+            } else if let Some(false_val) = false_val {
+                false_val
             } else {
-                if let Some(false_val) = false_val {
-                    false_val
-                } else {
-                    fold.resolve_to_int_subexpressions(expr, false_val_id);
-                    return None;
-                }
+                fold.resolve_to_int_subexpressions(expr, false_val_id);
+                return None;
             }
         }
 
@@ -639,11 +622,11 @@ pub fn int_constant_fold<'tag>(
     Some(res)
 }
 
-pub fn string_constant_fold<'tag>(
-    fold: &mut impl ConstantFolder<'tag>,
-    resolver: &mut impl ConstantResolver<'tag>,
-    expr: StringExpressionId<'tag>,
-) -> Option<CompressedRange<'tag>> {
+pub fn string_constant_fold(
+    fold: &mut impl ConstantFolder,
+    resolver: &mut impl ConstantResolver,
+    expr: StringExpressionId,
+) -> Option<StringLiteral> {
     Some(match fold.mir()[expr].contents {
         StringExpression::Literal(val) => return Some(val),
         StringExpression::VariableReference(var) => resolver.get_str_variable_value(var)?,
@@ -665,42 +648,42 @@ pub fn string_constant_fold<'tag>(
     })
 }
 
-pub struct ReadingConstantFold<'lt, 'tag>(pub &'lt Mir<'tag>);
+pub struct ReadingConstantFold<'lt>(pub &'lt Mir);
 
-impl<'lt, 'tag> ConstantFolder<'tag> for ReadingConstantFold<'lt, 'tag> {
+impl<'lt> ConstantFolder for ReadingConstantFold<'lt> {
     fn resolve_to_string_subexpressions(
         &mut self,
-        _dst: StringExpressionId<'tag>,
-        _newval: StringExpressionId<'tag>,
+        _dst: StringExpressionId,
+        _newval: StringExpressionId,
     ) {
     }
 
     fn resolve_to_int_subexpressions(
         &mut self,
-        _dst: IntegerExpressionId<'tag>,
-        _newval: IntegerExpressionId<'tag>,
+        _dst: IntegerExpressionId,
+        _newval: IntegerExpressionId,
     ) {
     }
 
     fn resolve_to_real_subexpressions(
         &mut self,
-        _dst: RealExpressionId<'tag>,
-        _newval: RealExpressionId<'tag>,
+        _dst: RealExpressionId,
+        _newval: RealExpressionId,
     ) {
     }
 
-    fn mir(&self) -> &Mir<'tag> {
+    fn mir(&self) -> &Mir {
         self.0
     }
 }
 
-pub struct IntermediateWritingConstantFold<'lt, 'tag>(pub &'lt mut Mir<'tag>);
+pub struct IntermediateWritingConstantFold<'lt>(pub &'lt mut Mir);
 
-impl<'lt, 'tag> ConstantFolder<'tag> for IntermediateWritingConstantFold<'lt, 'tag> {
+impl<'lt> ConstantFolder for IntermediateWritingConstantFold<'lt> {
     fn real_constant_fold(
         &mut self,
-        resolver: &mut impl ConstantResolver<'tag>,
-        expr: RealExpressionId<'tag>,
+        resolver: &mut impl ConstantResolver,
+        expr: RealExpressionId,
     ) -> Option<f64> {
         let res = real_constant_fold(self, resolver, expr)?;
         self.0[expr].contents = RealExpression::Literal(res);
@@ -709,8 +692,8 @@ impl<'lt, 'tag> ConstantFolder<'tag> for IntermediateWritingConstantFold<'lt, 't
 
     fn int_constant_fold(
         &mut self,
-        resolver: &mut impl ConstantResolver<'tag>,
-        expr: IntegerExpressionId<'tag>,
+        resolver: &mut impl ConstantResolver,
+        expr: IntegerExpressionId,
     ) -> Option<i64> {
         let res = int_constant_fold(self, resolver, expr)?;
         self.0[expr].contents = IntegerExpression::Literal(res);
@@ -719,9 +702,9 @@ impl<'lt, 'tag> ConstantFolder<'tag> for IntermediateWritingConstantFold<'lt, 't
 
     fn string_constant_fold(
         &mut self,
-        resolver: &mut impl ConstantResolver<'tag>,
-        expr: StringExpressionId<'tag>,
-    ) -> Option<CompressedRange<'tag>> {
+        resolver: &mut impl ConstantResolver,
+        expr: StringExpressionId,
+    ) -> Option<StringLiteral> {
         let res = string_constant_fold(self, resolver, expr)?;
         self.0[expr].contents = StringExpression::Literal(res);
         Some(res)
@@ -729,308 +712,161 @@ impl<'lt, 'tag> ConstantFolder<'tag> for IntermediateWritingConstantFold<'lt, 't
 
     fn resolve_to_string_subexpressions(
         &mut self,
-        dst: StringExpressionId<'tag>,
-        newval: StringExpressionId<'tag>,
+        dst: StringExpressionId,
+        newval: StringExpressionId,
     ) {
         self.0[dst] = self.0[newval].clone();
     }
 
     fn resolve_to_int_subexpressions(
         &mut self,
-        dst: IntegerExpressionId<'tag>,
-        newval: IntegerExpressionId<'tag>,
+        dst: IntegerExpressionId,
+        newval: IntegerExpressionId,
     ) {
         self.0[dst] = self.0[newval].clone();
     }
 
-    fn resolve_to_real_subexpressions(
-        &mut self,
-        dst: RealExpressionId<'tag>,
-        newval: RealExpressionId<'tag>,
-    ) {
+    fn resolve_to_real_subexpressions(&mut self, dst: RealExpressionId, newval: RealExpressionId) {
         self.0[dst] = self.0[newval].clone();
     }
 
-    fn mir(&self) -> &Mir<'tag> {
+    fn mir(&self) -> &Mir {
         &self.0
     }
 }
 
-pub trait ConstantFolder<'tag>: Sized {
+pub trait ConstantFolder: Sized {
     // We do defaults with external functions because specialization is nowhere near stable
     // This is similar to overwriting methods in OOP
 
     fn real_constant_fold(
         &mut self,
-        resolver: &mut impl ConstantResolver<'tag>,
-        expr: RealExpressionId<'tag>,
+        resolver: &mut impl ConstantResolver,
+        expr: RealExpressionId,
     ) -> Option<f64> {
         real_constant_fold(self, resolver, expr)
     }
 
     fn int_constant_fold(
         &mut self,
-        resolver: &mut impl ConstantResolver<'tag>,
-        expr: IntegerExpressionId<'tag>,
+        resolver: &mut impl ConstantResolver,
+        expr: IntegerExpressionId,
     ) -> Option<i64> {
         int_constant_fold(self, resolver, expr)
     }
 
     fn string_constant_fold(
         &mut self,
-        resolver: &mut impl ConstantResolver<'tag>,
-        expr: StringExpressionId<'tag>,
-    ) -> Option<CompressedRange<'tag>> {
+        resolver: &mut impl ConstantResolver,
+        expr: StringExpressionId,
+    ) -> Option<StringLiteral> {
         string_constant_fold(self, resolver, expr)
     }
 
     fn resolve_to_string_subexpressions(
         &mut self,
-        dst: StringExpressionId<'tag>,
-        newval: StringExpressionId<'tag>,
+        dst: StringExpressionId,
+        newval: StringExpressionId,
     );
     fn resolve_to_int_subexpressions(
         &mut self,
-        dst: IntegerExpressionId<'tag>,
-        newval: IntegerExpressionId<'tag>,
+        dst: IntegerExpressionId,
+        newval: IntegerExpressionId,
     );
-    fn resolve_to_real_subexpressions(
-        &mut self,
-        dst: RealExpressionId<'tag>,
-        newval: RealExpressionId<'tag>,
-    );
+    fn resolve_to_real_subexpressions(&mut self, dst: RealExpressionId, newval: RealExpressionId);
 
-    fn mir(&self) -> &Mir<'tag>;
+    fn mir(&self) -> &Mir;
 }
 
-impl<'tag> Mir<'tag> {}
-
-impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
-    pub fn constant_fold<'newtag>(
+impl ControlFlowGraph {
+    pub fn constant_fold(
         &mut self,
-        fold: &mut impl ConstantFolder<'mir>,
-        udg: &mut UseDefGraph<'mir, 'tag>,
-        known_values: &mut ConstantFoldState<'mir>,
-        write_intermidiate: bool,
-    ) {
-        self.constant_fold_internal(
-            fold,
-            udg,
-            known_values,
-            self.start(),
-            None,
-            &mut BitSet::with_capacity(udg.statement_count as usize),
-            &mut DefiningSet(BitSet::with_capacity(udg.statement_count as usize)),
-            write_intermidiate,
-        );
-    }
-
-    fn constant_fold_internal(
-        &mut self,
-        fold: &mut impl ConstantFolder<'mir>,
-        udg: &mut UseDefGraph<'mir, 'tag>,
-        known_values: &mut ConstantFoldState<'mir>,
-        start: BasicBlockId<'tag>,
-        end: Option<BasicBlockId<'tag>>,
-        removed_statements: &mut BitSet,
-        temporary_set: &mut DefiningSet,
+        fold: &mut impl ConstantFolder,
+        udg: &mut UseDefGraph,
+        known_values: &mut ConstantFoldState,
         write_intermediate: bool,
     ) {
-        let mut block = start;
-        loop {
-            self.constant_fold_basic_block(
-                block,
+        let mut temporary_set = BitSet::new_empty(udg.len_stmd_idx());
+
+        for (id, bb) in self.reverse_postorder_itermut() {
+            Self::constant_fold_basic_block(
+                id,
+                bb,
                 fold,
                 udg,
                 known_values,
-                removed_statements,
-                temporary_set,
+                &mut temporary_set,
                 write_intermediate,
             );
 
-            loop {
-                match self[block].terminator {
-                    Terminator::Split {
-                        condition,
-                        true_block,
-                        false_block,
-                        merge,
-                    } => {
-                        udg.terminator_uses[block]
-                            .0
-                            .difference_with(removed_statements);
-                        temporary_set
-                            .0
-                            .as_mut_slice()
-                            .copy_from_slice(udg.terminator_uses[block].0.as_slice());
+            if let Terminator::Split {
+                condition,
+                true_block,
+                false_block,
+                merge,
+            } = bb.terminator
+            {
+                temporary_set
+                    .as_mut_slice()
+                    .copy_from_slice(udg.terminator_use_def_chains[id].as_slice());
 
-                        let folded_condition = fold.int_constant_fold(
-                            &mut ConstantPropagator {
-                                known_values,
-                                dependencys_before: &udg.terminator_uses[block],
-                                dependencys_after: temporary_set,
-                                variables_assignments: &udg.variables,
-                            },
-                            condition,
+                let folded_condition = fold.int_constant_fold(
+                    &mut ConstantPropagator {
+                        known_values,
+                        dependencys_before: &udg.terminator_use_def_chains[id],
+                        dependencys_after: &mut temporary_set,
+                        variables_assignments: &udg.assignments,
+                    },
+                    condition,
+                );
+
+                if write_intermediate || folded_condition.is_some() {
+                    std::mem::swap(&mut temporary_set, &mut udg.terminator_use_def_chains[id]);
+                }
+
+                match folded_condition {
+                    Some(0) => {
+                        debug!(
+                            "{:?}->(false: {:?}, true: {:?}) always false (condition: {:?})",
+                            id, false_block, true_block, condition
                         );
 
-                        if write_intermediate || folded_condition.is_some() {
-                            std::mem::swap(temporary_set, &mut udg.terminator_uses[block]);
+                        bb.terminator = Terminator::Goto(false_block);
+                    }
+
+                    Some(_) => {
+                        if merge == id {
+                            panic!("Found constant infinite loop!")
                         }
 
-                        match folded_condition {
-                            Some(0) => {
-                                debug!(
-                                    "{}->(false: {}, true: {}) always false (condition: {})",
-                                    block, false_block, true_block, condition
-                                );
-                                self.partial_visit_mut_in_execution_order(
-                                    true_block,
-                                    Some(merge),
-                                    &mut |cfg, block, _| {
-                                        cfg.mark_block_dead(block);
-                                        removed_statements.extend(
-                                            cfg[block]
-                                                .statements
-                                                .iter()
-                                                .map(|stmt| stmt.as_usize()),
-                                        );
-                                    },
-                                );
-
-                                self[block].terminator = self[false_block].terminator;
-                                self.constant_fold_basic_block(
-                                    false_block,
-                                    fold,
-                                    udg,
-                                    known_values,
-                                    removed_statements,
-                                    temporary_set,
-                                    write_intermediate,
-                                );
-                                {
-                                    let (block, false_block) =
-                                        self.blocks.double_mut_borrow(block, false_block);
-                                    block.statements.append(&mut false_block.statements);
-                                }
-                                self.mark_block_dead(false_block)
-                            }
-
-                            Some(_) => {
-                                if merge == block {
-                                    panic!("Found constant infinite loop!")
-                                }
-                                debug!(
-                                    "{}->(false: {}, true: {}) always true (condition: {})",
-                                    block, false_block, true_block, condition
-                                );
-                                self.partial_visit_mut_in_execution_order(
-                                    false_block,
-                                    Some(merge),
-                                    &mut |cfg, block, _| {
-                                        cfg.mark_block_dead(block);
-                                        removed_statements.extend(
-                                            cfg[block]
-                                                .statements
-                                                .iter()
-                                                .map(|stmt| stmt.as_usize()),
-                                        );
-                                    },
-                                );
-                                self[block].terminator = self[true_block].terminator;
-                                self.constant_fold_basic_block(
-                                    true_block,
-                                    fold,
-                                    udg,
-                                    known_values,
-                                    removed_statements,
-                                    temporary_set,
-                                    write_intermediate,
-                                );
-                                {
-                                    let (block, true_block) =
-                                        self.blocks.double_mut_borrow(block, true_block);
-                                    block.statements.append(&mut true_block.statements);
-                                }
-                                self.mark_block_dead(true_block)
-                            }
-                            None => {
-                                self.constant_fold_internal(
-                                    fold,
-                                    udg,
-                                    known_values,
-                                    true_block,
-                                    Some(merge),
-                                    removed_statements,
-                                    temporary_set,
-                                    write_intermediate,
-                                );
-
-                                if merge == block {
-                                    block = false_block;
-                                } else {
-                                    self.constant_fold_internal(
-                                        fold,
-                                        udg,
-                                        known_values,
-                                        false_block,
-                                        Some(merge),
-                                        removed_statements,
-                                        temporary_set,
-                                        write_intermediate,
-                                    );
-                                    block = merge;
-                                }
-
-                                break;
-                            }
-                        }
+                        bb.terminator = Terminator::Goto(true_block);
                     }
 
-                    Terminator::Merge(next) if Some(next) == end => return,
-
-                    Terminator::End => return,
-
-                    Terminator::Merge(next) => {
-                        self[block].terminator = Terminator::Goto(next);
-                        debug!("Overwriting merge {} -> {} with goto", block, next);
-                        block = next;
-                        break;
-                    }
-
-                    Terminator::Goto(next) => {
-                        block = next;
-                        break;
-                    }
+                    None => (),
                 }
             }
         }
     }
 
     fn constant_fold_basic_block(
-        &mut self,
-        block: BasicBlockId<'tag>,
-        fold: &mut impl ConstantFolder<'mir>,
-        udg: &mut UseDefGraph<'mir, 'tag>,
-        known_values: &mut ConstantFoldState<'mir>,
-        removed_statements: &mut BitSet,
-        temporary_set: &mut DefiningSet,
+        id: BasicBlockId,
+        bb: &mut BasicBlock,
+        fold: &mut impl ConstantFolder,
+        udg: &mut UseDefGraph,
+        known_values: &mut ConstantFoldState,
+        temporary_set: &mut BitSet<StatementId>,
         write_intermediate: bool,
     ) {
-        for &stmt in self[block].statements.iter().rev() {
-            udg.uses[stmt.unwrap()]
-                .0
-                .difference_with(removed_statements);
+        for &stmt in bb.statements.iter().rev() {
             temporary_set
-                .0
                 .as_mut_slice()
-                .copy_from_slice(udg.uses[stmt.unwrap()].0.as_slice());
+                .copy_from_slice(udg.stmt_use_def_chains[stmt].as_slice());
 
             let mut resolver = ConstantPropagator {
                 known_values,
-                dependencys_before: &udg.terminator_uses[block],
+                dependencys_before: &udg.stmt_use_def_chains[stmt],
                 dependencys_after: temporary_set,
-                variables_assignments: &udg.variables,
+                variables_assignments: &udg.assignments,
             };
 
             match fold.mir()[stmt] {
@@ -1039,13 +875,16 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                         ExpressionId::Real(val) => {
                             if let Some(val) = fold.real_constant_fold(&mut resolver, val) {
                                 let old = known_values.real_definitions.insert(stmt, val);
-                                if cfg!(debug_assertions) && old.is_some() {
-                                    panic!(
-                                        "Statement {} was assigned twice (old={},new={})!",
+                                #[cfg(debug_assertions)]
+                                match old{
+                                    Some(new) if new != val => panic!(
+                                        "Statement {} in block {} was assigned twice with different values (old={},new={})!",
                                         stmt,
+                                        id,
                                         old.unwrap(),
                                         val
-                                    )
+                                    ),
+                                    _ => ()
                                 }
                                 true
                             } else {
@@ -1056,8 +895,16 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                         ExpressionId::Integer(val) => {
                             if let Some(val) = fold.int_constant_fold(&mut resolver, val) {
                                 let old = known_values.integer_definitions.insert(stmt, val);
-                                if cfg!(debug_assertions) && old.is_some() {
-                                    panic!("Statement {} was assigned twice!", stmt)
+                                #[cfg(debug_assertions)]
+                                match old{
+                                    Some(new) if new != val => panic!(
+                                        "Statement {} in block {} was assigned twice with different values (old={},new={})!",
+                                        stmt,
+                                        id,
+                                        old.unwrap(),
+                                        val
+                                    ),
+                                    _ => ()
                                 }
                                 true
                             } else {
@@ -1067,13 +914,16 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                         ExpressionId::String(val) => {
                             if let Some(val) = fold.string_constant_fold(&mut resolver, val) {
                                 let old = known_values.string_definitions.insert(stmt, val);
-                                if cfg!(debug_assertions) && old.is_some() {
-                                    panic!(
-                                        "Statement {} was assigned twice (old={:?},new={:?})!",
+                                #[cfg(debug_assertions)]
+                                match old{
+                                    Some(old) if old != val => panic!(
+                                        "Statement {} in block {} was assigned twice with different values (old={},new={})!",
                                         stmt,
-                                        old.unwrap(),
+                                        id,
+                                        old,
                                         val
-                                    )
+                                    ),
+                                    _ => ()
                                 }
                                 true
                             } else {
@@ -1083,13 +933,13 @@ impl<'tag, 'mir> ControlFlowGraph<'tag, 'mir> {
                     };
 
                     if success || write_intermediate {
-                        std::mem::swap(temporary_set, &mut udg.uses[stmt.unwrap()])
+                        std::mem::swap(temporary_set, &mut udg.stmt_use_def_chains[stmt])
                     }
                 }
 
                 Statement::Contribute(_, _, _, val) if write_intermediate => {
                     fold.real_constant_fold(&mut resolver, val);
-                    std::mem::swap(temporary_set, &mut udg.uses[stmt.unwrap()])
+                    std::mem::swap(temporary_set, &mut udg.stmt_use_def_chains[stmt])
                 }
 
                 _ => (),

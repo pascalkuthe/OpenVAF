@@ -52,27 +52,27 @@ pub mod error;
 
 //TODO input/output enforcement
 
-impl<'tag> Ast<'tag> {
+impl Ast {
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
-    pub fn lower(mut self: Box<Self>) -> Result<Box<Hir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
+    pub fn lower(mut self) -> Result<Hir, (Vec<Error>, Self)> {
         self.try_fold_to_hir().map_err(|err| (err, self))
     }
 
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
     pub fn lower_with_decl_handler(
-        mut self: Box<Self>,
-        declaration_handler: &mut impl DeclarationHandler<'tag>,
-    ) -> Result<Box<Hir<'tag>>, (Vec<Error<'tag>>, Box<Self>)> {
+        mut self,
+        declaration_handler: &mut impl DeclarationHandler,
+    ) -> Result<Hir, (Vec<Error>, Self)> {
         self.try_fold_to_hir_with_decl_handler(declaration_handler)
             .map_err(|err| (err, self))
     }
 
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability and printing any errors or warnings that might occur
     pub fn lower_and_print_errors(
-        self: Box<Self>,
+        self,
         source_map: &SourceMap,
         translate_lines: bool,
-    ) -> Option<Box<Hir<'tag>>> {
+    ) -> Option<Hir> {
         self.lower()
             .map_err(|(errors, ast)| {
                 errors
@@ -84,11 +84,11 @@ impl<'tag> Ast<'tag> {
 
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability and printing any errors or warnings that might occur
     pub fn lower_and_print_errors_with_var_decl_handle(
-        self: Box<Self>,
+        self,
         source_map: &SourceMap,
         translate_lines: bool,
-        declaration_handler: &mut impl DeclarationHandler<'tag>,
-    ) -> Option<Box<Hir<'tag>>> {
+        declaration_handler: &mut impl DeclarationHandler,
+    ) -> Option<Hir> {
         self.lower_with_decl_handler(declaration_handler)
             .map_err(|(errors, ast)| {
                 errors
@@ -99,13 +99,13 @@ impl<'tag> Ast<'tag> {
     }
 
     /// A Helper method to avoid code duplication until try blocks are stable
-    fn try_fold_to_hir(&mut self) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
+    fn try_fold_to_hir(&mut self) -> Result<Hir, Vec<Error>> {
         Ok(Global::new(self, &mut ()).fold()?.fold()?.fold()?)
     }
     fn try_fold_to_hir_with_decl_handler(
         &mut self,
-        declaration_handler: &mut impl DeclarationHandler<'tag>,
-    ) -> Result<Box<Hir<'tag>>, Vec<Error<'tag>>> {
+        declaration_handler: &mut impl DeclarationHandler,
+    ) -> Result<Hir, Vec<Error>> {
         Ok(Global::new(self, declaration_handler)
             .fold()?
             .fold()?

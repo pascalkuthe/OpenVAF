@@ -9,7 +9,7 @@
  */
 
 use crate::ast::{Net, NetType, Port};
-use crate::ir::Push;
+
 use crate::ir::{AttributeNode, Attributes, PortId};
 use crate::parser::error::Type::{AlreadyDeclaredInThisScope, PortNotPreDeclaredInModuleHead};
 use crate::parser::error::{Result, Type};
@@ -20,7 +20,7 @@ use crate::symbol_table::SymbolDeclaration;
 use crate::Span;
 use rustc_hash::FxHashSet;
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     pub fn parse_port_declaration_list(&mut self) -> Result {
         let attributes = self.parse_attributes()?;
         let first_port = self.parse_port_declaration_base(attributes)?;
@@ -29,10 +29,10 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             SymbolDeclaration::Port(first_port),
         );
         let mut last_port = first_port;
-        while self.look_ahead()?.0 == Token::Comma {
-            while self.next()?.0 == Token::Comma {
+        while self.look_ahead()? == Token::Comma {
+            while self.next()? == Token::Comma {
                 if let Ok(name) = self.parse_identifier(true) {
-                    self.ast.push(AttributeNode {
+                    self.ast.ports.push(AttributeNode {
                         attributes: self.ast[last_port].attributes,
                         source: self.ast[last_port].source.extend(name.span),
                         contents: Port {
@@ -60,24 +60,24 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
     pub fn parse_port_declaration(
         &mut self,
-        attributes: Attributes<'ast>,
+        attributes: Attributes,
         expected: &mut FxHashSet<Ident>,
         port_list: Span,
     ) -> Result {
         let first_port = self.parse_port_declaration_base(attributes)?;
         self.insert_port(first_port, port_list, expected);
         self.parse_list_tail(
-            |sel: &mut Self| {
-                let name = sel.parse_identifier(false)?;
-                let current_port = sel.ast.push(AttributeNode {
+            |parser| {
+                let name = parser.parse_identifier(false)?;
+                let current_port = parser.ast.ports.push(AttributeNode {
                     attributes,
-                    source: sel.ast[first_port].source.extend(name.span),
+                    source: parser.ast[first_port].source.extend(name.span),
                     contents: Port {
                         name,
-                        ..sel.ast[first_port].contents
+                        ..parser.ast[first_port].contents
                     },
                 });
-                sel.insert_port(current_port, port_list, expected);
+                parser.insert_port(current_port, port_list, expected);
                 Ok(())
             },
             Token::Semicolon,
@@ -86,12 +86,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         Ok(())
     }
 
-    fn insert_port(
-        &mut self,
-        port: PortId<'ast>,
-        port_list: Span,
-        expected: &mut FxHashSet<Ident>,
-    ) {
+    fn insert_port(&mut self, port: PortId, port_list: Span, expected: &mut FxHashSet<Ident>) {
         if expected.remove(&self.ast[port].contents.name) {
             self.insert_symbol(self.ast[port].contents.name, SymbolDeclaration::Port(port));
         } else {
@@ -120,11 +115,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
     /// this parses a port Declaration which only declares one port (for example input electrical x but not input electrical x,y)
     /// this function is a helper function to either be called from parse_port_declaration or parse_port_declaration_list which handel the extra ports declared
-    pub(super) fn parse_port_declaration_base(
-        &mut self,
-        attributes: Attributes<'ast>,
-    ) -> Result<PortId<'ast>> {
-        let (token, span) = self.next()?;
+    pub(super) fn parse_port_declaration_base(&mut self, attributes: Attributes) -> Result<PortId> {
+        let (token, span) = self.next_with_span()?;
         let start = self.preprocessor.current_start();
         let (input, output) = match token {
             Token::Input => (true, false),
@@ -148,7 +140,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         }
         let (discipline, signed, name) =
             self.parse_net_declaration_end(is_discipline, opt_first_identifier_or_discipline)?;
-        let res = self.ast.push(AttributeNode {
+        let res = self.ast.ports.push(AttributeNode {
             attributes,
             source: self.span_to_current_end(start),
             contents: Port {
@@ -164,7 +156,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     #[inline]
-    pub fn insert_net(&mut self, declaration: AttributeNode<'ast, Net>) {
+    pub fn insert_net(&mut self, declaration: AttributeNode<Net>) {
         if let Some(old_declaration) = self.symbol_table().get(&declaration.contents.name.name) {
             if let SymbolDeclaration::Port(id) = *old_declaration {
                 if self.ast[id].contents.net_type == NetType::UNDECLARED
@@ -187,13 +179,13 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 source: declaration.source,
             });
         } else {
-            let id = self.ast.push(declaration);
+            let id = self.ast.nets.push(declaration);
             self.symbol_table_mut()
                 .insert(declaration.contents.name.name, SymbolDeclaration::Net(id));
         }
     }
 
-    pub fn parse_net_declaration(&mut self, attributes: Attributes<'ast>) -> Result {
+    pub fn parse_net_declaration(&mut self, attributes: Attributes) -> Result {
         let start = self.preprocessor.current_start();
         let net_type = self.parse_net_type()?;
         let opt_first_identifier_or_discipline = self.parse_identifier(true);
@@ -244,7 +236,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         opt_first_identifier_or_discipline: Result<Ident>,
     ) -> Result<(Ident, bool, Ident)> {
         let start = self.preprocessor.current_start();
-        let signed = self.look_ahead()?.0 == Token::Signed;
+        let signed = self.look_ahead()? == Token::Signed;
 
         if signed {
             self.consume_lookahead();
@@ -273,7 +265,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     fn parse_net_type(&mut self) -> Result<NetType> {
-        let token = self.look_ahead()?.0;
+        let token = self.look_ahead()?;
         let vtype = match token {
             Token::Wreal => NetType::WREAL,
             Token::Supply0 => NetType::SUPPLY0,
