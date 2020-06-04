@@ -7,7 +7,7 @@
 //  * *******************************************************************************************
 
 use crate::ir::ast::Nature;
-use crate::ir::{AttributeNode, Attributes, Push};
+use crate::ir::{AttributeNode, Attributes};
 use crate::parser::error::Result;
 use crate::parser::error::Type::{
     AttributeAlreadyDefined, RequiredAttributeNotDefined, UnexpectedToken,
@@ -18,8 +18,8 @@ use crate::symbol::keywords;
 use crate::symbol_table::SymbolDeclaration;
 use crate::Parser;
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
-    pub fn parse_nature(&mut self, attributes: Attributes<'ast>) -> Result {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_nature(&mut self, attributes: Attributes) -> Result {
         self.consume_lookahead();
         let start = self.preprocessor.current_start();
 
@@ -49,8 +49,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::EndNature,
             true,
             true,
-            |parser, token| {
-                parser.lookahead.take();
+            |parser| {
+                let (token, source) = parser.next_with_span()?;
                 match token {
                     Token::Abstol if abstol.is_none() => {
                         parser.expect(Token::Assign)?;
@@ -99,12 +99,12 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                                     Token::Units,
                                 ],
                             },
-                            source: parser.preprocessor.span(),
+                            source,
                         })
                     }
                 }
-                parser.expect(Token::Semicolon)?;
-                Ok(())
+                parser.try_expect(Token::Semicolon);
+                Ok(true)
             },
         )?;
 
@@ -126,7 +126,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         if missing.is_empty() {
             if let Ok(name) = name {
                 let access = access.unwrap();
-                let id = self.ast.push(AttributeNode {
+                let id = self.ast.natures.push(AttributeNode {
                     attributes,
                     source,
                     contents: Nature {

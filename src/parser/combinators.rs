@@ -10,12 +10,12 @@
 
 use crate::error::Error;
 use crate::parser::error::Result;
-use crate::parser::error::Type::{UnexpectedEof, UnexpectedToken, Unrecoverable};
+use crate::parser::error::Type::{MissingOrUnexpectedToken, UnexpectedEof, Unrecoverable};
 use crate::parser::lexer::Token;
 use crate::parser::{error, Parser};
 use crate::Span;
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     /// Combinator that parses a list delimited by a comma and terminated by `end`.
     /// This function does not parse the first entry as this requires extra logic in some cases
     /// # Examples
@@ -31,28 +31,18 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     where
         F: FnMut(&mut Self) -> Result,
     {
-        let start = self.preprocessor.current_start();
-        self.parse_and_recover_on_tokens(
-            Token::Comma,
-            end,
-            consume_end,
-            false,
-            |parser, token| match token {
-                Token::Comma => {
-                    parser.lookahead.take();
-                    parse_list_item(parser)
-                }
-                _ => {
-                    parser.lookahead.take();
-                    Err(Error {
-                        source: parser.preprocessor.span(),
-                        error_type: UnexpectedToken {
-                            expected: vec![Token::Comma, end],
-                        },
-                    })
-                }
-            },
-        )?;
+        self.parse_and_recover_on_tokens(Token::Comma, end, consume_end, false, |parser| {
+            match parser.next_with_span_and_previous_end()? {
+                (Token::Comma, _, _) => parse_list_item(parser).map(|_| true),
+                (_, source, expected_at) => Err(Error {
+                    source,
+                    error_type: MissingOrUnexpectedToken {
+                        expected: vec![Token::Comma, end],
+                        expected_at,
+                    },
+                }),
+            }
+        })?;
         Ok(())
     }
 
@@ -81,14 +71,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         end: Token,
         consume_end: bool,
         consume_recover: bool,
-
         mut parse: F,
     ) -> Result
     where
-        F: FnMut(&mut Self, Token) -> Result,
+        F: FnMut(&mut Self) -> Result<bool>,
     {
+        let mut recovered = true;
         loop {
-            let error = match self.look_ahead() {
+            let error = match self.look_ahead_with_span() {
                 Ok((token, _)) if token == end => {
                     if consume_end {
                         self.consume_lookahead();
@@ -106,18 +96,22 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     });
                 }
 
-                Ok((token, _)) => {
-                    if let Err(error) = parse(self, token) {
-                        error
-                    } else {
+                Ok(_) => match parse(self) {
+                    Ok(false) => break,
+                    Ok(true) => {
+                        recovered = true;
                         continue;
                     }
-                }
+                    Err(error) => error,
+                },
 
                 Err(error) => error,
             };
 
-            self.non_critical_errors.push(error);
+            if recovered {
+                self.non_critical_errors.push(error);
+                recovered = false;
+            }
 
             if self.recover_on(end, recover, consume_end, consume_recover)? {
                 break;
@@ -143,7 +137,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             });
         }
         loop {
-            match self.look_ahead() {
+            match self.look_ahead_with_span() {
                 Ok((token, _)) if token == end => {
                     if consume_end {
                         self.consume_lookahead();
@@ -165,7 +159,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                         error_type: UnexpectedEof {
                             expected: vec![end],
                         },
-                        source: Span::new(start - 1, self.preprocessor.current_start() - 1),
+                        source: Span::new(start - 1, source.get_start() - 1),
                     });
                 }
 
@@ -185,7 +179,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         let start = self.preprocessor.current_start();
         self.unrecoverable = true;
         loop {
-            if let Ok((Token::EOF, source)) = self.next() {
+            if let Ok(Token::EOF) = self.next() {
                 return Error {
                     error_type: spanned_error,
                     source: Span::new(start - 1, self.preprocessor.current_start() - 1),
@@ -221,8 +215,8 @@ macro_rules! synchronize {
             $parser.non_critical_errors.push(error);
             loop {
                 match $parser.look_ahead() {
-                    $(Ok(($token,_)) => break,)+
-                    Ok(($end_token,_)) => break 'mainloop,
+                    $(Ok($token) => break,)+
+                    Ok($end_token) => break 'mainloop,
                     Ok(_) => {
                         $parser.lookahead.take();
                     }

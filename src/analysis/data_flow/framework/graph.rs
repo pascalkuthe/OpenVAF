@@ -6,34 +6,22 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
-use crate::ir::mir::ControlFlowGraph;
-use fixedbitset::FixedBitSet as BitSet;
+use crate::cfg::{BasicBlockId, ControlFlowGraph};
+use crate::data_structures::BitSet;
+use index_vec::*;
 
-pub struct Graph<'cfg> {
-    pub in_sets: TinyHeapArena<'cfg, BitSet>,
-    pub out_sets: TinyHeapArena<'cfg, BitSet>,
+pub struct Graph<SetType: Idx + From<usize>> {
+    pub in_sets: IndexVec<BasicBlockId, BitSet<SetType>>,
+    pub out_sets: IndexVec<BasicBlockId, BitSet<SetType>>,
 }
 
-impl<'cfg> Graph<'cfg> {
-    pub fn new<'mir>(cfg: &ControlFlowGraph<'cfg, 'mir>, set_size: usize) -> Self {
-        unsafe {
-            // This is save since we are creating associated data
-            let data = TinyHeapArena::new_with(invariant_lifetime(), cfg.block_count(), || {
-                BitSet::with_capacity(set_size)
-            });
-            Self {
-                in_sets: data.clone(),
-                out_sets: data,
-            }
+impl<SetType: Idx + From<usize>> Graph<SetType> {
+    pub fn new(max_id: SetType, cfg: &ControlFlowGraph) -> Self {
+        let in_sets = index_vec![BitSet::new_empty(max_id);cfg.blocks.len()];
+        Self {
+            out_sets: in_sets.clone(),
+            in_sets,
         }
     }
-
-    pub fn reborrow_for_subcfg<'newtag, 'lt, 'mir>(
-        &'lt self,
-        cfg: &ControlFlowGraph<'newtag, 'mir>,
-    ) -> &'lt Graph<'newtag> {
-        assert!(cfg.block_count() <= self.in_sets.len());
-        unsafe { std::mem::transmute(self) }
-    }
 }
+//TODO print

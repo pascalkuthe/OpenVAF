@@ -9,24 +9,23 @@
  */
 use std::path::Path;
 
-use ansi_term::Color::*;
 use bumpalo::Bump;
-use log::error;
+use log::*;
+use yansi_term::Color::*;
 
 pub use error::Error;
 pub use error::Result;
 
 use crate::ast::{Ast, HierarchicalId};
 use crate::ir::{Attribute, AttributeId, Attributes};
-use crate::ir::{Push, SafeRangeCreation};
 use crate::parser::error::{Expected, Type, Warning, WarningType};
 use crate::parser::lexer::Token;
 use crate::span::Index;
 use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::{Preprocessor, SourceMap, Span};
-use core::num::NonZeroU16;
 use rustc_hash::FxHashMap;
+use std::fmt::Display;
 
 pub(crate) mod lexer;
 pub(crate) mod preprocessor;
@@ -48,20 +47,20 @@ mod primaries;
 mod variables;
 
 /// A reclusive decent Parser that parses the tokens created by the [`Preprocessor`](crate::parser::preprocessor::Preprocessor) into an [`Ast`](crate::ast::Ast).
-pub(crate) struct Parser<'lt, 'ast, 'source_map> {
+pub(crate) struct Parser<'lt, 'source_map> {
     pub preprocessor: Preprocessor<'lt, 'source_map>,
-    pub scope_stack: Vec<SymbolTable<'ast>>,
-    lookahead: Option<Result<(Token, Span)>>,
-    pub ast: &'lt mut Ast<'ast>,
+    pub scope_stack: Vec<SymbolTable>,
+    lookahead: Option<Result<(Token, Span, Index)>>,
+    pub ast: &'lt mut Ast,
     pub non_critical_errors: Vec<Error>,
     pub warnings: Vec<Warning>,
     pub(crate) unrecoverable: bool,
 }
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     pub fn new(
         preprocessor: Preprocessor<'lt, 'source_map>,
-        ast: &'lt mut Ast<'ast>,
+        ast: &'lt mut Ast,
         errors: Vec<Error>,
     ) -> Self {
         Self {
@@ -78,7 +77,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     pub fn run(&mut self) {
         synchronize!(self;
             let attributes = self.parse_attributes()?;
-            sync self.next() => {
+            sync self.next_with_span() => {
                 Token::EOF => end,
                 Token::Module => self.parse_module(attributes),
                 Token::Nature => self.parse_nature(attributes),
@@ -86,31 +85,98 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             }
         )
     }
+    /// Returns the next token. Note that this consumes the token. If you wish to avoid this use [`look_ahead`](crate::parser::Parser::look_ahead)
+    fn next(&mut self) -> Result<Token> {
+        match self.lookahead.take() {
+            None => {
+                self.preprocessor.advance()?;
+                Ok(self.preprocessor.current_token())
+            }
+            Some(res) => res.map(|(token, _, _)| token),
+        }
+    }
 
-    /// Returns the next token. Note that this consumes the token. If you wish to avoid this use [`look_ahead`](crate::parser::Parser::consume_lookahead)
-    fn next(&mut self) -> Result<(Token, Span)> {
+    /// Returns the next token and its span. Note that this consumes the token. If you wish to avoid this use [`look_ahead_with_span`](crate::parser::Parser::look_ahead_with_span)
+    fn next_with_span(&mut self) -> Result<(Token, Span)> {
         match self.lookahead.take() {
             None => {
                 self.preprocessor.advance()?;
                 Ok((self.preprocessor.current_token(), self.preprocessor.span()))
             }
+            Some(res) => res.map(|(token, span, _)| (token, span)),
+        }
+    }
+
+    /// Returns the next token and its span. Note that this consumes the token. If you wish to avoid this use [`look_ahead_with_span_and_previous_end`](crate::parser::Parser::look_ahead_with_span_and_previous_end)
+    fn next_with_span_and_previous_end(&mut self) -> Result<(Token, Span, Index)> {
+        match self.lookahead.take() {
+            None => {
+                let end = self.preprocessor.current_end();
+                self.preprocessor.advance()?;
+                Ok((
+                    self.preprocessor.current_token(),
+                    self.preprocessor.span(),
+                    end,
+                ))
+            }
             Some(res) => res,
         }
     }
 
-    /// Returns the next token without consuming them so the next `look_ahead`/[`next`](crate::parser::Parser::next) call will return the same token again
+    /// Returns the next token without consuming it so the next `look_ahead`/[`next`](crate::parser::Parser::next) call will return the same token again
     /// if you do decide to consume the token use [`consume_lookahead`](crate::parser::Parser::consume_lookahead)
-    fn look_ahead(&mut self) -> Result<(Token, Span)> {
+    fn look_ahead(&mut self) -> Result<Token> {
+        if let Some(ref lookahead) = self.lookahead {
+            return lookahead.clone().map(|(token, _, _)| token);
+        }
+        let end = self.preprocessor.current_end();
+        let res = self.preprocessor.advance().map(|_| {
+            (
+                self.preprocessor.current_token(),
+                self.preprocessor.span(),
+                end,
+            )
+        });
+        self.lookahead = Some(res.clone());
+        res.map(|(token, _, _)| token)
+    }
+
+    /// Returns the next token and its span without consuming it so the next `look_ahead`/[`next`](crate::parser::Parser::next) call will return the same token again
+    /// if you do decide to consume the token use [`consume_lookahead`](crate::parser::Parser::consume_lookahead)
+    fn look_ahead_with_span(&mut self) -> Result<(Token, Span)> {
+        if let Some(ref lookahead) = self.lookahead {
+            return lookahead.clone().map(|(token, span, _)| (token, span));
+        }
+        let end = self.preprocessor.current_end();
+        let res = self.preprocessor.advance().map(|_| {
+            (
+                self.preprocessor.current_token(),
+                self.preprocessor.span(),
+                end,
+            )
+        });
+        self.lookahead = Some(res.clone());
+        res.map(|(token, span, _)| (token, span))
+    }
+
+    /// Returns the next token, its span and the end of the previous token without consuming it so the next `look_ahead`/[`next`](crate::parser::Parser::next) call will return the same token again
+    /// if you do decide to consume the token use [`consume_lookahead`](crate::parser::Parser::consume_lookahead)
+    fn look_ahead_with_span_and_previous_end(&mut self) -> Result<(Token, Span, Index)> {
         if let Some(ref lookahead) = self.lookahead {
             return lookahead.clone();
         }
-        let res = self
-            .preprocessor
-            .advance()
-            .map(|_| (self.preprocessor.current_token(), self.preprocessor.span()));
+        let end = self.preprocessor.current_end();
+        let res = self.preprocessor.advance().map(|_| {
+            (
+                self.preprocessor.current_token(),
+                self.preprocessor.span(),
+                end,
+            )
+        });
         self.lookahead = Some(res.clone());
         res
     }
+
     /// Consumes the current lookahead see [`look_ahead`](crate::parser::Parser::look_ahead)
     fn consume_lookahead(&mut self) {
         self.lookahead = None
@@ -130,9 +196,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     #[inline]
     pub fn parse_identifier(&mut self, optional: bool) -> Result<Ident> {
         let (token, source) = if optional {
-            self.look_ahead()?
+            self.look_ahead_with_span()?
         } else {
-            self.next()?
+            self.next_with_span()?
         };
 
         let identifier = match token {
@@ -177,7 +243,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         //Since hierarchical_identifier are made up of multiple lexer tokens they can not be parsed optionally.
         // This will have to be handled by caller so we just pass false to parse_identifier
         let mut names = vec![self.parse_identifier(false)?];
-        while self.look_ahead()?.0 == Token::Accessor {
+        while self.look_ahead()? == Token::Accessor {
             self.consume_lookahead();
             names.push(self.parse_identifier(false)?)
         }
@@ -198,11 +264,11 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     /// (*x,z="test"*)(*y=2*)(*x=1,y=3*) //parsed attributes x=1
     /// ```
     ///
-    pub fn parse_attributes(&mut self) -> Result<Attributes<'ast>> {
-        let attributes = self.ast.empty_range_from_end();
-        let mut attribute_map: FxHashMap<Symbol, AttributeId<'ast>> = FxHashMap::default();
+    pub fn parse_attributes(&mut self) -> Result<Attributes> {
+        let attr_start = self.ast.attributes.len_idx();
+        let mut attribute_map: FxHashMap<Symbol, AttributeId> = FxHashMap::default();
         loop {
-            if self.look_ahead()?.0 != Token::AttributeStart {
+            if self.look_ahead()? != Token::AttributeStart {
                 break;
             }
             self.consume_lookahead();
@@ -212,23 +278,20 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                 true,
             )?;
         }
-        Ok(self.ast.extend_range_to_end(attributes))
+        Ok(Attributes::new(attr_start, self.ast.attributes.len_idx()))
     }
 
     /// Parses a single attribute of the form `name = value` (value may be any valid constant expression that doesn't reference a parameter or Literal*) inside an Attribute Lis.
     /// Specifying a value is optional so just `name` is also valid (in this case the value is 0) .
     /// If this Attribute is already defined for the current item it will be overwritten and a Warning will be generated
-    fn parse_attribute(
-        &mut self,
-        attribute_map: &mut FxHashMap<Symbol, AttributeId<'ast>>,
-    ) -> Result {
-        let name = if self.look_ahead()?.0 == Token::Units {
+    fn parse_attribute(&mut self, attribute_map: &mut FxHashMap<Symbol, AttributeId>) -> Result {
+        let name = if self.look_ahead()? == Token::Units {
             self.consume_lookahead();
             Ident::new(keywords::UNITS, self.preprocessor.span())
         } else {
             self.parse_identifier(false)?
         };
-        let value = if self.look_ahead()?.0 == Token::Assign {
+        let value = if self.look_ahead()? == Token::Assign {
             self.consume_lookahead();
             Some(self.parse_expression_id()?)
         } else {
@@ -242,7 +305,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             });
             self.ast[*id] = Attribute { name, value };
         } else {
-            let id = self.ast.push(Attribute { name, value });
+            let id = self.ast.attributes.push(Attribute { name, value });
             attribute_map.insert(name.name, id);
         }
         Ok(())
@@ -251,12 +314,14 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     /// Tries to consume `token` returns an Unexpected Token error otherwise
     #[inline]
     pub fn expect(&mut self, token: Token) -> Result {
-        let (found, source) = self.next()?;
+        let (found, source, expected_at) = self.next_with_span_and_previous_end()?;
         if found != token {
+            debug!("Parser: Expected {} but found {}", token, found);
             Err(Error {
                 source,
-                error_type: error::Type::UnexpectedToken {
+                error_type: error::Type::MissingOrUnexpectedToken {
                     expected: vec![token],
+                    expected_at,
                 },
             })
         } else {
@@ -265,15 +330,55 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     #[inline]
+    pub fn try_expect(&mut self, token: Token) {
+        match self.look_ahead_with_span_and_previous_end() {
+            Ok((found, _, _)) if found == token => {
+                self.consume_lookahead();
+            }
+            Ok((found, source, expected_at)) if found == Token::Unexpected => {
+                debug!(
+                    "Parser: Expected {} but found {} lexical error",
+                    token, found
+                );
+                self.consume_lookahead();
+                self.non_critical_errors.push(Error {
+                    source,
+                    error_type: error::Type::MissingOrUnexpectedToken {
+                        expected: vec![found],
+                        expected_at,
+                    },
+                })
+            }
+            Err(error) => {
+                debug!("Parser: Expected {} but found preprocessor error", token);
+                self.consume_lookahead();
+                self.non_critical_errors.push(error)
+            }
+            Ok((found, source, expected_at)) => {
+                debug!(
+                    "Parser: Expected {} but found {} (not consumed)",
+                    token, found
+                );
+                self.non_critical_errors.push(Error {
+                    source,
+                    error_type: error::Type::MissingOrUnexpectedToken {
+                        expected: vec![token],
+                        expected_at,
+                    },
+                });
+            }
+        }
+    }
+
+    #[inline]
     pub fn expect_lookahead(&mut self, token: Token) -> Result {
-        let (found, _source) = self.look_ahead()?;
+        let (found, source, expected_at) = self.look_ahead_with_span_and_previous_end()?;
         if found != token {
             Err(Error {
-                source: Span::new_short_span(self.preprocessor.current_start(), unsafe {
-                    NonZeroU16::new_unchecked(1)
-                }),
-                error_type: error::Type::UnexpectedToken {
+                source,
+                error_type: error::Type::MissingOrUnexpectedToken {
                     expected: vec![token],
+                    expected_at,
                 },
             })
         } else {
@@ -288,7 +393,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     #[inline]
-    pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration<'ast>) {
+    pub fn insert_symbol(&mut self, name: Ident, declaration: SymbolDeclaration) {
         let source = declaration.span(&self.ast);
         if let Some(old_declaration) = self.symbol_table_mut().insert(name.name, declaration) {
             self.non_critical_errors.push(Error {
@@ -302,19 +407,19 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
     }
 
     #[inline]
-    pub fn symbol_table_mut(&mut self) -> &mut SymbolTable<'ast> {
+    pub fn symbol_table_mut(&mut self) -> &mut SymbolTable {
         self.scope_stack
             .last_mut()
             .unwrap_or(&mut self.ast.top_symbols)
     }
 
     #[inline]
-    pub fn symbol_table(&self) -> &SymbolTable<'ast> {
+    pub fn symbol_table(&self) -> &SymbolTable {
         self.scope_stack.last().unwrap_or(&self.ast.top_symbols)
     }
 }
 
-impl<'tag> Ast<'tag> {
+impl Ast {
     /// The main point of this module. Parses a verilog-ams source file into an ast and returns any errors that occur
     ///
     /// # Arguments
@@ -353,10 +458,11 @@ impl<'tag> Ast<'tag> {
         let mut parser = Parser::new(preprocessor, self, errors);
 
         // The preprocessors current token is set to the first token after initialization.
-        // Thg parsers lookahead needs to be set to this token as it is skipped otherwise
+        // The parsers lookahead needs to be set to this token as it is skipped otherwise
         parser.lookahead = Some(Ok((
             parser.preprocessor.current_token(),
             parser.preprocessor.span(),
+            0,
         )));
 
         parser.run();
@@ -406,15 +512,7 @@ impl<'tag> Ast<'tag> {
                 None
             }
             Err(error) => {
-                error!(
-                    "{} {}",
-                    Red.bold().paint("error"),
-                    Fixed(253).bold().paint(format!(
-                        ": failed to open {}: {}!",
-                        main_file.to_str().unwrap(),
-                        error
-                    ))
-                );
+                error!("failed to open : {}!\n\t caused by {}",main_file.display(),error);
                 None
             }
         }

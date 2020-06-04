@@ -6,94 +6,115 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::ir::mir::control_flow_graph::BasicBlockId;
-use crate::ir::mir::ControlFlowGraph;
-use crate::ir::{StatementId, VariableId};
-
-pub use engine::BackwardEngine;
-pub use engine::DirtyList;
 pub use engine::Engine;
-pub use engine::ForwardEngine;
 pub use graph::Graph as DataFlowGraph;
-
-use fixedbitset::FixedBitSet as BitSet;
 
 mod engine;
 mod graph;
 
-use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
+use crate::data_structures::{BitSet, WorkQueue};
+use crate::ir::cfg::{BasicBlockId, ControlFlowGraph};
+use index_vec::{Idx, IndexVec};
 
-pub trait GenKillAnalysis<'engine, 'cfg: 'engine, 'mir: 'engine>: Sized + 'engine {
-    type Engine: Engine<'engine, 'cfg, 'mir, GenKillEngine<'engine, 'cfg, Self>>;
-    type EngineArgs;
+pub trait GenKillAnalysis<'lt>: Sized {
+    type SetType: Idx + From<usize>;
+    type Direction: Direction<'lt>;
 
     fn transfer_function(
         &mut self,
-        gen_kill_set: &mut GenKillSet,
-        basic_bock: BasicBlockId<'cfg>,
-        cfg: &mut ControlFlowGraph<'cfg, 'mir>,
+        gen_kill_set: &mut GenKillSet<Self::SetType>,
+        basic_bock: BasicBlockId,
+        cfg: &ControlFlowGraph,
     );
 
-    fn set_size(&self) -> usize;
-
-    fn engine_builder(
-        &'engine mut self,
-        cfg: &mut ControlFlowGraph<'cfg, 'mir>,
-    ) -> GenKillEngine<'engine, 'cfg, Self> {
-        GenKillEngine::new(cfg, self)
-    }
-
-    fn engine(
-        analysis: &'engine mut GenKillEngine<'engine, 'cfg, Self>,
-        cfg: &'engine mut ControlFlowGraph<'cfg, 'mir>,
-        args: <Self::Engine as Engine<'engine, 'cfg, 'mir, GenKillEngine<'engine, 'cfg, Self>>>::Args,
-        additional_args: Self::EngineArgs,
-    ) -> Self::Engine;
+    fn max_idx(&self) -> Self::SetType;
 }
 
-pub trait Analysis<'engine, 'cfg: 'engine, 'mir: 'engine>: Sized + 'engine {
-    type Engine: Engine<'engine, 'cfg, 'mir, Self>;
-    type EngineArgs;
+pub trait Analysis<'lt>: Sized {
+    type SetType: Idx + From<usize>;
+    type Direction: Direction<'lt>;
 
     fn transfer_function(
         &mut self,
-        in_set: &BitSet,
-        out_set: &mut BitSet,
-        basic_bock: BasicBlockId<'cfg>,
-        cfg: &mut ControlFlowGraph<'cfg, 'mir>,
+        in_set: &BitSet<Self::SetType>,
+        out_set: &mut BitSet<Self::SetType>,
+        basic_bock: BasicBlockId,
+        cfg: &ControlFlowGraph,
     );
 
-    fn join(&mut self, inout_set: &mut BitSet, in_set: &BitSet) {
+    fn join(&mut self, inout_set: &mut BitSet<Self::SetType>, in_set: &BitSet<Self::SetType>) {
         inout_set.union_with(in_set);
     }
 
-    fn set_size(&self) -> usize;
-
-    fn engine(
-        &'engine mut self,
-        cfg: &'engine mut ControlFlowGraph<'cfg, 'mir>,
-        args: <Self::Engine as Engine<'engine, 'cfg, 'mir, Self>>::Args,
-        additional_args: Self::EngineArgs,
-    ) -> Self::Engine;
+    fn max_idx(&self) -> Self::SetType;
 }
 
-pub struct GenKillEngine<'lt, 'cfg, A> {
+pub trait Direction<'lt> {
+    fn inital_work_queue(cfg: &ControlFlowGraph) -> WorkQueue<BasicBlockId>;
+    fn propagate_result(bb: BasicBlockId, cfg: &ControlFlowGraph, apply: impl FnMut(BasicBlockId));
+}
+
+pub struct Forward;
+
+impl<'lt> Direction<'lt> for Forward {
+    fn inital_work_queue(cfg: &ControlFlowGraph) -> WorkQueue<BasicBlockId> {
+        let mut res = WorkQueue::with_none(cfg.blocks.len_idx());
+        for id in cfg.reverse_postorder() {
+            res.insert(id);
+        }
+        res
+    }
+
+    fn propagate_result(
+        bb: BasicBlockId,
+        cfg: &ControlFlowGraph,
+        mut apply: impl FnMut(BasicBlockId),
+    ) {
+        for bb in cfg.successors(bb) {
+            apply(bb)
+        }
+    }
+}
+
+pub struct Backward;
+
+impl<'lt> Direction<'lt> for Backward {
+    fn inital_work_queue(cfg: &ControlFlowGraph) -> WorkQueue<BasicBlockId> {
+        let mut res = WorkQueue::with_none(cfg.blocks.len_idx());
+        for (id, _) in cfg.postorder_iter() {
+            res.insert(id);
+        }
+        res
+    }
+
+    fn propagate_result(
+        bb: BasicBlockId,
+        cfg: &ControlFlowGraph,
+        mut apply: impl FnMut(BasicBlockId),
+    ) {
+        for &bb in cfg.predecessors(bb) {
+            apply(bb)
+        }
+    }
+}
+
+pub struct GenKillEngine<'lt, A: GenKillAnalysis<'lt>> {
     analysis: &'lt mut A,
-    pub transfer_functions: TinyHeapArena<'cfg, GenKillSet>,
+    pub transfer_functions: IndexVec<BasicBlockId, GenKillSet<A::SetType>>,
 }
 
-impl<'lt, 'cfg: 'lt, 'mir: 'lt, A: GenKillAnalysis<'lt, 'cfg, 'mir>> GenKillEngine<'lt, 'cfg, A> {
-    pub fn new(cfg: &mut ControlFlowGraph<'cfg, 'mir>, analysis: &'lt mut A) -> Self {
-        let gen_kill_set = GenKillSet::new(analysis.set_size());
-        let mut transfer_functions = unsafe {
-            TinyHeapArena::new_with(invariant_lifetime(), cfg.block_count(), || {
-                gen_kill_set.clone()
+impl<'lt, A: GenKillAnalysis<'lt>> GenKillEngine<'lt, A> {
+    pub fn new(cfg: &ControlFlowGraph, analysis: &'lt mut A) -> Self {
+        let gen_kill_set = GenKillSet::new(analysis.max_idx());
+        let transfer_functions = cfg
+            .blocks
+            .indices()
+            .map(|bb| {
+                let mut transfer_function = gen_kill_set.clone();
+                analysis.transfer_function(&mut transfer_function, bb, cfg);
+                transfer_function
             })
-        };
-
-        cfg.for_all_blocks_mut(|cfg, block| {
-            analysis.transfer_function(&mut transfer_functions[block], block, cfg)
-        });
+            .collect();
 
         Self {
             analysis,
@@ -102,49 +123,37 @@ impl<'lt, 'cfg: 'lt, 'mir: 'lt, A: GenKillAnalysis<'lt, 'cfg, 'mir>> GenKillEngi
     }
 }
 
-impl<'lt, 'cfg: 'lt, 'mir: 'lt, A: GenKillAnalysis<'lt, 'cfg, 'mir>> Analysis<'lt, 'cfg, 'mir>
-    for GenKillEngine<'lt, 'cfg, A>
-{
-    type Engine = A::Engine;
-    type EngineArgs = A::EngineArgs;
+impl<'lt, A: GenKillAnalysis<'lt>> Analysis<'lt> for GenKillEngine<'lt, A> {
+    type SetType = A::SetType;
+    type Direction = A::Direction;
 
     fn transfer_function(
         &mut self,
-        in_set: &BitSet,
-        out_set: &mut BitSet,
-        basic_bock: BasicBlockId<'cfg>,
-        _: &mut ControlFlowGraph<'cfg, 'mir>,
+        in_set: &BitSet<Self::SetType>,
+        out_set: &mut BitSet<Self::SetType>,
+        basic_bock: BasicBlockId,
+        _: &ControlFlowGraph,
     ) {
         out_set.clear();
         out_set.union_with(in_set);
         out_set.difference_with(&self.transfer_functions[basic_bock].kill);
         out_set.union_with(&self.transfer_functions[basic_bock].gen);
     }
-
-    fn set_size(&self) -> usize {
-        self.analysis.set_size()
-    }
-
-    fn engine(
-        &'lt mut self,
-        cfg: &'lt mut ControlFlowGraph<'cfg, 'mir>,
-        args: <A::Engine as Engine<'lt, 'cfg, 'mir, GenKillEngine<'lt, 'cfg, A>>>::Args,
-        additional_args: A::EngineArgs,
-    ) -> A::Engine {
-        A::engine(self, cfg, args, additional_args)
+    fn max_idx(&self) -> Self::SetType {
+        self.analysis.max_idx()
     }
 }
 
 #[derive(Clone)]
-pub struct GenKillSet {
-    gen: BitSet,
-    kill: BitSet,
+pub struct GenKillSet<I: Idx + From<usize>> {
+    pub gen: BitSet<I>,
+    pub kill: BitSet<I>,
 }
 
-impl GenKillSet {
+impl<I: Idx + From<usize>> GenKillSet<I> {
     #[inline]
-    pub fn new(set_size: usize) -> Self {
-        let gen = BitSet::with_capacity(set_size);
+    pub fn new(max_idx: I) -> Self {
+        let gen = BitSet::new_empty(max_idx);
         Self {
             kill: gen.clone(),
             gen,
@@ -152,45 +161,25 @@ impl GenKillSet {
     }
 
     #[inline]
-    pub fn gen(&mut self, x: usize) {
+    pub fn gen(&mut self, x: I) {
         self.gen.insert(x);
         self.kill.set(x, false);
     }
 
     #[inline]
-    pub fn kill(&mut self, x: usize) {
+    pub fn kill(&mut self, x: I) {
         self.kill.insert(x);
         self.gen.set(x, false);
     }
 
     #[inline]
-    pub fn gen_variable(&mut self, x: VariableId) {
-        self.gen(x.unwrap().index() as usize)
-    }
-
-    #[inline]
-    pub fn kill_variable(&mut self, x: VariableId) {
-        self.kill(x.unwrap().index() as usize)
-    }
-
-    #[inline]
-    pub fn gen_statement(&mut self, x: StatementId) {
-        self.gen(x.unwrap().index() as usize)
-    }
-
-    #[inline]
-    pub fn kill_statement(&mut self, x: StatementId) {
-        self.kill(x.unwrap().index() as usize)
-    }
-
-    #[inline]
-    pub fn kill_all(&mut self, kill: &BitSet) {
+    pub fn kill_all(&mut self, kill: &BitSet<I>) {
         self.kill.union_with(kill);
         self.gen.difference_with(kill);
     }
 
     #[inline]
-    pub fn gen_all(&mut self, gen: &BitSet) {
+    pub fn gen_all(&mut self, gen: &BitSet<I>) {
         self.gen.union_with(gen);
         self.kill.difference_with(gen);
     }

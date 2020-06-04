@@ -19,6 +19,9 @@ module Diode(inout electrical A,inout electrical C);
         i = 0;
         while (i < 1000) begin
             I_d = I_d * exp( V(d) /(m*V_t) );
+            if (i > 500) begin
+                I_d = I_d + 2;
+            end
             i = i+1;
         end
         I_d_ddx = ddx(I_d,V(A));

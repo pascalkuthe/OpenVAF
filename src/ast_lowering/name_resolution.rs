@@ -136,28 +136,55 @@ macro_rules! resolve_hierarchical {
 }
 
 /// Allows name resolution with the [`resolve`](crate::ast_lowering::name_resolution::Resolver::resolve)/[`resolve_hierarchical`](crate::ast_lowering::name_resolution::Resolver::resolve_hierarchical) methods
-pub struct Resolver<'tag, 'lt> {
-    pub scope_stack: Vec<&'lt SymbolTable<'tag>>,
-    ast: &'lt Ast<'tag>,
+pub struct Resolver<'lt> {
+    pub scope_stack: Vec<&'lt SymbolTable>,
+    ast: &'lt Ast,
+    inside_function: bool,
 }
 
-impl<'tag, 'lt> Resolver<'tag, 'lt> {
-    pub fn new(ast: &'lt Ast<'tag>) -> Self {
+impl<'lt> Resolver<'lt> {
+    pub fn new(ast: &'lt Ast) -> Self {
         Self {
             scope_stack: Vec::with_capacity(8),
             ast,
+            inside_function: false,
         }
+    }
+
+    pub fn enter_function(&mut self, function_symbol_table: &'lt SymbolTable) {
+        debug_assert!(!self.inside_function, "Already inside a function!");
+        self.inside_function = true;
+        self.enter_scope(function_symbol_table);
+    }
+
+    pub fn exit_function(&mut self) -> Option<&'lt SymbolTable> {
+        debug_assert!(self.inside_function, "Not yet inside a function!");
+        self.inside_function = false;
+        self.exit_scope()
     }
 
     /// Tries to resolve the Identifier `ident`
     ///
     /// This functions first tries to find `ident in the current scope, then in the previous scope and so on
     /// If it can't find ident in the global (first) Scope it returns an NotFound Error
-    pub fn resolve(&self, ident: &Ident) -> Result<'tag, SymbolDeclaration<'tag>> {
+    pub fn resolve(&self, ident: &Ident) -> Result<SymbolDeclaration> {
+        let mut depth = 0;
         for scope in self.scope_stack.iter().rev() {
             if let Some(res) = scope.get(&ident.name) {
+                if self.inside_function
+                    && depth > 0
+                    && !matches!(res,SymbolDeclaration::Parameter(_)|SymbolDeclaration::Module(_))
+                {
+                    return Err(Error {
+                        error_type: Type::NotAllowedInFunction(
+                            NotAllowedInFunction::NonLocalAccess,
+                        ),
+                        source: ident.span,
+                    });
+                }
                 return Ok(*res);
             }
+            depth += 1;
         }
         Err(Error {
             error_type: Type::NotFound(ident.name),
@@ -172,7 +199,7 @@ impl<'tag, 'lt> Resolver<'tag, 'lt> {
     pub fn resolve_hierarchical(
         &self,
         hierarchical_ident: &HierarchicalId,
-    ) -> Result<'tag, SymbolDeclaration<'tag>> {
+    ) -> Result<SymbolDeclaration> {
         let mut identifiers = hierarchical_ident.names.iter();
 
         let (mut current_span, mut current_declaration) = {
@@ -183,6 +210,15 @@ impl<'tag, 'lt> Resolver<'tag, 'lt> {
         for ident in identifiers {
             let symbol_table = match current_declaration {
                 SymbolDeclaration::Module(module) => &self.ast[module].contents.symbol_table,
+
+                SymbolDeclaration::Block(_) if self.inside_function => {
+                    return Err(Error {
+                        error_type: Type::NotAllowedInFunction(
+                            NotAllowedInFunction::NonLocalAccess,
+                        ),
+                        source: current_span,
+                    });
+                }
 
                 SymbolDeclaration::Block(block_id) => {
                     if let Some(scope) = &self.ast[block_id].contents.scope {
@@ -208,7 +244,17 @@ impl<'tag, 'lt> Resolver<'tag, 'lt> {
 
             if let Some(found) = symbol_table.get(&ident.name) {
                 current_declaration = *found;
-                current_span = found.span(self.ast)
+                current_span = found.span(self.ast);
+                if self.inside_function
+                    && !matches!(found,SymbolDeclaration::Parameter(_)|SymbolDeclaration::Module(_))
+                {
+                    return Err(Error {
+                        error_type: Type::NotAllowedInFunction(
+                            NotAllowedInFunction::NonLocalAccess,
+                        ),
+                        source: ident.span,
+                    });
+                }
             } else {
                 return Err(Error {
                     error_type: Type::NotFound(ident.name),
@@ -225,7 +271,7 @@ impl<'tag, 'lt> Resolver<'tag, 'lt> {
     ///
     /// # Arguments
     /// * `scope_symbol_table` - Symbol table in which the resolver will look for definitions in this scope
-    pub fn enter_scope(&mut self, scope_symbol_table: &'lt SymbolTable<'tag>) {
+    pub fn enter_scope(&mut self, scope_symbol_table: &'lt SymbolTable) {
         self.scope_stack.push(scope_symbol_table)
     }
     /// Leave the current Scope
@@ -236,7 +282,7 @@ impl<'tag, 'lt> Resolver<'tag, 'lt> {
     ///
     /// * None if the Resolver doesn't hold any Scopes
     /// * The Symbol_Table of the removed Scope
-    pub fn exit_scope(&mut self) -> Option<&'lt SymbolTable<'tag>> {
+    pub fn exit_scope(&mut self) -> Option<&'lt SymbolTable> {
         self.scope_stack.pop()
     }
 }

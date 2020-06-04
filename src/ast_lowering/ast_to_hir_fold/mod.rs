@@ -30,34 +30,25 @@ mod global;
 #[doc(hidden)]
 mod statements;
 
-pub trait DeclarationHandler<'tag> {
-    fn handle_declaration(
-        &mut self,
-        fold: &mut Fold<'tag, '_>,
-        declaration: SymbolDeclaration<'tag>,
-    );
+pub trait DeclarationHandler {
+    fn handle_declaration(&mut self, fold: &mut Fold<'_>, declaration: SymbolDeclaration);
 }
 
-impl<'tag> DeclarationHandler<'tag> for () {
-    fn handle_declaration(
-        &mut self,
-        fold: &mut Fold<'tag, '_>,
-        declaration: SymbolDeclaration<'tag>,
-    ) {
-    }
+impl DeclarationHandler for () {
+    fn handle_declaration(&mut self, _: &mut Fold<'_>, _: SymbolDeclaration) {}
 }
 
 /// A struct that contains data and functionality all ast to hir folds share
 /// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` macros and [`BranchResolver`](crate::ast_lowering::branch_resolution::BranchResolver)
-pub struct Fold<'tag, 'lt> {
-    pub resolver: Resolver<'tag, 'lt>,
-    pub errors: Vec<Error<'tag>>,
-    pub hir: Box<Hir<'tag>>,
-    pub ast: &'lt Ast<'tag>,
+pub struct Fold<'lt> {
+    pub resolver: Resolver<'lt>,
+    pub errors: Vec<Error>,
+    pub hir: Hir,
+    pub ast: &'lt Ast,
 }
 
-impl<'tag, 'lt> Fold<'tag, 'lt> {
-    pub fn error(&mut self, error: Error<'tag>) {
+impl<'lt> Fold<'lt> {
+    pub fn error(&mut self, error: Error) {
         self.errors.push(error)
     }
 }
@@ -66,9 +57,9 @@ bitflags! {
     /// The Verilog AMS standard uses multiple different grammar rules to enfoce that constants/analog exprerssions only contain items valid in their context
     /// OpenVAF uses flags stored inside this struct instead during the AST to MIR folding process in this module
     pub struct VerilogContext: u8{
-        const constant = 0b0000_0001;
-        const conditional = 0b0000_0010;
-        const analog = 0b0000_0100;
+        const CONSTANT = 0b0000_0001;
+        const CONDITIONAL = 0b0000_0010;
+        const FUNCTION = 0b0000_1000;
 
     }
 }

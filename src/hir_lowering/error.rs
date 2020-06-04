@@ -12,37 +12,43 @@ use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
 use log::*;
 
-use crate::ir::{ParameterId, VariableId};
-use crate::parser::error::translate_to_inner_snippet_range;
+use crate::ir::{FunctionId, ParameterId, VariableId};
+use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};
 use crate::symbol::Symbol;
-use crate::{Hir, SourceMap};
+use crate::util::VecFormatter;
+use crate::{Hir, SourceMap, Span};
 use beef::lean::Cow;
 
-pub type Error<'hir> = crate::error::Error<Type<'hir>>;
-pub(crate) type Warning<'hir> = crate::error::Error<WarningType<'hir>>;
-pub type Result<'hir, T = ()> = std::result::Result<T, Error<'hir>>;
+pub type Error = crate::error::Error<Type>;
+pub(crate) type Warning = crate::error::Error<WarningType>;
+pub type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
-pub enum Type<'hir> {
+pub enum Type {
     ExpectedReal,
     ExpectedString,
     CannotCompareStringToNumber,
     CondtionTypeMissmatch,
     ExpectedInteger,
     ExpectedNumber,
-    ExpectedIntegerParameter(ParameterId<'hir>),
-    ExpectedIntegerVariable(VariableId<'hir>),
-    ExpectedNumericParameter(ParameterId<'hir>),
-    ParameterDefinedAfterConstantReference(ParameterId<'hir>),
+    ExpectedIntegerParameter(ParameterId),
+    ExpectedIntegerVariable(VariableId),
+    ExpectedRealVariable(VariableId),
+    ExpectedNumericParameter(ParameterId),
+    ParameterDefinedAfterConstantReference(ParameterId),
     InvalidParameterBound,
     DerivativeNotDefined,
     PartialDerivativeOfTimeDerivative,
     OnlyNumericExpressionsCanBeDerived,
     ParameterExcludeNotPartOfRange,
     ImplicitSolverDeltaIsNotAValidString,
+    ExpectedVariableForFunctionOutput,
+    WrongFunctionArgCount(usize, usize),
+    Unsupported(Unsupported),
+    Recursion(FunctionId, Vec<FunctionId>, Span),
 }
-impl<'tag> Error<'tag> {
-    pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
+impl Error {
+    pub fn print(&self, source_map: &SourceMap, hir: &Hir, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
@@ -83,7 +89,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::ExpectedReal => {
@@ -109,7 +115,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::ExpectedInteger => {
@@ -135,7 +141,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::ExpectedNumber => {
@@ -161,7 +167,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::ExpectedIntegerVariable(variable) => {
@@ -219,7 +225,65 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
+            }
+
+            Type::ExpectedRealVariable(variable) => {
+                let (
+                    parameter_line,
+                    parameter_line_number,
+                    parameter_substitution_name,
+                    parameter_range,
+                ) = source_map.resolve_span_within_line(hir[variable].source, translate_lines);
+                let parameter_origin = if let Some(substitution_name) = parameter_substitution_name
+                {
+                    Cow::owned(substitution_name)
+                } else {
+                    Cow::const_str(source_map.main_file_name)
+                };
+                let parameter_range = translate_to_inner_snippet_range(
+                    parameter_range.start,
+                    parameter_range.end,
+                    parameter_line,
+                );
+                let parameter_line = parameter_line;
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let label = format!("{} is declared here", hir[variable].contents.name);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Expected a real valued variable"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![
+                        Slice {
+                            source: line,
+                            line_start: line_number as usize,
+                            origin: Some(&*origin),
+                            annotations: vec![SourceAnnotation {
+                                range,
+                                label: "Expected real",
+                                annotation_type: AnnotationType::Error,
+                            }],
+                            fold: false,
+                        },
+                        Slice {
+                            source: parameter_line,
+                            line_start: parameter_line_number as usize,
+                            origin: Some(&*parameter_origin),
+                            annotations: vec![SourceAnnotation {
+                                range: parameter_range,
+                                label: &label,
+                                annotation_type: AnnotationType::Info,
+                            }],
+                            fold: false,
+                        },
+                    ],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
             }
 
             Type::ExpectedIntegerParameter(parameter) => {
@@ -277,7 +341,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::ExpectedNumericParameter(parameter) => {
@@ -338,7 +402,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::ParameterDefinedAfterConstantReference(parameter) => {
@@ -399,7 +463,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::InvalidParameterBound => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -426,7 +490,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::ParameterExcludeNotPartOfRange => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -454,7 +518,7 @@ impl<'tag> Error<'tag> {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::CannotCompareStringToNumber => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -479,7 +543,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::CondtionTypeMissmatch => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -504,7 +568,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::OnlyNumericExpressionsCanBeDerived => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -529,7 +593,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::ImplicitSolverDeltaIsNotAValidString => {
@@ -555,7 +619,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::DerivativeNotDefined => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -582,7 +646,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::PartialDerivativeOfTimeDerivative => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -612,19 +676,132 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
+            }
+            Type::Unsupported(unsupported) => crate::parser::Error {
+                error_type: crate::parser::error::Type::Unsupported(unsupported),
+                source: self.source,
+            }
+            .print(source_map, translate_lines),
+            Type::Recursion(recursively_called, ref call_stack, _src) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let note; // declared here so it doesn't get dropped to early
+                match &call_stack[..] {
+                    [] => (),
+                    call_stack => {
+                        let call_stack: Vec<_> = call_stack
+                            .iter()
+                            .map(|&function| hir[function].contents.name)
+                            .collect();
+                        note = format!(
+                            "Recursion occured in the following callstack: {}",
+                            VecFormatter(&call_stack, "->", "->")
+                        );
+                        footer.push(Annotation {
+                            id: None,
+                            label: Some(&note),
+                            annotation_type: AnnotationType::Note,
+                        });
+                    }
+                }
+
+                let label = format!(
+                    "Recursion of {} detected!",
+                    hir[recursively_called].contents.name
+                );
+
+                //TODO extend span to src end
+
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(&label),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Recursion is forbidden",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
+            }
+            Type::ExpectedVariableForFunctionOutput => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("'output'/'inout' arguments can only accept variables!"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Expected variable",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
+            }
+            Type::WrongFunctionArgCount(found, expected) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let label = format!(
+                    "Function argument count mismatch: Expected {} found {}",
+                    expected, found
+                );
+                let inline_label = format!("Expected {} arguments", expected);
+
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(&label),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: &inline_label,
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
             }
         };
     }
 }
 #[derive(Clone, Debug)]
-pub enum WarningType<'hir> {
-    ImplicitDerivative(VariableId<'hir>),
+pub enum WarningType {
+    ImplicitDerivative(VariableId),
     SpecifiedDeltaIsNotDerived(Symbol),
-    StandardNatureConstants(&'static str), // warn!("{}  using NISTQ 2010 for P_Q and P_K. If this doesnt work for you please open an issue");
+    StandardNatureConstants(&'static str), // eprintln!("{}  using NISTQ 2010 for P_Q and P_K. If this doesnt work for you please open an issue");
 }
-impl<'tag> Warning<'tag> {
-    pub fn print(&self, source_map: &SourceMap, hir: &Hir<'tag>, translate_lines: bool) {
+impl Warning {
+    pub fn print(&self, source_map: &SourceMap, hir: &Hir, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
@@ -673,7 +850,7 @@ impl<'tag> Warning<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                warn!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             WarningType::SpecifiedDeltaIsNotDerived(name) => {
@@ -706,7 +883,7 @@ impl<'tag> Warning<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                warn!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             WarningType::StandardNatureConstants(occurance) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -740,7 +917,7 @@ impl<'tag> Warning<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                warn!("{}", display_list);
+                eprintln!("{}", display_list);
             }
         };
     }

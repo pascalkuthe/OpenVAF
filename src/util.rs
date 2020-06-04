@@ -31,34 +31,35 @@ impl<'t, T> RefMut<T> for Option<&'t mut T> {
     }
 }
 
-pub struct VecFormatter<'lt, T: Display>(pub &'lt Vec<T>, pub &'lt str);
+pub fn format_list<'lt, T: Display>(vec: &'lt [T], seperator: &'lt str) -> VecFormatter<'lt, T> {
+    VecFormatter(vec, seperator, " or ")
+}
+pub struct VecFormatter<'lt, T: Display>(pub &'lt [T], pub &'lt str, pub &'lt str);
 
 impl<'lt, T: Display> Display for VecFormatter<'lt, T> {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self.0.as_slice() {
+        match self.0 {
             [] => f.write_str(" "),
             [x] => {
-                f.write_str(self.1);
+                f.write_str(self.1)?;
                 x.fmt(f)?;
-                f.write_str(self.1);
-                Ok(())
+                f.write_str(self.1)
             }
             [ref body @ .., second_last, last] => {
                 for x in body {
-                    f.write_str(self.1);
+                    f.write_str(self.1)?;
                     x.fmt(f)?;
-                    f.write_str(self.1);
-                    f.write_str(", ");
+                    f.write_str(self.1)?;
+                    f.write_str(", ")?;
                 }
-                f.write_str(self.1);
+                f.write_str(self.1)?;
                 second_last.fmt(f)?;
-                f.write_str(self.1);
-                f.write_str(" or ");
-                f.write_str(self.1);
+                f.write_str(self.1)?;
+                f.write_str(self.2)?;
+                f.write_str(self.1)?;
                 last.fmt(f)?;
-                f.write_str(self.1);
-                Ok(())
+                f.write_str(self.1)
             }
         }
     }

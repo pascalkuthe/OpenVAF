@@ -192,7 +192,7 @@ organization and externally, subject to the following restrictions.
 // situation in such a manner that the corresponding node is COLLAPSED.
 // We expect that the simulators should permit current contribution statement
 // for any branch with resistance value more than (or equal to) 1 milli-Ohm without
-// any convergence problem. In fact, we wish NOT to have to use a voltage contribution
+// any Convergence problem. In fact, we wish NOT to have to use a voltage contribution
 // statement in our Verilog code, except as an indication for the model compiler/simulator
 // to interpret a zero branch voltage as NODE-COLLAPSING action.
 // **********************************************************************************
@@ -968,6 +968,12 @@ parameter integer  type = 1		 from [-1:1] exclude 0  `ATTR(info="For transistor 
 
 
     //end of variables
+analog function real test;
+    input x;
+    input y;
+    real x,y;
+    test = x*y;
+endfunction
 
 analog begin
 
@@ -1580,7 +1586,7 @@ begin : Model_evaluation
         Qf      = sqrt(T_f0*itf*Q_fT);
         Q_pT    = Q_0+Qf+Qr;
         d_Q     = Q_pT;
-        while (abs(d_Q) >= `RTOLC*abs(Q_pT) && l_it <= `l_itmax) begin
+        while (abs(d_Q) >= test(`RTOLC,abs(Q_pT)) && l_it <= `l_itmax) begin
             d_Q0    = d_Q;
             I_Tf1   = i_0f/Q_pT;
             a_h     = Oich*I_Tf1;
@@ -1686,7 +1692,7 @@ begin : Model_evaluation
     if(rbi0_t > 0.0) begin : HICRBI
         real Qz_nom,f_QR,ETA,Qz0,fQz;
         // Consideration of conductivity modulation
-        // To avoid convergence problem hyperbolic smoothing used
+        // To avoid Convergence problem hyperbolic smoothing used
         f_QR    = (1+fdqr0)*qp0_t;
         Qz0     = Qjei+Qjci+Qf;
         Qz_nom  = 1+Qz0/f_QR;

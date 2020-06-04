@@ -10,7 +10,7 @@
 
 use crate::ast::{Variable, VariableType};
 use crate::ir::ExpressionId;
-use crate::ir::Push;
+
 use crate::ir::{AttributeNode, Attributes};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
@@ -18,27 +18,27 @@ use crate::parser::Result;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     pub fn parse_variable_declaration(
         &mut self,
         variable_type: VariableType,
-        attributes: Attributes<'ast>,
+        attributes: Attributes,
     ) -> Result {
         let start = self.preprocessor.current_start();
         self.parse_list(
-            |sel| {
+            |parser| {
                 let (name, default_value) =
-                    sel.parse_single_declaration_with_opt_default_value()?;
-                let variable = sel.ast.push(AttributeNode {
+                    parser.parse_single_declaration_with_opt_default_value()?;
+                let variable = parser.ast.variables.push(AttributeNode {
                     attributes,
-                    source: sel.span_to_current_end(start),
+                    source: parser.span_to_current_end(start),
                     contents: Variable {
                         name,
                         variable_type,
                         default_value,
                     },
                 });
-                sel.insert_symbol(name, SymbolDeclaration::Variable(variable));
+                parser.insert_symbol(name, SymbolDeclaration::Variable(variable));
                 Ok(())
             },
             Token::Semicolon,
@@ -49,9 +49,9 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
 
     fn parse_single_declaration_with_opt_default_value(
         &mut self,
-    ) -> Result<(Ident, Option<ExpressionId<'ast>>)> {
+    ) -> Result<(Ident, Option<ExpressionId>)> {
         let name = self.parse_identifier(false)?;
-        let default_value = if self.look_ahead()?.0 == Token::Assign {
+        let default_value = if self.look_ahead()? == Token::Assign {
             self.consume_lookahead();
             Some(self.parse_expression_id()?)
         } else {

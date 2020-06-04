@@ -1,24 +1,29 @@
 [package]
 name = "open-vaf"
-version = "0.3.2"
+version = "0.4.0"
 authors = ["DSPOM"]
 edition = "2018"
 
 [dependencies]
 log="0.4.8"
+pretty_assertions = "0.6.1"
 intrusive-collections = "0.9.0"
+once_cell = "1.4.0"
 logos = "0.11.4"
-indexmap = "1.3.2"
+indexmap = "1.4.0"
 ahash = "0.3.5"
 lazy_static = "1.4.0"
-copyless = "0.1.4"
+copyless = "0.1.5"
+yansi-term = "0.1.2"
 bitflags = "1.2.1"
 float-cmp = "0.8.0"
-ansi_term = "0.12.1"
 beef = "0.4.4"
 rustc-hash = "1.1.0"
 fixedbitset = "0.3.0"
-rustc-ap-graphviz = {version = "656.0.0",optional=true}
+index_vec = "0.1.1"
+parking_lot = "0.10.2"
+more-asserts = "0.2.1"
+rustc-ap-graphviz = {version = "662.0.0",optional=true}
 
 [dependencies.bytecount]
 version = "0.6.0"
@@ -29,7 +34,7 @@ version = "0.8.0"
 features = ["color"]
 
 [dependencies.bumpalo]
-version = "3.3.0"
+version = "3.4.0"
 features=['collections']
 
 #Logging for tests
@@ -48,6 +53,8 @@ harness = false
 [features]
 
 default = []
+
+nightly = ["parking_lot/nightly"]
 
 graph_debug = ["rustc-ap-graphviz"]
 

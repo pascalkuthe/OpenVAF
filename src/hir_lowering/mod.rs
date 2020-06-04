@@ -33,9 +33,9 @@ use crate::ast;
 use crate::hir::Hir;
 use crate::hir_lowering::derivatives::DerivativeMap;
 use crate::hir_lowering::error::{Error, Type, Warning};
+use crate::hir_lowering::expression_semantic::{ConstantSchematicAnalysis, SchematicAnalysis};
 use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
 use crate::ir::*;
-use crate::ir::{Push, SafeRangeCreation};
 use crate::mir::Attribute;
 use crate::mir::*;
 use crate::SourceMap;
@@ -48,19 +48,19 @@ mod expression_semantic;
 #[cfg(test)]
 pub mod test;
 
-struct HirToMirFold<'tag, 'lt> {
-    pub errors: Vec<Error<'tag>>,
-    pub warnings: Vec<Warning<'tag>>,
-    hir: &'lt Hir<'tag>,
-    mir: Box<Mir<'tag>>,
-    variable_to_differentiate: DerivativeMap<'tag>,
+pub struct HirToMirFold<'lt> {
+    pub errors: Vec<Error>,
+    pub warnings: Vec<Warning>,
+    hir: &'lt Hir,
+    mir: Mir,
+    variable_to_differentiate: DerivativeMap,
 }
-impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
-    pub fn new(hir: &'lt mut Hir<'tag>) -> Self {
+impl<'lt> HirToMirFold<'lt> {
+    pub fn new(hir: &'lt mut Hir) -> Self {
         Self {
             errors: Vec::with_capacity(32),
             warnings: Vec::with_capacity(32),
-            mir: unsafe { Mir::partial_initalize(hir) },
+            mir: Mir::initalize(hir),
             hir: &*hir,
             variable_to_differentiate: DerivativeMap::with_capacity_and_hasher(
                 64,
@@ -69,41 +69,56 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         }
     }
 
-    fn fold(mut self) -> (Result<Box<Mir<'tag>>, Vec<Error<'tag>>>, Vec<Warning<'tag>>) {
-        for nature in self.hir.full_range() {
-            self.fold_nature(nature)
-        }
-        for parameter in self.hir.full_range() {
-            self.fold_parameter(parameter)
-        }
+    fn fold(mut self) -> (Result<Mir, Vec<Error>>, Vec<Warning>) {
+        self.mir.natures = self
+            .hir
+            .natures
+            .iter()
+            .map(|nature| nature.map_with(|old| self.fold_nature(old)))
+            .collect();
 
-        for variable in self.hir.full_range() {
-            self.fold_variable(variable)
-        }
+        self.mir.parameters = self
+            .hir
+            .parameters
+            .iter()
+            .map(|param| param.map_with(|old| self.fold_parameter(old)))
+            .collect();
 
-        for attribute in SafeRangeCreation::<AttributeId<'tag>>::full_range(self.hir) {
-            let value = self.hir[attribute]
-                .value
-                .and_then(|val| self.fold_expression(val, &mut Self::derivative_of_reference));
-            self.mir.push(Attribute {
-                name: self.hir[attribute].name,
-                value,
-            });
-        }
+        self.mir.variables = self
+            .hir
+            .variables
+            .iter()
+            .map(|var| var.map_with(|old| self.fold_variable(old)))
+            .collect();
 
-        for module in SafeRangeCreation::<ModuleId<'tag>>::full_range(self.hir) {
-            let res = self.hir[module].map_with(|old| {
-                let (analog_cfg, analog_dtree) = self.fold_block_into_cfg(old.analog);
-                Module {
-                    name: old.name,
-                    port_list: old.port_list,
-                    parameter_list: old.parameter_list,
-                    analog_cfg,
-                    analog_dtree,
+        self.mir.attributes = self
+            .hir
+            .attributes
+            .iter()
+            .map(|attr| {
+                let value = attr
+                    .value
+                    .and_then(|val| ConstantSchematicAnalysis().fold_expression(&mut self, val));
+
+                Attribute {
+                    name: attr.name,
+                    value,
                 }
-            });
-            self.mir.push(res);
-        }
+            })
+            .collect();
+
+        self.mir.modules = self
+            .hir
+            .modules
+            .iter()
+            .map(|module| {
+                module.map_with(|old| Module {
+                    name: old.name,
+                    port_list: old.port_list.clone(),
+                    analog_cfg: self.fold_block_into_cfg(old.analog.clone()),
+                })
+            })
+            .collect();
 
         (
             if self.errors.is_empty() {
@@ -116,50 +131,48 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
     }
 
     /// folds a variable by foldings its default value (to a typed representation)
-    fn fold_variable(&mut self, variable: VariableId<'tag>) {
-        let variable_type = match self.hir[variable].contents.variable_type {
-            ast::VariableType::REAL | ast::VariableType::REALTIME => {
-                let default_value = self.hir[variable]
-                    .contents
+    fn fold_variable(&mut self, variable: &ast::Variable) -> Variable {
+        let variable_type = match variable.variable_type {
+            ast::VariableType::REAL => {
+                let default_value = variable
                     .default_value
-                    .and_then(|expr| self.fold_read_only_real_expression(expr));
+                    .and_then(|expr| ConstantSchematicAnalysis().fold_real_expression(self, expr));
                 VariableType::Real(default_value)
             }
 
-            ast::VariableType::INTEGER | ast::VariableType::TIME => {
-                let default_value =
-                    if let Some(default_value) = self.hir[variable].contents.default_value {
-                        match self.fold_read_only_expression(default_value) {
-                            Some(ExpressionId::Integer(expr)) => Some(expr),
+            ast::VariableType::INTEGER => {
+                let default_value = if let Some(default_value) = variable.default_value {
+                    match ConstantSchematicAnalysis().fold_expression(self, default_value) {
+                        Some(ExpressionId::Integer(expr)) => Some(expr),
 
-                            Some(ExpressionId::Real(real_expr)) => Some(self.mir.push(Node {
+                        Some(ExpressionId::Real(real_expr)) => {
+                            Some(self.mir.integer_expressions.push(Node {
                                 source: self.mir[real_expr].source,
                                 contents: IntegerExpression::RealCast(real_expr),
-                            })),
-                            Some(ExpressionId::String(_)) => {
-                                self.errors.push(Error {
-                                    error_type: Type::ExpectedNumber,
-                                    source: self.hir[default_value].source,
-                                });
-                                return;
-                            }
-
-                            None => return,
+                            }))
                         }
-                    } else {
-                        None
-                    };
+
+                        Some(ExpressionId::String(_)) => {
+                            self.errors.push(Error {
+                                error_type: Type::ExpectedNumber,
+                                source: self.hir[default_value].source,
+                            });
+                            None
+                        }
+
+                        None => None,
+                    }
+                } else {
+                    None
+                };
                 VariableType::Integer(default_value)
             }
         };
 
-        self.mir.write(
-            variable,
-            self.hir[variable].copy_with(|old| Variable {
-                name: old.name,
-                variable_type,
-            }),
-        );
+        Variable {
+            name: variable.name,
+            variable_type,
+        }
     }
 
     /// folds a parameter by evaluating the default value and any range bounds
@@ -168,23 +181,24 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
     /// Parameters are not initialized and when the MIR is dropped drop will be called on the parameters.
     /// This is UB since parameters do implement drop (they contain vectors)
     /// Internally this function is very carefully written such that `self.mir[parameter]` is always initialized even when an error occurs
-    fn fold_parameter(&mut self, parameter: ParameterId<'tag>) {
-        let parameter_type = match self.hir[parameter].contents.parameter_type {
+    fn fold_parameter(&mut self, parameter: &ast::Parameter) -> Parameter {
+        let parameter_type = match parameter.parameter_type {
             ast::ParameterType::String() => todo!("String parameters"),
+
             ast::ParameterType::Numerical {
                 parameter_type,
                 ref from_ranges,
                 ref excluded,
             } => match parameter_type {
-                ast::VariableType::INTEGER | ast::VariableType::TIME => {
+                ast::VariableType::INTEGER => {
                     let from_ranges = from_ranges
                         .iter()
                         .filter_map(|range| {
                             let start = range.start.try_copy_with(&mut |expr| {
-                                self.fold_read_only_integer_expression(expr)
+                                ConstantSchematicAnalysis().fold_integer_expression(self, expr)
                             });
                             let end = range.end.try_copy_with(&mut |expr| {
-                                self.fold_read_only_integer_expression(expr)
+                                ConstantSchematicAnalysis().fold_integer_expression(self, expr)
                             });
                             Some(start?..end?)
                         })
@@ -193,35 +207,33 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     let excluded = excluded
                         .iter()
                         .filter_map(|exclude| {
-                            exclude
-                                .try_clone_with(|expr| self.fold_read_only_integer_expression(expr))
+                            exclude.try_clone_with(|expr| {
+                                ConstantSchematicAnalysis().fold_integer_expression(self, expr)
+                            })
                         })
                         .collect();
 
-                    let default_value = self
-                        .fold_read_only_integer_expression(
-                            self.hir[parameter].contents.default_value,
-                        )
-                        .unwrap_or(unsafe {
-                            // Just a plcaholder so that something can be written in the error case
-                            // This can never be read so its save
-                            IntegerExpressionId::from_raw_index(0)
-                        });
+                    #[allow(clippy::or_fun_call)]
+                    let default_value = ConstantSchematicAnalysis()
+                        .fold_integer_expression(self, parameter.default_value)
+                        .unwrap_or(IntegerExpressionId::from_usize_unchecked(0));
+
                     ParameterType::Integer {
                         from_ranges,
                         excluded,
                         default_value,
                     }
                 }
-                ast::VariableType::REAL | ast::VariableType::REALTIME => {
+
+                ast::VariableType::REAL => {
                     let from_ranges = from_ranges
                         .iter()
                         .filter_map(|range| {
                             let start = range.start.try_copy_with(&mut |expr| {
-                                self.fold_read_only_real_expression(expr)
+                                ConstantSchematicAnalysis().fold_real_expression(self, expr)
                             });
                             let end = range.end.try_copy_with(&mut |expr| {
-                                self.fold_read_only_real_expression(expr)
+                                ConstantSchematicAnalysis().fold_real_expression(self, expr)
                             });
                             Some(start?..end?)
                         })
@@ -230,17 +242,16 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                     let excluded = excluded
                         .iter()
                         .filter_map(|exclude| {
-                            exclude.try_clone_with(|expr| self.fold_read_only_real_expression(expr))
+                            exclude.try_clone_with(|expr| {
+                                ConstantSchematicAnalysis().fold_real_expression(self, expr)
+                            })
                         })
                         .collect();
 
-                    let default_value = self
-                        .fold_read_only_real_expression(self.hir[parameter].contents.default_value)
-                        .unwrap_or(unsafe {
-                            //Safe in practice but we can make this prettier
-                            //TODO remove unnecessary unsafety
-                            RealExpressionId::from_raw_index(0)
-                        });
+                    #[allow(clippy::or_fun_call)]
+                    let default_value = ConstantSchematicAnalysis()
+                        .fold_real_expression(self, parameter.default_value)
+                        .unwrap_or(RealExpressionId::from_usize_unchecked(0));
                     ParameterType::Real {
                         from_ranges,
                         excluded,
@@ -250,64 +261,39 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
             },
         };
 
-        unsafe {
-            //This is save since we write to all parameters unconditionally
-            self.mir.write_unsafe(
-                parameter,
-                self.hir[parameter].map_with(|old| Parameter {
-                    name: old.name,
-                    parameter_type,
-                }),
-            )
+        Parameter {
+            name: parameter.name,
+            parameter_type,
         }
     }
 
-    pub fn fold_nature(&mut self, nature: NatureId<'tag>) {
-        let units = self
-            .fold_read_only_string_expression(self.hir[nature].contents.units)
-            .and_then(|expr| ReadingConstantFold(&self.mir).string_constant_fold(&mut (), expr));
-        let abstol = self
-            .fold_read_only_real_expression(self.hir[nature].contents.abstol)
-            .and_then(|expr| ReadingConstantFold(&self.mir).real_constant_fold(&mut (), expr));
+    pub fn fold_nature(&mut self, nature: &hir::Nature) -> Nature {
+        let units = ConstantSchematicAnalysis()
+            .fold_string_expression(self, nature.units)
+            .and_then(|expr| ReadingConstantFold(&self.mir).string_constant_fold(&mut (), expr))
+            .unwrap();
+        let abstol = ConstantSchematicAnalysis()
+            .fold_real_expression(self, nature.abstol)
+            .and_then(|expr| ReadingConstantFold(&self.mir).real_constant_fold(&mut (), expr))
+            .unwrap();
 
-        let units = if let Some(units) = units {
-            units
-        } else {
-            unreachable_unchecked!(
-                "Constant fold failed during HIR Lowering! This is a compiler bug please report this"
-            );
-        };
-        let abstol = if let Some(abstol) = abstol {
-            abstol
-        } else {
-            unreachable_unchecked!(
-                "Constant fold failed during HIR Lowering! This is a compiler bug please report this"
-            );
-        };
-
-        self.mir.write(
-            nature,
-            self.hir[nature].copy_with(|old| Nature {
-                name: old.name,
-                abstol,
-                units,
-                access: old.access,
-                idt_nature: old.idt_nature,
-                ddt_nature: old.ddt_nature,
-            }),
-        )
+        Nature {
+            name: nature.name,
+            abstol,
+            units,
+            access: nature.access,
+            idt_nature: nature.idt_nature,
+            ddt_nature: nature.ddt_nature,
+        }
     }
 }
 
-impl<'tag> Hir<'tag> {
+pub type LoweringResults = (std::result::Result<Mir, (Vec<Error>, Hir)>, Vec<Warning>);
+
+impl Hir {
     /// Folds an hir to an mir by adding and checking type information
     /// Returns any errors that occur
-    pub fn lower(
-        mut self: Box<Self>,
-    ) -> (
-        std::result::Result<Box<Mir<'tag>>, (Vec<Error<'tag>>, Box<Self>)>,
-        Vec<Warning<'tag>>,
-    ) {
+    pub fn lower(mut self) -> LoweringResults {
         let (res, warnings) = HirToMirFold::new(&mut self).fold();
         (res.map_err(|errors| (errors, self)), warnings)
     }
@@ -315,10 +301,10 @@ impl<'tag> Hir<'tag> {
     /// Folds an hir to an mir by adding and checking type information
     /// Prints any errors that occur
     pub fn lower_and_print_errors(
-        mut self: Box<Self>,
+        mut self,
         source_map: &SourceMap,
         translate_line: bool,
-    ) -> Option<Box<Mir<'tag>>> {
+    ) -> Option<Mir> {
         let (res, warnings) = HirToMirFold::new(&mut self).fold();
         for warning in warnings {
             warning.print(source_map, &self, translate_line)

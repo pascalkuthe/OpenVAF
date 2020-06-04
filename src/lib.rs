@@ -11,7 +11,6 @@
 //! # use bumpalo::Bump;
 //! # use std::path::Path;
 //! let source_map_allocator = Bump::new();
-//!  mk_ast!(ast);
 //!  let source_map = ast
 //!     .parse_from_and_print_errors(Path::new("<File>"), &source_map_allocator, true)?;
 //!  let hir = ast
@@ -41,6 +40,10 @@ pub use ir::ast;
 #[doc(hidden)]
 pub use ir::ast::Ast;
 #[doc(inline)]
+pub use ir::cfg;
+#[doc(hidden)]
+pub use ir::cfg::ControlFlowGraph;
+#[doc(inline)]
 pub use ir::hir;
 #[doc(hidden)]
 pub use ir::hir::Hir;
@@ -57,8 +60,6 @@ pub(crate) use parser::Parser;
 #[doc(inline)]
 pub use span::Span;
 
-#[macro_use]
-pub mod compact_arena;
 pub mod symbol;
 #[macro_use]
 pub mod util;
@@ -66,11 +67,12 @@ pub mod util;
 pub mod ir;
 pub mod analysis;
 pub mod ast_lowering;
+pub mod data_structures;
 mod error;
 mod hir_lowering;
+mod literals;
 pub mod parser;
 mod span;
 pub mod symbol_table;
 
-pub use fixedbitset;
-pub use fixedbitset::FixedBitSet as BitSet;
+pub use literals::StringLiteral;

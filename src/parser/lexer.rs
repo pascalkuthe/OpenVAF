@@ -21,7 +21,7 @@ pub struct FollowedByBracket(pub bool);
 #[derive(Clone, Logos, Debug, PartialEq, Copy, Eq)]
 pub enum Token {
     //Newline handling
-    #[token("\\\n")]
+    #[regex(r"\\\r?\n")]
     MacroDefNewLine,
 
     #[token("\n")]
@@ -38,7 +38,7 @@ pub enum Token {
     //Actual Tokens
 
     //required rules
-    #[regex(r"[ \t\f]+", logos::skip)]
+    #[regex(r"[ \t\f\r]+", logos::skip)]
     #[error]
     Unexpected,
 
@@ -82,6 +82,14 @@ pub enum Token {
     PortConnected,
     #[token("$param_given")]
     ParamGiven,
+    #[token("$display")]
+    Display,
+    #[token("$strobe")]
+    Strobe,
+    #[token("$write")]
+    Write,
+    #[token("$debug")]
+    Debug,
 
     //Constants
     #[regex(r#""([^\n"\\]|\\[\\tn")])*""#)]
@@ -225,6 +233,10 @@ pub enum Token {
 
     #[token("analog")]
     Analog,
+    #[token("function")]
+    Function,
+    #[token("endfunction")]
+    EndFunction,
     #[token("initial")]
     AnalogInitial,
 
@@ -811,6 +823,12 @@ impl Display for Token {
             Token::SimParamStr => f.write_str("$simparam$str"),
             Token::PortConnected => f.write_str("$port_connected"),
             Token::ParamGiven => f.write_str("$param_given"),
+            Token::Display => f.write_str("$display"),
+            Token::Strobe => f.write_str("$strobe"),
+            Token::Write => f.write_str("$write"),
+            Token::Debug => f.write_str("$debug"),
+            Token::Function => f.write_str("function"),
+            Token::EndFunction => f.write_str("endfunction"),
         }
     }
 }

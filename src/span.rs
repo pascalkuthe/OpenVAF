@@ -14,7 +14,6 @@ use std::sync::Mutex;
 
 pub type Index = u32;
 pub type IndexOffset = i64;
-pub type Length = u16;
 pub type Range = std::ops::Range<Index>;
 pub type LineNumber = u16;
 
@@ -48,7 +47,7 @@ impl SpanInterner {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Span {
-    start_or_idx: u32,
+    start_or_idx: Index,
     data: SpanData,
 }
 impl Span {
@@ -57,7 +56,7 @@ impl Span {
         Self::new_with_length(start, end - start)
     }
 
-    const u16_max_u32: u32 = std::u16::MAX as u32;
+    const U16_MAX_U32: u32 = std::u16::MAX as u32;
     #[inline]
     pub fn new_with_length(start: Index, len: Index) -> Self {
         match len {
@@ -65,7 +64,7 @@ impl Span {
                 start_or_idx: (start << 1) | 1,
                 data: SpanData::LargeSpan,
             },
-            len @ 1..=Self::u16_max_u32 => Self {
+            len @ 1..=Self::U16_MAX_U32 => Self {
                 start_or_idx: start,
                 data: SpanData::Length(unsafe { NonZeroU16::new_unchecked(len as u16) }),
             },

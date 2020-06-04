@@ -19,22 +19,22 @@ use rustc_hash::FxHashMap;
 
 use super::ast::*;
 
-pub type SymbolTable<'ast> = FxHashMap<Symbol, SymbolDeclaration<'ast>>;
+pub type SymbolTable = FxHashMap<Symbol, SymbolDeclaration>;
 #[derive(Clone, Copy, Debug)]
-pub enum SymbolDeclaration<'ast> {
-    Module(ModuleId<'ast>),
-    Block(BlockId<'ast>),
-    Variable(VariableId<'ast>),
-    Branch(BranchId<'ast>),
-    Net(NetId<'ast>),
-    Port(PortId<'ast>),
-    Function(FunctionId<'ast>),
-    Discipline(DisciplineId<'ast>),
-    Nature(NatureId<'ast>),
-    Parameter(ParameterId<'ast>),
+pub enum SymbolDeclaration {
+    Module(ModuleId),
+    Block(BlockId),
+    Variable(VariableId),
+    Branch(BranchId),
+    Net(NetId),
+    Port(PortId),
+    Function(FunctionId),
+    Discipline(DisciplineId),
+    Nature(NatureId),
+    Parameter(ParameterId),
 }
-impl<'ast> SymbolDeclaration<'ast> {
-    pub fn span(self, ast: &Ast<'ast>) -> Span {
+impl SymbolDeclaration {
+    pub fn span(self, ast: &Ast) -> Span {
         match self {
             Self::Module(id) => ast[id].source,
             Self::Block(id) => ast[id].source,
@@ -48,7 +48,7 @@ impl<'ast> SymbolDeclaration<'ast> {
             Self::Parameter(id) => ast[id].source,
         }
     }
-    pub fn name<'lt>(self, ast: &'lt Ast<'ast>) -> Symbol {
+    pub fn name(self, ast: &Ast) -> Symbol {
         match self {
             Self::Module(id) => ast[id].contents.name.name,
             Self::Block(id) => ast[id].contents.scope.as_ref().unwrap().name.name,
