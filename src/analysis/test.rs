@@ -8,10 +8,11 @@
 
 use crate::analysis::constant_folding::{ConstantFoldState, IntermediateWritingConstantFold};
 use crate::analysis::data_flow::reaching_variables::ReachableDefinitionsAnalysis;
-use crate::analysis::dominator_tree::DominatorTree;
-use crate::ir::{ModuleId, SafeRangeCreation, VariableId};
-use crate::simplify;
+use crate::analysis::ProgramDependenceGraph;
+use crate::ir::{ModuleId, VariableId};
+use crate::{Ast, ControlFlowGraph};
 use bumpalo::Bump;
+use std::fs::File;
 use std::path::Path;
 
 #[test]
@@ -22,7 +23,7 @@ pub fn cfg() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+    let mut ast = Ast::new();
     let source_map = ast
         .parse_from_and_print_errors(Path::new("tests/hl2.va"), &source_map_allocator, true)
         .ok_or(())?;
@@ -33,18 +34,34 @@ pub fn cfg() -> Result<(), ()> {
         .lower_and_print_errors(source_map, true)
         .ok_or(())?;
 
-    for module in SafeRangeCreation::<ModuleId>::full_range(&*mir) {
-        mk_tiny_heap_arena!(cfg_allocator);
-        let mut cfg = mir[module].contents.analog_cfg.clone_into(cfg_allocator);
+    for module in mir.modules.indices() {
+        let mut cfg: ControlFlowGraph = mir[module].contents.analog_cfg.clone();
 
         let reaching_analysis = ReachableDefinitionsAnalysis::new(&mir, &cfg);
 
-        let (mut udg, mut dfg) = reaching_analysis.run(&mut cfg);
-
+        let (mut udg, _) = reaching_analysis.run(&mut cfg);
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg.dot").unwrap();
             cfg.render_to(&mut file);
+            let mut file = File::create("data_dependencies.dot").unwrap();
+            cfg.render_to(&mut file);
+        }
+
+        let ipdom = cfg.post_dominators();
+
+        #[cfg(feature = "graph_debug")]
+        {
+            let mut file = File::create("ipdom.dot").unwrap();
+            cfg.render_post_dominators(&mut file, &ipdom);
+        }
+
+        let mut control_dependencies = cfg.control_dependence_graph_from_ipdom(&ipdom);
+
+        #[cfg(feature = "graph_debug")]
+        {
+            let mut file = File::create("control_dependence.dot").unwrap();
+            cfg.render_control_dependence_to(&mut file, &control_dependencies);
         }
 
         cfg.constant_fold(
@@ -53,31 +70,33 @@ pub fn cfg() -> Result<(), ()> {
             &mut ConstantFoldState::default(),
             true,
         );
+
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg_constant_fold.dot").unwrap();
             cfg.render_to(&mut file);
         }
 
-        let dtree = DominatorTree::from_cfg(&cfg);
-        #[cfg(feature = "graph_debug")]
-        {
-            let mut file = File::create("dominators.dot").unwrap();
-            dtree.render_to(&mut file);
+        let pdg = ProgramDependenceGraph {
+            data_dependencies: udg,
+            control_dependencies: control_dependencies,
+        };
+
+        // forward transfer current as a pretty complex slice
+        let mut itf_id = None;
+        for (id, var) in mir.variables.iter_enumerated() {
+            if var.contents.name.name.as_str() == "CjCx_i" {
+                itf_id = Some(id)
+            }
         }
 
-        cfg.extract_relevant_statements_for_variable(
-            unsafe { VariableId::from_raw_index(64) },
-            &udg,
-            &dfg,
-            &dtree,
-        );
+        cfg.backward_variable_slice(itf_id.unwrap(), &pdg);
 
-        simplify!(cfg);
+        cfg.simplify();
 
         #[cfg(feature = "graph_debug")]
         {
-            let mut file = File::create("cfg_simplified.dot").unwrap();
+            let mut file = File::create("cfg_sliced.dot").unwrap();
             cfg.render_to(&mut file);
         }
     }

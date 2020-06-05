@@ -10,93 +10,155 @@
 //! The [`impl_id_type!`](impl_id_type) is also defined here which provides the implementation necessary for an ID type to interact with an IR
 
 use super::*;
+use index_vec::Idx;
+use more_asserts::*;
+use pretty_assertions::assert_eq;
+use std::iter;
+
+pub type IdxRangeIter<I> = iter::Map<Range<usize>, fn(usize) -> I>;
 
 macro_rules! id_type {
     ($name:ident($type:ident)) => {
-        #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Debug, Hash)]
-        #[repr(transparent)]
-        pub struct $name<'tag>(pub(super) $type<'tag>);
+        // see the index_vec documentation
+        ::index_vec::define_index_type! {
 
-        impl<'tag> $crate::compact_arena::Step for $name<'tag> {
-            type I = <$type<'tag> as $crate::compact_arena::Step>::I;
-            #[inline]
-            unsafe fn step(&mut self, distance: Self::I) {
-                self.0.step(distance)
-            }
-            #[inline]
-            unsafe fn step_back(&mut self, distance: Self::I) {
-                self.0.step_back(distance)
-            }
-        }
-        impl<'tag> ::std::convert::Into<$type<'tag>> for $name<'tag> {
-            fn into(self) -> $type<'tag> {
-                self.0
-            }
-        }
-        impl<'tag> $name<'tag> {
-            pub fn unwrap(self) -> $type<'tag> {
-                self.0
-            }
+            pub struct $name = $type;
 
-            pub unsafe fn from_raw_index(id: usize) -> Self {
-                Self($type::new_from_usize(id))
-            }
+            DISABLE_MAX_INDEX_CHECK = cfg!(not(debug_assertions));
 
-            pub fn as_usize(self) -> usize {
-                self.0.index() as usize
-            }
-        }
-        impl<'tag> $crate::compact_arena::SafeRange<$name<'tag>> {
-            pub fn unwrap(self) -> $crate::compact_arena::SafeRange<$type<'tag>> {
-                self.into()
-            }
-        }
-        impl<'tag> ::core::fmt::Display for $name<'tag> {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> std::fmt::Result {
-                ::core::fmt::Display::fmt(&self.0, f)
-            }
-        }
-        impl<'tag> ::std::convert::Into<$crate::compact_arena::SafeRange<$type<'tag>>>
-            for $crate::compact_arena::SafeRange<$name<'tag>>
-        {
-            fn into(self) -> $crate::compact_arena::SafeRange<$type<'tag>> {
-                $crate::compact_arena::SafeRange::new(
-                    unsafe { self.get_start() }.0,
-                    unsafe { self.get_end() }.0,
-                )
-            }
+            DISPLAY_FORMAT = "{}";
+
+            DEBUG_FORMAT = stringify!(<$name {}>);
+
+            IMPL_RAW_CONVERSIONS = true;
         }
     };
 }
 
-id_type!(BranchId(Idx8));
+id_type!(BranchId(u16));
 
-id_type!(NetId(Idx16));
+id_type!(NetId(u16));
 
-id_type!(PortId(Idx8));
+id_type!(PortId(u16));
 
-id_type!(ParameterId(Idx16));
+id_type!(ParameterId(u32));
 
-id_type!(VariableId(Idx16));
+id_type!(VariableId(u32));
 
-id_type!(ModuleId(Idx8));
+id_type!(ModuleId(u16));
 
-id_type!(FunctionId(Idx8));
+id_type!(FunctionId(u16));
 
-id_type!(DisciplineId(Idx8));
+id_type!(DisciplineId(u16));
 
-id_type!(ExpressionId(Idx16));
-id_type!(RealExpressionId(Idx16));
-id_type!(IntegerExpressionId(Idx16));
-id_type!(StringExpressionId(Idx8));
+id_type!(ExpressionId(u32));
+id_type!(RealExpressionId(u32));
+id_type!(IntegerExpressionId(u32));
+id_type!(StringExpressionId(u32));
 
-id_type!(BlockId(Idx16));
+id_type!(BlockId(u16));
 
-id_type!(AttributeId(Idx16));
+id_type!(AttributeId(u16));
 
-id_type!(StatementId(Idx16));
+id_type!(StatementId(u32));
 
-id_type!(NatureId(Idx8));
+id_type!(NatureId(u16));
+
+#[derive(Clone, Debug)]
+pub struct IdRange<I: Idx>(pub Range<I>);
+
+impl<I: Idx> IdRange<I> {
+    pub fn enter_back(&mut self, sub_range: &Self) -> Self {
+        if cfg!(debug_assertions) && self.len() != 0 {
+            assert_eq!(self.0.end, sub_range.0.end);
+            assert_gt!(sub_range.0.start, self.0.start);
+        }
+
+        self.0.end = sub_range.0.start;
+
+        sub_range.clone()
+    }
+}
+
+impl<I: Idx> Iterator for IdRange<I> {
+    type Item = I;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0.start < self.0.end {
+            let res = self.0.start;
+            self.0.start = I::from_usize(self.0.start.index() + 1);
+            Some(res)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<Self::Item> {
+        self.next_back()
+    }
+
+    #[inline]
+    fn max(self) -> Option<Self::Item> {
+        self.last()
+    }
+
+    #[inline]
+    fn min(self) -> Option<Self::Item> {
+        Some(self.0.start)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let new_start = I::from_usize(self.0.start.index() + n);
+        if new_start < self.0.end {
+            self.0.start = I::from_usize(new_start.index() + 1);
+            Some(new_start)
+        } else {
+            self.0.start = self.0.end;
+            None
+        }
+    }
+}
+
+impl<I: Idx> ExactSizeIterator for IdRange<I> {
+    fn len(&self) -> usize {
+        self.0.end.index() - self.0.start.index()
+    }
+}
+
+impl<I: Idx> DoubleEndedIterator for IdRange<I> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.0.start < self.0.end {
+            self.0.end = I::from_usize(self.0.end.index() - 1);
+            Some(self.0.end)
+        } else {
+            None
+        }
+    }
+
+    fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+        let new_end = I::from_usize(self.0.end.index() - n);
+        if self.0.start < new_end {
+            self.0.end = I::from_usize(new_end.index() - 1);
+            Some(new_end)
+        } else {
+            self.0.end = self.0.start;
+            None
+        }
+    }
+}
 
 /// Provides the implementation which allows the data of an IR to be accessed using an ID type generated using the `id_type!` macro.
 ///
@@ -114,111 +176,49 @@ id_type!(NatureId(Idx8));
 /// # Examples
 ///
 /// ```
-/// id_type!(NetId(Idx8));
-/// impl_id_type!(NetId in Ast::nets -> AttributeNode<'tag,Net>);
+/// id_type!(NetId(u8));
+/// impl_id_type!(NetId in Ast::nets -> AttributeNode<Net>);
 /// ```
 
 #[macro_export]
 macro_rules! impl_id_type {
     ($name:ident in $container:ident::$sub_container:ident -> $type:ty) => {
-        impl<'tag> ::std::ops::Index<$name<'tag>> for $container<'tag> {
+        impl ::std::ops::Index<$name> for $container {
             type Output = $type;
-            fn index(&self, index: $name<'tag>) -> &Self::Output {
-                &self.$sub_container[index.0]
+            fn index(&self, index: $name) -> &Self::Output {
+                &self.$sub_container[index]
             }
         }
-        impl<'tag> ::std::ops::Index<Range<$name<'tag>>> for $container<'tag> {
-            type Output = [$type];
-            fn index(&self, range: Range<$name<'tag>>) -> &Self::Output {
-                let range = $crate::compact_arena::SafeRange::new(range.start.0, range.end.0);
-                &self.$sub_container[range]
+
+        impl ::std::ops::IndexMut<$name> for $container {
+            fn index_mut(&mut self, index: $name) -> &mut Self::Output {
+                &mut self.$sub_container[index]
             }
         }
-        impl<'tag> ::std::ops::Index<$crate::compact_arena::SafeRange<$name<'tag>>>
-            for $container<'tag>
-        {
-            type Output = [$type];
-            fn index(&self, range: $crate::compact_arena::SafeRange<$name<'tag>>) -> &Self::Output {
-                let range = unsafe {
-                    $crate::compact_arena::SafeRange::new(range.get_start().0, range.get_end().0)
-                };
+
+        impl ::std::ops::Index<Range<$name>> for $container {
+            type Output = ::index_vec::IndexSlice<$name, [$type]>;
+            fn index(&self, range: Range<$name>) -> &Self::Output {
                 &self.$sub_container[range]
             }
         }
 
-        impl<'tag> ::std::ops::IndexMut<$name<'tag>> for $container<'tag> {
-            fn index_mut(&mut self, index: $name<'tag>) -> &mut Self::Output {
-                &mut self.$sub_container[index.0]
-            }
-        }
-        impl<'tag> $crate::ir::UnsafeWrite<$name<'tag>> for $container<'tag> {
-            type Data = $type;
-            unsafe fn write_unsafe(&mut self, index: $name<'tag>, value: Self::Data) {
-                self.$sub_container
-                    .write(index.0, ::core::mem::MaybeUninit::new(value))
-            }
-        }
-        impl<'tag> ::std::ops::IndexMut<Range<$name<'tag>>> for $container<'tag> {
-            fn index_mut(&mut self, range: Range<$name<'tag>>) -> &mut Self::Output {
-                let range = $crate::compact_arena::SafeRange::new(range.start.0, range.end.0);
+        impl ::std::ops::IndexMut<Range<$name>> for $container {
+            fn index_mut(&mut self, range: Range<$name>) -> &mut Self::Output {
                 &mut self.$sub_container[range]
             }
         }
-        impl<'tag> ::std::ops::IndexMut<$crate::compact_arena::SafeRange<$name<'tag>>>
-            for $container<'tag>
-        {
-            fn index_mut(
-                &mut self,
-                range: $crate::compact_arena::SafeRange<$name<'tag>>,
-            ) -> &mut Self::Output {
-                let range = unsafe {
-                    $crate::compact_arena::SafeRange::new(range.get_start().0, range.get_end().0)
-                };
-                &mut self.$sub_container[range]
+
+        impl ::std::ops::Index<$crate::ir::ids::IdRange<$name>> for $container {
+            type Output = ::index_vec::IndexSlice<$name, [$type]>;
+            fn index(&self, range: $crate::ir::ids::IdRange<$name>) -> &Self::Output {
+                &self.$sub_container[range.0]
             }
         }
-        impl<'tag> $crate::ir::Push<$type> for $container<'tag> {
-            type Key = $name<'tag>;
-            fn push(&mut self, val: $type) -> Self::Key {
-                $name(self.$sub_container.add(val))
-            }
-        }
-        impl<'tag> $crate::ir::SafeRangeCreation<$name<'tag>> for $container<'tag> {
-            fn range_to_end(&self, from: $name<'tag>) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.range_to_end(from.0);
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
-            }
-            fn empty_range_from_end(&self) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.empty_range_from_end();
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
-            }
-            fn extend_range_to_end(&self, range: SafeRange<$name<'tag>>) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.extend_range_to_end(range.into());
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
-            }
-            fn full_range(&self) -> SafeRange<$name<'tag>> {
-                let range = self.$sub_container.full_range();
-                unsafe {
-                    $crate::compact_arena::SafeRange::new(
-                        $name(range.get_start()),
-                        $name(range.get_end()),
-                    )
-                }
+
+        impl ::std::ops::IndexMut<$crate::ir::ids::IdRange<$name>> for $container {
+            fn index_mut(&mut self, range: $crate::ir::ids::IdRange<$name>) -> &mut Self::Output {
+                &mut self.$sub_container[range.0]
             }
         }
     };

@@ -6,11 +6,19 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-pub mod dominator_tree;
-pub use dominator_tree::DominatorTree;
 pub mod constant_folding;
 pub mod data_flow;
-mod extraction;
+pub mod program_slicing;
 #[cfg(test)]
 mod test;
-pub use extraction::DependencyHandler;
+pub use program_slicing::DependencyHandler;
+mod control_dependence;
+mod post_dominance;
+use crate::analysis::data_flow::reaching_variables::UseDefGraph;
+pub use control_dependence::ControlDependenceGraph;
+pub use post_dominance::IPDOM;
+
+pub struct ProgramDependenceGraph {
+    pub data_dependencies: UseDefGraph,
+    pub control_dependencies: ControlDependenceGraph,
+}

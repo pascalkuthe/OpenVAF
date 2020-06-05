@@ -14,7 +14,6 @@ use crate::ast_lowering::error::{Error, NetInfo, Type};
 use crate::hir::Net;
 use crate::hir::{Branch, BranchDeclaration, DisciplineAccess};
 use crate::ir::*;
-use crate::ir::{Push, SafeRangeCreation};
 use crate::symbol::{keywords, Ident};
 use crate::{ast, Ast, Span};
 use rustc_hash::FxHashMap;
@@ -22,19 +21,19 @@ use rustc_hash::FxHashMap;
 /// Handles branch resolution which is more complicated because unnamed branches exist and discipline comparability has to be enforced
 /// # Safety
 /// Branch resolution may only take place after all nets and ports have been folded! UB might occur otherwise.
-pub struct BranchResolver<'tag> {
-    unnamed_branches: FxHashMap<(NetId<'tag>, NetId<'tag>), BranchId<'tag>>,
-    unnamed_port_branches: FxHashMap<PortId<'tag>, BranchId<'tag>>,
-    implicit_grounds: FxHashMap<DisciplineId<'tag>, NetId<'tag>>,
+pub struct BranchResolver {
+    unnamed_branches: FxHashMap<(NetId, NetId), BranchId>,
+    unnamed_port_branches: FxHashMap<PortId, BranchId>,
+    implicit_grounds: FxHashMap<DisciplineId, NetId>,
 }
 
-impl<'tag, 'lt> BranchResolver<'tag> {
-    pub fn new(ast: &'lt Ast<'tag>) -> Self {
+impl<'lt> BranchResolver {
+    pub fn new(ast: &'lt Ast) -> Self {
         Self {
             unnamed_port_branches: FxHashMap::with_capacity_and_hasher(16, Default::default()),
             unnamed_branches: FxHashMap::with_capacity_and_hasher(32, Default::default()),
             implicit_grounds: FxHashMap::with_capacity_and_hasher(
-                ast.disciplines.len as usize,
+                ast.disciplines.len() as usize,
                 Default::default(),
             ),
         }
@@ -56,9 +55,9 @@ impl<'tag, 'lt> BranchResolver<'tag> {
     ///
     pub fn resolve_discipline_access(
         &mut self,
-        fold: &mut Fold<'tag, 'lt>,
+        fold: &mut Fold<'lt>,
         nature_name: &Ident,
-        discipline: DisciplineId<'tag>,
+        discipline: DisciplineId,
     ) -> Option<DisciplineAccess> {
         match nature_name.name {
             keywords::FLOW => Some(DisciplineAccess::Flow),
@@ -75,9 +74,9 @@ impl<'tag, 'lt> BranchResolver<'tag> {
     }
 
     pub fn resolve_nature_access(
-        fold: &mut Fold<'tag, 'lt>,
-        id: NatureId<'tag>,
-        discipline: DisciplineId<'tag>,
+        fold: &mut Fold<'lt>,
+        id: NatureId,
+        discipline: DisciplineId,
     ) -> Option<DisciplineAccess> {
         match id {
             id if Some(id) == fold.hir[discipline].contents.flow_nature => {
@@ -112,9 +111,9 @@ impl<'tag, 'lt> BranchResolver<'tag> {
     /// The Id of the resolved branch and its Discipline (if the resolution succeeded)
     pub fn resolve_branch_access(
         &mut self,
-        fold: &mut Fold<'tag, 'lt>,
+        fold: &mut Fold<'lt>,
         branch_access: &Node<ast::BranchAccess>,
-    ) -> Option<(BranchId<'tag>, DisciplineId<'tag>)> {
+    ) -> Option<(BranchId, DisciplineId)> {
         match branch_access.contents {
             ast::BranchAccess::Implicit(ref branch) => {
                 let (branch, discipline) = self.resolve_branch(fold, branch)?;
@@ -122,8 +121,8 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                     Branch::Port(port) => match self.unnamed_port_branches.get(&port) {
                         Some(id) => return Some((*id, discipline)),
                         None => {
-                            let branch_id = fold.hir.push(AttributeNode {
-                                attributes: fold.hir.empty_range_from_end(),
+                            let branch_id = fold.hir.branches.push(AttributeNode {
+                                attributes: Attributes::empty(),
                                 source: branch_access.source,
                                 contents: BranchDeclaration {
                                     name: Ident::from_str_and_span(
@@ -145,8 +144,8 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                     Branch::Nets(net1, net2) => match self.unnamed_branches.get(&(net1, net2)) {
                         Some(id) => return Some((*id, discipline)),
                         None => {
-                            let branch_id = fold.hir.push(AttributeNode {
-                                attributes: fold.hir.empty_range_from_end(),
+                            let branch_id = fold.hir.branches.push(AttributeNode {
+                                attributes: Attributes::empty(),
                                 source: branch_access.source,
                                 contents: BranchDeclaration {
                                     name: Ident::from_str_and_span(
@@ -181,11 +180,11 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                     },
 
                     // Needed to resolve ambiguities. Inefficient but will do
-                    Port(id) => {
+                    Port(_id) => {
                         return self.resolve_branch_access(fold,&branch_access.clone_as(ast::BranchAccess::Implicit(ast::Branch::Port(name.clone()))))
                     },
 
-                    Net(id) => {
+                    Net(_id) => {
                         return self.resolve_branch_access(fold,&branch_access.clone_as(ast::BranchAccess::Implicit(ast::Branch::NetToGround(name.clone()))))
                     }
                 )
@@ -209,9 +208,9 @@ impl<'tag, 'lt> BranchResolver<'tag> {
 
     pub fn resolve_branch(
         &mut self,
-        fold: &mut Fold<'tag, 'lt>,
+        fold: &mut Fold<'lt>,
         branch: &ast::Branch,
-    ) -> Option<(Branch<'tag>, DisciplineId<'tag>)> {
+    ) -> Option<(Branch, DisciplineId)> {
         match branch {
             ast::Branch::Port(ref port) => {
                 resolve_hierarchical!(fold; port as Port(port_id) => {
@@ -232,7 +231,7 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                     let discipline = fold.hir[net].contents.discipline;
                     let ground_net =
                         *self.implicit_grounds.entry(discipline).or_insert_with(|| {
-                            fold.hir.push(AttributeNode {
+                            fold.hir.nets.push(AttributeNode {
                                 contents: Net {
                                     name: Ident::from_str(
                                         format!("Implicit Ground_{:?}", discipline).as_str(),
@@ -242,7 +241,7 @@ impl<'tag, 'lt> BranchResolver<'tag> {
                                     net_type: GROUND,
                                 },
                                 source: Span::new_short_empty_span(0),
-                                attributes: fold.hir.empty_range_from_end(),
+                                attributes: Attributes::empty(),
                             })
                         });
                     return Some((Branch::Nets(net, ground_net), discipline));

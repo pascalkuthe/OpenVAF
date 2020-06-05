@@ -12,10 +12,9 @@ use std::path::Path;
 
 use bumpalo::Bump;
 
-use crate::compact_arena::SafeRange;
 use crate::ir::ast::NetType;
 use crate::ir::ModuleId;
-use crate::ir::SafeRangeCreation;
+use crate::Ast;
 
 #[test]
 pub fn diode() -> Result<(), ()> {
@@ -25,7 +24,7 @@ pub fn diode() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+    let mut ast = Ast::new();
     let source_map = ast
         .parse_from_and_print_errors(Path::new("tests/diode.va"), &source_map_allocator, true)
         .ok_or(())?;
@@ -42,16 +41,16 @@ pub fn linear() -> Result<(), ()> {
         .chain(std::io::stderr())
         .apply();
     let source_map_allocator = Bump::new();
-    mk_ast!(ast);
+
+    let mut ast = Ast::new();
     let source_map = ast
         .parse_from_and_print_errors(Path::new("tests/linear.va"), &source_map_allocator, true)
         .ok_or(())?;
 
     let hir = ast.lower_and_print_errors(source_map, true).ok_or(())?;
 
-    let module: SafeRange<ModuleId> = hir.full_range();
-    let module = &hir[module][0].contents;
-    let mut ports = hir[module.port_list].iter();
+    let module = &hir.modules[0].contents;
+    let mut ports = hir[module.port_list.clone()].iter();
     let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);

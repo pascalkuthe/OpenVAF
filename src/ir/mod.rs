@@ -42,7 +42,7 @@ pub use ids::StringExpressionId;
 #[doc(no_inline)]
 pub use ids::VariableId;
 
-use crate::compact_arena::{Idx16, Idx8, SafeRange};
+use crate::ir::ids::IdRange;
 use crate::symbol::Ident;
 use crate::Span;
 use bitflags::_core::fmt::Debug;
@@ -58,97 +58,8 @@ pub mod hir;
 
 pub mod mir;
 
-/// Allows adding elements to IRS
-///
-/// # Examples
-///
-/// ## Adding an attriubte to an ast and reading it using its ID
-///
-/// ```
-/// # use OpenVAF::ir::{Node, Attribute};
-/// # use OpenVAF::ir::ast::Statement;
-/// # use OpenVAF::symbol::Ident;
-/// # use open_vaf::symbol::Ident;
-/// # use open_vaf::ir::Attribute;
-/// mk_ast!(ast);
-/// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
-/// assert_eq!(ast[id].name,Ident::from_str("foo"));
-///
-/// ```
-///
-///
-pub trait Push<T> {
-    type Key;
-    fn push(&mut self, value: T) -> Self::Key;
-}
-
-/// Allows creating ranges of IDs for an IR. [`SafeRange`](crate::compact_arena::SafeRange)s are returned instead of normal [`Range`](std::ops::Range)s.
-/// See the documentation of [`SafeRange`](crate::compact_arena::SafeRange) for more details.
-pub trait SafeRangeCreation<Key: Copy + Clone> {
-    ///  Creates a range from `start` to the last Element of this type
-    ///
-    /// # Examples
-    /// ```
-    /// # use OpenVAF::ir::{Node, Attribute};
-    /// # use OpenVAF::ir::ast::Statement;
-    /// # use OpenVAF::symbol::Ident;
-    /// # use open_vaf::ir::Attribute;
-    /// # use open_vaf::symbol::Ident;
-    /// mk_ast!(ast);
-    /// let foo = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
-    /// let bar = ast.push(Attribute{name: Ident::from_str("bar"),value:None });
-    /// let range = ast.range_to_end(foo);
-    /// assert_eq!(bar,range.next());
-    /// assert_eq!(None,range.next());
-    ///
-    /// ```
-    fn range_to_end(&self, start: Key) -> SafeRange<Key>;
-
-    /// Extends a range to to the last Element of this type: `x..y`-> `x..end`
-    #[inline]
-    fn extend_range_to_end(&self, range: SafeRange<Key>) -> SafeRange<Key> {
-        //this is save since the result will be a SafeRange once again
-        self.range_to_end(unsafe { range.get_start() })
-    }
-    /// Creates an empty range (start = end) starting at the last Element of the IR
-    fn empty_range_from_end(&self) -> SafeRange<Key>;
-
-    /// Returns a range over all elements of the IR
-    ///
-    /// # Examples
-    /// ```
-    /// # use OpenVAF::ir::{Node, Attribute};
-    /// # use OpenVAF::ir::ast::Statement;
-    /// # use OpenVAF::symbol::Ident;
-    /// # use open_vaf::ir::Attribute;
-    /// # use open_vaf::symbol::Ident;
-    /// mk_ast!(ast);
-    /// let id = ast.push(Attribute{name: Ident::from_str("foo"),value:None });
-    /// let range = ast.full_range();
-    /// assert_eq!(id,range.next());
-    /// assert_eq!(None,range.next());
-    ///
-    /// ```
-    fn full_range(&self) -> SafeRange<Key>;
-}
-
-/// A trait implemented for all id types to abstract over writing to unitized memory (the = operator is not save since drop will be called)
-/// This is an unsafe trait since extra care has to be taken when using this during the folding process for types that implement drop:
-/// * This has to be called for every ID that will be assumed initialized later (even when errors occur)
-/// * This may cause memory leaks if this is used to write using an old id
-pub(crate) trait UnsafeWrite<Idx> {
-    type Data;
-    unsafe fn write_unsafe(&mut self, idx: Idx, val: Self::Data);
-}
-
-/// For most types in this crate drop is not implemented. For those types `UnsafeWrite` is always save.
-/// This crate is implimented for those types.
-pub(crate) trait Write<Idx> {
-    //This should be !Drop but negative trait bounds aren't implemented yet.
-    // While there could be drop implementations for copy types that's very rarely the case (not at all in this crate) so this will do for now
-    type Data: Copy;
-    fn write(&mut self, idx: Idx, val: Self::Data);
-}
+#[macro_use]
+pub mod cfg;
 
 /// A Node of an IR. Contains a Span an addition to whatever that node holds
 #[derive(Clone, Copy, Debug)]
@@ -181,24 +92,73 @@ impl<T: Clone> Node<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Attribute<'tag> {
+pub struct Attribute {
     pub name: Ident,
-    pub value: Option<ExpressionId<'tag>>,
+    pub value: Option<ExpressionId>,
 }
 
-pub type Attributes<'ast> = SafeRange<AttributeId<'ast>>;
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Attributes {
+    pub start: AttributeId,
+    pub len: u8,
+}
+
+impl Attributes {
+    pub fn new(start: AttributeId, end: AttributeId) -> Self {
+        let len = end.index() - start.index();
+        assert!(
+            len < u8::MAX as usize,
+            "Only up to 255 attributes per object are supported"
+        );
+        Self {
+            start,
+            len: len as u8,
+        }
+    }
+
+    #[inline]
+    pub fn as_range(&self) -> Range<AttributeId> {
+        self.start..self.end()
+    }
+
+    #[inline]
+    pub fn end(&self) -> AttributeId {
+        self.start + (self.len as usize)
+    }
+    pub const fn empty() -> Self {
+        Self {
+            start: AttributeId::from_raw_unchecked(0),
+            len: 0,
+        }
+    }
+}
+
+impl IntoIterator for Attributes {
+    type Item = AttributeId;
+    type IntoIter = IdRange<AttributeId>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IdRange(self.as_range())
+    }
+}
+
+impl Default for Attributes {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
 
 /// A special type of IR Node. Contains a Span and attributes in addition to whatever that node holds
 #[derive(Clone, Copy, Debug)]
-pub struct AttributeNode<'ast, T> {
-    pub attributes: Attributes<'ast>,
+pub struct AttributeNode<T> {
+    pub attributes: Attributes,
     pub source: Span,
     pub contents: T,
 }
 
-impl<'tag, T: Copy + Clone> AttributeNode<'tag, T> {
+impl<T: Copy + Clone> AttributeNode<T> {
     #[inline]
-    pub fn copy_with<X: Clone>(self, f: impl FnOnce(T) -> X) -> AttributeNode<'tag, X> {
+    pub fn copy_with<X: Clone>(self, f: impl FnOnce(T) -> X) -> AttributeNode<X> {
         AttributeNode {
             attributes: self.attributes,
             source: self.source,
@@ -207,7 +167,7 @@ impl<'tag, T: Copy + Clone> AttributeNode<'tag, T> {
     }
 
     #[inline]
-    pub fn copy_as<X: Clone>(self, contents: X) -> AttributeNode<'tag, X> {
+    pub fn copy_as<X: Clone>(self, contents: X) -> AttributeNode<X> {
         AttributeNode {
             attributes: self.attributes,
             source: self.source,
@@ -215,9 +175,9 @@ impl<'tag, T: Copy + Clone> AttributeNode<'tag, T> {
         }
     }
 }
-impl<'tag, T> AttributeNode<'tag, T> {
+impl<T> AttributeNode<T> {
     #[inline]
-    pub fn map_with<X>(&self, f: impl FnOnce(&T) -> X) -> AttributeNode<'tag, X> {
+    pub fn map_with<X>(&self, f: impl FnOnce(&T) -> X) -> AttributeNode<X> {
         AttributeNode {
             attributes: self.attributes,
             source: self.source,
@@ -226,7 +186,7 @@ impl<'tag, T> AttributeNode<'tag, T> {
     }
 
     #[inline]
-    pub fn map<X>(&self, contents: X) -> AttributeNode<'tag, X> {
+    pub fn map<X>(&self, contents: X) -> AttributeNode<X> {
         AttributeNode {
             attributes: self.attributes,
             source: self.source,
@@ -307,6 +267,13 @@ pub enum SystemFunctionCall<RealExpr, StrExpr, Port, Parameter> {
     ParameterGiven(Parameter),
 }
 
+#[derive(Clone, Debug, Copy)]
+pub enum DisplayTaskKind {
+    // stprob, display and write (write does not have a newline after are equivalent. write
+    Convergence(bool),
+    Debug,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericalParameterRangeBound<T> {
     pub inclusive: bool,
@@ -352,6 +319,12 @@ pub enum NumericalParameterRangeExclude<T> {
     Value(T),
     Range(Range<NumericalParameterRangeBound<T>>),
 }
+
+pub enum FunctionType {
+    Real,
+    Integer,
+}
+
 impl<T: Copy> NumericalParameterRangeExclude<T> {
     pub fn clone_with<N>(&self, mut f: impl FnMut(T) -> N) -> NumericalParameterRangeExclude<N> {
         match self {

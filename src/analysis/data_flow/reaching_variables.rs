@@ -7,142 +7,62 @@
 //  * *******************************************************************************************
 
 use crate::analysis::data_flow::framework::{
-    Analysis, DataFlowGraph, Engine, ForwardEngine, GenKillAnalysis, GenKillEngine, GenKillSet,
+    DataFlowGraph, Engine, Forward, GenKillAnalysis, GenKillEngine, GenKillSet,
 };
 use crate::analysis::DependencyHandler;
-use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
+
+use crate::cfg::*;
+use crate::data_structures::BitSet;
 use crate::ir::hir::DisciplineAccess;
-use crate::ir::mir::control_flow_graph::{BasicBlockId, Terminator};
-use crate::ir::mir::ControlFlowGraph;
 use crate::ir::{
-    BranchId, ParameterId, PortId, RealExpressionId, SafeRangeCreation, StatementId,
-    StringExpressionId, SystemFunctionCall, VariableId,
+    BranchId, ParameterId, PortId, RealExpressionId, StatementId, StringExpressionId,
+    SystemFunctionCall, VariableId,
 };
 use crate::mir::Mir;
 use crate::mir::Statement;
-use fixedbitset::FixedBitSet as BitSet;
+use crate::ControlFlowGraph;
+use index_vec::*;
 
-pub struct UseDefGraph<'mir, 'cfg> {
-    pub uses: TinyHeapArena<'mir, DefiningSet>,
-    pub terminator_uses: TinyHeapArena<'cfg, DefiningSet>,
-    pub variables: TinyHeapArena<'mir, DefiningSet>,
-    pub statement_count: u16,
+#[derive(Debug, Clone)]
+pub struct UseDefGraph {
+    pub stmt_use_def_chains: IndexVec<StatementId, BitSet<StatementId>>,
+    pub terminator_use_def_chains: IndexVec<BasicBlockId, BitSet<StatementId>>,
+    pub assignments: IndexVec<VariableId, BitSet<StatementId>>,
 }
 
-impl<'mir, 'cfg> UseDefGraph<'mir, 'cfg> {
-    pub fn total_def_count(&self) -> u16 {
-        self.statement_count
-    }
-    pub fn new(mir: &Mir<'mir>, cfg: &ControlFlowGraph<'cfg, 'mir>) -> Self {
-        let statement_count = SafeRangeCreation::<StatementId>::full_range(mir)
-            .unwrap()
-            .len();
+impl UseDefGraph {
+    pub fn new(mir: &Mir, cfg: &ControlFlowGraph) -> Self {
+        let statement_count = mir.statements.len();
+        let var_count = mir.variables.len();
 
-        let var_count = SafeRangeCreation::<VariableId>::full_range(mir)
-            .unwrap()
-            .len();
-
-        let base_set = BitSet::with_capacity(statement_count as usize);
-        unsafe {
-            // This iss save since we are creating associated data
-            Self {
-                uses: TinyHeapArena::new_with(invariant_lifetime(), statement_count, || {
-                    DefiningSet(base_set.clone())
-                }),
-
-                variables: TinyHeapArena::new_with(invariant_lifetime(), var_count, || {
-                    DefiningSet(base_set.clone())
-                }),
-
-                terminator_uses: TinyHeapArena::new_with_default_values(
-                    invariant_lifetime(),
-                    cfg.block_count(),
-                ),
-
-                statement_count,
-            }
-        }
-    }
-    pub fn clone_for_subcfg<'newtag>(
-        &self,
-        _: &ControlFlowGraph<'mir, 'newtag>,
-    ) -> UseDefGraph<'mir, 'newtag> {
-        let mut uses = unsafe { TinyHeapArena::new(invariant_lifetime(), self.uses.len()) };
-        self.uses.clone_into(&mut uses);
-        let mut terminator_uses =
-            unsafe { TinyHeapArena::new(invariant_lifetime(), self.terminator_uses.len()) };
-        self.terminator_uses.clone_into(&mut terminator_uses);
-        let mut variables =
-            unsafe { TinyHeapArena::new(invariant_lifetime(), self.variables.len()) };
-        self.variables.clone_into(&mut variables);
-        UseDefGraph {
-            uses,
-            terminator_uses,
-            variables,
-            statement_count: self.statement_count,
+        Self {
+            stmt_use_def_chains: index_vec![BitSet::new_empty(statement_count.into());statement_count],
+            terminator_use_def_chains: index_vec![BitSet::new_empty(statement_count.into());cfg.blocks.len()],
+            assignments: index_vec![BitSet::new_empty(statement_count.into());var_count],
         }
     }
 
-    pub fn reborrow_for_subcfg<'newtag, 'lt>(
-        &'lt self,
-        cfg: &ControlFlowGraph<'newtag, 'mir>,
-    ) -> &'lt UseDefGraph<'mir, 'newtag> {
-        assert!(self.terminator_uses.len() <= cfg.block_count());
-        unsafe { std::mem::transmute(self) }
+    pub fn stmt_count(&self) -> u32 {
+        self.stmt_use_def_chains.len() as u32
     }
 
-    pub fn get_assignments(&self, var: VariableId<'mir>) -> &DefiningSet {
-        &self.variables[var.unwrap()]
-    }
-
-    pub fn get_reachable_definitions(&self, stmt: StatementId<'mir>) -> &DefiningSet {
-        &self.uses[stmt.unwrap()]
-    }
-
-    fn get_assignments_mut(&mut self, var: VariableId<'mir>) -> &mut DefiningSet {
-        &mut self.variables[var.unwrap()]
-    }
-
-    fn get_reachable_definitions_mut(&mut self, stmt: StatementId<'mir>) -> &mut DefiningSet {
-        &mut self.uses[stmt.unwrap()]
+    pub fn len_stmd_idx(&self) -> StatementId {
+        self.stmt_use_def_chains.len_idx()
     }
 }
 
-// This is just a thing wrapper around BitSet taking care of Id conversions
-// For operations that don't require conversion just use the bitset directly
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Clone)]
-pub struct DefiningSet(pub BitSet);
-
-impl DefiningSet {
-    pub fn contains<'mir>(&self, id: StatementId) -> bool {
-        self.0.contains(id.as_usize())
-    }
-
-    pub fn insert<'mir>(&mut self, id: StatementId) {
-        self.0.insert(id.unwrap().index() as usize)
-    }
-
-    pub fn put(&mut self, id: StatementId) -> bool {
-        self.0.put(id.unwrap().index() as usize)
-    }
-
-    pub fn set(&mut self, id: StatementId, value: bool) {
-        self.0.set(id.as_usize(), value)
-    }
+pub struct ReachableDefinitionsAnalysis<'lt> {
+    graph: UseDefGraph,
+    mir: &'lt Mir,
 }
 
-pub struct ReachableDefinitionsAnalysis<'lt, 'mir, 'cfg> {
-    graph: UseDefGraph<'mir, 'cfg>,
-    mir: &'lt Mir<'mir>,
-}
-
-impl<'lt, 'mir: 'lt, 'cfg: 'lt> ReachableDefinitionsAnalysis<'lt, 'mir, 'cfg> {
-    pub fn new(mir: &'lt Mir<'mir>, cfg: &ControlFlowGraph<'cfg, 'mir>) -> Self {
+impl<'lt> ReachableDefinitionsAnalysis<'lt> {
+    pub fn new(mir: &'lt Mir, cfg: &ControlFlowGraph) -> Self {
         let mut graph = UseDefGraph::new(mir, cfg);
 
-        for stmt in SafeRangeCreation::<StatementId>::full_range(mir) {
-            match mir[stmt] {
-                Statement::Assignment(_, var, val) => graph.get_assignments_mut(var).insert(stmt),
+        for (id, stmt) in mir.statements.iter_enumerated() {
+            match stmt {
+                Statement::Assignment(_, var, _) => graph.assignments[*var].insert(id),
 
                 Statement::Contribute(_, _, _, _) => (),
             }
@@ -151,20 +71,18 @@ impl<'lt, 'mir: 'lt, 'cfg: 'lt> ReachableDefinitionsAnalysis<'lt, 'mir, 'cfg> {
         Self { graph, mir }
     }
 
-    pub fn run(
-        mut self,
-        cfg: &mut ControlFlowGraph<'cfg, 'mir>,
-    ) -> (UseDefGraph<'mir, 'cfg>, DataFlowGraph<'cfg>) {
-        let mut dependency_graph = self
-            .engine_builder(cfg)
-            .engine(cfg, (), ())
-            .iterate_to_fixpoint();
+    pub fn run(mut self, cfg: &ControlFlowGraph) -> (UseDefGraph, DataFlowGraph<StatementId>) {
+        let mut genkill_engine = GenKillEngine::new(cfg, &mut self);
+        let engine = Engine::new(cfg, &mut genkill_engine);
+        let dfg = engine.iterate_to_fixpoint();
 
-        let mut reachable = BitSet::with_capacity(self.graph.total_def_count() as usize);
+        let mut reachable = BitSet::new_empty(self.graph.stmt_use_def_chains.len_idx());
 
-        cfg.for_all_blocks(|block| {
-            reachable.union_with(&dependency_graph.in_sets[block]);
-            for stmt in cfg[block].statements.iter().copied() {
+        for (id, bb) in cfg.blocks.iter_enumerated() {
+            reachable.union_with(&dfg.in_sets[id]);
+            for stmt in bb.statements.iter().copied() {
+
+
                 match self.mir[stmt] {
                     Statement::Assignment(_, var, val) => {
                         self.mir.track_expression(
@@ -174,13 +92,11 @@ impl<'lt, 'mir: 'lt, 'cfg: 'lt> ReachableDefinitionsAnalysis<'lt, 'mir, 'cfg> {
                                 use_stmt: stmt,
                             },
                         );
-                        self.graph
-                            .get_reachable_definitions_mut(stmt)
-                            .0
-                            .intersect_with(&reachable);
 
-                        reachable.difference_with(&self.graph.get_assignments(var).0);
-                        reachable.insert(stmt.unwrap().index() as usize);
+                        self.graph.stmt_use_def_chains[stmt].intersect_with(&reachable);
+
+                        reachable.difference_with(&self.graph.assignments[var]);
+                        reachable.insert(stmt);
                     }
 
                     Statement::Contribute(_, _, _, val) => {
@@ -191,57 +107,50 @@ impl<'lt, 'mir: 'lt, 'cfg: 'lt> ReachableDefinitionsAnalysis<'lt, 'mir, 'cfg> {
                                 use_stmt: stmt,
                             },
                         );
-                        self.graph
-                            .get_reachable_definitions_mut(stmt)
-                            .0
-                            .intersect_with(&reachable);
+                        self.graph.stmt_use_def_chains[stmt].intersect_with(&reachable);
 
                         // branches are currently not tracked
                     }
                 }
             }
 
-            if let Terminator::Split { condition, .. } = cfg[block].terminator {
-                self.graph.terminator_uses[block]
-                    .0
-                    .grow(self.graph.statement_count as usize);
+            if let Terminator::Split { condition, .. } = bb.terminator {
+                self.graph.terminator_use_def_chains[id]
+                    .grow(self.graph.stmt_use_def_chains.len_idx());
 
                 self.mir.track_integer_expression(
                     condition,
                     &mut UseDefTerminatorBuilder {
                         graph: &mut self.graph,
-                        use_terminator_block: block,
+                        use_terminator_block: id,
                     },
                 );
 
-                self.graph.terminator_uses[block]
-                    .0
-                    .intersect_with(&reachable);
+                self.graph.terminator_use_def_chains[id].intersect_with(&reachable);
             }
-            reachable.clear();
-        });
 
-        (self.graph, dependency_graph)
+            reachable.clear();
+        }
+
+        (self.graph, dfg)
     }
 }
 
-impl<'lt: 'engine, 'cfg: 'lt, 'mir: 'lt, 'engine> GenKillAnalysis<'engine, 'cfg, 'mir>
-    for ReachableDefinitionsAnalysis<'lt, 'mir, 'cfg>
-{
-    type Engine = ForwardEngine<'engine, 'cfg, 'mir, GenKillEngine<'engine, 'cfg, Self>>;
-    type EngineArgs = ();
+impl<'lt> GenKillAnalysis<'_> for ReachableDefinitionsAnalysis<'lt> {
+    type SetType = StatementId;
+    type Direction = Forward;
 
     fn transfer_function(
         &mut self,
-        gen_kill_set: &mut GenKillSet,
-        basic_bock: BasicBlockId<'cfg>,
-        cfg: &mut ControlFlowGraph<'cfg, 'mir>,
+        gen_kill_set: &mut GenKillSet<StatementId>,
+        basic_bock: BasicBlockId,
+        cfg: &ControlFlowGraph,
     ) {
         for stmt in cfg[basic_bock].statements.iter().copied() {
             match self.mir[stmt] {
-                Statement::Assignment(_, var, val) => {
-                    gen_kill_set.kill_all(&self.graph.get_assignments(var).0);
-                    gen_kill_set.gen_statement(stmt);
+                Statement::Assignment(_, var, _) => {
+                    gen_kill_set.kill_all(&self.graph.assignments[var]);
+                    gen_kill_set.gen(stmt);
                 }
 
                 // branches are currently not tracked
@@ -250,73 +159,202 @@ impl<'lt: 'engine, 'cfg: 'lt, 'mir: 'lt, 'engine> GenKillAnalysis<'engine, 'cfg,
         }
     }
 
-    fn set_size(&self) -> usize {
-        self.graph.statement_count as usize
-    }
-
-    fn engine(
-        analysis: &'engine mut GenKillEngine<'engine, 'cfg, Self>,
-        cfg: &'engine mut ControlFlowGraph<'cfg, 'mir>,
-        _: (),
-        _: (),
-    ) -> Self::Engine {
-        ForwardEngine::new_with_empty_dfg(cfg, analysis, ())
+    fn max_idx(&self) -> Self::SetType {
+        self.graph.len_stmd_idx()
     }
 }
 
-struct UseDefBuilder<'lt, 'mir, 'cfg> {
-    graph: &'lt mut UseDefGraph<'mir, 'cfg>,
-    use_stmt: StatementId<'mir>,
+struct UseDefBuilder<'lt> {
+    graph: &'lt mut UseDefGraph,
+    use_stmt: StatementId,
 }
 
-impl<'lt, 'mir, 'cfg> DependencyHandler<'mir> for UseDefBuilder<'lt, 'mir, 'cfg> {
-    fn handle_variable_reference(&mut self, var: VariableId<'mir>) {
-        self.graph.uses[self.use_stmt.unwrap()]
-            .0
-            .union_with(&self.graph.variables[var.unwrap()].0)
+impl<'lt> DependencyHandler for UseDefBuilder<'lt> {
+    fn handle_variable_reference(&mut self, var: VariableId) {
+        self.graph.stmt_use_def_chains[self.use_stmt].union_with(&self.graph.assignments[var])
         // todo do intersection here for stateful lint (worse performance but should be okay)
     }
 
-    fn handle_parameter_reference(&mut self, _: ParameterId<'mir>) {}
+    fn handle_parameter_reference(&mut self, _: ParameterId) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>, _: u8) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId, _: u8) {}
 
     fn handle_system_function_call(
         &mut self,
-        _: SystemFunctionCall<
-            RealExpressionId<'mir>,
-            StringExpressionId<'mir>,
-            PortId<'mir>,
-            ParameterId<'mir>,
-        >,
+        _: SystemFunctionCall<RealExpressionId, StringExpressionId, PortId, ParameterId>,
     ) {
     }
 }
 
-struct UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
-    graph: &'lt mut UseDefGraph<'mir, 'cfg>,
-    use_terminator_block: BasicBlockId<'cfg>,
+struct UseDefTerminatorBuilder<'lt> {
+    graph: &'lt mut UseDefGraph,
+    use_terminator_block: BasicBlockId,
 }
 
-impl<'lt, 'mir, 'cfg> DependencyHandler<'mir> for UseDefTerminatorBuilder<'lt, 'mir, 'cfg> {
-    fn handle_variable_reference(&mut self, var: VariableId<'mir>) {
-        self.graph.terminator_uses[self.use_terminator_block]
-            .0
-            .union_with(&self.graph.variables[var.unwrap()].0);
+impl<'lt> DependencyHandler for UseDefTerminatorBuilder<'lt> {
+    fn handle_variable_reference(&mut self, var: VariableId) {
+        self.graph.terminator_use_def_chains[self.use_terminator_block]
+            .union_with(&self.graph.assignments[var]);
     }
 
-    fn handle_parameter_reference(&mut self, _: ParameterId<'mir>) {}
+    fn handle_parameter_reference(&mut self, _: ParameterId) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'mir>, _: u8) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId, _: u8) {}
 
     fn handle_system_function_call(
         &mut self,
-        _: SystemFunctionCall<
-            RealExpressionId<'mir>,
-            StringExpressionId<'mir>,
-            PortId<'mir>,
-            ParameterId<'mir>,
-        >,
+        _: SystemFunctionCall<RealExpressionId, StringExpressionId, PortId, ParameterId>,
     ) {
+    }
+}
+
+#[cfg(feature = "graph_debug")]
+mod print {
+    use super::*;
+    use rustc_ap_graphviz as dot;
+    use rustc_ap_graphviz::LabelText::{EscStr, LabelStr};
+    use rustc_ap_graphviz::{Edges, GraphWalk, Id, LabelText, Labeller, Nodes};
+    use rustc_hash::FxHashSet;
+    use std::borrow::Cow;
+    use std::io::Write;
+
+    impl ControlFlowGraph {
+        pub fn render_data_dependence_to<W: Write>(&self, write: &mut W, udg: &UseDefGraph) {
+            dot::render(&DataDependenceGraph(self, udg), write).expect("Rendering failed")
+        }
+    }
+
+    struct DataDependenceGraph<'lt>(&'lt ControlFlowGraph, &'lt UseDefGraph);
+
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    enum FlowOrDependence {
+        Flow,
+        Dependence,
+    }
+
+    impl<'a> dot::Labeller<'a> for DataDependenceGraph<'a> {
+        type Node = BasicBlockId;
+        type Edge = (FlowOrDependence, BasicBlockId, BasicBlockId);
+
+        fn graph_id(&'a self) -> Id<'a> {
+            dot::Id::new("ControlFlowGraph").unwrap()
+        }
+
+        fn node_id(&'a self, n: &Self::Node) -> Id<'a> {
+            dot::Id::new(format!("BB_{}", n.index())).unwrap()
+        }
+
+        fn node_label(&'a self, &n: &Self::Node) -> LabelText<'a> {
+            match self.0.blocks[n].terminator {
+                Terminator::End => EscStr(Cow::Owned(format!(
+                    "BB_{}: {} Statements\n END",
+                    n.index(),
+                    self.0.blocks[n].statements.len(),
+                ))),
+                Terminator::Goto(_) => LabelStr(Cow::Owned(format!(
+                    "BB_{}: {} Statements",
+                    n.index(),
+                    self.0.blocks[n].statements.len(),
+                ))),
+                Terminator::Split {
+                    condition, merge, ..
+                } => LabelStr(Cow::Owned(format!(
+                    "BB_{}: {} Statements\nSplit at {:?}\nMerge at BB_{}",
+                    n.index(),
+                    self.0.blocks[n].statements.len(),
+                    condition,
+                    merge.index(),
+                ))),
+            }
+        }
+        fn edge_label(
+            &'a self,
+            &(edge_type, start, dst): &(FlowOrDependence, BasicBlockId, BasicBlockId),
+        ) -> LabelText<'a> {
+            match edge_type {
+                FlowOrDependence::Flow => match self.0[start].terminator {
+                    Terminator::Goto(_) => LabelStr(Cow::Borrowed("GOTO")),
+                    Terminator::End => LabelStr(Cow::Borrowed("ILLEGAL")),
+                    Terminator::Split {
+                        condition,
+                        true_block,
+                        false_block,
+                        merge,
+                    } => {
+                        let true_or_false = if true_block == dst {
+                            "TRUE"
+                        } else if false_block == dst {
+                            "FALSE"
+                        } else {
+                            "ILLEGAL"
+                        };
+                        LabelStr(Cow::Borrowed(true_or_false))
+                    }
+                },
+
+                FlowOrDependence::Dependence => LabelStr(Cow::Borrowed("Data dependence")),
+            }
+        }
+    }
+
+    impl<'a> dot::GraphWalk<'a> for DataDependenceGraph<'a> {
+        type Node = BasicBlockId;
+        type Edge = (FlowOrDependence, BasicBlockId, BasicBlockId);
+
+        fn nodes(&'a self) -> Nodes<'a, Self::Node> {
+            Cow::Owned(self.0.blocks.indices().collect())
+        }
+
+        fn edges(&'a self) -> Edges<'a, Self::Edge> {
+            let mut edges = Vec::new();
+            for (id, bb) in self.0.blocks.iter_enumerated() {
+                match bb.terminator {
+                    Terminator::Goto(dst) => edges.push((FlowOrDependence::Flow, id, dst)),
+                    Terminator::Split {
+                        condition,
+                        true_block,
+                        false_block,
+                        merge,
+                    } => {
+                        edges.push((FlowOrDependence::Flow, id, false_block));
+                        edges.push((FlowOrDependence::Flow, id, true_block));
+                    }
+                    Terminator::End => (),
+                }
+            }
+            let mut processed_data_dependencies = FxHashSet::with_capacity_and_hasher(
+                self.0.blocks.len() * self.0.blocks.len(),
+                Default::default(),
+            );
+
+            for (src, data_dependencies) in self.1.stmt_use_def_chains.iter_enumerated() {
+                let src_block = self.0.containing_block(src).unwrap();
+                for dst in data_dependencies.ones() {
+                    let dst_block = self.0.containing_block(dst).unwrap();
+                    if processed_data_dependencies.insert((src_block, dst_block)) {
+                        edges.push((FlowOrDependence::Dependence, src_block, dst_block));
+                    }
+                }
+            }
+
+            for (src, data_dependencies) in self.1.terminator_use_def_chains.iter_enumerated() {
+                for dst in data_dependencies.ones() {
+                    let dst_block = self.0.containing_block(dst).unwrap();
+                    if processed_data_dependencies.insert((src, dst_block)) {
+                        edges.push((FlowOrDependence::Dependence, src, dst_block));
+                    }
+                }
+            }
+
+            Cow::Owned(edges)
+        }
+
+        fn source(&'a self, edge: &Self::Edge) -> Self::Node {
+            edge.1
+        }
+
+        fn target(&'a self, edge: &Self::Edge) -> Self::Node {
+            edge.2
+        }
     }
 }

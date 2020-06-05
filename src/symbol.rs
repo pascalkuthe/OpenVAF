@@ -71,6 +71,7 @@ impl Ident {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     /// Maps a string to an identifier with a dummy span.
     pub fn from_str(string: &str) -> Ident {
         Self::new(Symbol::intern(string), DUMMY_SPAN)
@@ -127,6 +128,7 @@ impl SymbolIndex {
     pub fn as_usize(self) -> usize {
         self.0 as usize
     }
+
     pub fn as_u32(self) -> u32 {
         self.0
     }
@@ -244,7 +246,7 @@ pub mod keywords {
     pub const IMPLICIT_SOLVER: Symbol = Symbol(SymbolIndex(9));
 }
 mod statics {
-    use std::sync::Mutex;
+    use parking_lot::Mutex;
 
     use crate::symbol::keywords::*;
     use crate::symbol::Interner;
@@ -266,7 +268,7 @@ mod statics {
     }
     #[inline]
     pub(super) fn with_interner<T, F: FnOnce(&mut Interner) -> T>(f: F) -> T {
-        f(&mut *INTERNER.lock().unwrap())
+        f(&mut *INTERNER.lock())
     }
 }
 

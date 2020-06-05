@@ -6,46 +6,47 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::analysis::{DependencyHandler, DominatorTree};
-use crate::compact_arena::{invariant_lifetime, TinyHeapArena};
+use crate::analysis::DependencyHandler;
+
+use crate::cfg::{BasicBlock, BasicBlockId, Terminator};
 use crate::hir::Block;
 use crate::hir_lowering::error::{Error, Type, Warning, WarningType};
+use crate::hir_lowering::expression_semantic::{
+    AssignmentSchematicAnalysis, FunctionInline, SchematicAnalysis,
+};
 use crate::hir_lowering::HirToMirFold;
 use crate::ir::hir::DisciplineAccess;
-use crate::ir::mir::{ControlFlowGraph, ExpressionId, Statement};
+use crate::ir::mir::{ExpressionId, Statement};
 use crate::ir::{BranchId, Node, ParameterId, VariableId};
-use crate::ir::{PortId, Push, RealExpressionId, StringExpressionId, SystemFunctionCall};
-use crate::mir::control_flow_graph::{BasicBlock, BasicBlockId, Terminator};
+use crate::ir::{PortId, RealExpressionId, StringExpressionId, SystemFunctionCall};
 use crate::mir::{IntegerExpression, VariableType};
-use crate::{hir, Span};
-use fixedbitset::FixedBitSet as BitSet;
+use crate::{hir, ControlFlowGraph, Span};
+use index_vec::{IndexVec, IdxSliceIndex};
 use rustc_hash::FxHashSet;
 
-impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
+impl<'lt> HirToMirFold<'lt> {
     /// Creates a controls flow Graph from a statement block
-    pub fn fold_block_into_cfg<'cfg>(
-        &mut self,
-        statements: Block<'tag>,
-    ) -> (ControlFlowGraph<'tag, 'tag>, DominatorTree<'tag>) {
-        let mut allocator = unsafe { TinyHeapArena::new(invariant_lifetime(), 512) };
+    pub fn fold_block_into_cfg(&mut self, statements: Block) -> ControlFlowGraph {
+        let mut blocks = IndexVec::new();
 
-        self.fold_block_internal(statements, Terminator::End, &mut allocator);
-        let mut cfg = ControlFlowGraph {
-            dead_blocks: BitSet::with_capacity(allocator.len() as usize),
-            blocks: allocator,
-        };
-        let dtree = DominatorTree::from_cfg(&cfg);
-        self.generate_derivatives(&mut cfg, &dtree);
-        (cfg, dtree)
+        self.fold_block_internal(statements, Terminator::End, &mut blocks);
+        for block in blocks.iter_mut(){
+            block.statements.reverse()
+        }
+        let mut cfg = ControlFlowGraph::new(blocks, &self.mir);
+
+        self.generate_derivatives(&mut cfg);
+        cfg.statement_owner_cache.stmt_count = self.mir.statements.len();
+        cfg
     }
 
-    fn fold_block_internal(
+    pub(super) fn fold_block_internal(
         &mut self,
-        mut statements: Block<'tag>,
-        terminator: Terminator<'tag, 'tag>,
-        allocator: &mut TinyHeapArena<'tag, BasicBlock<'tag, 'tag>>,
-    ) -> BasicBlockId<'tag> {
-        let mut current_block = allocator.add(BasicBlock {
+        mut statements: Block,
+        terminator: Terminator,
+        blocks: &mut IndexVec<BasicBlockId, BasicBlock>,
+    ) -> BasicBlockId {
+        let mut current_block = blocks.push(BasicBlock {
             statements: Vec::new(),
             terminator,
         });
@@ -53,128 +54,151 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
         while let Some(statement) = statements.next_back() {
             match self.hir[statement] {
                 hir::Statement::Condition(ref condition) => {
-                    allocator[current_block].statements.reverse();
-                    let terminator = Terminator::Merge(current_block);
+                    let terminator = Terminator::Goto(current_block);
 
                     let false_block = self.fold_block_internal(
-                        statements.enter_back(condition.contents.else_statement),
+                        statements.enter_back(&condition.contents.else_statements),
                         terminator,
-                        allocator,
+                        blocks,
                     );
 
                     let true_block = self.fold_block_internal(
-                        statements.enter_back(condition.contents.if_statements),
+                        statements.enter_back(&condition.contents.if_statements),
                         terminator,
-                        allocator,
+                        blocks,
                     );
 
-                    let terminator = if let Some(condition) =
-                        self.fold_read_only_integer_expression(condition.contents.condition)
+                    let merge = current_block;
+
+                    current_block = blocks.push(BasicBlock {
+                        statements: Vec::new(),
+                        terminator, //Placeholder
+                    });
+                    let mut inliner = FunctionInline::new(
+                        blocks,
+                        current_block,
+                        self.hir[condition.contents.condition].source,
+                    );
+                    if let Some(condition) =
+                        inliner.fold_integer_expression(self, condition.contents.condition)
                     {
-                        Terminator::Split {
+                        let tmp = inliner.current_block;
+                        blocks[current_block].terminator = Terminator::Split {
                             condition,
                             true_block,
                             false_block,
-                            merge: current_block,
-                        }
-                    } else {
-                        Terminator::Goto(current_block)
-                    };
+                            merge,
+                        };
+                        current_block = tmp;
+                    }
 
-                    current_block = allocator.add(BasicBlock {
-                        statements: Vec::new(),
-                        terminator,
-                    });
-
-                    statements.skip_backward(1); //skip start
+                    statements.next_back(); //skip start
                 }
 
-                hir::Statement::While(while_loop) => {
-                    allocator[current_block].statements.reverse();
+                hir::Statement::While(ref while_loop) => {
 
-                    let condition_block = allocator.add(BasicBlock {
+                    let condition_block = blocks.push(BasicBlock {
                         statements: Vec::new(),
                         terminator: Terminator::Goto(current_block), //just a placeholder
                     });
 
-                    let loop_body = self.fold_block_internal(
-                        statements.enter_back(while_loop.contents.body),
-                        Terminator::Merge(condition_block),
-                        allocator,
+                    let mut inliner = FunctionInline::new(
+                        blocks,
+                        condition_block,
+                        self.hir[while_loop.contents.condition].source,
                     );
 
-                    if let Some(mut condition) =
-                        self.fold_read_only_integer_expression(while_loop.contents.condition)
+                    if let Some(condition) =
+                        inliner.fold_integer_expression(self, while_loop.contents.condition)
                     {
-                        /*for attr in while_loop.attributes {
-                            if self.mir[attr].name.name == keywords::IMPLICIT_SOLVER {
-                                if let Some(name) = self.mir[attr].value {
-                                    if let ExpressionId::String(name) = name {
-                                        if let Some(name) = self.mir.try_string_constant_fold(
-                                            name,
-                                            &Constants::default(),
-                                            true,
-                                        ) {
-                                            let ident =
-                                                Symbol::intern(&self.mir.string_literals[name]);
-                                            condition = self.or_for_derivative(
-                                                condition,
-                                                ident,
-                                                &derived_inside_loop,
-                                            );
-                                            derived_inside_loop.clear();
-                                        } else {
-                                            self.errors.push(Error {
-                                                error_type:
-                                                    Type::ImplicitSolverDeltaIsNotAValidString,
-                                                source: self.mir[name].source,
-                                            });
-                                        }
+                        let false_block = current_block;
+
+                        let (loop_start, loop_body) = if condition_block != inliner.current_block {
+                            //TODO evaluate if we can handle these kinds of loops
+                            let loop_start = inliner.current_block;
+                            let loop_body = self.fold_block_internal(
+                                statements.enter_back(&while_loop.contents.body),
+                                Terminator::Goto(loop_start),
+                                blocks,
+                            );
+                            (loop_start, loop_body)
+                        } else {
+                            let loop_body = self.fold_block_internal(
+                                statements.enter_back(&while_loop.contents.body),
+                                Terminator::Goto(condition_block),
+                                blocks,
+                            );
+                            (condition_block, loop_body)
+                        };
+
+                        blocks[condition_block].terminator = Terminator::Split {
+                            condition,
+                            true_block: loop_body,
+                            false_block,
+                            merge: condition_block,
+                        };
+
+                        current_block = blocks.push(BasicBlock {
+                            statements: Vec::new(),
+                            terminator: Terminator::Goto(loop_start),
+                        });
+                    /*for attr in while_loop.attributes {
+                        if self.mir[attr].name.name == keywords::IMPLICIT_SOLVER {
+                            if let Some(name) = self.mir[attr].value {
+                                if let ExpressionId::String(name) = name {
+                                    if let Some(name) = self.mir.try_string_constant_fold(
+                                        name,
+                                        &Constants::default(),
+                                        true,
+                                    ) {
+                                        let ident =
+                                            Symbol::intern(&self.mir.string_literals[name]);
+                                        condition = self.or_for_derivative(
+                                            condition,
+                                            ident,
+                                            &derived_inside_loop,
+                                        );
+                                        derived_inside_loop.clear();
                                     } else {
                                         self.errors.push(Error {
-                                            error_type: Type::ImplicitSolverDeltaIsNotAValidString,
-                                            source: name.source(&self.mir),
+                                            error_type:
+                                                Type::ImplicitSolverDeltaIsNotAValidString,
+                                            source: self.mir[name].source,
                                         });
                                     }
                                 } else {
                                     self.errors.push(Error {
                                         error_type: Type::ImplicitSolverDeltaIsNotAValidString,
-                                        source: self.mir[attr].name.span,
+                                        source: name.source(&self.mir),
                                     });
                                 }
-
-                                break;
+                            } else {
+                                self.errors.push(Error {
+                                    error_type: Type::ImplicitSolverDeltaIsNotAValidString,
+                                    source: self.mir[attr].name.span,
+                                });
                             }
+
+                            break;
                         }
+                    }
 
-                        if !derived_inside_loop.is_empty() {
-                            self.mir.track_integer_expression(
-                                condition,
-                                &mut FxHashSet::default(),
-                                &mut ImplicitDerivativeCheck {
-                                    warnings: &mut self.warnings,
-                                    condition_span: self.mir[condition].source,
-                                    modified_variables: derived_inside_loop,
-                                },
-                            );
-                        }*/
-
-                        allocator[condition_block].terminator = Terminator::Split {
+                    if !derived_inside_loop.is_empty() {
+                        self.mir.track_integer_expression(
                             condition,
-                            true_block: loop_body,
-                            false_block: current_block,
-                            merge: condition_block,
-                        };
-
-                        current_block = allocator.add(BasicBlock {
-                            statements: Vec::new(),
-                            terminator: Terminator::Goto(condition_block),
-                        });
+                            &mut FxHashSet::default(),
+                            &mut ImplicitDerivativeCheck {
+                                warnings: &mut self.warnings,
+                                condition_span: self.mir[condition].source,
+                                modified_variables: derived_inside_loop,
+                            },
+                        );
+                    }*/
                     } else {
                         current_block = condition_block;
                     }
 
-                    statements.skip_backward(1); //skip start
+                    statements.next_back(); //skip start
                 }
 
                 hir::Statement::WhileStart { .. } => {
@@ -188,36 +212,59 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 hir::Statement::Assignment(attr, dst, val)
                     if matches!(self.mir[dst].contents.variable_type, VariableType::Real(..)) =>
                 {
-                    if let Some(value) = self.fold_real_assignment_expression(val, dst) {
-                        let stmt = self.mir.push(Statement::Assignment(
+                    // Function calls can insert basic blocks
+                    let tmp_block = current_block;
+                    let mut assignment_schematic = AssignmentSchematicAnalysis::new(
+                        dst,
+                        self.hir[val].source,
+                        blocks,
+                        current_block,
+                    );
+                    if let Some(value) = assignment_schematic.fold_real_expression(self, val) {
+                        let stmt = self.mir.statements.push(Statement::Assignment(
                             attr,
                             dst,
                             ExpressionId::Real(value),
                         ));
-
-                        allocator[current_block].statements.push(stmt);
+                        // Innefficent but way cleaner than anything else
+                        current_block = assignment_schematic.inliner.current_block;
+                        blocks[tmp_block].statements.push( stmt);
                     }
                 }
 
                 hir::Statement::Assignment(attr, dst, value) => {
-                    let value = match self.fold_assignment_expression(value, dst) {
+                    let tmp_block = current_block;
+                    let mut assignment_schematic = AssignmentSchematicAnalysis::new(
+                        dst,
+                        self.hir[value].source,
+                        blocks,
+                        current_block,
+                    );
+                    match assignment_schematic.fold_expression(self, value) {
                         Some(ExpressionId::Real(val)) => {
-                            let value = ExpressionId::Integer(self.mir.push(Node {
-                                source: self.mir[val].source,
-                                contents: IntegerExpression::RealCast(val),
-                            }));
-                            let stmt = self.mir.push(Statement::Assignment(attr, dst, value));
-
-                            allocator[current_block].statements.push(stmt);
-
-                            value
+                            let value =
+                                ExpressionId::Integer(self.mir.integer_expressions.push(Node {
+                                    source: self.mir[val].source,
+                                    contents: IntegerExpression::RealCast(val),
+                                }));
+                            let stmt = self
+                                .mir
+                                .statements
+                                .push(Statement::Assignment(attr, dst, value));
+                            // Innefficent but way cleaner than anything else
+                            current_block = assignment_schematic.inliner.current_block;
+                            blocks[tmp_block].statements.push( stmt);
                         }
 
                         Some(ExpressionId::Integer(val)) => {
                             let value = ExpressionId::Integer(val);
-                            let stmt = self.mir.push(Statement::Assignment(attr, dst, value));
-                            allocator[current_block].statements.push(stmt);
-                            value
+                            let stmt = self
+                                .mir
+                                .statements
+                                .push(Statement::Assignment(attr, dst, value));
+                            // Innefficent but way cleaner than anything else
+                            current_block = assignment_schematic.inliner.current_block;
+                            blocks[tmp_block].statements.push( stmt);
                         }
 
                         Some(ExpressionId::String(val)) => {
@@ -233,30 +280,30 @@ impl<'tag, 'lt> HirToMirFold<'tag, 'lt> {
                 }
 
                 hir::Statement::Contribute(attr, access, branch, value) => {
-                    if let Some(value) = self.fold_read_only_real_expression(value) {
-                        let stmt = self.mir.push(Statement::Contribute(
-                            attr,
-                            access.into(),
-                            branch,
-                            value,
-                        ));
-                        allocator[current_block].statements.push(stmt);
+                    let mut inliner =
+                        FunctionInline::new(blocks, current_block, self.hir[value].source);
+                    if let Some(value) = inliner.fold_real_expression(self, value) {
+                        current_block = inliner.current_block;
+                        let stmt = self
+                            .mir
+                            .statements
+                            .push(Statement::Contribute(attr, access, branch, value));
+                        blocks[current_block].statements.push(stmt);
                     }
                 }
                 hir::Statement::FunctionCall(_, _, _) => todo!("Function Calls"),
             }
         }
-        allocator[current_block].statements.reverse();
         current_block
     }
 }
-struct ImplicitDerivativeCheck<'tag, 'lt> {
-    warnings: &'lt mut Vec<Warning<'tag>>,
-    modified_variables: FxHashSet<VariableId<'tag>>,
+struct ImplicitDerivativeCheck<'lt> {
+    warnings: &'lt mut Vec<Warning>,
+    modified_variables: FxHashSet<VariableId>,
     condition_span: Span,
 }
-impl<'tag, 'lt> DependencyHandler<'tag> for ImplicitDerivativeCheck<'tag, 'lt> {
-    fn handle_variable_reference(&mut self, var: VariableId<'tag>) {
+impl<'lt> DependencyHandler for ImplicitDerivativeCheck<'lt> {
+    fn handle_variable_reference(&mut self, var: VariableId) {
         if self.modified_variables.remove(&var) {
             self.warnings.push(Warning {
                 error_type: WarningType::ImplicitDerivative(var),
@@ -265,18 +312,13 @@ impl<'tag, 'lt> DependencyHandler<'tag> for ImplicitDerivativeCheck<'tag, 'lt> {
         }
     }
 
-    fn handle_parameter_reference(&mut self, _: ParameterId<'tag>) {}
+    fn handle_parameter_reference(&mut self, _: ParameterId) {}
 
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId<'tag>, _: u8) {}
+    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId, _: u8) {}
 
     fn handle_system_function_call(
         &mut self,
-        _: SystemFunctionCall<
-            RealExpressionId<'_>,
-            StringExpressionId<'_>,
-            PortId<'_>,
-            ParameterId<'_>,
-        >,
+        _: SystemFunctionCall<RealExpressionId, StringExpressionId, PortId, ParameterId>,
     ) {
     }
 }

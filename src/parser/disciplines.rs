@@ -7,7 +7,7 @@
 //  * *******************************************************************************************
 
 use crate::ir::ast::Discipline;
-use crate::ir::{AttributeNode, Attributes, Push};
+use crate::ir::{AttributeNode, Attributes};
 use crate::parser::error::Type::{
     AttributeAlreadyDefined, DiscreteDisciplineHasNatures, UnexpectedToken,
 };
@@ -16,15 +16,15 @@ use crate::parser::{Error, Result};
 use crate::symbol_table::SymbolDeclaration;
 use crate::Parser;
 
-impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
-    pub fn parse_discipline(&mut self, attributes: Attributes<'ast>) -> Result {
+impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    pub fn parse_discipline(&mut self, attributes: Attributes) -> Result {
         let start = self.preprocessor.current_start();
         self.consume_lookahead();
         let name = self
             .parse_identifier(false)
             .map_err(|err| self.non_critical_errors.push(err));
 
-        self.expect(Token::Semicolon)?;
+        self.try_expect(Token::Semicolon);
 
         let mut potential_nature = None;
         let mut flow_nature = None;
@@ -34,8 +34,8 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
             Token::EndDiscipline,
             true,
             true,
-            |parser, token| {
-                match parser.next()? {
+            |parser| {
+                match parser.next_with_span()? {
                     (Token::Potential, _) if potential_nature.is_none() => {
                         potential_nature = Some(parser.parse_identifier(false)?);
                     }
@@ -45,7 +45,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     }
 
                     (Token::Domain, _) if continuous.is_none() => {
-                        continuous = match parser.next()? {
+                        continuous = match parser.next_with_span()? {
                             (Token::Continuous, _) => Some(true),
                             (Token::Discrete, _) => Some(false),
                             (_, source) => {
@@ -78,7 +78,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
                     }
                 }
                 parser.expect(Token::Semicolon)?;
-                Ok(())
+                Ok(true)
             },
         )?;
 
@@ -98,7 +98,7 @@ impl<'lt, 'ast, 'source_map> Parser<'lt, 'ast, 'source_map> {
         };
 
         if let Ok(name) = name {
-            let id = self.ast.push(AttributeNode {
+            let id = self.ast.disciplines.push(AttributeNode {
                 attributes,
                 source,
                 contents: Discipline {

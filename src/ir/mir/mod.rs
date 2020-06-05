@@ -8,219 +8,159 @@
  * *****************************************************************************************
  */
 
-pub mod control_flow_graph;
+use crate::ast::UnaryOperator;
 
-pub use control_flow_graph::ControlFlowGraph;
-
-use crate::analysis::DominatorTree;
-use crate::ast::{Function, UnaryOperator};
-use crate::compact_arena::{CompressedRange, NanoArena, SafeRange, StringArena, TinyArena};
 use crate::hir::{BranchDeclaration, Discipline, DisciplineAccess, Net, Port};
+use crate::ir::cfg::ControlFlowGraph;
 use crate::ir::hir::Hir;
-use crate::ir::ids::StringExpressionId;
+use crate::ir::ids::{IdRange, StringExpressionId};
 use crate::ir::*;
+use crate::literals::StringLiteral;
 use crate::symbol::Ident;
 use crate::Span;
-use bitflags::_core::mem::MaybeUninit;
+use index_vec::IndexVec;
 use rustc_hash::FxHashMap;
+use std::mem::take;
 use std::ops::Range;
-use std::ptr::NonNull;
 
-pub struct Mir<'tag> {
-    //TODO unsized
-    //TODO configure to use different arena sizes
-    //Declarations
-    parameters: TinyArena<'tag, AttributeNode<'tag, Parameter<'tag>>>,
-    //    nature: NanoArena<'tag,Nature>
-    branches: NanoArena<'tag, AttributeNode<'tag, BranchDeclaration<'tag>>>,
-    nets: TinyArena<'tag, AttributeNode<'tag, Net<'tag>>>,
-    ports: NanoArena<'tag, Port<'tag>>,
-    variables: TinyArena<'tag, AttributeNode<'tag, Variable<'tag>>>,
-    modules: NanoArena<'tag, AttributeNode<'tag, Module<'tag>>>,
-    functions: NanoArena<'tag, AttributeNode<'tag, Function<'tag>>>,
-    disciplines: NanoArena<'tag, AttributeNode<'tag, Discipline<'tag>>>,
-    natures: NanoArena<'tag, AttributeNode<'tag, Nature<'tag>>>,
-    real_expressions: TinyArena<'tag, Node<RealExpression<'tag>>>,
-    integer_expressions: TinyArena<'tag, Node<IntegerExpression<'tag>>>,
-    string_expressions: NanoArena<'tag, Node<StringExpression<'tag>>>,
-    attributes: TinyArena<'tag, Attribute<'tag>>,
-    statements: TinyArena<'tag, Statement<'tag>>,
-    pub(crate) string_literals: StringArena<'tag>,
+pub struct Mir {
+    pub branches: IndexVec<BranchId, AttributeNode<BranchDeclaration>>,
+    pub nets: IndexVec<NetId, AttributeNode<Net>>,
+    pub ports: IndexVec<PortId, Port>,
+    pub disciplines: IndexVec<DisciplineId, AttributeNode<Discipline>>,
+
+    // The only thing that changes about these types is that type checking happens
+    pub modules: IndexVec<ModuleId, AttributeNode<Module>>,
+    pub parameters: IndexVec<ParameterId, AttributeNode<Parameter>>,
+    pub variables: IndexVec<VariableId, AttributeNode<Variable>>,
+    pub natures: IndexVec<NatureId, AttributeNode<Nature>>,
+    pub attributes: IndexVec<AttributeId, Attribute>,
+
+    // Expressions
+    pub real_expressions: IndexVec<RealExpressionId, Node<RealExpression>>,
+    pub integer_expressions: IndexVec<IntegerExpressionId, Node<IntegerExpression>>,
+    pub string_expressions: IndexVec<StringExpressionId, Node<StringExpression>>,
+
+    // Statements
+    pub statements: IndexVec<StatementId, Statement>,
 }
 
-impl<'tag> Mir<'tag> {
+impl Mir {
     /// # Safety
     /// You should never call this yourself
-    pub(crate) unsafe fn partial_initalize<'lt>(hir: &'lt mut Hir<'tag>) -> Box<Self> {
-        let layout = std::alloc::Layout::new::<Self>();
-        #[allow(clippy::cast_ptr_alignment)]
-        //the ptr cast below has the right alignment since we are allocation using the right layout
-        let mut res: NonNull<Self> = NonNull::new(std::alloc::alloc(layout) as *mut Self)
-            .unwrap_or_else(|| std::alloc::handle_alloc_error(layout));
-        NanoArena::copy_to(&mut res.as_mut().branches, &hir.branches);
-        TinyArena::copy_to(&mut res.as_mut().nets, &hir.nets);
-        NanoArena::copy_to(&mut res.as_mut().ports, &hir.ports);
-        NanoArena::copy_to(&mut res.as_mut().disciplines, &hir.disciplines);
+    pub(crate) fn initalize(hir: &mut Hir) -> Self {
+        Self {
+            // Nothing about these changes during HIR lowering we can just copy
+            branches: take(&mut hir.branches),
+            nets: take(&mut hir.nets),
+            ports: take(&mut hir.ports),
+            disciplines: take(&mut hir.disciplines),
 
-        NanoArena::init(&mut res.as_mut().modules);
-        NanoArena::init_from(&mut res.as_mut().natures, &hir.natures);
-        TinyArena::init_from(&mut res.as_mut().parameters, &hir.parameters);
-        TinyArena::init_from(&mut res.as_mut().variables, &hir.variables);
-
-        NanoArena::move_to(&mut res.as_mut().functions, &mut hir.functions);
-        StringArena::move_to(&mut res.as_mut().string_literals, &mut hir.string_literals);
-
-        TinyArena::init(&mut res.as_mut().integer_expressions);
-        TinyArena::init(&mut res.as_mut().real_expressions);
-
-        TinyArena::init(&mut res.as_mut().statements);
-        Box::from_raw(res.as_ptr())
-    }
-
-    pub fn get_str(&self, range: CompressedRange<'tag>) -> &str {
-        &self.string_literals[range]
-    }
-    pub fn get_str_mut(&mut self, range: CompressedRange<'tag>) -> &mut str {
-        &mut self.string_literals[range]
-    }
-
-    pub fn parameter_count(&self) -> u32 {
-        self.parameters.len
-    }
-    pub fn variable_count(&self) -> u32 {
-        self.variables.len
-    }
-    pub fn branch_count(&self) -> u16 {
-        self.branches.len
-    }
-    pub fn net_count(&self) -> u32 {
-        self.nets.len
-    }
-    pub fn port_count(&self) -> u16 {
-        self.ports.len
-    }
-    pub fn module_count(&self) -> u16 {
-        self.modules.len
-    }
-    pub fn natures_count(&self) -> u16 {
-        self.natures.len
-    }
-    pub fn discipline_count(&self) -> u16 {
-        self.disciplines.len
+            parameters: Default::default(),
+            variables: Default::default(),
+            modules: Default::default(),
+            natures: Default::default(),
+            real_expressions: Default::default(),
+            integer_expressions: Default::default(),
+            string_expressions: Default::default(),
+            attributes: Default::default(),
+            statements: Default::default(),
+        }
     }
 }
 
-impl_id_type!(BranchId in Mir::branches -> AttributeNode<'tag,BranchDeclaration<'tag>>);
-impl_id_type!(NetId in Mir::nets -> AttributeNode<'tag,Net<'tag>>);
-impl_id_type!(PortId in Mir::ports -> Port<'tag>);
-impl_id_type!(VariableId in Mir::variables ->  AttributeNode<'tag,Variable<'tag>>);
-impl<'tag> Write<VariableId<'tag>> for Mir<'tag> {
-    type Data = AttributeNode<'tag, Variable<'tag>>;
-    fn write(&mut self, index: VariableId<'tag>, value: Self::Data) {
-        unsafe { self.variables.write(index.0, MaybeUninit::new(value)) }
-    }
-}
-impl_id_type!(ModuleId in Mir::modules -> AttributeNode<'tag,Module<'tag>>);
-impl_id_type!(FunctionId in Mir::functions -> AttributeNode<'tag,Function<'tag>>);
-impl_id_type!(DisciplineId in Mir::disciplines -> AttributeNode<'tag,Discipline<'tag>>);
-impl_id_type!(RealExpressionId in Mir::real_expressions -> Node<RealExpression<'tag>>);
-impl_id_type!(StringExpressionId in Mir::string_expressions -> Node<StringExpression<'tag>>);
-impl_id_type!(IntegerExpressionId in Mir::integer_expressions -> Node<IntegerExpression<'tag>>);
-impl_id_type!(AttributeId in Mir::attributes -> Attribute<'tag>);
-impl_id_type!(StatementId in Mir::statements -> Statement<'tag>);
-impl_id_type!(NatureId in Mir::natures -> AttributeNode<'tag,Nature<'tag>>);
-impl<'tag> Write<NatureId<'tag>> for Mir<'tag> {
-    type Data = AttributeNode<'tag, Nature<'tag>>;
-    fn write(&mut self, index: NatureId<'tag>, value: Self::Data) {
-        unsafe { self.natures.write(index.0, MaybeUninit::new(value)) }
-    }
-}
-impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<'tag,Parameter<'tag>>);
+impl_id_type!(BranchId in Mir::branches -> AttributeNode<BranchDeclaration>);
+impl_id_type!(NetId in Mir::nets -> AttributeNode<Net>);
+impl_id_type!(PortId in Mir::ports -> Port);
+impl_id_type!(VariableId in Mir::variables ->  AttributeNode<Variable>);
+impl_id_type!(ModuleId in Mir::modules -> AttributeNode<Module>);
+impl_id_type!(DisciplineId in Mir::disciplines -> AttributeNode<Discipline>);
+impl_id_type!(RealExpressionId in Mir::real_expressions -> Node<RealExpression>);
+impl_id_type!(StringExpressionId in Mir::string_expressions -> Node<StringExpression>);
+impl_id_type!(IntegerExpressionId in Mir::integer_expressions -> Node<IntegerExpression>);
+impl_id_type!(AttributeId in Mir::attributes -> Attribute);
+impl_id_type!(StatementId in Mir::statements -> Statement);
+impl_id_type!(NatureId in Mir::natures -> AttributeNode<Nature>);
+impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<Parameter>);
 
 #[derive(Clone, Copy, Debug)]
-pub struct Variable<'mir> {
+pub struct Variable {
     pub name: Ident,
-    pub variable_type: VariableType<'mir>,
+    pub variable_type: VariableType,
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Attribute<'tag> {
+pub struct Attribute {
     pub name: Ident,
-    pub value: Option<ExpressionId<'tag>>,
+    pub value: Option<ExpressionId>,
 }
 
 #[derive(Copy, Clone)]
-pub struct Nature<'mir> {
+pub struct Nature {
     pub name: Ident,
     pub abstol: f64,
-    pub units: CompressedRange<'mir>,
+    pub units: StringLiteral,
     pub access: Ident,
-    pub idt_nature: NatureId<'mir>,
-    pub ddt_nature: NatureId<'mir>,
+    pub idt_nature: NatureId,
+    pub ddt_nature: NatureId,
 }
+
 #[derive(Debug)]
-pub struct Module<'mir> {
+pub struct Module {
     pub name: Ident,
-    pub port_list: SafeRange<PortId<'mir>>,
-    pub parameter_list: SafeRange<ParameterId<'mir>>,
-    pub analog_cfg: ControlFlowGraph<'mir, 'mir>,
-    pub analog_dtree: DominatorTree<'mir>,
+    pub port_list: IdRange<PortId>,
+    pub analog_cfg: ControlFlowGraph,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum VariableType<'mir> {
-    Real(Option<RealExpressionId<'mir>>),
-    Integer(Option<IntegerExpressionId<'mir>>),
+pub enum VariableType {
+    Real(Option<RealExpressionId>),
+    Integer(Option<IntegerExpressionId>),
 }
 
 #[derive(Clone)]
-pub enum Statement<'mir> {
-    Contribute(
-        Attributes<'mir>,
-        DisciplineAccess,
-        BranchId<'mir>,
-        RealExpressionId<'mir>,
-    ),
+pub enum Statement {
+    Contribute(Attributes, DisciplineAccess, BranchId, RealExpressionId),
     //  TODO IndirectContribute
-    Assignment(Attributes<'mir>, VariableId<'mir>, ExpressionId<'mir>),
+    Assignment(Attributes, VariableId, ExpressionId),
 }
 
 #[derive(Clone, Debug)]
-pub struct Parameter<'tag> {
+pub struct Parameter {
     pub name: Ident,
-    pub parameter_type: ParameterType<'tag>,
+    pub parameter_type: ParameterType,
 }
 
-impl<'tag> ParameterType<'tag> {
+impl ParameterType {
     pub fn is_numeric(&self) -> bool {
         !matches!(self, ParameterType::String(_))
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum ParameterType<'tag> {
+pub enum ParameterType {
     Integer {
-        from_ranges: Vec<Range<NumericalParameterRangeBound<IntegerExpressionId<'tag>>>>,
-        excluded: Vec<NumericalParameterRangeExclude<IntegerExpressionId<'tag>>>,
-        default_value: IntegerExpressionId<'tag>,
+        from_ranges: Vec<Range<NumericalParameterRangeBound<IntegerExpressionId>>>,
+        excluded: Vec<NumericalParameterRangeExclude<IntegerExpressionId>>,
+        default_value: IntegerExpressionId,
     },
     Real {
-        from_ranges: Vec<Range<NumericalParameterRangeBound<RealExpressionId<'tag>>>>,
-        excluded: Vec<NumericalParameterRangeExclude<RealExpressionId<'tag>>>,
-        default_value: RealExpressionId<'tag>,
+        from_ranges: Vec<Range<NumericalParameterRangeBound<RealExpressionId>>>,
+        excluded: Vec<NumericalParameterRangeExclude<RealExpressionId>>,
+        default_value: RealExpressionId,
     },
-    String(StringExpressionId<'tag>),
+    String(StringExpressionId),
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub enum ExpressionId<'mir> {
-    Real(RealExpressionId<'mir>),
-    Integer(IntegerExpressionId<'mir>),
-    String(StringExpressionId<'mir>),
+pub enum ExpressionId {
+    Real(RealExpressionId),
+    Integer(IntegerExpressionId),
+    String(StringExpressionId),
 }
 
-impl<'mir> ExpressionId<'mir> {
-    pub fn source(self, mir: &Mir<'mir>) -> Span {
+impl ExpressionId {
+    pub fn source(self, mir: &Mir) -> Span {
         match self {
             Self::Real(id) => mir[id].source,
             Self::Integer(id) => mir[id].source,
@@ -229,7 +169,7 @@ impl<'mir> ExpressionId<'mir> {
     }
 }
 
-impl<'mir> ExpressionId<'mir> {
+impl ExpressionId {
     pub fn is_real(self) -> bool {
         matches!(self,Self::Real{..})
     }
@@ -240,45 +180,41 @@ impl<'mir> ExpressionId<'mir> {
 }
 
 #[derive(Clone, Debug)]
-pub enum IntegerExpression<'mir> {
+pub enum IntegerExpression {
     BinaryOperator(
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
         Node<IntegerBinaryOperator>,
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
     ),
-    UnaryOperator(Node<UnaryOperator>, IntegerExpressionId<'mir>),
+    UnaryOperator(Node<UnaryOperator>, IntegerExpressionId),
     IntegerComparison(
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
         Node<ComparisonOperator>,
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
     ),
-    RealComparison(
-        RealExpressionId<'mir>,
-        Node<ComparisonOperator>,
-        RealExpressionId<'mir>,
-    ),
-    StringEq(StringExpressionId<'mir>, StringExpressionId<'mir>),
-    StringNEq(StringExpressionId<'mir>, StringExpressionId<'mir>),
+    RealComparison(RealExpressionId, Node<ComparisonOperator>, RealExpressionId),
+    StringEq(StringExpressionId, StringExpressionId),
+    StringNEq(StringExpressionId, StringExpressionId),
     Condition(
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
         Span,
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
         Span,
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
     ),
-    RealCast(RealExpressionId<'mir>),
+    RealCast(RealExpressionId),
     Literal(i64),
-    VariableReference(VariableId<'mir>),
-    NetReference(NetId<'mir>),
-    PortReference(PortId<'mir>),
-    ParameterReference(ParameterId<'mir>),
-    FunctionCall(FunctionId<'mir>, Vec<ExpressionId<'mir>>),
-    Min(IntegerExpressionId<'mir>, IntegerExpressionId<'mir>),
-    Max(IntegerExpressionId<'mir>, IntegerExpressionId<'mir>),
-    Abs(IntegerExpressionId<'mir>),
+    VariableReference(VariableId),
+    NetReference(NetId),
+    PortReference(PortId),
+    ParameterReference(ParameterId),
+    FunctionCall(FunctionId, Vec<ExpressionId>),
+    Min(IntegerExpressionId, IntegerExpressionId),
+    Max(IntegerExpressionId, IntegerExpressionId),
+    Abs(IntegerExpressionId),
 
-    ParamGiven(ParameterId<'mir>),
-    PortConnected(PortId<'mir>),
+    ParamGiven(ParameterId),
+    PortConnected(PortId),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -332,40 +268,28 @@ pub enum IntegerUnaryOperator {
 }
 
 #[derive(Clone, Debug)]
-pub enum RealExpression<'mir> {
-    BinaryOperator(
-        RealExpressionId<'mir>,
-        Node<RealBinaryOperator>,
-        RealExpressionId<'mir>,
-    ),
-    Negate(Span, RealExpressionId<'mir>),
+pub enum RealExpression {
+    BinaryOperator(RealExpressionId, Node<RealBinaryOperator>, RealExpressionId),
+    Negate(Span, RealExpressionId),
     Condition(
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
         Span,
-        RealExpressionId<'mir>,
+        RealExpressionId,
         Span,
-        RealExpressionId<'mir>,
+        RealExpressionId,
     ),
     Literal(f64),
-    VariableReference(VariableId<'mir>),
-    ParameterReference(ParameterId<'mir>),
-    FunctionCall(FunctionId<'mir>, Vec<ExpressionId<'mir>>),
-    BranchAccess(DisciplineAccess, BranchId<'mir>, u8),
-    Noise(
-        NoiseSource<RealExpressionId<'mir>, ()>,
-        Option<CompressedRange<'mir>>,
-    ),
-    BuiltInFunctionCall1p(BuiltInFunctionCall1p, RealExpressionId<'mir>),
-    BuiltInFunctionCall2p(
-        BuiltInFunctionCall2p,
-        RealExpressionId<'mir>,
-        RealExpressionId<'mir>,
-    ),
-    IntegerConversion(IntegerExpressionId<'mir>),
+    VariableReference(VariableId),
+    ParameterReference(ParameterId),
+    BranchAccess(DisciplineAccess, BranchId, u8),
+    Noise(NoiseSource<RealExpressionId, ()>, Option<StringLiteral>),
+    BuiltInFunctionCall1p(BuiltInFunctionCall1p, RealExpressionId),
+    BuiltInFunctionCall2p(BuiltInFunctionCall2p, RealExpressionId, RealExpressionId),
+    IntegerConversion(IntegerExpressionId),
 
     Temperature,
-    Vt(Option<RealExpressionId<'mir>>),
-    SimParam(StringExpressionId<'mir>, Option<RealExpressionId<'mir>>),
+    Vt(Option<RealExpressionId>),
+    SimParam(StringExpressionId, Option<RealExpressionId>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -379,29 +303,29 @@ pub enum RealBinaryOperator {
 }
 
 #[derive(Clone, Debug)]
-pub enum StringExpression<'mir> {
+pub enum StringExpression {
     Condition(
-        IntegerExpressionId<'mir>,
+        IntegerExpressionId,
         Span,
-        StringExpressionId<'mir>,
+        StringExpressionId,
         Span,
-        StringExpressionId<'mir>,
+        StringExpressionId,
     ),
 
-    Literal(CompressedRange<'mir>),
-    SimParam(StringExpressionId<'mir>),
+    Literal(StringLiteral),
+    SimParam(StringExpressionId),
 
-    VariableReference(VariableId<'mir>),
+    VariableReference(VariableId),
 
-    ParameterReference(ParameterId<'mir>),
+    ParameterReference(ParameterId),
 }
 
-impl<'tag> Mir<'tag> {
+impl Mir {
     pub fn map_real_expr(
         &mut self,
-        expr: RealExpressionId<'tag>,
-        variables_to_replace: &FxHashMap<VariableId<'tag>, VariableId<'tag>>,
-    ) -> Option<RealExpressionId<'tag>> {
+        expr: RealExpressionId,
+        variables_to_replace: &FxHashMap<VariableId, VariableId>,
+    ) -> Option<RealExpressionId> {
         let new_expr = match self[expr].contents {
             RealExpression::VariableReference(var) => {
                 let new_var = *variables_to_replace.get(&var)?;
@@ -443,8 +367,6 @@ impl<'tag> Mir<'tag> {
                 let condition = mapped_condition.unwrap_or(condition);
                 RealExpression::Condition(condition, question_span, arg1, colon_span, arg2)
             }
-
-            RealExpression::FunctionCall(_, _) => todo!("Function Calls"),
 
             RealExpression::BuiltInFunctionCall1p(call, expr) => {
                 let expr = self.map_real_expr(expr, variables_to_replace)?;
@@ -500,14 +422,14 @@ impl<'tag> Mir<'tag> {
                 }
             }
         };
-        Some(self.push(self[expr].clone_as(new_expr)))
+        Some(self.real_expressions.push(self[expr].clone_as(new_expr)))
     }
 
     pub fn map_int_expr(
         &mut self,
-        expr: IntegerExpressionId<'tag>,
-        variables_to_replace: &FxHashMap<VariableId<'tag>, VariableId<'tag>>,
-    ) -> Option<IntegerExpressionId<'tag>> {
+        expr: IntegerExpressionId,
+        variables_to_replace: &FxHashMap<VariableId, VariableId>,
+    ) -> Option<IntegerExpressionId> {
         let new_expr = match self[expr].contents {
             IntegerExpression::VariableReference(var) => {
                 let new_var = *variables_to_replace.get(&var)?;
@@ -613,7 +535,6 @@ impl<'tag> Mir<'tag> {
             IntegerExpression::StringNEq(arg1, arg2) => {
                 let mapped_arg1 = self.map_str_expr(arg1, variables_to_replace);
                 let mapped_arg2 = self.map_str_expr(arg2, variables_to_replace);
-                let mapped_arg2 = self.map_str_expr(arg2, variables_to_replace);
                 let (arg1, arg2) = match (mapped_arg1, mapped_arg2) {
                     (None, None) => return None,
                     (Some(arg1), None) => (arg1, arg2),
@@ -635,14 +556,14 @@ impl<'tag> Mir<'tag> {
             | IntegerExpression::PortReference(_)
             | IntegerExpression::NetReference(_) => return None,
         };
-        Some(self.push(self[expr].clone_as(new_expr)))
+        Some(self.integer_expressions.push(self[expr].clone_as(new_expr)))
     }
 
     pub fn map_str_expr(
         &mut self,
-        expr: StringExpressionId<'tag>,
-        variables_to_replace: &FxHashMap<VariableId<'tag>, VariableId<'tag>>,
-    ) -> Option<StringExpressionId<'tag>> {
+        expr: StringExpressionId,
+        variables_to_replace: &FxHashMap<VariableId, VariableId>,
+    ) -> Option<StringExpressionId> {
         let new_expr = match self[expr].contents {
             StringExpression::VariableReference(var) => {
                 let new_var = *variables_to_replace.get(&var)?;
@@ -663,10 +584,10 @@ impl<'tag> Mir<'tag> {
             }
 
             StringExpression::SimParam(name) => {
-                StringExpression::SimParam(self.map_str_expr(expr, variables_to_replace)?)
+                StringExpression::SimParam(self.map_str_expr(name, variables_to_replace)?)
             }
             StringExpression::Literal(_) | StringExpression::ParameterReference(_) => return None,
         };
-        Some(self.push(self[expr].clone_as(new_expr)))
+        Some(self.string_expressions.push(self[expr].clone_as(new_expr)))
     }
 }

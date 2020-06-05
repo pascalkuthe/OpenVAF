@@ -9,15 +9,21 @@
  */
 
 use crate::{SourceMap, Span};
+use std::io;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Error<ErrorType> {
     pub error_type: ErrorType,
     pub source: Span,
 }
-pub trait PrettyPrintError: Sized {
-    fn print<'source>(
-        error: &'source Error<Self>,
-        source_map: &'source SourceMap,
-    ) -> std::fmt::Arguments<'source>;
-}
+
+/*
+#[derive(Error, Debug)]
+pub enum OpenVAFError {
+    #[error("Compilation failed!")]
+    InvalidCode(usize),
+    Io {
+        #[from]
+        error: io::Error,
+    },
+}*/

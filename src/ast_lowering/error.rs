@@ -19,22 +19,23 @@ use crate::ir::DisciplineId;
 use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};
 use crate::symbol::Symbol;
 use crate::symbol_table::SymbolDeclaration;
-use crate::util::VecFormatter;
+use crate::util::format_list;
 use crate::{parser, Ast, SourceMap, Span};
 use beef::lean::Cow;
 use core::fmt::Debug;
 
-pub type Error<'tag> = crate::error::Error<Type<'tag>>;
+pub type Error = crate::error::Error<Type>;
 //pub(crate) type Warning = crate::error::Error<WarningType>;
-pub type Result<'tag, T = ()> = std::result::Result<T, Error<'tag>>;
+pub type Result<T = ()> = std::result::Result<T, Error>;
 #[derive(Clone, Debug)]
-pub struct NetInfo<'tag> {
-    pub discipline: DisciplineId<'tag>,
+pub struct NetInfo {
+    pub discipline: DisciplineId,
     pub name: Symbol,
     pub declaration: Span,
 }
 #[derive(Clone, Debug)]
-pub enum Type<'tag> {
+pub enum Type {
+    TypeDeclarationMissing(Symbol),
     NotFound(Symbol),
     NotAScope {
         declaration: Span,
@@ -42,13 +43,14 @@ pub enum Type<'tag> {
     },
     DeclarationTypeMismatch {
         expected: Vec<MockSymbolDeclaration>,
-        found: SymbolDeclaration<'tag>,
+        found: SymbolDeclaration,
     },
     UnexpectedTokenInBranchAccess,
     EmptyBranchAccess,
-    NatureNotPotentialOrFlow(Symbol, DisciplineId<'tag>),
-    DisciplineMismatch(NetInfo<'tag>, NetInfo<'tag>),
+    NatureNotPotentialOrFlow(Symbol, DisciplineId),
+    DisciplineMismatch(NetInfo, NetInfo),
     NotAllowedInConstantContext(NonConstantExpression),
+    NotAllowedInFunction(NotAllowedInFunction),
     Unsupported(Unsupported),
     DerivativeNotAllowed,
 }
@@ -70,8 +72,28 @@ impl Display for NonConstantExpression {
     }
 }
 
-impl<'tag> Error<'tag> {
-    pub fn print(self, source_map: &SourceMap, ast: &Ast<'tag>, translate_lines: bool) {
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum NotAllowedInFunction {
+    BranchAccess,
+    AnalogFilters,
+    NamedBlocks,
+    Contribute,
+    NonLocalAccess,
+}
+impl Display for NotAllowedInFunction {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::BranchAccess => f.write_str("Accessing branches"),
+            Self::AnalogFilters => f.write_str("Analog filter functions"),
+            Self::NamedBlocks => f.write_str("Named blocks"),
+            Self::NonLocalAccess => f.write_str("Named blocks"),
+            Self::Contribute => f.write_str("contribute statements (<+)"),
+        }
+    }
+}
+
+impl Error {
+    pub fn print(self, source_map: &SourceMap, ast: &Ast, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
@@ -112,7 +134,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::NotFound(sym) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -138,7 +160,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::DeclarationTypeMismatch {
                 ref expected,
@@ -147,7 +169,7 @@ impl<'tag> Error<'tag> {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let label = format!(
                     "Expected {} found {} {}",
-                    VecFormatter(expected, ""),
+                    format_list(expected, ""),
                     found.mock(),
                     found.name(&ast).as_str()
                 );
@@ -173,7 +195,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::NatureNotPotentialOrFlow(name, discipline) => {
                 let (msg,expected) = match (ast[discipline].contents.potential_nature,ast[discipline].contents.flow_nature){
@@ -228,7 +250,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::NotAScope { declaration, name } => {
                 let (
@@ -286,7 +308,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::DisciplineMismatch(net1, net2) => {
                 let (
@@ -381,7 +403,7 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::NotAllowedInConstantContext(non_constant_expr) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -410,11 +432,10 @@ impl<'tag> Error<'tag> {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::Unsupported(unsupported) => {
-                println!("{:?}", self.source);
-                return parser::error::Error {
+                parser::error::Error {
                     error_type: parser::error::Type::Unsupported(unsupported),
                     source: self.source,
                 }
@@ -443,7 +464,7 @@ impl<'tag> Error<'tag> {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::DerivativeNotAllowed => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -468,7 +489,71 @@ impl<'tag> Error<'tag> {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
+            }
+            Type::TypeDeclarationMissing(name) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let label = format!(
+                    "Function argument {} is missing separate type declaration",
+                    name
+                );
+                let hint_label = format!(
+                    "Add the following to the function declaration: real {}; (or integer {};)",
+                    name, name
+                );
+                footer.push(Annotation {
+                    id: None,
+                    label: Some(&hint_label),
+                    annotation_type: AnnotationType::Help,
+                });
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(&label),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Type declaration missing",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
+            }
+            Type::NotAllowedInFunction(not_allowed) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let label = format!("{} are not allowed inside functions!", not_allowed);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(label.as_str()),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Not allowed in a function",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
             }
         };
     }

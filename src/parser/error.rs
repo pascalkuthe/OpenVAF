@@ -16,7 +16,7 @@ use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
 use crate::span::Index;
 use crate::symbol::{Ident, Symbol};
-use crate::util::VecFormatter;
+use crate::util::format_list;
 use crate::{SourceMap, Span};
 use beef::lean::Cow;
 
@@ -65,10 +65,16 @@ pub enum Type {
     UnexpectedToken {
         expected: Vec<Token>,
     },
+    MissingOrUnexpectedToken {
+        expected: Vec<Token>,
+        expected_at: Index,
+    },
     UnexpectedTokens {
         expected: Vec<Expected>,
     },
+    TooManyBranchArgs(usize),
     Unsupported(Unsupported),
+    FunctionWithoutBody(Ident),
     Unrecoverable,
 }
 
@@ -81,9 +87,11 @@ impl From<std::io::Error> for Type {
 #[derive(Clone, Copy, Debug)]
 pub enum Unsupported {
     StringParameters,
-    DefaultDiscipline,
+    DefaultDiscipline, // TODO remove this. Only part of VerilogAMS not VerilogA
     MacroDefinedInMacro,
     NatureInheritance,
+    ConstantFunctionCalls,
+    SelfDerivingAssignments,
 }
 
 impl Display for Unsupported {
@@ -93,6 +101,12 @@ impl Display for Unsupported {
             Self::DefaultDiscipline => f.write_str("Implicit Disciplines"),
             Self::MacroDefinedInMacro => f.write_str("Macros defined inside another Macros"),
             Self::NatureInheritance => f.write_str("Derived Natures"),
+            Self::ConstantFunctionCalls => {
+                f.write_str("Function calls inside constant expressions")
+            }
+            Self::SelfDerivingAssignments => {
+                f.write_str("Assignments of the form 'x = f(ddx(x,..),...)'")
+            }
         }
     }
 }
@@ -105,6 +119,7 @@ pub enum Expected {
     BinaryOperator,
     Primary,
     Statement,
+    Expression,
     BranchAcess,
     ParameterRange,
 }
@@ -122,6 +137,7 @@ impl Display for Expected {
             Expected::Statement => f.write_str("statement"),
             Expected::BranchAcess => f.write_str("branch access"),
             Expected::ParameterRange => f.write_str("parameter range (such as from [0:inf]"),
+            Expected::Expression => f.write_str("expression"),
         }
     }
 }
@@ -139,7 +155,7 @@ pub enum List {
 }
 impl Error {
     pub fn print(self, source_map: &SourceMap, translate_lines: bool) {
-        let (line, line_number, substitution_name, range) =
+        let (mut line, mut line_number, substitution_name, mut range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
         let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
             (Cow::owned(substitution_name),vec![Annotation{
@@ -159,7 +175,7 @@ impl Error {
         match self.error_type {
             Type::UnexpectedToken { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let label = format!("expected {}", VecFormatter(expected, "'"));
+                let label = format!("expected {}", format_list(expected, "'"));
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -182,12 +198,12 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::UnexpectedTokens { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let label = format!("expected {}", VecFormatter(expected, ""));
+                let label = format!("expected {}", format_list(expected, ""));
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -210,7 +226,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::PortRedeclaration(error_span, declaration_list_span) => {
                 let error_range = translate_to_inner_snippet_range(
@@ -253,7 +269,7 @@ impl Error {
                     }],opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::AlreadyDeclaredInThisScope {
@@ -323,7 +339,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::PortPreDeclaredNotDefined => {
@@ -351,7 +367,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::UnclosedConditions(ref conditions) => {
@@ -402,7 +418,7 @@ impl Error {
                 };
 
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::MacroNotFound => {
@@ -429,7 +445,7 @@ impl Error {
                 };
 
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::HierarchicalIdNotAllowedAsNature { .. } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -456,7 +472,7 @@ impl Error {
                 };
 
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::PortNotPreDeclaredInModuleHead { port_list } => {
                 let (
@@ -520,7 +536,7 @@ impl Error {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::EmptyListEntry(_list_type) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -545,7 +561,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::MacroArgumentCount { expected, found } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -575,7 +591,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::ConditionEndWithoutStart => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -600,7 +616,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::MacroEndTooEarly => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -625,7 +641,7 @@ impl Error {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::MacroRecursion => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -650,7 +666,7 @@ impl Error {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::CompilerDirectiveSplit => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -675,11 +691,11 @@ impl Error {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::UnexpectedEof { ref expected } => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let label = format!("Unexpected EOF expected {}", VecFormatter(expected, "'"));
+                let label = format!("Unexpected EOF expected {}", format_list(expected, "'"));
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -702,7 +718,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::Unsupported(unsupported) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -729,7 +745,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::IoErr(error) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -754,7 +770,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::AttributeAlreadyDefined => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -779,16 +795,15 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::RequiredAttributeNotDefined(ref missing) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
                 let label = format!(
                     "Nature is missing the required attributes {}",
-                    VecFormatter(missing, "'")
+                    format_list(missing, "'")
                 );
-                let inline_label = format!("Required attributes are missing");
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -803,7 +818,7 @@ impl Error {
                         origin: Some(&*origin),
                         annotations: vec![SourceAnnotation {
                             range,
-                            label: &inline_label,
+                            label: "Required attributes are missing",
                             annotation_type: AnnotationType::Error,
                         }],
                         fold: false,
@@ -811,7 +826,7 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
 
             Type::DiscreteDisciplineHasNatures => {
@@ -837,7 +852,7 @@ impl Error {
                     opt
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::StringTooLong(len) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
@@ -868,9 +883,121 @@ impl Error {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                error!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             Type::Unrecoverable => (),
+            Type::FunctionWithoutBody(name) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let label = format!("Function {} was delcared without body", name);
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(&label),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Function body is missing",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: true,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
+            }
+            Type::MissingOrUnexpectedToken {
+                ref expected,
+                expected_at,
+            } => {
+                let (range, expected_at) = if expected_at < self.source.get_start() {
+                    let res = source_map.resolve_span_within_line(
+                        Span::new(expected_at, self.source.get_end()),
+                        translate_lines,
+                    );
+                    line = res.0;
+                    range = res.3;
+                    line_number = res.1;
+                    (
+                        (
+                            (self.source.get_start() - expected_at + range.start) as usize,
+                            range.end as usize,
+                        ),
+                        range.start as usize,
+                    )
+                } else {
+                    (
+                        (range.start as usize, range.end as usize),
+                        (expected_at - self.source.get_start() + range.start) as usize,
+                    )
+                };
+                let label = format!("expected {}", format_list(expected, "'"));
+
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some("Unexpected Token"),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![
+                            SourceAnnotation {
+                                range,
+                                label: "Unexpected Token",
+                                annotation_type: AnnotationType::Error,
+                            },
+                            SourceAnnotation {
+                                range: (expected_at, expected_at + 1),
+                                label: &label,
+                                annotation_type: AnnotationType::Info,
+                            },
+                        ],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
+            }
+            Type::TooManyBranchArgs(count) => {
+                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let label = format!(
+                    "Branch access expected at most 2 arguments but {} were specified",
+                    count
+                );
+                let snippet = Snippet {
+                    title: Some(Annotation {
+                        id: None,
+                        label: Some(&label),
+                        annotation_type: AnnotationType::Error,
+                    }),
+                    footer,
+                    slices: vec![Slice {
+                        source: line,
+                        line_start: line_number as usize,
+                        origin: Some(&*origin),
+                        annotations: vec![SourceAnnotation {
+                            range,
+                            label: "Unexpected arguemts",
+                            annotation_type: AnnotationType::Error,
+                        }],
+                        fold: false,
+                    }],
+                    opt,
+                };
+                let display_list = DisplayList::from(snippet);
+                eprintln!("{}", display_list);
+            }
         };
     }
 }
@@ -878,7 +1005,7 @@ impl Warning {
     pub fn print(&self, source_map: &SourceMap, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
-        let (origin, mut footer) = if let Some(substitution_name) = substitution_name {
+        let (origin, footer) = if let Some(substitution_name) = substitution_name {
             (Cow::owned(substitution_name),vec![Annotation{
                 id: None,
                 label: Some("This error occurred inside an expansion of a macro or a file. If additional macros or files are included inside this expansion the line information will be inaccurate and the error output might be hard to track if macros are used extensivly. The fully expanded source could give better insight in that case"),
@@ -895,7 +1022,7 @@ impl Warning {
         match self.error_type {
             WarningType::MacroOverwritten(first_declaration) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let (original_line, original_line_number, substitution_name, original_range) =
+                let (original_line, original_line_number, _substitution_name, original_range) =
                     source_map.resolve_span_within_line(first_declaration, translate_lines);
                 let original_range = translate_to_inner_snippet_range(
                     original_range.start,
@@ -936,7 +1063,7 @@ impl Warning {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                warn!("{}", display_list);
+                eprintln!("{}", display_list);
             }
             WarningType::AttributeOverwrite(overwritten_ident, overwrite_span) => {
                 let overwritten_range = translate_to_inner_snippet_range(
@@ -982,16 +1109,17 @@ impl Warning {
                     opt,
                 };
                 let display_list = DisplayList::from(snippet);
-                warn!("{}", display_list);
+                eprintln!("{}", display_list);
             }
         };
     }
 }
 
+// FIXME remove this function. Its just here because i cant be bothered to remove the billion uses of it
 pub(crate) fn translate_to_inner_snippet_range(
     start: Index,
     end: Index,
-    source: &str,
+    _source: &str,
 ) -> (usize, usize) {
     (start as usize, end as usize)
 }
