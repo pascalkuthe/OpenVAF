@@ -43,7 +43,7 @@ features=['collections']
 
 #Logging for tests
 [dev-dependencies]
-fern={version="*",features=["colored"]}
+fern={version="0.6.0",features=["colored"]}
 
 
 
