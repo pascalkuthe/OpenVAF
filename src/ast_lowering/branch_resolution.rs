@@ -127,7 +127,7 @@ impl<'lt> BranchResolver {
                                 contents: BranchDeclaration {
                                     name: Ident::from_str_and_span(
                                         format!(
-                                            "branch (<{}>)",
+                                            "( <{}> )",
                                             fold.hir[fold.hir[port].net].contents.name
                                         )
                                         .as_str(),
@@ -150,7 +150,7 @@ impl<'lt> BranchResolver {
                                 contents: BranchDeclaration {
                                     name: Ident::from_str_and_span(
                                         format!(
-                                            "branch ({},{})",
+                                            "({} , {})",
                                             fold.hir[net1].contents.name.name.as_str(),
                                             fold.hir[net2].contents.name.name.as_str()
                                         )
@@ -234,7 +234,7 @@ impl<'lt> BranchResolver {
                             fold.hir.nets.push(AttributeNode {
                                 contents: Net {
                                     name: Ident::from_str(
-                                        format!("Implicit Ground_{:?}", discipline).as_str(),
+                                        "implicit_ground",
                                     ),
                                     discipline,
                                     signed: false,
