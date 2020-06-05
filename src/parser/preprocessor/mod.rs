@@ -331,7 +331,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     self.consume(Token::LiteralString)?;
                     let mut path_str = parse_string(self.slice());
                     match path_str.as_str() {
-                        "constants.va" | "constants.vams" | "constants.v" => {
+                        "constants.va" | "constants.vams" | "constants.v"|"constants.h" => {
                             let mut path = PathBuf::from(
                                 std::env::var_os("VAMS_STD")
                                     .expect("VAMS_STD enviorment variable not set"),
@@ -339,7 +339,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                             path.push("constants.va");
                             path_str = String::from(path.to_str().unwrap())
                         }
-                        "disciplines.va" | "disciplines.vams" | "disciplines.v" => {
+                        "disciplines.va" | "disciplines.vams" | "disciplines.v"| "disciplines.h" => {
                             let mut path = PathBuf::from(
                                 std::env::var_os("VAMS_STD")
                                     .expect("VAMS_STD enviorment variable not set"),
