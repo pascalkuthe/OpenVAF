@@ -1,8 +1,12 @@
-[package]
+package]
 name = "open-vaf"
 version = "0.4.0"
 authors = ["DSPOM"]
 edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="README.md"
 
 [dependencies]
 log="0.4.8"
@@ -39,15 +43,10 @@ features=['collections']
 
 #Logging for tests
 [dev-dependencies]
-#criterion = "0.3.2"
 fern={version="*",features=["colored"]}
-#chrono="*"
 
 
 
-[[bench]]
-name = "parser_bench"
-harness = false
 
 
 [features]
