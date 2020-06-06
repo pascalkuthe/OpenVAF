@@ -171,7 +171,7 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                 }
             }
             let error_type = Type::AlreadyDeclaredInThisScope {
-                other_declaration: old_declaration.span(&self.ast),
+                other_declaration: old_declaration.span(self.ast),
                 name: declaration.contents.name.name,
             };
             self.non_critical_errors.push(Error {

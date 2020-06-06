@@ -8,6 +8,9 @@
  * *****************************************************************************************
  */
 
+#![allow(clippy::similar_names)]
+
+
 use crate::ast_lowering::ast_to_hir_fold::expression::ConstantExpressionFolder;
 use crate::ast_lowering::ast_to_hir_fold::{Branches, DeclarationHandler, ExpressionFolder, Fold};
 use crate::ast_lowering::branch_resolution::BranchResolver;
@@ -21,6 +24,7 @@ use crate::parser::error::Unsupported;
 use crate::symbol::{keywords, Ident};
 use crate::symbol_table::SymbolDeclaration;
 use crate::{Ast, Hir};
+
 
 /// This is the first fold. All Items that are defined globally or do not reference other items (nets & ports) are folded here
 pub struct Global<'lt, H: DeclarationHandler> {

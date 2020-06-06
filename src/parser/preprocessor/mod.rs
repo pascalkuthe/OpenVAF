@@ -12,7 +12,6 @@ use std::fmt::{Debug, Formatter};
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::vec::IntoIter;
-use yansi_term::Color::*;
 
 use bumpalo::Bump;
 use indexmap::map::IndexMap;

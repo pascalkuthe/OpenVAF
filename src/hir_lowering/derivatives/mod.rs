@@ -923,7 +923,7 @@ impl<'lt> HirToMirFold<'lt> {
                     ),
                     source: self.mir[expr].source,
                 });
-                let dtemp = self.partial_derivative(temp, derive_by, reference_derivative)?;
+                let derivatve_temp = self.partial_derivative(temp, derive_by, reference_derivative)?;
                 let p_q_p_k = self.mir.real_expressions.push(
                     self.mir[expr]
                         .clone_as(RealExpression::Literal(1.3806488e-23 / 1.602176565e-19)),
@@ -931,7 +931,7 @@ impl<'lt> HirToMirFold<'lt> {
                 RealExpression::BinaryOperator(
                     p_q_p_k,
                     self.mir[expr].clone_as(RealBinaryOperator::Multiply),
-                    dtemp,
+                    derivatve_temp,
                 )
             }
 
@@ -1194,7 +1194,7 @@ impl<'lt> HirToMirFold<'lt> {
                                 let literal2 = self
                                     .mir
                                     .real_expressions
-                                    .push(self.mir[expr].clone_as(RealExpression::Literal(2f64)));
+                                    .push(self.mir[expr].clone_as(RealExpression::Literal(2_f64)));
                                 let pow = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BuiltInFunctionCall2p(
                                         BuiltInFunctionCall2p::Pow,

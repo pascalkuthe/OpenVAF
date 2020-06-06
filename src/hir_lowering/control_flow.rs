@@ -21,7 +21,7 @@ use crate::ir::{BranchId, Node, ParameterId, VariableId};
 use crate::ir::{PortId, RealExpressionId, StringExpressionId, SystemFunctionCall};
 use crate::mir::{IntegerExpression, VariableType};
 use crate::{hir, ControlFlowGraph, Span};
-use index_vec::{IndexVec, IdxSliceIndex};
+use index_vec::{IndexVec};
 use rustc_hash::FxHashSet;
 
 impl<'lt> HirToMirFold<'lt> {

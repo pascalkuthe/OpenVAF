@@ -271,29 +271,30 @@ impl<'lt> BranchResolver {
 
                 if let (Some(first_net), Some(second_net)) = (first_net, second_net) {
                     if fold.hir[first_net].contents.discipline
-                        != fold.hir[second_net].contents.discipline
+                        == fold.hir[second_net].contents.discipline
                     {
-                        fold.error(Error {
-                            error_type: Type::DisciplineMismatch(
-                                NetInfo {
-                                    discipline: fold.hir[first_net].contents.discipline,
-                                    name: fold.hir[first_net].contents.name.name,
-                                    declaration: fold.hir[first_net].source,
-                                },
-                                NetInfo {
-                                    discipline: fold.hir[second_net].contents.discipline,
-                                    name: fold.hir[second_net].contents.name.name,
-                                    declaration: fold.hir[second_net].source,
-                                },
-                            ),
-                            source: net1.span().extend(net2.span()),
-                        });
-                    } else {
                         //doesn't matter which nets discipline we use since we asserted that they are equal
                         return Some((
                             Branch::Nets(first_net, second_net),
                             fold.hir[first_net].contents.discipline,
                         ));
+;
+                    } else {                        fold.error(Error {
+                        error_type: Type::DisciplineMismatch(
+                            NetInfo {
+                                discipline: fold.hir[first_net].contents.discipline,
+                                name: fold.hir[first_net].contents.name.name,
+                                declaration: fold.hir[first_net].source,
+                            },
+                            NetInfo {
+                                discipline: fold.hir[second_net].contents.discipline,
+                                name: fold.hir[second_net].contents.name.name,
+                                declaration: fold.hir[second_net].source,
+                            },
+                        ),
+                        source: net1.span().extend(net2.span()),
+                    })
+
                     }
                 }
             }

@@ -6,6 +6,8 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+#![allow(clippy::similar_names)]
+
 use crate::ir::ast::Nature;
 use crate::ir::{AttributeNode, Attributes};
 use crate::parser::error::Result;
@@ -17,6 +19,7 @@ use crate::parser::Error;
 use crate::symbol::keywords;
 use crate::symbol_table::SymbolDeclaration;
 use crate::Parser;
+
 
 impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     pub fn parse_nature(&mut self, attributes: Attributes) -> Result {

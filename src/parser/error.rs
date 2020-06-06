@@ -10,7 +10,6 @@ use std::fmt::{Display, Formatter};
 
 use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
-use log::{error, warn};
 
 use crate::parser::lexer::Token;
 use crate::parser::preprocessor::ArgumentIndex;
@@ -1022,7 +1021,7 @@ impl Warning {
         match self.error_type {
             WarningType::MacroOverwritten(first_declaration) => {
                 let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let (original_line, original_line_number, _substitution_name, original_range) =
+                let (original_line, original_line_number, _, original_range) =
                     source_map.resolve_span_within_line(first_declaration, translate_lines);
                 let original_range = translate_to_inner_snippet_range(
                     original_range.start,

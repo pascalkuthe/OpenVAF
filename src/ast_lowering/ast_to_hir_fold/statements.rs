@@ -17,7 +17,6 @@ use crate::ast_lowering::ast_to_hir_fold::{
 };
 use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::{Error, NotAllowedInFunction, Type};
-use yansi_term::Color::*;
 
 use crate::hir::{Condition, Module, Statement};
 use crate::ir::hir::{DisciplineAccess, Function, FunctionArg, WhileLoop};

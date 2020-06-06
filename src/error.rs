@@ -8,8 +8,7 @@
  * *****************************************************************************************
  */
 
-use crate::{SourceMap, Span};
-use std::io;
+use crate::{ Span};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Error<ErrorType> {

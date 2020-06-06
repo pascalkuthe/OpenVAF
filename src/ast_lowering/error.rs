@@ -13,7 +13,6 @@ use std::fmt::Display;
 use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
 use core::fmt::Formatter;
-use log::error;
 
 use crate::ir::DisciplineId;
 use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};

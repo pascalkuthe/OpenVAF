@@ -5,6 +5,7 @@
 //  *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
+#![allow(clippy::similar_names)]
 
 use crate::analysis::data_flow::framework::{
     DataFlowGraph, Engine, Forward, GenKillAnalysis, GenKillEngine, GenKillSet,
@@ -84,9 +85,9 @@ impl<'lt> ReachableDefinitionsAnalysis<'lt> {
 
 
                 match self.mir[stmt] {
-                    Statement::Assignment(_, var, val) => {
+                    Statement::Assignment(_, var, expr) => {
                         self.mir.track_expression(
-                            val,
+                            expr,
                             &mut UseDefBuilder {
                                 graph: &mut self.graph,
                                 use_stmt: stmt,

@@ -11,7 +11,6 @@ use std::path::Path;
 
 use bumpalo::Bump;
 use log::*;
-use yansi_term::Color::*;
 
 pub use error::Error;
 pub use error::Result;
@@ -25,7 +24,6 @@ use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::{Preprocessor, SourceMap, Span};
 use rustc_hash::FxHashMap;
-use std::fmt::Display;
 
 pub(crate) mod lexer;
 pub(crate) mod preprocessor;

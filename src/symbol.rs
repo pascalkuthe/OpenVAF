@@ -31,6 +31,8 @@
     DEALINGS IN THE SOFTWARE.
 */
 
+#![allow(clippy::module_name_repetitions)]
+
 use core::fmt;
 use std::clone::Clone;
 use std::convert::Into;
@@ -57,14 +59,14 @@ impl Ident {
         Self { name, span }
     }
 
-    pub const fn empty() -> Ident {
+    pub const fn empty() -> Self {
         Self {
             name: EMPTY_SYMBOL,
             span: DUMMY_SPAN,
         }
     }
 
-    pub const fn spanned_empty(span: Span) -> Ident {
+    pub const fn spanned_empty(span: Span) -> Self {
         Self {
             name: EMPTY_SYMBOL,
             span,
@@ -72,18 +74,19 @@ impl Ident {
     }
 
     #[allow(clippy::should_implement_trait)]
+    #[must_use]
     /// Maps a string to an identifier with a dummy span.
-    pub fn from_str(string: &str) -> Ident {
+    pub fn from_str(string: &str) -> Self {
         Self::new(Symbol::intern(string), DUMMY_SPAN)
     }
 
     /// Maps a string and a span to an identifier.
-    pub fn from_str_and_span(string: &str, span: Span) -> Ident {
-        Ident::new(Symbol::intern(string), span)
+    pub fn from_str_and_span(string: &str, span: Span) -> Self {
+        Self::new(Symbol::intern(string), span)
     }
 
-    pub fn without_first_quote(self) -> Ident {
-        Ident::new(
+    pub fn without_first_quote(self) -> Self {
+        Self::new(
             Symbol::intern(self.as_str().trim_start_matches('\'')),
             self.span,
         )
@@ -125,18 +128,18 @@ pub struct Symbol(SymbolIndex);
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 struct SymbolIndex(u32);
 impl SymbolIndex {
-    pub fn as_usize(self) -> usize {
+    pub const fn as_usize(self) -> usize {
         self.0 as usize
     }
 
-    pub fn as_u32(self) -> u32 {
+    pub const fn as_u32(self) -> u32 {
         self.0
     }
 }
 
 impl Symbol {
     const fn new(n: u32) -> Self {
-        Symbol(SymbolIndex(n))
+        Self(SymbolIndex(n))
     }
 
     /// Maps a string to its interned representation.
@@ -160,7 +163,8 @@ impl Symbol {
         })
     }
 
-    pub fn as_u32(self) -> u32 {
+    #[must_use]
+    pub const fn as_u32(self) -> u32 {
         let index = self.0;
         index.0
     }
@@ -189,7 +193,7 @@ pub struct Interner {
 
 impl Interner {
     fn prefill(init: &[&'static str]) -> Self {
-        Interner {
+        Self {
             strings: init.into(),
             names: init.iter().copied().zip((0..).map(Symbol::new)).collect(),
             ..Default::default()

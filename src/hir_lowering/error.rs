@@ -10,7 +10,6 @@
 
 use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
-use log::*;
 
 use crate::ir::{FunctionId, ParameterId, VariableId};
 use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};

@@ -7,6 +7,9 @@
 //  * *******************************************************************************************
 
 #![allow(clippy::float_cmp)]
+#![allow(clippy::similar_names)]
+
+
 
 use crate::analysis::data_flow::reaching_variables::UseDefGraph;
 use crate::ast::UnaryOperator;
@@ -637,10 +640,10 @@ pub fn string_constant_fold(
             let true_val = fold.string_constant_fold(resolver, true_val);
             let false_val = fold.string_constant_fold(resolver, false_val);
 
-            if condition? != 0 {
-                true_val?
-            } else {
+            if condition? == 0 {
                 false_val?
+            } else {
+                true_val?
             }
         }
         // TODO system function call constant fold
