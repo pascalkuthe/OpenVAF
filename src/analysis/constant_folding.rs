@@ -200,10 +200,6 @@ pub fn real_constant_fold(
                 },
                 RealBinaryOperator::Subtract => match (lhs, rhs) {
                     (Some(lhs), Some(rhs)) => lhs - rhs,
-                    (Some(lhs), None) if lhs == 0.0 => {
-                        fold.resolve_to_real_subexpressions(expr, rhs_id);
-                        return None;
-                    }
                     (None, Some(rhs)) if rhs == 0.0 => {
                         fold.resolve_to_real_subexpressions(expr, lhs_id);
                         return None;
