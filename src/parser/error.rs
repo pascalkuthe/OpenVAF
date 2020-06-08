@@ -43,7 +43,7 @@ pub enum Type {
     //Preprocessor
     MacroArgumentCount {
         expected: ArgumentIndex,
-        found: ArgumentIndex,
+        found: usize,
     },
     ConditionEndWithoutStart,
     MacroEndTooEarly,
@@ -127,16 +127,16 @@ impl Display for Expected {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         // TODO move exampels to webpage
         match self {
-            Expected::Identifier => f.write_str("identifier"),
-            Expected::PortDeclaration => f.write_str("port declaration"),
-            Expected::Port => f.write_str("port listing"),
-            Expected::UnaryOperator => f.write_str("unary operator (+,-,!)"),
-            Expected::BinaryOperator => f.write_str("binary operator (such as * or +)"),
-            Expected::Primary => f.write_str("expression primary"),
-            Expected::Statement => f.write_str("statement"),
-            Expected::BranchAcess => f.write_str("branch access"),
-            Expected::ParameterRange => f.write_str("parameter range (such as from [0:inf]"),
-            Expected::Expression => f.write_str("expression"),
+            Self::Identifier => f.write_str("identifier"),
+            Self::PortDeclaration => f.write_str("port declaration"),
+            Self::Port => f.write_str("port listing"),
+            Self::UnaryOperator => f.write_str("unary operator (+,-,!)"),
+            Self::BinaryOperator => f.write_str("binary operator (such as * or +)"),
+            Self::Primary => f.write_str("expression primary"),
+            Self::Statement => f.write_str("statement"),
+            Self::BranchAcess => f.write_str("branch access"),
+            Self::ParameterRange => f.write_str("parameter range (such as from [0:inf]"),
+            Self::Expression => f.write_str("expression"),
         }
     }
 }
@@ -153,6 +153,7 @@ pub enum List {
     FunctionArgument,
 }
 impl Error {
+    #[allow(clippy::too_many_lines)]
     pub fn print(self, source_map: &SourceMap, translate_lines: bool) {
         let (mut line, mut line_number, substitution_name, mut range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
@@ -173,7 +174,7 @@ impl Error {
 
         match self.error_type {
             Type::UnexpectedToken { ref expected } => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("expected {}", format_list(expected, "'"));
 
                 let snippet = Snippet {
@@ -201,7 +202,7 @@ impl Error {
             }
 
             Type::UnexpectedTokens { ref expected } => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("expected {}", format_list(expected, ""));
 
                 let snippet = Snippet {
@@ -228,15 +229,13 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::PortRedeclaration(error_span, declaration_list_span) => {
-                let error_range = translate_to_inner_snippet_range(
-                    range.start as Index + error_span.get_start(),
-                    range.start as Index + error_span.get_end(),
-                    &line,
+                let error_range = (
+                    (range.start + error_span.get_start()) as usize,
+                    (range.start + error_span.get_end()) as usize,
                 );
-                let declaration_list_range = translate_to_inner_snippet_range(
-                    declaration_list_span.get_start() + range.start as Index,
-                    range.start as Index + declaration_list_span.get_end(),
-                    &line,
+                let declaration_list_range = (
+                    (declaration_list_span.get_start() + range.start) as usize,
+                    (range.start as Index + declaration_list_span.get_end()) as usize,
                 );
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -282,11 +281,10 @@ impl Error {
                     other_declaration_range,
                 ) = source_map.resolve_span_within_line(other_declaration, translate_lines);
 
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let other_declaration_range = translate_to_inner_snippet_range(
-                    other_declaration_range.start,
-                    other_declaration_range.end,
-                    &other_declaration_line,
+                let range = (range.start as usize,range.end as usize);
+                let other_declaration_range = (
+                    other_declaration_range.start as usize,
+                    other_declaration_range.end as usize,
                 );
                 let other_declaration_origin = if let Some(other_declaration_origin) =
                     other_declaration_origin
@@ -342,7 +340,7 @@ impl Error {
             }
 
             Type::PortPreDeclaredNotDefined => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -377,7 +375,7 @@ impl Error {
                     .map(|(index, condition)| {
                         let (src, line_number, origin, range) =
                             source_map.resolve_span_within_line(condition, translate_lines);
-                        let range = translate_to_inner_snippet_range(range.start, range.end, src);
+                        let range = (range.start as usize, range.end as usize);
                         (
                             src,
                             line_number,
@@ -421,7 +419,7 @@ impl Error {
             }
 
             Type::MacroNotFound => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -447,7 +445,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::HierarchicalIdNotAllowedAsNature { .. } => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
 
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -494,11 +492,10 @@ impl Error {
                     Cow::const_str(source_map.main_file_name)
                 };
 
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let other_declaration_range = translate_to_inner_snippet_range(
-                    other_declaration_range.start,
-                    other_declaration_range.end,
-                    &other_declaration_line,
+                let range = (range.start as usize,range.end as usize);
+                let other_declaration_range = (
+                    other_declaration_range.start as usize,
+                    other_declaration_range.end as usize,
                 );
 
                 let snippet = Snippet {
@@ -538,7 +535,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::EmptyListEntry(_list_type) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -563,7 +560,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::MacroArgumentCount { expected, found } => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "Found wrong number of Macro arguments. Expected {} found {} ",
                     expected, found
@@ -593,7 +590,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::ConditionEndWithoutStart => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -618,7 +615,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::MacroEndTooEarly => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -643,7 +640,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::MacroRecursion => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -668,7 +665,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::CompilerDirectiveSplit => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -693,7 +690,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::UnexpectedEof { ref expected } => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("Unexpected EOF expected {}", format_list(expected, "'"));
 
                 let snippet = Snippet {
@@ -720,7 +717,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::Unsupported(unsupported) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("{} are currently not supported", unsupported);
 
                 let snippet = Snippet {
@@ -747,7 +744,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::IoErr(error) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -772,7 +769,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::AttributeAlreadyDefined => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -798,7 +795,7 @@ impl Error {
             }
 
             Type::RequiredAttributeNotDefined(ref missing) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "Nature is missing the required attributes {}",
                     format_list(missing, "'")
@@ -829,7 +826,7 @@ impl Error {
             }
 
             Type::DiscreteDisciplineHasNatures => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize, range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -854,7 +851,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::StringTooLong(len) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize, range.end as usize);
                 let label = format!(
                     "String literals longer than {} characters are not supported",
                     std::u16::MAX
@@ -886,7 +883,7 @@ impl Error {
             }
             Type::Unrecoverable => (),
             Type::FunctionWithoutBody(name) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize, range.end as usize);
                 let label = format!("Function {} was delcared without body", name);
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -969,7 +966,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::TooManyBranchArgs(count) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize, range.end as usize);
                 let label = format!(
                     "Branch access expected at most 2 arguments but {} were specified",
                     count
@@ -1001,6 +998,7 @@ impl Error {
     }
 }
 impl Warning {
+    #[allow(clippy::too_many_lines)]
     pub fn print(&self, source_map: &SourceMap, translate_lines: bool) {
         let (line, line_number, substitution_name, range) =
             source_map.resolve_span_within_line(self.source, translate_lines);
@@ -1020,13 +1018,12 @@ impl Warning {
 
         match self.error_type {
             WarningType::MacroOverwritten(first_declaration) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize, range.end as usize);
                 let (original_line, original_line_number, _, original_range) =
                     source_map.resolve_span_within_line(first_declaration, translate_lines);
-                let original_range = translate_to_inner_snippet_range(
-                    original_range.start,
-                    original_range.end,
-                    &original_line,
+                let original_range = (
+                    original_range.start as usize,
+                    original_range.end as usize,
                 );
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -1065,16 +1062,14 @@ impl Warning {
                 eprintln!("{}", display_list);
             }
             WarningType::AttributeOverwrite(overwritten_ident, overwrite_span) => {
-                let overwritten_range = translate_to_inner_snippet_range(
-                    range.start,
-                    range.start + overwritten_ident.span.get_end() - self.source.get_start(),
-                    &line,
+                let overwritten_range = (
+                    range.start as usize,
+                    (range.start + overwritten_ident.span.get_end() - self.source.get_start()) as usize,
                 );
                 let overwrite_span = overwrite_span.negative_offset(self.source.get_start());
-                let overwrite_range = translate_to_inner_snippet_range(
-                    range.start + overwrite_span.get_start(),
-                    range.start + overwrite_span.get_end(),
-                    &line,
+                let overwrite_range = (
+                    (range.start + overwrite_span.get_start() ) as usize,
+                    (range.start + overwrite_span.get_end()) as usize,
                 );
                 let label = format!(
                     "Attribute {} was declared multiple times. First value is ignored",
@@ -1114,11 +1109,3 @@ impl Warning {
     }
 }
 
-// FIXME remove this function. Its just here because i cant be bothered to remove the billion uses of it
-pub(crate) fn translate_to_inner_snippet_range(
-    start: Index,
-    end: Index,
-    _source: &str,
-) -> (usize, usize) {
-    (start as usize, end as usize)
-}

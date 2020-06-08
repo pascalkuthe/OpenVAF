@@ -177,7 +177,7 @@ impl ControlFlowGraph {
                 match block.terminator {
                     Terminator::End => (),
                     Terminator::Goto(ref mut next) => {
-                        if let Some(&new_next) = replacements.get(&next) {
+                        if let Some(&new_next) = replacements.get(next) {
                             *next = new_next
                         }
 
@@ -271,7 +271,7 @@ impl ControlFlowGraph {
                 Terminator::End => (),
 
                 Terminator::Goto(ref mut next) => {
-                    if let Some(&new_next) = replacements.get(&next) {
+                    if let Some(&new_next) = replacements.get(next) {
                         *next = new_next
                     }
                 }
@@ -319,11 +319,12 @@ pub enum Terminator {
 }
 
 impl Terminator {
+    #[must_use]
     pub fn successors(&self) -> Successors {
         match self {
-            Terminator::End => Successors::new_empty(),
-            Terminator::Goto(dst) => Successors::new_single(*dst),
-            Terminator::Split {
+            Self::End => Successors::new_empty(),
+            Self::Goto(dst) => Successors::new_single(*dst),
+            Self::Split {
                 true_block,
                 false_block,
                 ..

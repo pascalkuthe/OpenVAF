@@ -22,6 +22,7 @@ use crate::Parser;
 
 
 impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+    #[allow(clippy::too_many_lines)]
     pub fn parse_nature(&mut self, attributes: Attributes) -> Result {
         self.consume_lookahead();
         let start = self.preprocessor.current_start();

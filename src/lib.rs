@@ -22,6 +22,8 @@
 //!
 //!
 
+#![allow(clippy::module_name_repetitions,clippy::unreadable_literal,clippy::unseparated_literal_suffix,clippy::pub_enum_variant_names)]
+
 #[macro_use]
 extern crate bitflags;
 #[macro_use]

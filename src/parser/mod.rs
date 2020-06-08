@@ -313,7 +313,9 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     #[inline]
     pub fn expect(&mut self, token: Token) -> Result {
         let (found, source, expected_at) = self.next_with_span_and_previous_end()?;
-        if found != token {
+        if found == token {
+            Ok(())
+        } else {
             debug!("Parser: Expected {} but found {}", token, found);
             Err(Error {
                 source,
@@ -322,8 +324,6 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                     expected_at,
                 },
             })
-        } else {
-            Ok(())
         }
     }
 
@@ -371,7 +371,10 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     #[inline]
     pub fn expect_lookahead(&mut self, token: Token) -> Result {
         let (found, source, expected_at) = self.look_ahead_with_span_and_previous_end()?;
-        if found != token {
+        if found == token {
+            self.consume_lookahead();
+            Ok(())
+        } else {
             Err(Error {
                 source,
                 error_type: error::Type::MissingOrUnexpectedToken {
@@ -379,9 +382,6 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                     expected_at,
                 },
             })
-        } else {
-            self.consume_lookahead();
-            Ok(())
         }
     }
 

@@ -19,7 +19,7 @@ use crate::ir::{AttributeNode, Attributes, BlockId, Node, StatementId};
 use crate::parser::error::Type::{
     HierarchicalIdNotAllowedAsNature, TooManyBranchArgs, UnexpectedTokens,
 };
-use crate::parser::error::*;
+use crate::parser::error::{Error,Expected,Result};
 use crate::parser::lexer::Token;
 use crate::parser::Parser;
 use crate::symbol::keywords;
@@ -27,6 +27,8 @@ use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 
 impl<'lt, 'source_map> Parser<'lt, 'source_map> {
+
+    #[allow(clippy::too_many_lines)]
     pub fn parse_statement(&mut self, attributes: Attributes) -> Result<StatementId> {
         let (token, span) = self.look_ahead_with_span()?;
         let res = match token {

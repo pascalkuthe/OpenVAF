@@ -71,11 +71,11 @@ impl<T: Idx + From<usize>> WorkQueue<T> {
     /// Attempt to enqueue `element` in the work queue. Returns false if it was already present.
     #[inline]
     pub fn insert(&mut self, element: T) -> bool {
-        if !self.set.put(element) {
+        if self.set.put(element) {
+            false
+        } else {
             self.deque.push_back(element);
             true
-        } else {
-            false
         }
     }
 

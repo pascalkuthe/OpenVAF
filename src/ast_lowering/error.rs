@@ -15,7 +15,7 @@ use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, Sou
 use core::fmt::Formatter;
 
 use crate::ir::DisciplineId;
-use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};
+use crate::parser::error::{ Unsupported};
 use crate::symbol::Symbol;
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::format_list;
@@ -111,7 +111,7 @@ impl Error {
 
         match self.error_type {
             Type::UnexpectedTokenInBranchAccess => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -136,7 +136,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::NotFound(sym) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("cannot find {} in this scope", sym.as_str());
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -165,7 +165,7 @@ impl Error {
                 ref expected,
                 found,
             } => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "Expected {} found {} {}",
                     format_list(expected, ""),
@@ -222,7 +222,7 @@ impl Error {
                     label: Some(&*msg),
                     annotation_type: AnnotationType::Info,
                 });
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "{} can not be accessed by {}",
                     ast[discipline].contents.name,
@@ -259,11 +259,10 @@ impl Error {
                     other_declaration_range,
                 ) = source_map.resolve_span_within_line(declaration, translate_lines);
 
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let other_declaration_range = translate_to_inner_snippet_range(
-                    other_declaration_range.start,
-                    other_declaration_range.end,
-                    &other_declaration_line,
+                let range = (range.start as usize,range.end as usize);
+                let other_declaration_range = (
+                    other_declaration_range.start as usize,
+                    other_declaration_range.end as usize,
                 );
 
                 let other_declaration_origin = if let Some(val) = other_declaration_origin {
@@ -323,16 +322,14 @@ impl Error {
                     other_declaration_range,
                 ) = source_map.resolve_span_within_line(net2.declaration, translate_lines);
 
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
-                let declaration_range = translate_to_inner_snippet_range(
-                    declaration_range.start,
-                    declaration_range.end,
-                    &declaration_line,
+                let range = (range.start as usize,range.end as usize);
+                let declaration_range = (
+                    declaration_range.start as usize,
+                    declaration_range.end as usize,
                 );
-                let other_declaration_range = translate_to_inner_snippet_range(
-                    other_declaration_range.start,
-                    other_declaration_range.end,
-                    &other_declaration_line,
+                let other_declaration_range = (
+                    other_declaration_range.start as usize,
+                    other_declaration_range.end as usize,
                 );
 
                 let other_declaration_origin = if let Some(val) = other_declaration_origin {
@@ -405,7 +402,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::NotAllowedInConstantContext(non_constant_expr) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "{} are not allowed in a constant context!",
                     non_constant_expr
@@ -441,7 +438,7 @@ impl Error {
                 .print(source_map, translate_lines);
             }
             Type::EmptyBranchAccess => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -466,7 +463,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::DerivativeNotAllowed => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -491,7 +488,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::TypeDeclarationMissing(name) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "Function argument {} is missing separate type declaration",
                     name
@@ -529,7 +526,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::NotAllowedInFunction(not_allowed) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("{} are not allowed inside functions!", not_allowed);
                 let snippet = Snippet {
                     title: Some(Annotation {

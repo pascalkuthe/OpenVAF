@@ -157,6 +157,7 @@ impl<'lt> Fold<'lt> {
             ast::Expression::Primary(ast::Primary::BranchAccess(_, _))
             | ast::Expression::Primary(ast::Primary::DerivativeByBranch(_, _, _))
             | ast::Expression::Primary(ast::Primary::DerivativeByTime(_))
+            | ast::Expression::Primary(ast::Primary::DerivativeByTemperature(_))
             | ast::Expression::Primary(ast::Primary::Noise(_, _)) => {
                 self.error(Error {
                     source: expression.source,
@@ -284,6 +285,21 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
                 base.hir.expressions.push(Node {
                     source: expression.source,
                     contents: Expression::Primary(Primary::Derivative(expr, Unknown::Time)),
+                })
+            }
+
+            ast::Expression::Primary(ast::Primary::DerivativeByTemperature(expr)) => {
+                if self.state.contains(VerilogContext::FUNCTION) {
+                    base.error(Error {
+                        source: expression.source,
+                        error_type: Type::NotAllowedInFunction(NotAllowedInFunction::AnalogFilters),
+                    });
+                    return None;
+                }
+                let expr = self.fold(expr, base)?;
+                base.hir.expressions.push(Node {
+                    source: expression.source,
+                    contents: Expression::Primary(Primary::Derivative(expr, Unknown::Temperature)),
                 })
             }
 

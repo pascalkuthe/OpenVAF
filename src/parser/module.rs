@@ -25,6 +25,7 @@ use rustc_hash::FxHashSet;
 impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     pub(crate) const SYMBOL_TABLE_DEFAULT_SIZE: usize = 512;
 
+    #[allow(clippy::too_many_lines)]
     /// Parses a Module and all its items
     /// If an error occurs while trying to parse a module items the parser tries to recover to the next semicolon
     pub(super) fn parse_module(&mut self, attributes: Attributes) -> Result {
@@ -216,6 +217,7 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn parse_function(&mut self, attributes: Attributes) -> Result {
         let start = self.preprocessor.current_start();
         let return_type = match self.look_ahead()? {
@@ -276,7 +278,7 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                         parser.consume_lookahead();
                         args.push(FunctionArg {
                             name: parser.parse_identifier(false)?,
-                            input: false,
+                            input: true,
                             output: true,
                         });
                         parser.try_expect(Token::Semicolon);

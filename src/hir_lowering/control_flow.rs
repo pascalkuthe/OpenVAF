@@ -113,8 +113,14 @@ impl<'lt> HirToMirFold<'lt> {
                     {
                         let false_block = current_block;
 
-                        let (loop_start, loop_body) = if condition_block != inliner.current_block {
-                            //TODO evaluate if we can handle these kinds of loops
+                        let (loop_start, loop_body) = if condition_block == inliner.current_block {
+                            let loop_body = self.fold_block_internal(
+                                statements.enter_back(&while_loop.contents.body),
+                                Terminator::Goto(condition_block),
+                                blocks,
+                            );
+                            (condition_block, loop_body)
+                        } else {
                             let loop_start = inliner.current_block;
                             let loop_body = self.fold_block_internal(
                                 statements.enter_back(&while_loop.contents.body),
@@ -122,13 +128,6 @@ impl<'lt> HirToMirFold<'lt> {
                                 blocks,
                             );
                             (loop_start, loop_body)
-                        } else {
-                            let loop_body = self.fold_block_internal(
-                                statements.enter_back(&while_loop.contents.body),
-                                Terminator::Goto(condition_block),
-                                blocks,
-                            );
-                            (condition_block, loop_body)
                         };
 
                         blocks[condition_block].terminator = Terminator::Split {

@@ -6,10 +6,11 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+#![allow(clippy::wildcard_imports)]
+use crate::ir::*;
+
 use core::fmt::Debug;
 use std::ops::Range;
-
-use crate::ir::*;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
 use crate::Span;
@@ -70,6 +71,7 @@ pub struct Ast {
 }
 
 impl Ast {
+    #[must_use]
     pub fn new() -> Self {
         // Large initial capacity to avoid reallocation
         // TODO configure this smh
@@ -337,6 +339,7 @@ pub enum Primary {
     Noise(NoiseSource<ExpressionId, ()>, Option<StringLiteral>),
     DerivativeByBranch(ExpressionId, Ident, Node<BranchAccess>),
     DerivativeByTime(ExpressionId),
+    DerivativeByTemperature(ExpressionId),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -387,6 +390,7 @@ pub struct HierarchicalId {
 }
 
 impl HierarchicalId {
+    #[must_use]
     pub fn span(&self) -> Span {
         self.names[0]
             .span

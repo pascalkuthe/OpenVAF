@@ -7,6 +7,9 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+#![allow(clippy::wildcard_imports)]
+use crate::ir::*;
+use index_vec::*;
 
 use std::ops::Range;
 
@@ -14,10 +17,8 @@ use crate::ast::Parameter;
 use crate::ast::{BinaryOperator, NetType, UnaryOperator, Variable};
 
 use crate::hir_lowering::derivatives::Unknown;
-use crate::ir::*;
 use crate::symbol::Ident;
 use crate::{Ast, Span};
-use index_vec::*;
 use std::mem::take;
 use crate::literals::StringLiteral;
 use crate::ir::ids::IdRange;

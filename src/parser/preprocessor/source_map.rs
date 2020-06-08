@@ -178,6 +178,8 @@ impl<'source_map> SourceMap<'source_map> {
             range,
         )
     }
+
+    #[must_use]
     pub fn resolve_span(
         &self,
         span: Span,

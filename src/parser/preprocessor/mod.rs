@@ -30,7 +30,7 @@ use crate::{Lexer, Span};
 
 use super::Result;
 use ahash::AHashMap;
-
+use more_asserts::assert_le;
 mod source_map;
 
 #[cfg(test)]
@@ -91,7 +91,7 @@ struct Insertion<'lt> {
 }
 
 impl<'lt> Insertion<'lt> {
-    fn new(start: Index, token_source: TokenSource<'lt>) -> Self {
+    const fn new(start: Index, token_source: TokenSource<'lt>) -> Self {
         Self {
             start,
             global_offset: start as IndexOffset,
@@ -541,6 +541,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         }
         let decl_source = &self.source()
             [body_start as usize..(self.current_source_start + self.current_len) as usize];
+
+        assert_le!(args.len(),ArgumentIndex::MAX as usize);
         let maco_decl = Macro {
             body,
             arg_count: args.len() as ArgumentIndex,
@@ -602,6 +604,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             Token::SimpleIdentifier(_) => {
                 let identifier = self.slice();
                 if let Some(index) = args.iter().position(|arg_name| *arg_name == identifier) {
+                    #[allow(clippy::cast_possible_truncation)]
                     MacroBodyToken::ArgumentReference(index as ArgumentIndex, depth)
                 } else {
                     MacroBodyToken::LexerToken(self.current_token)
@@ -739,15 +742,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
             });
         }
         if let Some(definition) = self.macros.get(reference.name) {
-            if reference.arg_bindings.len() as ArgumentIndex != definition.arg_count {
-                Err(Error {
-                    error_type: error::Type::MacroArgumentCount {
-                        found: reference.arg_bindings.len() as ArgumentIndex,
-                        expected: definition.arg_count,
-                    },
-                    source: span,
-                })
-            } else {
+            if reference.arg_bindings.len() == definition.arg_count as usize{
                 self.source_map_builder.enter_macro(
                     span.get_start(),
                     source_span,
@@ -760,10 +755,18 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
                     .insert(reference.name, reference.arg_bindings.clone());
 
                 self.state_stack.last_mut().unwrap().global_offset -=
-                    source_span.get_len() as IndexOffset;
+                    IndexOffset::from(source_span.get_len());
                 let token_source =
                     TokenSource::Insert(definition.body.clone().into_iter().peekable(), true);
                 Ok(token_source)
+            } else {
+                Err(Error {
+                    error_type: error::Type::MacroArgumentCount {
+                        found: reference.arg_bindings.len(),
+                        expected: definition.arg_count,
+                    },
+                    source: span,
+                })
             }
         } else {
             Err(Error {
@@ -773,7 +776,8 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         }
     }
 
-    pub fn current_token(&self) -> Token {
+    #[inline]
+    pub const  fn current_token(&self) -> Token {
         self.current_token
     }
 
@@ -784,22 +788,30 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         })
     }
 
+    #[must_use]
     pub fn span(&self) -> Span {
         Span::new_with_length(self.current_start, self.current_len)
     }
 
-    pub fn current_start(&self) -> Index {
+    #[must_use]
+    #[inline]
+    pub const fn current_start(&self) -> Index {
         self.current_start
     }
 
-    pub fn current_end(&self) -> Index {
+    #[must_use]
+    #[inline]
+    pub const fn current_end(&self) -> Index {
         self.current_start + self.current_len
     }
 
-    pub fn current_len(&self) -> Index {
+    #[must_use]
+    #[inline]
+    pub const fn current_len(&self) -> Index {
         self.current_len
     }
 
+    #[must_use]
     fn current_offset(&self) -> IndexOffset {
         self.state_stack.last().unwrap().global_offset
     }
@@ -809,6 +821,7 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
         self.source_map_builder.source()
     }
 
+    #[must_use]
     pub fn slice(&self) -> &'lt str {
         let source = self.source();
         &source[self.current_source_start as usize
@@ -817,23 +830,23 @@ impl<'lt, 'source_map> Preprocessor<'lt, 'source_map> {
 
     fn consume(&mut self, token: Token) -> Result<()> {
         self.advance_state()?;
-        if self.current_token != token {
+        if self.current_token == token {
+            Ok(())
+        } else {
             let error = error::Type::UnexpectedToken {
                 expected: vec![token],
             };
             self.token_error(error)
-        } else {
-            Ok(())
         }
     }
     fn consume_simple_ident(&mut self) -> Result<()> {
-        if !matches!(self.current_token, Token::SimpleIdentifier(_)) {
+        if matches!(self.current_token, Token::SimpleIdentifier(_)) {
+            Ok(())
+        } else {
             let error = error::Type::UnexpectedToken {
                 expected: vec![Token::SimpleIdentifier(FollowedByBracket(false))],
             };
             self.token_error(error)
-        } else {
-            Ok(())
         }
     }
 }

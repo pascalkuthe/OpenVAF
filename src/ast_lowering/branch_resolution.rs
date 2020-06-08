@@ -277,7 +277,7 @@ impl<'lt> BranchResolver {
                         return Some((
                             Branch::Nets(first_net, second_net),
                             fold.hir[first_net].contents.discipline,
-                        ));
+                        ))
 ;
                     } else {                        fold.error(Error {
                         error_type: Type::DisciplineMismatch(

@@ -8,6 +8,7 @@
  * *****************************************************************************************
  */
 
+#![allow(clippy::enum_glob_use)]
 use crate::ast::{BinaryOperator, BranchAccess, Expression, Primary, UnaryOperator};
 use crate::ir::BuiltInFunctionCall1p::*;
 use crate::ir::BuiltInFunctionCall2p::*;
@@ -15,7 +16,7 @@ use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, NoiseSource, Syste
 use crate::ir::{ExpressionId, Node};
 use crate::literals::StringLiteral;
 use crate::parser::error::Type::{UnexpectedEof, UnexpectedTokens};
-use crate::parser::error::*;
+use crate::parser::error::{Error,Expected,Result,Type};
 use crate::parser::lexer::Token;
 use crate::parser::lexer::Token::ParenOpen;
 use crate::parser::primaries::{
@@ -165,6 +166,7 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
         Ok(BinaryOperatorOrCondition::BinaryOperator(res.0, res.1))
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(super) fn parse_atom(&mut self) -> Result<Node<Expression>> {
         let (token, span) = self.look_ahead_with_span()?;
         let res = match token {
@@ -237,12 +239,12 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                 let primary = if self.look_ahead()? == Token::ParenOpen {
                     self.consume_lookahead();
                     if self.look_ahead()? == Token::OpLess {
-                        let start = self.preprocessor.current_start();
+                        let branch_start = self.preprocessor.current_start();
                         let res = Primary::BranchAccess(
                             Self::convert_to_nature_identifier(ident.names)?,
                             Node::new(
                                 BranchAccess::Implicit(self.parse_branch()?),
-                                self.span_to_current_end(start),
+                                self.span_to_current_end(branch_start),
                             ),
                         );
                         self.expect(Token::ParenClose)?;
@@ -351,6 +353,16 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
                 let expr = self.ast.expressions.push(expr);
                 Node::new(
                     Expression::Primary(Primary::DerivativeByTime(expr)),
+                    self.span_to_current_end(start),
+                )
+            }
+            Token::TemperatureDerivative => {
+                let start = self.preprocessor.current_start();
+                self.consume_lookahead();
+                let expr = self.parse_bracketed_expression()?;
+                let expr = self.ast.expressions.push(expr);
+                Node::new(
+                    Expression::Primary(Primary::DerivativeByTemperature(expr)),
                     self.span_to_current_end(start),
                 )
             }

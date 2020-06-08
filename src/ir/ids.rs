@@ -9,11 +9,17 @@
 //! All IRS use preallocated Arenas for each node type. These Ids and their implementations are generated using the `id_type!` macro in this module.
 //! The [`impl_id_type!`](impl_id_type) is also defined here which provides the implementation necessary for an ID type to interact with an IR
 
-use super::*;
+// IndexVec macro is a bit unpretty atm
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::used_underscore_binding)]
+
+use std::fmt::Debug;
+use std::ops::Range;
 use index_vec::Idx;
-use more_asserts::*;
+use more_asserts::assert_gt;
 use pretty_assertions::assert_eq;
 use std::iter;
+
 
 pub type IdxRangeIter<I> = iter::Map<Range<usize>, fn(usize) -> I>;
 
@@ -21,10 +27,7 @@ macro_rules! id_type {
     ($name:ident($type:ident)) => {
         // see the index_vec documentation
         ::index_vec::define_index_type! {
-
             pub struct $name = $type;
-
-            DISABLE_MAX_INDEX_CHECK = cfg!(not(debug_assertions));
 
             DISPLAY_FORMAT = "{}";
 

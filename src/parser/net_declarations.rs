@@ -99,7 +99,7 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
             {
                 self.non_critical_errors.push(Error {
                     error_type: AlreadyDeclaredInThisScope {
-                        other_declaration: old_declaration.span(&self.ast),
+                        other_declaration: old_declaration.span(self.ast),
                         name: ident.name,
                     },
                     source: ident.span,
@@ -114,7 +114,7 @@ impl<'lt, 'source_map> Parser<'lt, 'source_map> {
     }
 
     /// this parses a port Declaration which only declares one port (for example input electrical x but not input electrical x,y)
-    /// this function is a helper function to either be called from parse_port_declaration or parse_port_declaration_list which handel the extra ports declared
+    /// this function is a helper function to either be called from `parse_port_declaration` or `parse_port_declaration_list` which handel the extra ports declared
     pub(super) fn parse_port_declaration_base(&mut self, attributes: Attributes) -> Result<PortId> {
         let (token, span) = self.next_with_span()?;
         let start = self.preprocessor.current_start();

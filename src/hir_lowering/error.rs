@@ -12,7 +12,7 @@ use annotate_snippets::display_list::{DisplayList, FormatOptions};
 use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
 
 use crate::ir::{FunctionId, ParameterId, VariableId};
-use crate::parser::error::{translate_to_inner_snippet_range, Unsupported};
+use crate::parser::error::{ Unsupported};
 use crate::symbol::Symbol;
 use crate::util::VecFormatter;
 use crate::{Hir, SourceMap, Span};
@@ -66,7 +66,7 @@ impl Error {
 
         match self.error_type {
             Type::ExpectedString => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -92,7 +92,7 @@ impl Error {
             }
 
             Type::ExpectedReal => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -118,7 +118,7 @@ impl Error {
             }
 
             Type::ExpectedInteger => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -144,7 +144,7 @@ impl Error {
             }
 
             Type::ExpectedNumber => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -182,13 +182,12 @@ impl Error {
                 } else {
                     Cow::const_str(source_map.main_file_name)
                 };
-                let parameter_range = translate_to_inner_snippet_range(
-                    parameter_range.start,
-                    parameter_range.end,
-                    parameter_line,
+                let parameter_range = (
+                    parameter_range.start as usize,
+                    parameter_range.end as usize,
                 );
                 let parameter_line = parameter_line;
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("{} is declared here", hir[variable].contents.name);
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -240,13 +239,12 @@ impl Error {
                 } else {
                     Cow::const_str(source_map.main_file_name)
                 };
-                let parameter_range = translate_to_inner_snippet_range(
-                    parameter_range.start,
-                    parameter_range.end,
-                    parameter_line,
+                let parameter_range = (
+                    parameter_range.start as usize,
+                    parameter_range.end as usize,
                 );
                 let parameter_line = parameter_line;
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("{} is declared here", hir[variable].contents.name);
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -298,13 +296,12 @@ impl Error {
                 } else {
                     Cow::const_str(source_map.main_file_name)
                 };
-                let parameter_range = translate_to_inner_snippet_range(
-                    parameter_range.start,
-                    parameter_range.end,
-                    parameter_line,
+                let parameter_range = (
+                    parameter_range.start as usize,
+                    parameter_range.end as usize,
                 );
                 let parameter_line = parameter_line;
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!("{} is declared here", hir[parameter].contents.name);
                 let snippet = Snippet {
                     title: Some(Annotation {
@@ -356,13 +353,12 @@ impl Error {
                 } else {
                     Cow::const_str(source_map.main_file_name)
                 };
-                let parameter_range = translate_to_inner_snippet_range(
-                    parameter_range.start,
-                    parameter_range.end,
-                    parameter_line,
+                let parameter_range = (
+                    parameter_range.start as usize,
+                    parameter_range.end as usize,
                 );
                 let parameter_line = parameter_line;
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "Expected numeric parameter but {} is a String",
                     hir[parameter].contents.name
@@ -417,13 +413,12 @@ impl Error {
                 } else {
                     Cow::const_str(source_map.main_file_name)
                 };
-                let parameter_range = translate_to_inner_snippet_range(
-                    parameter_range.start,
-                    parameter_range.end,
-                    parameter_line,
+                let parameter_range = (
+                    parameter_range.start as usize,
+                    parameter_range.end as usize,
                 );
                 let parameter_line = parameter_line;
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "Parameter {} was referenced before it was defined in a constant context",
                     hir[parameter].contents.name
@@ -465,7 +460,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::InvalidParameterBound => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -492,7 +487,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::ParameterExcludeNotPartOfRange => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -520,7 +515,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::CannotCompareStringToNumber => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -545,7 +540,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::CondtionTypeMissmatch => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -570,7 +565,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::OnlyNumericExpressionsCanBeDerived => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -596,7 +591,7 @@ impl Error {
             }
 
             Type::ImplicitSolverDeltaIsNotAValidString => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -621,7 +616,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::DerivativeNotDefined => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -648,7 +643,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::PartialDerivativeOfTimeDerivative => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 footer.push(Annotation{
                     id: None,
                     label: Some("Partial derivatives of branch time derivatives are not possible because time derivatives of branches are calculated numerically by the Simulator"),
@@ -683,7 +678,7 @@ impl Error {
             }
             .print(source_map, translate_lines),
             Type::Recursion(recursively_called, ref call_stack, _src) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let note; // declared here so it doesn't get dropped to early
                 match &call_stack[..] {
                     [] => (),
@@ -735,7 +730,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::ExpectedVariableForFunctionOutput => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let snippet = Snippet {
                     title: Some(Annotation {
                         id: None,
@@ -760,7 +755,7 @@ impl Error {
                 eprintln!("{}", display_list);
             }
             Type::WrongFunctionArgCount(found, expected) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let label = format!(
                     "Function argument count mismatch: Expected {} found {}",
                     expected, found
@@ -819,7 +814,7 @@ impl Warning {
 
         match self.error_type {
             WarningType::ImplicitDerivative(var) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let main_label = format!("Implicit derivatives can not be calculated using automatic differentiation! The derivative of {} is calulated inside a branch that depends on its value",hir[var].contents.name);
                 let inline_label =
                     format!("Branch depends on the value of {} ", hir[var].contents.name);
@@ -853,7 +848,7 @@ impl Warning {
             }
 
             WarningType::SpecifiedDeltaIsNotDerived(name) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let main_label = format!("The delta \"{}\" that was specified for the ImplicitFunctionSolver attribute is not the name of a Variable that is derived inside the loop",name);
                 let inline_label = format!("{} is not derived inside the loop", name);
                 footer.push(Annotation{
@@ -885,7 +880,7 @@ impl Warning {
                 eprintln!("{}", display_list);
             }
             WarningType::StandardNatureConstants(occurance) => {
-                let range = translate_to_inner_snippet_range(range.start, range.end, &line);
+                let range = (range.start as usize,range.end as usize);
                 let main_label = format!(
                     "{}. To calculate this the NIST2010 physical constants are used",
                     occurance

@@ -38,6 +38,7 @@ use std::clone::Clone;
 use std::convert::Into;
 use std::hash::{Hash, Hasher};
 use std::iter::Iterator;
+use more_asserts::assert_le;
 
 use ahash::AHashMap;
 use bumpalo::Bump;
@@ -54,11 +55,13 @@ pub struct Ident {
 const DUMMY_SPAN: Span = Span::new_short_empty_span(0);
 impl Ident {
     #[inline]
+    #[must_use]
     /// Constructs a new identifier from a symbol and a span.
     pub const fn new(name: Symbol, span: Span) -> Self {
         Self { name, span }
     }
 
+    #[must_use]
     pub const fn empty() -> Self {
         Self {
             name: EMPTY_SYMBOL,
@@ -66,6 +69,7 @@ impl Ident {
         }
     }
 
+    #[must_use]
     pub const fn spanned_empty(span: Span) -> Self {
         Self {
             name: EMPTY_SYMBOL,
@@ -81,10 +85,12 @@ impl Ident {
     }
 
     /// Maps a string and a span to an identifier.
+    #[must_use]
     pub fn from_str_and_span(string: &str, span: Span) -> Self {
         Self::new(Symbol::intern(string), span)
     }
 
+    #[must_use]
     pub fn without_first_quote(self) -> Self {
         Self::new(
             Symbol::intern(self.as_str().trim_start_matches('\'')),
@@ -92,6 +98,7 @@ impl Ident {
         )
     }
 
+    #[must_use]
     /// Convert the name to a `SymbolStr`. This is a slowish operation because
     /// it requires locking the symbol interner.
     pub fn as_str(self) -> SymbolStr {
@@ -138,10 +145,12 @@ impl SymbolIndex {
 }
 
 impl Symbol {
+    #[must_use]
     const fn new(n: u32) -> Self {
         Self(SymbolIndex(n))
     }
 
+    #[must_use]
     /// Maps a string to its interned representation.
     pub fn intern(string: &str) -> Self {
         with_interner(|interner| interner.intern(string))
@@ -153,6 +162,7 @@ impl Symbol {
         with_interner(|interner| f(interner.get(self)))
     }
 
+    #[must_use]
     /// Convert to a `SymbolStr`. This is a slowish operation because it
     /// requires locking the symbol interner.
     pub fn as_str(self) -> SymbolStr {
@@ -205,6 +215,8 @@ impl Interner {
             return name;
         }
 
+        assert_le!(self.strings.len(),u32::MAX as usize);
+        #[allow(clippy::cast_possible_truncation)]
         let name = Symbol::new(self.strings.len() as u32);
         let string = self.arena.alloc_str(string);
         // It is safe to extend the arena allocation to `'static` because we only access
@@ -250,8 +262,8 @@ pub mod keywords {
     pub const IMPLICIT_SOLVER: Symbol = Symbol(SymbolIndex(9));
 }
 mod statics {
+    #![allow(clippy::wildcard_imports)]
     use parking_lot::Mutex;
-
     use crate::symbol::keywords::*;
     use crate::symbol::Interner;
 
