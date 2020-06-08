@@ -9,7 +9,6 @@
 use crate::analysis::constant_folding::{ConstantFoldState, IntermediateWritingConstantFold};
 use crate::analysis::data_flow::reaching_variables::ReachableDefinitionsAnalysis;
 use crate::analysis::ProgramDependenceGraph;
-use crate::ir::{ModuleId, VariableId};
 use crate::{Ast, ControlFlowGraph};
 use bumpalo::Bump;
 use std::fs::File;

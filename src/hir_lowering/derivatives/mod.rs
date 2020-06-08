@@ -227,14 +227,18 @@ impl<'lt> HirToMirFold<'lt> {
                                 )
                             }
                             RealBinaryOperator::Divide => {
-                                // lhs * rhs' / (rhs*rhs)
+                                // -lhs * rhs' / (rhs*rhs)
 
-                                let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                                let product = self.mir.real_expressions.push(self.mir[expr].clone_as(
                                     RealExpression::BinaryOperator(
                                         lhs,
                                         op.copy_as(RealBinaryOperator::Multiply),
                                         rhs_derived,
                                     ),
+                                ));
+
+                                let top = self.mir.real_expressions.push(self.mir[expr].clone_as(
+                                    RealExpression::Negate(op.source,product)
                                 ));
 
                                 let bottom = self.mir.real_expressions.push(
