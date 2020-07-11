@@ -35,4 +35,4 @@ Documentation is currently in the works. OpenVAF has three different documentati
 
 # Acknowledgement
 
-[rustc](https://github.com/rust-lang/rust/) has heavily inspired the design of this compiler. Some code has even benn from rustc (marked appropriately in sourcecode comments) to avoid needless rewrites.
+[rustc](https://github.com/rust-lang/rust/) has heavily inspired the design of this compiler. Some code has even been copied straight from rustc (marked appropriately in sourcecode comments) to avoid needless rewrites.
