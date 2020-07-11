@@ -82,6 +82,7 @@ pages:
   stage: doc
   script:
     - cargo doc --workspace --document-private-items
+    - mkdir docs
     - cp -R target/doc docs/internal
     - cargo doc --workspace
     - cp -R target/doc docs/api

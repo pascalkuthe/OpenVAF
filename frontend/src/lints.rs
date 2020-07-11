@@ -34,9 +34,10 @@ pub static PLUGIN_LINTS: [&'static LintData] = [..];
 
 /// Allows declaring additional lints that are not built into OpenVAF
 ///
-/// This macro will register lint with display name `-crate_name-::$name`, no documentation lvl and the specified default lvl.
+/// This macro will register lint with display name `*crate_name*::$name`, no documentation lvl and the specified default lvl.
 /// Furthmore a static variable `$name` will be declared that can be used to access the [`Lint`](crate::lints::Lint)
 ///
+/// Note that [`linkme`](https://crates.io/crates/linkme) currently has to be a **directy dependency** (in your Cargo.toml) of every crate that calls this macro
 ///
 /// # Arguments
 ///
