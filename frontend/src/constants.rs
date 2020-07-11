@@ -63,7 +63,7 @@ impl Constants {
     }
 
     fn with<T>(f: impl FnOnce(&Constants) -> T) -> T {
-        GLOBALS.with(|globals| f(globals.constants.get_or_init(|| Default::default())))
+        GLOBALS.with(|globals| f(globals.constants.get_or_init(Default::default)))
     }
 
     #[inline]

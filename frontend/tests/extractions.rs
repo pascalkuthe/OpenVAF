@@ -26,7 +26,7 @@ fn extraction_integration_test(
 ) -> Result<(), PrettyError> {
     fern::Dispatch::new()
         .format(|out, message, _record| out.finish(*message))
-        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Warn)
         .chain(std::io::stderr())
         .apply();
 

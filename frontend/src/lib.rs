@@ -15,7 +15,7 @@
 
 /// Reexport for macros
 pub mod _macro_reexports {
-    pub use linkme::distributed_slice;
+    pub use linkme;
     pub use once_cell;
     pub use paste;
 }

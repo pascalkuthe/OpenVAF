@@ -137,7 +137,6 @@ pub(crate) fn generate_lints(lints: Lints) -> TokenStream {
                 let mut lints = index_vec![#init];
                 lints.extend_from_slice(IndexSlice::from_slice(&PLUGIN_LINTS[..]));
 
-
                 Self{
                     names,
                     lints,

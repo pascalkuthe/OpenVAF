@@ -32,6 +32,70 @@ use std::sync::Arc;
 #[distributed_slice]
 pub static PLUGIN_LINTS: [&'static LintData] = [..];
 
+/// Allows declaring additional lints that are not built into OpenVAF
+///
+/// This macro will register lint with display name `-crate_name-::$name`, no documentation lvl and the specified default lvl.
+/// Furthmore a static variable `$name` will be declared that can be used to access the [`Lint`](crate::lints::Lint)
+///
+///
+/// # Arguments
+///
+/// * `$name` - The name of the lint
+///
+/// * `$default_lvl` - The lvl of the lint that should be used when no overwrite is presen
+///
+///
+///
+/// # Example
+///
+/// ```
+/// # use open_vaf::declare_plugin_lint;
+/// # use open_vaf::lints::LintLevel;
+///
+/// declare_plugin_lint!(foo,Warn);
+/// declare_plugin_lint!(bar,Deny);
+///
+/// fn main(){
+///     // doc tests are compiled as tough they are part of the main crate
+///     // Therefore the crate name here is open-vaf
+///     assert_eq!(foo.data().display_id,"open-vaf::foo");
+///     assert_eq!(foo.lvl().0,LintLevel::Warn);
+///     assert_eq!(bar.data().display_id,"open-vaf::bar");
+///     assert_eq!(bar.lvl().0,LintLevel::Deny);
+/// }
+///
+/// ```
+///
+#[macro_export]
+macro_rules! declare_plugin_lint {
+    ($name:ident,$default_lvl:ident) => {
+        $crate::_macro_reexports::paste::item! {
+            #[$crate::_macro_reexports::linkme::distributed_slice($crate::lints::PLUGIN_LINTS)]
+            #[allow(non_upper_case_globals)]
+            pub static [<$name _data>]: &$crate::lints::LintData = &$crate::lints::LintData {
+                display_id: concat!(env!("CARGO_PKG_NAME"), "::", stringify!($name)),
+
+                // Documentation doesnt cover plugins
+                documentation_id: None,
+
+                default_lvl: $crate::lints::LintLevel::$default_lvl,
+            };
+        }
+
+        #[allow(non_upper_case_globals)]
+        pub static $name: $crate::_macro_reexports::once_cell::sync::Lazy<$crate::lints::Lint> =
+            $crate::_macro_reexports::once_cell::sync::Lazy::new(|| {
+                println!(concat!(env!("CARGO_PKG_NAME"), "::", stringify!($name)));
+                $crate::lints::Lint::from_name(concat!(
+                    env!("CARGO_PKG_NAME"),
+                    "::",
+                    stringify!($name)
+                ))
+                .unwrap()
+            });
+    };
+}
+
 static LINT_REGISTRY: OnceCell<LintRegistry> = OnceCell::new();
 
 #[derive(Debug, Default)]
@@ -128,7 +192,7 @@ pub enum LintLevel {
 }
 
 /// The location a late lint occured
-/// This is will be used in the future to figure out which attributes apply to a lint
+/// This is will be used in the future to figure out the correct lint lvl based on attributes
 pub enum LintLocation {
     Statement(StatementId),
     RealExpression(RealExpressionId),
@@ -215,33 +279,6 @@ pub struct LintData {
     pub display_id: &'static str,
     pub documentation_id: Option<&'static str>,
     pub default_lvl: LintLevel,
-}
-
-#[macro_export]
-macro_rules! declare_plugin_lint {
-    ($name:ident,$default_lvl:ident) => {
-        $crate::_macro_reexports::paste::item! {
-            #[allow(non_upper_case_globals)]
-            pub static [<$name _data>]: &$crate::lints::LintData = &$crate::lints::LintData {
-                display_id: concat!(env!("CARGO_PKG_NAME"), "::", stringify!($name)),
-
-                // Documentation doesnt cover plugins
-                documentation_id: None,
-
-                default_lvl: $crate::lints::LintLevel::$default_lvl,
-            };
-        }
-
-        #[allow(non_upper_case_globals)]
-        pub static $name: $crate::_macro_reexports::once_cell::sync::Lazy<$crate::lints::Lint> =
-            $crate::once_cell::sync::Lazy::new(|| {
-                $crate::lints::register_lint($crate::lints::Lint::from_name(concat!(
-                    env!("CARGO_PKG_NAME"),
-                    "::",
-                    stringify!($name)
-                )))
-            });
-    };
 }
 
 /// Responsible for managing all lints generated in the current thread
