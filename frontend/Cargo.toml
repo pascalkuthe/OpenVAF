@@ -1,0 +1,85 @@
+[package]
+name = "open-vaf"
+version = "0.5.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+
+open-vaf-macros = {version = "0.5.0", path = "../macros"}
+
+# Functionality
+logos = "0.11.4"
+float-cmp = "0.8.0"
+num-traits = "0.2.12"
+paste = "0.1.18"
+
+
+# Error reporting
+log="0.4.8"
+thiserror = "1.0.20"
+more-asserts = "0.2.1"
+
+# Performance
+ahash = "0.4.1"
+beef = "0.4.4"
+parking_lot = "0.11.0"
+bumpalo = "3.4.0"
+
+# Data structures
+once_cell = "1.4.0"
+fixedbitset = "0.3.0"
+index_vec = "0.1.2"
+
+# Boiler plate
+cfg-if = "0.1.10"
+bitflags = "1.2.1"
+
+# Debug
+rustc-ap-graphviz = {version = "662.0.0",optional=true}
+
+
+#Performance
+[dependencies.bytecount]
+version = "0.6.0"
+features = ["runtime-dispatch-simd"]
+
+# Functionality
+[dependencies.annotate-snippets]
+version = "0.9.0"
+features = ["color"]
+
+#Logging for tests
+[dev-dependencies]
+fern={version="0.6.0",features=["colored"]}
+criterion = "0.3.3"
+
+[[bench]]
+name = "extractions"
+harness = false
+
+[[test]]
+name = "extractions"
+
+
+
+[features]
+
+default = []
+
+
+threading = []
+
+nightly = ["parking_lot/nightly"]
+
+graph_debug = ["rustc-ap-graphviz"]
+

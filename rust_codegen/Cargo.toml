@@ -1,0 +1,21 @@
+[package]
+name = "verilog-arc"
+version = "0.5.0"
+authors = ["DSOM <dspom@protonmail.com>"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/verilogarc"
+description = "A rust proc macro based code generation backend for OpenVAF"
+license="GPL-3.0"
+readme="README.md"
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+proc-macro2 = "1.0.18"
+quote = "1.0.7"
+log = "0.4.8"
+open-vaf = {version = "0.5.0",path = "../frontend"}
+
+[features]
+graph_debug = ["open-vaf/graph_debug"]
