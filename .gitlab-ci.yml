@@ -30,7 +30,15 @@ build:
     - rustc --version
     - cargo --version
     - cargo build --verbose
-
+  rules:
+    - changes:
+        - frontend/src/**.rs
+        - macros/src/**.rs
+        - rust_codegen/src/**.rs
+        - frontend/src/Cargo.toml
+        - macros/src/Cargo.toml
+        - rust_codegen/src/Cargo.toml
+        - Cargo.toml
 test:
   stage: test
   script:
@@ -107,8 +115,7 @@ pages:
         - frontend/src/**.rs
         - macros/src/**.rs
         - rust_codegen/src/**.rs
-
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 
   cache:
