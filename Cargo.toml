@@ -11,4 +11,3 @@ opt-level = 1
 
 [profile.bench]
 lto = true        # Enable full link-time optimization.
-target-cpu="native"

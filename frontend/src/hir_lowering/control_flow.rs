@@ -373,7 +373,7 @@ impl<'lt> HirToMirFold<'lt> {
                                 blocks,
                                 attributes,
                                 for_loop.increment_var,
-                                for_loop.increment_val,
+                                for_loop.increment_expr,
                             )
                         },
                     );
@@ -383,7 +383,7 @@ impl<'lt> HirToMirFold<'lt> {
                         blocks,
                         attributes,
                         for_loop.initial_var,
-                        for_loop.initial_val,
+                        for_loop.initial_expr,
                     )
                 }
 

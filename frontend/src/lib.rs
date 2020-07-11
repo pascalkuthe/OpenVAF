@@ -14,7 +14,7 @@
 )]
 
 /// Reexport for macros
-pub mod _macro_reexports{
+pub mod _macro_reexports {
     pub use linkme::distributed_slice;
     pub use once_cell;
     pub use paste;
@@ -73,10 +73,6 @@ pub use sourcemap::SourceMap;
 
 use crate::constants::Constants;
 use data_structures::sync::OnceCell;
-
-
-
-
 
 #[cfg(test)]
 pub mod test;

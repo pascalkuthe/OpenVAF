@@ -47,7 +47,6 @@ use bitflags::_core::ptr::NonNull;
 use index_vec::{define_index_type, IndexVec};
 use open_vaf_macros::symbols;
 use std::fmt::{Debug, Display};
-use std::mem::transmute;
 use std::ops::Deref;
 
 #[derive(Copy, Clone, Debug)]
@@ -247,7 +246,7 @@ impl SymbolStr {
         unsafe {
             // this is save since we only use NonNull to indicate that SymbolStr is not send
             // &str is always non null anyway and the const to mut case is also save since self.string() is only ever used in deref as reading
-            let raw = transmute::<*const str, *mut str>(interner_str as *const str);
+            let raw = interner_str as *const str as *mut str;
             Self {
                 string: NonNull::new_unchecked(raw),
             }

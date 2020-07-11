@@ -42,6 +42,7 @@ use crate::mir::{
     RealExpression, StringExpression,
 };
 use crate::Span;
+use float_cmp::{ApproxEq, F64Margin};
 use log::trace;
 
 mod lints;
@@ -312,10 +313,10 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
     ) -> Option<f64> {
         let cond = self.fold_int_expression(cond)?;
 
-        let (expr, res) = if cond != 0 {
-            (true_expr, self.visit_real_expr(true_expr))
-        } else {
+        let (expr, res) = if cond == 0 {
             (false_expr, self.visit_real_expr(false_expr))
+        } else {
+            (true_expr, self.visit_real_expr(true_expr))
         };
 
         if res.is_none() {
@@ -643,10 +644,10 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
     ) -> Option<i64> {
         let cond = self.fold_int_expression(cond)?;
 
-        let (expr, res) = if cond != 0 {
-            (true_expr, self.visit_integer_expr(true_expr))
-        } else {
+        let (expr, res) = if cond == 0 {
             (false_expr, self.visit_integer_expr(false_expr))
+        } else {
+            (true_expr, self.visit_integer_expr(true_expr))
         };
 
         if res.is_none() {
@@ -1054,7 +1055,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealComparisonVisit
         let lhs = self.fold_real_expression(lhs)?;
         let rhs = self.fold_real_expression(rhs)?;
         trace!("folding {:?} != {:?}", lhs, rhs);
-        Some((lhs != rhs) as i64)
+        Some((lhs.approx_ne(rhs, F64Margin::default())) as i64)
     }
 }
 
@@ -1090,10 +1091,10 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> StringExprVisitor
         false_expr: StringExpressionId,
     ) -> Option<StringLiteral> {
         let cond = self.fold_int_expression(cond)?;
-        let (expr, val) = if cond != 0 {
-            (true_expr, self.visit_string_expr(true_expr))
-        } else {
+        let (expr, val) = if cond == 0 {
             (false_expr, self.visit_string_expr(false_expr))
+        } else {
+            (true_expr, self.visit_string_expr(true_expr))
         };
 
         if val.is_none() {

@@ -243,7 +243,7 @@ impl<'lt, H: DeclarationHandler> Statements<'lt, H> {
                 });
 
                 let increment_val = self.fold_expression(increment_val);
-                let initial_val = self.fold_expression(initial_val);
+                let initial_expr = self.fold_expression(initial_val);
                 let condition = self.fold_expression(condition);
 
                 let body_start = self.base.hir.statements.len_idx();
@@ -254,14 +254,14 @@ impl<'lt, H: DeclarationHandler> Statements<'lt, H> {
                     initial_var_id,
                     increment_var_id,
                     increment_val,
-                    initial_val,
+                    initial_expr,
                     condition,
                 ) {
                     (
                         Some(initial_var),
                         Some(increment_var),
-                        Some(increment_val),
-                        Some(initial_val),
+                        Some(increment_expr),
+                        Some(initial_expr),
                         Some(condition),
                     ) => {
                         self.base
@@ -270,9 +270,9 @@ impl<'lt, H: DeclarationHandler> Statements<'lt, H> {
                             .push(Statement::For(for_loop.map(ForLoop {
                                 condition,
                                 initial_var,
-                                initial_val,
+                                initial_expr,
                                 increment_var,
-                                increment_val,
+                                increment_expr,
                                 body: IdRange(body_start..self.base.hir.statements.len_idx()),
                             })));
                     }

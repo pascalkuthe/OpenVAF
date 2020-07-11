@@ -41,7 +41,7 @@ struct LintRegistry {
 }
 
 fn with_lint_registry<T>(f: impl FnOnce(&LintRegistry) -> T) -> T {
-    let registry = LINT_REGISTRY.get_or_init(|| LintRegistry::new());
+    let registry = LINT_REGISTRY.get_or_init(LintRegistry::new);
     f(registry)
 }
 

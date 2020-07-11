@@ -1,4 +1,11 @@
-image: 'rust:latest'
+default:
+  image: 'rust:latest'
+  cache: &global_cache
+    key: ${CI_COMMIT_REF_SLUG}
+
+    paths:
+      - .cargo/
+      - target/
 
 stages:
   - build
@@ -8,16 +15,21 @@ stages:
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
+  RUSTUP_HOME: $CI_PROJECT_DIR/rustup
 
-#before_script:
-#  - apt-get update -yq
-#  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -y {{  }}
+
+
 build:
   stage: build
   script:
     - rustc --version
     - cargo --version
     - cargo build --verbose
+
+  only:
+    - master
+    - merge_requests
+    - tags
 
 test:
   stage: test
@@ -26,6 +38,41 @@ test:
     - cargo --version
     - cd frontend
     - cargo test --verbose
+
+  only:
+    - master
+    - merge_requests
+    - tags
+
+test_fmt:
+  stage: test
+
+  before_script:
+    - rustup component add rustfmt
+
+  script:
+    - cargo fmt -- --check
+
+  only:
+    - master
+    - merge_requests
+    - tags
+
+
+test_clippy:
+  stage: test
+
+  before_script:
+    - rustup component add clippy
+
+  script:
+    - cargo clippy -- -D warnings
+
+  only:
+    - master
+    - merge_requests
+    - tags
+
 
 pages:
   stage: doc
@@ -43,8 +90,8 @@ pages:
   only:
     - master
 
-cache:
-  paths:
-    - apt/
-    - .cargo/
-    - target/
+  cache:
+    key: documentation
+    <<: *global_cache
+
+

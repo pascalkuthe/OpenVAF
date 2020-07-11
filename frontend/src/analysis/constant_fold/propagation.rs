@@ -15,6 +15,7 @@ use crate::cfg::Terminator;
 use crate::ir::{ParameterId, StatementId};
 use crate::mir::{ExpressionId, Mir, Statement};
 use crate::{ControlFlowGraph, HashMap, StringLiteral};
+use float_cmp::{ApproxEq, F64Margin};
 use log::debug;
 
 /// This struct maps all variable assigments and parameters to their values that are already known during constant propagation
@@ -150,7 +151,7 @@ impl Mir {
                         let old = known_values(resolver).real_definitions.insert(stmt, val);
                         #[cfg(debug_assertions)]
                         match old{
-                            Some(new) if new != val => panic!(
+                            Some(new) if new.approx_ne(val,F64Margin::default())  => panic!(
                                 "Statement {} was assigned twice with different values (old={},new={})!",
                                 stmt,
                                 old.unwrap(),

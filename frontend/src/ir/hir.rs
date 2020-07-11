@@ -209,9 +209,9 @@ pub struct CaseItem {
 pub struct ForLoop {
     pub condition: ExpressionId,
     pub initial_var: VariableId,
-    pub initial_val: ExpressionId,
+    pub initial_expr: ExpressionId,
     pub increment_var: VariableId,
-    pub increment_val: ExpressionId,
+    pub increment_expr: ExpressionId,
     pub body: Block,
 }
 

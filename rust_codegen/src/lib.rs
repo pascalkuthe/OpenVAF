@@ -11,13 +11,20 @@ use open_vaf::ast::{UnaryOperator, VariableType};
 use open_vaf::cfg::{BasicBlockId, Terminator};
 use open_vaf::hir::DisciplineAccess;
 use open_vaf::ir::mir::RealExpression;
-use open_vaf::ir::*;
+use open_vaf::ir::{
+    AttributeNode, Attributes, BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p,
+    IntegerExpressionId, NetId, NoiseSource, ParameterId, PortId, PrintOnFinish, RealExpressionId,
+    StatementId, StopTaskKind, StringExpressionId, VariableId,
+};
 use open_vaf::mir::ExpressionId;
-use open_vaf::mir::*;
+use open_vaf::mir::{
+    ComparisonOperator, IntegerBinaryOperator, IntegerExpression, Mir, ParameterType,
+    RealBinaryOperator, Statement, StringExpression,
+};
 use open_vaf::StringLiteral;
 use open_vaf::{ControlFlowGraph, SourceMap};
 use proc_macro2::{Ident, Literal, Span, TokenStream, TokenTree};
-use quote::*;
+use quote::{quote, ToTokens, TokenStreamExt};
 
 pub struct RealNumberInterpolator(pub f64);
 impl ToTokens for RealNumberInterpolator {
@@ -55,6 +62,7 @@ pub struct CfgInterpolator<'lt, EI> {
     pub external_interpolator: &'lt EI,
 }
 impl<'lt, EI: TargetSpecificInterpolator> ToTokens for CfgInterpolator<'lt, EI> {
+    #[allow(clippy::too_many_lines)]
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let mut current = self.start;
         loop {
@@ -470,6 +478,8 @@ pub struct IntegerExpressionInterpolator<'lt, EI> {
     pub external_interpolator: &'lt EI,
 }
 impl<'lt, EI: TargetSpecificInterpolator> ToTokens for IntegerExpressionInterpolator<'lt, EI> {
+    // TODO rewrite as Mir expr visit
+    #[allow(clippy::too_many_lines)]
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self.mir[self.expression].contents {
             IntegerExpression::Condition(condition, if_val, else_val) => {
@@ -792,6 +802,8 @@ pub struct RealExpressionInterpolator<'lt, EI> {
     pub external_interpolator: &'lt EI,
 }
 impl<'lt, EI: TargetSpecificInterpolator> ToTokens for RealExpressionInterpolator<'lt, EI> {
+    // TODO rewrite as Mir expr visit
+    #[allow(clippy::too_many_lines)]
     fn to_tokens(&self, tokens: &mut TokenStream) {
         match self.mir[self.expression].contents {
             RealExpression::Temperature => self
@@ -916,6 +928,7 @@ impl<'lt, EI: TargetSpecificInterpolator> ToTokens for RealExpressionInterpolato
     }
 }
 
+#[must_use]
 pub fn gen_branch_access(
     discipline_access: DisciplineAccess,
     branch_access: BranchId,
@@ -927,6 +940,7 @@ pub fn gen_branch_access(
     )
 }
 
+#[must_use]
 pub fn gen_parameter_ident(parameter: ParameterId) -> Ident {
     Ident::new(
         format!("parameter_{}", parameter).as_str(),
@@ -934,6 +948,7 @@ pub fn gen_parameter_ident(parameter: ParameterId) -> Ident {
     )
 }
 
+#[must_use]
 pub fn gen_variable_ident(id: VariableId) -> Ident {
     Ident::new(
         format!("variable_{}", id).as_str(),
@@ -941,6 +956,7 @@ pub fn gen_variable_ident(id: VariableId) -> Ident {
     )
 }
 
+#[must_use]
 pub fn gen_port_ident(port: PortId) -> Ident {
     Ident::new(
         format!("port_{}", port).as_str(),
@@ -948,6 +964,7 @@ pub fn gen_port_ident(port: PortId) -> Ident {
     )
 }
 
+#[must_use]
 pub fn generate_variable_type(variable_type: VariableType) -> TokenTree {
     match variable_type {
         VariableType::INTEGER => {
@@ -957,6 +974,7 @@ pub fn generate_variable_type(variable_type: VariableType) -> TokenTree {
     }
 }
 
+#[must_use]
 pub fn gen_net_ident(net: NetId) -> Ident {
     Ident::new(
         format!("net_{}", net).as_str(),

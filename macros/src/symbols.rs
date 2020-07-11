@@ -61,6 +61,7 @@ impl Parse for Symbol {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub(crate) fn generate_symbols(symbols: Symbols) -> TokenStream {
     let mut items = quote! {};
     let mut prefill_stream = quote! {};
@@ -80,7 +81,9 @@ pub(crate) fn generate_symbols(symbols: Symbols) -> TokenStream {
     }
     // Generate the listed symbols.
     for (counter, symbol) in symbols.0.iter().enumerate() {
+        #[allow(clippy::cast_possible_truncation)]
         let counter = counter as u32;
+
         let name = &symbol.name;
         let value = match &symbol.value {
             Some(value) => value.value(),

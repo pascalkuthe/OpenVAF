@@ -88,6 +88,7 @@ pub(crate) fn generate_lints(lints: Lints) -> TokenStream {
         )
         .to_tokens(&mut items);
 
+        #[allow(clippy::cast_possible_truncation)]
         let i = i as u16;
 
         quote! (
