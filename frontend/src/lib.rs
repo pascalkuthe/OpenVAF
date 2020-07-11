@@ -14,6 +14,7 @@
 )]
 
 /// Reexport for macros
+#[doc(hidden)]
 pub mod _macro_reexports {
     pub use linkme;
     pub use once_cell;

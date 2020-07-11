@@ -55,6 +55,11 @@ test_fmt:
     - merge_requests
     - tags
 
+  cache:
+    <<: *global_cache
+    policy: pull
+
+
 
 test_clippy:
   stage: test
@@ -72,11 +77,13 @@ test_clippy:
 
 
 pages:
+  image: "rustlang/rust:nightly"
+
   stage: doc
   script:
-    - cargo +nightly doc --workspace --document-private-items
+    - cargo doc --workspace --document-private-items
     - cp -R target/doc docs/internal
-    - cargo +nightly doc --workspace
+    - cargo doc --workspace
     - cp -R target/doc docs/api
     - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > docs/internal/index.html
     - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > docs/api/index.html
@@ -88,7 +95,7 @@ pages:
     - master
 
   cache:
-    key: documentation
     <<: *global_cache
+    key: documentation
 
 
