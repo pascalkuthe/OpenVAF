@@ -41,7 +41,9 @@ test:
 
   rules:
     - changes:
-      - **.rs
+        - frontend/src/**.rs
+        - macros/src/**.rs
+        - rust_codegen/src/**.rs
 
 test_fmt:
   stage: test
@@ -54,7 +56,9 @@ test_fmt:
 
   rules:
     - changes:
-        - **.rs
+        - frontend/src/**.rs
+        - macros/src/**.rs
+        - rust_codegen/src/**.rs
 
   cache:
     <<: *global_cache
@@ -73,11 +77,6 @@ test_clippy:
 
   rules:
     - changes:
-        - **.rs
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-
-    changes:
         - frontend/src/**.rs
         - macros/src/**.rs
         - rust_codegen/src/**.rs
@@ -103,8 +102,14 @@ pages:
       - public
 
   rules:
+
     - changes:
-        - **.rs
+        - frontend/src/**.rs
+        - macros/src/**.rs
+        - rust_codegen/src/**.rs
+
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 
   cache:
     <<: *global_cache
