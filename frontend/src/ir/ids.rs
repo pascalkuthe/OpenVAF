@@ -171,7 +171,7 @@ impl<I: Idx> DoubleEndedIterator for IdRange<I> {
 ///
 /// * `$container` - the identifier of the IR
 ///
-/// * `$sub_container` - the field of the ir which contains the [Arena](crate::compact_arena) this ID indexes
+/// * `$sub_container` - the field of the ir which contains the [Arena](index_vec::IndexVec) this ID indexes
 ///
 /// * `$type` - The type of the values that are indexed by this id
 ///

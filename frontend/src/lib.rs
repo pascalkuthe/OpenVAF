@@ -13,6 +13,13 @@
     clippy::pub_enum_variant_names
 )]
 
+/// Reexport for macros
+pub mod _macro_reexports{
+    pub use linkme::distributed_slice;
+    pub use once_cell;
+    pub use paste;
+}
+
 pub type HashMap<K, V> = ahash::AHashMap<K, V>;
 pub type HashSet<T> = ahash::AHashSet<T>;
 
@@ -66,8 +73,10 @@ pub use sourcemap::SourceMap;
 
 use crate::constants::Constants;
 use data_structures::sync::OnceCell;
-pub use once_cell;
-pub use paste;
+
+
+
+
 
 #[cfg(test)]
 pub mod test;

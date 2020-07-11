@@ -1,7 +1,9 @@
 image: 'rust:latest'
 
 stages:
+  - build
   - test
+  - doc
 
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
@@ -10,6 +12,12 @@ variables:
 #before_script:
 #  - apt-get update -yq
 #  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -y {{  }}
+build:
+  stage: build
+  script:
+    - rustc --version
+    - cargo --version
+    - cargo build --verbose
 
 test:
   stage: test
@@ -17,19 +25,23 @@ test:
     - rustc --version
     - cargo --version
     - cd frontend
-    - cargo test --features "threading" --verbose
+    - cargo test --verbose
 
-#pages:
-#  stage: doc
-#  script:
-#    - cargo doc --no-deps
-#    - mv target/doc public
-#    - echo '<meta http-equiv="refresh" content="0; url={{ LIBRARY NAME }}">' > public/index.html
-#  artifacts:
-#    paths:
-#      - public
-#  only:
-#    - master
+pages:
+  stage: doc
+  script:
+    - cargo +nightly doc --workspace --document-private-items
+    - cp -R target/doc docs/internal
+    - cargo +nightly doc --workspace
+    - cp -R target/doc docs/api
+    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > docs/internal/index.html
+    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > docs/api/index.html
+
+  artifacts:
+    paths:
+      - docs
+  only:
+    - master
 
 cache:
   paths:

@@ -118,15 +118,28 @@ pub(crate) fn generate_lints(lints: Lints) -> TokenStream {
             #items
         }
 
+
+
         #[allow(clippy::default_trait_access)]
         impl LintRegistry{
             pub fn new()->Self{
                 let mut names = HashMap::with_capacity(#count);
+
+                assert_le!(#count+PLUGIN_LINTS.len(),Lint::MAX_INDEX);
+
                 #name_lookup_init
+
+                for (id,lint) in PLUGIN_LINTS.iter().enumerate(){
+                    names.insert(lint.display_id,Lint::new(id+#count));
+                }
+
+                let mut lints = index_vec![#init];
+                lints.extend_from_slice(IndexSlice::from_slice(&PLUGIN_LINTS[..]));
+
+
                 Self{
                     names,
-                    lints: index_vec![#init],
-                    .. LintRegistry::default()
+                    lints,
                 }
             }
         }

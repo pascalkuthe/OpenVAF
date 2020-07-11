@@ -27,7 +27,7 @@ impl ControlFlowGraph {
     /// Calculates the control dependence graph when `ipdom(bb)` has already been calculated
     ///# Note
     /// This is only a seperate funciton to avoid recalculating the post dominators in some cases
-    /// If you dont want to reuse `ipdom` you should use [`control_dependence_graph`]
+    /// If you dont want to reuse `ipdom` you should use [`control_dependence_graph`](crate::cfg::ControlFlowGraph::control_dependence_graph_from_ipdom)
     pub fn control_dependence_graph_from_ipdom(&self, ipdom: &IPDOM) -> ControlDependenceGraph {
         let mut cdg = SparseBitSetMatrix::new_empty(self.blocks.len_idx(), self.blocks.len_idx());
         for (id, bb) in self.blocks.iter_enumerated() {

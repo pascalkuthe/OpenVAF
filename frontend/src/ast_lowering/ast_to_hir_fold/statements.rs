@@ -27,7 +27,7 @@ use crate::ir::NumericalParameterRangeExclude;
 use crate::ir::{
     BlockId, BranchId, ExpressionId, FunctionId, Node, ParameterId, StatementId, VariableId,
 };
-use crate::lints::dispatch_early;
+use crate::lints::Linter;
 use crate::sourcemap::span::DUMMY_SP;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
@@ -313,7 +313,7 @@ impl<'lt, H: DeclarationHandler> Statements<'lt, H> {
                 let end = args
                     .last()
                     .map_or(DUMMY_SP, |expr| self.base.ast[*expr].span);
-                dispatch_early(Box::new(IgnoredDisplayTask {
+                Linter::dispatch_early(Box::new(IgnoredDisplayTask {
                     span: task_kind.span.extend(end),
                 }))
             }

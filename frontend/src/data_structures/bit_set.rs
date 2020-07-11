@@ -208,7 +208,7 @@ impl<I: Idx + From<usize>> BitSet<I> {
         self.internal.insert_range(start..end)
     }
 
-    /// Equivalent to [`insert_range(..)`](insert_range) but significantly faster
+    /// Equivalent to [`insert_range(..)`](crate::data_structures::bit_set::BitSet::insert_range) but faster
     #[inline]
     pub fn enable_all(&mut self) {
         for block in self.as_mut_slice().iter_mut() {

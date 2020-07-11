@@ -6,7 +6,7 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-///! Constant folding and propagation along control flow
+//! Constant folding and propagation along control flow
 use crate::analysis::constant_fold::resolver::{
     ConstResolver, ConstantPropagator, NoConstResolution,
 };
@@ -109,7 +109,7 @@ impl ControlFlowGraph {
 }
 
 impl Mir {
-    /// See [`constant_fold_stmt`]
+    /// See [`constant_fold_stmt`](crate::mir::Mir::constant_fold_stmt)
     fn constant_fold_statements(
         &mut self,
         statements: &[StatementId],

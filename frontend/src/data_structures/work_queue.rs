@@ -93,10 +93,12 @@ impl<T: Idx + From<usize>> WorkQueue<T> {
     /// Attempt to take an element from the work queue
     /// This function does not remove the item from the internal set
     /// As such any element removed using `take` can never be inserted again.
-    /// For must use cases [`pop`] should be used
+    /// For must use cases [`pop`][pop] should be used
     ///
     /// This is useful when you want to write a worklist based algorithm
     /// that processes every element exactly once
+    ///
+    /// [pop]: crate::data_structures::work_queue::WorkQueue
     #[inline]
     pub fn take(&mut self) -> Option<T> {
         if let Some(element) = self.deque.pop_front() {

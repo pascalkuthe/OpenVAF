@@ -12,7 +12,7 @@ use open_vaf::analysis::data_flow::reaching_definitions::ReachingDefinitionsAnal
 use open_vaf::analysis::ProgramDependenceGraph;
 use open_vaf::diagnostic::{ExpansionPrinter, StandardPrinter};
 use open_vaf::lints;
-use open_vaf::lints::{with_linter, LintLevel};
+use open_vaf::lints::{LintLevel, Linter};
 use open_vaf::{Ast, ControlFlowGraph, SourceMap};
 use std::fs::File;
 use std::path::PathBuf;
@@ -55,9 +55,7 @@ fn extraction_integration_test(
     )?
     .lower_user_facing(&sm, TEST_EXPANSION_HINT)?;
 
-    let warnings = with_linter(|linter| {
-        linter.early_user_diagnostics::<StandardPrinter>(&sm, TEST_EXPANSION_HINT)
-    })?;
+    let warnings = Linter::early_user_diagnostics::<StandardPrinter>(&sm, TEST_EXPANSION_HINT)?;
 
     print!("{}", warnings);
 
@@ -126,9 +124,7 @@ fn extraction_integration_test(
         }
     }
 
-    let warnings = with_linter(|linter| {
-        linter.late_user_diagnostics::<StandardPrinter>(&sm, TEST_EXPANSION_HINT)
-    })?;
+    let warnings = Linter::late_user_diagnostics::<StandardPrinter>(&sm, TEST_EXPANSION_HINT)?;
     print!("{}", warnings);
 
     Ok(())

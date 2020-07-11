@@ -16,7 +16,7 @@ pub use error::Result;
 use crate::ast::{Ast, HierarchicalId};
 use crate::diagnostic::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use crate::ir::{Attribute, AttributeId, Attributes};
-use crate::lints::dispatch_early;
+use crate::lints::Linter;
 use crate::parser::error::Error::{
     AlreadyDeclaredInThisScope, MissingOrUnexpectedToken, UnexpectedToken,
 };
@@ -53,7 +53,7 @@ mod parameter;
 mod statements;
 mod variables;
 
-/// A reclusive decent Parser that parses the tokens created by the [`Preprocessor`](crate::parser::preprocessor::Preprocessor) into an [`Ast`](crate::ast::Ast).
+/// A reclusive decent Parser that parses the tokens created by the [`Preprocessor`](crate::preprocessor::Preprocessor) into an [`Ast`](crate::ast::Ast).
 pub(crate) struct Parser<'lt> {
     pub scope_stack: Vec<SymbolTable>,
     pub ast: &'lt mut Ast,
@@ -151,7 +151,7 @@ impl<'lt> Parser<'lt> {
         }
     }
 
-    /// This function parses an hieraichal identifier (See [parse_hierarchical_identifier])
+    /// This function parses an hieraichal identifier (See [`parse_hierarchical_identifier`](crate::parser::Parser::parse_hierarchical_identifier)
     /// when the first identifier is given as `start`
     pub fn parse_hierarchical_identifier_with_start(
         &mut self,
@@ -237,7 +237,7 @@ impl<'lt> Parser<'lt> {
         if let Some(id) = attribute_map.get(&ident.name) {
             let old_ident = self.ast[*id].ident;
 
-            dispatch_early(Box::new(AtrributeOverwritten {
+            Linter::dispatch_early(Box::new(AtrributeOverwritten {
                 name: old_ident.name,
                 old: old_ident.span,
                 new: ident.span,

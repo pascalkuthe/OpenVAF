@@ -1,4 +1,4 @@
-///! This module contains an algorithm that will calculate all partial derivatives specified in a map for the entire programm
+//! This module contains an algorithm that will calculate all partial derivatives specified in a map for the entire programm
 use crate::derivatives::error::Error;
 use crate::derivatives::{AutoDiff, Unknown};
 use crate::diagnostic::MultiDiagnostic;

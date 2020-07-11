@@ -1,3 +1,11 @@
+//! An extensible linting system used for high quality errors warning throughout OpenVAF
+//! A lint is an Error or Warning that the user might plausibly want to ignore
+//! As such each lint has a [lvl](crate::lints::LintLevel).
+//!
+//! When a lint is declared a default lvl for this lvl is set but this lvl can be [overwritten at runtime](crate::lints::Lint::overwrite_lvl_global)
+//! This is possible because every lint has an display_id: A string constant that uniquely identifies it
+//! A CLI interface may then accept something like `-W foo_lint` to change the lint lvl of `foo_lint` to `Warn`
+
 use crate::diagnostic::{
     DiagnosticSlice, DiagnosticSlicePrinter, FooterItem, LibraryDiagnostic, Text,
     UserMultiDiagnostic, UserResult,
@@ -12,19 +20,50 @@ use crate::HashMap;
 use crate::GLOBALS;
 use annotate_snippets::snippet::AnnotationType;
 use beef::lean::Cow;
-use index_vec::{define_index_type, index_vec, IndexVec};
+use index_vec::{define_index_type, index_vec, IndexSlice, IndexVec};
+use linkme::distributed_slice;
+use more_asserts::assert_le;
+use once_cell::sync::OnceCell;
 use open_vaf_macros::lints;
-use parking_lot::{const_rwlock, RwLock};
 use std::error::Error;
 use std::fmt::Display;
 use std::sync::Arc;
 
+#[distributed_slice]
+pub static PLUGIN_LINTS: [&'static LintData] = [..];
+
+static LINT_REGISTRY: OnceCell<LintRegistry> = OnceCell::new();
+
+#[derive(Debug, Default)]
+struct LintRegistry {
+    pub names: HashMap<&'static str, Lint>,
+    pub lints: IndexVec<Lint, &'static LintData>,
+}
+
+fn with_lint_registry<T>(f: impl FnOnce(&LintRegistry) -> T) -> T {
+    let registry = LINT_REGISTRY.get_or_init(|| LintRegistry::new());
+    f(registry)
+}
+
+lints! {
+    pub const macro_overwritten = LintData{default_lvl: Warn, documentation_id: None};
+    pub const macro_file_cutoff = LintData{default_lvl: Warn, documentation_id: None};
+    pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id: None};
+    pub const ignored_display_task = LintData{default_lvl: Warn, documentation_id: None};
+    pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: None};
+    pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: Some("L001")};
+    pub const constant_overflow = LintData{default_lvl: Warn, documentation_id: Some("L002")};
+}
+
 define_index_type! {
+            /// A lint is an Error that a user might plausibly want to ignore
+            /// Most compiler error are **not lints** because they indicate that an
+            /// assumption the compiler made no longer holds
             pub struct Lint = u16;
 
             DISPLAY_FORMAT = "{}";
 
-            DEBUG_FORMAT = "<StringLiteral {}>";
+            DEBUG_FORMAT = "<Lint {}>";
 
             IMPL_RAW_CONVERSIONS = true;
 
@@ -74,14 +113,22 @@ impl Lint {
     }
 }
 
+/// Lints can be set to different levls
+/// This enum represents these levls
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LintLevel {
+    /// Same as `Deny` but can not be overwritten by attributes later
     Forbid,
+    /// Generates an error and will cause an error upon generating user diagnostics
     Deny,
+    /// A warning
     Warn,
+    /// Lints set to allow will not be displayed
     Allow,
 }
 
+/// The location a late lint occured
+/// This is will be used in the future to figure out which attributes apply to a lint
 pub enum LintLocation {
     Statement(StatementId),
     RealExpression(RealExpressionId),
@@ -173,7 +220,7 @@ pub struct LintData {
 #[macro_export]
 macro_rules! declare_plugin_lint {
     ($name:ident,$default_lvl:ident) => {
-        $crate::paste::item! {
+        $crate::_macro_reexports::paste::item! {
             #[allow(non_upper_case_globals)]
             pub static [<$name _data>]: &$crate::lints::LintData = &$crate::lints::LintData {
                 display_id: concat!(env!("CARGO_PKG_NAME"), "::", stringify!($name)),
@@ -186,61 +233,18 @@ macro_rules! declare_plugin_lint {
         }
 
         #[allow(non_upper_case_globals)]
-        pub static $name: $crate::once_cell::sync::Lazy<$crate::lints::Lint> =
+        pub static $name: $crate::_macro_reexports::once_cell::sync::Lazy<$crate::lints::Lint> =
             $crate::once_cell::sync::Lazy::new(|| {
-                $crate::lints::register_lint($crate::paste::expr! {[<$name _data>]})
+                $crate::lints::register_lint($crate::lints::Lint::from_name(concat!(
+                    env!("CARGO_PKG_NAME"),
+                    "::",
+                    stringify!($name)
+                )))
             });
     };
 }
 
-#[derive(Debug, Default)]
-struct LintRegistry {
-    pub names: HashMap<&'static str, Lint>,
-    pub lints: IndexVec<Lint, &'static LintData>,
-}
-
-static LINT_REGISTRY: RwLock<Option<LintRegistry>> = const_rwlock(None);
-
-fn with_lint_registry_mut<T>(f: impl FnOnce(&mut LintRegistry) -> T) -> T {
-    if let Some(registry) = LINT_REGISTRY.write().as_mut() {
-        return f(registry);
-    }
-
-    let mut new = LintRegistry::new();
-    let res = f(&mut new);
-    *LINT_REGISTRY.write() = Some(new);
-    res
-}
-
-fn with_lint_registry<T>(f: impl FnOnce(&LintRegistry) -> T) -> T {
-    if let Some(registry) = LINT_REGISTRY.read().as_ref() {
-        return f(registry);
-    }
-
-    let new = LintRegistry::new();
-    let res = f(&new);
-    *LINT_REGISTRY.write() = Some(new);
-    res
-}
-
-pub fn register_lint(data: &'static LintData) -> Lint {
-    with_lint_registry_mut(|registry| {
-        let id = registry.lints.push(data);
-        registry.names.insert(data.display_id, id);
-        id
-    })
-}
-
-lints! {
-    pub const macro_overwritten = LintData{default_lvl: Warn, documentation_id: None};
-    pub const macro_file_cutoff = LintData{default_lvl: Warn, documentation_id: None};
-    pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id: None};
-    pub const ignored_display_task = LintData{default_lvl: Warn, documentation_id: None};
-    pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: None};
-    pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: Some("L001")};
-    pub const constant_overflow = LintData{default_lvl: Warn, documentation_id: Some("L002")};
-}
-
+/// Responsible for managing all lints generated in the current thread
 #[derive(Default)]
 pub struct Linter {
     early_lints: Vec<Box<dyn LintDiagnostic>>,
@@ -249,23 +253,33 @@ pub struct Linter {
 }
 
 impl Linter {
-    /// Returns user diagnostics for lints that were emitted during early changes of compiliation
-    /// Their lint lvl is **always global** and con not be adjust using attributes
+    /// Returns user diagnostics for lints that were emitted before type checking
+    /// Their lint lvl is **always global** and can not be adjust using attributes
+    ///
+    /// # Returns
+    ///
+    /// * Err(diagnostics) if any lint has a lvl of `Deny` or `Forbid`
+    ///
+    /// * Ok(diagnostics) if all lints have a lvl of allow or warn
+    ///
     pub fn early_user_diagnostics<Printer: DiagnosticSlicePrinter>(
-        &self,
         sm: &Arc<SourceMap>,
         expansion_disclaimer: &'static str,
     ) -> UserResult<UserMultiDiagnostic<Printer>, Printer> {
         let mut failure = false;
-        let diagnostics = self
-            .early_lints
-            .iter()
-            .filter_map(|diagnostic| {
-                let user_diagnostic = diagnostic.user_facing(sm.clone(), expansion_disclaimer)?;
-                failure |= user_diagnostic.annotation_type == AnnotationType::Error;
-                Some(user_diagnostic)
-            })
-            .collect();
+
+        let diagnostics = with_linter(|linter| {
+            linter
+                .early_lints
+                .iter()
+                .filter_map(|diagnostic| {
+                    let user_diagnostic =
+                        diagnostic.user_facing(sm.clone(), expansion_disclaimer)?;
+                    failure |= user_diagnostic.annotation_type == AnnotationType::Error;
+                    Some(user_diagnostic)
+                })
+                .collect()
+        });
 
         if failure {
             Err(UserMultiDiagnostic(diagnostics))
@@ -274,30 +288,58 @@ impl Linter {
         }
     }
 
-    // This is temporary
-    // In the future this will be the last pass to run
-    // It will figure out which lint lvl applies based upon attribues similiar to rustc
+    /// Returns user diagnostics for lints that were emitted after type checking
+    ///
+    /// # Returns
+    ///
+    /// * Err(diagnostics) if any lint has a lvl of `Deny` or `Forbid`
+    ///
+    /// * Ok(diagnostics) if all lints have a lvl of allow or warn
+    ///
+    /// # Note
+    ///
+    /// This currently works the same as [`early_user_diagnostics`)(crate::lints::Linter::early_user_diagnostics)
+    /// However this implementation is temporary
+    /// In the future this will be an Mir pass that
+    /// will figure out which lint lvl applies based upon attributes similar to rustc
+
     pub fn late_user_diagnostics<Printer: DiagnosticSlicePrinter>(
-        &self,
         sm: &Arc<SourceMap>,
         expansion_disclaimer: &'static str,
     ) -> UserResult<UserMultiDiagnostic<Printer>, Printer> {
         let mut failure = false;
-        let diagnostics = self
-            .late_lints
-            .iter()
-            .filter_map(|(diagnostic, _)| {
-                let user_diagnostic = diagnostic.user_facing(sm.clone(), expansion_disclaimer)?;
-                failure |= user_diagnostic.annotation_type == AnnotationType::Error;
-                Some(user_diagnostic)
-            })
-            .collect();
+        let diagnostics = with_linter(|linter| {
+            linter
+                .late_lints
+                .iter()
+                .filter_map(|(diagnostic, _)| {
+                    let user_diagnostic =
+                        diagnostic.user_facing(sm.clone(), expansion_disclaimer)?;
+                    failure |= user_diagnostic.annotation_type == AnnotationType::Error;
+                    Some(user_diagnostic)
+                })
+                .collect()
+        });
 
         if failure {
             Err(UserMultiDiagnostic(diagnostics))
         } else {
             Ok(UserMultiDiagnostic(diagnostics))
         }
+    }
+
+    #[inline]
+    pub fn dispatch_early(diagnostic: Box<dyn LintDiagnostic>) {
+        with_linter_mut(|linter| {
+            linter.early_lints.push(diagnostic);
+        })
+    }
+
+    #[inline]
+    pub fn dispatch_late(diagnostic: Box<dyn LintDiagnostic>, location: LintLocation) {
+        with_linter_mut(|linter| {
+            linter.late_lints.push((diagnostic, location));
+        })
     }
 }
 
@@ -316,20 +358,6 @@ pub trait LintDiagnostic: Display + Error {
     fn footer(&self) -> Vec<FooterItem> {
         Vec::new()
     }
-}
-
-#[inline]
-pub fn dispatch_early(diagnostic: Box<dyn LintDiagnostic>) {
-    with_linter_mut(|linter| {
-        linter.early_lints.push(diagnostic);
-    })
-}
-
-#[inline]
-pub fn dispatch_late(diagnostic: Box<dyn LintDiagnostic>, location: LintLocation) {
-    with_linter_mut(|linter| {
-        linter.late_lints.push((diagnostic, location));
-    })
 }
 
 impl<T: LintDiagnostic + ?Sized> LibraryDiagnostic for T {
@@ -391,10 +419,10 @@ impl<T: LintDiagnostic + ?Sized> LibraryDiagnostic for T {
     }
 }
 
-pub fn with_linter<T>(f: impl FnOnce(&Linter) -> T) -> T {
+fn with_linter<T>(f: impl FnOnce(&Linter) -> T) -> T {
     GLOBALS.with(|globals| f(&globals.linter.read()))
 }
 
-pub fn with_linter_mut<T>(f: impl FnOnce(&mut Linter) -> T) -> T {
+fn with_linter_mut<T>(f: impl FnOnce(&mut Linter) -> T) -> T {
     GLOBALS.with(|globals| f(&mut globals.linter.write()))
 }

@@ -6,7 +6,7 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-///! Abstraction over resolution of variable and parameter values during constant folding
+//! Abstraction over resolution of variable and parameter values during constant folding
 use crate::analysis::constant_fold::propagation::PropagatedConstants;
 use crate::data_structures::{HybridBitSet, SparseBitSetMatrix};
 use crate::ir::{ParameterId, StatementId, VariableId};
@@ -96,11 +96,11 @@ pub struct ConstantPropagator<'lt, K: Borrow<PropagatedConstants>> {
 
     ///Statements that can affect the statement this is being folded
     /// (by writing to a variable that is read here)
-    /// Calculated using [reaching definitions analysis](rate::analysis::data_flow::reaching_definitions)
+    /// Calculated using [reaching definitions analysis](crate::analysis::data_flow::reaching_definitions)
     reaching_definitions: &'lt mut HybridBitSet<StatementId>,
 
     /// Map from a Variable to all Statements that write to it
-    /// See [reaching definitions analysis](rate::analysis::data_flow::reaching_definitions)
+    /// See [reaching definitions analysis](crate::analysis::data_flow::reaching_definitions)
     variables_assignments: &'lt SparseBitSetMatrix<VariableId, StatementId>,
 
     /// real variables that have already been folded and don't need to be recomputed

@@ -21,7 +21,7 @@
 //! * **folding constant expressions to values** -
 //!    Constant expressions can generally not be evaluated as they may depend on parameters.
 //!    However the constant expressions defining parameters may only depend on the default values of previously defined parameters.
-//!    The evaluation of these expressions is done in the [`constant_eval`]  module.
+//!    The evaluation of these expressions is done using the [costant fold](crate::analysis::constant_fold) analysis.
 //!
 //! * **TypeChecking** -
 //!     VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.

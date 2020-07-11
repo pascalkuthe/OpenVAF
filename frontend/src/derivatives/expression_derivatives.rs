@@ -26,7 +26,7 @@ use crate::ir::{
     BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, NetId, Node,
     NoiseSource, ParameterId, PortId, RealExpressionId, StringExpressionId, VariableId,
 };
-use crate::lints::dispatch_late;
+use crate::lints::Linter;
 use crate::mir::visit::integer_expressions::walk_integer_expression;
 use crate::mir::visit::real_expressions::{
     RealBinaryOperatorVisitor, RealBuiltInFunctionCall1pVisitor,
@@ -546,7 +546,7 @@ impl<'lt, 'mir: 'lt> RealBuiltInFunctionCall1pVisitor
     }
 
     fn visit_floor(&mut self, _arg: RealExpressionId) -> Derivative {
-        dispatch_late(
+        Linter::dispatch_late(
             Box::new(RoundingDerivativeNotFullyDefined {
                 span: self.ad.mir[self.current_expr].span,
             }),
@@ -556,7 +556,7 @@ impl<'lt, 'mir: 'lt> RealBuiltInFunctionCall1pVisitor
     }
 
     fn visit_ceil(&mut self, _arg: RealExpressionId) -> Derivative {
-        dispatch_late(
+        Linter::dispatch_late(
             Box::new(RoundingDerivativeNotFullyDefined {
                 span: self.ad.mir[self.current_expr].span,
             }),

@@ -1,6 +1,6 @@
-///! This module manages the physical constants that VARF uses to compile certain functions (such as `$vt`)
+//! This module manages the physical constants that VARF uses to compile certain functions (such as `$vt`)
 use crate::diagnostic::{AnnotationType, DiagnosticSlice, FooterItem, Text};
-use crate::lints::{builtin, dispatch_early, Lint, LintDiagnostic};
+use crate::lints::{builtin, Lint, LintDiagnostic, Linter};
 use crate::{Span, GLOBALS};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -85,7 +85,7 @@ impl Constants {
     /// Dispatches a lint that the default value is being used and returns
     /// the [default](defaults) value for `constant`
     fn default(&self, span: Span, constant: Constant) -> f64 {
-        dispatch_early(Box::new(StandardNatureConstant {
+        Linter::dispatch_early(Box::new(StandardNatureConstant {
             span,
             disclaimer: self.disclaimer,
             constant,

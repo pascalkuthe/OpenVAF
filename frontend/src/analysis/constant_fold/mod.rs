@@ -6,7 +6,8 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-///! Simple constant folding algorithm
+//! Simple constant folding algorithm
+
 use core::mem::replace;
 use core::ops::{Add, Div, Mul, Sub};
 use core::option::Option::Some;
@@ -31,7 +32,7 @@ use crate::ir::{
     BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, NetId, Node,
     NoiseSource, ParameterId, PortId, RealExpressionId, StringExpressionId, VariableId,
 };
-use crate::lints::dispatch_late;
+use crate::lints::Linter;
 use crate::literals::StringLiteral;
 use crate::mir::visit::integer_expressions::walk_integer_expression;
 use crate::mir::visit::real_expressions::{walk_real_expression, RealBuiltInFunctionCall1pVisitor};
@@ -47,8 +48,7 @@ mod lints;
 mod propagation;
 mod resolver;
 
-///! Abstraction over mutability of the mir for constant folding (see [`crate::mir::Mir::constant_eval_real_expr`])
-
+/// Abstraction over mutability of the mir for constant folding (see [`constant_eval_real_expr`](crate::mir::Mir::constant_eval_real_expr))
 trait ConstantFoldType: AsRef<Mir> {
     fn overwrite_real_expr(&mut self, expr: RealExpressionId, val: RealExpression);
     fn overwrite_int_expr(&mut self, expr: IntegerExpressionId, val: IntegerExpression);
@@ -101,8 +101,8 @@ enum ArgSide {
     Lhs,
 }
 
-///! Implementation of constant folding as a [mir expression visit](crate::ir::mir::visit).
-///! All methods return `None` if constant folding was not possible and `Some(value)` otherwise
+/// Implementation of constant folding as a [mir expression visit](crate::ir::mir::visit).
+/// All methods return `None` if constant folding was not possible and `Some(value)` otherwise
 
 struct ConstantFold<'lt, T: ConstantFoldType, R: ConstResolver, E> {
     fold_type: &'lt mut T,
@@ -779,7 +779,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
         let rhs = self.visit_integer_expr(rhs_expr);
 
         if rhs == Some(0) {
-            dispatch_late(
+            Linter::dispatch_late(
                 Box::new(ConstantOverflow(self.mir()[self.expr].span)),
                 self.expr.into(),
             )
@@ -805,7 +805,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
 
             // raising to a power higher than u32::MAX leads to an overflow
             Some(U32_OVERFLOW_START..=i64::MAX) => {
-                dispatch_late(
+                Linter::dispatch_late(
                     Box::new(ConstantOverflow(self.mir()[self.expr].span)),
                     self.expr.into(),
                 );
@@ -1155,7 +1155,7 @@ impl Mir {
         .visit_real_expr(expr)
     }
 
-    /// See [`constant_fold_real_expr`]
+    /// See [`constant_fold_real_expr`](crate::mir::Mir::constant_fold_real_expr)
     pub fn constant_fold_int_expr(
         &mut self,
         expr: IntegerExpressionId,
@@ -1169,7 +1169,7 @@ impl Mir {
         .visit_integer_expr(expr)
     }
 
-    /// See [`constant_fold_str_expr`]
+    /// See [`constant_fold_str_expr`](crate::mir::Mir::constant_fold_str_expr)
     pub fn constant_fold_str_expr(
         &mut self,
         expr: StringExpressionId,
@@ -1183,7 +1183,7 @@ impl Mir {
         .visit_string_expr(expr)
     }
 
-    /// Same as [`constant_fold_str_expr`] but no expressions in `self` actually change only the return value is calculated
+    /// Same as [`constant_fold_str_expr`](crate::mir::Mir::constant_fold_str_expr) but no expressions in `self` actually change only the return value is calculated
     pub fn constant_eval_real_expr(
         &self,
         expr: RealExpressionId,
@@ -1197,7 +1197,7 @@ impl Mir {
         .visit_real_expr(expr)
     }
 
-    /// See [`constant_eval_real_expr`]
+    /// See [`constant_eval_real_expr`](crate::mir::Mir::constant_eval_real_expr)
     pub fn constant_eval_int_expr(
         &self,
         expr: IntegerExpressionId,
@@ -1211,7 +1211,7 @@ impl Mir {
         .visit_integer_expr(expr)
     }
 
-    /// See [`constant_eval_real_expr`]
+    /// See [`constant_eval_real_expr`](crate::mir::Mir::constant_eval_real_expr)
     pub fn constant_eval_str_expr(
         &self,
         expr: StringExpressionId,

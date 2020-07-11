@@ -5,7 +5,6 @@ use crate::preprocessor::error::Error::{MacroNotFound, MissingToken, UnexpectedT
 use crate::preprocessor::lexer::Token as LexicalToken;
 use crate::preprocessor::lexer::{FollowedByBracket, Lexer};
 
-use crate::lints::dispatch_early;
 use crate::literals::unesacpe_string;
 use crate::preprocessor::lexer::Token::{
     LiteralInteger, LiteralRealNumber, LiteralRealNumberWithScaleChar,
@@ -21,6 +20,7 @@ pub use error::{Error, Result};
 use index_vec::{IndexSlice, IndexVec};
 use log::debug;
 
+use crate::lints::Linter;
 use core::intrinsics::transmute;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -284,7 +284,7 @@ impl<'sm> Preprocessor<'sm> {
         debug!("Macro {} was declared", name);
         let new_location = def.head;
         if let Some(old) = self.macros.insert(name, def) {
-            dispatch_early(Box::new(MacroOverwritten {
+            Linter::dispatch_early(Box::new(MacroOverwritten {
                 old: old.head,
                 new: new_location,
                 name,

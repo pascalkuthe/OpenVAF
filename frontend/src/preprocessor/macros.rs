@@ -1,5 +1,5 @@
 use super::lexer::Token as LexicalToken;
-use crate::lints::dispatch_early;
+use crate::lints::Linter;
 use crate::literals::unesacpe_string;
 use crate::parser::tokenstream::Token as ParserToken;
 use crate::preprocessor::error::{Error, Result};
@@ -27,7 +27,7 @@ impl<'p, 'sm> MacroParser<'p, 'sm> {
             let (token, span) = if let Some(res) = self.parent.lexer.next() {
                 res
             } else {
-                dispatch_early(Box::new(MacroCutOffAtFileEnd {
+                Linter::dispatch_early(Box::new(MacroCutOffAtFileEnd {
                     span: self.parent.lexer.span(),
                     name: macro_name,
                 }));
