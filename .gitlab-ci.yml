@@ -12,6 +12,14 @@ stages:
   - test
   - doc
 
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
@@ -23,11 +31,6 @@ build:
     - cargo --version
     - cargo build --verbose
 
-  only:
-    - master
-    - merge_requests
-    - tags
-
 test:
   stage: test
   script:
@@ -36,10 +39,9 @@ test:
     - cd frontend
     - cargo test --verbose
 
-  only:
-    - master
-    - merge_requests
-    - tags
+  rules:
+    - changes:
+      - **.rs
 
 test_fmt:
   stage: test
@@ -50,10 +52,9 @@ test_fmt:
   script:
     - cargo fmt -- --check
 
-  only:
-    - master
-    - merge_requests
-    - tags
+  rules:
+    - changes:
+        - **.rs
 
   cache:
     <<: *global_cache
@@ -70,10 +71,18 @@ test_clippy:
   script:
     - cargo clippy -- -D warnings
 
-  only:
-    - master
-    - merge_requests
-    - tags
+  rules:
+    - changes:
+        - **.rs
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+
+    changes:
+        - frontend/src/**.rs
+        - macros/src/**.rs
+        - rust_codegen/src/**.rs
+
+
 
 
 pages:
@@ -82,18 +91,20 @@ pages:
   stage: doc
   script:
     - cargo doc --workspace --document-private-items
-    - mkdir docs
-    - cp -R target/doc docs/internal
+    - mkdir public
+    - cp -R target/doc public/dev_doc
     - cargo doc --workspace
-    - cp -R target/doc docs/api
-    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > docs/internal/index.html
-    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > docs/api/index.html
+    - cp -R target/doc public/api_doc
+    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > public/api_doc/index.html
+    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > public/dev_doc/index.html
 
   artifacts:
     paths:
-      - docs
-  only:
-    - master
+      - public
+
+  rules:
+    - changes:
+        - **.rs
 
   cache:
     <<: *global_cache
