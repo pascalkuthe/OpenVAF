@@ -30,6 +30,7 @@ use crate::ir::{
     PrintOnFinish, RealExpressionId, StatementId, StopTaskKind, VariableId,
 };
 
+pub mod fold;
 pub mod visit;
 
 #[derive(Debug, Clone, Default)]

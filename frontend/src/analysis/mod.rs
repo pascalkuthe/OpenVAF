@@ -7,11 +7,10 @@
 //  * *******************************************************************************************
 
 pub mod constant_fold;
-pub mod data_flow;
-pub mod program_slicing;
-pub use program_slicing::DependencyHandler;
 mod control_dependence;
+pub mod data_flow;
 mod post_dominance;
+pub mod program_slicing;
 use crate::analysis::data_flow::reaching_definitions::UseDefGraph;
 pub use control_dependence::ControlDependenceGraph;
 pub use post_dominance::IPDOM;

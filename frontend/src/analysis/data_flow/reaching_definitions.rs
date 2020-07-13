@@ -10,15 +10,11 @@
 use crate::analysis::data_flow::framework::{
     Engine, Forward, GenKillAnalysis, GenKillEngine, GenKillSet,
 };
-use crate::analysis::DependencyHandler;
 
 use crate::cfg::{BasicBlockId, Terminator};
 use crate::data_structures::{BitSet, SparseBitSetMatrix};
-use crate::ir::hir::DisciplineAccess;
-use crate::ir::{
-    BranchId, ParameterId, PortId, RealExpressionId, StatementId, StringExpressionId,
-    SystemFunctionCall, VariableId,
-};
+use crate::ir::mir::visit::ExpressionVisit;
+use crate::ir::{StatementId, VariableId};
 use crate::mir::Mir;
 use crate::mir::Statement;
 use crate::ControlFlowGraph;
@@ -80,19 +76,21 @@ impl<'lt> ReachingDefinitionsAnalysis<'lt> {
         for (id, bb) in cfg.blocks.iter_enumerated() {
             // reusing the in set because we dont need it afterwards anyway
             let mut reachable = take(&mut dfg.in_sets[id]);
+
             // reusing the out set because we dont need it afterwards anyway
             let mut tmp = take(&mut dfg.out_sets[id]);
+
             for stmt in bb.statements.iter().copied() {
                 match self.mir[stmt] {
                     Statement::Assignment(_, var, expr) => {
                         tmp.clear();
-                        self.mir.track_expression(
-                            expr,
-                            &mut UseDefBuilder {
-                                graph: &mut self.graph,
-                                dst: &mut tmp,
-                            },
-                        );
+
+                        UseDefBuilder {
+                            mir: self.mir,
+                            graph: &mut self.graph,
+                            dst: &mut tmp,
+                        }
+                        .visit_expr(expr);
 
                         tmp.intersect_with(&reachable);
 
@@ -104,13 +102,12 @@ impl<'lt> ReachingDefinitionsAnalysis<'lt> {
 
                     Statement::Contribute(_, _, _, val) => {
                         tmp.clear();
-                        self.mir.track_real_expression(
-                            val,
-                            &mut UseDefBuilder {
-                                graph: &mut self.graph,
-                                dst: &mut tmp,
-                            },
-                        );
+                        UseDefBuilder {
+                            mir: self.mir,
+                            graph: &mut self.graph,
+                            dst: &mut tmp,
+                        }
+                        .visit_real_expr(val);
 
                         tmp.intersect_with(&reachable);
                         self.graph.stmt_use_def_chains[stmt] = tmp.to_hybrid();
@@ -124,13 +121,12 @@ impl<'lt> ReachingDefinitionsAnalysis<'lt> {
             if let Terminator::Split { condition, .. } = bb.terminator {
                 tmp.clear();
 
-                self.mir.track_integer_expression(
-                    condition,
-                    &mut UseDefTerminatorBuilder {
-                        graph: &mut self.graph,
-                        dst: &mut tmp,
-                    },
-                );
+                UseDefBuilder {
+                    mir: self.mir,
+                    graph: &mut self.graph,
+                    dst: &mut tmp,
+                }
+                .visit_integer_expr(condition);
 
                 tmp.intersect_with(&reachable);
                 self.graph.terminator_use_def_chains[id] = tmp.to_hybrid()
@@ -170,44 +166,18 @@ impl<'lt> GenKillAnalysis<'_> for ReachingDefinitionsAnalysis<'lt> {
 }
 
 struct UseDefBuilder<'lt> {
+    mir: &'lt Mir,
     graph: &'lt UseDefGraph,
     dst: &'lt mut BitSet<StatementId>,
 }
 
-impl<'lt> DependencyHandler for UseDefBuilder<'lt> {
-    fn handle_variable_reference(&mut self, var: VariableId) {
-        self.dst.union_with(&self.graph.assignments[var])
+impl<'lt> ExpressionVisit for UseDefBuilder<'lt> {
+    fn mir(&self) -> &Mir {
+        self.mir
     }
 
-    fn handle_parameter_reference(&mut self, _: ParameterId) {}
-
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId, _: u8) {}
-
-    fn handle_system_function_call(
-        &mut self,
-        _: SystemFunctionCall<RealExpressionId, StringExpressionId, PortId, ParameterId>,
-    ) {
-    }
-}
-
-struct UseDefTerminatorBuilder<'lt> {
-    graph: &'lt mut UseDefGraph,
-    dst: &'lt mut BitSet<StatementId>,
-}
-
-impl<'lt> DependencyHandler for UseDefTerminatorBuilder<'lt> {
-    fn handle_variable_reference(&mut self, var: VariableId) {
+    fn visit_variable_reference(&mut self, var: VariableId) {
         self.dst.union_with(&self.graph.assignments[var]);
-    }
-
-    fn handle_parameter_reference(&mut self, _: ParameterId) {}
-
-    fn handle_branch_reference(&mut self, _: DisciplineAccess, _: BranchId, _: u8) {}
-
-    fn handle_system_function_call(
-        &mut self,
-        _: SystemFunctionCall<RealExpressionId, StringExpressionId, PortId, ParameterId>,
-    ) {
     }
 }
 

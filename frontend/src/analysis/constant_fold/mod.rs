@@ -20,13 +20,13 @@ pub use resolver::{ConstResolver, ConstantPropagator, NoConstResolution};
 
 use crate::ast::UnaryOperator;
 use crate::ir::hir::DisciplineAccess;
-use crate::ir::mir::visit::integer_expressions::{
-    IntegerBinaryOperatorVisitor, IntegerComparisonVisit, IntegerExprVisitor, RealComparisonVisit,
+use crate::ir::mir::fold::integer_expressions::{
+    IntegerBinaryOperatorFold, IntegerComparisonFold, IntegerExprFold, RealComparisonFold,
 };
-use crate::ir::mir::visit::real_expressions::{
-    RealBinaryOperatorVisitor, RealBuiltInFunctionCall2pVisitor, RealExprVisitor,
+use crate::ir::mir::fold::real_expressions::{
+    RealBinaryOperatorFold, RealBuiltInFunctionCall2pFold, RealExprFold,
 };
-use crate::ir::mir::visit::string_expressions::StringExprVisitor;
+use crate::ir::mir::fold::string_expressions::StringExprFold;
 use crate::ir::mir::Mir;
 use crate::ir::{
     BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, NetId, Node,
@@ -34,9 +34,9 @@ use crate::ir::{
 };
 use crate::lints::Linter;
 use crate::literals::StringLiteral;
-use crate::mir::visit::integer_expressions::walk_integer_expression;
-use crate::mir::visit::real_expressions::{walk_real_expression, RealBuiltInFunctionCall1pVisitor};
-use crate::mir::visit::string_expressions::walk_string_expression;
+use crate::mir::fold::integer_expressions::walk_integer_expression;
+use crate::mir::fold::real_expressions::{walk_real_expression, RealBuiltInFunctionCall1pFold};
+use crate::mir::fold::string_expressions::walk_string_expression;
 use crate::mir::{
     ComparisonOperator, IntegerBinaryOperator, IntegerExpression, RealBinaryOperator,
     RealExpression, StringExpression,
@@ -102,7 +102,7 @@ enum ArgSide {
     Lhs,
 }
 
-/// Implementation of constant folding as a [mir expression visit](crate::ir::mir::visit).
+/// Implementation of constant folding as a [mir expression fold](crate::ir::mir::fold).
 /// All methods return `None` if constant folding was not possible and `Some(value)` otherwise
 
 struct ConstantFold<'lt, T: ConstantFoldType, R: ConstResolver, E> {
@@ -118,7 +118,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver, E> ConstantFold<'lt, T, R, E> {
             resolver: self.resolver,
             expr,
         }
-        .visit_real_expr(expr)
+        .fold_real_expr(expr)
     }
 
     fn fold_int_expression(&mut self, expr: IntegerExpressionId) -> Option<i64> {
@@ -127,7 +127,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver, E> ConstantFold<'lt, T, R, E> {
             resolver: self.resolver,
             expr,
         }
-        .visit_integer_expr(expr)
+        .fold_integer_expr(expr)
     }
 
     fn fold_str_expression(&mut self, expr: StringExpressionId) -> Option<StringLiteral> {
@@ -136,7 +136,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver, E> ConstantFold<'lt, T, R, E> {
             resolver: self.resolver,
             expr,
         }
-        .visit_string_expr(expr)
+        .fold_string_expr(expr)
     }
 }
 
@@ -271,7 +271,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> ConstantFold<'lt, T, R, Integer
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
+impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprFold
     for ConstantFold<'lt, T, R, RealExpressionId>
 {
     type T = Option<f64>;
@@ -281,31 +281,31 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
     }
 
     #[inline]
-    fn visit_real_expr(&mut self, expr: RealExpressionId) -> Option<f64> {
+    fn fold_real_expr(&mut self, expr: RealExpressionId) -> Option<f64> {
         let old = replace(&mut self.expr, expr);
         let res = walk_real_expression(self, expr);
         self.expr = old;
         res
     }
 
-    fn visit_literal(&mut self, val: f64) -> Option<f64> {
+    fn fold_literal(&mut self, val: f64) -> Option<f64> {
         Some(val)
     }
 
-    fn visit_binary_operator(
+    fn fold_binary_operator(
         &mut self,
         lhs: RealExpressionId,
         op: Node<RealBinaryOperator>,
         rhs: RealExpressionId,
     ) -> Option<f64> {
-        self.visit_real_binary_op(lhs, op.contents, rhs)
+        self.fold_real_binary_op(lhs, op.contents, rhs)
     }
 
-    fn visit_negate(&mut self, _: Span, arg: RealExpressionId) -> Option<f64> {
-        Some(-self.visit_real_expr(arg)?)
+    fn fold_negate(&mut self, _: Span, arg: RealExpressionId) -> Option<f64> {
+        Some(-self.fold_real_expr(arg)?)
     }
 
-    fn visit_condition(
+    fn fold_condition(
         &mut self,
         cond: IntegerExpressionId,
         true_expr: RealExpressionId,
@@ -314,9 +314,9 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
         let cond = self.fold_int_expression(cond)?;
 
         let (expr, res) = if cond == 0 {
-            (false_expr, self.visit_real_expr(false_expr))
+            (false_expr, self.fold_real_expr(false_expr))
         } else {
-            (true_expr, self.visit_real_expr(true_expr))
+            (true_expr, self.fold_real_expr(true_expr))
         };
 
         if res.is_none() {
@@ -327,15 +327,15 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
         res
     }
 
-    fn visit_variable_reference(&mut self, var: VariableId) -> Option<f64> {
+    fn fold_variable_reference(&mut self, var: VariableId) -> Option<f64> {
         self.resolver.real_variable_value(var)
     }
 
-    fn visit_parameter_reference(&mut self, param: ParameterId) -> Option<f64> {
+    fn fold_parameter_reference(&mut self, param: ParameterId) -> Option<f64> {
         self.resolver.real_parameter_value(param)
     }
 
-    fn visit_branch_access(
+    fn fold_branch_access(
         &mut self,
         _discipline_accesss: DisciplineAccess,
         _branch: BranchId,
@@ -344,7 +344,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
         None
     }
 
-    fn visit_noise(
+    fn fold_noise(
         &mut self,
         _noise_src: NoiseSource<RealExpressionId, ()>,
         _name: Option<StringLiteral>,
@@ -352,28 +352,28 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
         None
     }
 
-    fn visit_builtin_function_call_1p(
+    fn fold_builtin_function_call_1p(
         &mut self,
         call: BuiltInFunctionCall1p,
         arg: RealExpressionId,
     ) -> Option<f64> {
-        self.visit_real_builtin_function_call_1p(call, arg)
+        self.fold_real_builtin_function_call_1p(call, arg)
     }
 
-    fn visit_builtin_function_call_2p(
+    fn fold_builtin_function_call_2p(
         &mut self,
         call: BuiltInFunctionCall2p,
         arg1: RealExpressionId,
         arg2: RealExpressionId,
     ) -> Option<f64> {
-        self.visit_real_builtin_function_call_2p(call, arg1, arg2)
+        self.fold_real_builtin_function_call_2p(call, arg1, arg2)
     }
 
-    fn visit_temperature(&mut self) -> Option<f64> {
+    fn fold_temperature(&mut self) -> Option<f64> {
         None
     }
 
-    fn visit_sim_param(
+    fn fold_sim_param(
         &mut self,
         _name: StringExpressionId,
         _default: Option<RealExpressionId>,
@@ -381,203 +381,199 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprVisitor
         None
     }
 
-    fn visit_integer_conversion(&mut self, expr: IntegerExpressionId) -> Option<f64> {
+    fn fold_integer_conversion(&mut self, expr: IntegerExpressionId) -> Option<f64> {
         let val = ConstantFold {
             expr,
             fold_type: self.fold_type,
             resolver: self.resolver,
         }
-        .visit_integer_expr(expr)? as f64;
+        .fold_integer_expr(expr)? as f64;
         Some(val)
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> RealBuiltInFunctionCall2pVisitor
+impl<'lt, T: ConstantFoldType, R: ConstResolver> RealBuiltInFunctionCall2pFold
     for ConstantFold<'lt, T, R, RealExpressionId>
 {
     type T = Option<f64>;
 
-    fn visit_pow(
+    fn fold_pow(
         &mut self,
         arg1_expr: RealExpressionId,
         arg2_expr: RealExpressionId,
     ) -> Option<f64> {
-        let arg1 = self.visit_real_expr(arg1_expr);
-        let arg2 = self.visit_real_expr(arg2_expr);
+        let arg1 = self.fold_real_expr(arg1_expr);
+        let arg2 = self.fold_real_expr(arg2_expr);
         Self::fold_pow(arg1, arg2, |side| {
             self.real_resolve_to(arg1_expr, arg2_expr, side)
         })
     }
 
-    fn visit_hypot(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
-        let arg1 = self.visit_real_expr(arg1)?;
-        let arg2 = self.visit_real_expr(arg2)?;
+    fn fold_hypot(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
+        let arg1 = self.fold_real_expr(arg1)?;
+        let arg2 = self.fold_real_expr(arg2)?;
         Some(arg1.hypot(arg2))
     }
 
-    fn visit_arctan2(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
-        let arg1 = self.visit_real_expr(arg1)?;
-        let arg2 = self.visit_real_expr(arg2)?;
+    fn fold_arctan2(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
+        let arg1 = self.fold_real_expr(arg1)?;
+        let arg2 = self.fold_real_expr(arg2)?;
         Some(arg1.atan2(arg2))
     }
 
-    fn visit_max(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
-        let arg1 = self.visit_real_expr(arg1)?;
-        let arg2 = self.visit_real_expr(arg2)?;
+    fn fold_max(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
+        let arg1 = self.fold_real_expr(arg1)?;
+        let arg2 = self.fold_real_expr(arg2)?;
         Some(arg1.max(arg2))
     }
 
-    fn visit_min(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
-        let arg1 = self.visit_real_expr(arg1)?;
-        let arg2 = self.visit_real_expr(arg2)?;
+    fn fold_min(&mut self, arg1: RealExpressionId, arg2: RealExpressionId) -> Option<f64> {
+        let arg1 = self.fold_real_expr(arg1)?;
+        let arg2 = self.fold_real_expr(arg2)?;
         Some(arg1.min(arg2))
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> RealBuiltInFunctionCall1pVisitor
+impl<'lt, T: ConstantFoldType, R: ConstResolver> RealBuiltInFunctionCall1pFold
     for ConstantFold<'lt, T, R, RealExpressionId>
 {
     type T = Option<f64>;
 
-    fn visit_sqrt(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.sqrt())
+    fn fold_sqrt(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.sqrt())
     }
 
-    fn visit_exp(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.exp())
+    fn fold_exp(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.exp())
     }
 
-    fn visit_ln(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.ln())
+    fn fold_ln(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.ln())
     }
 
-    fn visit_log(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.log10())
+    fn fold_log(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.log10())
     }
 
-    fn visit_abs(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.abs())
+    fn fold_abs(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.abs())
     }
 
-    fn visit_floor(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.floor())
+    fn fold_floor(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.floor())
     }
 
-    fn visit_ceil(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.ceil())
+    fn fold_ceil(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.ceil())
     }
 
-    fn visit_sin(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.sin())
+    fn fold_sin(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.sin())
     }
 
-    fn visit_cos(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.cos())
+    fn fold_cos(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.cos())
     }
 
-    fn visit_tan(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.tan())
+    fn fold_tan(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.tan())
     }
 
-    fn visit_arcsin(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.asin())
+    fn fold_arcsin(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.asin())
     }
 
-    fn visit_arccos(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.acos())
+    fn fold_arccos(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.acos())
     }
 
-    fn visit_arctan(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.atan())
+    fn fold_arctan(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.atan())
     }
 
-    fn visit_sinh(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.sinh())
+    fn fold_sinh(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.sinh())
     }
 
-    fn visit_cosh(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.cosh())
+    fn fold_cosh(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.cosh())
     }
 
-    fn visit_tanh(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.tanh())
+    fn fold_tanh(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.tanh())
     }
 
-    fn visit_arcsinh(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.asinh())
+    fn fold_arcsinh(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.asinh())
     }
 
-    fn visit_arccosh(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.acosh())
+    fn fold_arccosh(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.acosh())
     }
 
-    fn visit_arctanh(&mut self, arg: RealExpressionId) -> Option<f64> {
-        self.visit_real_expr(arg).map(|arg| arg.atanh())
+    fn fold_arctanh(&mut self, arg: RealExpressionId) -> Option<f64> {
+        self.fold_real_expr(arg).map(|arg| arg.atanh())
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> RealBinaryOperatorVisitor
+impl<'lt, T: ConstantFoldType, R: ConstResolver> RealBinaryOperatorFold
     for ConstantFold<'lt, T, R, RealExpressionId>
 {
     type T = Option<f64>;
 
-    fn visit_sum(&mut self, lhs_expr: RealExpressionId, rhs_expr: RealExpressionId) -> Option<f64> {
-        let lhs = self.visit_real_expr(lhs_expr);
-        let rhs = self.visit_real_expr(rhs_expr);
+    fn fold_sum(&mut self, lhs_expr: RealExpressionId, rhs_expr: RealExpressionId) -> Option<f64> {
+        let lhs = self.fold_real_expr(lhs_expr);
+        let rhs = self.fold_real_expr(rhs_expr);
         Self::fold_plus(lhs, rhs, |side| {
             self.real_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_diff(
-        &mut self,
-        lhs_expr: RealExpressionId,
-        rhs_expr: RealExpressionId,
-    ) -> Option<f64> {
-        let lhs = self.visit_real_expr(lhs_expr);
-        let rhs = self.visit_real_expr(rhs_expr);
+    fn fold_diff(&mut self, lhs_expr: RealExpressionId, rhs_expr: RealExpressionId) -> Option<f64> {
+        let lhs = self.fold_real_expr(lhs_expr);
+        let rhs = self.fold_real_expr(rhs_expr);
         Self::fold_minus(lhs, rhs, |side| {
             self.real_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_mul(&mut self, lhs_expr: RealExpressionId, rhs_expr: RealExpressionId) -> Option<f64> {
-        let lhs = self.visit_real_expr(lhs_expr);
-        let rhs = self.visit_real_expr(rhs_expr);
+    fn fold_mul(&mut self, lhs_expr: RealExpressionId, rhs_expr: RealExpressionId) -> Option<f64> {
+        let lhs = self.fold_real_expr(lhs_expr);
+        let rhs = self.fold_real_expr(rhs_expr);
 
         Self::fold_mul(lhs, rhs, |side| {
             self.real_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_quotient(
+    fn fold_quotient(
         &mut self,
         lhs_expr: RealExpressionId,
         rhs_expr: RealExpressionId,
     ) -> Option<f64> {
-        let lhs = self.visit_real_expr(lhs_expr);
-        let rhs = self.visit_real_expr(rhs_expr);
+        let lhs = self.fold_real_expr(lhs_expr);
+        let rhs = self.fold_real_expr(rhs_expr);
         Self::fold_div(lhs, rhs, |side| {
             self.real_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_pow(&mut self, lhs_expr: RealExpressionId, rhs_expr: RealExpressionId) -> Option<f64> {
-        let lhs = self.visit_real_expr(lhs_expr);
-        let rhs = self.visit_real_expr(rhs_expr);
+    fn fold_pow(&mut self, lhs_expr: RealExpressionId, rhs_expr: RealExpressionId) -> Option<f64> {
+        let lhs = self.fold_real_expr(lhs_expr);
+        let rhs = self.fold_real_expr(rhs_expr);
         Self::fold_pow(lhs, rhs, |side| {
             self.real_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_mod(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<f64> {
-        let lhs = self.visit_real_expr(lhs)?;
-        let rhs = self.visit_real_expr(rhs)?;
+    fn fold_mod(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<f64> {
+        let lhs = self.fold_real_expr(lhs)?;
+        let rhs = self.fold_real_expr(rhs)?;
         Some(lhs % rhs)
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
+impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprFold
     for ConstantFold<'lt, T, R, IntegerExpressionId>
 {
     type T = Option<i64>;
@@ -585,7 +581,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
     fn mir(&self) -> &Mir {
         self.fold_type.as_ref()
     }
-    fn visit_integer_expr(&mut self, expr: IntegerExpressionId) -> Option<i64> {
+    fn fold_integer_expr(&mut self, expr: IntegerExpressionId) -> Option<i64> {
         let old = replace(&mut self.expr, expr);
         let res = walk_integer_expression(self, expr);
         if let Some(res) = res {
@@ -595,39 +591,39 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
         self.expr = old;
         res
     }
-    fn visit_literal(&mut self, val: i64) -> Option<i64> {
+    fn fold_literal(&mut self, val: i64) -> Option<i64> {
         Some(val)
     }
 
-    fn visit_binary_operator(
+    fn fold_binary_operator(
         &mut self,
         lhs: IntegerExpressionId,
         op: Node<IntegerBinaryOperator>,
         rhs: IntegerExpressionId,
     ) -> Option<i64> {
-        self.visit_integer_binary_op(lhs, op.contents, rhs)
+        self.fold_integer_binary_op(lhs, op.contents, rhs)
     }
 
-    fn visit_integer_comparison(
+    fn fold_integer_comparison(
         &mut self,
         lhs: IntegerExpressionId,
         op: Node<ComparisonOperator>,
         rhs: IntegerExpressionId,
     ) -> Option<i64> {
-        IntegerComparisonVisit::visit_integer_comparison(self, lhs, op.contents, rhs)
+        IntegerComparisonFold::fold_integer_comparison(self, lhs, op.contents, rhs)
     }
 
-    fn visit_real_comparison(
+    fn fold_real_comparison(
         &mut self,
         lhs: RealExpressionId,
         op: Node<ComparisonOperator>,
         rhs: RealExpressionId,
     ) -> Option<i64> {
-        RealComparisonVisit::visit_real_comparison(self, lhs, op.contents, rhs)
+        RealComparisonFold::fold_real_comparison(self, lhs, op.contents, rhs)
     }
 
-    fn visit_unary_op(&mut self, op: Node<UnaryOperator>, arg: IntegerExpressionId) -> Option<i64> {
-        let arg = self.visit_integer_expr(arg)?;
+    fn fold_unary_op(&mut self, op: Node<UnaryOperator>, arg: IntegerExpressionId) -> Option<i64> {
+        let arg = self.fold_integer_expr(arg)?;
         let res = match op.contents {
             UnaryOperator::BitNegate | UnaryOperator::LogicNegate => !arg,
             UnaryOperator::ArithmeticNegate => -arg,
@@ -636,7 +632,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
         Some(res)
     }
 
-    fn visit_condition(
+    fn fold_condition(
         &mut self,
         cond: IntegerExpressionId,
         true_expr: IntegerExpressionId,
@@ -645,9 +641,9 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
         let cond = self.fold_int_expression(cond)?;
 
         let (expr, res) = if cond == 0 {
-            (false_expr, self.visit_integer_expr(false_expr))
+            (false_expr, self.fold_integer_expr(false_expr))
         } else {
-            (true_expr, self.visit_integer_expr(true_expr))
+            (true_expr, self.fold_integer_expr(true_expr))
         };
 
         if res.is_none() {
@@ -658,65 +654,61 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
         res
     }
 
-    fn visit_min(&mut self, arg1: IntegerExpressionId, arg2: IntegerExpressionId) -> Option<i64> {
-        let arg1 = self.visit_integer_expr(arg1)?;
-        let arg2 = self.visit_integer_expr(arg2)?;
+    fn fold_min(&mut self, arg1: IntegerExpressionId, arg2: IntegerExpressionId) -> Option<i64> {
+        let arg1 = self.fold_integer_expr(arg1)?;
+        let arg2 = self.fold_integer_expr(arg2)?;
         Some(arg1.min(arg2))
     }
 
-    fn visit_max(&mut self, arg1: IntegerExpressionId, arg2: IntegerExpressionId) -> Option<i64> {
-        let arg1 = self.visit_integer_expr(arg1)?;
-        let arg2 = self.visit_integer_expr(arg2)?;
+    fn fold_max(&mut self, arg1: IntegerExpressionId, arg2: IntegerExpressionId) -> Option<i64> {
+        let arg1 = self.fold_integer_expr(arg1)?;
+        let arg2 = self.fold_integer_expr(arg2)?;
         Some(arg1.max(arg2))
     }
 
-    fn visit_abs(&mut self, arg: IntegerExpressionId) -> Option<i64> {
-        let arg = self.visit_integer_expr(arg)?;
+    fn fold_abs(&mut self, arg: IntegerExpressionId) -> Option<i64> {
+        let arg = self.fold_integer_expr(arg)?;
         Some(arg.abs())
     }
 
-    fn visit_variable_reference(&mut self, var: VariableId) -> Option<i64> {
+    fn fold_variable_reference(&mut self, var: VariableId) -> Option<i64> {
         self.resolver.int_variable_value(var)
     }
 
-    fn visit_parameter_reference(&mut self, param: ParameterId) -> Option<i64> {
+    fn fold_parameter_reference(&mut self, param: ParameterId) -> Option<i64> {
         self.resolver.int_parameter_value(param)
     }
 
-    fn visit_real_cast(&mut self, expr: RealExpressionId) -> Option<i64> {
+    fn fold_real_cast(&mut self, expr: RealExpressionId) -> Option<i64> {
         let res = self.fold_real_expression(expr)?.round();
 
         Some(res as i64)
     }
 
-    fn visit_port_connected(&mut self, _: PortId) -> Option<i64> {
+    fn fold_port_connected(&mut self, _: PortId) -> Option<i64> {
         None
     }
 
-    fn visit_param_given(&mut self, _: ParameterId) -> Option<i64> {
+    fn fold_param_given(&mut self, _: ParameterId) -> Option<i64> {
         None
     }
 
-    fn visit_port_reference(&mut self, _: PortId) -> Option<i64> {
+    fn fold_port_reference(&mut self, _: PortId) -> Option<i64> {
         None
     }
 
-    fn visit_net_reference(&mut self, _: NetId) -> Option<i64> {
+    fn fold_net_reference(&mut self, _: NetId) -> Option<i64> {
         None
     }
 
-    fn visit_string_eq(&mut self, lhs: StringExpressionId, rhs: StringExpressionId) -> Option<i64> {
+    fn fold_string_eq(&mut self, lhs: StringExpressionId, rhs: StringExpressionId) -> Option<i64> {
         let lhs = self.fold_str_expression(lhs)?;
         let rhs = self.fold_str_expression(rhs)?;
 
         Some((rhs == lhs) as i64)
     }
 
-    fn visit_string_neq(
-        &mut self,
-        lhs: StringExpressionId,
-        rhs: StringExpressionId,
-    ) -> Option<i64> {
+    fn fold_string_neq(&mut self, lhs: StringExpressionId, rhs: StringExpressionId) -> Option<i64> {
         let lhs = self.fold_str_expression(lhs)?;
         let rhs = self.fold_str_expression(rhs)?;
 
@@ -727,57 +719,57 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprVisitor
 const U32_MAX_I64: i64 = u32::MAX as i64;
 const U32_OVERFLOW_START: i64 = U32_MAX_I64 + 1;
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
+impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorFold
     for ConstantFold<'lt, T, R, IntegerExpressionId>
 {
     type T = Option<i64>;
 
-    fn visit_sum(
+    fn fold_sum(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
 
         Self::fold_plus(lhs, rhs, |side| {
             self.int_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_diff(
+    fn fold_diff(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
 
         Self::fold_minus(lhs, rhs, |side| {
             self.int_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_mul(
+    fn fold_mul(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
 
         Self::fold_mul(lhs, rhs, |side| {
             self.int_resolve_to(lhs_expr, rhs_expr, side)
         })
     }
 
-    fn visit_quotient(
+    fn fold_quotient(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
 
         if rhs == Some(0) {
             Linter::dispatch_late(
@@ -791,13 +783,13 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
         })
     }
 
-    fn visit_pow(
+    fn fold_pow(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = match self.visit_integer_expr(rhs_expr) {
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = match self.fold_integer_expr(rhs_expr) {
             // Negative powers are 0 < |1/x| < 1 and as such always truncated to 0 according to VAMS standard
             Some(i64::MIN..=-1) => return Some(0),
 
@@ -821,48 +813,48 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
         })
     }
 
-    fn visit_mod(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_mod(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
 
         Some(lhs % rhs)
     }
 
-    fn visit_shiftl(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_shiftl(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
 
         Some(lhs << rhs)
     }
 
-    fn visit_shiftr(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_shiftr(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
 
         Some(lhs >> rhs)
     }
 
-    fn visit_xor(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_xor(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
 
         Some(lhs ^ rhs)
     }
 
-    fn visit_nxor(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_nxor(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
 
         Some(!(lhs ^ rhs))
     }
 
-    fn visit_and(
+    fn fold_and(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
         trace!("folding {:?} & {:?}", lhs, rhs);
 
         match (lhs, rhs) {
@@ -882,13 +874,13 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
         }
     }
 
-    fn visit_or(
+    fn fold_or(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
         trace!("folding {:?} | {:?}", lhs, rhs);
 
         match (lhs, rhs) {
@@ -908,13 +900,13 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
         }
     }
 
-    fn visit_logic_and(
+    fn fold_logic_and(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
         trace!("folding {:?} && {:?}", lhs, rhs);
 
         match (lhs, rhs) {
@@ -934,13 +926,13 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
         }
     }
 
-    fn visit_logic_or(
+    fn fold_logic_or(
         &mut self,
         lhs_expr: IntegerExpressionId,
         rhs_expr: IntegerExpressionId,
     ) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs_expr);
-        let rhs = self.visit_integer_expr(rhs_expr);
+        let lhs = self.fold_integer_expr(lhs_expr);
+        let rhs = self.fold_integer_expr(rhs_expr);
         trace!("folding {:?} || {:?}", lhs, rhs);
 
         match (lhs, rhs) {
@@ -963,95 +955,95 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerBinaryOperatorVisitor
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerComparisonVisit
+impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerComparisonFold
     for ConstantFold<'lt, T, R, IntegerExpressionId>
 {
     type T = Option<i64>;
 
-    fn visit_lt(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_lt(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
         trace!("folding {:?} < {:?}", lhs, rhs);
         Some((lhs < rhs) as i64)
     }
 
-    fn visit_le(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_le(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
         trace!("folding {:?} <= {:?}", lhs, rhs);
         Some((lhs <= rhs) as i64)
     }
 
-    fn visit_gt(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_gt(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
         trace!("folding {:?} > {:?}", lhs, rhs);
         Some((lhs > rhs) as i64)
     }
 
-    fn visit_ge(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_ge(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
         trace!("folding {:?} >= {:?}", lhs, rhs);
         Some((lhs >= rhs) as i64)
     }
 
-    fn visit_eq(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_eq(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
         trace!("folding {:?} == {:?}", lhs, rhs);
         Some((lhs == rhs) as i64)
     }
 
-    fn visit_ne(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
-        let lhs = self.visit_integer_expr(lhs)?;
-        let rhs = self.visit_integer_expr(rhs)?;
+    fn fold_ne(&mut self, lhs: IntegerExpressionId, rhs: IntegerExpressionId) -> Option<i64> {
+        let lhs = self.fold_integer_expr(lhs)?;
+        let rhs = self.fold_integer_expr(rhs)?;
         trace!("folding {:?} != {:?}", lhs, rhs);
         Some((lhs != rhs) as i64)
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> RealComparisonVisit
+impl<'lt, T: ConstantFoldType, R: ConstResolver> RealComparisonFold
     for ConstantFold<'lt, T, R, IntegerExpressionId>
 {
     type T = Option<i64>;
 
-    fn visit_lt(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
+    fn fold_lt(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
         let lhs = self.fold_real_expression(lhs)?;
         let rhs = self.fold_real_expression(rhs)?;
         trace!("folding {:?} < {:?}", lhs, rhs);
         Some((lhs < rhs) as i64)
     }
 
-    fn visit_le(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
+    fn fold_le(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
         let lhs = self.fold_real_expression(lhs)?;
         let rhs = self.fold_real_expression(rhs)?;
         trace!("folding {:?} <= {:?}", lhs, rhs);
         Some((lhs <= rhs) as i64)
     }
 
-    fn visit_gt(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
+    fn fold_gt(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
         let lhs = self.fold_real_expression(lhs)?;
         let rhs = self.fold_real_expression(rhs)?;
         trace!("folding {:?} > {:?}", lhs, rhs);
         Some((lhs > rhs) as i64)
     }
 
-    fn visit_ge(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
+    fn fold_ge(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
         let lhs = self.fold_real_expression(lhs)?;
         let rhs = self.fold_real_expression(rhs)?;
         trace!("folding {:?} >= {:?}", lhs, rhs);
         Some((lhs >= rhs) as i64)
     }
 
-    fn visit_eq(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
+    fn fold_eq(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
         let lhs = self.fold_real_expression(lhs)?;
         let rhs = self.fold_real_expression(rhs)?;
         trace!("folding {:?} == {:?}", lhs, rhs);
         Some((lhs == rhs) as i64)
     }
 
-    fn visit_ne(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
+    fn fold_ne(&mut self, lhs: RealExpressionId, rhs: RealExpressionId) -> Option<i64> {
         let lhs = self.fold_real_expression(lhs)?;
         let rhs = self.fold_real_expression(rhs)?;
         trace!("folding {:?} != {:?}", lhs, rhs);
@@ -1059,13 +1051,13 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealComparisonVisit
     }
 }
 
-impl<'lt, T: ConstantFoldType, R: ConstResolver> StringExprVisitor
+impl<'lt, T: ConstantFoldType, R: ConstResolver> StringExprFold
     for ConstantFold<'lt, T, R, StringExpressionId>
 {
     type T = Option<StringLiteral>;
 
     #[inline]
-    fn visit_string_expr(&mut self, expr: StringExpressionId) -> Option<StringLiteral> {
+    fn fold_string_expr(&mut self, expr: StringExpressionId) -> Option<StringLiteral> {
         let old = replace(&mut self.expr, expr);
         let res = walk_string_expression(self, expr);
         if let Some(res) = res {
@@ -1080,11 +1072,11 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> StringExprVisitor
         self.fold_type.as_ref()
     }
 
-    fn visit_literal(&mut self, val: StringLiteral) -> Option<StringLiteral> {
+    fn fold_literal(&mut self, val: StringLiteral) -> Option<StringLiteral> {
         Some(val)
     }
 
-    fn visit_condition(
+    fn fold_condition(
         &mut self,
         cond: IntegerExpressionId,
         true_expr: StringExpressionId,
@@ -1092,9 +1084,9 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> StringExprVisitor
     ) -> Option<StringLiteral> {
         let cond = self.fold_int_expression(cond)?;
         let (expr, val) = if cond == 0 {
-            (false_expr, self.visit_string_expr(false_expr))
+            (false_expr, self.fold_string_expr(false_expr))
         } else {
-            (true_expr, self.visit_string_expr(true_expr))
+            (true_expr, self.fold_string_expr(true_expr))
         };
 
         if val.is_none() {
@@ -1105,15 +1097,15 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> StringExprVisitor
         val
     }
 
-    fn visit_variable_reference(&mut self, var: VariableId) -> Option<StringLiteral> {
+    fn fold_variable_reference(&mut self, var: VariableId) -> Option<StringLiteral> {
         self.resolver.str_variable_value(var)
     }
 
-    fn visit_parameter_reference(&mut self, param: ParameterId) -> Option<StringLiteral> {
+    fn fold_parameter_reference(&mut self, param: ParameterId) -> Option<StringLiteral> {
         self.resolver.str_parameter_value(param)
     }
 
-    fn visit_sim_parameter(&mut self, _name: StringExpressionId) -> Option<StringLiteral> {
+    fn fold_sim_parameter(&mut self, _name: StringExpressionId) -> Option<StringLiteral> {
         None
     }
 }
@@ -1153,7 +1145,7 @@ impl Mir {
             resolver,
             expr,
         }
-        .visit_real_expr(expr)
+        .fold_real_expr(expr)
     }
 
     /// See [`constant_fold_real_expr`](crate::mir::Mir::constant_fold_real_expr)
@@ -1167,7 +1159,7 @@ impl Mir {
             resolver,
             expr,
         }
-        .visit_integer_expr(expr)
+        .fold_integer_expr(expr)
     }
 
     /// See [`constant_fold_str_expr`](crate::mir::Mir::constant_fold_str_expr)
@@ -1181,7 +1173,7 @@ impl Mir {
             resolver,
             expr,
         }
-        .visit_string_expr(expr)
+        .fold_string_expr(expr)
     }
 
     /// Same as [`constant_fold_str_expr`](crate::mir::Mir::constant_fold_str_expr) but no expressions in `self` actually change only the return value is calculated
@@ -1195,7 +1187,7 @@ impl Mir {
             resolver,
             expr,
         }
-        .visit_real_expr(expr)
+        .fold_real_expr(expr)
     }
 
     /// See [`constant_eval_real_expr`](crate::mir::Mir::constant_eval_real_expr)
@@ -1209,7 +1201,7 @@ impl Mir {
             resolver,
             expr,
         }
-        .visit_integer_expr(expr)
+        .fold_integer_expr(expr)
     }
 
     /// See [`constant_eval_real_expr`](crate::mir::Mir::constant_eval_real_expr)
@@ -1223,6 +1215,6 @@ impl Mir {
             resolver,
             expr,
         }
-        .visit_string_expr(expr)
+        .fold_string_expr(expr)
     }
 }
