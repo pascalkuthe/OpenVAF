@@ -31,15 +31,7 @@ build:
     - cargo --version
     - cargo update
     - cargo build --verbose
-  rules:
-    - changes:
-        - frontend/src/**.rs
-        - macros/src/**.rs
-        - rust_codegen/src/**.rs
-        - frontend/src/Cargo.toml
-        - macros/src/Cargo.toml
-        - rust_codegen/src/Cargo.toml
-        - Cargo.toml
+    
 test:
   stage: test
   script:
@@ -48,11 +40,6 @@ test:
     - cd frontend
     - cargo test --verbose
 
-  rules:
-    - changes:
-        - frontend/src/**.rs
-        - macros/src/**.rs
-        - rust_codegen/src/**.rs
 
 test_fmt:
   stage: test
@@ -62,12 +49,6 @@ test_fmt:
 
   script:
     - cargo fmt -- --check
-
-  rules:
-    - changes:
-        - frontend/src/**.rs
-        - macros/src/**.rs
-        - rust_codegen/src/**.rs
 
   cache:
     <<: *global_cache
@@ -83,12 +64,6 @@ test_clippy:
 
   script:
     - cargo clippy -- -D warnings
-
-  rules:
-    - changes:
-        - frontend/src/**.rs
-        - macros/src/**.rs
-        - rust_codegen/src/**.rs
 
 
 
@@ -111,12 +86,7 @@ pages:
       - public
 
   rules:
-
-    - changes:
-        - frontend/src/**.rs
-        - macros/src/**.rs
-        - rust_codegen/src/**.rs
-      if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 
   cache:
