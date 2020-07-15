@@ -117,7 +117,7 @@ lints! {
     pub const ignored_display_task = LintData{default_lvl: Warn, documentation_id: None};
     pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: None};
     pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: Some("L001")};
-    pub const constant_overflow = LintData{default_lvl: Warn, documentation_id: Some("L002")};
+    pub const constant_overflow = LintData{default_lvl: Deny, documentation_id: Some("L002")};
 }
 
 define_index_type! {
