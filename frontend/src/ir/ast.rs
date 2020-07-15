@@ -47,9 +47,7 @@ use std::ops::Range;
 // pub mod visitor;
 
 /// An Ast representing a parsed Verilog-AMS project (root file);
-/// It provides stable indicies for every Node because the entire Tree is immutable once created;
-/// It uses preallocated constant size arrays for performance
-
+/// It provides stable indices for every Node because the entire Tree is immutable once created;
 #[derive(Default, Debug, Clone)]
 pub struct Ast {
     //Declarations

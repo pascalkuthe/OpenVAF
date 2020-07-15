@@ -68,7 +68,9 @@ test_clippy:
 
 
 book:
-
+  image:
+    name: "peaceiris/mdbook:latest"
+    entrypoint: [""]
 
   stage: doc
   script:
@@ -101,9 +103,7 @@ rustdoc:
     key: documentation
 
 pages:
-  image:
-    name: "peaceiris/mdbook:latest"
-    entrypoint: [""]
+  image: "alpine"
 
   stage: deploy_doc
 
