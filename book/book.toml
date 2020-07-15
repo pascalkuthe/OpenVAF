@@ -1,0 +1,10 @@
+[book]
+authors = ["DSPOM"]
+language = "en"
+multilingual = false
+src = "src"
+title = "OpenVAF"
+
+[output.html]
+default-theme = "Ayu"
+

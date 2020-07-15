@@ -66,20 +66,23 @@ test_clippy:
     - cargo clippy -- -D warnings
 
 
-
-
 pages:
+  stage: doc
+
   image: "rustlang/rust:nightly"
 
-  stage: doc
+  services:
+    - name: peaceiris/mdbook:latest
+      alias: mdbook
+
   script:
+    - mdbook build book -d ../public
     - cargo doc --workspace --document-private-items
-    - mkdir public
     - cp -R target/doc public/dev_doc
+    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > public/dev_doc/index.html
     - cargo doc --workspace
     - cp -R target/doc public/api_doc
     - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > public/api_doc/index.html
-    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > public/dev_doc/index.html
 
   artifacts:
     paths:
