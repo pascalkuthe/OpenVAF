@@ -16,9 +16,9 @@ use crate::preprocessor::error::Error::{
 };
 use crate::preprocessor::lexer::Token::SimpleIdentifier;
 use crate::sourcemap::span::SpanData;
+use crate::sourcemap::Span;
 use crate::sourcemap::{BytePos, SyntaxContext};
 use crate::symbol::Ident;
-use crate::Span;
 use logos::Filter::Emit;
 use std::fmt::{Display, Formatter};
 

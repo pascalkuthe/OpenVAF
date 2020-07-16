@@ -19,10 +19,10 @@ use crate::parser::error::Result;
 use crate::parser::Error::{
     MissingOrUnexpectedToken, UnexpectedToken, UnexpectedTokens, Unsupported,
 };
+use crate::parser::Parser;
 use crate::parser::Token;
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::format_list;
-use crate::Parser;
 
 impl<'lt> Parser<'lt> {
     pub fn parse_parameter_decl(&mut self, attributes: Attributes) -> Result {

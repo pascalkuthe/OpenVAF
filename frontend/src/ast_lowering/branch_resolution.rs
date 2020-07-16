@@ -8,6 +8,7 @@
  * *****************************************************************************************
  */
 
+use crate::ast::Ast;
 use crate::ast::NetType::GROUND;
 use crate::ast_lowering::ast_to_hir_fold::Fold;
 use crate::ast_lowering::error::Error::{DisciplineMismatch, NatureNotPotentialOrFlow};
@@ -17,7 +18,7 @@ use crate::hir::{Branch, BranchDeclaration, DisciplineAccess};
 use crate::ir::{AttributeNode, Attributes, BranchId, DisciplineId, NatureId, NetId, Node, PortId};
 use crate::sourcemap::span::DUMMY_SP;
 use crate::symbol::{keywords, Ident};
-use crate::{ast, Ast, HashMap};
+use crate::{ast, HashMap};
 
 /// Handles branch resolution which is more complicated because unnamed branches exist and discipline comparability has to be enforced
 pub struct BranchResolver {

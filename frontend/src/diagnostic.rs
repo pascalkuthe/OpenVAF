@@ -26,7 +26,6 @@ pub type UserResult<T, Printer = StandardPrinter> = Result<T, UserMultiDiagnosti
 pub enum Unsupported {
     StringParameters,
     ConstantFunctionCalls,
-    // TODO readd as lint
     //SelfDerivingAssignments,
 }
 

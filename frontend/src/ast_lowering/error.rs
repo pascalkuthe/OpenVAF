@@ -8,19 +8,20 @@
  * *****************************************************************************************
  */
 
+use core::fmt::Debug;
+use core::fmt::Formatter;
 use std::fmt::Display;
 
 use annotate_snippets::snippet::AnnotationType;
-use core::fmt::Formatter;
+use thiserror::Error;
 
 use crate::diagnostic::{DiagnosticSlice, LibraryDiagnostic, Text, Unsupported};
+use crate::hir::Hir;
 use crate::ir::DisciplineId;
+use crate::sourcemap::Span;
 use crate::symbol::keywords;
 use crate::symbol::{Ident, Symbol};
 use crate::util::{format_list, ListFormatter};
-use crate::{Hir, Span};
-use core::fmt::Debug;
-use thiserror::Error;
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
 

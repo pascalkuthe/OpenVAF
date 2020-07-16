@@ -41,7 +41,7 @@ use crate::mir::{
     ComparisonOperator, IntegerBinaryOperator, IntegerExpression, RealBinaryOperator,
     RealExpression, StringExpression,
 };
-use crate::Span;
+use crate::sourcemap::Span;
 use float_cmp::{ApproxEq, F64Margin};
 use log::trace;
 

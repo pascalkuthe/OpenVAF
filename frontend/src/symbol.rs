@@ -41,7 +41,7 @@ use crate::{HashMap, GLOBALS};
 use bumpalo::Bump;
 
 use crate::sourcemap::span::DUMMY_SP;
-use crate::Span;
+use crate::sourcemap::Span;
 use bitflags::_core::fmt::Formatter;
 use bitflags::_core::ptr::NonNull;
 use index_vec::{define_index_type, IndexVec};
@@ -181,7 +181,7 @@ impl Interner {
         Self {
             strings: IndexVec::from_iter(init.iter().copied()),
             names: init.iter().copied().zip((0..).map(Symbol::new)).collect(),
-            ..Interner::default()
+            arena: Bump::with_capacity(2048),
         }
     }
 

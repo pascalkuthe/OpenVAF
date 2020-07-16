@@ -31,8 +31,9 @@ use crate::mir::{
     ComparisonOperator, ExpressionId, IntegerBinaryOperator, IntegerExpression, RealBinaryOperator,
     RealExpression, Statement, StringExpression, VariableType,
 };
+use crate::sourcemap::Span;
 use crate::HashMap;
-use crate::{ast, ir, mir, Span};
+use crate::{ast, ir, mir};
 use index_vec::IndexVec;
 
 pub struct ConstantSchematicAnalysis;

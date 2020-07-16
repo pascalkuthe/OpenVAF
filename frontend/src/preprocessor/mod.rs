@@ -1,29 +1,41 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
+use core::intrinsics::transmute;
+use core::mem::swap;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use index_vec::{IndexSlice, IndexVec};
+use log::debug;
+
+pub use error::{Error, Result};
+
 use crate::diagnostic::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
+use crate::lints::Linter;
+use crate::literals::unesacpe_string;
 use crate::parser::tokenstream::Token as ParserToken;
 use crate::parser::tokenstream::TokenStream as ParserTokenStream;
 use crate::preprocessor::error::Error::{MacroNotFound, MissingToken, UnexpectedToken};
 use crate::preprocessor::lexer::Token as LexicalToken;
-use crate::preprocessor::lexer::{FollowedByBracket, Lexer};
-
-use crate::literals::unesacpe_string;
 use crate::preprocessor::lexer::Token::{
     LiteralInteger, LiteralRealNumber, LiteralRealNumberWithScaleChar,
 };
+use crate::preprocessor::lexer::{FollowedByBracket, Lexer};
 use crate::preprocessor::lints::MacroOverwritten;
 use crate::preprocessor::macros::MacroParser;
 use crate::preprocessor::tokenstream::{Macro, MacroArg, Token};
+use crate::sourcemap::Span;
 use crate::sourcemap::{BytePos, FileId, SourceMap, SyntaxContext};
 use crate::symbol::{Ident, Symbol};
-use crate::{HashMap, Span, StringLiteral};
-use core::mem::swap;
-pub use error::{Error, Result};
-use index_vec::{IndexSlice, IndexVec};
-use log::debug;
-
-use crate::lints::Linter;
-use core::intrinsics::transmute;
-use std::path::PathBuf;
-use std::sync::Arc;
+use crate::{HashMap, StringLiteral};
 
 mod lints;
 

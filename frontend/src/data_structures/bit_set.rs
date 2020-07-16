@@ -1,5 +1,4 @@
 /*
-
  * ******************************************************************************************
  *  Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
  *  It is subject to the license terms in the LICENSE file found in the top-level directory

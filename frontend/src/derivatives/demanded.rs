@@ -1,10 +1,10 @@
 //! This module contains an algorithm that will calculate all partial derivatives specified in a map for the entire programm
+use crate::cfg::ControlFlowGraph;
 use crate::derivatives::error::Error;
 use crate::derivatives::{AutoDiff, Unknown};
 use crate::diagnostic::MultiDiagnostic;
 use crate::ir::{StatementId, VariableId};
 use crate::mir::{ExpressionId, Mir, Statement};
-use crate::ControlFlowGraph;
 
 impl ControlFlowGraph {
     pub fn demand_derivatives(

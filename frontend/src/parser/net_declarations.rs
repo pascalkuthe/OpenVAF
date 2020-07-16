@@ -16,11 +16,11 @@ use crate::parser::error::Result;
 use crate::parser::Error::{AlreadyDeclaredInThisScope, PortNotPreDeclaredInModuleHead};
 use crate::parser::Parser;
 use crate::parser::Token;
+use crate::sourcemap::Span;
 use crate::symbol::{keywords, Ident};
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::format_list;
 use crate::HashSet;
-use crate::Span;
 
 impl<'lt> Parser<'lt> {
     pub fn parse_port_declaration_list(&mut self) -> Result {

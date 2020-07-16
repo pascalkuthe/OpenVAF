@@ -8,6 +8,7 @@
 
 pub use open_vaf;
 use open_vaf::ast::{UnaryOperator, VariableType};
+use open_vaf::cfg::ControlFlowGraph;
 use open_vaf::cfg::{BasicBlockId, Terminator};
 use open_vaf::hir::DisciplineAccess;
 use open_vaf::ir::mir::RealExpression;
@@ -21,8 +22,8 @@ use open_vaf::mir::{
     ComparisonOperator, IntegerBinaryOperator, IntegerExpression, Mir, ParameterType,
     RealBinaryOperator, Statement, StringExpression,
 };
+use open_vaf::SourceMap;
 use open_vaf::StringLiteral;
-use open_vaf::{ControlFlowGraph, SourceMap};
 use proc_macro2::{Ident, Literal, Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens, TokenStreamExt};
 

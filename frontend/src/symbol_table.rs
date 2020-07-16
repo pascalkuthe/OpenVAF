@@ -13,8 +13,8 @@ use crate::ir::{
     BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, ParameterId, PortId,
     VariableId,
 };
+use crate::sourcemap::Span;
 use crate::symbol::{Ident, Symbol};
-use crate::Span;
 
 use super::ast::Ast;
 use crate::HashMap;

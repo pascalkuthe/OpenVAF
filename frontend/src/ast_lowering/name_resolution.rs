@@ -8,6 +8,7 @@
  * *****************************************************************************************
  */
 
+use crate::ast::Ast;
 use crate::ast::HierarchicalId;
 use crate::ast_lowering::error::Error::{NotAScope, NotAllowedInFunction, NotFound, NotFoundIn};
 use crate::ast_lowering::error::NotAllowedInFunction::NonLocalAccess;
@@ -18,7 +19,6 @@ pub use crate::resolve;
 pub use crate::resolve_hierarchical;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
-use crate::Ast;
 
 /// A macro that hides the boiler plate required for name resolution using the resolver struct
 /// It is defined in the [`name_resolution`](crate::ast_lowering::name_resolution) module but due to limitations of rustdoc can't be shown there in the documentation
@@ -46,7 +46,7 @@ use crate::Ast;
 /// use open_vaf::symbol_table::SymbolDeclaration::Discipline;
 /// use open_vaf::resolve;
 /// # use open_vaf::ast_lowering::Fold;
-/// # use open_vaf::Ast;
+/// # use open_vaf::ast::Ast;
 /// # use open_vaf::diagnostic::MultiDiagnostic;
 /// # use open_vaf::hir::Hir;
 /// # use open_vaf::ast_lowering::name_resolution::Resolver;
@@ -123,7 +123,7 @@ macro_rules! resolve {
 /// use open_vaf::symbol_table::SymbolDeclaration::Port;
 /// use open_vaf::resolve_hierarchical;
 /// # use open_vaf::ast_lowering::Fold;
-/// # use open_vaf::Ast;
+/// # use open_vaf::ast::Ast;
 /// # use open_vaf::diagnostic::MultiDiagnostic;
 /// # use open_vaf::hir::Hir;
 /// # use open_vaf::ast_lowering::name_resolution::Resolver;

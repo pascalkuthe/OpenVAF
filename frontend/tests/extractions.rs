@@ -10,13 +10,14 @@ use common::{preprocess_test, PrettyError, TEST_EXPANSION_HINT};
 use open_vaf::analysis::constant_fold::PropagatedConstants;
 use open_vaf::analysis::data_flow::reaching_definitions::ReachingDefinitionsAnalysis;
 use open_vaf::analysis::ProgramDependenceGraph;
+use open_vaf::ast::Ast;
+use open_vaf::cfg::ControlFlowGraph;
 use open_vaf::diagnostic::{ExpansionPrinter, StandardPrinter};
 use open_vaf::lints;
 use open_vaf::lints::{LintLevel, Linter};
-use open_vaf::{Ast, ControlFlowGraph, SourceMap};
+use open_vaf::SourceMap;
 use std::fs::File;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 mod common;
 

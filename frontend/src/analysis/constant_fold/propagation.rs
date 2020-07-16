@@ -7,16 +7,19 @@
 //  * *******************************************************************************************
 
 //! Constant folding and propagation along control flow
+use float_cmp::{ApproxEq, F64Margin};
+use log::debug;
+
 use crate::analysis::constant_fold::resolver::{
     ConstResolver, ConstantPropagator, NoConstResolution,
 };
+use crate::cfg::ControlFlowGraph;
+use crate::{HashMap, StringLiteral};
+
 use crate::analysis::data_flow::reaching_definitions::UseDefGraph;
 use crate::cfg::Terminator;
 use crate::ir::{ParameterId, StatementId};
 use crate::mir::{ExpressionId, Mir, Statement};
-use crate::{ControlFlowGraph, HashMap, StringLiteral};
-use float_cmp::{ApproxEq, F64Margin};
-use log::debug;
 
 /// This struct maps all variable assigments and parameters to their values that are already known during constant propagation
 #[derive(Clone, Debug, Default)]

@@ -7,7 +7,7 @@
 //  * *******************************************************************************************
 
 use crate::cfg::BasicBlockId;
-use crate::ControlFlowGraph;
+use crate::cfg::ControlFlowGraph;
 use index_vec::{index_vec, IndexVec};
 use log::{debug, trace};
 use std::cmp::Ordering;
@@ -107,7 +107,7 @@ fn intersect(
 mod print {
     use crate::analysis::IPDOM;
     use crate::cfg::BasicBlockId;
-    use crate::ControlFlowGraph;
+    use crate::cfg::ControlFlowGraph;
     use rustc_ap_graphviz as dot;
     use rustc_ap_graphviz::{Edges, Id, LabelText, Nodes};
     use std::borrow::Cow;

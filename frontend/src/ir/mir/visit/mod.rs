@@ -1,3 +1,13 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 use crate::ast::UnaryOperator;
 use crate::hir::DisciplineAccess;
 use crate::ir::mir::{ExpressionId, IntegerExpression, Mir};
@@ -8,7 +18,8 @@ use crate::ir::{
 use crate::mir::{
     ComparisonOperator, IntegerBinaryOperator, RealBinaryOperator, RealExpression, StringExpression,
 };
-use crate::{Span, StringLiteral};
+use crate::sourcemap::Span;
+use crate::StringLiteral;
 
 pub mod integer_expressions;
 pub mod real_expressions;

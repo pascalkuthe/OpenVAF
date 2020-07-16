@@ -27,11 +27,12 @@ pub use crate::parser::tokenstream::Token;
 use crate::parser::tokenstream::{SpannedToken, TokenStream};
 use crate::sourcemap::span::DUMMY_SP;
 use crate::sourcemap::SourceMap;
+use crate::sourcemap::Span;
 use crate::symbol::{keywords, Ident, Symbol};
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::util::format_list;
 use crate::HashMap;
-use crate::{Span, StringLiteral};
+use crate::StringLiteral;
 use std::sync::Arc;
 
 pub mod tokenstream;

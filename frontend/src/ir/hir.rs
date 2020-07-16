@@ -10,15 +10,15 @@
 use crate::ir::*;
 use index_vec::*;
 
-use crate::ast::Parameter;
+use crate::ast::{Ast, Parameter};
 use crate::ast::{BinaryOperator, NetType, UnaryOperator, Variable};
 
 use crate::derivatives::Unknown;
 use crate::ir::ids::IdRange;
 use crate::literals::StringLiteral;
 use crate::sourcemap::span::DUMMY_SP;
+use crate::sourcemap::Span;
 use crate::symbol::Ident;
-use crate::{Ast, Span};
 use std::mem::take;
 
 //pub mod visitor;

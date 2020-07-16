@@ -10,28 +10,35 @@
 
 //! This module is responsible for lowering an [`Ast`](crate::ast::Ast) to an [`Hir`](crate::hir::Hir)
 //!
-//! The main transformations in this module are
+//! This pass mainly applies the following three transformations to the AST
 //!
-//! * [**Name resolution**](name_resolution) -
+//!
+//! ## [Name resolution](name_resolution)
+//!
 //!   Names (such as variable references) are resolved to declarations.
 //!   It is enforced that the resolved declarations are the right type of Hir node
 //!   (no type checking that happens during [`hir_lowering`](crate::hir_lowering).
 //!   Ids of the resolved declarations are then stored in the HIR inplace of identifiers in the AST
 //!
-//! * [**Branch resolution**](BranchResolver) -
+//!
+//! ## [Branch resolution](BranchResolver)
+//!
 //!   Unnamed branches ( accessed using for example using `<nature>(<net1>,<net2>)` )  are created as needed
 //!   and tracked so that the same unnamed branch isn't created multiple times.
 //!   Furthermore it is enforced that disciplines of the nets defining a branch are comparable
 //!   and that branches are only accessed using the flow/potential Nature of those disciplines
 //!
-//! * **Context based information** -
-//!     Some expressions and statements are not allowed in some places (for example in an analog/digital context).
-//!     During the fold these (states)[ast_to_hir_fold::VerilogContext) are tracked and errors are generated when an illegal expressions/statements is used
+//! ## Context based information
+//!
+//!   Some expressions and statements are not allowed in some places (for example in an analog/digital context).
+//!   During the fold these [states](ast_to_hir_fold::VerilogContext) are tracked and errors are generated when an illegal expressions/statements is used
 //!
 //!
 //! The lowering process happens in a series of folds implemented in the [`ast_to_hir_fold`] module
 //!
-//!
+
+use std::sync::Arc;
+
 pub use ast_to_hir_fold::Fold;
 #[doc(inline)]
 pub use branch_resolution::BranchResolver;
@@ -42,7 +49,6 @@ use crate::ast_lowering::error::Error;
 use crate::diagnostic::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use crate::ir::hir::Hir;
 use crate::SourceMap;
-use std::sync::Arc;
 
 #[macro_use]
 pub mod name_resolution;

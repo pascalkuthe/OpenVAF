@@ -32,7 +32,8 @@ use crate::mir::{
     RealExpression,
 };
 use crate::sourcemap::span::DUMMY_SP;
-use crate::{Span, StringLiteral};
+use crate::sourcemap::Span;
+use crate::StringLiteral;
 
 pub struct ExpressionAutoDiff<'lt, 'mir: 'lt, E> {
     current_expr: E,

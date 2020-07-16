@@ -8,7 +8,7 @@
 
 use crate::diagnostic::{AnnotationType, DiagnosticSlice, Text};
 use crate::lints::{builtin, Lint, LintDiagnostic};
-use crate::Span;
+use crate::sourcemap::Span;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 

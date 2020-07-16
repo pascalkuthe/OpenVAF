@@ -12,8 +12,8 @@ use crate::parser::error::Error::UnexpectedEofExpecting;
 use crate::parser::error::Result;
 use crate::parser::Error::{MissingOrUnexpectedToken, Unrecoverable};
 use crate::parser::{Parser, Token};
+use crate::sourcemap::Span;
 use crate::util::format_list;
-use crate::Span;
 
 impl<'lt> Parser<'lt> {
     /// Combinator that parses a list delimited by a comma and terminated by `end`.

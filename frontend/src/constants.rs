@@ -1,7 +1,19 @@
-//! This module manages the physical constants that VARF uses to compile certain functions (such as `$vt`)
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
+//! This module manages the physical constants that OpenVAF uses to compile certain functions (such as `$vt`)
+
 use crate::diagnostic::{AnnotationType, DiagnosticSlice, FooterItem, Text};
 use crate::lints::{builtin, Lint, LintDiagnostic, Linter};
-use crate::{Span, GLOBALS};
+use crate::sourcemap::Span;
+use crate::GLOBALS;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
@@ -14,7 +26,7 @@ pub enum Constant {
 }
 
 impl Constant {
-    pub fn default_value(&self) -> f64 {
+    pub fn default_value(self) -> f64 {
         match self {
             Self::Q => defaults::Q,
             Self::Kb => defaults::KB,
@@ -55,9 +67,10 @@ pub struct Constants {
 impl Constants {
     /// Sets the constants to be used by OpenVAF
     /// This function can only be called **once**
-    /// # Returns
-    /// * Err(constants) if the value was already set
-    /// * Ok(()) if the constants were sucessfuly set
+    ///
+    /// # Errors
+    ///
+    /// returns `constants` if the constants have already been set for this thread
     pub fn set(constants: Self) -> Result<(), Self> {
         GLOBALS.with(|globals| globals.constants.set(constants))
     }

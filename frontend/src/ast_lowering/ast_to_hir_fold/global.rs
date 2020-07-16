@@ -16,13 +16,14 @@ use crate::ast_lowering::branch_resolution::BranchResolver;
 use crate::ast_lowering::error::Error;
 use crate::ast_lowering::name_resolution::Resolver;
 
+use crate::ast::Ast;
 use crate::diagnostic::MultiDiagnostic;
+use crate::hir::Hir;
 use crate::hir::{Discipline, Nature, Net, Port};
 use crate::ir::{ast, AttributeNode};
 use crate::ir::{DisciplineId, ExpressionId, NatureId};
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
-use crate::{Ast, Hir};
 
 /// This is the first fold. All Items that are defined globally or do not reference other items (nets & ports) are folded here
 pub struct Global<'lt, H: DeclarationHandler> {

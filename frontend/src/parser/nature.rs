@@ -12,11 +12,11 @@ use crate::ir::ast::Nature;
 use crate::ir::{AttributeNode, Attributes, ExpressionId};
 use crate::parser::error::Result;
 use crate::parser::Error::{AttributeAlreadyDefined, RequiredAttributeNotDefined, UnexpectedToken};
+use crate::parser::Parser;
 use crate::parser::Token;
 use crate::symbol::keywords;
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::{format_list, ListFormatter};
-use crate::Parser;
 
 impl<'lt> Parser<'lt> {
     #[allow(clippy::too_many_lines)]

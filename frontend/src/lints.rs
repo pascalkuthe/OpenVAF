@@ -1,3 +1,13 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 //! An extensible linting system used for high quality errors warning throughout OpenVAF
 //! A lint is an Error or Warning that the user might plausibly want to ignore
 //! As such each lint has a [lvl](crate::lints::LintLevel).
@@ -118,6 +128,7 @@ lints! {
     pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: None};
     pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: Some("L001")};
     pub const constant_overflow = LintData{default_lvl: Deny, documentation_id: Some("L002")};
+    pub const noise_derivative = LintData{default_lvl: Warn, documentation_id: None};
 }
 
 define_index_type! {

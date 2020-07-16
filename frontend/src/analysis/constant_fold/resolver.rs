@@ -142,7 +142,6 @@ impl<'lt, K: Borrow<PropagatedConstants>> ConstResolver for ConstantPropagator<'
             .intersection(self.variables_assignments[var].as_ref()?)
             .map(|id| self.known_values.borrow().real_definitions.get(&id));
 
-        // TODO constant fold default values
         let value = *definitions.next().flatten()?;
         if definitions.any(|x| Some(&value) != x) {
             return None;

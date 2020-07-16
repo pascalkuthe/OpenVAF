@@ -13,6 +13,7 @@ use crate::data_structures::BitSet;
 use crate::ir::cfg::ControlFlowGraph;
 use log::trace;
 
+/// A worklist based DFA solver
 pub struct Engine<'lt, A: Analysis<'lt>> {
     pub analysis: &'lt mut A,
     pub dfg: DataFlowGraph<A::SetType>,
@@ -28,6 +29,13 @@ impl<'lt, A: Analysis<'lt>> Engine<'lt, A> {
         }
     }
 
+    /// Runs the `analysis` until a fix point is reached
+    ///
+    /// A fixepoint is reachched when no more elements are in the worklist
+    /// The [worklist](crate::data_structures::WorkQueue) is initialized using [`Direction:inital_work_queue`](crate::analysis::data_flow::framework::Direction::inital_work_queue)
+    /// Basic blocks are then removed, their transfer function is executed and they are propagated to any dependent blocks where their outset is joined into their inset.
+    /// If the destination insets changed the elements are added back to the worklist
+    ///
     #[must_use]
     pub fn iterate_to_fixpoint(mut self) -> DataFlowGraph<A::SetType> {
         let mut worklist =

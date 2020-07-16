@@ -13,11 +13,12 @@ use crate::ast::NetType::{UNDECLARED, WIRE};
 use crate::ast::VariableType::{INTEGER, REAL};
 use crate::ast::{Branch, VariableType};
 
+use crate::ast::Ast;
 use crate::symbol::keywords::EMPTY;
 use crate::symbol::Symbol;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::test::{preprocess_test, PrettyError, TEST_EXPANSION_HINT};
-use crate::{Ast, SourceMap};
+use crate::SourceMap;
 
 #[test]
 pub fn module() -> Result<(), PrettyError> {

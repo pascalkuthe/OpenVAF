@@ -11,13 +11,13 @@ use crate::analysis::data_flow::framework::{
     Engine, Forward, GenKillAnalysis, GenKillEngine, GenKillSet,
 };
 
+use crate::cfg::ControlFlowGraph;
 use crate::cfg::{BasicBlockId, Terminator};
 use crate::data_structures::{BitSet, SparseBitSetMatrix};
 use crate::ir::mir::visit::ExpressionVisit;
 use crate::ir::{StatementId, VariableId};
 use crate::mir::Mir;
 use crate::mir::Statement;
-use crate::ControlFlowGraph;
 use std::mem::take;
 
 #[derive(Debug, Clone)]

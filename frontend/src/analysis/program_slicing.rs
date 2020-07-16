@@ -7,9 +7,9 @@
 //  * *******************************************************************************************
 
 use crate::analysis::ProgramDependenceGraph;
+use crate::cfg::ControlFlowGraph;
 use crate::data_structures::{BitSet, HybridBitSet, WorkQueue};
 use crate::ir::{StatementId, VariableId};
-use crate::ControlFlowGraph;
 use log::debug;
 use std::collections::VecDeque;
 use std::iter::FromIterator;

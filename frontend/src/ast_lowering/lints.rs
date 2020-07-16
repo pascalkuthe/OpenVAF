@@ -9,7 +9,7 @@
 use crate::diagnostic::{DiagnosticSlice, Text};
 use crate::lints::builtin;
 use crate::lints::{Lint, LintDiagnostic};
-use crate::Span;
+use crate::sourcemap::Span;
 use annotate_snippets::snippet::AnnotationType;
 use std::error::Error;
 use std::fmt::{Display, Formatter};

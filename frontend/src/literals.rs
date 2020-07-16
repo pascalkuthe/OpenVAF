@@ -19,6 +19,7 @@ define_index_type! {
 impl StringLiteral {
     pub const DUMMY: Self = Self::from_raw_unchecked(0);
 
+    /// Creates a string literal from the text locate at `span`
     #[must_use]
     pub fn create(span: &SpanData, sm: &SourceMap) -> Self {
         with_string_literal_interner(|interner| interner.intern(span, sm))

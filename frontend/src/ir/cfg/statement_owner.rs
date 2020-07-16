@@ -11,9 +11,9 @@
 
 //! Lazily compute the `StatementId` -> `BasicBlockId` mapping
 
+use crate::cfg::ControlFlowGraph;
 use crate::ir::cfg::BasicBlockId;
 use crate::ir::StatementId;
-use crate::ControlFlowGraph;
 use index_vec::{index_vec, IndexVec};
 use once_cell::unsync::OnceCell;
 

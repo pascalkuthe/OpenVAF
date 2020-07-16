@@ -11,12 +11,12 @@ use crate::ir::{AttributeNode, Attributes};
 use crate::parser::Error::{
     AttributeAlreadyDefined, DiscreteDisciplineHasNatures, UnexpectedToken,
 };
+use crate::parser::Parser;
 use crate::parser::Result;
 use crate::parser::Token;
 use crate::symbol::keywords;
 use crate::symbol_table::SymbolDeclaration;
 use crate::util::format_list;
-use crate::Parser;
 
 impl<'lt> Parser<'lt> {
     pub fn parse_discipline(&mut self, attributes: Attributes) -> Result {

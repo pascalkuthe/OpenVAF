@@ -10,9 +10,9 @@ use crate::ir::*;
 
 use crate::ir::ids::IdRange;
 use crate::literals::StringLiteral;
+use crate::sourcemap::Span;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolTable;
-use crate::Span;
 use ahash::RandomState;
 use core::fmt::Debug;
 use index_vec::IndexVec;

@@ -6,7 +6,7 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::cfg::{BasicBlock, BasicBlockId, Terminator};
+use crate::cfg::{BasicBlock, BasicBlockId, ControlFlowGraph, Terminator};
 use crate::hir::Block;
 use crate::hir_lowering::error::Error::TypeMissmatch;
 use crate::hir_lowering::error::MockType;
@@ -15,7 +15,8 @@ use crate::hir_lowering::HirToMirFold;
 use crate::ir::mir::{ComparisonOperator, ExpressionId, IntegerBinaryOperator, Statement};
 use crate::ir::{AttributeNode, Attributes, IntegerExpressionId, Node, VariableId};
 use crate::mir::{IntegerExpression, VariableType};
-use crate::{hir, ir, ControlFlowGraph, Span};
+use crate::sourcemap::Span;
+use crate::{hir, ir};
 use index_vec::IndexVec;
 
 impl<'lt> HirToMirFold<'lt> {

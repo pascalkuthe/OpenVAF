@@ -8,17 +8,20 @@
  * *****************************************************************************************
  */
 
+use std::mem::take;
+
+use crate::ast;
 use crate::ast::{BranchAccess, ModuleItem, ParameterType};
 use crate::ast_lowering::ast_to_hir_fold::expression::StatementExpressionFolder;
 use crate::ast_lowering::ast_to_hir_fold::{
     DeclarationHandler, ExpressionFolder, Fold, VerilogContext,
 };
 use crate::ast_lowering::branch_resolution::BranchResolver;
-use crate::ast_lowering::error::{Error, NotAllowedInFunction};
-
 use crate::ast_lowering::error::Error::FunctionArgTypeDeclarationMissing;
+use crate::ast_lowering::error::{Error, NotAllowedInFunction};
 use crate::ast_lowering::lints::IgnoredDisplayTask;
 use crate::diagnostic::{MultiDiagnostic, Unsupported};
+use crate::hir::Hir;
 use crate::hir::{Condition, Module, Statement};
 use crate::ir::hir::{CaseItem, Cases, ForLoop};
 use crate::ir::hir::{DisciplineAccess, Function, FunctionArg, WhileLoop};
@@ -31,8 +34,6 @@ use crate::lints::Linter;
 use crate::sourcemap::span::DUMMY_SP;
 use crate::symbol::Ident;
 use crate::symbol_table::SymbolDeclaration;
-use crate::{ast, Hir};
-use std::mem::take;
 
 /// The last fold folds all statements in textual order
 pub struct Statements<'lt, H: DeclarationHandler> {

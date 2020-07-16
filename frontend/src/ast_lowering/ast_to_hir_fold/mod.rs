@@ -7,6 +7,9 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
+
+use bitflags::bitflags;
+
 #[doc(inline)]
 pub(super) use branches::Branches;
 #[doc(inline)]
@@ -16,12 +19,12 @@ pub(super) use global::Global;
 #[doc(inline)]
 pub(super) use statements::Statements;
 
+use crate::ast::Ast;
 use crate::ast_lowering::error::Error;
 use crate::ast_lowering::name_resolution::Resolver;
 use crate::diagnostic::MultiDiagnostic;
+use crate::hir::Hir;
 use crate::symbol_table::SymbolDeclaration;
-use crate::{Ast, Hir};
-use bitflags::bitflags;
 
 #[doc(hidden)]
 mod branches;

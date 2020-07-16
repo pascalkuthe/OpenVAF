@@ -6,6 +6,11 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+//! This module impliments a general data flow framework that allows to easily implement multiple data flow analysis
+//! Since OpenVAF is not an optimizing compiler (delegating that responsibility to rusc/LLVM) it doesn't require an particulary advanced Data flow framework
+//! As such this framework is currently limited to **bitset problems**
+//! If more advanced analysis are required in the future this could be extended using traits/generics
+
 pub use engine::Engine;
 pub use graph::Graph as DataFlowGraph;
 
@@ -16,24 +21,23 @@ use crate::data_structures::{BitSet, BitSetOperations, WorkQueue};
 use crate::ir::cfg::{BasicBlockId, ControlFlowGraph};
 use index_vec::{Idx, IndexVec};
 
-pub trait GenKillAnalysis<'lt>: Sized {
-    type SetType: Idx + From<usize>;
-    type Direction: Direction<'lt>;
-
-    fn transfer_function(
-        &mut self,
-        gen_kill_set: &mut GenKillSet<Self::SetType>,
-        basic_bock: BasicBlockId,
-        cfg: &ControlFlowGraph,
-    );
-
-    fn max_idx(&self) -> Self::SetType;
-}
-
+/// This trait forms the core of the Data flow framework
+/// Every Data flow analysis needs to implement this trait
 pub trait Analysis<'lt>: Sized {
+    /// The [Id type](crate::data_structures::bit_set) used for the BitSets in this analysis Pass
     type SetType: Idx + From<usize>;
+
+    /// The direction in which this data flow analysis should be solved (eg. Backward/Postorder or Forward/Reverse Postorder)
     type Direction: Direction<'lt>;
 
+    /// The transfer function of the data flow analysis
+    /// This should be a pure function from `in_set` to `out_set` (the cfg and basic block can however be used)
+    ///
+    /// This function is called during every iteration in the solver.
+    /// Nontrivial implementations will therefore have notable performance costs.
+    ///
+    /// Many pratical data flow analysis can be realized as a (gen kill)[GenKillAnalysis] analysis instead
+    ///
     fn transfer_function(
         &mut self,
         in_set: &BitSet<Self::SetType>,
@@ -42,18 +46,31 @@ pub trait Analysis<'lt>: Sized {
         cfg: &ControlFlowGraph,
     );
 
+    /// The join function of the data flow analysis
+    /// This should be a pure function of in_set and inout_set
+    ///
+    /// Generally a set unition is appropriate here but somtimes intersection might be required
+
     fn join(&mut self, inout_set: &mut BitSet<Self::SetType>, in_set: &BitSet<Self::SetType>) {
         inout_set.union_with(in_set);
     }
 
+    /// The max of the analysis domain (for example the total count of statements for reaching definitions analysis)
+    /// Note that attemting to insert an `index > self.max_indx()` into a set during analysis wil **cause a panic**
     fn max_idx(&self) -> Self::SetType;
 }
 
+/// The dirction in which a data flow analysis should be performed
 pub trait Direction<'lt> {
+    /// The work queue with which the engine starts the solution process
+    /// This should be **all** relevant blocks in correct order
     fn inital_work_queue(cfg: &ControlFlowGraph) -> WorkQueue<BasicBlockId>;
+
+    /// Propagate the outset of `bb` to the insets of dependent nodes using `apply(dependent_block)`
     fn propagate_result(bb: BasicBlockId, cfg: &ControlFlowGraph, apply: impl FnMut(BasicBlockId));
 }
 
+/// [Reverse postorder](crate::cfg::transversal::ReversePostorder) DFA [direction](Direction)
 pub struct Forward;
 
 impl<'lt> Direction<'lt> for Forward {
@@ -76,6 +93,7 @@ impl<'lt> Direction<'lt> for Forward {
     }
 }
 
+/// [Postorder](crate::cfg::transversal::Postorder) DFA [direction](Direction)
 pub struct Backward;
 
 impl<'lt> Direction<'lt> for Backward {
@@ -98,6 +116,37 @@ impl<'lt> Direction<'lt> for Backward {
     }
 }
 
+/// Gen kill analysis is a special form of data flow analysis
+/// that is often used in practice
+///
+/// Gen kill analysis have seperable transfer functions
+/// That is their transfer function can be reduced to a gen and kill set.
+/// These sets are always added and removed from the inset to produce the outset
+///
+/// The join function of GenKillAnalysis is currently always set union in this implimentation
+///
+pub trait GenKillAnalysis<'lt>: Sized {
+    /// See [`Analysis::SetType`]
+    type SetType: Idx + From<usize>;
+
+    /// See [`Analysis::Direction`]
+    type Direction: Direction<'lt>;
+
+    /// The transfer function is called **once before** the analysis begins
+    /// to generate the `gen_kill_set`.
+    fn transfer_function(
+        &mut self,
+        gen_kill_set: &mut GenKillSet<Self::SetType>,
+        basic_bock: BasicBlockId,
+        cfg: &ControlFlowGraph,
+    );
+
+    /// See [`Analysis::max_idx`]
+    fn max_idx(&self) -> Self::SetType;
+}
+
+/// A `GenKillEngine` is a wrapper around an `GenKillAnalysis`
+/// which impliments [`Analysis`] and can be solved using the DFA engine
 pub struct GenKillEngine<'lt, A: GenKillAnalysis<'lt>> {
     analysis: &'lt mut A,
     pub transfer_functions: IndexVec<BasicBlockId, GenKillSet<A::SetType>>,

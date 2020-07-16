@@ -6,12 +6,128 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+//! OpenVAF is a framework for writing VerilogA compiler/static analysis tools focused on compact modelling
+//! As such it provides the ability to fully parse and check a VerilogA source file and bring it into a form both suitable for code generation and analysis.
+//! Furtheremore it provides a highly configuarable diagnostic/lint/error system that allows printing
+//! [very informative feedback](https://dspom.gitlab.io/OpenVAF/diagnostics.html) to users
+//!
+//!
+//! # Compilation steps
+//!
+//! To make navigating the documentation and sourcecode easier a highlevel overview of the compilation process is provided below
+//!
+//! ## [Preprocessing](crate::preprocessor)
+//!
+//! The first contact with sourcefiles happen here. These sourcefile are loaded into an [`sourcemap`].
+//! When a sourcefile is loaded its tokens are lexed into tokens which are then checked for compiler directive.
+//! These compiler directives are resolved and a vector of `ParserTokens` is produced
+//!
+//! ## [Parsing](crate::parser)
+//!
+//! The preprocessed Tokens are parsed into [`AST`](crate::ast::Ast) nodes during this step.
+//! Any names (variables, parameters, etc) are also placed into an [`symbol_table`].
+//!
+//! This is the last Step that deals with classical text procissing. All further analysis
+//! happen on Tree/Graph based [irs](crate::ir)
+//!
+//! ## [AST lowering](crate::ast_lowering)
+//!
+//! During this step names are resolved to their declarations and other global information is resolved.
+//! As a result an `ir` very similar to the AST called [`HIR`](crate::hir) is produced
+//!
+//! ## [HIR lowering](crate::hir_lowering)
+//!
+//! After all global information is known local transformations and type checking can take place.
+//! During this pass all expression are type checked according to the rules layout out in the standard.
+//! Furthremore instead of representing statements in a linear/scoped fashion they are represented as
+//! a [control flow graph](crate::cfg). This step produces an [`Mir`](crate::mir::Mir) which is the end product of OpenVAF.
+//!
+//!
+//! ## Analysis
+//!
+//! In practice analysing and modyfing the MIR is highly desirable. The minimal required
+//! to be standard compliant is to generate all [derivatives](crate::cfg::ControlFlowGraph::calculate_all_registered_derivatives).
+//! This is seperate step to allow adding additional derivatives during analysis.
+//!
+//! For static analysis OpenVAF currently contains a [data flow framework](crate::analysis::data_flow::framework) which is used to implement
+//! [raching definitions analysis](crate::analysis::data_flow::reaching_definitions), [constant propagation](crate::analysis::constant_fold) and [backwards program slicing](crate::cfg::ControlFlowGraph::backward_slice)
+//!
+//!
+//! # Examples
+//!
+//! ``` no_run
+//!
+//! # use open_vaf::preprocessor::{preprocess_user_facing_with_printer, std_path};
+//! # use std::path::Path;
+//! # use open_vaf::diagnostic::UserResult;
+//! # use open_vaf::mir::Mir;
+//! # use open_vaf::ast::Ast;
+//! # use open_vaf::SourceMap;
+//! # use open_vaf::lints::Linter;
+//! # const EXPANSION_DISCLAIMER: &str = "hint to use the backtrace option";
+//!
+//! # fn compile(file: &Path)-> UserResult<Mir>{
+//!
+//!     let paths = std_path("path_to_constants.va".into(),"path_to_disciplines.va".into());
+//!     
+//!     let (sm,main_file) = SourceMap::new_with_mainfile(file).expect("Failed to open mainfile");
+//!
+//!     let (ts, sm) = preprocess_user_facing_with_printer(sm, EXPANSION_DISCLAIMER, main_file, paths)?;
+//!
+//!     let ast = Ast::parse_from_token_stream_user_facing_with_printer(ts, &sm, EXPANSION_DISCLAIMER)?;
+//!
+//!     let hir = ast.lower_user_facing(&sm,EXPANSION_DISCLAIMER)?;
+//!
+//!     let diagnostic = Linter::early_user_diagnostics(&sm, EXPANSION_DISCLAIMER)?;
+//!
+//!     eprint!("{}", diagnostic);
+//!
+//!     let mut mir = hir.lower_user_facing_with_printer(&sm, EXPANSION_DISCLAIMER)?;
+//!
+//!     // Assuming only one module. OpenVAF is currently not really desinged for multiple modules yet
+//!     let mut main_cfg = mir.modules[0].contents.analog_cfg.clone();
+//!
+//!     let res = main_cfg.calculate_all_registered_derivatives(&mut mir);
+//!
+//!     if res.is_empty() {
+//!         Ok(mir)
+//!     }else {
+//!         Err(res.user_facing(&sm, EXPANSION_DISCLAIMER))
+//!     }
+//!
+//! }
+//!
+//! ```
+//!
+//! # Note
+//!
+//! This compiler is based upon the Verilog-A subsection of the [Verilog AMS 2.4](https://accellera.org/images/downloads/standards/v-ams/VAMS-LRM-2-4.pdf) standard.
+//! Significant parts (documentation to be crated) of the language are still missing that may or may not be implemented in the future.
+//! The goal right now is to support functionality relevant to compact modelling and **not** to write a general Verilog-AMS compiler
+//!
+
 #![allow(
     clippy::module_name_repetitions,
     clippy::unreadable_literal,
     clippy::unseparated_literal_suffix,
     clippy::pub_enum_variant_names
 )]
+
+use data_structures::sync::OnceCell;
+
+pub use ir::ast;
+pub use ir::cfg;
+pub use ir::hir;
+pub use ir::mir;
+
+pub use literals::StringLiteral;
+pub use sourcemap::SourceMap;
+
+use crate::constants::Constants;
+use crate::data_structures::sync::{Lock, RwLock};
+use crate::lints::Linter;
+use crate::literals::StringLiteralInterner;
+use crate::sourcemap::{SpanInterner, SyntaxContextInterner};
 
 /// Reexport for macros
 #[doc(hidden)]
@@ -23,25 +139,6 @@ pub mod _macro_reexports {
 
 pub type HashMap<K, V> = ahash::AHashMap<K, V>;
 pub type HashSet<T> = ahash::AHashSet<T>;
-
-#[doc(inline)]
-pub use ir::ast;
-#[doc(hidden)]
-pub use ir::ast::Ast;
-#[doc(inline)]
-pub use ir::cfg;
-#[doc(hidden)]
-pub use ir::cfg::ControlFlowGraph;
-#[doc(inline)]
-pub use ir::hir;
-#[doc(hidden)]
-pub use ir::hir::Hir;
-#[doc(inline)]
-pub use ir::mir;
-#[doc(hidden)]
-pub(crate) use parser::Parser;
-#[doc(inline)]
-pub use sourcemap::Span;
 
 pub mod constants;
 
@@ -63,17 +160,6 @@ pub mod sourcemap;
 pub mod symbol_table;
 
 pub mod lints;
-
-use crate::data_structures::sync::{Lock, RwLock};
-use crate::literals::StringLiteralInterner;
-use crate::sourcemap::{SpanInterner, SyntaxContextInterner};
-
-use crate::lints::Linter;
-pub use literals::StringLiteral;
-pub use sourcemap::SourceMap;
-
-use crate::constants::Constants;
-use data_structures::sync::OnceCell;
 
 #[cfg(test)]
 pub mod test;

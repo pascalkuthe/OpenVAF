@@ -43,8 +43,8 @@ pub use ids::StringExpressionId;
 pub use ids::VariableId;
 
 use crate::ir::ids::IdRange;
+use crate::sourcemap::Span;
 use crate::symbol::Ident;
-use crate::Span;
 use bitflags::_core::convert::TryFrom;
 use core::fmt::Debug;
 use std::ops::Range;
@@ -245,6 +245,7 @@ pub enum NoiseSource<Expr, Table> {
     Table(Table),
     TableLog(Table),
 }
+
 impl<Expr, Table> NoiseSource<Expr, Table> {
     pub fn fold<NewExpr, NewTable>(
         self,

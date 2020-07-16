@@ -12,9 +12,9 @@ use annotate_snippets::snippet::AnnotationType;
 
 use crate::diagnostic::{DiagnosticSlice, LibraryDiagnostic, Text, Unsupported};
 use crate::parser::Token;
+use crate::sourcemap::Span;
 use crate::symbol::{Ident, Symbol};
 use crate::util::ListFormatter;
-use crate::Span;
 use thiserror::Error;
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
@@ -114,7 +114,6 @@ pub enum Expected {
 
 impl Display for Expected {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        // TODO move exampels to webpage
         match self {
             Self::Identifier => f.write_str("identifier"),
             Self::PortDeclaration => f.write_str("port declaration"),

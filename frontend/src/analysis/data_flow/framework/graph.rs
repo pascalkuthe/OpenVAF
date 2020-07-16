@@ -24,4 +24,3 @@ impl<SetType: Idx + From<usize>> Graph<SetType> {
         }
     }
 }
-//TODO print

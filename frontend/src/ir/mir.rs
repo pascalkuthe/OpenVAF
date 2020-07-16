@@ -15,8 +15,8 @@ use crate::ir::cfg::ControlFlowGraph;
 use crate::ir::hir::Hir;
 use crate::ir::ids::{IdRange, StringExpressionId};
 use crate::literals::StringLiteral;
+use crate::sourcemap::Span;
 use crate::symbol::Ident;
-use crate::Span;
 use index_vec::IndexVec;
 
 use std::mem::take;

@@ -7,10 +7,10 @@
 //  * *******************************************************************************************
 
 use crate::analysis::IPDOM;
+use crate::cfg::ControlFlowGraph;
 use crate::cfg::Terminator;
 use crate::data_structures::SparseBitSetMatrix;
 use crate::ir::cfg::BasicBlockId;
-use crate::ControlFlowGraph;
 use log::trace;
 
 pub type ControlDependenceGraph = SparseBitSetMatrix<BasicBlockId, BasicBlockId>;

@@ -7,7 +7,7 @@
 //  * *******************************************************************************************
 
 use crate::diagnostic::{DiagnosticSlice, LibraryDiagnostic, Text};
-use crate::Span;
+use crate::sourcemap::Span;
 use annotate_snippets::snippet::AnnotationType;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
