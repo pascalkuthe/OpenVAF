@@ -66,7 +66,7 @@
 //! # use open_vaf::lints::Linter;
 //! # const EXPANSION_DISCLAIMER: &str = "hint to use the backtrace option";
 //!
-//! # fn compile(file: &Path)-> UserResult<Mir>{
+//!  fn compile(file: &Path)-> UserResult<Mir>{
 //!
 //!     let paths = std_path("path_to_constants.va".into(),"path_to_disciplines.va".into());
 //!     
