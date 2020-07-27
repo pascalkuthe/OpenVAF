@@ -1,6 +1,6 @@
 [package]
 name = "verilog-arc"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["DSOM <dspom@protonmail.com>"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/verilogarc"
