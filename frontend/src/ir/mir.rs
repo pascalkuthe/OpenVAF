@@ -8,57 +8,83 @@
  * *****************************************************************************************
  */
 
-use crate::ast::UnaryOperator;
-
-use crate::hir::{BranchDeclaration, Discipline, DisciplineAccess, Net, Port};
-use crate::ir::cfg::ControlFlowGraph;
-use crate::ir::hir::Hir;
-use crate::ir::ids::{IdRange, StringExpressionId};
-use crate::literals::StringLiteral;
-use crate::sourcemap::Span;
-use crate::symbol::Ident;
-use index_vec::IndexVec;
-
 use std::mem::take;
 use std::ops::Range;
 
+use index_vec::IndexVec;
+
+use crate::ast::UnaryOperator;
+use crate::data_structures::sync::{Lrc, RwLock};
 use crate::derivatives::DerivativeMap;
-use crate::ir::{
-    AttributeId, AttributeNode, Attributes, BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p,
-    DisciplineId, IntegerExpressionId, ModuleId, NatureId, NetId, Node, NoiseSource,
-    NumericalParameterRangeBound, NumericalParameterRangeExclude, ParameterId, PortId,
-    PrintOnFinish, RealExpressionId, StatementId, StopTaskKind, VariableId,
+use crate::hir::{Branch, Discipline, DisciplineAccess, Net};
+use crate::ir::cfg::ControlFlowGraph;
+use crate::ir::hir::Hir;
+use crate::ir::ids::{
+    AttributeId, BranchId, DisciplineId, IntegerExpressionId, ModuleId, NatureId, NetId,
 };
+use crate::ir::ids::{
+    IdRange, ParameterId, PortId, RealExpressionId, StatementId, StringExpressionId, VariableId,
+};
+use crate::ir::Port;
+use crate::ir::{
+    DoubleArgMath, Node, NoiseSource, ParameterExcludeConstraint, ParameterRangeConstraintBound,
+    PrintOnFinish, SingleArgMath, Spanned, StopTaskKind,
+};
+use crate::literals::StringLiteral;
+use crate::sourcemap::Span;
+use crate::symbol::Ident;
+use crate::HashMap;
 
 pub mod fold;
 pub mod visit;
 
 #[derive(Debug, Clone, Default)]
 pub struct Mir {
-    pub branches: IndexVec<BranchId, AttributeNode<BranchDeclaration>>,
-    pub nets: IndexVec<NetId, AttributeNode<Net>>,
+    pub branches: IndexVec<BranchId, Node<Branch>>,
+    pub nets: IndexVec<NetId, Node<Net>>,
     pub ports: IndexVec<PortId, Port>,
-    pub disciplines: IndexVec<DisciplineId, AttributeNode<Discipline>>,
+    pub disciplines: IndexVec<DisciplineId, Node<Discipline>>,
 
     // The only thing that changes about these types is that type checking happens
-    pub modules: IndexVec<ModuleId, AttributeNode<Module>>,
-    pub parameters: IndexVec<ParameterId, AttributeNode<Parameter>>,
-    pub variables: IndexVec<VariableId, AttributeNode<Variable>>,
-    pub natures: IndexVec<NatureId, AttributeNode<Nature>>,
+    pub modules: IndexVec<ModuleId, Node<Module>>,
+    pub parameters: IndexVec<ParameterId, Node<Parameter>>,
+    pub variables: IndexVec<VariableId, Node<Variable>>,
+    pub natures: IndexVec<NatureId, Node<Nature>>,
     pub attributes: IndexVec<AttributeId, Attribute>,
 
     // Expressions
-    pub real_expressions: IndexVec<RealExpressionId, Node<RealExpression>>,
-    pub integer_expressions: IndexVec<IntegerExpressionId, Node<IntegerExpression>>,
-    pub string_expressions: IndexVec<StringExpressionId, Node<StringExpression>>,
+    pub real_expressions: IndexVec<RealExpressionId, Spanned<RealExpression>>,
+    pub integer_expressions: IndexVec<IntegerExpressionId, Spanned<IntegerExpression>>,
+    pub string_expressions: IndexVec<StringExpressionId, Spanned<StringExpression>>,
 
     // Statements
-    pub statements: IndexVec<StatementId, Statement>,
+    statements: IndexVec<StatementId, Node<Statement>>,
 
     pub(crate) derivatives: DerivativeMap,
+    pub(crate) derivative_origins: HashMap<VariableId, VariableId>,
+
+    pub(crate) statement_origins: HashMap<StatementId, StatementId>,
 }
 
 impl Mir {
+    pub fn statements(&self) -> &IndexVec<StatementId, Node<Statement>> {
+        &self.statements
+    }
+
+    pub fn add_modified_stmt(&mut self, stmt: Statement, origin: StatementId) -> StatementId {
+        let id = self.add_new_stmt(Node {
+            attributes: self.statements[origin].attributes,
+            span: self.statements[origin].span,
+            contents: stmt,
+        });
+        self.statement_origins.insert(id, origin);
+        id
+    }
+
+    pub fn add_new_stmt(&mut self, stmt: Node<Statement>) -> StatementId {
+        self.statements.push(stmt)
+    }
+
     pub(crate) fn initalize(hir: &mut Hir) -> Self {
         Self {
             // Nothing about these changes during HIR lowering we can just copy
@@ -71,19 +97,19 @@ impl Mir {
     }
 }
 
-impl_id_type!(BranchId in Mir::branches -> AttributeNode<BranchDeclaration>);
-impl_id_type!(NetId in Mir::nets -> AttributeNode<Net>);
+impl_id_type!(BranchId in Mir::branches -> Node<Branch>);
+impl_id_type!(NetId in Mir::nets -> Node<Net>);
 impl_id_type!(PortId in Mir::ports -> Port);
-impl_id_type!(VariableId in Mir::variables ->  AttributeNode<Variable>);
-impl_id_type!(ModuleId in Mir::modules -> AttributeNode<Module>);
-impl_id_type!(DisciplineId in Mir::disciplines -> AttributeNode<Discipline>);
-impl_id_type!(RealExpressionId in Mir::real_expressions -> Node<RealExpression>);
-impl_id_type!(StringExpressionId in Mir::string_expressions -> Node<StringExpression>);
-impl_id_type!(IntegerExpressionId in Mir::integer_expressions -> Node<IntegerExpression>);
+impl_id_type!(VariableId in Mir::variables ->  Node<Variable>);
+impl_id_type!(ModuleId in Mir::modules -> Node<Module>);
+impl_id_type!(DisciplineId in Mir::disciplines -> Node<Discipline>);
+impl_id_type!(RealExpressionId in Mir::real_expressions -> Spanned<RealExpression>);
+impl_id_type!(StringExpressionId in Mir::string_expressions -> Spanned<StringExpression>);
+impl_id_type!(IntegerExpressionId in Mir::integer_expressions -> Spanned<IntegerExpression>);
 impl_id_type!(AttributeId in Mir::attributes -> Attribute);
-impl_id_type!(StatementId in Mir::statements -> Statement);
-impl_id_type!(NatureId in Mir::natures -> AttributeNode<Nature>);
-impl_id_type!(ParameterId in Mir::parameters -> AttributeNode<Parameter>);
+impl_id_type!(StatementId in Mir::statements -> Node<Statement>);
+impl_id_type!(NatureId in Mir::natures -> Node<Nature>);
+impl_id_type!(ParameterId in Mir::parameters -> Node<Parameter>);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Variable {
@@ -91,15 +117,15 @@ pub struct Variable {
     pub variable_type: VariableType,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Attribute {
-    pub name: Ident,
-    pub value: Option<ExpressionId>,
+    pub ident: Ident,
+    pub value: Vec<ExpressionId>,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct Nature {
-    pub name: Ident,
+    pub ident: Ident,
     pub abstol: f64,
     pub units: StringLiteral,
     pub access: Ident,
@@ -109,23 +135,24 @@ pub struct Nature {
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub name: Ident,
+    pub ident: Ident,
     pub port_list: IdRange<PortId>,
-    pub analog_cfg: ControlFlowGraph,
+    pub analog_cfg: Lrc<RwLock<ControlFlowGraph>>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum VariableType {
     Real(Option<RealExpressionId>),
     Integer(Option<IntegerExpressionId>),
+    String(Option<StringExpressionId>),
 }
 
 #[derive(Clone, Debug)]
 pub enum Statement {
-    Contribute(Attributes, DisciplineAccess, BranchId, RealExpressionId),
+    Contribute(DisciplineAccess, BranchId, RealExpressionId),
     //  TODO IndirectContribute
-    Assignment(Attributes, VariableId, ExpressionId),
-    StopTask(AttributeNode<StopTaskKind>, PrintOnFinish),
+    Assignment(VariableId, ExpressionId),
+    StopTask(StopTaskKind, PrintOnFinish),
 }
 
 #[derive(Clone, Debug)]
@@ -137,23 +164,27 @@ pub struct Parameter {
 impl ParameterType {
     #[must_use]
     pub fn is_numeric(&self) -> bool {
-        !matches!(self, ParameterType::String(_))
+        !matches!(self, ParameterType::String{..})
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum ParameterType {
     Integer {
-        from_ranges: Vec<Range<NumericalParameterRangeBound<IntegerExpressionId>>>,
-        excluded: Vec<NumericalParameterRangeExclude<IntegerExpressionId>>,
+        included: Vec<Range<ParameterRangeConstraintBound<IntegerExpressionId>>>,
+        excluded: Vec<ParameterExcludeConstraint<IntegerExpressionId>>,
         default_value: IntegerExpressionId,
     },
     Real {
-        from_ranges: Vec<Range<NumericalParameterRangeBound<RealExpressionId>>>,
-        excluded: Vec<NumericalParameterRangeExclude<RealExpressionId>>,
+        included: Vec<Range<ParameterRangeConstraintBound<RealExpressionId>>>,
+        excluded: Vec<ParameterExcludeConstraint<RealExpressionId>>,
         default_value: RealExpressionId,
     },
-    String(StringExpressionId),
+    String {
+        included: Vec<StringExpressionId>,
+        excluded: Vec<StringExpressionId>,
+        default_value: StringExpressionId,
+    },
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -212,16 +243,20 @@ impl From<StringExpressionId> for ExpressionId {
 pub enum IntegerExpression {
     BinaryOperator(
         IntegerExpressionId,
-        Node<IntegerBinaryOperator>,
+        Spanned<IntegerBinaryOperator>,
         IntegerExpressionId,
     ),
-    UnaryOperator(Node<UnaryOperator>, IntegerExpressionId),
+    UnaryOperator(Spanned<UnaryOperator>, IntegerExpressionId),
     IntegerComparison(
         IntegerExpressionId,
-        Node<ComparisonOperator>,
+        Spanned<ComparisonOperator>,
         IntegerExpressionId,
     ),
-    RealComparison(RealExpressionId, Node<ComparisonOperator>, RealExpressionId),
+    RealComparison(
+        RealExpressionId,
+        Spanned<ComparisonOperator>,
+        RealExpressionId,
+    ),
     StringEq(StringExpressionId, StringExpressionId),
     StringNEq(StringExpressionId, StringExpressionId),
     Condition(
@@ -287,16 +322,21 @@ pub enum ComparisonOperator {
 
 #[derive(Clone, Debug)]
 pub enum RealExpression {
-    BinaryOperator(RealExpressionId, Node<RealBinaryOperator>, RealExpressionId),
+    BinaryOperator(
+        RealExpressionId,
+        Spanned<RealBinaryOperator>,
+        RealExpressionId,
+    ),
     Negate(Span, RealExpressionId),
     Condition(IntegerExpressionId, RealExpressionId, RealExpressionId),
     Literal(f64),
     VariableReference(VariableId),
     ParameterReference(ParameterId),
     BranchAccess(DisciplineAccess, BranchId, u8),
+    PortFlowAccess(PortId, u8),
     Noise(NoiseSource<RealExpressionId, ()>, Option<StringLiteral>),
-    BuiltInFunctionCall1p(BuiltInFunctionCall1p, RealExpressionId),
-    BuiltInFunctionCall2p(BuiltInFunctionCall2p, RealExpressionId, RealExpressionId),
+    BuiltInFunctionCall1p(SingleArgMath, RealExpressionId),
+    BuiltInFunctionCall2p(DoubleArgMath, RealExpressionId, RealExpressionId),
     IntegerConversion(IntegerExpressionId),
 
     Temperature,

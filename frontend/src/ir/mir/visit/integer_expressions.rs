@@ -8,8 +8,8 @@
  * *****************************************************************************************
  */
 
+use crate::ir::ids::{IntegerExpressionId, RealExpressionId};
 use crate::ir::mir::visit::ExpressionVisit;
-use crate::ir::{IntegerExpressionId, RealExpressionId};
 use crate::mir::{ComparisonOperator, IntegerBinaryOperator};
 
 #[inline]

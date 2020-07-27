@@ -108,6 +108,12 @@ pub const DUMMY_SP: Span = Span {
     ctxt_or_zero: SyntaxContext::ROOT_U16,
 };
 
+impl Default for Span {
+    fn default() -> Self {
+        DUMMY_SP
+    }
+}
+
 impl Span {
     #[inline]
     pub fn new(mut lo: BytePos, mut hi: BytePos, ctxt: SyntaxContext) -> Self {

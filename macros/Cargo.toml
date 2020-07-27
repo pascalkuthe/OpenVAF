@@ -1,6 +1,6 @@
 [package]
 name = "open-vaf-macros"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"

@@ -8,10 +8,9 @@
  * *****************************************************************************************
  */
 
-use crate::ast_lowering::error::MockSymbolDeclaration;
-use crate::ir::{
-    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, ParameterId, PortId,
-    VariableId,
+use crate::ir::ids::{
+    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, ParameterId,
+    PortBranchId, PortId, VariableId,
 };
 use crate::sourcemap::Span;
 use crate::symbol::{Ident, Symbol};
@@ -20,12 +19,14 @@ use super::ast::Ast;
 use crate::HashMap;
 
 pub type SymbolTable = HashMap<Symbol, SymbolDeclaration>;
+
 #[derive(Clone, Copy, Debug)]
 pub enum SymbolDeclaration {
     Module(ModuleId),
     Block(BlockId),
     Variable(VariableId),
     Branch(BranchId),
+    PortBranch(PortBranchId),
     Net(NetId),
     Port(PortId),
     Function(FunctionId),
@@ -33,52 +34,93 @@ pub enum SymbolDeclaration {
     Nature(NatureId),
     Parameter(ParameterId),
 }
+
 impl SymbolDeclaration {
     #[must_use]
     pub fn span(self, ast: &Ast) -> Span {
-        match self {
-            Self::Module(id) => ast[id].span,
-            Self::Block(id) => ast[id].span,
-            Self::Variable(id) => ast[id].span,
-            Self::Net(id) => ast[id].span,
-            Self::Branch(id) => ast[id].span,
-            Self::Port(id) => ast[id].span,
-            Self::Function(id) => ast[id].span,
-            Self::Discipline(id) => ast[id].span,
-            Self::Nature(id) => ast[id].span,
-            Self::Parameter(id) => ast[id].span,
-        }
+        self.ident(ast).span
     }
 
     #[must_use]
     pub fn ident(self, ast: &Ast) -> Ident {
         match self {
-            Self::Module(id) => ast[id].contents.name,
-            Self::Block(id) => ast[id].contents.scope.as_ref().unwrap().name,
-            Self::Variable(id) => ast[id].contents.name,
-            Self::Net(id) => ast[id].contents.name,
-            Self::Branch(id) => ast[id].contents.name,
-            Self::Port(id) => ast[id].contents.ident,
-            Self::Function(id) => ast[id].contents.name,
-            Self::Discipline(id) => ast[id].contents.name,
-            Self::Nature(id) => ast[id].contents.name,
-            Self::Parameter(id) => ast[id].contents.name,
+            Self::Module(id) => ast[id].contents.ident,
+            Self::Block(id) => ast[id].scope.as_ref().unwrap().ident,
+            Self::Variable(id) => ast[id].contents.ident,
+            Self::Net(id) => ast[id].contents.ident,
+            Self::Branch(id) => ast[id].contents.ident,
+            Self::PortBranch(id) => ast[id].contents.ident,
+            Self::Port(id) => ast[ast[id].net].contents.ident,
+            Self::Function(id) => ast[id].contents.ident,
+            Self::Discipline(id) => ast[id].contents.ident,
+            Self::Nature(id) => ast[id].contents.ident,
+            Self::Parameter(id) => ast[id].contents.ident,
         }
     }
+}
 
-    #[must_use]
-    pub fn mock(self) -> MockSymbolDeclaration {
-        match self {
-            Self::Module(_) => MockSymbolDeclaration::Module,
-            Self::Block(_) => MockSymbolDeclaration::Block,
-            Self::Variable(_) => MockSymbolDeclaration::Variable,
-            Self::Net(_) => MockSymbolDeclaration::Net,
-            Self::Branch(_) => MockSymbolDeclaration::Branch,
-            Self::Port(_) => MockSymbolDeclaration::Port,
-            Self::Function(_) => MockSymbolDeclaration::Function,
-            Self::Discipline(_) => MockSymbolDeclaration::Discipline,
-            Self::Nature(_) => MockSymbolDeclaration::Nature,
-            Self::Parameter(_) => MockSymbolDeclaration::Parameter,
-        }
+impl From<ModuleId> for SymbolDeclaration {
+    fn from(id: ModuleId) -> Self {
+        Self::Module(id)
+    }
+}
+
+impl From<BlockId> for SymbolDeclaration {
+    fn from(id: BlockId) -> Self {
+        Self::Block(id)
+    }
+}
+
+impl From<PortBranchId> for SymbolDeclaration {
+    fn from(id: PortBranchId) -> Self {
+        Self::PortBranch(id)
+    }
+}
+
+impl From<VariableId> for SymbolDeclaration {
+    fn from(id: VariableId) -> Self {
+        Self::Variable(id)
+    }
+}
+
+impl From<NetId> for SymbolDeclaration {
+    fn from(id: NetId) -> Self {
+        Self::Net(id)
+    }
+}
+
+impl From<BranchId> for SymbolDeclaration {
+    fn from(id: BranchId) -> Self {
+        Self::Branch(id)
+    }
+}
+
+impl From<PortId> for SymbolDeclaration {
+    fn from(id: PortId) -> Self {
+        Self::Port(id)
+    }
+}
+
+impl From<FunctionId> for SymbolDeclaration {
+    fn from(id: FunctionId) -> Self {
+        Self::Function(id)
+    }
+}
+
+impl From<DisciplineId> for SymbolDeclaration {
+    fn from(id: DisciplineId) -> Self {
+        Self::Discipline(id)
+    }
+}
+
+impl From<NatureId> for SymbolDeclaration {
+    fn from(id: NatureId) -> Self {
+        Self::Nature(id)
+    }
+}
+
+impl From<ParameterId> for SymbolDeclaration {
+    fn from(id: ParameterId) -> Self {
+        Self::Parameter(id)
     }
 }

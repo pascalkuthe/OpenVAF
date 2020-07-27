@@ -1,14 +1,17 @@
 use criterion::{black_box, Criterion};
 use criterion::{criterion_group, criterion_main};
-use open_vaf::analysis::constant_fold::{ConstantFoldState, IntermediateWritingConstantFold};
+use open_vaf::analysis::constant_fold::PropagatedConstants;
 use open_vaf::analysis::data_flow::reaching_definitions::ReachingDefinitionsAnalysis;
 use open_vaf::analysis::ProgramDependenceGraph;
-use open_vaf::diagnostic::UserResult;
-use open_vaf::parser::tokenstream::TokenStream;
+use open_vaf::ast::Ast;
+use open_vaf::cfg::ControlFlowGraph;
+use open_vaf::diagnostic::{StandardPrinter, UserResult};
+use open_vaf::parser::TokenStream;
 use open_vaf::preprocessor::{preprocess_user_facing, std_path};
 use open_vaf::sourcemap::FileId;
-use open_vaf::{Ast, ControlFlowGraph, SourceMap};
+use open_vaf::SourceMap;
 use std::fmt::{Debug, Display, Formatter};
+use std::fs::File;
 use std::sync::Arc;
 
 pub const TEST_EXPANSION_HINT: &'static str =
@@ -76,49 +79,46 @@ pub fn bsimsoi(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
     let hir = Ast::parse_from_token_stream_user_facing(ts, &sm, TEST_EXPANSION_HINT)?
         .lower_user_facing(&sm, TEST_EXPANSION_HINT)?;
     let mut mir = hir.lower_user_facing(&sm, TEST_EXPANSION_HINT)?;
+    mir.calculate_all_registered_derivatives()
+        .map_err(|err| err.user_facing::<StandardPrinter>(&sm, TEST_EXPANSION_HINT))?;
 
     for module in mir.modules.indices() {
-        let mut cfg: ControlFlowGraph = mir[module].contents.analog_cfg.clone();
+        let mut cfg = mir[module].contents.analog_cfg.clone();
+        let cfg_ref = &mut cfg.borrow_mut();
 
-        cfg.calculate_all_registered_derivatives(&mut mir);
+        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg_ref);
 
-        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg);
-
-        let mut udg = reaching_analysis.run(&mut cfg);
+        let mut udg = reaching_analysis.run(cfg_ref);
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg.dot").unwrap();
-            cfg.render_to(&mut file);
+            cfg_ref.render_to(&mut file);
             let mut file = File::create("data_dependencies.dot").unwrap();
-            cfg.render_to(&mut file);
+            cfg_ref.render_to(&mut file);
         }
 
-        let ipdom = cfg.post_dominators();
+        let ipdom = cfg_ref.post_dominators();
 
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("ipdom.dot").unwrap();
-            cfg.render_post_dominators(&mut file, &ipdom);
+            cfg_ref.render_post_dominators(&mut file, &ipdom);
         }
 
-        let control_dependencies = cfg.control_dependence_graph_from_ipdom(&ipdom);
+        let control_dependencies = cfg_ref.control_dependence_graph_from_ipdom(&ipdom);
 
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("control_dependence.dot").unwrap();
-            cfg.render_control_dependence_to(&mut file, &control_dependencies);
+            cfg_ref.render_control_dependence_to(&mut file, &control_dependencies);
         }
 
-        cfg.constant_fold(
-            &mut IntermediateWritingConstantFold(&mut mir),
-            &mut udg,
-            &mut ConstantFoldState::default(),
-        );
+        cfg_ref.constant_propagation(&mut mir, &mut udg, &mut PropagatedConstants::default());
 
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg_constant_fold.dot").unwrap();
-            cfg.render_to(&mut file);
+            cfg_ref.render_to(&mut file);
         }
 
         let pdg = ProgramDependenceGraph {
@@ -134,16 +134,16 @@ pub fn bsimsoi(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
             }
         }
 
-        cfg.backward_variable_slice(itf_id.unwrap(), &pdg);
+        cfg_ref.backward_variable_slice(itf_id.unwrap(), &pdg);
 
-        cfg.simplify();
+        cfg_ref.simplify();
 
-        let test = black_box(cfg);
+        let test = black_box(cfg_ref);
 
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg_sliced.dot").unwrap();
-            cfg.render_to(&mut file);
+            test.render_to(&mut file);
         }
     }
 
@@ -163,14 +163,16 @@ pub fn hl2(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
         .lower_user_facing(&sm, TEST_EXPANSION_HINT)?;
     let mut mir = hir.lower_user_facing(&sm, TEST_EXPANSION_HINT)?;
 
+    mir.calculate_all_registered_derivatives()
+        .map_err(|err| err.user_facing::<StandardPrinter>(&sm, TEST_EXPANSION_HINT))?;
+
     for module in mir.modules.indices() {
-        let mut cfg: ControlFlowGraph = mir[module].contents.analog_cfg.clone();
+        let mut cfg = mir[module].contents.analog_cfg.clone();
+        let mut cfg_ref = cfg.borrow_mut();
 
-        cfg.calculate_all_registered_derivatives(&mut mir);
+        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg_ref);
 
-        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg);
-
-        let mut udg = reaching_analysis.run(&mut cfg);
+        let mut udg = reaching_analysis.run(&mut cfg_ref);
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg.dot").unwrap();
@@ -179,32 +181,28 @@ pub fn hl2(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
             cfg.render_to(&mut file);
         }
 
-        let ipdom = cfg.post_dominators();
+        let ipdom = cfg_ref.post_dominators();
 
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("ipdom.dot").unwrap();
-            cfg.render_post_dominators(&mut file, &ipdom);
+            cfg_ref.render_post_dominators(&mut file, &ipdom);
         }
 
-        let control_dependencies = cfg.control_dependence_graph_from_ipdom(&ipdom);
+        let control_dependencies = cfg_ref.control_dependence_graph_from_ipdom(&ipdom);
 
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("control_dependence.dot").unwrap();
-            cfg.render_control_dependence_to(&mut file, &control_dependencies);
+            cfg_ref.render_control_dependence_to(&mut file, &control_dependencies);
         }
 
-        cfg.constant_fold(
-            &mut IntermediateWritingConstantFold(&mut mir),
-            &mut udg,
-            &mut ConstantFoldState::default(),
-        );
+        cfg_ref.constant_propagation(&mut mir, &mut udg, &mut PropagatedConstants::default());
 
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg_constant_fold.dot").unwrap();
-            cfg.render_to(&mut file);
+            cfg_ref.render_to(&mut file);
         }
 
         let pdg = ProgramDependenceGraph {
@@ -220,11 +218,11 @@ pub fn hl2(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
             }
         }
 
-        cfg.backward_variable_slice(itf_id.unwrap(), &pdg);
+        cfg_ref.backward_variable_slice(itf_id.unwrap(), &pdg);
 
-        cfg.simplify();
+        cfg_ref.simplify();
 
-        let test = black_box(cfg);
+        let test = black_box(cfg_ref);
 
         #[cfg(feature = "graph_debug")]
         {

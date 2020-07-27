@@ -7,21 +7,23 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-use crate::ir::*;
-use index_vec::*;
+use index_vec::{index_vec, IndexVec};
 
-use crate::ast::{Ast, Parameter};
-use crate::ast::{BinaryOperator, NetType, UnaryOperator, Variable};
+use crate::ast::{Ast, BinaryOperator, NetType, UnaryOperator, Variable};
 
 use crate::derivatives::Unknown;
-use crate::ir::ids::IdRange;
+use crate::ir::ids::{
+    AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, IdRange, ModuleId, NatureId,
+    NetId, ParameterId, PortId, StatementId, VariableId,
+};
+use crate::ir::{
+    Attribute, Attributes, DoubleArgMath, Node, NoiseSource, ParameterExcludeConstraint,
+    ParameterRangeConstraint, Port, SingleArgMath, Spanned, StopTaskKind, SystemFunctionCall,
+};
 use crate::literals::StringLiteral;
 use crate::sourcemap::span::DUMMY_SP;
-use crate::sourcemap::Span;
 use crate::symbol::Ident;
 use std::mem::take;
-
-//pub mod visitor;
 
 /// An High level (tree) IR representing a Verilog-AMS project;
 /// It provides stable indicies for every Node because the entire Tree is immutable once created;
@@ -30,33 +32,33 @@ use std::mem::take;
 
 #[derive(Default, Debug, Clone)]
 pub struct Hir {
-    pub parameters: IndexVec<ParameterId, AttributeNode<Parameter>>,
-    pub branches: IndexVec<BranchId, AttributeNode<BranchDeclaration>>,
-    pub nets: IndexVec<NetId, AttributeNode<Net>>,
+    pub parameters: IndexVec<ParameterId, Node<Parameter>>,
+    pub branches: IndexVec<BranchId, Node<Branch>>,
+    pub nets: IndexVec<NetId, Node<Net>>,
     pub ports: IndexVec<PortId, Port>,
-    pub variables: IndexVec<VariableId, AttributeNode<Variable>>,
-    pub modules: IndexVec<ModuleId, AttributeNode<Module>>,
-    pub functions: IndexVec<FunctionId, AttributeNode<Function>>,
-    pub disciplines: IndexVec<DisciplineId, AttributeNode<Discipline>>,
-    pub natures: IndexVec<NatureId, AttributeNode<Nature>>,
-    pub expressions: IndexVec<ExpressionId, Node<Expression>>,
+    pub variables: IndexVec<VariableId, Node<Variable>>,
+    pub modules: IndexVec<ModuleId, Node<Module>>,
+    pub functions: IndexVec<FunctionId, Node<Function>>,
+    pub disciplines: IndexVec<DisciplineId, Node<Discipline>>,
+    pub natures: IndexVec<NatureId, Node<Nature>>,
+    pub expressions: IndexVec<ExpressionId, Spanned<Expression>>,
     pub attributes: IndexVec<AttributeId, Attribute>,
-    pub statements: IndexVec<StatementId, Statement>,
+    pub statements: IndexVec<StatementId, Node<Statement>>,
 }
 impl Hir {
     pub(crate) fn init(ast: &mut Ast) -> Self {
         Self {
             // The following AST items do change (references are mapped but the data structure doesnt change so we init it like this)
-            parameters: take(&mut ast.parameters),
             variables: take(&mut ast.variables),
             attributes: take(&mut ast.attributes),
+            ports: take(&mut ast.ports),
 
-            // We init empty vecs because that doesnt allocate. We will reinit these during AST lowering
+            parameters: index_vec![Parameter::PLACEHOLDER; ast.parameters.len()],
+            functions: index_vec![Function::PLACEHOLDER; ast.functions.len()],
+
             branches: IndexVec::with_capacity(ast.branches.len()),
             nets: IndexVec::new(),
-            ports: IndexVec::new(),
             modules: IndexVec::with_capacity(ast.modules.len()),
-            functions: index_vec![Function::placeholder();ast.functions.len()],
             disciplines: IndexVec::new(),
             natures: IndexVec::new(),
             expressions: IndexVec::with_capacity(ast.expressions.len()),
@@ -65,46 +67,82 @@ impl Hir {
     }
 }
 
-impl_id_type!(BranchId in Hir::branches -> AttributeNode<BranchDeclaration>);
-impl_id_type!(NetId in Hir::nets -> AttributeNode<Net>);
+impl_id_type!(BranchId in Hir::branches -> Node<Branch>);
+impl_id_type!(NetId in Hir::nets -> Node<Net>);
 impl_id_type!(PortId in Hir::ports -> Port);
-impl_id_type!(VariableId in Hir::variables ->  AttributeNode<Variable>);
-impl_id_type!(ModuleId in Hir::modules -> AttributeNode<Module>);
-impl_id_type!(FunctionId in Hir::functions -> AttributeNode<Function>);
-impl_id_type!(DisciplineId in Hir::disciplines -> AttributeNode<Discipline>);
-impl_id_type!(ExpressionId in Hir::expressions -> Node<Expression>);
+impl_id_type!(VariableId in Hir::variables ->  Node<Variable>);
+impl_id_type!(ModuleId in Hir::modules -> Node<Module>);
+impl_id_type!(FunctionId in Hir::functions -> Node<Function>);
+impl_id_type!(DisciplineId in Hir::disciplines -> Node<Discipline>);
+impl_id_type!(ExpressionId in Hir::expressions -> Spanned<Expression>);
 impl_id_type!(AttributeId in Hir::attributes -> Attribute);
-impl_id_type!(StatementId in Hir::statements -> Statement);
-impl_id_type!(NatureId in Hir::natures -> AttributeNode<Nature>);
-impl_id_type!(ParameterId in Hir::parameters -> AttributeNode<Parameter>);
+impl_id_type!(StatementId in Hir::statements -> Node<Statement>);
+impl_id_type!(NatureId in Hir::natures -> Node<Nature>);
+impl_id_type!(ParameterId in Hir::parameters -> Node<Parameter>);
+
+#[derive(Clone, Debug)]
+pub struct Parameter {
+    pub ident: Ident,
+    pub param_type: ParameterType,
+    pub default: ExpressionId,
+}
+impl Parameter {
+    pub const PLACEHOLDER: Node<Self> = {
+        let contents = Parameter {
+            ident: Ident::DUMMY,
+            param_type: ParameterType::Real(Vec::new(), Vec::new()),
+            default: ExpressionId::from_raw_unchecked(u32::MAX),
+        };
+
+        Node {
+            contents,
+            attributes: Attributes::EMPTY,
+            span: DUMMY_SP,
+        }
+    };
+}
+
+#[derive(Clone, Debug)]
+pub enum ParameterType {
+    Real(
+        Vec<ParameterRangeConstraint<ExpressionId>>,
+        Vec<ParameterExcludeConstraint<ExpressionId>>,
+    ),
+    Integer(
+        Vec<ParameterRangeConstraint<ExpressionId>>,
+        Vec<ParameterExcludeConstraint<ExpressionId>>,
+    ),
+    String(Vec<ExpressionId>, Vec<ExpressionId>),
+}
 
 #[derive(Clone, Debug)]
 pub struct Function {
-    pub name: Ident,
+    pub ident: Ident,
     pub args: Vec<FunctionArg>,
     pub return_variable: VariableId,
     pub body: Block,
 }
 
 impl Function {
-    #[inline]
-    #[must_use]
-    pub const fn placeholder() -> AttributeNode<Function> {
+    pub const PLACEHOLDER: Node<Self> = {
         let contents = Self {
-            name: Ident::DUMMY_IDNT,
+            ident: Ident::DUMMY,
             args: Vec::new(),
-            return_variable: VariableId::from_raw_unchecked(0),
-            body: IdRange(StatementId::from_raw_unchecked(0)..StatementId::from_raw_unchecked(0)),
+            return_variable: VariableId::from_raw_unchecked(u32::MAX),
+            body: IdRange(
+                StatementId::from_raw_unchecked(u32::MAX)
+                    ..StatementId::from_raw_unchecked(u32::MAX),
+            ),
         };
-        AttributeNode {
+        Node {
             attributes: Attributes {
-                start: AttributeId::from_raw_unchecked(0),
+                start: AttributeId::from_raw_unchecked(u16::MAX),
                 len: 0,
             },
             span: DUMMY_SP,
             contents,
         }
-    }
+    };
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
@@ -119,7 +157,7 @@ pub struct Discipline {
     pub ident: Ident,
     pub flow_nature: Option<NatureId>,
     pub potential_nature: Option<NatureId>,
-    pub continuous: Option<bool>,
+    pub continuous: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -135,39 +173,23 @@ pub struct Nature {
 #[derive(Clone, Debug)]
 pub struct Module {
     pub ident: Ident,
-    pub port_list: IdRange<PortId>,
+    pub ports: IdRange<PortId>,
+    pub parameters: IdRange<ParameterId>,
     pub analog: Block,
 }
 pub type Block = IdRange<StatementId>;
-#[derive(Clone, Debug)]
-pub struct Condition {
-    pub condition: ExpressionId,
-    pub if_statements: Block,
-    pub else_statements: Block,
-}
-#[derive(Clone, Copy, Debug)]
-pub struct Port {
-    pub input: bool,
-    pub output: bool,
-    pub net: NetId,
-}
 
 #[derive(Clone, Copy, Debug)]
-pub struct BranchDeclaration {
-    pub name: Ident,
-    pub branch: Branch,
+pub struct Branch {
+    pub ident: Ident,
+    pub hi: NetId,
+    pub lo: NetId,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Branch {
-    Port(PortId),
-    Nets(NetId, NetId),
-}
 #[derive(Clone, Copy, Debug)]
 pub struct Net {
-    pub name: Ident,
+    pub ident: Ident,
     pub discipline: DisciplineId,
-    pub signed: bool,
     pub net_type: NetType,
 }
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -178,24 +200,24 @@ pub enum DisciplineAccess {
 
 #[derive(Clone, Debug)]
 pub enum Statement {
-    Condition(AttributeNode<Condition>),
+    Condition(ExpressionId, Block, Block),
 
-    While(AttributeNode<WhileLoop>),
-    For(AttributeNode<ForLoop>),
+    While(ExpressionId, Block),
+    For(ForLoop),
 
-    Contribute(Attributes, DisciplineAccess, BranchId, ExpressionId),
+    Contribute(DisciplineAccess, BranchId, ExpressionId),
     //  TODO IndirectContribute(),
-    Assignment(Attributes, VariableId, ExpressionId),
+    Assignment(VariableId, ExpressionId),
 
-    StopTask(AttributeNode<StopTaskKind>, PrintOnFinish),
+    StopTask(StopTaskKind, Option<ExpressionId>),
 
-    Case(AttributeNode<Cases>),
+    Case(Cases),
 }
 
 #[derive(Clone, Debug)]
 pub struct Cases {
     pub expr: ExpressionId,
-    pub cases: Vec<Node<CaseItem>>,
+    pub cases: Vec<CaseItem>,
     pub default: Block,
 }
 
@@ -207,25 +229,17 @@ pub struct CaseItem {
 
 #[derive(Clone, Debug)]
 pub struct ForLoop {
-    pub condition: ExpressionId,
-    pub initial_var: VariableId,
-    pub initial_expr: ExpressionId,
-    pub increment_var: VariableId,
-    pub increment_expr: ExpressionId,
-    pub body: Block,
-}
-
-#[derive(Clone, Debug)]
-pub struct WhileLoop {
-    pub condition: ExpressionId,
+    pub cond: ExpressionId,
+    pub init: (VariableId, ExpressionId),
+    pub incr: (VariableId, ExpressionId),
     pub body: Block,
 }
 
 #[derive(Clone, Debug)]
 pub enum Expression {
-    BinaryOperator(ExpressionId, Node<BinaryOperator>, ExpressionId),
-    UnaryOperator(Node<UnaryOperator>, ExpressionId),
-    Condtion(ExpressionId, Span, ExpressionId, Span, ExpressionId),
+    BinaryOperator(ExpressionId, Spanned<BinaryOperator>, ExpressionId),
+    UnaryOperator(Spanned<UnaryOperator>, ExpressionId),
+    Condtion(ExpressionId, ExpressionId, ExpressionId),
     Primary(Primary),
 }
 #[derive(Clone, Debug)]
@@ -240,12 +254,13 @@ pub enum Primary {
     PortReference(PortId),
     ParameterReference(ParameterId),
 
+    PortFlowAccess(PortId),
     BranchAccess(DisciplineAccess, BranchId),
     Derivative(ExpressionId, Unknown),
 
-    BuiltInFunctionCall1p(BuiltInFunctionCall1p, ExpressionId),
-    BuiltInFunctionCall2p(BuiltInFunctionCall2p, ExpressionId, ExpressionId),
+    BuiltInFunctionCall1p(SingleArgMath, ExpressionId),
+    BuiltInFunctionCall2p(DoubleArgMath, ExpressionId, ExpressionId),
     FunctionCall(FunctionId, Vec<ExpressionId>),
     SystemFunctionCall(SystemFunctionCall<ExpressionId, ExpressionId, PortId, ParameterId>),
-    Noise(NoiseSource<ExpressionId, ()>, Option<StringLiteral>),
+    Noise(NoiseSource<ExpressionId, ()>, Option<ExpressionId>),
 }

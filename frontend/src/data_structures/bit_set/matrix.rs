@@ -12,6 +12,16 @@ use crate::data_structures::bit_set::hybrid::HybridBitSet;
 use crate::data_structures::{BitSet, BitSetOperations};
 use core::ops::{Index, IndexMut};
 use index_vec::{index_vec, Idx, IndexVec};
+use std::{iter, slice};
+
+pub type EnumartedRows<'lt, C, V> = iter::FilterMap<
+    iter::Enumerate<slice::Iter<'lt, Option<HybridBitSet<V>>>>,
+    fn((usize, &'lt Option<HybridBitSet<V>>)) -> Option<(C, &'lt HybridBitSet<V>)>,
+>;
+pub type Rows<'lt, V> = iter::FilterMap<
+    slice::Iter<'lt, Option<HybridBitSet<V>>>,
+    fn(&'lt Option<HybridBitSet<V>>) -> Option<&'lt HybridBitSet<V>>,
+>;
 
 #[derive(Debug, Clone, Default)]
 pub struct SparseBitSetMatrix<C: Idx + From<usize>, V: Idx + From<usize>> {
@@ -59,6 +69,16 @@ impl<C: Idx + From<usize>, V: Idx + From<usize>> SparseBitSetMatrix<C, V> {
             row.insert(y);
             self.data[x] = Some(row)
         }
+    }
+    pub fn rows_enumerated(&self) -> EnumartedRows<'_, C, V> {
+        self.data
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| Some((C::from_usize(i), t.as_ref()?)))
+    }
+
+    pub fn rows(&self) -> Rows<'_, V> {
+        self.data.iter().filter_map(Option::as_ref)
     }
 }
 

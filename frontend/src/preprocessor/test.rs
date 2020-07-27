@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use crate::parser::tokenstream::Token::{Comma, Ident, OpDiv, OpMul, Plus};
+use crate::parser::Token::{Comma, Ident, OpDiv, OpMul, Plus};
 use crate::symbol::Symbol;
 use crate::test::{preprocess_test, PrettyError};
 use crate::SourceMap;

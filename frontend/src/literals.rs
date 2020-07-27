@@ -50,6 +50,7 @@ pub struct StringLiteralInterner {
 }
 
 impl StringLiteralInterner {
+    #[allow(clippy::reversed_empty_ranges)]
     pub fn new() -> Self {
         Self {
             interned_literals: vec![(

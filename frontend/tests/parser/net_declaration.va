@@ -7,9 +7,9 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
  */
-module test;
+module test ();
     wire x,y;
     electrical z;
-    wire electrical signed l;
+    wire electrical l;
 
 endmodule

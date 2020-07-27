@@ -31,7 +31,7 @@
 //! ## Context based information
 //!
 //!   Some expressions and statements are not allowed in some places (for example in an analog/digital context).
-//!   During the fold these [states](ast_to_hir_fold::VerilogContext) are tracked and errors are generated when an illegal expressions/statements is used
+//!   During the fold these [states](VerilogContext) are tracked and errors are generated when an illegal expressions/statements is used
 //!
 //!
 //! The lowering process happens in a series of folds implemented in the [`ast_to_hir_fold`] module
@@ -39,25 +39,144 @@
 
 use std::sync::Arc;
 
-pub use ast_to_hir_fold::Fold;
-#[doc(inline)]
-pub use branch_resolution::BranchResolver;
+use bitflags::bitflags;
 
-use crate::ast::Ast;
-use crate::ast_lowering::ast_to_hir_fold::{DeclarationHandler, Global};
+#[doc(inline)]
+pub use branches::resolver::BranchResolver;
+#[doc(inline)]
+pub(super) use branches::Branches;
+#[doc(inline)]
+pub(super) use expression::ExpressionFolder;
+#[doc(inline)]
+pub(super) use global::Global;
+#[doc(inline)]
+pub(super) use statements::Statements;
+
+use crate::ast::{Ast, HierarchicalId};
 use crate::ast_lowering::error::Error;
+use crate::ast_lowering::error::Error::ExpectedIdentifier;
+use crate::ast_lowering::expression::{AllowedReferences, ConstantExpressionFolder};
+use crate::ast_lowering::name_resolution::Resolver;
+use crate::data_structures::BitSet;
 use crate::diagnostic::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
-use crate::ir::hir::Hir;
-use crate::SourceMap;
+use crate::hir::Hir;
+use crate::ir::ids::{AttributeId, ExpressionId};
+use crate::ir::{Attributes, Spanned};
+use crate::symbol::Ident;
+use crate::{ast, SourceMap};
+use bitflags::_core::mem::take;
 
 #[macro_use]
 pub mod name_resolution;
-pub mod ast_to_hir_fold;
-mod branch_resolution;
+
+#[doc(hidden)]
+mod branches;
+#[doc(hidden)]
+mod expression;
+#[doc(hidden)]
+mod global;
+#[doc(hidden)]
+mod statements;
+
 pub mod error;
 pub mod lints;
 
 //TODO input/output enforcement
+
+/// A struct that contains data and functionality all ast to hir folds share
+/// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` macros and [`BranchResolver`](crate::ast_lowering::branch_resolution::BranchResolver)
+pub struct Fold<'lt> {
+    pub resolver: Resolver<'lt>,
+    pub errors: MultiDiagnostic<Error>,
+    pub hir: Hir,
+    pub ast: &'lt Ast,
+    folded_attribute: BitSet<AttributeId>,
+}
+
+impl<'lt> Fold<'lt> {
+    pub fn new(ast: &'lt mut Ast) -> Self {
+        let folded_attribute = BitSet::new_empty(ast.attributes.len_idx());
+        let mut res = Self {
+            hir: Hir::init(ast),
+            ast: &*ast,
+            errors: MultiDiagnostic(Vec::with_capacity(32)),
+            resolver: Resolver::new(&*ast),
+            folded_attribute,
+        };
+        res.resolver.enter_scope(&ast.top_symbols);
+        res
+    }
+
+    pub fn error(&mut self, error: Error) {
+        self.errors.add(error)
+    }
+
+    pub(crate) fn reinterpret_expression_as_hierarchical_identifier(
+        &mut self,
+        function: &'static str,
+        expression: &'lt Spanned<ast::Expression>,
+    ) -> Option<&'lt HierarchicalId> {
+        if let ast::Expression::Primary(ast::Primary::Reference(ref name)) = expression.contents {
+            Some(name)
+        } else {
+            self.error(ExpectedIdentifier(function, expression.span));
+            None
+        }
+    }
+
+    pub(crate) fn reinterpret_expression_as_identifier(
+        &mut self,
+        function: &'static str,
+        expression: &'lt Spanned<ast::Expression>,
+    ) -> Option<Ident> {
+        let hident =
+            self.reinterpret_expression_as_hierarchical_identifier(function, expression)?;
+        match hident.names.as_slice() {
+            [ident] => Some(*ident),
+            _ => {
+                self.error(ExpectedIdentifier(function, expression.span));
+                None
+            }
+        }
+    }
+}
+
+impl<'lt> Fold<'lt> {
+    pub fn fold_attributes(&mut self, attributes: Attributes) {
+        for attribute in attributes {
+            if self.folded_attribute.put(attribute) {
+                //attribute has already been folded
+                continue;
+            }
+
+            let mut values = take(&mut self.hir[attribute].value);
+            for value in &mut values {
+                if let Some(expr) =
+                    ConstantExpressionFolder(AllowedReferences::All).fold(*value, self)
+                {
+                    *value = expr
+                } else {
+                    *value = ExpressionId::MAX_INDEX.into();
+                }
+            }
+
+            self.hir[attribute].value = values
+        }
+    }
+}
+
+bitflags! {
+    /// The Verilog AMS standard uses multiple different grammar rules to enfoce that constants/analog exprerssions only contain items valid in their context
+    /// frontend uses flags stored inside this struct instead during the AST to MIR folding process in this module
+    pub struct VerilogContext: u8{
+        const CONSTANT = 0b0000_0001;
+        const CONDITIONAL = 0b0000_0010;
+        const FUNCTION = 0b0000_1000;
+        // attributes receive special treatment because all references are allowed which would normally not be the allowed
+        const ATTRIBUTE = 0b0001_0000;
+
+    }
+}
 
 impl Ast {
     /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
@@ -80,17 +199,7 @@ impl Ast {
     }
 
     /// A Helper method to avoid code duplication until try blocks are stable
-    pub fn lower(self) -> Result<Hir, MultiDiagnostic<Error>> {
-        self.lower_with_decl_handler(&mut ())
-    }
-
-    pub fn lower_with_decl_handler(
-        mut self,
-        declaration_handler: &mut impl DeclarationHandler,
-    ) -> Result<Hir, MultiDiagnostic<Error>> {
-        Ok(Global::new(&mut self, declaration_handler)
-            .fold()?
-            .fold()?
-            .fold()?)
+    pub fn lower(mut self) -> Result<Hir, MultiDiagnostic<Error>> {
+        Ok(Global::new(&mut self).fold()?.fold()?.fold()?)
     }
 }

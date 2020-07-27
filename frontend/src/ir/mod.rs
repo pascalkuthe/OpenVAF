@@ -8,44 +8,12 @@
  * *****************************************************************************************
  */
 
-//here so that ids don't spam the struct section of this module in docs but can still be imported under the normal path
-#[doc(no_inline)]
-pub use ids::AttributeId;
-#[doc(no_inline)]
-pub use ids::BlockId;
-#[doc(no_inline)]
-pub use ids::BranchId;
-#[doc(no_inline)]
-pub use ids::DisciplineId;
-#[doc(no_inline)]
-pub use ids::ExpressionId;
-#[doc(no_inline)]
-pub use ids::FunctionId;
-#[doc(no_inline)]
-pub use ids::IntegerExpressionId;
-#[doc(no_inline)]
-pub use ids::ModuleId;
-#[doc(no_inline)]
-pub use ids::NatureId;
-#[doc(no_inline)]
-pub use ids::NetId;
-#[doc(no_inline)]
-pub use ids::ParameterId;
-#[doc(no_inline)]
-pub use ids::PortId;
-#[doc(no_inline)]
-pub use ids::RealExpressionId;
-#[doc(no_inline)]
-pub use ids::StatementId;
-#[doc(no_inline)]
-pub use ids::StringExpressionId;
-#[doc(no_inline)]
-pub use ids::VariableId;
+pub use crate::ir::ids::IdRange;
 
-use crate::ir::ids::IdRange;
+use crate::ir::ids::{AttributeId, ExpressionId, NetId};
 use crate::sourcemap::Span;
 use crate::symbol::Ident;
-use bitflags::_core::convert::TryFrom;
+use core::convert::TryFrom;
 use core::fmt::Debug;
 use std::ops::Range;
 
@@ -62,14 +30,13 @@ pub mod mir;
 #[macro_use]
 pub mod cfg;
 
-/// A Node of an IR. Contains a Span an addition to whatever that node holds
 #[derive(Clone, Copy, Debug)]
-pub struct Node<T> {
+pub struct Spanned<T> {
     pub span: Span,
     pub contents: T,
 }
 
-impl<T> Node<T> {
+impl<T> Spanned<T> {
     pub fn new(contents: T, source: Span) -> Self {
         Self {
             contents,
@@ -78,27 +45,28 @@ impl<T> Node<T> {
     }
 }
 
-impl<T: Copy> Node<T> {
-    pub fn copy_as<X>(self, contents: X) -> Node<X> {
-        Node {
+impl<T: Copy> Spanned<T> {
+    pub fn copy_as<X>(self, contents: X) -> Spanned<X> {
+        Spanned {
             span: self.span,
             contents,
         }
     }
 }
-impl<T: Clone> Node<T> {
-    pub fn clone_as<X>(&self, contents: X) -> Node<X> {
-        Node {
+impl<T: Clone> Spanned<T> {
+    pub fn clone_as<X>(&self, contents: X) -> Spanned<X> {
+        Spanned {
             span: self.span,
             contents,
         }
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Attribute {
     pub ident: Ident,
-    pub value: Option<ExpressionId>,
+    // TODO make arrays actual expressions
+    pub value: Vec<ExpressionId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -157,16 +125,16 @@ impl Default for Attributes {
 
 /// A special type of IR Node. Contains a Span and attributes in addition to whatever that node holds
 #[derive(Clone, Copy, Debug)]
-pub struct AttributeNode<T> {
+pub struct Node<T> {
     pub attributes: Attributes,
     pub span: Span,
     pub contents: T,
 }
 
-impl<T: Copy + Clone> AttributeNode<T> {
+impl<T: Copy + Clone> Node<T> {
     #[inline]
-    pub fn copy_with<X: Clone>(self, f: impl FnOnce(T) -> X) -> AttributeNode<X> {
-        AttributeNode {
+    pub fn copy_with<X: Clone>(self, f: impl FnOnce(T) -> X) -> Node<X> {
+        Node {
             attributes: self.attributes,
             span: self.span,
             contents: f(self.contents),
@@ -174,18 +142,18 @@ impl<T: Copy + Clone> AttributeNode<T> {
     }
 
     #[inline]
-    pub fn copy_as<X: Clone>(self, contents: X) -> AttributeNode<X> {
-        AttributeNode {
+    pub fn copy_as<X: Clone>(self, contents: X) -> Node<X> {
+        Node {
             attributes: self.attributes,
             span: self.span,
             contents,
         }
     }
 }
-impl<T> AttributeNode<T> {
+impl<T> Node<T> {
     #[inline]
-    pub fn map_with<X>(&self, f: impl FnOnce(&T) -> X) -> AttributeNode<X> {
-        AttributeNode {
+    pub fn map_with<X>(&self, f: impl FnOnce(&T) -> X) -> Node<X> {
+        Node {
             attributes: self.attributes,
             span: self.span,
             contents: f(&self.contents),
@@ -193,8 +161,8 @@ impl<T> AttributeNode<T> {
     }
 
     #[inline]
-    pub fn map<X>(&self, contents: X) -> AttributeNode<X> {
-        AttributeNode {
+    pub fn map<X>(&self, contents: X) -> Node<X> {
+        Node {
             attributes: self.attributes,
             span: self.span,
             contents,
@@ -203,7 +171,7 @@ impl<T> AttributeNode<T> {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum BuiltInFunctionCall1p {
+pub enum SingleArgMath {
     Sqrt,
     Exp(bool),
     Ln,
@@ -229,13 +197,52 @@ pub enum BuiltInFunctionCall1p {
     ArcTanH,
 }
 
+impl SingleArgMath {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Sqrt => "sqrt",
+            Self::Exp(true) => "limexp",
+            Self::Exp(false) => "exp",
+            Self::Ln => "ln",
+            Self::Log => "log",
+            Self::Abs => "abs",
+            Self::Floor => "floor",
+            Self::Ceil => "ceil",
+            Self::Sin => "floor",
+            Self::Cos => "cos",
+            Self::Tan => "tan",
+            Self::ArcSin => "asin",
+            Self::ArcCos => "acos",
+            Self::ArcTan => "atan",
+            Self::SinH => "sinh",
+            Self::CosH => "cosh",
+            Self::TanH => "tanh",
+            Self::ArcSinH => "asinh",
+            Self::ArcCosH => "acosh",
+            Self::ArcTanH => "atanh",
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
-pub enum BuiltInFunctionCall2p {
+pub enum DoubleArgMath {
     Pow,
     Hypot,
     Min,
     Max,
     ArcTan2,
+}
+
+impl DoubleArgMath {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Pow => "pow",
+            Self::Hypot => "hypot",
+            Self::Min => "min",
+            Self::Max => "max",
+            Self::ArcTan2 => "arctan2",
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -263,6 +270,13 @@ impl<Expr, Table> NoiseSource<Expr, Table> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Port {
+    pub input: bool,
+    pub output: bool,
+    pub net: NetId,
+}
+
 // TODO add system to generalise (dynamically add more)
 // TODO add a way to constant fold these
 #[derive(Clone, Debug)]
@@ -279,6 +293,15 @@ pub enum SystemFunctionCall<RealExpr, StrExpr, Port, Parameter> {
 pub enum StopTaskKind {
     Stop,
     Finish,
+}
+
+impl StopTaskKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Stop => "$stop",
+            Self::Finish => "$finish",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -310,21 +333,23 @@ pub enum DisplayTaskKind {
     Fatal(PrintOnFinish),
 }
 
+pub type ParameterRangeConstraint<T> = Range<ParameterRangeConstraintBound<T>>;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct NumericalParameterRangeBound<T> {
+pub struct ParameterRangeConstraintBound<T> {
     pub inclusive: bool,
     pub bound: T,
 }
-impl<T: Copy> NumericalParameterRangeBound<T> {
-    pub fn copy_with<N>(self, f: impl FnOnce(T) -> N) -> NumericalParameterRangeBound<N> {
-        NumericalParameterRangeBound {
+impl<T: Copy> ParameterRangeConstraintBound<T> {
+    pub fn copy_with<N>(self, f: impl FnOnce(T) -> N) -> ParameterRangeConstraintBound<N> {
+        ParameterRangeConstraintBound {
             inclusive: self.inclusive,
             bound: f(self.bound),
         }
     }
 
-    pub fn copy_with_ref<N>(self, f: &mut impl FnMut(T) -> N) -> NumericalParameterRangeBound<N> {
-        NumericalParameterRangeBound {
+    pub fn copy_with_ref<N>(self, f: &mut impl FnMut(T) -> N) -> ParameterRangeConstraintBound<N> {
+        ParameterRangeConstraintBound {
             inclusive: self.inclusive,
             bound: f(self.bound),
         }
@@ -333,8 +358,8 @@ impl<T: Copy> NumericalParameterRangeBound<T> {
     pub fn try_copy_with<N>(
         self,
         f: impl FnOnce(T) -> Option<N>,
-    ) -> Option<NumericalParameterRangeBound<N>> {
-        Some(NumericalParameterRangeBound {
+    ) -> Option<ParameterRangeConstraintBound<N>> {
+        Some(ParameterRangeConstraintBound {
             inclusive: self.inclusive,
             bound: f(self.bound)?,
         })
@@ -343,17 +368,17 @@ impl<T: Copy> NumericalParameterRangeBound<T> {
     pub fn try_copy_with_ref<N>(
         self,
         f: &mut impl FnMut(T) -> Option<N>,
-    ) -> Option<NumericalParameterRangeBound<N>> {
-        Some(NumericalParameterRangeBound {
+    ) -> Option<ParameterRangeConstraintBound<N>> {
+        Some(ParameterRangeConstraintBound {
             inclusive: self.inclusive,
             bound: f(self.bound)?,
         })
     }
 }
 #[derive(Clone, Debug, PartialEq)]
-pub enum NumericalParameterRangeExclude<T> {
+pub enum ParameterExcludeConstraint<T> {
     Value(T),
-    Range(Range<NumericalParameterRangeBound<T>>),
+    Range(Range<ParameterRangeConstraintBound<T>>),
 }
 
 pub enum FunctionType {
@@ -361,13 +386,23 @@ pub enum FunctionType {
     Integer,
 }
 
-impl<T: Copy> NumericalParameterRangeExclude<T> {
-    pub fn clone_with<N>(&self, mut f: impl FnMut(T) -> N) -> NumericalParameterRangeExclude<N> {
+impl<T> From<T> for ParameterExcludeConstraint<T> {
+    fn from(val: T) -> Self {
+        Self::Value(val)
+    }
+}
+
+impl<T> From<Range<ParameterRangeConstraintBound<T>>> for ParameterExcludeConstraint<T> {
+    fn from(val: Range<ParameterRangeConstraintBound<T>>) -> Self {
+        Self::Range(val)
+    }
+}
+
+impl<T: Copy> ParameterExcludeConstraint<T> {
+    pub fn clone_with<N>(&self, mut f: impl FnMut(T) -> N) -> ParameterExcludeConstraint<N> {
         match self {
-            NumericalParameterRangeExclude::Value(val) => {
-                NumericalParameterRangeExclude::Value(f(*val))
-            }
-            NumericalParameterRangeExclude::Range(range) => NumericalParameterRangeExclude::Range(
+            ParameterExcludeConstraint::Value(val) => ParameterExcludeConstraint::Value(f(*val)),
+            ParameterExcludeConstraint::Range(range) => ParameterExcludeConstraint::Range(
                 range.start.copy_with_ref(&mut f)..range.end.copy_with_ref(&mut f),
             ),
         }
@@ -375,12 +410,10 @@ impl<T: Copy> NumericalParameterRangeExclude<T> {
     pub fn try_clone_with<N>(
         &self,
         mut f: impl FnMut(T) -> Option<N>,
-    ) -> Option<NumericalParameterRangeExclude<N>> {
+    ) -> Option<ParameterExcludeConstraint<N>> {
         Some(match self {
-            NumericalParameterRangeExclude::Value(val) => {
-                NumericalParameterRangeExclude::Value(f(*val)?)
-            }
-            NumericalParameterRangeExclude::Range(range) => NumericalParameterRangeExclude::Range(
+            ParameterExcludeConstraint::Value(val) => ParameterExcludeConstraint::Value(f(*val)?),
+            ParameterExcludeConstraint::Range(range) => ParameterExcludeConstraint::Range(
                 range.start.try_copy_with_ref(&mut f)?..range.end.try_copy_with_ref(&mut f)?,
             ),
         })

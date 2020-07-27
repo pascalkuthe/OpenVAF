@@ -889,7 +889,7 @@ parameter integer  type = 1		 from [-1:1] exclude 0  `ATTR(info="For transistor 
     real itf,itr,Tf,Tr,VT_f,i_0f,i_0r,a_bpt,Q_0,Q_p,Q_bpt;
     real Orci0_t,b_q,I_Tf1,T_f0,Q_fT,T_fT,Q_bf;
     real ICKa,d1,a1,a11,Odelck,ick1,ick2;
-    real A,a_h,Q_pT,d_Q,d_Q0;
+    real A,a_h,Q_pT,d_Q;
     real Qf,Cdei,Qr,Cdci,Crbi;
     real ick,vc,vceff,cjcx01,cjcx02,HSa,HSb;
     integer l_it;
@@ -1587,7 +1587,6 @@ begin : Model_evaluation
         Q_pT    = Q_0+Qf+Qr;
         d_Q     = Q_pT;
         while (abs(d_Q) >= test(`RTOLC,abs(Q_pT)) && l_it <= `l_itmax) begin
-            d_Q0    = d_Q;
             I_Tf1   = i_0f/Q_pT;
             a_h     = Oich*I_Tf1;
             itf     = I_Tf1*(1.0+a_h);

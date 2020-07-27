@@ -38,6 +38,7 @@ macro_rules! id_type {
 }
 
 id_type!(BranchId(u16));
+id_type!(PortBranchId(u16));
 
 id_type!(NetId(u16));
 
@@ -79,6 +80,10 @@ impl<I: Idx> IdRange<I> {
         self.0.end = sub_range.0.start;
 
         sub_range.clone()
+    }
+
+    pub fn contains(&self, id: I) -> bool {
+        self.0.start <= id && id < self.0.end
     }
 }
 

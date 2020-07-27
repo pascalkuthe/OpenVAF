@@ -24,20 +24,15 @@ use std::sync::Arc;
 pub type UserResult<T, Printer = StandardPrinter> = Result<T, UserMultiDiagnostic<Printer>>;
 #[derive(Clone, Copy, Debug)]
 pub enum Unsupported {
-    StringParameters,
     ConstantFunctionCalls,
-    //SelfDerivingAssignments,
 }
 
 impl Display for Unsupported {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::StringParameters => f.write_str("String parameters"),
             Self::ConstantFunctionCalls => {
                 f.write_str("Function calls inside constant expressions")
-            } //Self::SelfDerivingAssignments => {
-              //   f.write_str("Assignments of the form 'x = f(ddx(x,..),...)'")
-              //}
+            }
         }
     }
 }

@@ -8,9 +8,10 @@
  * *****************************************************************************************
  */
 
+use crate::ir::ids::RealExpressionId;
 use crate::ir::mir::visit::ExpressionVisit;
 use crate::ir::mir::RealBinaryOperator;
-use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p, RealExpressionId};
+use crate::ir::{DoubleArgMath, SingleArgMath};
 
 #[inline]
 pub fn walk_real_binary_operator<V: RealBinaryOperatorVisit>(
@@ -73,39 +74,35 @@ pub trait RealBinaryOperatorVisit: Sized + ExpressionVisit {
 #[inline]
 pub fn walk_real_builtin_function_call_1p<V: RealBuiltInFunctionCall1pVisit>(
     visit: &mut V,
-    call: BuiltInFunctionCall1p,
+    call: SingleArgMath,
     arg: RealExpressionId,
 ) {
     match call {
-        BuiltInFunctionCall1p::Sqrt => visit.visit_sqrt(arg),
-        BuiltInFunctionCall1p::Exp(_) => visit.visit_exp(arg),
-        BuiltInFunctionCall1p::Ln => visit.visit_ln(arg),
-        BuiltInFunctionCall1p::Log => visit.visit_log(arg),
-        BuiltInFunctionCall1p::Abs => visit.visit_abs(arg),
-        BuiltInFunctionCall1p::Floor => visit.visit_floor(arg),
-        BuiltInFunctionCall1p::Ceil => visit.visit_ceil(arg),
-        BuiltInFunctionCall1p::Sin => visit.visit_sin(arg),
-        BuiltInFunctionCall1p::Cos => visit.visit_cos(arg),
-        BuiltInFunctionCall1p::Tan => visit.visit_tan(arg),
-        BuiltInFunctionCall1p::ArcSin => visit.visit_arcsin(arg),
-        BuiltInFunctionCall1p::ArcCos => visit.visit_arccos(arg),
-        BuiltInFunctionCall1p::ArcTan => visit.visit_arctan(arg),
-        BuiltInFunctionCall1p::SinH => visit.visit_sinh(arg),
-        BuiltInFunctionCall1p::CosH => visit.visit_cosh(arg),
-        BuiltInFunctionCall1p::TanH => visit.visit_tanh(arg),
-        BuiltInFunctionCall1p::ArcSinH => visit.visit_arcsinh(arg),
-        BuiltInFunctionCall1p::ArcCosH => visit.visit_arccosh(arg),
-        BuiltInFunctionCall1p::ArcTanH => visit.visit_arctanh(arg),
+        SingleArgMath::Sqrt => visit.visit_sqrt(arg),
+        SingleArgMath::Exp(_) => visit.visit_exp(arg),
+        SingleArgMath::Ln => visit.visit_ln(arg),
+        SingleArgMath::Log => visit.visit_log(arg),
+        SingleArgMath::Abs => visit.visit_abs(arg),
+        SingleArgMath::Floor => visit.visit_floor(arg),
+        SingleArgMath::Ceil => visit.visit_ceil(arg),
+        SingleArgMath::Sin => visit.visit_sin(arg),
+        SingleArgMath::Cos => visit.visit_cos(arg),
+        SingleArgMath::Tan => visit.visit_tan(arg),
+        SingleArgMath::ArcSin => visit.visit_arcsin(arg),
+        SingleArgMath::ArcCos => visit.visit_arccos(arg),
+        SingleArgMath::ArcTan => visit.visit_arctan(arg),
+        SingleArgMath::SinH => visit.visit_sinh(arg),
+        SingleArgMath::CosH => visit.visit_cosh(arg),
+        SingleArgMath::TanH => visit.visit_tanh(arg),
+        SingleArgMath::ArcSinH => visit.visit_arcsinh(arg),
+        SingleArgMath::ArcCosH => visit.visit_arccosh(arg),
+        SingleArgMath::ArcTanH => visit.visit_arctanh(arg),
     }
 }
 
 pub trait RealBuiltInFunctionCall1pVisit: Sized + ExpressionVisit {
     #[inline]
-    fn visit_real_builtin_function_call_1p(
-        &mut self,
-        call: BuiltInFunctionCall1p,
-        arg: RealExpressionId,
-    ) {
+    fn visit_real_builtin_function_call_1p(&mut self, call: SingleArgMath, arg: RealExpressionId) {
         walk_real_builtin_function_call_1p(self, call, arg)
     }
 
@@ -189,23 +186,23 @@ pub trait RealBuiltInFunctionCall1pVisit: Sized + ExpressionVisit {
 #[inline]
 pub fn walk_real_builtin_function_call_2p<V: RealBuiltInFunctionCall2pVisit>(
     visit: &mut V,
-    call: BuiltInFunctionCall2p,
+    call: DoubleArgMath,
     arg1: RealExpressionId,
     arg2: RealExpressionId,
 ) {
     match call {
-        BuiltInFunctionCall2p::Pow => visit.visit_pow(arg1, arg2),
-        BuiltInFunctionCall2p::Hypot => visit.visit_hypot(arg1, arg2),
-        BuiltInFunctionCall2p::ArcTan2 => visit.visit_arctan2(arg1, arg2),
-        BuiltInFunctionCall2p::Max => visit.visit_max(arg1, arg2),
-        BuiltInFunctionCall2p::Min => visit.visit_min(arg1, arg2),
+        DoubleArgMath::Pow => visit.visit_pow(arg1, arg2),
+        DoubleArgMath::Hypot => visit.visit_hypot(arg1, arg2),
+        DoubleArgMath::ArcTan2 => visit.visit_arctan2(arg1, arg2),
+        DoubleArgMath::Max => visit.visit_max(arg1, arg2),
+        DoubleArgMath::Min => visit.visit_min(arg1, arg2),
     }
 }
 
 pub trait RealBuiltInFunctionCall2pVisit: Sized + ExpressionVisit {
     fn visit_real_builtin_function_call_2p(
         &mut self,
-        call: BuiltInFunctionCall2p,
+        call: DoubleArgMath,
         arg1: RealExpressionId,
         arg2: RealExpressionId,
     ) {

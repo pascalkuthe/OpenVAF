@@ -10,6 +10,7 @@
 
 use crate::ast::BinaryOperator;
 
+use crate::analysis::constant_fold::NoConstResolution;
 use crate::cfg::Terminator;
 use crate::cfg::{BasicBlock, BasicBlockId};
 use crate::constants::Constants;
@@ -22,11 +23,11 @@ use crate::hir_lowering::error::Error::{
 };
 use crate::hir_lowering::error::{Error, MockType};
 use crate::hir_lowering::HirToMirFold;
-use crate::ir::{
-    hir, Attributes, FunctionId, IntegerExpressionId, Node, NoiseSource, RealExpressionId,
-    StringExpressionId, SystemFunctionCall, VariableId,
+use crate::ir::ids::{
+    FunctionId, IntegerExpressionId, RealExpressionId, StringExpressionId, VariableId,
 };
-use crate::ir::{BuiltInFunctionCall1p, BuiltInFunctionCall2p};
+use crate::ir::{hir, Attributes, Node, NoiseSource, Spanned, SystemFunctionCall};
+use crate::ir::{DoubleArgMath, SingleArgMath};
 use crate::mir::{
     ComparisonOperator, ExpressionId, IntegerBinaryOperator, IntegerExpression, RealBinaryOperator,
     RealExpression, Statement, StringExpression, VariableType,
@@ -85,14 +86,14 @@ impl<'lt> SchematicAnalysis<'lt> for InliningSchemanticAnalysis<'_> {
         if self.call_stack.iter().any(|(x, _)| *x == function) {
             let function = &fold.hir[function];
             fold.errors.add(Recursion {
-                function_name: function.contents.name.name,
+                function_name: function.contents.ident.name,
                 recursion_span: function.span,
                 recursion_traceback: self
                     .call_stack
                     .iter()
                     .map(|(id, call_span)| {
                         let function = &fold.hir[*id];
-                        (function.contents.name.name, *call_span)
+                        (function.contents.ident.name, *call_span)
                     })
                     .collect(),
             });
@@ -103,21 +104,30 @@ impl<'lt> SchematicAnalysis<'lt> for InliningSchemanticAnalysis<'_> {
         // Write locals to output args
         for (local, dst) in output {
             let expression = match fold.mir[local].contents.variable_type {
-                VariableType::Real(_) => ExpressionId::Real(fold.mir.real_expressions.push(Node {
-                    span: fold.mir[dst].span,
-                    contents: RealExpression::VariableReference(local),
-                })),
+                VariableType::Real(_) => {
+                    ExpressionId::Real(fold.mir.real_expressions.push(Spanned {
+                        span: fold.mir[dst].span,
+                        contents: RealExpression::VariableReference(local),
+                    }))
+                }
                 VariableType::Integer(_) => {
-                    ExpressionId::Integer(fold.mir.integer_expressions.push(Node {
+                    ExpressionId::Integer(fold.mir.integer_expressions.push(Spanned {
                         span: fold.mir[dst].span,
                         contents: IntegerExpression::VariableReference(local),
                     }))
                 }
+                VariableType::String(_) => {
+                    ExpressionId::String(fold.mir.string_expressions.push(Spanned {
+                        span: fold.mir[dst].span,
+                        contents: StringExpression::VariableReference(local),
+                    }))
+                }
             };
-            let stmt =
-                fold.mir
-                    .statements
-                    .push(Statement::Assignment(Attributes::EMPTY, dst, expression));
+            let stmt = fold.mir.add_new_stmt(Node {
+                attributes: Attributes::EMPTY,
+                span: fold.mir[dst].span,
+                contents: Statement::Assignment(dst, expression),
+            });
             self.cfg_allocator[self.current_block].statements.push(stmt);
         }
 
@@ -128,27 +138,36 @@ impl<'lt> SchematicAnalysis<'lt> for InliningSchemanticAnalysis<'_> {
             .push(fold.mir[fold.hir[function].contents.return_variable]);
 
         let expr = match fold.mir[return_variable].contents.variable_type {
-            VariableType::Real(_) => ExpressionId::Real(fold.mir.real_expressions.push(Node {
+            VariableType::Real(_) => ExpressionId::Real(fold.mir.real_expressions.push(Spanned {
                 span: call_span,
                 contents: RealExpression::VariableReference(
                     fold.hir[function].contents.return_variable,
                 ),
             })),
             VariableType::Integer(_) => {
-                ExpressionId::Integer(fold.mir.integer_expressions.push(Node {
+                ExpressionId::Integer(fold.mir.integer_expressions.push(Spanned {
                     span: call_span,
                     contents: IntegerExpression::VariableReference(
                         fold.hir[function].contents.return_variable,
                     ),
                 }))
             }
+            VariableType::String(_) => {
+                ExpressionId::String(fold.mir.string_expressions.push(Spanned {
+                    span: call_span,
+                    contents: StringExpression::VariableReference(
+                        fold.hir[function].contents.return_variable,
+                    ),
+                }))
+            }
         };
 
-        let stmt = fold.mir.statements.push(Statement::Assignment(
-            Attributes::EMPTY,
-            return_variable,
-            expr,
-        ));
+        let stmt = fold.mir.add_new_stmt(Node {
+            attributes: Attributes::EMPTY,
+            span: fold.hir[fold.hir[function].contents.return_variable].span,
+            contents: Statement::Assignment(return_variable, expr),
+        });
+
         self.cfg_allocator[self.current_block].statements.push(stmt);
 
         // Add function body
@@ -160,32 +179,34 @@ impl<'lt> SchematicAnalysis<'lt> for InliningSchemanticAnalysis<'_> {
 
         // Write inputs to local variables
         for (local, expr) in input {
-            let stmt =
-                fold.mir
-                    .statements
-                    .push(Statement::Assignment(Attributes::EMPTY, local, expr));
+            let stmt = fold.mir.add_new_stmt(Node {
+                span: expr.span(&fold.mir),
+                attributes: Attributes::EMPTY,
+                contents: Statement::Assignment(local, expr),
+            });
             self.cfg_allocator[self.current_block].statements.push(stmt);
         }
 
         // Init return value to 0
         let expr = match fold.mir[return_variable].contents.variable_type {
-            VariableType::Real(_) => ExpressionId::Real(fold.mir.real_expressions.push(Node {
+            VariableType::Real(_) => ExpressionId::Real(fold.mir.real_expressions.push(Spanned {
                 span: call_span,
                 contents: RealExpression::Literal(0.0),
             })),
             VariableType::Integer(_) => {
-                ExpressionId::Integer(fold.mir.integer_expressions.push(Node {
+                ExpressionId::Integer(fold.mir.integer_expressions.push(Spanned {
                     span: call_span,
                     contents: IntegerExpression::Literal(0),
                 }))
             }
+            VariableType::String(_) => unreachable!("Hir lowering should have errored here"),
         };
 
-        let stmt = fold.mir.statements.push(Statement::Assignment(
-            Attributes::EMPTY,
-            fold.hir[function].contents.return_variable,
-            expr,
-        ));
+        let stmt = fold.mir.add_new_stmt(Node {
+            contents: Statement::Assignment(fold.hir[function].contents.return_variable, expr),
+            span: fold.hir[fold.hir[function].contents.return_variable].span,
+            attributes: Attributes::EMPTY,
+        });
         self.cfg_allocator[self.current_block].statements.push(stmt);
 
         // Now calling the function is allowed again
@@ -198,7 +219,7 @@ pub trait SchematicAnalysis<'lt>: Sized {
     fn fold_expression(
         &mut self,
         fold: &mut HirToMirFold<'lt>,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
     ) -> Option<ExpressionId> {
         fold.fold_expression(expr, self)
     }
@@ -206,7 +227,7 @@ pub trait SchematicAnalysis<'lt>: Sized {
     fn fold_real_expression(
         &mut self,
         fold: &mut HirToMirFold<'lt>,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
     ) -> Option<RealExpressionId> {
         fold.fold_real_expression(expr, self)
     }
@@ -214,7 +235,7 @@ pub trait SchematicAnalysis<'lt>: Sized {
     fn fold_string_expression(
         &mut self,
         fold: &mut HirToMirFold<'lt>,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
     ) -> Option<StringExpressionId> {
         fold.fold_string_expression(expr, self)
     }
@@ -222,7 +243,7 @@ pub trait SchematicAnalysis<'lt>: Sized {
     fn fold_integer_expression(
         &mut self,
         fold: &mut HirToMirFold<'lt>,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
     ) -> Option<IntegerExpressionId> {
         fold.fold_integer_expression(expr, self)
     }
@@ -312,7 +333,8 @@ impl<'hirref> HirToMirFold<'hirref> {
                             self.mir[var].contents.variable_type,
                         ) {
                             (VariableType::Real(_), VariableType::Real(_))
-                            | (VariableType::Integer(_), VariableType::Integer(_)) => (),
+                            | (VariableType::Integer(_), VariableType::Integer(_))
+                            | (VariableType::String(_), VariableType::String(_)) => (),
                             (VariableType::Real(_), _) => {
                                 self.errors.add(Error::expected_variable_type(
                                     MockType::Real,
@@ -324,6 +346,14 @@ impl<'hirref> HirToMirFold<'hirref> {
                             (VariableType::Integer(_), _) => {
                                 self.errors.add(Error::expected_variable_type(
                                     MockType::Integer,
+                                    &self.mir[var],
+                                    self.mir[expected.local_var].span,
+                                ));
+                                continue;
+                            }
+                            (VariableType::String(_), _) => {
+                                self.errors.add(Error::expected_variable_type(
+                                    MockType::String,
                                     &self.mir[var],
                                     self.mir[expected.local_var].span,
                                 ));
@@ -346,12 +376,12 @@ impl<'hirref> HirToMirFold<'hirref> {
 
     pub fn fold_real_expression(
         &mut self,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
         analysis: &mut impl SchematicAnalysis<'hirref>,
     ) -> Option<RealExpressionId> {
         let span = self.hir[expr].span;
         let contents = match self.hir[expr].contents {
-            hir::Expression::Condtion(condition, _, if_val, _, else_val) => {
+            hir::Expression::Condtion(condition, if_val, else_val) => {
                 let condition = analysis.fold_integer_expression(self, condition);
                 let if_val = analysis.fold_real_expression(self, if_val);
                 let else_val = analysis.fold_real_expression(self, else_val);
@@ -362,8 +392,8 @@ impl<'hirref> HirToMirFold<'hirref> {
             hir::Expression::Primary(Primary::FunctionCall(function, ref args))
                 if self.hir[self.hir[function].contents.return_variable]
                     .contents
-                    .variable_type
-                    == ast::VariableType::REAL =>
+                    .var_type
+                    == ast::VariableType::Real =>
             {
                 RealExpression::VariableReference(self.fold_function_call(
                     function,
@@ -380,18 +410,18 @@ impl<'hirref> HirToMirFold<'hirref> {
             hir::Expression::Primary(Primary::SystemFunctionCall(SystemFunctionCall::Vt(arg))) => {
                 let factor = Constants::kb(span) / Constants::q(span);
                 let factor = RealExpression::Literal(factor);
-                let factor = self.mir.real_expressions.push(Node::new(factor, span));
+                let factor = self.mir.real_expressions.push(Spanned::new(factor, span));
                 let temp = arg
                     .and_then(|arg| analysis.fold_real_expression(self, arg))
                     .unwrap_or_else(|| {
                         self.mir
                             .real_expressions
-                            .push(Node::new(RealExpression::Temperature, span))
+                            .push(Spanned::new(RealExpression::Temperature, span))
                     });
 
                 RealExpression::BinaryOperator(
                     factor,
-                    Node::new(RealBinaryOperator::Multiply, span),
+                    Spanned::new(RealBinaryOperator::Multiply, span),
                     temp,
                 )
             }
@@ -419,10 +449,14 @@ impl<'hirref> HirToMirFold<'hirref> {
                 RealExpression::BranchAccess(discipline_access, branch, 0)
             }
 
+            hir::Expression::Primary(Primary::PortFlowAccess(port)) => {
+                RealExpression::PortFlowAccess(port, 0)
+            }
+
             hir::Expression::Primary(Primary::ParameterReference(parameter))
                 if matches!(
-                    self.hir[parameter].contents.parameter_type,
-                    ast::ParameterType::Numerical {parameter_type: ast::VariableType::REAL,..}
+                    self.hir[parameter].contents.param_type,
+                    hir::ParameterType::Real {..}
                 ) =>
             {
                 RealExpression::ParameterReference(parameter)
@@ -438,7 +472,7 @@ impl<'hirref> HirToMirFold<'hirref> {
             }
 
             hir::Expression::UnaryOperator(
-                Node {
+                Spanned {
                     contents: ast::UnaryOperator::ArithmeticNegate,
                     span: op,
                 },
@@ -449,15 +483,15 @@ impl<'hirref> HirToMirFold<'hirref> {
                 let lhs = analysis.fold_real_expression(self, lhs);
                 let rhs = analysis.fold_real_expression(self, rhs);
                 let op = match op_node.contents {
-                    BinaryOperator::Sum => RealBinaryOperator::Sum,
-                    BinaryOperator::Subtract => RealBinaryOperator::Subtract,
+                    BinaryOperator::Plus => RealBinaryOperator::Sum,
+                    BinaryOperator::Minus => RealBinaryOperator::Subtract,
                     BinaryOperator::Multiply => RealBinaryOperator::Multiply,
                     BinaryOperator::Divide => RealBinaryOperator::Divide,
                     BinaryOperator::Exponent => RealBinaryOperator::Exponent,
                     BinaryOperator::Modulus => RealBinaryOperator::Modulus,
                     _ => {
                         let integer_expr = analysis.fold_integer_expression(self, expr)?;
-                        return Some(self.mir.real_expressions.push(Node {
+                        return Some(self.mir.real_expressions.push(Spanned {
                             contents: RealExpression::IntegerConversion(integer_expr),
                             span,
                         }));
@@ -465,7 +499,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                 };
                 RealExpression::BinaryOperator(
                     lhs?,
-                    Node {
+                    Spanned {
                         contents: op,
                         span: op_node.span,
                     },
@@ -507,23 +541,42 @@ impl<'hirref> HirToMirFold<'hirref> {
                     }
                     NoiseSource::Table(_) | NoiseSource::TableLog(_) => todo!(),
                 };
+                // no error here if const folding failed because that happens during ast lowering
+                let name = name.and_then(|name| {
+                    self.fold_string_expression(name, analysis)
+                        .and_then(|name| {
+                            self.mir
+                                .constant_eval_str_expr(name, &mut NoConstResolution)
+                        })
+                });
+
                 RealExpression::Noise(source, name)
             }
 
             _ => RealExpression::IntegerConversion(analysis.fold_integer_expression(self, expr)?),
         };
-        Some(self.mir.real_expressions.push(Node { contents, span }))
+        Some(self.mir.real_expressions.push(Spanned { contents, span }))
     }
 
     pub fn fold_integer_expression(
         &mut self,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
         analysis: &mut impl SchematicAnalysis<'hirref>,
     ) -> Option<IntegerExpressionId> {
         let span = self.hir[expr].span;
         let contents = match self.hir[expr].contents {
             hir::Expression::Primary(Primary::Integer(val)) => {
                 IntegerExpression::Literal(val as i64)
+            }
+
+            // Infinity can't be specified as a literal expect for parameter ranges
+            // where infinity basically just means maximum and is also valid for integer
+            hir::Expression::Primary(Primary::Real(x)) if x == f64::INFINITY => {
+                IntegerExpression::Literal(i64::MAX)
+            }
+
+            hir::Expression::Primary(Primary::Real(x)) if x == f64::NEG_INFINITY => {
+                IntegerExpression::Literal(i64::MIN)
             }
 
             hir::Expression::Primary(Primary::UnsignedInteger(val)) => {
@@ -543,7 +596,7 @@ impl<'hirref> HirToMirFold<'hirref> {
             }
 
             hir::Expression::Primary(Primary::BuiltInFunctionCall2p(
-                BuiltInFunctionCall2p::Min,
+                DoubleArgMath::Min,
                 arg1,
                 arg2,
             )) => {
@@ -554,7 +607,7 @@ impl<'hirref> HirToMirFold<'hirref> {
             }
 
             hir::Expression::Primary(Primary::BuiltInFunctionCall2p(
-                BuiltInFunctionCall2p::Max,
+                DoubleArgMath::Max,
                 arg1,
                 arg2,
             )) => {
@@ -564,12 +617,11 @@ impl<'hirref> HirToMirFold<'hirref> {
                 IntegerExpression::Max(arg1, arg2)
             }
 
-            hir::Expression::Primary(Primary::BuiltInFunctionCall1p(
-                BuiltInFunctionCall1p::Abs,
-                arg,
-            )) => IntegerExpression::Abs(analysis.fold_integer_expression(self, arg)?),
+            hir::Expression::Primary(Primary::BuiltInFunctionCall1p(SingleArgMath::Abs, arg)) => {
+                IntegerExpression::Abs(analysis.fold_integer_expression(self, arg)?)
+            }
 
-            hir::Expression::Condtion(condition, _, if_val, _, else_val) => {
+            hir::Expression::Condtion(condition, if_val, else_val) => {
                 let condition = analysis.fold_integer_expression(self, condition);
                 let if_val = analysis.fold_integer_expression(self, if_val);
                 let else_val = analysis.fold_integer_expression(self, else_val);
@@ -598,7 +650,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                     BinaryOperator::LogicalNotEqual => ComparisonOperator::LogicalNotEqual,
                     _ => unreachable!(),
                 };
-                let op = Node::new(comparison_op, op.span);
+                let op = Spanned::new(comparison_op, op.span);
 
                 match (lhs?, rhs?) {
                     (ExpressionId::Integer(lhs), ExpressionId::Integer(rhs)) => {
@@ -610,7 +662,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                     }
 
                     (ExpressionId::Integer(lhs), ExpressionId::Real(rhs)) => {
-                        let lhs = self.mir.real_expressions.push(Node::new(
+                        let lhs = self.mir.real_expressions.push(Spanned::new(
                             RealExpression::IntegerConversion(lhs),
                             self.mir[lhs].span,
                         ));
@@ -618,7 +670,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                     }
 
                     (ExpressionId::Real(lhs), ExpressionId::Integer(rhs)) => {
-                        let rhs = self.mir.real_expressions.push(Node::new(
+                        let rhs = self.mir.real_expressions.push(Spanned::new(
                             RealExpression::IntegerConversion(rhs),
                             self.mir[rhs].span,
                         ));
@@ -662,8 +714,8 @@ impl<'hirref> HirToMirFold<'hirref> {
                 let lhs = analysis.fold_integer_expression(self, lhs);
                 let rhs = analysis.fold_integer_expression(self, rhs);
                 let op = match op_node.contents {
-                    BinaryOperator::Sum => IntegerBinaryOperator::Sum,
-                    BinaryOperator::Subtract => IntegerBinaryOperator::Subtract,
+                    BinaryOperator::Plus => IntegerBinaryOperator::Sum,
+                    BinaryOperator::Minus => IntegerBinaryOperator::Subtract,
                     BinaryOperator::Multiply => IntegerBinaryOperator::Multiply,
                     BinaryOperator::Divide => IntegerBinaryOperator::Divide,
                     BinaryOperator::Exponent => IntegerBinaryOperator::Exponent,
@@ -680,7 +732,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                 };
                 IntegerExpression::BinaryOperator(
                     lhs?,
-                    Node {
+                    Spanned {
                         contents: op,
                         span: op_node.span,
                     },
@@ -691,8 +743,8 @@ impl<'hirref> HirToMirFold<'hirref> {
             hir::Expression::Primary(Primary::FunctionCall(function, ref args))
                 if self.hir[self.hir[function].contents.return_variable]
                     .contents
-                    .variable_type
-                    == ast::VariableType::INTEGER =>
+                    .var_type
+                    == ast::VariableType::Integer =>
             {
                 IntegerExpression::VariableReference(self.fold_function_call(
                     function,
@@ -711,11 +763,10 @@ impl<'hirref> HirToMirFold<'hirref> {
             )) => IntegerExpression::PortConnected(port),
 
             hir::Expression::Primary(Primary::ParameterReference(parameter)) => {
-                match self.hir[parameter].contents.parameter_type {
-                    ast::ParameterType::Numerical {
-                        parameter_type: ast::VariableType::INTEGER,
-                        ..
-                    } => IntegerExpression::ParameterReference(parameter),
+                match self.hir[parameter].contents.param_type {
+                    hir::ParameterType::Integer { .. } => {
+                        IntegerExpression::ParameterReference(parameter)
+                    }
                     _ => {
                         self.errors.add(Error::expected_parameter_type(
                             MockType::Integer,
@@ -753,12 +804,16 @@ impl<'hirref> HirToMirFold<'hirref> {
             }
         };
 
-        Some(self.mir.integer_expressions.push(Node { span, contents }))
+        Some(
+            self.mir
+                .integer_expressions
+                .push(Spanned { span, contents }),
+        )
     }
 
     pub fn fold_string_expression(
         &mut self,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
         analysis: &mut impl SchematicAnalysis<'hirref>,
     ) -> Option<StringExpressionId> {
         //TODO make this into a real fold like the other ones for improved error reporting (then again strings are so rare who cares)
@@ -776,12 +831,12 @@ impl<'hirref> HirToMirFold<'hirref> {
 
     pub fn fold_expression(
         &mut self,
-        expr: ir::ExpressionId,
+        expr: ir::ids::ExpressionId,
         analysis: &mut impl SchematicAnalysis<'hirref>,
     ) -> Option<ExpressionId> {
         let span = self.hir[expr].span;
         let contents = match self.hir[expr].contents {
-            hir::Expression::Condtion(condition, _, if_val, _, else_val) => {
+            hir::Expression::Condtion(condition, if_val, else_val) => {
                 let condition = analysis.fold_integer_expression(self, condition);
                 let (if_val, else_val) = match (
                     analysis.fold_expression(self, if_val)?,
@@ -791,14 +846,14 @@ impl<'hirref> HirToMirFold<'hirref> {
                         (if_val, else_val)
                     }
                     (ExpressionId::Real(if_val), ExpressionId::Integer(else_val)) => {
-                        let else_val = self.mir.real_expressions.push(Node {
+                        let else_val = self.mir.real_expressions.push(Spanned {
                             span: self.mir[else_val].span,
                             contents: RealExpression::IntegerConversion(else_val),
                         });
                         (if_val, else_val)
                     }
                     (ExpressionId::Integer(if_val), ExpressionId::Real(else_val)) => {
-                        let if_val = self.mir.real_expressions.push(Node {
+                        let if_val = self.mir.real_expressions.push(Spanned {
                             span: self.mir[if_val].span,
                             contents: RealExpression::IntegerConversion(if_val),
                         });
@@ -806,7 +861,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                     }
                     (ExpressionId::Integer(if_val), ExpressionId::Integer(else_val)) => {
                         return Some(ExpressionId::Integer(self.mir.integer_expressions.push(
-                            Node {
+                            Spanned {
                                 contents: IntegerExpression::Condition(
                                     condition?, if_val, else_val,
                                 ),
@@ -817,7 +872,7 @@ impl<'hirref> HirToMirFold<'hirref> {
 
                     (ExpressionId::String(if_val), ExpressionId::String(else_val)) => {
                         return Some(ExpressionId::String(self.mir.string_expressions.push(
-                            Node {
+                            Spanned {
                                 contents: StringExpression::Condition(condition?, if_val, else_val),
                                 span,
                             },
@@ -843,18 +898,18 @@ impl<'hirref> HirToMirFold<'hirref> {
             hir::Expression::Primary(Primary::SystemFunctionCall(SystemFunctionCall::Vt(arg))) => {
                 let factor = Constants::kb(span) / Constants::q(span);
                 let factor = RealExpression::Literal(factor);
-                let factor = self.mir.real_expressions.push(Node::new(factor, span));
+                let factor = self.mir.real_expressions.push(Spanned::new(factor, span));
                 let temp = arg
                     .and_then(|arg| analysis.fold_real_expression(self, arg))
                     .unwrap_or_else(|| {
                         self.mir
                             .real_expressions
-                            .push(Node::new(RealExpression::Temperature, span))
+                            .push(Spanned::new(RealExpression::Temperature, span))
                     });
 
                 RealExpression::BinaryOperator(
                     factor,
-                    Node::new(RealBinaryOperator::Multiply, span),
+                    Spanned::new(RealBinaryOperator::Multiply, span),
                     temp,
                 )
             }
@@ -893,7 +948,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                         return None;
                     };
                 return Some(ExpressionId::String(self.mir.string_expressions.push(
-                    Node {
+                    Spanned {
                         contents: StringExpression::SimParam(name),
                         span,
                     },
@@ -902,7 +957,7 @@ impl<'hirref> HirToMirFold<'hirref> {
 
             hir::Expression::Primary(Primary::String(val)) => {
                 return Some(ExpressionId::String(self.mir.string_expressions.push(
-                    Node {
+                    Spanned {
                         contents: StringExpression::Literal(val),
                         span,
                     },
@@ -914,10 +969,14 @@ impl<'hirref> HirToMirFold<'hirref> {
                 RealExpression::BranchAccess(discipline_access, branch, 0)
             }
 
+            hir::Expression::Primary(Primary::PortFlowAccess(port)) => {
+                RealExpression::PortFlowAccess(port, 0)
+            }
+
             hir::Expression::Primary(Primary::ParameterReference(parameter))
                 if matches!(
-                    self.hir[parameter].contents.parameter_type,
-                    ast::ParameterType::Numerical {parameter_type: ast::VariableType::REAL,..}
+                    self.hir[parameter].contents.param_type,
+                    hir::ParameterType::Real {..}
                 ) =>
             {
                 RealExpression::ParameterReference(parameter)
@@ -935,8 +994,8 @@ impl<'hirref> HirToMirFold<'hirref> {
             hir::Expression::Primary(Primary::FunctionCall(function, ref args))
                 if self.hir[self.hir[function].contents.return_variable]
                     .contents
-                    .variable_type
-                    == ast::VariableType::REAL =>
+                    .var_type
+                    == ast::VariableType::Real =>
             {
                 RealExpression::VariableReference(self.fold_function_call(
                     function,
@@ -952,12 +1011,12 @@ impl<'hirref> HirToMirFold<'hirref> {
                 let expr = analysis.fold_expression(self, parameter)?;
                 let res = match expr {
                     ExpressionId::Real(arg) => {
-                        let expr = Node::new(RealExpression::Negate(op.span, arg), span);
+                        let expr = Spanned::new(RealExpression::Negate(op.span, arg), span);
                         ExpressionId::Real(self.mir.real_expressions.push(expr))
                     }
 
                     ExpressionId::Integer(arg) => {
-                        let expr = Node::new(IntegerExpression::UnaryOperator(op, arg), span);
+                        let expr = Spanned::new(IntegerExpression::UnaryOperator(op, arg), span);
                         ExpressionId::Integer(self.mir.integer_expressions.push(expr))
                     }
                     ExpressionId::String(arg) => {
@@ -973,8 +1032,8 @@ impl<'hirref> HirToMirFold<'hirref> {
 
             hir::Expression::BinaryOperator(lhs, op_node, rhs) => {
                 let op = match op_node.contents {
-                    BinaryOperator::Sum => RealBinaryOperator::Sum,
-                    BinaryOperator::Subtract => RealBinaryOperator::Subtract,
+                    BinaryOperator::Plus => RealBinaryOperator::Sum,
+                    BinaryOperator::Minus => RealBinaryOperator::Subtract,
                     BinaryOperator::Multiply => RealBinaryOperator::Multiply,
                     BinaryOperator::Divide => RealBinaryOperator::Divide,
                     BinaryOperator::Exponent => RealBinaryOperator::Exponent,
@@ -992,7 +1051,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                 ) {
                     (ExpressionId::Real(lhs), ExpressionId::Real(rhs)) => (lhs, rhs),
                     (ExpressionId::Real(lhs), ExpressionId::Integer(rhs)) => {
-                        let rhs = self.mir.real_expressions.push(Node {
+                        let rhs = self.mir.real_expressions.push(Spanned {
                             span: self.mir[rhs].span,
                             contents: RealExpression::IntegerConversion(rhs),
                         });
@@ -1000,7 +1059,7 @@ impl<'hirref> HirToMirFold<'hirref> {
                     }
 
                     (ExpressionId::Integer(lhs), ExpressionId::Real(rhs)) => {
-                        let lhs = self.mir.real_expressions.push(Node {
+                        let lhs = self.mir.real_expressions.push(Spanned {
                             span: self.mir[lhs].span,
                             contents: RealExpression::IntegerConversion(lhs),
                         });
@@ -1009,10 +1068,10 @@ impl<'hirref> HirToMirFold<'hirref> {
 
                     (ExpressionId::Integer(lhs), ExpressionId::Integer(rhs)) => {
                         return Some(ExpressionId::Integer(self.mir.integer_expressions.push(
-                            Node {
+                            Spanned {
                                 contents: IntegerExpression::BinaryOperator(
                                     lhs,
-                                    Node {
+                                    Spanned {
                                         contents: op.into(),
                                         span: op_node.span,
                                     },
@@ -1040,7 +1099,7 @@ impl<'hirref> HirToMirFold<'hirref> {
 
                 RealExpression::BinaryOperator(
                     lhs,
-                    Node {
+                    Spanned {
                         contents: op,
                         span: op_node.span,
                     },
@@ -1073,7 +1132,7 @@ impl<'hirref> HirToMirFold<'hirref> {
             }
         };
         Some(ExpressionId::Real(
-            self.mir.real_expressions.push(Node { contents, span }),
+            self.mir.real_expressions.push(Spanned { contents, span }),
         ))
     }
 }
