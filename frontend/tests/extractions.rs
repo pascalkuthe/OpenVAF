@@ -11,7 +11,6 @@ use open_vaf::analysis::constant_fold::PropagatedConstants;
 use open_vaf::analysis::data_flow::reaching_definitions::ReachingDefinitionsAnalysis;
 use open_vaf::analysis::ProgramDependenceGraph;
 use open_vaf::ast::Ast;
-use open_vaf::cfg::ControlFlowGraph;
 use open_vaf::diagnostic::{ExpansionPrinter, StandardPrinter};
 use open_vaf::lints;
 use open_vaf::lints::{LintLevel, Linter};
@@ -31,7 +30,12 @@ fn extraction_integration_test(
         .chain(std::io::stderr())
         .apply();
 
+    // Bugs/oversights/deliberate in models
+    // this is not helpful during tests so we just allows this
     lints::builtin::ignored_display_task.overwrite_lvl_global(LintLevel::Allow);
+    lints::builtin::dead_code.overwrite_lvl_global(LintLevel::Allow);
+    lints::builtin::unused_variables.overwrite_lvl_global(LintLevel::Allow);
+    lints::builtin::unused_parameters.overwrite_lvl_global(LintLevel::Allow);
 
     let mut test_dir = std::env::current_dir()?.canonicalize()?;
     test_dir.push("tests");
@@ -49,7 +53,7 @@ fn extraction_integration_test(
 
     let (sm, main_file) = SourceMap::new_with_mainfile(main_file)?;
     let (ts, sm) = preprocess_test(test_dir, sm, main_file)?;
-    let hir = Ast::parse_from_token_stream_user_facing_with_printer::<ExpansionPrinter>(
+    let hir = Ast::parse_from_token_stream_user_facing_with_printer::<StandardPrinter>(
         ts,
         &sm,
         TEST_EXPANSION_HINT,
@@ -62,14 +66,19 @@ fn extraction_integration_test(
 
     let mut mir = hir.lower_user_facing(&sm, TEST_EXPANSION_HINT)?;
 
+    mir.calculate_all_registered_derivatives()
+        .map_err(|err| err.user_facing::<StandardPrinter>(&sm, TEST_EXPANSION_HINT))?;
+
+    // Late lints
+    mir.lint_unused_items();
+
     for module in mir.modules.indices() {
-        let mut cfg: ControlFlowGraph = mir[module].contents.analog_cfg.clone();
+        let cfg = mir[module].contents.analog_cfg.clone();
+        let mut cfg_borrow = cfg.borrow_mut();
 
-        cfg.calculate_all_registered_derivatives(&mut mir);
+        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg_borrow);
 
-        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg);
-
-        let mut udg = reaching_analysis.run(&mut cfg);
+        let mut udg = reaching_analysis.run(&mut cfg_borrow);
         #[cfg(feature = "graph_debug")]
         {
             let mut file = File::create("cfg.dot").unwrap();
@@ -78,7 +87,8 @@ fn extraction_integration_test(
             cfg.render_to(&mut file);
         }
 
-        let ipdom = cfg.post_dominators();
+        mir.lint_unreadable_assignments(&cfg_borrow, &udg);
+        let ipdom = cfg_borrow.post_dominators();
 
         #[cfg(feature = "graph_debug")]
         {
@@ -86,7 +96,7 @@ fn extraction_integration_test(
             cfg.render_post_dominators(&mut file, &ipdom);
         }
 
-        let control_dependencies = cfg.control_dependence_graph_from_ipdom(&ipdom);
+        let control_dependencies = cfg_borrow.control_dependence_graph_from_ipdom(&ipdom);
 
         #[cfg(feature = "graph_debug")]
         {
@@ -94,7 +104,7 @@ fn extraction_integration_test(
             cfg.render_control_dependence_to(&mut file, &control_dependencies);
         }
 
-        cfg.constant_propagation(&mut mir, &mut udg, &mut PropagatedConstants::default());
+        cfg_borrow.constant_propagation(&mut mir, &mut udg, &mut PropagatedConstants::default());
 
         #[cfg(feature = "graph_debug")]
         {
@@ -114,9 +124,9 @@ fn extraction_integration_test(
             }
         }
 
-        cfg.backward_variable_slice(extracted_var_id.unwrap(), &pdg);
+        cfg_borrow.backward_variable_slice(extracted_var_id.unwrap(), &pdg);
 
-        cfg.simplify();
+        cfg_borrow.simplify();
 
         #[cfg(feature = "graph_debug")]
         {
@@ -125,7 +135,7 @@ fn extraction_integration_test(
         }
     }
 
-    let warnings = Linter::late_user_diagnostics::<StandardPrinter>(&sm, TEST_EXPANSION_HINT)?;
+    let warnings = Linter::late_user_diagnostics::<ExpansionPrinter>(&sm, TEST_EXPANSION_HINT)?;
     print!("{}", warnings);
 
     Ok(())

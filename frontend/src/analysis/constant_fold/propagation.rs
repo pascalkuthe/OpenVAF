@@ -18,7 +18,7 @@ use crate::{HashMap, StringLiteral};
 
 use crate::analysis::data_flow::reaching_definitions::UseDefGraph;
 use crate::cfg::Terminator;
-use crate::ir::{ParameterId, StatementId};
+use crate::ir::ids::{ParameterId, StatementId};
 use crate::mir::{ExpressionId, Mir, Statement};
 
 /// This struct maps all variable assigments and parameters to their values that are already known during constant propagation
@@ -147,8 +147,8 @@ impl Mir {
         mut resolver: T,
         known_values: impl FnOnce(T) -> &'lt mut PropagatedConstants,
     ) -> bool {
-        match self[stmt] {
-            Statement::Assignment(_, _, val) => match val {
+        match self[stmt].contents {
+            Statement::Assignment(_, val) => match val {
                 ExpressionId::Real(val) => {
                     if let Some(val) = self.constant_fold_real_expr(val, &mut resolver) {
                         let old = known_values(resolver).real_definitions.insert(stmt, val);
@@ -200,7 +200,7 @@ impl Mir {
                 }
             },
 
-            Statement::Contribute(_, _, _, val) => {
+            Statement::Contribute(_, _, val) => {
                 return self.constant_fold_real_expr(val, &mut resolver).is_some()
             }
 

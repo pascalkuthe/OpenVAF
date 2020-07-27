@@ -15,7 +15,7 @@ maintenance = { status = "actively-developed" }
 proc-macro2 = "1.0.18"
 quote = "1.0.7"
 log = "0.4.8"
-open-vaf = {version = "0.5.0",path = "../frontend"}
+open-vaf = {version = "0.6.0",path = "../frontend"}
 
 [features]
 graph_debug = ["open-vaf/graph_debug"]

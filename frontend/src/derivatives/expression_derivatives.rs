@@ -11,7 +11,11 @@ use crate::derivatives::error::Error::{DerivativeNotDefined, OnlyNumericExpressi
 use crate::derivatives::error::UndefinedDerivative;
 use crate::derivatives::lints::RoundingDerivativeNotFullyDefined;
 use crate::derivatives::{AutoDiff, Unknown};
-use crate::hir::{Branch, DisciplineAccess};
+use crate::hir::DisciplineAccess;
+use crate::ir::ids::{
+    BranchId, IntegerExpressionId, NetId, ParameterId, PortId, RealExpressionId,
+    StringExpressionId, VariableId,
+};
 use crate::ir::mir::fold::integer_expressions::{IntegerBinaryOperatorFold, IntegerExprFold};
 use crate::ir::mir::fold::real_expressions::{
     walk_real_expression, RealBuiltInFunctionCall2pFold, RealExprFold,
@@ -19,11 +23,8 @@ use crate::ir::mir::fold::real_expressions::{
 use crate::ir::mir::RealBinaryOperator::{Divide, Multiply, Subtract, Sum};
 use crate::ir::mir::RealExpression::{BranchAccess, IntegerConversion};
 use crate::ir::mir::{ExpressionId, Mir};
-use crate::ir::BuiltInFunctionCall1p::{Cos, CosH, Ln, Sin, SinH, Sqrt};
-use crate::ir::{
-    BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, NetId, Node,
-    NoiseSource, ParameterId, PortId, RealExpressionId, StringExpressionId, VariableId,
-};
+use crate::ir::SingleArgMath::{Cos, CosH, Ln, Sin, SinH, Sqrt};
+use crate::ir::{DoubleArgMath, NoiseSource, SingleArgMath, Spanned};
 use crate::lints::Linter;
 use crate::mir::fold::integer_expressions::walk_integer_expression;
 use crate::mir::fold::real_expressions::{RealBinaryOperatorFold, RealBuiltInFunctionCall1pFold};
@@ -46,7 +47,7 @@ type Derivative = Option<RealExpressionId>;
 
 impl<'lt, 'mir: 'lt, E: Into<ExpressionId> + Copy> ExpressionAutoDiff<'lt, 'mir, E> {
     fn add_to_mir(&mut self, expr: RealExpression) -> RealExpressionId {
-        let node = Node::new(expr, self.current_expr.into().span(self.ad.mir));
+        let node = Spanned::new(expr, self.current_expr.into().span(self.ad.mir));
         self.ad.mir.real_expressions.push(node)
     }
 
@@ -57,7 +58,7 @@ impl<'lt, 'mir: 'lt, E: Into<ExpressionId> + Copy> ExpressionAutoDiff<'lt, 'mir,
 
     fn gen_int_constant(&mut self, val: i64) -> IntegerExpressionId {
         let expr = IntegerExpression::Literal(val);
-        let node = Node::new(expr, self.current_expr.into().span(self.ad.mir));
+        let node = Spanned::new(expr, self.current_expr.into().span(self.ad.mir));
         self.ad.mir.integer_expressions.push(node)
     }
 
@@ -74,13 +75,13 @@ impl<'lt, 'mir: 'lt, E: Into<ExpressionId> + Copy> ExpressionAutoDiff<'lt, 'mir,
         rhs: RealExpressionId,
     ) -> RealExpressionId {
         let span = self.current_expr.into().span(self.ad.mir);
-        let expr = RealExpression::BinaryOperator(lhs, Node::new(op, span), rhs);
+        let expr = RealExpression::BinaryOperator(lhs, Spanned::new(op, span), rhs);
         self.add_to_mir(expr)
     }
 
     fn gen_math_function(
         &mut self,
-        call: BuiltInFunctionCall1p,
+        call: SingleArgMath,
         arg: RealExpressionId,
     ) -> RealExpressionId {
         let expr = RealExpression::BuiltInFunctionCall1p(call, arg);
@@ -229,10 +230,10 @@ impl<'lt, 'mir: 'lt> ExpressionAutoDiff<'lt, 'mir, RealExpressionId> {
         let span = self.ad.mir[self.current_expr].span;
         let condition = IntegerExpression::RealComparison(
             arg1,
-            Node::new(ComparisonOperator::LessThen, span),
+            Spanned::new(ComparisonOperator::LessThen, span),
             arg2,
         );
-        let condition = Node::new(condition, span);
+        let condition = Spanned::new(condition, span);
         self.ad.mir.integer_expressions.push(condition)
     }
     pub fn run(&mut self) -> RealExpressionId {
@@ -251,10 +252,10 @@ impl<'lt, 'mir: 'lt> ExpressionAutoDiff<'lt, 'mir, IntegerExpressionId> {
         let span = self.ad.mir[self.current_expr].span;
         let condition = IntegerExpression::IntegerComparison(
             arg1,
-            Node::new(ComparisonOperator::LessThen, span),
+            Spanned::new(ComparisonOperator::LessThen, span),
             arg2,
         );
-        let condition = Node::new(condition, span);
+        let condition = Spanned::new(condition, span);
         self.ad.mir.integer_expressions.push(condition)
     }
 
@@ -287,7 +288,7 @@ impl<'lt, 'mir: 'lt> RealExprFold for ExpressionAutoDiff<'lt, 'mir, RealExpressi
     fn fold_binary_operator(
         &mut self,
         lhs: RealExpressionId,
-        op: Node<RealBinaryOperator>,
+        op: Spanned<RealBinaryOperator>,
         rhs: RealExpressionId,
     ) -> Derivative {
         self.fold_real_binary_op(lhs, op.contents, rhs)
@@ -295,7 +296,7 @@ impl<'lt, 'mir: 'lt> RealExprFold for ExpressionAutoDiff<'lt, 'mir, RealExpressi
 
     fn fold_builtin_function_call_1p(
         &mut self,
-        call: BuiltInFunctionCall1p,
+        call: SingleArgMath,
         arg: RealExpressionId,
     ) -> Derivative {
         RealBuiltInFunctionCall1pFold::fold_real_builtin_function_call_1p(self, call, arg)
@@ -303,7 +304,7 @@ impl<'lt, 'mir: 'lt> RealExprFold for ExpressionAutoDiff<'lt, 'mir, RealExpressi
 
     fn fold_builtin_function_call_2p(
         &mut self,
-        call: BuiltInFunctionCall2p,
+        call: DoubleArgMath,
         arg1: RealExpressionId,
         arg2: RealExpressionId,
     ) -> Derivative {
@@ -349,14 +350,19 @@ impl<'lt, 'mir: 'lt> RealExprFold for ExpressionAutoDiff<'lt, 'mir, RealExpressi
                 branch,
                 time_derivative_order + 1,
             ))),
-            Unknown::NodePotential(net) => match self.mir()[branch].contents.branch {
-                Branch::Nets(uppper, _) if uppper == net => Some(self.gen_constant(1.0)),
-                Branch::Nets(_, lower) if lower == net => Some(self.gen_constant(-1.0)),
-                _ => None,
-            },
+            Unknown::NodePotential(net) if self.mir()[branch].contents.hi == net => {
+                Some(self.gen_constant(1.0))
+            }
+            Unknown::NodePotential(net) if self.mir()[branch].contents.lo == net => {
+                Some(self.gen_constant(-1.0))
+            }
             Unknown::Flow(unknown) if unknown == branch => Some(self.gen_constant(1.0)),
             _ => None,
         }
+    }
+
+    fn fold_port_flow_access(&mut self, _port: PortId, _time_derivative_order: u8) -> Derivative {
+        None
     }
 
     fn fold_noise(
@@ -693,7 +699,7 @@ impl<'lt, 'mir: 'lt> IntegerExprFold for ExpressionAutoDiff<'lt, 'mir, IntegerEx
     fn fold_binary_operator(
         &mut self,
         lhs: IntegerExpressionId,
-        op: Node<IntegerBinaryOperator>,
+        op: Spanned<IntegerBinaryOperator>,
         rhs: IntegerExpressionId,
     ) -> Derivative {
         self.fold_integer_binary_op(lhs, op.contents, rhs)
@@ -702,7 +708,7 @@ impl<'lt, 'mir: 'lt> IntegerExprFold for ExpressionAutoDiff<'lt, 'mir, IntegerEx
     fn fold_integer_comparison(
         &mut self,
         _lhs: IntegerExpressionId,
-        _op: Node<ComparisonOperator>,
+        _op: Spanned<ComparisonOperator>,
         _rhs: IntegerExpressionId,
     ) -> Derivative {
         self.undefined_derivative(UndefinedDerivative::Comparison);
@@ -712,14 +718,18 @@ impl<'lt, 'mir: 'lt> IntegerExprFold for ExpressionAutoDiff<'lt, 'mir, IntegerEx
     fn fold_real_comparison(
         &mut self,
         _lhs: RealExpressionId,
-        _op: Node<ComparisonOperator>,
+        _op: Spanned<ComparisonOperator>,
         _rhs: RealExpressionId,
     ) -> Derivative {
         self.undefined_derivative(UndefinedDerivative::Comparison);
         None
     }
 
-    fn fold_unary_op(&mut self, op: Node<UnaryOperator>, arg: IntegerExpressionId) -> Derivative {
+    fn fold_unary_op(
+        &mut self,
+        op: Spanned<UnaryOperator>,
+        arg: IntegerExpressionId,
+    ) -> Derivative {
         match op.contents {
             UnaryOperator::ArithmeticNegate => {
                 let arg = self.fold_integer_expr(arg)?;
@@ -986,7 +996,7 @@ impl<'lt> AutoDiff<'lt> {
                 // Just a placeholder
                 self.mir
                     .real_expressions
-                    .push(Node::new(RealExpression::Literal(0.0), DUMMY_SP))
+                    .push(Spanned::new(RealExpression::Literal(0.0), DUMMY_SP))
             }
         }
     }

@@ -9,12 +9,12 @@ module Diode(inout electrical A,inout electrical C);
   parameter real zeta = 1;
   parameter real T_0 = 300 from [0:inf];
   real V_t,I_s;
-  integer i;
   (*extract*) real I_d;
   analog begin
         I_s = I_s0*($temperature/T_0)**zeta;
         V_t = `P_K*$temperature/`P_Q;
         I_d = I_s * exp( V(d) /(m*V_t) );
+        I(d) <+ ddx(I_d,V(A));
    end
 endmodule
 

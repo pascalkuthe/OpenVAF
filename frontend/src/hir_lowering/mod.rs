@@ -12,33 +12,33 @@
 //!
 //! This entails three main transformations
 //!
-//! * **Adding explicit type information** -
-//!    Code generation generally requires explicit type information.
-//!    This is represented in the MIR with distinct expression types for [real](crate::mir::RealExpression) and [integers](crate::mir::IntegerExpression).
-//!    Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules
-//!    Instead of being implicit type conversions are now distinct expressions that are added when required and legal
+//! ## Adding explicit type information
 //!
-//! * **folding constant expressions to values** -
-//!    Constant expressions can generally not be evaluated as they may depend on parameters.
-//!    However the constant expressions defining parameters may only depend on the default values of previously defined parameters.
-//!    The evaluation of these expressions is done using the [costant fold](crate::analysis::constant_fold) analysis.
+//! Code generation generally requires explicit type information.
+//! This is represented in the MIR with distinct expression types for [real](crate::mir::RealExpression) and [integers](crate::mir::IntegerExpression).
+//! Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules
+//! Instead of being implicit type conversions are now distinct expressions that are added when required and legal
 //!
-//! * **TypeChecking** -
-//!     VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.
-//!     During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
+//! ## TypeChecking
+//!
+//! VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.
+//! During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
 //!
 
 use crate::analysis::constant_fold::NoConstResolution;
 use crate::ast;
+use crate::data_structures::sync::{Lrc, RwLock};
 use crate::diagnostic::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use crate::hir::Hir;
 use crate::hir_lowering::error::Error::TypeMissmatch;
 use crate::hir_lowering::error::{Error, MockType};
 use crate::hir_lowering::expression_semantic::{ConstantSchematicAnalysis, SchematicAnalysis};
-use crate::ir::mir::{ExpressionId, Mir, Parameter, ParameterType};
-use crate::ir::{hir, IntegerExpressionId, Node, RealExpressionId};
-use crate::mir::Attribute;
-use crate::mir::{IntegerExpression, Module, Nature, Variable, VariableType};
+use crate::ir::ids::{IntegerExpressionId, RealExpressionId, StringExpressionId};
+use crate::ir::{hir, Spanned};
+use crate::mir::{
+    Attribute, ExpressionId, IntegerExpression, Mir, Module, Nature, Parameter, ParameterType,
+    Variable, VariableType,
+};
 use crate::SourceMap;
 use std::sync::Arc;
 
@@ -89,10 +89,12 @@ impl<'lt> HirToMirFold<'lt> {
             .map(|attr| {
                 let value = attr
                     .value
-                    .and_then(|val| ConstantSchematicAnalysis.fold_expression(&mut self, val));
+                    .iter()
+                    .filter_map(|&val| ConstantSchematicAnalysis.fold_expression(&mut self, val))
+                    .collect();
 
                 Attribute {
-                    name: attr.ident,
+                    ident: attr.ident,
                     value,
                 }
             })
@@ -104,9 +106,9 @@ impl<'lt> HirToMirFold<'lt> {
             .iter()
             .map(|module| {
                 module.map_with(|old| Module {
-                    name: old.ident,
-                    port_list: old.port_list.clone(),
-                    analog_cfg: self.fold_block_into_cfg(old.analog.clone()),
+                    ident: old.ident,
+                    port_list: old.ports.clone(),
+                    analog_cfg: Lrc::new(RwLock::new(self.fold_block_into_cfg(old.analog.clone()))),
                 })
             })
             .collect();
@@ -120,21 +122,21 @@ impl<'lt> HirToMirFold<'lt> {
 
     /// folds a variable by foldings its default value (to a typed representation)
     fn fold_variable(&mut self, variable: &ast::Variable) -> Variable {
-        let variable_type = match variable.variable_type {
-            ast::VariableType::REAL => {
+        let variable_type = match variable.var_type {
+            ast::VariableType::Real => {
                 let default_value = variable
-                    .default_value
+                    .default
                     .and_then(|expr| ConstantSchematicAnalysis.fold_real_expression(self, expr));
                 VariableType::Real(default_value)
             }
 
-            ast::VariableType::INTEGER => {
-                let default_value = if let Some(default_value) = variable.default_value {
+            ast::VariableType::Integer => {
+                let default_value = if let Some(default_value) = variable.default {
                     match ConstantSchematicAnalysis.fold_expression(self, default_value) {
                         Some(ExpressionId::Integer(expr)) => Some(expr),
 
                         Some(ExpressionId::Real(real_expr)) => {
-                            Some(self.mir.integer_expressions.push(Node {
+                            Some(self.mir.integer_expressions.push(Spanned {
                                 span: self.mir[real_expr].span,
                                 contents: IntegerExpression::RealCast(real_expr),
                             }))
@@ -156,97 +158,122 @@ impl<'lt> HirToMirFold<'lt> {
                 };
                 VariableType::Integer(default_value)
             }
+            ast::VariableType::String => {
+                let default_value = variable
+                    .default
+                    .and_then(|expr| ConstantSchematicAnalysis.fold_string_expression(self, expr));
+                VariableType::String(default_value)
+            }
         };
 
         Variable {
-            ident: variable.name,
+            ident: variable.ident,
             variable_type,
         }
     }
 
     /// folds a parameter by evaluating the default value and any range bounds
-    fn fold_parameter(&mut self, parameter: &ast::Parameter) -> Parameter {
-        let parameter_type = match parameter.parameter_type {
-            ast::ParameterType::String() => todo!("String parameters"),
+    fn fold_parameter(&mut self, parameter: &hir::Parameter) -> Parameter {
+        let parameter_type = match parameter.param_type {
+            hir::ParameterType::String(ref included, ref excluded) => {
+                let included = included
+                    .iter()
+                    .filter_map(|&expr| {
+                        ConstantSchematicAnalysis.fold_string_expression(self, expr)
+                    })
+                    .collect();
 
-            ast::ParameterType::Numerical {
-                parameter_type,
-                ref from_ranges,
-                ref excluded,
-            } => match parameter_type {
-                ast::VariableType::INTEGER => {
-                    let from_ranges = from_ranges
-                        .iter()
-                        .filter_map(|range| {
-                            let start = range.start.try_copy_with(|expr| {
-                                ConstantSchematicAnalysis.fold_integer_expression(self, expr)
-                            });
-                            let end = range.end.try_copy_with(|expr| {
-                                ConstantSchematicAnalysis.fold_integer_expression(self, expr)
-                            });
-                            Some(start?..end?)
-                        })
-                        .collect();
+                let excluded = excluded
+                    .iter()
+                    .filter_map(|&expr| {
+                        ConstantSchematicAnalysis.fold_string_expression(self, expr)
+                    })
+                    .collect();
 
-                    let excluded = excluded
-                        .iter()
-                        .filter_map(|exclude| {
-                            exclude.try_clone_with(|expr| {
-                                ConstantSchematicAnalysis.fold_integer_expression(self, expr)
-                            })
-                        })
-                        .collect();
+                #[allow(clippy::or_fun_call)]
+                let default_value = ConstantSchematicAnalysis
+                    .fold_string_expression(self, parameter.default)
+                    .unwrap_or(StringExpressionId::from_usize_unchecked(0));
 
-                    #[allow(clippy::or_fun_call)]
-                    let default_value = ConstantSchematicAnalysis
-                        .fold_integer_expression(self, parameter.default_value)
-                        .unwrap_or(IntegerExpressionId::from_usize_unchecked(0));
-
-                    ParameterType::Integer {
-                        from_ranges,
-                        excluded,
-                        default_value,
-                    }
+                ParameterType::String {
+                    included,
+                    excluded,
+                    default_value,
                 }
+            }
 
-                ast::VariableType::REAL => {
-                    let from_ranges = from_ranges
-                        .iter()
-                        .filter_map(|range| {
-                            let start = range.start.try_copy_with(|expr| {
-                                ConstantSchematicAnalysis.fold_real_expression(self, expr)
-                            });
-                            let end = range.end.try_copy_with(|expr| {
-                                ConstantSchematicAnalysis.fold_real_expression(self, expr)
-                            });
-                            Some(start?..end?)
+            hir::ParameterType::Integer(ref included, ref excluded) => {
+                let included = included
+                    .iter()
+                    .filter_map(|range| {
+                        let start = range.start.try_copy_with(|expr| {
+                            ConstantSchematicAnalysis.fold_integer_expression(self, expr)
+                        });
+                        let end = range.end.try_copy_with(|expr| {
+                            ConstantSchematicAnalysis.fold_integer_expression(self, expr)
+                        });
+                        Some(start?..end?)
+                    })
+                    .collect();
+
+                let excluded = excluded
+                    .iter()
+                    .filter_map(|exclude| {
+                        exclude.try_clone_with(|expr| {
+                            ConstantSchematicAnalysis.fold_integer_expression(self, expr)
                         })
-                        .collect();
+                    })
+                    .collect();
 
-                    let excluded = excluded
-                        .iter()
-                        .filter_map(|exclude| {
-                            exclude.try_clone_with(|expr| {
-                                ConstantSchematicAnalysis.fold_real_expression(self, expr)
-                            })
-                        })
-                        .collect();
+                #[allow(clippy::or_fun_call)]
+                let default_value = ConstantSchematicAnalysis
+                    .fold_integer_expression(self, parameter.default)
+                    .unwrap_or(IntegerExpressionId::from_usize_unchecked(0));
 
-                    #[allow(clippy::or_fun_call)]
-                    let default_value = ConstantSchematicAnalysis
-                        .fold_real_expression(self, parameter.default_value)
-                        .unwrap_or(RealExpressionId::from_usize_unchecked(0));
-                    ParameterType::Real {
-                        from_ranges,
-                        excluded,
-                        default_value,
-                    }
+                ParameterType::Integer {
+                    included,
+                    excluded,
+                    default_value,
                 }
-            },
+            }
+
+            hir::ParameterType::Real(ref included, ref excluded) => {
+                let included = included
+                    .iter()
+                    .filter_map(|range| {
+                        let start = range.start.try_copy_with(|expr| {
+                            ConstantSchematicAnalysis.fold_real_expression(self, expr)
+                        });
+                        let end = range.end.try_copy_with(|expr| {
+                            ConstantSchematicAnalysis.fold_real_expression(self, expr)
+                        });
+                        Some(start?..end?)
+                    })
+                    .collect();
+
+                let excluded = excluded
+                    .iter()
+                    .filter_map(|exclude| {
+                        exclude.try_clone_with(|expr| {
+                            ConstantSchematicAnalysis.fold_real_expression(self, expr)
+                        })
+                    })
+                    .collect();
+
+                #[allow(clippy::or_fun_call)]
+                let default_value = ConstantSchematicAnalysis
+                    .fold_real_expression(self, parameter.default)
+                    .unwrap_or(RealExpressionId::from_usize_unchecked(0));
+                ParameterType::Real {
+                    included,
+                    excluded,
+                    default_value,
+                }
+            }
         };
 
         Parameter {
-            ident: parameter.name,
+            ident: parameter.ident,
             parameter_type,
         }
     }
@@ -268,7 +295,7 @@ impl<'lt> HirToMirFold<'lt> {
             .unwrap();
 
         Nature {
-            name: nature.ident,
+            ident: nature.ident,
             abstol,
             units,
             access: nature.access,

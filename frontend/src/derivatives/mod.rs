@@ -8,11 +8,11 @@
  * *****************************************************************************************
 */
 
-use crate::ir::mir::{Variable, VariableType};
-use crate::ir::{AttributeNode, Attributes, BranchId, NetId, ParameterId, VariableId};
-
 use crate::derivatives::error::Error;
 use crate::diagnostic::MultiDiagnostic;
+use crate::ir::ids::{BranchId, NetId, ParameterId, VariableId};
+use crate::ir::mir::{Variable, VariableType};
+use crate::ir::{Attributes, Node};
 use crate::mir::Mir;
 use crate::symbol::Ident;
 use crate::HashMap;
@@ -31,7 +31,6 @@ pub(super) type DerivativeMap = HashMap<VariableId, PartialDerivativeMap>;
 pub enum Unknown {
     Parameter(ParameterId),
     NodePotential(NetId),
-    PortFlow(NetId),
     Flow(BranchId),
     Temperature,
     Time,
@@ -51,37 +50,13 @@ impl<'lt> AutoDiff<'lt> {
     }
 }
 
-// impl<'lt> HirToMirFold<'lt> {
-//     pub fn derivative_of_reference(
-//         &mut self,
-//         reference: VariableId,
-//         derive_by: Unknown,
-//     ) -> VariableId {
-//         let mir = &mut self.mir;
-//         *self
-//             .variable_to_differentiate
-//             .entry(reference)
-//             .or_insert_with(|| HashMap::with_capacity(2))
-//             .entry(derive_by)
-//             .or_insert_with(|| mir.declare_partial_derivative_variable(reference, derive_by))
-//     }
-//
-//     #[allow(dead_code)]
-//     pub fn partial_derivative_read_only(
-//         &mut self,
-//         expr: RealExpressionId,
-//         derive_by: Unknown,
-//     ) -> Option<RealExpressionId> {
-//         self.partial_derivative(expr, derive_by, &mut |fold, var| {
-//             fold.derivative_of_reference(var, derive_by)
-//         })
-//     }
-//
-// }
-
 impl Mir {
     pub fn derivatives(&self) -> &DerivativeMap {
         &self.derivatives
+    }
+
+    pub fn derivative_origins(&self) -> &HashMap<VariableId, VariableId> {
+        &self.derivative_origins
     }
 
     pub fn derivative_var(&mut self, var: VariableId, derive_by: Unknown) -> VariableId {
@@ -105,12 +80,12 @@ impl Mir {
     ) -> VariableId {
         let derive_by = match derive_by {
             Unknown::Parameter(parameter) => self[parameter].contents.ident.to_string(),
-            Unknown::NodePotential(net) => format!("pot({})", self[net].contents.name),
-            Unknown::Flow(branch) => format!("flow({})", self[branch].contents.name),
-            Unknown::PortFlow(net) => format!("flow(<{}>)", self[net].contents.name),
+            Unknown::NodePotential(net) => format!("potential({})", self[net].contents.ident),
+            Unknown::Flow(branch) => format!("flow({})", self[branch].contents.ident),
             Unknown::Temperature => "Temp".to_string(),
             Unknown::Time => "t".to_string(),
         };
+
         let name = Ident::from_str(
             format!(
                 "\u{2202}{}/\u{2202}{}",
@@ -118,7 +93,8 @@ impl Mir {
             )
             .as_str(),
         );
-        let res = self.variables.push(AttributeNode {
+
+        let res = self.variables.push(Node {
             attributes: Attributes::EMPTY,
             span: self[variable].span,
             contents: Variable {
@@ -126,7 +102,17 @@ impl Mir {
                 variable_type: VariableType::Real(None),
             },
         });
+
         debug_assert!(&self[self[res].attributes.as_range()].is_empty());
+
+        let origin = if let Some(&origin) = self.derivative_origins.get(&variable) {
+            origin
+        } else {
+            variable
+        };
+
+        self.derivative_origins.insert(res, origin);
+
         res
     }
 }

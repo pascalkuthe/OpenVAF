@@ -13,13 +13,13 @@
 
 use crate::cfg::ControlFlowGraph;
 use crate::ir::cfg::BasicBlockId;
-use crate::ir::StatementId;
+use crate::ir::ids::StatementId;
 use index_vec::{index_vec, IndexVec};
 use once_cell::unsync::OnceCell;
 
 pub type StatementOwners = IndexVec<StatementId, Option<BasicBlockId>>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct StatementOwnerCache {
     cache: OnceCell<StatementOwners>,
     pub(crate) stmt_count: usize,

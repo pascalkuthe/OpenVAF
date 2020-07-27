@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use crate::parser::tokenstream::Token as ParserToken;
+use crate::parser::Token as ParserToken;
 use crate::sourcemap::Span;
 use crate::symbol::Symbol;
 use index_vec::{define_index_type, IndexVec};

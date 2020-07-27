@@ -9,7 +9,7 @@
  */
 
 use crate::diagnostic::UserResult;
-use crate::parser::tokenstream::TokenStream;
+use crate::parser::TokenStream;
 use crate::preprocessor::{preprocess_user_facing, std_path};
 use crate::sourcemap::FileId;
 use crate::SourceMap;

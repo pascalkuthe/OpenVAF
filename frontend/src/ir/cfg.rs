@@ -13,8 +13,8 @@ use crate::ir::cfg::statement_owner::StatementOwnerCache;
 use crate::ir::cfg::transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
 };
+use crate::ir::ids::{IntegerExpressionId, StatementId};
 use crate::ir::mir::Mir;
-use crate::ir::{IntegerExpressionId, StatementId};
 use core::mem::swap;
 use core::mem::MaybeUninit;
 use index_vec::IndexVec;
@@ -90,7 +90,7 @@ impl ExactSizeIterator for Successors {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ControlFlowGraph {
     pub blocks: IndexVec<BasicBlockId, BasicBlock>,
     pub(crate) predecessor_cache: PredecessorCache,
@@ -104,7 +104,7 @@ impl ControlFlowGraph {
         Self {
             blocks,
             predecessor_cache: PredecessorCache::new(),
-            statement_owner_cache: StatementOwnerCache::new(mir.statements.len()),
+            statement_owner_cache: StatementOwnerCache::new(mir.statements().len()),
         }
     }
 

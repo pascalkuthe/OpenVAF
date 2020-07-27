@@ -10,13 +10,15 @@
 
 use crate::ast::UnaryOperator;
 use crate::hir::DisciplineAccess;
-use crate::ir::mir::{ExpressionId, IntegerExpression, Mir};
-use crate::ir::{
-    BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, NetId, Node,
-    NoiseSource, ParameterId, PortId, RealExpressionId, StringExpressionId, VariableId,
+use crate::ir::ids::{
+    BranchId, IntegerExpressionId, NetId, ParameterId, PortId, RealExpressionId, StatementId,
+    StringExpressionId, VariableId,
 };
+use crate::ir::mir::{ExpressionId, IntegerExpression, Mir};
+use crate::ir::{DoubleArgMath, NoiseSource, SingleArgMath, Spanned};
 use crate::mir::{
-    ComparisonOperator, IntegerBinaryOperator, RealBinaryOperator, RealExpression, StringExpression,
+    ComparisonOperator, IntegerBinaryOperator, RealBinaryOperator, RealExpression, Statement,
+    StringExpression,
 };
 use crate::sourcemap::Span;
 use crate::StringLiteral;
@@ -92,6 +94,7 @@ pub fn walk_real_expression<V: ExpressionVisit>(visit: &mut V, expr: RealExpress
         RealExpression::BranchAccess(discipline_access, branch, derivative_order) => {
             visit.visit_branch_access(discipline_access, branch, derivative_order)
         }
+        RealExpression::PortFlowAccess(port, order) => visit.visit_port_flow_access(port, order),
         RealExpression::Noise(noise_src, name) => visit.visit_noise(noise_src, name),
         RealExpression::BuiltInFunctionCall1p(call, arg) => {
             visit.visit_builtin_function_call_1p(call, arg)
@@ -116,6 +119,14 @@ pub trait ExpressionVisit: Sized {
         walk_expr(self, expr)
     }
 
+    fn visit_stmt(&mut self, stmt: StatementId) {
+        match self.mir()[stmt].contents {
+            Statement::Contribute(_, _, expr) => self.visit_real_expr(expr),
+            Statement::Assignment(_, expr) => self.visit_expr(expr),
+            Statement::StopTask(_, _) => (),
+        }
+    }
+
     #[inline]
     fn visit_string_expr(&mut self, expr: StringExpressionId) {
         walk_string_expression(self, expr)
@@ -136,7 +147,7 @@ pub trait ExpressionVisit: Sized {
     fn visit_int_binary_operator(
         &mut self,
         lhs: IntegerExpressionId,
-        _op: Node<IntegerBinaryOperator>,
+        _op: Spanned<IntegerBinaryOperator>,
         rhs: IntegerExpressionId,
     ) {
         self.visit_integer_expr(lhs);
@@ -146,7 +157,7 @@ pub trait ExpressionVisit: Sized {
     fn visit_real_binary_operator(
         &mut self,
         lhs: RealExpressionId,
-        _op: Node<RealBinaryOperator>,
+        _op: Spanned<RealBinaryOperator>,
         rhs: RealExpressionId,
     ) {
         self.visit_real_expr(lhs);
@@ -157,14 +168,14 @@ pub trait ExpressionVisit: Sized {
         self.visit_real_expr(arg)
     }
 
-    fn visit_int_unary_op(&mut self, _op: Node<UnaryOperator>, arg: IntegerExpressionId) {
+    fn visit_int_unary_op(&mut self, _op: Spanned<UnaryOperator>, arg: IntegerExpressionId) {
         self.visit_integer_expr(arg)
     }
 
     fn visit_integer_comparison(
         &mut self,
         lhs: IntegerExpressionId,
-        _op: Node<ComparisonOperator>,
+        _op: Spanned<ComparisonOperator>,
         rhs: IntegerExpressionId,
     ) {
         self.visit_integer_expr(lhs);
@@ -174,7 +185,7 @@ pub trait ExpressionVisit: Sized {
     fn visit_real_comparison(
         &mut self,
         lhs: RealExpressionId,
-        _op: Node<ComparisonOperator>,
+        _op: Spanned<ComparisonOperator>,
         rhs: RealExpressionId,
     ) {
         self.visit_real_expr(lhs);
@@ -269,17 +280,13 @@ pub trait ExpressionVisit: Sized {
         }
     }
 
-    fn visit_builtin_function_call_1p(
-        &mut self,
-        _call: BuiltInFunctionCall1p,
-        arg: RealExpressionId,
-    ) {
+    fn visit_builtin_function_call_1p(&mut self, _call: SingleArgMath, arg: RealExpressionId) {
         self.visit_real_expr(arg)
     }
 
     fn visit_builtin_function_call_2p(
         &mut self,
-        _call: BuiltInFunctionCall2p,
+        _call: DoubleArgMath,
         arg1: RealExpressionId,
         arg2: RealExpressionId,
     ) {
@@ -322,6 +329,9 @@ pub trait ExpressionVisit: Sized {
         _time_derivative_order: u8,
     ) {
     }
+
+    #[inline(always)]
+    fn visit_port_flow_access(&mut self, _port: PortId, _time_derivative_order: u8) {}
 
     #[inline(always)]
     fn visit_port_connected(&mut self, _port: PortId) {}

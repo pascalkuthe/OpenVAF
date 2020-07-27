@@ -12,13 +12,19 @@ use crate::ast::Ast;
 use crate::ast::HierarchicalId;
 use crate::ast_lowering::error::Error::{NotAScope, NotAllowedInFunction, NotFound, NotFoundIn};
 use crate::ast_lowering::error::NotAllowedInFunction::NonLocalAccess;
-use crate::ast_lowering::error::Result;
+use crate::ast_lowering::error::{MockSymbolDeclaration, Result};
+use crate::ir::ids::{
+    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, ParameterId,
+    PortBranchId, PortId, VariableId,
+};
 #[doc(inline)]
 pub use crate::resolve;
 #[doc(inline)]
 pub use crate::resolve_hierarchical;
 use crate::symbol::Ident;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
+use crate::HashMap;
+use index_vec::IndexVec;
 
 /// A macro that hides the boiler plate required for name resolution using the resolver struct
 /// It is defined in the [`name_resolution`](crate::ast_lowering::name_resolution) module but due to limitations of rustdoc can't be shown there in the documentation
@@ -26,7 +32,7 @@ use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 ///
 /// # Arguments
 ///
-/// * `$self` - reference to an ast fold (implementation of the [`Fold`](crate::ast_lowering::ast_to_hir_fold::Fold) trait)
+/// * `$self` - reference to an ast fold (implementation of the [`Fold`](crate::ast_lowering::Fold) trait)
 ///
 /// * `$name` - The Identifier (type [`Ident`](crate::symbol::Ident)) that should be resolved
 ///
@@ -51,15 +57,10 @@ use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 /// # use open_vaf::hir::Hir;
 /// # use open_vaf::ast_lowering::name_resolution::Resolver;
 /// # use open_vaf::symbol::Ident;
-/// # let ast = Ast::default();
+/// # let mut ast = Ast::default();
 /// # let ident = Ident::from_str("test");
 ///
-/// # let mut fold = Fold{
-/// #    ast: &ast,
-/// #    errors: MultiDiagnostic(Vec::new()),
-/// #    hir: Hir::default(),
-/// #    resolver: Resolver::new(&ast)
-/// # };
+/// # let mut fold = Fold::new(&mut ast);
 ///
 /// resolve!(fold; ident as
 ///            Nature(id) => {
@@ -76,11 +77,12 @@ use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 #[doc(inline)]
 #[macro_export]
 macro_rules! resolve {
-    ($fold:expr; $name:ident as $($declaration:ident($id:ident) => $block:block),+) => {
+    ($fold:expr; $name:ident as $($declaration:ident($id:ident) => $block:expr),+) => {
         match $fold.resolver.resolve(&$name) {
-            $(Ok($crate::symbol_table::SymbolDeclaration::$declaration($id)) => $block),+
+            $( #[allow(unreachable_code)] Ok($crate::ast_lowering::name_resolution::SymbolReference::$declaration($id)) =>  {Some($block)}),+
             Err(error) => {
                 $fold.error(error);
+                None
             }
             Ok(found) => {
                 use $crate::ast_lowering::error::Error::DeclarationTypeMismatch;
@@ -92,6 +94,7 @@ macro_rules! resolve {
                         expected:  format_list(vec![$(MockSymbolDeclaration::$declaration),+]),
                         span: $name.span,
                     });
+                None
             }
         }
     };
@@ -103,7 +106,7 @@ macro_rules! resolve {
 ///
 /// # Arguments
 ///
-/// * `$fold` - identifer refering to an [`Fold`](crate::ast_lowering::ast_to_hir_fold::Fold) instance
+/// * `$fold` - identifer refering to an [`Fold`](crate::ast_lowering::Fold) instance
 ///
 /// * `$name` - The Identifier (type [`Ident`](crate::symbol::Ident)) that should be resolved
 ///
@@ -129,16 +132,11 @@ macro_rules! resolve {
 /// # use open_vaf::ast_lowering::name_resolution::Resolver;
 /// # use open_vaf::symbol::Ident;
 /// # use open_vaf::ir::ast::HierarchicalId;
-/// # let ast = Ast::default();
+/// # let mut ast = Ast::default();
 /// # let hid = vec![Ident::from_str("test")].into();
 /// # let ident = &hid;
 ///
-/// # let mut fold = Fold{
-/// #    ast: &ast,
-/// #    errors: MultiDiagnostic(Vec::new()),
-/// #    hir: Hir::default(),
-/// #    resolver: Resolver::new(&ast)
-/// # };
+/// # let mut fold = Fold::new(&mut ast);
 ///
 /// resolve_hierarchical!(fold; ident as
 ///            Net(id) => {
@@ -154,11 +152,13 @@ macro_rules! resolve {
 
 #[macro_export]
 macro_rules! resolve_hierarchical {
-    ($fold:expr; $name:ident as  $($declaration:ident($id:ident) => $block:block),+) => {
+
+    ($fold:expr; $name:ident as $($declaration:ident($id:ident) => $block:expr),+ ) => {
         match $fold.resolver.resolve_hierarchical($name) {
-            $(Ok($crate::symbol_table::SymbolDeclaration::$declaration($id)) => $block),+
+            $(Ok($crate::ast_lowering::name_resolution::SymbolReference::$declaration($id)) => {Some($block)}),+
             Err(error) => {
                 $fold.error(error);
+                None
             }
             Ok(found) => {
                 use $crate::ast_lowering::error::Error::DeclarationTypeMismatch;
@@ -170,14 +170,91 @@ macro_rules! resolve_hierarchical {
                         expected:  format_list(vec![$(MockSymbolDeclaration::$declaration),+]),
                         span: $name.span(),
                     });
+                None
             }
         }
     };
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum SymbolReference {
+    Module(ModuleId),
+    Block(BlockId),
+    Variable(VariableId),
+    Branch(BranchId),
+    PortBranch(PortBranchId),
+    Net(NetId),
+    Port(PortId),
+    Function(FunctionId),
+    Discipline(DisciplineId),
+    Nature(NatureId),
+    Parameter(ParameterId),
+    NatureAccess(NatureAccessId),
+}
+
+id_type!(NatureAccessId(u16));
+
+impl From<SymbolDeclaration> for SymbolReference {
+    fn from(declaration: SymbolDeclaration) -> Self {
+        match declaration {
+            SymbolDeclaration::Discipline(id) => Self::Discipline(id),
+            SymbolDeclaration::Module(id) => Self::Module(id),
+            SymbolDeclaration::Block(id) => Self::Block(id),
+            SymbolDeclaration::Variable(id) => Self::Variable(id),
+            SymbolDeclaration::Branch(id) => Self::Branch(id),
+            SymbolDeclaration::PortBranch(id) => Self::PortBranch(id),
+            SymbolDeclaration::Net(id) => Self::Net(id),
+            SymbolDeclaration::Port(id) => Self::Port(id),
+            SymbolDeclaration::Function(id) => Self::Function(id),
+            SymbolDeclaration::Nature(id) => Self::Nature(id),
+            SymbolDeclaration::Parameter(id) => Self::Parameter(id),
+        }
+    }
+}
+
+impl SymbolReference {
+    #[must_use]
+    pub fn mock(self) -> MockSymbolDeclaration {
+        match self {
+            Self::Module(_) => MockSymbolDeclaration::Module,
+            Self::Block(_) => MockSymbolDeclaration::Block,
+            Self::Variable(_) => MockSymbolDeclaration::Variable,
+            Self::Net(_) => MockSymbolDeclaration::Net,
+            Self::Branch(_) => MockSymbolDeclaration::Branch,
+            Self::PortBranch(_) => MockSymbolDeclaration::PortBranch,
+            Self::Port(_) => MockSymbolDeclaration::Port,
+            Self::Function(_) => MockSymbolDeclaration::Function,
+            Self::Discipline(_) => MockSymbolDeclaration::Discipline,
+            Self::Nature(_) => MockSymbolDeclaration::Nature,
+            Self::Parameter(_) => MockSymbolDeclaration::Parameter,
+            Self::NatureAccess(_) => MockSymbolDeclaration::Nature,
+        }
+    }
+
+    #[must_use]
+    pub fn ident(self, resolver: &Resolver) -> Ident {
+        match self {
+            Self::Module(id) => resolver.ast[id].contents.ident,
+            Self::Block(id) => resolver.ast[id].scope.as_ref().unwrap().ident,
+            Self::Variable(id) => resolver.ast[id].contents.ident,
+            Self::Net(id) => resolver.ast[id].contents.ident,
+            Self::Branch(id) => resolver.ast[id].contents.ident,
+            Self::PortBranch(id) => resolver.ast[id].contents.ident,
+            Self::Port(id) => resolver.ast[resolver.ast[id].net].contents.ident,
+            Self::Function(id) => resolver.ast[id].contents.ident,
+            Self::Discipline(id) => resolver.ast[id].contents.ident,
+            Self::Nature(id) => resolver.ast[id].contents.ident,
+            Self::Parameter(id) => resolver.ast[id].contents.ident,
+            Self::NatureAccess(id) => resolver.get_nature_access_ident(id),
+        }
+    }
+}
+
 /// Allows name resolution with the [`resolve`](crate::ast_lowering::name_resolution::Resolver::resolve)/[`resolve_hierarchical`](crate::ast_lowering::name_resolution::Resolver::resolve_hierarchical) methods
 #[derive(Debug, Clone)]
 pub struct Resolver<'lt> {
+    nature_access_symbol_table: HashMap<Ident, NatureAccessId>,
+    natures_access: IndexVec<NatureAccessId, (Ident, Vec<NatureId>)>,
     pub scope_stack: Vec<&'lt SymbolTable>,
     ast: &'lt Ast,
     inside_function: bool,
@@ -187,10 +264,33 @@ impl<'lt> Resolver<'lt> {
     #[must_use]
     pub fn new(ast: &'lt Ast) -> Self {
         Self {
+            natures_access: IndexVec::with_capacity(ast.natures.len()),
+            nature_access_symbol_table: HashMap::with_capacity(ast.natures.len()),
             scope_stack: Vec::with_capacity(8),
             ast,
             inside_function: false,
         }
+    }
+
+    pub fn insert_nature_access(&mut self, ident: Ident, nature: NatureId) {
+        let natures_access = &mut self.natures_access;
+        let id = *self
+            .nature_access_symbol_table
+            .entry(ident)
+            .or_insert_with(|| natures_access.push((ident, Vec::with_capacity(2))));
+        debug_assert!(
+            !natures_access[id].1.contains(&nature),
+            "Same access to same nature declared twice!"
+        );
+        natures_access[id].1.push(nature);
+    }
+
+    pub fn get_nature_access(&self, id: NatureAccessId) -> &[NatureId] {
+        &self.natures_access[id].1
+    }
+
+    pub fn get_nature_access_ident(&self, id: NatureAccessId) -> Ident {
+        self.natures_access[id].0
     }
 
     pub fn enter_function(&mut self, function_symbol_table: &'lt SymbolTable) {
@@ -209,21 +309,25 @@ impl<'lt> Resolver<'lt> {
     ///
     /// This functions first tries to find `ident in the current scope, then in the previous scope and so on
     /// If it can't find ident in the global (first) Scope it returns an NotFound Error
-    pub fn resolve(&self, ident: &Ident) -> Result<SymbolDeclaration> {
+    pub fn resolve(&self, ident: &Ident) -> Result<SymbolReference> {
         let mut depth = 0;
         for scope in self.scope_stack.iter().rev() {
-            if let Some(res) = scope.get(&ident.name) {
+            if let Some(&res) = scope.get(&ident.name) {
                 if self.inside_function
                     && depth > 0
                     && !matches!(res,SymbolDeclaration::Parameter(_)|SymbolDeclaration::Module(_)|SymbolDeclaration::Function(_))
                 {
                     return Err(NotAllowedInFunction(NonLocalAccess, ident.span));
                 }
-                return Ok(*res);
+                return Ok(res.into());
             }
             depth += 1;
         }
-        Err(NotFound(*ident))
+        if let Some(&access) = self.nature_access_symbol_table.get(ident) {
+            Ok(SymbolReference::NatureAccess(access))
+        } else {
+            Err(NotFound(*ident))
+        }
     }
 
     /// Tries to resolve the Hierarchical Identifer `hierarchical_ident`
@@ -233,25 +337,24 @@ impl<'lt> Resolver<'lt> {
     pub fn resolve_hierarchical(
         &self,
         hierarchical_ident: &HierarchicalId,
-    ) -> Result<SymbolDeclaration> {
+    ) -> Result<SymbolReference> {
         let mut identifiers = hierarchical_ident.names.iter();
 
-        let (mut current_span, mut current_declaration) = {
+        let (mut current_span, mut current_ref) = {
             let first_ident = identifiers.next().unwrap();
             (first_ident.span, self.resolve(first_ident)?)
         };
 
         for ident in identifiers {
-            let symbol_table = match current_declaration {
-                SymbolDeclaration::Module(module) => &self.ast[module].contents.symbol_table,
+            let symbol_table = match current_ref {
+                SymbolReference::Module(module) => &self.ast[module].contents.symbol_table,
 
-                SymbolDeclaration::Block(_) if self.inside_function => {
+                SymbolReference::Block(_) if self.inside_function => {
                     return Err(NotAllowedInFunction(NonLocalAccess, current_span))
                 }
 
-                SymbolDeclaration::Block(block_id) => {
+                SymbolReference::Block(block_id) => {
                     &self.ast[block_id]
-                        .contents
                         .scope
                         .as_ref()
                         .expect("Blocks always have a scope when they are named")
@@ -260,15 +363,15 @@ impl<'lt> Resolver<'lt> {
 
                 item_without_scope => {
                     return Err(NotAScope {
-                        declaration: item_without_scope.ident(self.ast).span,
-                        declaration_name: item_without_scope.ident(self.ast).name,
+                        declaration: item_without_scope.ident(self).span,
+                        declaration_name: item_without_scope.ident(self).name,
                         span: current_span,
                     })
                 }
             };
 
-            if let Some(found) = symbol_table.get(&ident.name) {
-                current_declaration = *found;
+            if let Some(&found) = symbol_table.get(&ident.name) {
+                current_ref = found.into();
                 current_span = found.span(self.ast);
                 if self.inside_function
                     && !matches!(found,SymbolDeclaration::Parameter(_)|SymbolDeclaration::Module(_))
@@ -276,11 +379,11 @@ impl<'lt> Resolver<'lt> {
                     return Err(NotAllowedInFunction(NonLocalAccess, ident.span));
                 }
             } else {
-                return Err(NotFoundIn(*ident, current_declaration.ident(self.ast).name));
+                return Err(NotFoundIn(*ident, current_ref.ident(self).name));
             }
         }
 
-        Ok(current_declaration)
+        Ok(current_ref)
     }
     /// Enter a new Scope
     ///

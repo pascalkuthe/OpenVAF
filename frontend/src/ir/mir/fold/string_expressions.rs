@@ -8,8 +8,8 @@
  * *****************************************************************************************
  */
 
+use crate::ir::ids::{IntegerExpressionId, ParameterId, StringExpressionId, VariableId};
 use crate::ir::mir::StringExpression;
-use crate::ir::{IntegerExpressionId, ParameterId, StringExpressionId, VariableId};
 use crate::mir::Mir;
 use crate::StringLiteral;
 

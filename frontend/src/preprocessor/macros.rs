@@ -11,7 +11,7 @@
 use super::lexer::Token as LexicalToken;
 use crate::lints::Linter;
 use crate::literals::unesacpe_string;
-use crate::parser::tokenstream::Token as ParserToken;
+use crate::parser::Token as ParserToken;
 use crate::preprocessor::error::{Error, Result};
 use crate::preprocessor::lints::MacroCutOffAtFileEnd;
 use crate::preprocessor::tokenstream::Token::FileInclude;

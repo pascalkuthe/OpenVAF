@@ -42,8 +42,8 @@ use bumpalo::Bump;
 
 use crate::sourcemap::span::DUMMY_SP;
 use crate::sourcemap::Span;
-use bitflags::_core::fmt::Formatter;
-use bitflags::_core::ptr::NonNull;
+use core::fmt::Formatter;
+use core::ptr::NonNull;
 use index_vec::{define_index_type, IndexVec};
 use open_vaf_macros::symbols;
 use std::fmt::{Debug, Display};
@@ -63,7 +63,7 @@ impl Ident {
         Self { name, span }
     }
 
-    pub const DUMMY_IDNT: Self = Self {
+    pub const DUMMY: Self = Self {
         name: keywords::EMPTY,
         span: DUMMY_SP,
     };
@@ -210,6 +210,7 @@ impl Interner {
 
 symbols! {
     EMPTY: " ",
+    OpenVAF,
     temperature: "$temperature",
     flow,
     potential,

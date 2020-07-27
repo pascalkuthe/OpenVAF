@@ -14,8 +14,8 @@ use crate::analysis::data_flow::framework::{
 use crate::cfg::ControlFlowGraph;
 use crate::cfg::{BasicBlockId, Terminator};
 use crate::data_structures::{BitSet, SparseBitSetMatrix};
+use crate::ir::ids::{StatementId, VariableId};
 use crate::ir::mir::visit::ExpressionVisit;
-use crate::ir::{StatementId, VariableId};
 use crate::mir::Mir;
 use crate::mir::Statement;
 use std::mem::take;
@@ -29,7 +29,7 @@ pub struct UseDefGraph {
 
 impl UseDefGraph {
     pub fn new(mir: &Mir, cfg: &ControlFlowGraph) -> Self {
-        let statement_count = mir.statements.len_idx();
+        let statement_count = mir.statements().len_idx();
         let var_count = mir.variables.len_idx();
 
         Self {
@@ -57,11 +57,11 @@ impl<'lt> ReachingDefinitionsAnalysis<'lt> {
     pub fn new(mir: &'lt Mir, cfg: &ControlFlowGraph) -> Self {
         let mut graph = UseDefGraph::new(mir, cfg);
 
-        for (id, stmt) in mir.statements.iter_enumerated() {
-            match stmt {
-                Statement::Assignment(_, var, _) => graph.assignments.insert(*var, id),
+        for (id, stmt) in mir.statements().iter_enumerated() {
+            match stmt.contents {
+                Statement::Assignment(var, _) => graph.assignments.insert(var, id),
 
-                Statement::Contribute(_, _, _, _) | Statement::StopTask(_, _) => (),
+                Statement::Contribute(_, _, _) | Statement::StopTask(_, _) => (),
             }
         }
 
@@ -81,8 +81,8 @@ impl<'lt> ReachingDefinitionsAnalysis<'lt> {
             let mut tmp = take(&mut dfg.out_sets[id]);
 
             for stmt in bb.statements.iter().copied() {
-                match self.mir[stmt] {
-                    Statement::Assignment(_, var, expr) => {
+                match self.mir[stmt].contents {
+                    Statement::Assignment(var, expr) => {
                         tmp.clear();
 
                         UseDefBuilder {
@@ -100,7 +100,7 @@ impl<'lt> ReachingDefinitionsAnalysis<'lt> {
                         reachable.insert(stmt);
                     }
 
-                    Statement::Contribute(_, _, _, val) => {
+                    Statement::Contribute(_, _, val) => {
                         tmp.clear();
                         UseDefBuilder {
                             mir: self.mir,
@@ -148,14 +148,14 @@ impl<'lt> GenKillAnalysis<'_> for ReachingDefinitionsAnalysis<'lt> {
         cfg: &ControlFlowGraph,
     ) {
         for stmt in cfg[basic_bock].statements.iter().copied() {
-            match self.mir[stmt] {
-                Statement::Assignment(_, var, _) => {
+            match self.mir[stmt].contents {
+                Statement::Assignment(var, _) => {
                     gen_kill_set.kill_all(&self.graph.assignments[var]);
                     gen_kill_set.gen(stmt);
                 }
 
                 // branches are currently not tracked
-                Statement::Contribute(_, _, _, _) | Statement::StopTask(_, _) => {}
+                Statement::Contribute(_, _, _) | Statement::StopTask(_, _) => {}
             }
         }
     }

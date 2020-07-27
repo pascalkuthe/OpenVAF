@@ -9,11 +9,12 @@
  */
 
 use crate::ir::hir::DisciplineAccess;
-use crate::ir::mir::RealBinaryOperator;
-use crate::ir::{
-    BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, Node, NoiseSource,
-    ParameterId, RealExpressionId, StringExpressionId, VariableId,
+use crate::ir::ids::{
+    BranchId, IntegerExpressionId, ParameterId, PortId, RealExpressionId, StringExpressionId,
+    VariableId,
 };
+use crate::ir::mir::RealBinaryOperator;
+use crate::ir::{DoubleArgMath, NoiseSource, SingleArgMath, Spanned};
 use crate::mir::{Mir, RealExpression};
 use crate::sourcemap::Span;
 use crate::StringLiteral;
@@ -32,6 +33,10 @@ pub fn walk_real_expression<V: RealExprFold>(fold: &mut V, expr: RealExpressionI
         RealExpression::BranchAccess(discipline_access, branch, derivative_order) => {
             fold.fold_branch_access(discipline_access, branch, derivative_order)
         }
+        RealExpression::PortFlowAccess(port, derivative_order) => {
+            fold.fold_port_flow_access(port, derivative_order)
+        }
+
         RealExpression::Noise(noise_src, name) => fold.fold_noise(noise_src, name),
         RealExpression::BuiltInFunctionCall1p(call, arg) => {
             fold.fold_builtin_function_call_1p(call, arg)
@@ -57,49 +62,63 @@ pub trait RealExprFold: Sized {
     }
 
     fn fold_literal(&mut self, val: f64) -> Self::T;
+
     fn fold_binary_operator(
         &mut self,
         lhs: RealExpressionId,
-        op: Node<RealBinaryOperator>,
+        op: Spanned<RealBinaryOperator>,
         rhs: RealExpressionId,
     ) -> Self::T;
+
     fn fold_negate(&mut self, op: Span, arg: RealExpressionId) -> Self::T;
+
     fn fold_condition(
         &mut self,
         cond: IntegerExpressionId,
         true_expr: RealExpressionId,
         false_expr: RealExpressionId,
     ) -> Self::T;
+
     fn fold_variable_reference(&mut self, var: VariableId) -> Self::T;
+
     fn fold_parameter_reference(&mut self, param: ParameterId) -> Self::T;
+
     fn fold_branch_access(
         &mut self,
         discipline_accesss: DisciplineAccess,
         branch: BranchId,
         time_derivative_order: u8,
     ) -> Self::T;
+
+    fn fold_port_flow_access(&mut self, port: PortId, time_derivative_order: u8) -> Self::T;
+
     fn fold_noise(
         &mut self,
         noise_src: NoiseSource<RealExpressionId, ()>,
         name: Option<StringLiteral>,
     ) -> Self::T;
+
     fn fold_builtin_function_call_1p(
         &mut self,
-        call: BuiltInFunctionCall1p,
+        call: SingleArgMath,
         arg: RealExpressionId,
     ) -> Self::T;
+
     fn fold_builtin_function_call_2p(
         &mut self,
-        call: BuiltInFunctionCall2p,
+        call: DoubleArgMath,
         arg1: RealExpressionId,
         arg2: RealExpressionId,
     ) -> Self::T;
+
     fn fold_temperature(&mut self) -> Self::T;
+
     fn fold_sim_param(
         &mut self,
         name: StringExpressionId,
         default: Option<RealExpressionId>,
     ) -> Self::T;
+
     fn fold_integer_conversion(&mut self, expr: IntegerExpressionId) -> Self::T;
 }
 
@@ -143,29 +162,29 @@ pub trait RealBinaryOperatorFold: Sized {
 #[inline]
 pub fn walk_real_builtin_function_call_1p<V: RealBuiltInFunctionCall1pFold>(
     fold: &mut V,
-    call: BuiltInFunctionCall1p,
+    call: SingleArgMath,
     arg: RealExpressionId,
 ) -> V::T {
     match call {
-        BuiltInFunctionCall1p::Sqrt => fold.fold_sqrt(arg),
-        BuiltInFunctionCall1p::Exp(_) => fold.fold_exp(arg),
-        BuiltInFunctionCall1p::Ln => fold.fold_ln(arg),
-        BuiltInFunctionCall1p::Log => fold.fold_log(arg),
-        BuiltInFunctionCall1p::Abs => fold.fold_abs(arg),
-        BuiltInFunctionCall1p::Floor => fold.fold_floor(arg),
-        BuiltInFunctionCall1p::Ceil => fold.fold_ceil(arg),
-        BuiltInFunctionCall1p::Sin => fold.fold_sin(arg),
-        BuiltInFunctionCall1p::Cos => fold.fold_cos(arg),
-        BuiltInFunctionCall1p::Tan => fold.fold_tan(arg),
-        BuiltInFunctionCall1p::ArcSin => fold.fold_arcsin(arg),
-        BuiltInFunctionCall1p::ArcCos => fold.fold_arccos(arg),
-        BuiltInFunctionCall1p::ArcTan => fold.fold_arctan(arg),
-        BuiltInFunctionCall1p::SinH => fold.fold_sinh(arg),
-        BuiltInFunctionCall1p::CosH => fold.fold_cosh(arg),
-        BuiltInFunctionCall1p::TanH => fold.fold_tanh(arg),
-        BuiltInFunctionCall1p::ArcSinH => fold.fold_arcsinh(arg),
-        BuiltInFunctionCall1p::ArcCosH => fold.fold_arccosh(arg),
-        BuiltInFunctionCall1p::ArcTanH => fold.fold_arctanh(arg),
+        SingleArgMath::Sqrt => fold.fold_sqrt(arg),
+        SingleArgMath::Exp(_) => fold.fold_exp(arg),
+        SingleArgMath::Ln => fold.fold_ln(arg),
+        SingleArgMath::Log => fold.fold_log(arg),
+        SingleArgMath::Abs => fold.fold_abs(arg),
+        SingleArgMath::Floor => fold.fold_floor(arg),
+        SingleArgMath::Ceil => fold.fold_ceil(arg),
+        SingleArgMath::Sin => fold.fold_sin(arg),
+        SingleArgMath::Cos => fold.fold_cos(arg),
+        SingleArgMath::Tan => fold.fold_tan(arg),
+        SingleArgMath::ArcSin => fold.fold_arcsin(arg),
+        SingleArgMath::ArcCos => fold.fold_arccos(arg),
+        SingleArgMath::ArcTan => fold.fold_arctan(arg),
+        SingleArgMath::SinH => fold.fold_sinh(arg),
+        SingleArgMath::CosH => fold.fold_cosh(arg),
+        SingleArgMath::TanH => fold.fold_tanh(arg),
+        SingleArgMath::ArcSinH => fold.fold_arcsinh(arg),
+        SingleArgMath::ArcCosH => fold.fold_arccosh(arg),
+        SingleArgMath::ArcTanH => fold.fold_arctanh(arg),
     }
 }
 
@@ -175,7 +194,7 @@ pub trait RealBuiltInFunctionCall1pFold: Sized {
     #[inline]
     fn fold_real_builtin_function_call_1p(
         &mut self,
-        call: BuiltInFunctionCall1p,
+        call: SingleArgMath,
         arg: RealExpressionId,
     ) -> Self::T {
         walk_real_builtin_function_call_1p(self, call, arg)
@@ -205,16 +224,16 @@ pub trait RealBuiltInFunctionCall1pFold: Sized {
 #[inline]
 pub fn walk_real_builtin_function_call_2p<V: RealBuiltInFunctionCall2pFold>(
     fold: &mut V,
-    call: BuiltInFunctionCall2p,
+    call: DoubleArgMath,
     arg1: RealExpressionId,
     arg2: RealExpressionId,
 ) -> V::T {
     match call {
-        BuiltInFunctionCall2p::Pow => fold.fold_pow(arg1, arg2),
-        BuiltInFunctionCall2p::Hypot => fold.fold_hypot(arg1, arg2),
-        BuiltInFunctionCall2p::ArcTan2 => fold.fold_arctan2(arg1, arg2),
-        BuiltInFunctionCall2p::Max => fold.fold_max(arg1, arg2),
-        BuiltInFunctionCall2p::Min => fold.fold_min(arg1, arg2),
+        DoubleArgMath::Pow => fold.fold_pow(arg1, arg2),
+        DoubleArgMath::Hypot => fold.fold_hypot(arg1, arg2),
+        DoubleArgMath::ArcTan2 => fold.fold_arctan2(arg1, arg2),
+        DoubleArgMath::Max => fold.fold_max(arg1, arg2),
+        DoubleArgMath::Min => fold.fold_min(arg1, arg2),
     }
 }
 
@@ -223,7 +242,7 @@ pub trait RealBuiltInFunctionCall2pFold: Sized {
 
     fn fold_real_builtin_function_call_2p(
         &mut self,
-        call: BuiltInFunctionCall2p,
+        call: DoubleArgMath,
         arg1: RealExpressionId,
         arg2: RealExpressionId,
     ) -> Self::T {

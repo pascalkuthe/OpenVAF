@@ -1,6 +1,6 @@
 [package]
 name = "open-vaf"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -8,26 +8,32 @@ description = "A compiler frontend for VerilogA aimed predominently at compact m
 license="GPL-3.0"
 readme="../README.md"
 
+build = "build.rs" # LALRPOP preprocessing
+
 
 
 [badges]
 maintenance = { status = "actively-developed" }
 
+
 [dependencies]
 
-open-vaf-macros = {version = "0.5.0", path = "../macros"}
+open-vaf-macros = {version = "0.6.0", path = "../macros"}
 
-# Functionality
+# Parsing
 logos = "0.11"
-float-cmp = "0.8"
-num-traits = "0.2"
-paste = "0.1"
-linkme = "0.2"
+lalrpop-util = "0.19"
 
 # Error reporting
 log="0.4"
 thiserror = "1.0"
 more-asserts = "0.2"
+
+# Misc
+float-cmp = "0.8"
+num-traits = "0.2"
+paste = "0.1"
+linkme = "0.2"
 
 # Performance
 ahash = "0.4"
@@ -48,12 +54,12 @@ bitflags = "1.2"
 rustc-ap-graphviz = {version = "662.0",optional=true}
 
 
-#Performance
+# Performance
 [dependencies.bytecount]
 version = "0.6"
 features = ["runtime-dispatch-simd"]
 
-# Functionality
+# Pretty errors
 [dependencies.annotate-snippets]
 version = "0.9"
 features = ["color"]
@@ -70,6 +76,9 @@ harness = false
 [[test]]
 name = "extractions"
 
+
+[build-dependencies]
+lalrpop = "0.19.0"
 
 
 [features]

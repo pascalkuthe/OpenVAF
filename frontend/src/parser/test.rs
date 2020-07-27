@@ -8,13 +8,13 @@
  * *****************************************************************************************
  */
 
-use crate::ast::NetType;
 use crate::ast::NetType::{UNDECLARED, WIRE};
-use crate::ast::VariableType::{INTEGER, REAL};
-use crate::ast::{Branch, VariableType};
+use crate::ast::VariableType;
+use crate::ast::VariableType::{Integer, Real};
+use crate::ast::{NetType, PortList};
 
 use crate::ast::Ast;
-use crate::symbol::keywords::EMPTY;
+use crate::ir::IdRange;
 use crate::symbol::Symbol;
 use crate::symbol_table::{SymbolDeclaration, SymbolTable};
 use crate::test::{preprocess_test, PrettyError, TEST_EXPANSION_HINT};
@@ -35,89 +35,100 @@ pub fn module() -> Result<(), PrettyError> {
 
     let modules = ast.modules.as_slice();
     let second_module = &modules[1].contents;
-    let mut ports = ast[second_module.port_list.clone()].iter();
+    let mut ports = second_module.body_ports.clone().map(|id| ast[id]);
 
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "a");
+    let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, false);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.name, EMPTY);
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "a");
+    assert_eq!(port.discipline, None);
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "b");
+    let port = ports.next().unwrap();
     assert_eq!(port.output, false);
     assert_eq!(port.input, true);
-    assert_eq!(port.signed, true);
-    assert_eq!(port.discipline.name, EMPTY);
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "b");
+    assert_eq!(port.discipline, None);
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "c");
+    let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.name, EMPTY);
+
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "c");
+    assert_eq!(port.discipline, None);
     assert_eq!(port.net_type, NetType::WIRE);
 
-    let port = ports.next().unwrap().contents;
+    let port = ports.next().unwrap();
+    assert_eq!(port.output, true);
+    assert_eq!(port.input, true);
+
+    let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "d");
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, true);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.as_str(), "electrical");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
+    let port = ports.next().unwrap();
+    assert_eq!(port.output, true);
+    assert_eq!(port.input, false);
+
+    let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "e");
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, false);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.as_str(), "electrical");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
+    let port = ports.next().unwrap();
+    assert_eq!(port.output, true);
+    assert_eq!(port.input, false);
+
+    let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "f");
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, false);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.as_str(), "electrical");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "g");
+    let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
-    assert_eq!(port.signed, true);
-    assert_eq!(port.discipline.as_str(), "electrical");
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "g");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::WIRE);
 
     let third_module = &modules[2].contents;
-    assert_eq!(third_module.name.as_str(), "test3");
-    let mut ports = ast[third_module.port_list.clone()].iter();
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "a");
+    assert_eq!(third_module.ident.as_str(), "test3");
+
+    let mut ports = if let PortList::Declarations(start) = third_module.ports.contents {
+        IdRange(start..third_module.body_ports.0.end).map(|id| ast[id])
+    } else {
+        panic!("Expected head ports!")
+    };
+
+    let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, false);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.name, EMPTY);
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "a");
+    assert_eq!(port.discipline, None);
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "b");
+    let port = ports.next().unwrap();
     assert_eq!(port.output, false);
     assert_eq!(port.input, true);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.as_str(), "electrical");
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "b");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "c");
+    let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.as_str(), "electrical");
+
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "c");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::TRI);
     Ok(())
 }
@@ -136,16 +147,16 @@ pub fn branch() -> Result<(), PrettyError> {
     let ast = Ast::parse_from_token_stream_user_facing(ts, &sm, TEST_EXPANSION_HINT)?;
 
     let module = &ast.modules[0].contents;
-    assert_eq!(module.name.as_str(), "test");
-    let ports = &ast[module.port_list.clone()];
+    assert_eq!(module.ident.as_str(), "test");
+    let ports = &ast.ports;
 
-    let port = ports[0].contents;
-    assert_eq!(port.ident.as_str(), "a");
+    let port = ports[0];
+    assert_eq!(ast[port.net].contents.ident.as_str(), "a");
     assert_eq!(port.output, true);
     assert_eq!(port.input, false);
 
-    let port = ports[1].contents;
-    assert_eq!(port.ident.as_str(), "b");
+    let port = ports[1];
+    assert_eq!(ast[port.net].contents.ident.as_str(), "b");
     assert_eq!(port.output, false);
     assert_eq!(port.input, true);
     let symbol_table = &module.symbol_table;
@@ -164,25 +175,19 @@ fn assert_branch_decl(
     net2_name: &str,
 ) {
     if let Some(SymbolDeclaration::Branch(branchid)) = symbol_table.get(&Symbol::intern(name)) {
-        let branch = &ast[*branchid].contents;
-        if let Branch::Nets(ref net1, ref net2) = branch.branch {
-            assert_eq!(net1.names[0].as_str(), net1_name);
-            assert_eq!(net2.names[0].as_str(), net2_name);
-        } else {
-            panic!("This should be a branch between two nets")
-        }
+        assert_eq!(ast[*branchid].contents.hi_net.names[0].as_str(), net1_name);
+        assert_eq!(
+            ast[*branchid].contents.lo_net.as_ref().unwrap().names[0].as_str(),
+            net2_name
+        );
     } else {
         panic!("Branch {} not found", name);
     }
 }
 fn assert_port_branch_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, port_name: &str) {
-    if let Some(SymbolDeclaration::Branch(branchid)) = symbol_table.get(&Symbol::intern(name)) {
-        let branch = &ast[*branchid].contents;
-        if let Branch::Port(ref port) = branch.branch {
-            assert_eq!(port.names[0].as_str(), port_name);
-        } else {
-            panic!("This should be a branch trough a ports")
-        }
+    if let Some(SymbolDeclaration::PortBranch(id)) = symbol_table.get(&Symbol::intern(name)) {
+        let port = &ast[*id].contents.port;
+        assert_eq!(port.names[0].as_str(), port_name);
     } else {
         panic!("Branch {} not found", name)
     }
@@ -190,7 +195,7 @@ fn assert_port_branch_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, po
 fn assert_variable_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, vtype: VariableType) {
     if let Some(SymbolDeclaration::Variable(variableid)) = symbol_table.get(&Symbol::intern(name)) {
         let variable = &ast[*variableid].contents;
-        assert_eq!(variable.variable_type, vtype)
+        assert_eq!(variable.var_type, vtype)
     } else {
         panic!("Variable {} not found", name)
     }
@@ -200,13 +205,16 @@ fn assert_net_decl(
     ast: &Ast,
     name: &str,
     net_type: NetType,
-    discipline: &str,
-    signed: bool,
+    discipline: Option<&str>,
 ) {
     if let Some(SymbolDeclaration::Net(netid)) = symbol_table.get(&Symbol::intern(name)) {
         let net = &ast[*netid].contents;
-        assert_eq!(net.signed, signed);
-        assert_eq!(net.discipline.as_str(), discipline);
+        assert_eq!(
+            net.discipline
+                .map(|discipline| discipline.as_str())
+                .as_deref(),
+            discipline
+        );
         assert_eq!(net.net_type, net_type);
     } else {
         panic!("Net {} not found", name)
@@ -238,11 +246,11 @@ pub fn variable_decl() -> Result<(), PrettyError> {
     let ast = Ast::parse_from_token_stream_user_facing(ts, &sm, TEST_EXPANSION_HINT)?;
 
     let symbol_table = get_module_symbol_table(&ast.top_symbols, &ast, "test");
-    assert_variable_decl(&symbol_table, &ast, "x", REAL);
-    assert_variable_decl(&symbol_table, &ast, "y", INTEGER);
-    assert_variable_decl(&symbol_table, &ast, "z", INTEGER);
-    assert_variable_decl(&symbol_table, &ast, "t", INTEGER);
-    assert_variable_decl(&symbol_table, &ast, "rt", REAL);
+    assert_variable_decl(&symbol_table, &ast, "x", Real);
+    assert_variable_decl(&symbol_table, &ast, "y", Integer);
+    assert_variable_decl(&symbol_table, &ast, "z", Integer);
+    assert_variable_decl(&symbol_table, &ast, "t", Integer);
+    assert_variable_decl(&symbol_table, &ast, "rt", Real);
     Ok(())
 }
 
@@ -261,11 +269,11 @@ pub fn net_decl() -> Result<(), PrettyError> {
 
     let module = &ast.modules[0].contents;
     let symbol_table = &module.symbol_table;
-    assert_eq!(module.name.as_str(), "test");
-    assert_net_decl(symbol_table, &ast, "x", WIRE, " ", false);
-    assert_net_decl(symbol_table, &ast, "y", WIRE, " ", false);
-    assert_net_decl(symbol_table, &ast, "z", UNDECLARED, "electrical", false);
-    assert_net_decl(symbol_table, &ast, "l", WIRE, "electrical", true);
+    assert_eq!(module.ident.as_str(), "test");
+    assert_net_decl(symbol_table, &ast, "x", WIRE, None);
+    assert_net_decl(symbol_table, &ast, "y", WIRE, None);
+    assert_net_decl(symbol_table, &ast, "z", UNDECLARED, Some("electrical"));
+    assert_net_decl(symbol_table, &ast, "l", WIRE, Some("electrical"));
     Ok(())
 }
 
@@ -285,30 +293,30 @@ pub fn linear() -> Result<(), PrettyError> {
 
     let module = &ast.modules[0].contents;
 
-    let mut ports = ast[module.port_list.clone()].iter();
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "A");
+    let mut ports = ast[module.body_ports.clone()].iter();
+    let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.as_str(), "electrical");
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "A");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
-    let port = ports.next().unwrap().contents;
-    assert_eq!(port.ident.as_str(), "B");
+    let port = ports.next().unwrap();
     assert_eq!(port.output, true);
     assert_eq!(port.input, true);
-    assert_eq!(port.signed, false);
-    assert_eq!(port.discipline.as_str(), "electrical");
+    let port = ast[port.net].contents;
+    assert_eq!(port.ident.as_str(), "B");
+    assert_eq!(port.discipline.unwrap().as_str(), "electrical");
 
     let symbol_table = &module.symbol_table;
-    assert_net_decl(symbol_table, &ast, "x", UNDECLARED, "electrical", false);
-    assert_net_decl(symbol_table, &ast, "y", UNDECLARED, "electrical", false);
+    assert_net_decl(symbol_table, &ast, "x", UNDECLARED, Some("electrical"));
+    assert_net_decl(symbol_table, &ast, "y", UNDECLARED, Some("electrical"));
     assert_branch_decl(symbol_table, &ast, "ax", "A", "x");
     assert_branch_decl(symbol_table, &ast, "ay", "A", "y");
     assert_branch_decl(symbol_table, &ast, "xb", "x", "B");
     assert_branch_decl(symbol_table, &ast, "yb", "y", "B");
     assert_branch_decl(symbol_table, &ast, "xy", "x", "y");
-    assert_variable_decl(symbol_table, &ast, "C", REAL);
+    assert_variable_decl(symbol_table, &ast, "C", Real);
     Ok(())
 }

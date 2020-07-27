@@ -1,0 +1,1156 @@
+//  * ******************************************************************************************
+//  * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
+//  * It is subject to the license terms in the LICENSE file found in the top-level directory
+//  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+//  *  No part of frontend, including this file, may be copied, modified, propagated, or
+//  *  distributed except according to the terms contained in the LICENSE file.
+//  * *******************************************************************************************
+
+
+use std::convert::identity;
+use std::vec::Vec;
+
+use crate::diagnostic::MultiDiagnostic;
+use crate::HashMap;
+use crate::ir::{ast, Attribute, Attributes, DisplayTaskKind, Node,Spanned};
+use crate::ir;
+use crate::ir::ast::{Ast, BinaryOperator, Block, Branch, PortBranch, Expression, HierarchicalId, Primary, FunctionArg};
+use crate::ir::ids::{AttributeId, BranchId, PortBranchId, IdRange, StatementId, ExpressionId, PortId, ParameterId, VariableId};
+use crate::lints::Linter;
+use crate::parser::{extract_double_arg, extract_single_arg, extract_single_or_double_arg, SymbolTableBuilder, Token};
+use crate::parser::error::{ArgumentCountMissmatch, Error, ErrorRecoveryExpecting, ModuleEndErrorRecovery};
+use crate::parser::lints::AtrributeOverwritten;
+use crate::sourcemap::Span;
+use crate::StringLiteral;
+use crate::symbol::{Ident, keywords, Symbol};
+
+grammar<'lt>(
+    scopes: &'lt mut SymbolTableBuilder,
+    ast: &'lt mut Ast,
+    errors: &'lt mut MultiDiagnostic<Error>
+);
+
+// ERROR Recovery
+
+RecoverError: () = {
+    <err: !> => errors.add(err),
+};
+
+SkipExtraTokens: () = {
+    => (),
+    RecoverError,
+};
+
+Comma: () = {
+    "," => (),
+    RecoverError,
+};
+
+// COMBINATORS
+
+#[inline]
+either<true_rule,false_rule>: bool = {
+    true_rule => true,
+    false_rule => false,
+}
+
+// Create a spanned version of data that can span multiple tokens
+#[inline]
+Node<Rule>: ir::Node<Rule> =
+    <l: @L> <attributes: ATTR> <contents: Rule> <r: @R> =>{
+        Node{
+            attributes,
+            contents,
+            span: l.extend(r),
+        }
+    };
+
+
+SCOPE: Ident = <IDENT> => {scopes.enter_scope(); <>};
+
+array_init: Vec<ExpressionId> = "'" "{" <List<EXPR>> "}";
+
+REAL_TYPE: ()= {<"real">,<"realtime">};
+INT_TYPE: ()= {<"integer">,<"time">};
+
+// Create a spanned version of a rule that can span multiple tokens
+MultiSp<Rule>: Spanned<Rule> =
+    <l: @L> <rule: Rule> <r: @R> =>
+        Spanned::new(rule,l.extend(r));
+
+// Create a spanned version of a rule that can only span a single token
+SingleSp<Rule>: Spanned<Rule> =
+    <l: @L> <rule: Rule> <r: @R> => {
+        debug_assert_eq!(l,r);
+        Spanned::new(rule,l)
+    };
+
+
+
+#[inline]
+List<T>: Vec<T> =
+    <v:(<T> Comma)*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    };
+
+#[inline]
+ListAtLeastOneWithRecover<T>: Vec<T> =
+    <v:(<T> Comma)*> <e:T> => {
+        let mut v = v;
+        v.push(e);
+        v
+    };
+
+#[inline]
+ListAtLeastOne<T>: Vec<T> =
+    <v:(<T> ",")*> <e:T> => {
+    let mut v = v;
+    v.push(e);
+    v
+};
+
+
+
+
+
+
+// Basic rules
+IDENT: Ident = <span: @L> <name: Name> => Ident::new(name,span);
+
+IDENT_POT_FLOW: Ident = {
+    <@L> "potential" => Ident::new(keywords::potential,<>),
+    <@L> "flow" => Ident::new(keywords::flow,<>),
+    <IDENT>
+}
+
+HIDENT: HierarchicalId =
+    <v: (<IDENT> ".")*> <e: IDENT> => {
+        let mut v = v;
+        v.push(e);
+        v.into()
+    };
+
+FunctionArgs: Vec<ExpressionId> = "(" <List<EXPR>> ")";
+
+
+
+Attribute: Attribute = {
+    // Currently only attributes support arrays
+    // if we allow arrays everywhere this special casing here will go away
+    // This is also not really standard compliant so users should wrap this in a macro if they want to use this elsewhere
+    <ident: ATTR_IDENT> => Attribute{ident, value: vec![]},
+    <ident: ATTR_IDENT> "=" <value: EXPR> => Attribute{ident, value: vec![value]},
+    <ident: ATTR_IDENT> "=" <value: array_init> => Attribute{ident, value},
+
+}
+
+ATTR_IDENT: Ident= {
+    <@L> "units" => Ident::new(keywords::units,<>),
+    <IDENT>
+}
+
+#[inline]
+ATTR: Attributes =
+    <("(*" <List<Attribute>> "*)")*> => {
+        let attr_start = ast.attributes.len_idx();
+        let mut map: HashMap<Symbol, AttributeId>= HashMap::new();
+        for attribute_list in <>{
+            map.reserve(attribute_list.len());
+            for attr in attribute_list{
+                if let Some(id) = map.get(&attr.ident.name){
+                    let old_ident = ast[*id].ident;
+
+                    Linter::dispatch_early(Box::new(AtrributeOverwritten {
+                        name: old_ident.name,
+                        old: old_ident.span,
+                        new: attr.ident.span,
+                    }));
+
+                    ast[*id] = attr;
+
+                } else {
+                    let name = attr.ident.name;
+                    let id = ast.attributes.push(attr);
+                    map.insert(name, id);
+                }
+            }
+        }
+        Attributes::new(attr_start, ast.attributes.len_idx())
+    };
+
+
+
+
+
+// EPXRESSIONS
+
+
+EXPR: ExpressionId ={
+    <l: @L> <cond: LogicOrExpr> "?" <true_val: EXPR> ":" <false_val: EXPR> <r: @R> => {
+        let expr = ast::Expression::Condition(cond, true_val, false_val);
+        let span = l.extend(r);
+        let spanned = Spanned::new(expr,span);
+        ast.expressions.push(spanned)
+    },
+
+    <LogicOrExpr>
+}
+
+// Binary Operator prededance is encoded in tiers
+// Each tier corresponds to a precedance lvl from the VerilogAMS standard
+
+Tier<Op, NextTier>: ExpressionId = {
+
+    <lhs: Tier<Op, NextTier>> <op: SingleSp<Op>> <rhs: NextTier> => {
+        let expr = ast::Expression::BinaryOperator(lhs,op,rhs);
+        let span = ast[lhs].span.extend(ast[rhs].span);
+        let spanned = Spanned::new(expr,span);
+        ast.expressions.push(spanned)
+    },
+
+    NextTier
+};
+
+
+
+LogicOr: BinaryOperator = "||" => BinaryOperator::LogicOr;
+LogicOrExpr = Tier<LogicOr,LogicAndExpr>;
+
+LogicAnd: BinaryOperator = "&&" => BinaryOperator::LogicAnd;
+LogicAndExpr = Tier<LogicAnd, OrExpr>;
+
+Or: BinaryOperator = "|" => BinaryOperator::Or;
+OrExpr = Tier<Or, XorExpr>;
+
+Xor: BinaryOperator = {
+    "^" => BinaryOperator::Xor,
+    "~^" => BinaryOperator::NXor,
+}
+XorExpr = Tier<Xor, AndExpr>;
+
+And: BinaryOperator = "&" => BinaryOperator::And;
+AndExpr = Tier<And, EqualityExpr>;
+
+
+Equality: BinaryOperator = {
+    "==" => BinaryOperator::LogicEqual,
+    "!=" => BinaryOperator::LogicalNotEqual,
+}
+EqualityExpr = Tier<Equality, ComparisonExpr>;
+
+Comparison: BinaryOperator = {
+    "<" => BinaryOperator::LessThen,
+    "<=" => BinaryOperator::LessEqual,
+    ">" => BinaryOperator::GreaterThen,
+    ">=" => BinaryOperator::GreaterEqual,
+}
+ComparisonExpr = Tier<Comparison, ShiftExpr>;
+
+Shift: BinaryOperator = {
+    "<<" => BinaryOperator::ShiftLeft,
+    ">>" => BinaryOperator::ShiftRight,
+}
+ShiftExpr = Tier<Shift, SumExpr>;
+
+Sum: BinaryOperator = {
+    "+" => BinaryOperator::Plus,
+    "-" => BinaryOperator::Minus,
+}
+SumExpr = Tier<Sum, FactorExpr>;
+
+Factor: BinaryOperator = {
+    "*" => BinaryOperator::Multiply,
+    "/" => BinaryOperator::Divide,
+}
+FactorExpr = Tier<Factor, ModulusExpr>;
+
+
+Modulus: BinaryOperator = "%" => BinaryOperator::Modulus;
+ModulusExpr = Tier<Modulus, ExponentExpr>;
+
+Exponent: BinaryOperator = "**" => BinaryOperator::Exponent;
+ExponentExpr = Tier<Exponent, NonBinaryExpression>;
+
+
+NonBinaryExpression: ExpressionId = {
+
+    <op: SingleSp<UnaryOp>> <val:NonBinaryExpression> => {
+        let expr = ast::Expression::UnaryOperator(op,val);
+        let span = op.span.extend(ast[val].span);
+        let spanned = Spanned::new(expr,span);
+        ast.expressions.push(spanned)
+    },
+
+    <MultiSp<Primary>> => {
+        let expr = ast::Expression::Primary(<>.contents);
+        let spanned = Spanned::new(expr,<>.span);
+        ast.expressions.push(spanned)
+    },
+
+    "(" <EXPR> ")",
+}
+
+UnaryOp: ast::UnaryOperator = {
+    "!" => ast::UnaryOperator::LogicNegate,
+    "~" => ast::UnaryOperator::BitNegate,
+    "-" => ast::UnaryOperator::ArithmeticNegate,
+    "+" => ast::UnaryOperator::ExplicitPositive,
+}
+
+
+Primary: ast::Primary = {
+
+    //Literals
+    <StringLiteral> => <>.into(),
+    <RealLiteral> => <>.into(),
+    <IntLiteral> => <>.into(),
+
+    // Reference
+    <HIDENT> => <>.into(),
+
+    // System funcion call
+    <SystemFunctionCall> => <>.into(),
+
+    <ident: IDENT_POT_FLOW> <args: FunctionArgs> => ast::Primary::FunctionCall(ident, args),
+
+    // TODO better errors
+    <nature: IDENT_POT_FLOW> "(" "<" <port: HIDENT> ">" ")" => ast::Primary::PortFlowProbe(nature,port),
+
+
+    <Noise> => ast::Primary::Noise(<>.0,<>.1),
+
+    <call: SingleArgMath> <l: @L> <args: FunctionArgs> <r: @R> => {
+        let arg = extract_single_arg(l, args, r, call.name(), errors, ast);
+        ast::Primary::SingleArgMath(call, arg)
+    },
+
+    <call: DoubleArgMath> <l: @L> <args: FunctionArgs> <r: @R> => {
+        let (arg1, arg2) = extract_double_arg(l, args, r, call.name(), errors, ast);
+        ast::Primary::DoubleArgMath(call, arg1, arg2)
+    },
+
+    "ddt" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let expr = extract_single_arg(l, args, r, "ddt", errors, ast);
+        ast::Primary::DerivativeByTime(expr)
+    },
+
+    "ddx" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let (expr,derive_by) = extract_double_arg(l, args, r, "ddx", errors, ast);
+        ast::Primary::DerivativeByBranch(expr, derive_by)
+    },
+}
+
+
+SingleArgMath: ir::SingleArgMath = {
+    "sqrt" => ir::SingleArgMath::Sqrt,
+
+    "exp" => ir::SingleArgMath::Exp(false),
+    "limexp" => ir::SingleArgMath::Exp(true),
+    "ln" => ir::SingleArgMath::Ln,
+    "log" => ir::SingleArgMath::Log,
+
+    "avs" => ir::SingleArgMath::Abs,
+    "floor" => ir::SingleArgMath::Floor,
+    "ceil" => ir::SingleArgMath::Ceil,
+
+    "sin" => ir::SingleArgMath::Sin,
+    "cos" => ir::SingleArgMath::Cos,
+    "tan" => ir::SingleArgMath::Tan,
+
+    "asin" => ir::SingleArgMath::ArcSin,
+    "acos" => ir::SingleArgMath::ArcCos,
+    "atan" => ir::SingleArgMath::ArcTan,
+
+    "sinh" => ir::SingleArgMath::SinH,
+    "cosh" => ir::SingleArgMath::CosH,
+    "tanh" => ir::SingleArgMath::TanH,
+
+    "asinh" => ir::SingleArgMath::ArcSinH,
+    "acosh" => ir::SingleArgMath::ArcCosH,
+    "atanh" => ir::SingleArgMath::ArcTanH,
+}
+
+DoubleArgMath: ir::DoubleArgMath = {
+
+    "pow" => ir::DoubleArgMath::Pow,
+    "hypot" => ir::DoubleArgMath::Hypot,
+    "atan2" => ir::DoubleArgMath::ArcTan2,
+    "min" => ir::DoubleArgMath::Min,
+    "max" => ir::DoubleArgMath::Max,
+}
+
+
+Noise: (ast::NoiseSource, Option<ExpressionId>) = {
+
+    "white_noise" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let (pwr, name) = extract_single_or_double_arg(l,args,r,"white_noise", errors, ast);
+        (ast::NoiseSource::White(pwr),name)
+    },
+
+    "flicker_noise" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let (pwr, exp, name) = match args.as_slice(){
+            [pwr, exp] => (*pwr,*exp, None),
+            [pwr, exp, name] => (*pwr,*exp,Some(*name)),
+            args => {
+                let span = l.extend(r);
+
+                let missmatch = ArgumentCountMissmatch{
+                    found: args.len() as u8,
+                    at_most: 3,
+                    at_least: 2,
+                };
+                errors.add(Error::ArgumentCountMissmatch(missmatch,"flicker_noise",span));
+
+                let err_expr = ast.expressions.push(Spanned::new(ast::Expression::Error,span));
+                (err_expr,err_expr,None)
+            }
+        };
+        (ast::NoiseSource::Flicker(pwr, exp), name)
+    },
+}
+
+
+SystemFunctionCall: ast::SystemFunctionCall = {
+
+    "$temperature" => ast::SystemFunctionCall::Temperature,
+
+    "$vt" <l: @L> < args: FunctionArgs? > <r: @R>  => {
+        let temp = args.map(|args|extract_single_arg(l, args, r, "$vt", errors, ast));
+        ast::SystemFunctionCall::Vt(temp)
+    },
+
+    "$simparam" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let (name, default) = extract_single_or_double_arg(l,args,r,"$simparam", errors, ast);
+        ast::SystemFunctionCall::Simparam(name, default)
+    },
+
+    "$simparam$str" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let name = extract_single_arg(l, args, r, "$simparam$str", errors, ast);
+        ast::SystemFunctionCall::SimparamStr(name)
+    },
+
+    "$port_connected" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let port = extract_single_arg(l,args,r,"$port_connected", errors, ast);
+        ast::SystemFunctionCall::PortConnected(port)
+    },
+
+    "$param_given" <l: @L> <args: FunctionArgs> <r: @R> => {
+        let param = extract_single_arg(l, args, r,"$param_given", errors, ast);
+        ast::SystemFunctionCall::ParameterGiven(param)
+    },
+}
+
+
+// Statements
+STMT = REST_STMT<"I">;
+REST_STMT<I>: StatementId = <Node<raw_stmt<I>>> => ast.statements.push(<>);
+
+#[inline]
+ASSIGNMENT: (HierarchicalId, ExpressionId) = <(<HIDENT> "=" <EXPR>)>;
+
+raw_stmt<I>: ast::Statement = {
+    // Simple stmts
+
+    <res: ASSIGNMENT> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        ast::Statement::Assignment( res.0, res.1)
+    },
+
+    // we accept all expressions here because it allows for significantly improved errors
+    // distinguishing branch probes from function calls needs to be done for expressions anyway so we just relegate that completly to HIR lowering
+    <expr: EXPR> "<+" <val: EXPR> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        ast::Statement::Contribute(expr,val)
+    },
+
+    <kind: display_task> <args: FunctionArgs> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        ast::Statement::DisplayTask(kind, args)
+    },
+
+    <kind: StopTaskKind> <args: (@L FunctionArgs @R)?> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        let expr = args.map(|(l,args,r)| extract_single_arg(l, args, r, kind.name(), errors, ast));
+        ast::Statement::StopTask(kind, expr)
+    },
+
+    //control flow
+
+    "if" "(" <cond: EXPR> ")" <true_body: STMT> if I == "I"  => ast::Statement::Condition(cond, true_body, None),
+
+    "if" "(" <cond: EXPR> ")" <true_body: REST_STMT<"">> "else" <false_body: REST_STMT<I>> => ast::Statement::Condition(cond, true_body, Some(false_body)),
+
+    "while" "(" <cond: EXPR> ")" <body: REST_STMT<I>> => ast::Statement::While(cond, body),
+
+
+    "for" "(" <init: ASSIGNMENT> ";" <cond: EXPR> ";" <incr: ASSIGNMENT>  ")" <body: REST_STMT<I>> => {
+        let for_loop = ast::ForLoop{
+            init,
+            cond,
+            incr,
+            body,
+        };
+
+        ast::Statement::For(for_loop)
+    },
+
+    "case" "(" <cond: EXPR> ")" <cases: MultiSp<case_item>*> "endcase" => ast::Statement::Case(cond, cases),
+
+    <BLOCK>,
+
+    // Error recovery rules
+    "if" RecoverError BLOCK if I == "I"  => ast::Statement::Error,
+
+    "if" RecoverError BLOCK "else" REST_STMT<I> => ast::Statement::Error,
+
+    "while" RecoverError BLOCK => ast::Statement::Error,
+
+    "for" RecoverError BLOCK => ast::Statement::Error,
+
+    RecoverError ";" => ast::Statement::Error,
+
+    "case" RecoverError case_item* SkipExtraTokens "endcase" => ast::Statement::Error,
+
+}
+
+#[inline]
+BLOCK: ast::Statement = "begin" <scope: block_scope?> <statements: STMT*> <err: !?> <r: @R> "end" => {
+    if let Some(err) = err{
+        errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+    }
+    let block = Block{
+        scope,
+        statements,
+    };
+
+    let id = ast.blocks.push(block);
+    ast::Statement::Block(id)
+};
+
+StopTaskKind: ir::StopTaskKind = {
+    "$finish" => ir::StopTaskKind::Finish,
+    "$stop" => ir::StopTaskKind::Stop,
+}
+
+
+#[inline]
+block_scope: ast::BlockScope = ":" <ident: SCOPE> block_item_declaration* => ast::BlockScope{ident, symbols: scopes.exit_scope()};
+
+#[inline]
+block_item_declaration: () = {
+    PARAM_DECL,
+    VAR_DECL,
+}
+
+
+case_item: ast::CaseItem = {
+    <values: ListAtLeastOneWithRecover<EXPR>> ":" <stmt: STMT> => ast::CaseItem{values, stmt: Some(stmt)},
+    <values: ListAtLeastOneWithRecover<EXPR>> ":" ";" => ast::CaseItem{values, stmt: None},
+
+    // default case is encoded as a case item without values
+    "default" ":"? <stmt: STMT> => ast::CaseItem{values: vec![], stmt: Some(stmt)},
+    "default" ":"? ";" => ast::CaseItem{values: vec![], stmt: None},
+
+};
+
+display_task: DisplayTaskKind = {
+    "$strobe"  => DisplayTaskKind::Convergence(true),
+    "$display"  => DisplayTaskKind::Convergence(true),
+    "$write"   => DisplayTaskKind::Convergence(false),
+    "$warn"    => DisplayTaskKind::Warn,
+    "$info"    => DisplayTaskKind::Info,
+    "$error"   => DisplayTaskKind::Error,
+    "$debug"   => DisplayTaskKind::Debug,
+}
+
+
+// Items
+
+
+
+#[inline]
+PARAM_DECL: () = {
+    <res: Node< ("parameter" REAL_TYPE <ListAtLeastOne<NumericalParameter>> )>> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        ast.insert_params(errors, scopes, res, ast::ParameterType::Real)
+    },
+
+
+    <res: Node< ("parameter" INT_TYPE <ListAtLeastOne<NumericalParameter>> ) >> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        ast.insert_params(errors, scopes, res, ast::ParameterType::Integer)
+    },
+
+    <res: Node< ("parameter" "string" <ListAtLeastOne<StringParameter>> )>> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        ast.insert_params(errors, scopes, res, ast::ParameterType::String)
+    },
+}
+
+
+
+
+NumericalParameter: (Ident, ExpressionId, Vec<ast::NumericParameterConstraint>) = <(<IDENT> "=" <EXPR> <numeric_value_range*>)>;
+StringParameter: (Ident, ExpressionId, Vec<ast::StringParameterConstraint>) = <(<IDENT> "=" <EXPR> <string_value_range*>)>;
+
+numeric_value_range: ast::NumericParameterConstraint = {
+    "from" <numeric_param_range> => ast::ParameterConstraint::From(<>),
+    "exclude" <numeric_param_range> => ast::ParameterConstraint::Exclude(<>.into()),
+    "exclude" <EXPR> => ast::ParameterConstraint::Exclude(<>.into()),
+}
+
+string_value_range: ast::StringParameterConstraint = {
+    "from" <array_init> => ast::ParameterConstraint::From(<>),
+    "exclude" <array_init> => ast::ParameterConstraint::Exclude(<>),
+    "exclude" <EXPR> => ast::ParameterConstraint::Exclude(vec![<>]),
+}
+
+numeric_param_range: ir::ParameterRangeConstraint<ExpressionId> =
+    <lo_inclusive: either<"[","(">> <lo: value_range_expr> ":" <hi:value_range_expr> <hi_inclusive: either<"]",")">>  => {
+        let lo = ir::ParameterRangeConstraintBound{bound: lo, inclusive: lo_inclusive};
+        let hi = ir::ParameterRangeConstraintBound{bound: hi, inclusive: hi_inclusive};
+        lo..hi
+    };
+
+#[inline]
+value_range_expr: ExpressionId = {
+    <@L> "inf" => {
+        let expr = Expression::Primary(Primary::Real( f64::INFINITY ));
+        let spanned = Spanned::new(expr,<>);
+        ast.expressions.push(spanned)
+    },
+
+    <@L> "-inf" => {
+        let expr = Expression::Primary(Primary::Real( f64::NEG_INFINITY ));
+        let spanned = Spanned::new(expr,<>);
+        ast.expressions.push(spanned)
+    },
+
+    <EXPR>
+};
+
+
+VAR_TYPE: ast::VariableType = {
+    REAL_TYPE => ast::VariableType::Real,
+    INT_TYPE => ast::VariableType::Integer,
+    "string" => ast::VariableType::String,
+}
+
+#[inline]
+VAR_DECL: () =
+    <res: Node< (<VAR_TYPE> <ListAtLeastOne<var_declaration>>) >>  <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        ast.insert_vars(errors, scopes,res);
+    };
+
+
+
+
+var_declaration = (<IDENT> <("=" <EXPR>)?>);
+
+
+
+
+#[inline]
+PORT_DECL: () = {
+    <res: Node<(<DIRECTION> <IDENT?> <net_type?>  <ListAtLeastOne<IDENT>>)>> => {
+        for ident in res.contents.3{
+
+            let net = ast::Net{
+                ident,
+                discipline: res.contents.1,
+                net_type: res.contents.2.unwrap_or(ast::NetType::UNDECLARED),
+            };
+
+            let node = Node{
+                contents: net,
+                attributes: res.attributes,
+                span: res.span
+            };
+            let id = ast.nets.push(node);
+
+            let port = ir::Port{
+                input: (res.contents.0).0,
+                output: (res.contents.0).1,
+                net: id
+            };
+
+            let id = ast.ports.push(port);
+
+            scopes.insert(ast,errors,id)
+
+        }
+    },
+
+
+
+}
+
+DIRECTION: (bool,bool) = {
+    "input" => (true,false),
+    "output" => (false,true),
+    "inout" => (true,true),
+}
+
+
+
+NET_DECL: () =
+    <res: Node<raw_net>> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        for ident in res.contents.2{
+            let net = ast::Net{
+                ident,
+                discipline: res.contents.1,
+                net_type: res.contents.0,
+            };
+            let node = Node{
+                contents: net,
+                attributes: res.attributes,
+                span: res.span
+            };
+            scopes.insert_net(ast,errors, node);
+        }
+    };
+
+
+
+raw_net: (ast::NetType, Option<Ident>, Vec<Ident>) = {
+    <(net_type  IDENT? ListAtLeastOne<IDENT>)>,
+    <discipline: IDENT> <names: ListAtLeastOne<IDENT>> => (ast::NetType::UNDECLARED, Some(discipline), names),
+}
+
+net_type: ast::NetType = {
+    "wreal" => ast::NetType::WREAL,
+    "supply0" => ast::NetType::SUPPLY0,
+    "supply1" => ast::NetType::SUPPLY1,
+    "tri" => ast::NetType::TRI,
+    "triand" => ast::NetType::TRIAND,
+    "trior" => ast::NetType::TRIOR,
+    "tri0" => ast::NetType::TRI0,
+    "tri1" => ast::NetType::TRI1,
+    "wire" => ast::NetType::WIRE,
+    "uwire" => ast::NetType::UWIRE,
+    "wand" => ast::NetType::WAND,
+    "wor" => ast::NetType::WOR,
+    "ground" => ast::NetType::GROUND,
+}
+
+
+BRANCH_DECL: () = {
+    <res: Node<("branch" "(" <HIDENT> <("," <HIDENT>)?> ")" <ListAtLeastOne<IDENT>>)>> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        for ident in res.contents.2{
+            let branch = Branch{
+                ident,
+                hi_net: res.contents.0.clone(),
+                lo_net: res.contents.1.clone(),
+            };
+
+            let node = Node{
+                attributes: res.attributes,
+                span: res.span,
+                contents: branch,
+            };
+
+            let id = ast.branches.push(node);
+            scopes.insert(ast, errors, id);
+        }
+    },
+
+    <res: Node<("branch" "(" "<" <HIDENT> ">" ")" <ListAtLeastOne<IDENT>>)>> <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        for ident in res.contents.1{
+            let port_branch = PortBranch{
+                ident,
+                port: res.contents.0.clone()
+            };
+
+            let node = Node{
+                attributes: res.attributes,
+                span: res.span,
+                contents: port_branch
+            };
+
+            let id = ast.port_branches.push(node);
+            scopes.insert(ast, errors, id);
+        }
+    }
+}
+
+FUNC_DECL: () = <Node<raw_function>> => {
+    let id = ast.functions.push(<>);
+    scopes.insert(ast,errors, id);
+};
+
+func_scope: (Ident, VariableId) = <IDENT> => (<>,scopes.enter_function_scope(<>,ast));
+
+raw_function: ast::Function = {
+    "function" <return_type: VAR_TYPE?> <ident_and_var: func_scope> SkipExtraTokens ";"
+        <declarations: function_item_decl*>
+        <body: STMT>
+    "endfunction" => {
+        let (ident, return_variable) = ident_and_var;
+        let args = declarations
+            .into_iter()
+            .flatten()
+            .collect();
+
+        if let Some(return_type) = return_type{
+            ast[return_variable].contents.var_type = return_type;
+        }
+
+        ast::Function{
+            ident,
+            args,
+            declarations: scopes.exit_scope(),
+            body,
+            return_variable,
+        }
+    }
+}
+
+function_item_decl: Vec<FunctionArg> = {
+    block_item_declaration => Vec::new(),
+    <direction: DIRECTION> <idents: ListAtLeastOne<IDENT>> ";" =>
+        idents.into_iter().map(|ident|FunctionArg{
+            ident,
+            input: direction.0,
+            output: direction.1,
+        }).collect()
+}
+
+MODULE: () = <Node<raw_module>> => {
+    let id = ast.modules.push(<>);
+    scopes.insert(ast,errors, id);
+};
+
+
+raw_module: ast::Module = "module" <ident: SCOPE> <ports: MultiSp<module_ports>> SkipExtraTokens ";" <body_start: module_start> <analog_stmts: module_body>  => {
+    let symbol_table = scopes.exit_scope();
+    let branches = IdRange(body_start.0..ast.branches.len_idx());
+    let analog_stmts = analog_stmts.into_iter().filter_map(identity).collect();
+    let body_ports = IdRange(body_start.1..ast.ports.len_idx());
+    let port_branches = IdRange(body_start.2..ast.port_branches.len_idx());
+    let parameters = IdRange(body_start.3..ast.parameters.len_idx());
+    ast::Module{
+        ident,
+        symbol_table,
+        branches,
+        port_branches,
+        body_ports,
+        parameters,
+        analog_stmts,
+        ports,
+    }
+};
+
+module_start: (BranchId, PortId, PortBranchId, ParameterId) = => (ast.branches.len_idx(), ast.ports.len_idx(), ast.port_branches.len_idx(), ast.parameters.len_idx());
+
+module_body: Vec<Option<StatementId>> = {
+    <module_item*> "endmodule",
+    <res: module_item*> "analog" <r: @R> <err: !> "endmodule" => {
+        errors.add(ModuleEndErrorRecovery(err,r));
+        res
+    },
+
+}
+
+#[inline]
+module_item: Option<StatementId> = {
+    "analog" <STMT> => Some(<>),
+    "analog" FUNC_DECL => None,
+
+    BRANCH_DECL => None,
+
+    NET_DECL => None,
+
+    VAR_DECL =>  None,
+
+    PORT_DECL <r: @R> <err: !?> ";" => {
+        if let Some(err) = err{
+            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
+        }
+        None
+    },
+
+    PARAM_DECL => None,
+};
+
+port_list_start: PortId = => ast.ports.len_idx();
+
+module_ports: ast::PortList = {
+    <port_list_start> ("("  List<PORT_DECL> ")")?  => <>.into(),
+    port_list_start "(" <ListAtLeastOne<IDENT>> ")" => <>.into()
+};
+
+DISCIPLINE: () = <Node<raw_discipline>> => {
+    let id = ast.disciplines.push(<>);
+    scopes.insert(ast,errors,id);
+};
+
+raw_discipline: ast::Discipline =
+    "discipline" <ident: IDENT> (SkipExtraTokens ";")?
+        <items: MultiSp<discipline_item>*>
+    "enddiscipline" =>
+        ast::Discipline{ident, items};
+
+
+discipline_item: ast::DisciplineItem = {
+    "potential" <IDENT> ";" => ast::DisciplineItem::Potential(<>),
+    "flow" <IDENT> ";" => ast::DisciplineItem::Flow(<>),
+    "domain" "discrete" ";" => ast::DisciplineItem::Domain(false),
+    "domain" "continuous" ";" => ast::DisciplineItem::Domain(true),
+    RecoverError =>  ast::DisciplineItem::Error,
+};
+
+NATURE: () = <Node<raw_nature>> => {
+    let id = ast.natures.push(<>);
+    scopes.insert(ast,errors,id);
+};
+
+raw_nature: ast::Nature =
+    "nature" <ident: IDENT> <parent: (":" <IDENT>)?> (SkipExtraTokens ";")?
+        <attributes: nature_attribute*>
+    "endnature" =>
+    ast::Nature{ident, parent, attributes};
+
+nature_attribute: Option<Spanned<(ast::NatureAttribute,ExpressionId)>> = {
+    < MultiSp<(<nature_attribute_ident> "=" <EXPR> ";")> > => Some(<>),
+    RecoverError => None,
+};
+
+nature_attribute_ident: ast::NatureAttribute = {
+    "access" => ast::NatureAttribute::Access,
+    "abstol" => ast::NatureAttribute::Abstol,
+    "ddt_nature" => ast::NatureAttribute::DerivativeNature,
+    "idt_nature" => ast::NatureAttribute::AntiDerivativeNature,
+    "units" => ast::NatureAttribute::Units,
+    <IDENT> => ast::NatureAttribute::User(<>),
+}
+
+
+pub Top: () = root_item*;
+
+root_item = {
+    MODULE,
+    RecoverError,
+    DISCIPLINE,
+    NATURE,
+}
+
+
+extern {
+    type Location = Span ;
+    type Error = ();
+
+    enum Token {
+        Name => Token::Ident(<Symbol>),
+        StringLiteral =>  Token::LiteralString(<StringLiteral>),
+        RealLiteral =>  Token::RealLiteral(<f64>),
+        IntLiteral =>  Token::IntLiteral(<u32>),
+
+        "$temperature" =>  Token::Temperature,
+        "$vt" =>  Token::Vt,
+        "$simparam" => Token::SimParam,
+        "$simparam$str" => Token::SimParamStr,
+        "$port_connected" => Token::PortConnected,
+        "$param_given" => Token::ParamGiven,
+        "$display" => Token::Display,
+        "$strobe" => Token::Strobe,
+        "$write" => Token::Write,
+        "$debug" => Token::Debug,
+        "$finish" => Token::Finish,
+        "$stop" => Token::Stop,
+        "$info" => Token::Info,
+        "$warn" => Token::Warn,
+        "$error" => Token::Error,
+        "$fatal" => Token::Fatal,
+
+        "." => Token::Accessor,
+        ";" => Token::Semicolon,
+        ":" => Token::Colon,
+        "," => Token::Comma,
+        "(" => Token::ParenOpen,
+        ")" => Token::ParenClose,
+        "(*" => Token::AttributeStart,
+        "*)" => Token::AttributeEnd,
+        "[" => Token::SquareBracketOpen,
+        "]" => Token::SquareBracketClose,
+        "<+" => Token::Contribute,
+        "=" => Token::Assign,
+        "#" => Token::Hash,
+
+        "*" => Token::OpMul,
+        "/" => Token::OpDiv,
+        "%" => Token::OpModulus,
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        "**" => Token::OpExp,
+        "!" => Token::OpLogicNot,
+        "~" => Token::OpBitNot,
+
+        "<<" => Token::OpArithmeticShiftLeft,
+        ">>" => Token::OpArithmeticShiftRight,
+
+        "<" => Token::OpLess,
+        "<=" => Token::OpLessEqual,
+        ">" => Token::OpGreater,
+        ">=" => Token::OpGreaterEqual,
+        "==" => Token::OpEqual,
+        "!=" => Token::OpNotEqual,
+        "&&" => Token::OpLogicAnd,
+        "||" => Token::OpLogicalOr,
+
+        "&" => Token::OpBitAnd,
+        "^" => Token::OpBitXor,
+        "~^" => Token::OpBitNXor,
+        "|" => Token::OpBitOr,
+
+        "?" => Token::OpCondition,
+        "{" => Token::ConcatStart,
+        "}" => Token::ConcatEnd,
+        "'" => Token::ArrStart,
+
+        //Keywords
+        "if" => Token::If,
+        "else" => Token::Else,
+        "case" => Token::Case,
+        "endcase" => Token::EndCase,
+        "default" => Token::Default,
+
+        "while" => Token::While,
+        "for" => Token::For,
+
+        "begin" => Token::Begin,
+        "end" => Token::End,
+
+        "module" => Token::Module,
+        "endmodule" => Token::EndModule,
+        "discipline" => Token::Discipline,
+        "enddiscipline" => Token::EndDiscipline,
+
+        "nature" => Token::Nature,
+        "endnature" => Token::EndNature,
+
+        "branch" => Token::Branch,
+        "parameter" => Token::Parameter,
+        "defparam" => Token::DefineParameter,
+        "localparam" => Token::LocalParameter,
+
+        "analog" => Token::Analog,
+        "function" => Token::Function,
+        "endfunction" => Token::EndFunction,
+        "inital" => Token::AnalogInitial,
+
+        "input" => Token::Input,
+        "inout" => Token::Inout,
+        "output" => Token::Output,
+
+        "signed" => Token::Signed,
+        "vectored" => Token::Vectored,
+        "scalared" => Token::Scalared,
+
+        //Types
+        "string" => Token::String,
+        "time" => Token::Time,
+        "realtime" => Token::Realtime,
+        "integer" => Token::Integer,
+        "real" => Token::Real,
+        "reg" => Token::Reg,
+        "wreal" => Token::Wreal,
+        "supply0" => Token::Supply0,
+        "supply1" => Token::Supply1,
+        "tri" => Token::Tri,
+        "triand" => Token::TriAnd,
+        "trior" => Token::TriOr,
+        "tri0" => Token::Tri0,
+        "tri1" => Token::Tri1,
+        "wire" => Token::Wire,
+        "uwire" => Token::Uwire,
+        "wand" => Token::Wand,
+        "wor" => Token::Wor,
+        "ground" => Token::Ground,
+
+        "potential" => Token::Potential,
+        "flow" => Token::Flow,
+        "domain" => Token::Domain,
+        "discrete" => Token::Discrete,
+        "continuous" => Token::Continuous,
+
+        "ddt" => Token::TimeDerivative,
+        "ddx" => Token::PartialDerivative,
+        "idt" => Token::TimeIntegral,
+        "idtmod" => Token::TimeIntegralMod,
+        "limexp" => Token::LimExp,
+        "white_noise" => Token::WhiteNoise,
+        "flicker_noise" => Token::FlickerNoise,
+
+        "pow" => Token::Pow,
+        "sqrt" => Token::Sqrt,
+
+        "hypot" => Token::Hypot,
+        "exp" => Token::Exp,
+        "ln" => Token::Ln,
+        "log" => Token::Log,
+        "min" => Token::Min,
+        "max" => Token::Max,
+        "avs" => Token::Abs,
+        "floor" => Token::Floor,
+        "ceil" => Token::Ceil,
+
+        "sin" => Token::Sin,
+        "cos" => Token::Cos,
+        "tan" => Token::Tan,
+
+        "asin" => Token::ArcSin,
+        "acos" => Token::ArcCos,
+        "atan" => Token::ArcTan,
+        "atan2" => Token::ArcTan2,
+
+        "sinh" => Token::SinH,
+        "cosh" => Token::CosH,
+        "tanh" => Token::TanH,
+
+        "asinh" => Token::ArcSinH,
+        "acosh" => Token::ArcCosH,
+        "atanh" => Token::ArcTanH,
+
+        "from" => Token::From,
+        "exclude" => Token::Exclude,
+        "inf" => Token::Infinity,
+        "-inf" => Token::MinusInfinity,
+
+        "abstol" => Token::Abstol,
+        "access" => Token::Access,
+        "ddt_nature" => Token::TimeDerivativeNature,
+        "idt_nature" => Token::TimeIntegralNature,
+        "units" => Token::Units,
+    }
+}

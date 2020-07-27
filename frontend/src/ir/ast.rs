@@ -6,9 +6,14 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-use crate::ir::*;
-
-use crate::ir::ids::IdRange;
+use crate::ir::ids::{
+    AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, IdRange, ModuleId,
+    NatureId, NetId, ParameterId, PortBranchId, PortId, StatementId, VariableId,
+};
+use crate::ir::{
+    Attribute, DisplayTaskKind, DoubleArgMath, Node, ParameterExcludeConstraint,
+    ParameterRangeConstraintBound, Port, SingleArgMath, Spanned, StopTaskKind,
+};
 use crate::literals::StringLiteral;
 use crate::sourcemap::Span;
 use crate::symbol::Ident;
@@ -18,53 +23,26 @@ use core::fmt::Debug;
 use index_vec::IndexVec;
 use std::ops::Range;
 
-// pub use visitor::Visitor;
-
-/*The FOLLOWING MACRO is adapted from https://github.com/llogiq/compact_arena (mk_tiny_arena!) under MIT-License:
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-    ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-    TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-    PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-    SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-    OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-    IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-    DEALINGS IN THE SOFTWARE.
-*/
-
-//pub mod printer;
-// pub mod visitor;
-
 /// An Ast representing a parsed Verilog-AMS project (root file);
 /// It provides stable indices for every Node because the entire Tree is immutable once created;
 #[derive(Default, Debug, Clone)]
 pub struct Ast {
     //Declarations
-    pub branches: IndexVec<BranchId, AttributeNode<BranchDeclaration>>,
-    pub nets: IndexVec<NetId, AttributeNode<Net>>,
-    pub ports: IndexVec<PortId, AttributeNode<Port>>,
-    pub variables: IndexVec<VariableId, AttributeNode<Variable>>,
-    pub parameters: IndexVec<ParameterId, AttributeNode<Parameter>>,
-    pub modules: IndexVec<ModuleId, AttributeNode<Module>>,
-    pub functions: IndexVec<FunctionId, AttributeNode<Function>>,
-    pub disciplines: IndexVec<DisciplineId, AttributeNode<Discipline>>,
-    pub natures: IndexVec<NatureId, AttributeNode<Nature>>,
+    pub branches: IndexVec<BranchId, Node<Branch>>,
+    pub port_branches: IndexVec<PortBranchId, Node<PortBranch>>,
+    pub nets: IndexVec<NetId, Node<Net>>,
+    pub ports: IndexVec<PortId, Port>,
+    pub variables: IndexVec<VariableId, Node<Variable>>,
+    pub parameters: IndexVec<ParameterId, Node<Parameter>>,
+    pub modules: IndexVec<ModuleId, Node<Module>>,
+    pub functions: IndexVec<FunctionId, Node<Function>>,
+    pub disciplines: IndexVec<DisciplineId, Node<Discipline>>,
+    pub natures: IndexVec<NatureId, Node<Nature>>,
     //Ast Items
-    pub expressions: IndexVec<ExpressionId, Node<Expression>>,
-    pub blocks: IndexVec<BlockId, AttributeNode<SeqBlock>>,
+    pub expressions: IndexVec<ExpressionId, Spanned<Expression>>,
+    pub blocks: IndexVec<BlockId, Block>,
     pub attributes: IndexVec<AttributeId, Attribute>,
-    pub statements: IndexVec<StatementId, Statement>,
+    pub statements: IndexVec<StatementId, Node<Statement>>,
     pub top_symbols: SymbolTable,
 }
 
@@ -75,11 +53,12 @@ impl Ast {
         // TODO configure this smh
         Self {
             branches: IndexVec::with_capacity(32),
+            port_branches: IndexVec::with_capacity(32),
             nets: IndexVec::with_capacity(32),
             ports: IndexVec::with_capacity(32),
             variables: IndexVec::with_capacity(512),
             parameters: IndexVec::with_capacity(512),
-            modules: IndexVec::with_capacity(1),
+            modules: IndexVec::with_capacity(4),
             functions: IndexVec::with_capacity(16),
             disciplines: IndexVec::with_capacity(8),
             natures: IndexVec::with_capacity(8),
@@ -92,136 +71,138 @@ impl Ast {
     }
 }
 
-impl_id_type!(BranchId in Ast::branches -> AttributeNode<BranchDeclaration>);
+impl_id_type!(BranchId in Ast::branches -> Node<Branch>);
 
-impl_id_type!(NetId in Ast::nets -> AttributeNode<Net>);
+impl_id_type!(PortBranchId in Ast::port_branches -> Node<PortBranch>);
 
-impl_id_type!(PortId in Ast::ports -> AttributeNode<Port>);
+impl_id_type!(NetId in Ast::nets -> Node<Net>);
 
-impl_id_type!(ParameterId in Ast::parameters -> AttributeNode<Parameter>);
+impl_id_type!(PortId in Ast::ports -> Port);
 
-impl_id_type!(VariableId in Ast::variables -> AttributeNode<Variable>);
+impl_id_type!(ParameterId in Ast::parameters -> Node<Parameter>);
 
-impl_id_type!(ModuleId in Ast::modules -> AttributeNode<Module>);
+impl_id_type!(VariableId in Ast::variables -> Node<Variable>);
 
-impl_id_type!(FunctionId in Ast::functions -> AttributeNode<Function>);
+impl_id_type!(ModuleId in Ast::modules -> Node<Module>);
 
-impl_id_type!(DisciplineId in Ast::disciplines -> AttributeNode<Discipline>);
+impl_id_type!(FunctionId in Ast::functions -> Node<Function>);
 
-impl_id_type!(ExpressionId in Ast::expressions -> Node<Expression>);
+impl_id_type!(DisciplineId in Ast::disciplines -> Node<Discipline>);
+
+impl_id_type!(ExpressionId in Ast::expressions -> Spanned<Expression>);
 
 impl_id_type!(AttributeId in Ast::attributes -> Attribute);
 
-impl_id_type!(StatementId in Ast::statements -> Statement);
+impl_id_type!(StatementId in Ast::statements -> Node<Statement>);
 
-impl_id_type!(BlockId in Ast::blocks -> AttributeNode<SeqBlock>);
+impl_id_type!(BlockId in Ast::blocks -> Block);
 
-impl_id_type!(NatureId in Ast::natures -> AttributeNode<Nature>);
+impl_id_type!(NatureId in Ast::natures -> Node<Nature>);
 
 #[derive(Clone, Debug)]
-pub enum TopNode {
-    Module(ModuleId),
-    Nature(NatureId),
-    Discipline(DisciplineId),
-}
-
-#[derive(Copy, Clone, Debug)]
 pub struct Nature {
-    pub name: Ident,
-    pub abstol: ExpressionId,
-    pub units: ExpressionId,
-    pub access: Ident,
-    pub idt_nature: Option<Ident>,
-    pub ddt_nature: Option<Ident>,
-}
-
-pub enum NatureParentType {
-    Nature,
-    DisciplineFlow,
-    DisciplinePotential,
-}
-
-#[derive(Clone, Debug)]
-pub struct Module {
-    pub name: Ident,
-    pub port_list: IdRange<PortId>,
-    pub branch_list: IdRange<BranchId>,
-    pub symbol_table: SymbolTable,
-    pub children: Vec<ModuleItem>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Parameter {
-    pub name: Ident,
-    pub parameter_type: ParameterType,
-    pub default_value: ExpressionId,
-}
-
-#[derive(Clone, Debug)]
-pub enum ParameterType {
-    Numerical {
-        parameter_type: VariableType,
-        from_ranges: Vec<Range<NumericalParameterRangeBound<ExpressionId>>>,
-        excluded: Vec<NumericalParameterRangeExclude<ExpressionId>>,
-    },
-    String(
-        //TODO string parameter from/exlude
-    ),
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Port {
     pub ident: Ident,
-    pub input: bool,
-    pub output: bool,
-    pub discipline: Ident, //TODO discipline
-    pub signed: bool,
-    pub net_type: NetType,
+    pub parent: Option<Ident>,
+    pub attributes: Vec<Option<Spanned<(NatureAttribute, ExpressionId)>>>,
 }
 
-impl Default for Port {
-    fn default() -> Self {
-        Self {
-            ident: Ident::DUMMY_IDNT,
-            input: false,
-            output: false,
-            discipline: Ident::DUMMY_IDNT,
-            signed: false,
-            net_type: NetType::UNDECLARED,
-        }
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum NatureAttribute {
+    Access,
+    Abstol,
+    DerivativeNature,
+    AntiDerivativeNature,
+    Units,
+    User(Ident),
+}
+
+#[derive(Debug, Clone)]
+pub enum PortList {
+    Expected(Vec<Ident>),
+    Declarations(PortId),
+}
+
+impl From<Vec<Ident>> for PortList {
+    fn from(expected: Vec<Ident>) -> Self {
+        Self::Expected(expected)
+    }
+}
+
+impl From<PortId> for PortList {
+    fn from(ports: PortId) -> Self {
+        Self::Declarations(ports)
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct BranchDeclaration {
-    pub name: Ident,
-    pub branch: Branch,
+pub struct Module {
+    pub ident: Ident,
+    pub branches: IdRange<BranchId>,
+    pub port_branches: IdRange<PortBranchId>,
+    pub ports: Spanned<PortList>,
+    pub parameters: IdRange<ParameterId>,
+    pub body_ports: IdRange<PortId>,
+    pub symbol_table: SymbolTable,
+    pub analog_stmts: Vec<StatementId>,
 }
 
 #[derive(Clone, Debug)]
-pub enum Branch {
-    Port(HierarchicalId),
-    NetToGround(HierarchicalId),
-    Nets(HierarchicalId, HierarchicalId),
+pub struct Parameter {
+    pub ident: Ident,
+    pub param_type: ParameterType,
+    pub default: ExpressionId,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum ModuleItem {
-    AnalogStmt(StatementId),
-    GenerateStatement, //TODO
+#[derive(Clone, Debug)]
+pub enum ParameterConstraint<F, E> {
+    From(F),
+    Exclude(E),
 }
 
-#[derive(Clone, Copy, Debug)]
+pub type NumericParameterConstraint = ParameterConstraint<
+    Range<ParameterRangeConstraintBound<ExpressionId>>,
+    ParameterExcludeConstraint<ExpressionId>,
+>;
+
+pub type StringParameterConstraint = ParameterConstraint<Vec<ExpressionId>, Vec<ExpressionId>>;
+
+#[derive(Clone, Debug)]
+pub enum ParameterType {
+    Real(Vec<NumericParameterConstraint>),
+    Integer(Vec<NumericParameterConstraint>),
+    String(Vec<StringParameterConstraint>),
+}
+
+#[derive(Clone, Debug)]
+pub struct Branch {
+    pub ident: Ident,
+    pub hi_net: HierarchicalId,
+    pub lo_net: Option<HierarchicalId>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PortBranch {
+    pub ident: Ident,
+    pub port: HierarchicalId,
+}
+
+#[derive(Clone, Debug)]
 pub struct Discipline {
-    pub name: Ident,
-    pub flow_nature: Option<Ident>,
-    pub potential_nature: Option<Ident>,
-    pub continuous: Option<bool>,
+    pub ident: Ident,
+    pub items: Vec<Spanned<DisciplineItem>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum DisciplineItem {
+    Potential(Ident),
+    Flow(Ident),
+    Domain(bool),
+    Error,
 }
 
 #[derive(Clone, Debug)]
 pub struct Function {
-    pub name: Ident,
+    pub ident: Ident,
     pub args: Vec<FunctionArg>,
     pub declarations: SymbolTable,
     pub return_variable: VariableId,
@@ -230,24 +211,33 @@ pub struct Function {
 
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub struct FunctionArg {
-    pub name: Ident,
+    pub ident: Ident,
     pub input: bool,
     pub output: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Net {
-    pub name: Ident,
-    pub discipline: Ident,
-    pub signed: bool,
+    pub ident: Ident,
+    pub discipline: Option<Ident>,
     pub net_type: NetType,
+}
+
+impl Default for Net {
+    fn default() -> Self {
+        Self {
+            ident: Ident::DUMMY,
+            discipline: None,
+            net_type: NetType::UNDECLARED,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Variable {
-    pub name: Ident,
-    pub variable_type: VariableType,
-    pub default_value: Option<ExpressionId>,
+    pub ident: Ident,
+    pub var_type: VariableType,
+    pub default: Option<ExpressionId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -272,26 +262,27 @@ pub enum NetType {
 #[derive(Clone, Debug)]
 pub enum Statement {
     Block(BlockId),
-    Condition(AttributeNode<Condition>),
-    Case(AttributeNode<Cases>),
-    Contribute(Attributes, Ident, Node<BranchAccess>, ExpressionId),
+    Condition(ExpressionId, StatementId, Option<StatementId>),
+    Case(ExpressionId, Vec<Spanned<CaseItem>>),
+    Contribute(ExpressionId, ExpressionId),
     //  TODO IndirectContribute(),
-    Assign(Attributes, HierarchicalId, ExpressionId),
-    While(AttributeNode<WhileLoop>),
-    For(AttributeNode<ForLoop>),
-    DisplayTask(AttributeNode<DisplayTaskKind>, Vec<ExpressionId>),
-    StopTask(AttributeNode<StopTaskKind>, PrintOnFinish),
+    Assignment(HierarchicalId, ExpressionId),
+    While(ExpressionId, StatementId),
+    For(ForLoop),
+    DisplayTask(DisplayTaskKind, Vec<ExpressionId>),
+    StopTask(StopTaskKind, Option<ExpressionId>),
+    Error,
 }
 
 #[derive(Clone, Debug)]
-pub struct SeqBlock {
+pub struct Block {
     pub scope: Option<BlockScope>,
     pub statements: Vec<StatementId>,
 }
 
 #[derive(Clone, Debug)]
 pub struct BlockScope {
-    pub name: Ident,
+    pub ident: Ident,
     pub symbols: SymbolTable,
 }
 
@@ -303,11 +294,9 @@ pub struct WhileLoop {
 
 #[derive(Clone, Debug)]
 pub struct ForLoop {
-    pub condition: ExpressionId,
-    pub initial_var: HierarchicalId,
-    pub initial_val: ExpressionId,
-    pub increment_var: HierarchicalId,
-    pub increment_val: ExpressionId,
+    pub cond: ExpressionId,
+    pub init: (HierarchicalId, ExpressionId),
+    pub incr: (HierarchicalId, ExpressionId),
     pub body: StatementId,
 }
 
@@ -325,49 +314,81 @@ pub struct CaseItem {
 }
 
 #[derive(Clone, Debug)]
-pub struct Cases {
-    pub expr: ExpressionId,
-    pub cases: Vec<Node<CaseItem>>,
-    pub default: Option<StatementId>,
-}
-
-#[derive(Clone, Debug)]
 pub enum Expression {
-    BinaryOperator(ExpressionId, Node<BinaryOperator>, ExpressionId),
-    UnaryOperator(Node<UnaryOperator>, ExpressionId),
-    Condtion(ExpressionId, Span, ExpressionId, Span, ExpressionId),
+    BinaryOperator(ExpressionId, Spanned<BinaryOperator>, ExpressionId),
+    UnaryOperator(Spanned<UnaryOperator>, ExpressionId),
+    Condition(ExpressionId, ExpressionId, ExpressionId),
     Primary(Primary),
+    Error,
 }
 
-#[derive(Clone, Debug)]
-pub enum BranchAccess {
-    BranchOrNodePotential(HierarchicalId),
-    Implicit(Branch),
-}
+pub type SystemFunctionCall =
+    super::SystemFunctionCall<ExpressionId, ExpressionId, ExpressionId, ExpressionId>;
+
+pub type NoiseSource = super::NoiseSource<ExpressionId, ()>;
 
 #[derive(Clone, Debug)]
 pub enum Primary {
     Integer(i64),
     Real(f64),
     String(StringLiteral),
-    VariableOrNetReference(HierarchicalId),
+
+    Reference(HierarchicalId),
+
+    SystemFunctionCall(SystemFunctionCall),
     FunctionCall(Ident, Vec<ExpressionId>),
-    SystemFunctionCall(
-        SystemFunctionCall<ExpressionId, ExpressionId, HierarchicalId, HierarchicalId>,
-    ),
-    BranchAccess(Ident, Node<BranchAccess>),
-    BuiltInFunctionCall1p(BuiltInFunctionCall1p, ExpressionId),
-    BuiltInFunctionCall2p(BuiltInFunctionCall2p, ExpressionId, ExpressionId),
-    Noise(NoiseSource<ExpressionId, ()>, Option<StringLiteral>),
-    DerivativeByBranch(ExpressionId, Ident, Node<BranchAccess>),
+
+    PortFlowProbe(Ident, HierarchicalId),
+    SingleArgMath(SingleArgMath, ExpressionId),
+
+    DoubleArgMath(DoubleArgMath, ExpressionId, ExpressionId),
+
+    Noise(NoiseSource, Option<ExpressionId>),
+
+    DerivativeByBranch(ExpressionId, ExpressionId),
     DerivativeByTime(ExpressionId),
-    DerivativeByTemperature(ExpressionId),
+}
+
+impl From<i64> for Primary {
+    fn from(val: i64) -> Self {
+        Self::Integer(val)
+    }
+}
+
+impl From<u32> for Primary {
+    fn from(val: u32) -> Self {
+        Self::Integer(val.into())
+    }
+}
+
+impl From<f64> for Primary {
+    fn from(val: f64) -> Self {
+        Self::Real(val)
+    }
+}
+
+impl From<StringLiteral> for Primary {
+    fn from(val: StringLiteral) -> Self {
+        Self::String(val)
+    }
+}
+
+impl From<HierarchicalId> for Primary {
+    fn from(ident: HierarchicalId) -> Self {
+        Self::Reference(ident)
+    }
+}
+
+impl From<SystemFunctionCall> for Primary {
+    fn from(call: SystemFunctionCall) -> Self {
+        Self::SystemFunctionCall(call)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOperator {
-    Sum,
-    Subtract,
+    Plus,
+    Minus,
     Multiply,
     Divide,
     Exponent,
@@ -402,8 +423,9 @@ pub enum UnaryOperator {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VariableType {
-    INTEGER,
-    REAL,
+    Integer,
+    Real,
+    String,
 }
 
 #[derive(Clone, Debug)]

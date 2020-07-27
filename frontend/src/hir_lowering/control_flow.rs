@@ -6,14 +6,18 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
+use crate::analysis::constant_fold::NoConstResolution;
 use crate::cfg::{BasicBlock, BasicBlockId, ControlFlowGraph, Terminator};
 use crate::hir::Block;
-use crate::hir_lowering::error::Error::TypeMissmatch;
+use crate::hir_lowering::error::Error::{IllegalFinishNumber, TypeMissmatch};
 use crate::hir_lowering::error::MockType;
-use crate::hir_lowering::expression_semantic::{InliningSchemanticAnalysis, SchematicAnalysis};
+use crate::hir_lowering::expression_semantic::{
+    ConstantSchematicAnalysis, InliningSchemanticAnalysis, SchematicAnalysis,
+};
 use crate::hir_lowering::HirToMirFold;
+use crate::ir::ids::{IntegerExpressionId, VariableId};
 use crate::ir::mir::{ComparisonOperator, ExpressionId, IntegerBinaryOperator, Statement};
-use crate::ir::{AttributeNode, Attributes, IntegerExpressionId, Node, VariableId};
+use crate::ir::{Attributes, Node, PrintOnFinish, Spanned};
 use crate::mir::{IntegerExpression, VariableType};
 use crate::sourcemap::Span;
 use crate::{hir, ir};
@@ -29,7 +33,7 @@ impl<'lt> HirToMirFold<'lt> {
             block.statements.reverse()
         }
         let mut cfg = ControlFlowGraph::new(blocks, &self.mir);
-        cfg.statement_owner_cache.stmt_count = self.mir.statements.len();
+        cfg.statement_owner_cache.stmt_count = self.mir.statements().len();
         cfg
     }
 
@@ -39,7 +43,7 @@ impl<'lt> HirToMirFold<'lt> {
         blocks: &mut IndexVec<BasicBlockId, BasicBlock>,
         exit: BasicBlockId,
         body: Block,
-        condition: ir::ExpressionId,
+        condition: ir::ids::ExpressionId,
         tail: F,
     ) -> BasicBlockId
     where
@@ -88,22 +92,23 @@ impl<'lt> HirToMirFold<'lt> {
         &mut self,
         current_block: BasicBlockId,
         blocks: &mut IndexVec<BasicBlockId, BasicBlock>,
-        attr: Attributes,
+        attributes: Attributes,
+        span: Span,
         dst: VariableId,
-        val: ir::ExpressionId,
+        val: ir::ids::ExpressionId,
     ) -> BasicBlockId {
         match self.mir[dst].contents.variable_type {
             VariableType::Real(_) => {
                 // Function calls can insert basic blocks
                 let mut assignment_schematic =
-                    InliningSchemanticAnalysis::new(blocks, current_block, self.hir[val].span);
+                    InliningSchemanticAnalysis::new(blocks, current_block, span);
                 if let Some(value) = assignment_schematic.fold_real_expression(self, val) {
-                    let stmt = self.mir.statements.push(Statement::Assignment(
-                        attr,
-                        dst,
-                        ExpressionId::Real(value),
-                    ));
-                    // Innefficent but way cleaner than anything else
+                    let stmt = self.mir.add_new_stmt(Node {
+                        attributes,
+                        span,
+                        contents: Statement::Assignment(dst, ExpressionId::Real(value)),
+                    });
+
                     let res = assignment_schematic.current_block;
                     blocks[current_block].statements.push(stmt);
                     res
@@ -113,18 +118,20 @@ impl<'lt> HirToMirFold<'lt> {
             }
             VariableType::Integer(_) => {
                 let mut assignment_schematic =
-                    InliningSchemanticAnalysis::new(blocks, current_block, self.hir[val].span);
+                    InliningSchemanticAnalysis::new(blocks, current_block, span);
+
                 match assignment_schematic.fold_expression(self, val) {
                     Some(ExpressionId::Real(val)) => {
                         let value =
-                            ExpressionId::Integer(self.mir.integer_expressions.push(Node {
+                            ExpressionId::Integer(self.mir.integer_expressions.push(Spanned {
                                 span: self.mir[val].span,
                                 contents: IntegerExpression::RealCast(val),
                             }));
-                        let stmt = self
-                            .mir
-                            .statements
-                            .push(Statement::Assignment(attr, dst, value));
+                        let stmt = self.mir.add_new_stmt(Node {
+                            attributes,
+                            span,
+                            contents: Statement::Assignment(dst, value),
+                        });
 
                         let res = assignment_schematic.current_block;
                         blocks[current_block].statements.push(stmt);
@@ -133,10 +140,11 @@ impl<'lt> HirToMirFold<'lt> {
 
                     Some(ExpressionId::Integer(val)) => {
                         let value = ExpressionId::Integer(val);
-                        let stmt = self
-                            .mir
-                            .statements
-                            .push(Statement::Assignment(attr, dst, value));
+                        let stmt = self.mir.add_new_stmt(Node {
+                            attributes,
+                            span,
+                            contents: Statement::Assignment(dst, value),
+                        });
 
                         let res = assignment_schematic.current_block;
                         blocks[current_block].statements.push(stmt);
@@ -154,6 +162,24 @@ impl<'lt> HirToMirFold<'lt> {
                     None => current_block,
                 }
             }
+            VariableType::String(_) => {
+                let mut assignment_schematic =
+                    InliningSchemanticAnalysis::new(blocks, current_block, span);
+                if let Some(val) = assignment_schematic.fold_string_expression(self, val) {
+                    let value = ExpressionId::String(val);
+                    let stmt = self.mir.add_new_stmt(Node {
+                        attributes,
+                        span,
+                        contents: Statement::Assignment(dst, value),
+                    });
+
+                    let res = assignment_schematic.current_block;
+                    blocks[current_block].statements.push(stmt);
+                    res
+                } else {
+                    current_block
+                }
+            }
         }
     }
 
@@ -169,13 +195,43 @@ impl<'lt> HirToMirFold<'lt> {
         });
 
         while let Some(statement) = statements.next_back() {
-            match self.hir[statement] {
+            let attributes = self.hir[statement].attributes;
+            // TODO fold attributes
+            let span = self.hir[statement].span;
+
+            match self.hir[statement].contents {
                 hir::Statement::StopTask(kind, print) => {
-                    let stmt = self.mir.statements.push(Statement::StopTask(kind, print));
+                    let print = print
+                        .and_then(|print| {
+                            self.fold_integer_expression(print, &mut ConstantSchematicAnalysis)
+                        })
+                        .and_then(|expr| {
+                            match self
+                                .mir
+                                .constant_fold_int_expr(expr, &mut NoConstResolution)
+                                .expect("Should have been enforced during ast lowering")
+                            {
+                                0 => Some(PrintOnFinish::Nothing),
+                                1 => Some(PrintOnFinish::Location),
+                                2 => Some(PrintOnFinish::LocationAndResourceUsage),
+                                illegal => {
+                                    self.errors
+                                        .add(IllegalFinishNumber(illegal, self.mir[expr].span));
+                                    None
+                                }
+                            }
+                        })
+                        .unwrap_or(PrintOnFinish::Location);
+
+                    let stmt = self.mir.add_new_stmt(Node {
+                        attributes,
+                        span,
+                        contents: Statement::StopTask(kind, print),
+                    });
                     blocks[current_block].statements.push(stmt);
                 }
 
-                hir::Statement::Case(ref case_node) => {
+                hir::Statement::Case(ref cases) => {
                     let start = blocks.push(BasicBlock {
                         statements: Vec::new(),
                         terminator: Terminator::Goto(current_block), //placeholder
@@ -183,21 +239,21 @@ impl<'lt> HirToMirFold<'lt> {
 
                     let end = current_block;
 
-                    let expr_span = self.hir[case_node.contents.expr].span;
+                    let expr_span = self.hir[cases.expr].span;
 
                     let mut inline = InliningSchemanticAnalysis::new(blocks, start, expr_span);
-                    let expr = inline.fold_expression(self, case_node.contents.expr);
+                    let expr = inline.fold_expression(self, cases.expr);
 
                     current_block = inline.current_block;
                     let mut false_block = self.fold_block_internal(
-                        statements.enter_back(&case_node.contents.default),
+                        statements.enter_back(&cases.default),
                         Terminator::Goto(end),
                         blocks,
                     );
 
-                    for case in case_node.contents.cases.iter().rev() {
+                    for case in cases.cases.iter().rev() {
                         let true_block = self.fold_block_internal(
-                            statements.enter_back(&case.contents.body),
+                            statements.enter_back(&case.body),
                             Terminator::Goto(end),
                             blocks,
                         );
@@ -209,7 +265,7 @@ impl<'lt> HirToMirFold<'lt> {
                         let mut cond = None;
 
                         //TODO take advantage of short circuit
-                        for &val in &case.contents.values {
+                        for &val in &case.values {
                             match expr {
                                 Some(ExpressionId::Real(expr)) => {
                                     let mut inliner = InliningSchemanticAnalysis::new(
@@ -220,11 +276,11 @@ impl<'lt> HirToMirFold<'lt> {
 
                                     if let Some(val) = self.fold_real_expression(val, &mut inliner)
                                     {
-                                        let value_cond = Node {
+                                        let value_cond = Spanned {
                                             span: expr_span,
                                             contents: IntegerExpression::RealComparison(
                                                 val,
-                                                Node::new(
+                                                Spanned::new(
                                                     ComparisonOperator::LogicEqual,
                                                     expr_span,
                                                 ),
@@ -246,11 +302,11 @@ impl<'lt> HirToMirFold<'lt> {
                                     if let Some(val) =
                                         self.fold_integer_expression(val, &mut inliner)
                                     {
-                                        let value_cond = Node {
+                                        let value_cond = Spanned {
                                             span: expr_span,
                                             contents: IntegerExpression::IntegerComparison(
                                                 val,
-                                                Node::new(
+                                                Spanned::new(
                                                     ComparisonOperator::LogicEqual,
                                                     expr_span,
                                                 ),
@@ -270,7 +326,7 @@ impl<'lt> HirToMirFold<'lt> {
 
                                     if let Some(val) = self.fold_string_expression(val, &mut inline)
                                     {
-                                        let value_cond = Node {
+                                        let value_cond = Spanned {
                                             span: expr_span,
                                             contents: IntegerExpression::StringEq(val, expr),
                                         };
@@ -303,20 +359,20 @@ impl<'lt> HirToMirFold<'lt> {
                     }
 
                     // Default is always folded last during ast lowering
-                    statements.0.end = case_node.contents.default.0.end;
+                    statements.0.end = cases.default.0.end;
                 }
 
-                hir::Statement::Condition(ref condition) => {
+                hir::Statement::Condition(cond, ref true_block, ref false_block) => {
                     let terminator = Terminator::Goto(current_block);
 
                     let false_block = self.fold_block_internal(
-                        statements.enter_back(&condition.contents.else_statements),
+                        statements.enter_back(false_block),
                         terminator,
                         blocks,
                     );
 
                     let true_block = self.fold_block_internal(
-                        statements.enter_back(&condition.contents.if_statements),
+                        statements.enter_back(true_block),
                         terminator,
                         blocks,
                     );
@@ -327,14 +383,9 @@ impl<'lt> HirToMirFold<'lt> {
                         statements: Vec::new(),
                         terminator, //Placeholder
                     });
-                    let mut inliner = InliningSchemanticAnalysis::new(
-                        blocks,
-                        current_block,
-                        self.hir[condition.contents.condition].span,
-                    );
-                    if let Some(condition) =
-                        inliner.fold_integer_expression(self, condition.contents.condition)
-                    {
+                    let mut inliner =
+                        InliningSchemanticAnalysis::new(blocks, current_block, self.hir[cond].span);
+                    if let Some(condition) = inliner.fold_integer_expression(self, cond) {
                         let tmp = inliner.current_block;
                         blocks[current_block].terminator = Terminator::Split {
                             condition,
@@ -346,35 +397,32 @@ impl<'lt> HirToMirFold<'lt> {
                     }
                 }
 
-                hir::Statement::While(ref while_loop) => {
+                hir::Statement::While(cond, ref body) => {
                     current_block = self.fold_loop(
                         &mut statements,
                         blocks,
                         current_block,
-                        while_loop.contents.body.clone(),
-                        while_loop.contents.condition,
+                        body.clone(),
+                        cond,
                         |_, loop_tail, _| loop_tail,
                     );
                 }
 
-                hir::Statement::For(AttributeNode {
-                    contents: ref for_loop,
-                    attributes,
-                    ..
-                }) => {
+                hir::Statement::For(ref for_loop) => {
                     current_block = self.fold_loop(
                         &mut statements,
                         blocks,
                         current_block,
                         for_loop.body.clone(),
-                        for_loop.condition,
+                        for_loop.cond,
                         |fold, loop_tail, blocks| {
                             fold.fold_assignment(
                                 loop_tail,
                                 blocks,
                                 attributes,
-                                for_loop.increment_var,
-                                for_loop.increment_expr,
+                                span,
+                                for_loop.incr.0,
+                                for_loop.incr.1,
                             )
                         },
                     );
@@ -383,16 +431,18 @@ impl<'lt> HirToMirFold<'lt> {
                         current_block,
                         blocks,
                         attributes,
-                        for_loop.initial_var,
-                        for_loop.initial_expr,
+                        span,
+                        for_loop.init.0,
+                        for_loop.init.1,
                     )
                 }
 
-                hir::Statement::Assignment(attr, dst, val) => {
-                    current_block = self.fold_assignment(current_block, blocks, attr, dst, val)
+                hir::Statement::Assignment(dst, val) => {
+                    current_block =
+                        self.fold_assignment(current_block, blocks, attributes, span, dst, val)
                 }
 
-                hir::Statement::Contribute(attr, access, branch, value) => {
+                hir::Statement::Contribute(access, branch, value) => {
                     let mut inliner = InliningSchemanticAnalysis::new(
                         blocks,
                         current_block,
@@ -400,10 +450,11 @@ impl<'lt> HirToMirFold<'lt> {
                     );
                     if let Some(value) = inliner.fold_real_expression(self, value) {
                         current_block = inliner.current_block;
-                        let stmt = self
-                            .mir
-                            .statements
-                            .push(Statement::Contribute(attr, access, branch, value));
+                        let stmt = self.mir.add_new_stmt(Node {
+                            attributes,
+                            span,
+                            contents: Statement::Contribute(access, branch, value),
+                        });
                         blocks[current_block].statements.push(stmt);
                     }
                 }
@@ -415,16 +466,16 @@ impl<'lt> HirToMirFold<'lt> {
     fn merge_conditions(
         &mut self,
         cond: &mut Option<IntegerExpressionId>,
-        value_cond: Node<IntegerExpression>,
+        value_cond: Spanned<IntegerExpression>,
         expr_span: Span,
     ) {
         let value_cond = self.mir.integer_expressions.push(value_cond);
         if let Some(ref mut cond) = cond {
-            let or_expr = Node {
+            let or_expr = Spanned {
                 span: expr_span,
                 contents: IntegerExpression::BinaryOperator(
                     *cond,
-                    Node::new(IntegerBinaryOperator::LogicOr, expr_span),
+                    Spanned::new(IntegerBinaryOperator::LogicOr, expr_span),
                     value_cond,
                 ),
             };
