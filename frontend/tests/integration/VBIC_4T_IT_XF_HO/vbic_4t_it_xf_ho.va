@@ -160,9 +160,6 @@ module vbic(c,b,e,s);
 	parameter	real	ITF	=   0.0		from[0.0:inf];
 	parameter	real	TR	=   0.0		from[0.0:inf];
 	parameter	real	TD	=   0.0		from[0.0:inf];
-	parameter	real	KFN	=   0.0		from[0.0:inf];
-	parameter	real	AFN	=   1.0		from(0.0:inf];
-	parameter	real	BFN	=   1.0		from(0.0:inf];
 	parameter	real	XRE	=   0;
 	parameter	real	XRBI	=   0;
 	parameter	real	XRCI	=   0;
@@ -180,8 +177,6 @@ module vbic(c,b,e,s);
 	parameter	real	XIN	=   3.0;
 	parameter	real	TNF	=   0.0;
 	parameter	real	TAVC	=   0.0;
-	parameter	real	RTH	=   0.0		from[0.0:inf];
-	parameter	real	CTH	=   0.0		from[0.0:inf];
 	parameter	real	VRT	=   0.0		from[0.0:inf];
 	parameter	real	ART	=   0.1		from(0.0:inf];
 	parameter	real	CCSO	=   0.0		from[0.0:inf];
@@ -201,10 +196,7 @@ module vbic(c,b,e,s);
 	parameter	real	TVBBE1	=   0.0;
 	parameter	real	TVBBE2	=   0.0;
 	parameter	real	TNBBE	=   0.0;
-	parameter	real	EBBE	=   0.0;
 	parameter	real	DTEMP	=   0.0;
-	parameter	real	VERS	=   1.2;
-	parameter	real	VREV	=   0.0;
 
 //
 //	parameter	alias	TNOM	TN0M, TREF
@@ -229,7 +221,7 @@ module vbic(c,b,e,s);
 	real	Tdev,Tini,rT,dT;
 	real	IVEF,IVER,IIKF,IIKR,IIKP,IVO,IHRCF,IVTF,IITF,slTF,LEP,CEP;
 
-	real	Vtv,Vcbj,Ifi,Iri,Itzf,Ixzf,Itxf,Ixxf,Itzr,q1z,q1,q2,qb,Ifp,Irp,Iccp,q2p,qbp;
+	real	Vtv,Ifi,Iri,Itzf,Ixzf,Itxf,Ixxf,Itzr,q1z,q1,q2,qb,Ifp,Irp,Iccp,q2p,qbp;
 	real	Ibe,Ibex,Ibcj,Ibc,Ibep,Ibcp,Igc,avalf;
 	real	Ircx,Irci,Irbx,Irbi,Ire,Irbp,Irs;
 	real	Kbci,Kbcx,rKp1,Iohm,derf;
@@ -237,7 +229,6 @@ module vbic(c,b,e,s);
 	real	qdbe,qdbex,qdbc,qdbep,qdbcp;
 	real	sgIf,rIf,mIf,tff;
 	real	Qbe,Qbex,Qbc,Qbcx,Qbep,Qbcp,Qbeo,Qbco;
-	real	Ith,Irth,Qcth;
 	real	Qcxf,Flxf;
 	real	LAMBDA,hf,hr,hfp,hrp;
 

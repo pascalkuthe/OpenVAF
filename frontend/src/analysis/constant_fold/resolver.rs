@@ -9,7 +9,7 @@
 //! Abstraction over resolution of variable and parameter values during constant folding
 use crate::analysis::constant_fold::propagation::PropagatedConstants;
 use crate::data_structures::{HybridBitSet, SparseBitSetMatrix};
-use crate::ir::{ParameterId, StatementId, VariableId};
+use crate::ir::ids::{ParameterId, StatementId, VariableId};
 use crate::{HashMap, StringLiteral};
 use log::debug;
 use std::borrow::Borrow;

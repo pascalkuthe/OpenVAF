@@ -202,6 +202,15 @@ pub enum Token {
     #[token("?")]
     OpCondition,
 
+    #[token("{")]
+    ConcatStart,
+
+    #[token("}")]
+    ConcatEnd,
+
+    #[token("'")]
+    ArrStart,
+
     //Keywords
     #[token("if")]
     If,
@@ -321,8 +330,6 @@ pub enum Token {
     #[token("continuous")]
     Continuous,
 
-    #[token("ddT")]
-    TemperatureDerivative,
     #[token("ddt")]
     TimeDerivative,
     #[token("ddx")]
@@ -884,13 +891,12 @@ impl Display for Token {
             Self::Discrete => f.write_str("discrete"),
             Self::Continuous => f.write_str("continuous"),
             Self::TimeDerivative => f.write_str("ddt"),
-            Self::TemperatureDerivative => f.write_str("ddT"),
             Self::PartialDerivative => f.write_str("ddx"),
             Self::TimeIntegral => f.write_str("idt"),
             Self::TimeIntegralMod => f.write_str("idtmod"),
             Self::LimExp => f.write_str("limexp"),
             Self::WhiteNoise => f.write_str("whitenoise"),
-            Self::FlickerNoise => f.write_str("flickrnoise"),
+            Self::FlickerNoise => f.write_str("flickernoise"),
             Self::Pow => f.write_str("pow"),
             Self::Sqrt => f.write_str("sqrt"),
             Self::Hypot => f.write_str("hypot"),
@@ -943,6 +949,9 @@ impl Display for Token {
             Self::Error => f.write_str("$error"),
             Self::Fatal => f.write_str("$fatal"),
             Self::Default => f.write_str("default"),
+            Self::ConcatStart => f.write_str("{"),
+            Self::ConcatEnd => f.write_str("}"),
+            Self::ArrStart => f.write_str("'"),
         }
     }
 }

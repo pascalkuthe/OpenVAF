@@ -13,7 +13,7 @@ use annotate_snippets::snippet::AnnotationType;
 use crate::derivatives;
 use crate::diagnostic::{DiagnosticSlice, LibraryDiagnostic, Text, Unsupported};
 use crate::ir::mir::{Parameter, Variable, VariableType};
-use crate::ir::AttributeNode;
+use crate::ir::Node;
 use crate::mir::ParameterType;
 use crate::sourcemap::Span;
 use crate::symbol::{Ident, Symbol};
@@ -98,6 +98,9 @@ pub enum Error {
     #[error("frontend does currently not support {0}!")]
     Unsupported(Unsupported, Span),
 
+    #[error("{0} is not a valid finish number (allowed values are 0,1,2)")]
+    IllegalFinishNumber(i64, Span),
+
     #[error("Function {function_name} was called recursively")]
     Recursion {
         function_name: Symbol,
@@ -107,11 +110,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn expected_parameter_type(
-        expected: MockType,
-        param: &AttributeNode<Parameter>,
-        at: Span,
-    ) -> Self {
+    pub fn expected_parameter_type(expected: MockType, param: &Node<Parameter>, at: Span) -> Self {
         let found_type = match param.contents.parameter_type {
             ParameterType::Integer { .. } => MockType::Integer,
             ParameterType::Real { .. } => MockType::Real,
@@ -128,14 +127,11 @@ impl Error {
         }
     }
 
-    pub fn expected_variable_type(
-        expected: MockType,
-        var: &AttributeNode<Variable>,
-        at: Span,
-    ) -> Self {
+    pub fn expected_variable_type(expected: MockType, var: &Node<Variable>, at: Span) -> Self {
         let found_type = match var.contents.variable_type {
             VariableType::Integer { .. } => MockType::Integer,
             VariableType::Real { .. } => MockType::Real,
+            VariableType::String { .. } => MockType::String,
         };
 
         Self::ReferenceTypeMissmatch {
@@ -169,7 +165,17 @@ impl LibraryDiagnostic for Error {
 
     fn slices(&self) -> Vec<DiagnosticSlice> {
         match self {
-            Error::TypeMissmatch {
+            Self::IllegalFinishNumber(_, span) => vec![DiagnosticSlice {
+                slice_span: span.data(),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::const_str("Expected 0, 1 or 2"),
+                    span.data(),
+                )],
+                fold: false,
+            }],
+
+            Self::TypeMissmatch {
                 span,
                 expected_type,
             } => vec![DiagnosticSlice {
@@ -182,7 +188,7 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Error::ReferenceTypeMissmatch {
+            Self::ReferenceTypeMissmatch {
                 expected_type,
                 name,
                 ref_span,
@@ -209,7 +215,7 @@ impl LibraryDiagnostic for Error {
                 },
             ],
 
-            Error::CannotCompareStringToNumber(span) => vec![DiagnosticSlice {
+            Self::CannotCompareStringToNumber(span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
@@ -219,7 +225,7 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Error::CondtionTypeMissmatch {
+            Self::CondtionTypeMissmatch {
                 string,
                 number,
                 span,
@@ -240,7 +246,7 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Error::ExpectedVariableForFunctionOutput(span) => vec![DiagnosticSlice {
+            Self::ExpectedVariableForFunctionOutput(span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
@@ -250,7 +256,7 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Error::WrongFunctionArgCount { expected, span, .. } => vec![DiagnosticSlice {
+            Self::WrongFunctionArgCount { expected, span, .. } => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
@@ -260,7 +266,7 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Error::Unsupported(unsupported, span) => vec![DiagnosticSlice {
+            Self::Unsupported(unsupported, span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
@@ -270,7 +276,7 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Error::Recursion {
+            Self::Recursion {
                 function_name,
                 recursion_span,
                 recursion_traceback,
@@ -310,7 +316,7 @@ impl LibraryDiagnostic for Error {
                 }
                 res
             }
-            Error::DerivativeError(err) => err.slices(),
+            Self::DerivativeError(err) => err.slices(),
         }
     }
 }

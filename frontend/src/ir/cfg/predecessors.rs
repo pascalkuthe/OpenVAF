@@ -39,7 +39,7 @@ use once_cell::unsync::OnceCell;
 
 pub type Predecessors = IndexVec<BasicBlockId, Vec<BasicBlockId>>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct PredecessorCache {
     cache: OnceCell<Predecessors>,
 }

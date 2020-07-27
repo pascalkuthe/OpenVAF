@@ -1,10 +1,31 @@
 //! This module contains an algorithm that will calculate all partial derivatives specified in a map for the entire programm
 use crate::cfg::ControlFlowGraph;
+use crate::data_structures::sync::WriteGuard;
 use crate::derivatives::error::Error;
 use crate::derivatives::{AutoDiff, Unknown};
 use crate::diagnostic::MultiDiagnostic;
-use crate::ir::{StatementId, VariableId};
+use crate::ir::ids::{StatementId, VariableId};
 use crate::mir::{ExpressionId, Mir, Statement};
+
+impl Mir {
+    pub fn calculate_all_registered_derivatives(&mut self) -> Result<(), MultiDiagnostic<Error>> {
+        let mut errors = MultiDiagnostic(Vec::new());
+        // TODO hierarchical module structure
+        for module in self.modules.indices() {
+            let cfg = self[module].contents.analog_cfg.clone();
+            let mut cfg_ref: WriteGuard<'_, ControlFlowGraph> = cfg.borrow_mut();
+            if let Err(err) = cfg_ref.calculate_all_registered_derivatives(self) {
+                errors.add_all(err);
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+}
 
 impl ControlFlowGraph {
     pub fn demand_derivatives(
@@ -12,7 +33,7 @@ impl ControlFlowGraph {
         mir: &mut Mir,
         mut derivative_predicate: impl FnMut(&mut AutoDiff, VariableId, StatementId, Unknown) -> bool,
         upperbound: f64,
-    ) -> MultiDiagnostic<Error> {
+    ) -> Result<(), MultiDiagnostic<Error>> {
         // Try to approximate an upper bound by which a statement count is increased
         let factor = upperbound + 1.0;
 
@@ -32,18 +53,23 @@ impl ControlFlowGraph {
         }
 
         self.statement_owner_cache
-            .invalidate(ad.mir.statements.len());
-        ad.errors
+            .invalidate(ad.mir.statements().len());
+
+        if ad.errors.is_empty() {
+            Ok(())
+        } else {
+            Err(ad.errors)
+        }
     }
 
     /// Use this with care calling this on multiple overlapping cfgs will calculate derivatives multiple times
     pub fn calculate_all_registered_derivatives(
         &mut self,
         mir: &mut Mir,
-    ) -> MultiDiagnostic<Error> {
+    ) -> Result<(), MultiDiagnostic<Error>> {
         let derivative_count = mir.derivatives.values().flatten().count();
 
-        // * 2 to take transitive dependencies into account
+        // `2 * count` instead of just `count` to take transitive dependencies into account
         let upperbound = (2 * derivative_count) as f64 / mir.variables.len() as f64;
         self.demand_derivatives(mir, |_, _, _, _| true, upperbound)
     }
@@ -56,7 +82,7 @@ impl<'lt> AutoDiff<'lt> {
         stmt: StatementId,
         derivative_predicate: &mut impl FnMut(&mut AutoDiff, VariableId, StatementId, Unknown) -> bool,
     ) {
-        if let Statement::Assignment(attr, var, expr) = self.mir[stmt] {
+        if let Statement::Assignment(var, expr) = self.mir[stmt].contents {
             if let Some(partial_derivatives) = self.mir.derivatives.get(&var).cloned() {
                 for (derive_by, derivative_var) in partial_derivatives {
                     if !derivative_predicate(self, var, stmt, derive_by) {
@@ -65,11 +91,10 @@ impl<'lt> AutoDiff<'lt> {
 
                     let derivative = self.partial_derivative(expr, derive_by);
 
-                    let stmt = self.mir.statements.push(Statement::Assignment(
-                        attr,
-                        derivative_var,
-                        ExpressionId::Real(derivative),
-                    ));
+                    let stmt = self.mir.add_modified_stmt(
+                        Statement::Assignment(derivative_var, ExpressionId::Real(derivative)),
+                        stmt,
+                    );
 
                     dst.push(stmt);
                     // Higher order derivatives

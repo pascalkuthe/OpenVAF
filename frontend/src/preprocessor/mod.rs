@@ -21,8 +21,8 @@ pub use error::{Error, Result};
 use crate::diagnostic::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use crate::lints::Linter;
 use crate::literals::unesacpe_string;
-use crate::parser::tokenstream::Token as ParserToken;
-use crate::parser::tokenstream::TokenStream as ParserTokenStream;
+use crate::parser::Token as ParserToken;
+use crate::parser::TokenStream as ParserTokenStream;
 use crate::preprocessor::error::Error::{MacroNotFound, MissingToken, UnexpectedToken};
 use crate::preprocessor::lexer::Token as LexicalToken;
 use crate::preprocessor::lexer::Token::{
@@ -32,9 +32,10 @@ use crate::preprocessor::lexer::{FollowedByBracket, Lexer};
 use crate::preprocessor::lints::MacroOverwritten;
 use crate::preprocessor::macros::MacroParser;
 use crate::preprocessor::tokenstream::{Macro, MacroArg, Token};
+use crate::sourcemap::span::DUMMY_SP;
 use crate::sourcemap::Span;
 use crate::sourcemap::{BytePos, FileId, SourceMap, SyntaxContext};
-use crate::symbol::{Ident, Symbol};
+use crate::symbol::{keywords, Ident, Symbol};
 use crate::{HashMap, StringLiteral};
 
 mod lints;
@@ -165,9 +166,20 @@ impl<'sm> Preprocessor<'sm> {
         // average word length in HICUM without macro expansion and including comments is 8.1
         // as such we use 4 to have some wiggel room (especially with regards to macros) as most tokens correspond to one word
         let expected_token_count = source_map[file].contents().len() / 4;
+        let mut macros = HashMap::with_capacity(64);
+
+        macros.insert(
+            keywords::OpenVAF,
+            Macro {
+                head: DUMMY_SP,
+                body: vec![],
+                arg_len_idx: MacroArg::new(0),
+            },
+        );
+
         let mut res = Self {
             source_map,
-            macros: HashMap::with_capacity(64),
+            macros,
             lexer: Lexer::new("", SyntaxContext::ROOT, BytePos::new(0)),
             errors: MultiDiagnostic(Vec::with_capacity(16)),
             dst: Vec::with_capacity(expected_token_count),
@@ -834,7 +846,6 @@ pub trait TokenProcessor<'lt> {
             LexicalToken::Domain => ParserToken::Domain,
             LexicalToken::Discrete => ParserToken::Discrete,
             LexicalToken::Continuous => ParserToken::Continuous,
-            LexicalToken::TemperatureDerivative => ParserToken::TemperatureDerivative,
             LexicalToken::TimeDerivative => ParserToken::TimeDerivative,
             LexicalToken::PartialDerivative => ParserToken::PartialDerivative,
             LexicalToken::TimeIntegral => ParserToken::TimeIntegral,
@@ -875,6 +886,10 @@ pub trait TokenProcessor<'lt> {
             LexicalToken::TimeDerivativeNature => ParserToken::TimeDerivativeNature,
             LexicalToken::TimeIntegralNature => ParserToken::TimeIntegralNature,
             LexicalToken::Units => ParserToken::Units,
+
+            LexicalToken::ConcatStart => ParserToken::ConcatStart,
+            LexicalToken::ConcatEnd => ParserToken::ConcatEnd,
+            LexicalToken::ArrStart => ParserToken::ArrStart,
 
             LexicalToken::MacroElsif
             | LexicalToken::MacroElse

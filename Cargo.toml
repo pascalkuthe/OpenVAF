@@ -5,9 +5,3 @@ members = [
     "macros",
     "rust_codegen"
 ]
-
-[profile.dev]
-opt-level = 1
-
-[profile.bench]
-lto = true        # Enable full link-time optimization.

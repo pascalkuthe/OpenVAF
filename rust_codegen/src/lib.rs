@@ -11,12 +11,12 @@ use open_vaf::ast::{UnaryOperator, VariableType};
 use open_vaf::cfg::ControlFlowGraph;
 use open_vaf::cfg::{BasicBlockId, Terminator};
 use open_vaf::hir::DisciplineAccess;
-use open_vaf::ir::mir::RealExpression;
-use open_vaf::ir::{
-    AttributeNode, Attributes, BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p,
-    IntegerExpressionId, NetId, NoiseSource, ParameterId, PortId, PrintOnFinish, RealExpressionId,
-    StatementId, StopTaskKind, StringExpressionId, VariableId,
+use open_vaf::ir::ids::{
+    BranchId, IntegerExpressionId, NetId, ParameterId, PortId, RealExpressionId, StatementId,
+    StringExpressionId, VariableId,
 };
+use open_vaf::ir::mir::RealExpression;
+use open_vaf::ir::{DoubleArgMath, NoiseSource, PrintOnFinish, SingleArgMath, StopTaskKind};
 use open_vaf::mir::ExpressionId;
 use open_vaf::mir::{
     ComparisonOperator, IntegerBinaryOperator, IntegerExpression, Mir, ParameterType,
@@ -210,8 +210,8 @@ pub struct BasicBlockInterpolator<'lt, EI> {
 impl<'lt, EI: TargetSpecificInterpolator> ToTokens for BasicBlockInterpolator<'lt, EI> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         for stmt in self.cfg.blocks[self.block].statements.iter().copied() {
-            match self.mir[stmt] {
-                Statement::Assignment(_, variable, value) => {
+            match self.mir[stmt].contents {
+                Statement::Assignment(variable, value) => {
                     let name = gen_variable_ident(variable);
                     match value {
                         ExpressionId::Real(value) => {
@@ -245,9 +245,9 @@ impl<'lt, EI: TargetSpecificInterpolator> ToTokens for BasicBlockInterpolator<'l
                     }
                 }
 
-                Statement::Contribute(attr, access, branch, val) => self
+                Statement::Contribute(access, branch, val) => self
                     .external_interpolator
-                    .contribute_to_tokens(tokens, attr, access, branch, val),
+                    .contribute_to_tokens(tokens, stmt, access, branch, val),
 
                 Statement::StopTask(kind, print) => self
                     .external_interpolator
@@ -261,21 +261,29 @@ pub trait TargetSpecificInterpolator: Sized {
     fn stop_task_to_tokens(
         &self,
         stmt: StatementId,
-        kind: AttributeNode<StopTaskKind>,
+        kind: StopTaskKind,
         print: PrintOnFinish,
         tokens: &mut TokenStream,
     );
 
-    #[allow(unused_variables)]
-    fn temperature_to_tokens(&self, expr: RealExpressionId, tokens: &mut TokenStream) {
+    fn port_flow_to_tokens(
+        &self,
+        _expr: RealExpressionId,
+        port: PortId,
+        order: u8,
+        tokens: &mut TokenStream,
+    ) {
+        tokens.append(gen_port_flow_access(port, order))
+    }
+
+    fn temperature_to_tokens(&self, _expr: RealExpressionId, tokens: &mut TokenStream) {
         //By default temperature is just a variable
         tokens.append(Ident::new("temperature", Span::call_site()))
     }
 
-    #[allow(unused_variables)]
     fn branch_access_to_tokens(
         &self,
-        expr: RealExpressionId,
+        _expr: RealExpressionId,
         discipline_access: DisciplineAccess,
         branch: BranchId,
         order: u8,
@@ -314,7 +322,6 @@ pub trait TargetSpecificInterpolator: Sized {
         port: PortId,
     );
 
-    #[allow(unused_variables)]
     fn limexp_to_tokens(
         &self,
         tokens: &mut TokenStream,
@@ -334,7 +341,7 @@ pub trait TargetSpecificInterpolator: Sized {
     fn contribute_to_tokens(
         &self,
         tokens: &mut TokenStream,
-        attr: Attributes,
+        stmt: StatementId,
         access: DisciplineAccess,
         branch: BranchId,
         val: RealExpressionId,
@@ -344,7 +351,7 @@ pub trait TargetSpecificInterpolator: Sized {
 pub struct RealBuiltInFunctionCallInterpolator1p<'lt, EI> {
     pub mir: &'lt Mir,
     pub sm: &'lt SourceMap,
-    pub call: BuiltInFunctionCall1p,
+    pub call: SingleArgMath,
     pub arg: RealExpressionId,
     pub external_interpolator: &'lt EI,
 }
@@ -360,64 +367,64 @@ impl<'lt, EI: TargetSpecificInterpolator> ToTokens
             expression: self.arg,
         };
         match self.call {
-            BuiltInFunctionCall1p::Sqrt => {
+            SingleArgMath::Sqrt => {
                 quote!(#arg.sqrt()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Exp(false) => {
+            SingleArgMath::Exp(false) => {
                 quote!(#arg.exp()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Exp(true) => {
+            SingleArgMath::Exp(true) => {
                 self.external_interpolator.limexp_to_tokens(tokens, arg);
             }
-            BuiltInFunctionCall1p::Ln => {
+            SingleArgMath::Ln => {
                 quote!(#arg.ln()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Log => {
+            SingleArgMath::Log => {
                 quote!(#arg.log10()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Abs => {
+            SingleArgMath::Abs => {
                 quote!(#arg.abs()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Floor => {
+            SingleArgMath::Floor => {
                 quote!(#arg.floor()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Ceil => {
+            SingleArgMath::Ceil => {
                 quote!(#arg.ceil()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Sin => {
+            SingleArgMath::Sin => {
                 quote!(#arg.sin()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Cos => {
+            SingleArgMath::Cos => {
                 quote!(#arg.cos()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::Tan => {
+            SingleArgMath::Tan => {
                 quote!(#arg.tan()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::ArcSin => {
+            SingleArgMath::ArcSin => {
                 quote!(#arg.asin()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::ArcCos => {
+            SingleArgMath::ArcCos => {
                 quote!(#arg.acos()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::ArcTan => {
+            SingleArgMath::ArcTan => {
                 quote!(#arg.atan()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::SinH => {
+            SingleArgMath::SinH => {
                 quote!(#arg.sinh()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::CosH => {
+            SingleArgMath::CosH => {
                 quote!(#arg.cosh()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::TanH => {
+            SingleArgMath::TanH => {
                 quote!(#arg.tanh()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::ArcSinH => {
+            SingleArgMath::ArcSinH => {
                 quote!(#arg.asinh()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::ArcCosH => {
+            SingleArgMath::ArcCosH => {
                 quote!(#arg.acosh()).to_tokens(tokens);
             }
-            BuiltInFunctionCall1p::ArcTanH => {
+            SingleArgMath::ArcTanH => {
                 quote!(#arg.atanh()).to_tokens(tokens);
             }
         }
@@ -427,7 +434,7 @@ impl<'lt, EI: TargetSpecificInterpolator> ToTokens
 pub struct RealBuiltInFunctionCallInterpolator2p<'lt, EI: TargetSpecificInterpolator> {
     pub mir: &'lt Mir,
     pub sm: &'lt SourceMap,
-    pub call: BuiltInFunctionCall2p,
+    pub call: DoubleArgMath,
     pub arg1: RealExpressionId,
     pub arg2: RealExpressionId,
     pub external_interpolator: &'lt EI,
@@ -451,19 +458,19 @@ impl<'lt, EI: TargetSpecificInterpolator> ToTokens
         arg1.to_tokens(tokens);
 
         match self.call {
-            BuiltInFunctionCall2p::Pow => {
+            DoubleArgMath::Pow => {
                 quote! (.powf).to_tokens(tokens);
             }
-            BuiltInFunctionCall2p::Hypot => {
+            DoubleArgMath::Hypot => {
                 quote! (.hypot).to_tokens(tokens);
             }
-            BuiltInFunctionCall2p::Min => {
+            DoubleArgMath::Min => {
                 quote! (.min).to_tokens(tokens);
             }
-            BuiltInFunctionCall2p::Max => {
+            DoubleArgMath::Max => {
                 quote! (.max).to_tokens(tokens);
             }
-            BuiltInFunctionCall2p::ArcTan2 => {
+            DoubleArgMath::ArcTan2 => {
                 quote! (.antan2).to_tokens(tokens);
             }
         }
@@ -925,6 +932,9 @@ impl<'lt, EI: TargetSpecificInterpolator> ToTokens for RealExpressionInterpolato
                 self.external_interpolator
                     .noise_to_tokens(self.expression, tokens, source, name)
             }
+            RealExpression::PortFlowAccess(port, order) => self
+                .external_interpolator
+                .port_flow_to_tokens(self.expression, port, order, tokens),
         }
     }
 }
@@ -937,6 +947,14 @@ pub fn gen_branch_access(
 ) -> Ident {
     Ident::new(
         format!("branch_{:?}_{}_{}", discipline_access, branch_access, order).as_str(),
+        proc_macro2::Span::call_site(),
+    )
+}
+
+#[must_use]
+pub fn gen_port_flow_access(port: PortId, order: u8) -> Ident {
+    Ident::new(
+        format!("portflow_{}_{}", port, order).as_str(),
         proc_macro2::Span::call_site(),
     )
 }
@@ -968,10 +986,13 @@ pub fn gen_port_ident(port: PortId) -> Ident {
 #[must_use]
 pub fn generate_variable_type(variable_type: VariableType) -> TokenTree {
     match variable_type {
-        VariableType::INTEGER => {
+        VariableType::Integer => {
             TokenTree::Ident(Ident::new("i32", proc_macro2::Span::call_site()))
         }
-        VariableType::REAL => TokenTree::Ident(Ident::new("f64", proc_macro2::Span::call_site())),
+        VariableType::Real => TokenTree::Ident(Ident::new("f64", proc_macro2::Span::call_site())),
+        VariableType::String => {
+            TokenTree::Ident(Ident::new("String", proc_macro2::Span::call_site()))
+        }
     }
 }
 

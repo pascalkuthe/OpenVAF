@@ -8,7 +8,7 @@
  *  distributed except according to the terms contained in the LICENSE file.
  * *****************************************************************************************
 
- Adapted from https://github.com/rust-lang/rust  src/librustc_macros/src/symbols.rs  under MIT-License
+ Adapted from https://github.com/rust-lang/rust  src/librustc_macros/src/declarations  under MIT-License
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal

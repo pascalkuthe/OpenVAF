@@ -9,11 +9,12 @@
  */
 
 use crate::ir::ast::UnaryOperator;
-use crate::ir::mir::ComparisonOperator;
-use crate::ir::{
-    IntegerExpressionId, NetId, Node, ParameterId, PortId, RealExpressionId, StringExpressionId,
+use crate::ir::ids::{
+    IntegerExpressionId, NetId, ParameterId, PortId, RealExpressionId, StringExpressionId,
     VariableId,
 };
+use crate::ir::mir::ComparisonOperator;
+use crate::ir::Spanned;
 use crate::mir::{IntegerBinaryOperator, IntegerExpression, Mir};
 
 pub fn walk_integer_expression<V: IntegerExprFold>(
@@ -60,25 +61,25 @@ pub trait IntegerExprFold: Sized {
     fn fold_binary_operator(
         &mut self,
         lhs: IntegerExpressionId,
-        op: Node<IntegerBinaryOperator>,
+        op: Spanned<IntegerBinaryOperator>,
         rhs: IntegerExpressionId,
     ) -> Self::T;
 
     fn fold_integer_comparison(
         &mut self,
         lhs: IntegerExpressionId,
-        op: Node<ComparisonOperator>,
+        op: Spanned<ComparisonOperator>,
         rhs: IntegerExpressionId,
     ) -> Self::T;
 
     fn fold_real_comparison(
         &mut self,
         lhs: RealExpressionId,
-        op: Node<ComparisonOperator>,
+        op: Spanned<ComparisonOperator>,
         rhs: RealExpressionId,
     ) -> Self::T;
 
-    fn fold_unary_op(&mut self, op: Node<UnaryOperator>, arg: IntegerExpressionId) -> Self::T;
+    fn fold_unary_op(&mut self, op: Spanned<UnaryOperator>, arg: IntegerExpressionId) -> Self::T;
 
     fn fold_condition(
         &mut self,

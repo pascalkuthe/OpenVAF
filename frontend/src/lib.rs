@@ -59,14 +59,14 @@
 //!
 //! # use open_vaf::preprocessor::{preprocess_user_facing_with_printer, std_path};
 //! # use std::path::Path;
-//! # use open_vaf::diagnostic::UserResult;
+//! # use open_vaf::diagnostic::{UserResult, StandardPrinter};
 //! # use open_vaf::mir::Mir;
 //! # use open_vaf::ast::Ast;
 //! # use open_vaf::SourceMap;
 //! # use open_vaf::lints::Linter;
 //! # const EXPANSION_DISCLAIMER: &str = "hint to use the backtrace option";
 //!
-//! # fn compile(file: &Path)-> UserResult<Mir>{
+//!  fn compile(file: &Path)-> UserResult<Mir>{
 //!
 //!     let paths = std_path("path_to_constants.va".into(),"path_to_disciplines.va".into());
 //!     
@@ -84,16 +84,16 @@
 //!
 //!     let mut mir = hir.lower_user_facing_with_printer(&sm, EXPANSION_DISCLAIMER)?;
 //!
-//!     // Assuming only one module. OpenVAF is currently not really desinged for multiple modules yet
-//!     let mut main_cfg = mir.modules[0].contents.analog_cfg.clone();
 //!
-//!     let res = main_cfg.calculate_all_registered_derivatives(&mut mir);
+//!     mir.calculate_all_registered_derivatives().map_err(|err|err.user_facing::<StandardPrinter>(&sm,EXPANSION_DISCLAIMER))?;
 //!
-//!     if res.is_empty() {
-//!         Ok(mir)
-//!     }else {
-//!         Err(res.user_facing(&sm, EXPANSION_DISCLAIMER))
-//!     }
+//!     mir.lint_unused_items();
+//!
+//!     let diagnostic = Linter::late_user_diagnostics(&sm, EXPANSION_DISCLAIMER)?;
+//!
+//!     eprint!("{}", diagnostic);
+//!
+//!     Ok(mir)
 //!
 //! }
 //!

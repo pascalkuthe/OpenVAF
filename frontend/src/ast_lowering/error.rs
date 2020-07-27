@@ -15,9 +15,10 @@ use std::fmt::Display;
 use annotate_snippets::snippet::AnnotationType;
 use thiserror::Error;
 
-use crate::diagnostic::{DiagnosticSlice, LibraryDiagnostic, Text, Unsupported};
+use crate::diagnostic::{DiagnosticSlice, FooterItem, LibraryDiagnostic, Text};
 use crate::hir::Hir;
-use crate::ir::DisciplineId;
+use crate::ir::ast::NatureAttribute;
+use crate::ir::ids::DisciplineId;
 use crate::sourcemap::Span;
 use crate::symbol::keywords;
 use crate::symbol::{Ident, Symbol};
@@ -44,9 +45,15 @@ impl Display for NetInfo {
 #[derive(Error, Clone, Debug, Eq, PartialEq, Copy)]
 pub enum AllowedNatures {
     None, // Discrete
-    Potential(Symbol),
-    Flow(Symbol),
-    PotentialAndFlow(Symbol, Symbol),
+    PortPotential,
+    Potential(Symbol, Symbol),
+    Flow(Symbol, Symbol),
+    PotentialAndFlow {
+        potential_nature: Symbol,
+        potential_nature_access: Symbol,
+        flow_nature: Symbol,
+        flow_nature_access: Symbol,
+    },
 }
 
 impl AllowedNatures {
@@ -54,22 +61,49 @@ impl AllowedNatures {
         let discipline = &hir[discipline].contents;
         match (discipline.potential_nature, discipline.flow_nature) {
             (None, None) => Self::None,
-            (Some(pot), None) => Self::Potential(hir[pot].contents.ident.name),
-            (None, Some(flow)) => Self::Flow(hir[flow].contents.ident.name),
-            (Some(pot), Some(flow)) => {
-                Self::PotentialAndFlow(hir[pot].contents.ident.name, hir[flow].contents.ident.name)
+            (Some(pot), None) => {
+                Self::Potential(hir[pot].contents.ident.name, hir[pot].contents.access.name)
             }
+            (None, Some(flow)) => Self::Flow(
+                hir[flow].contents.ident.name,
+                hir[flow].contents.access.name,
+            ),
+            (Some(pot), Some(flow)) => Self::PotentialAndFlow {
+                potential_nature: hir[pot].contents.ident.name,
+                potential_nature_access: hir[pot].contents.access.name,
+                flow_nature: hir[flow].contents.ident.name,
+                flow_nature_access: hir[flow].contents.access.name,
+            },
+        }
+    }
+
+    pub fn from_port_discipline(discipline: DisciplineId, hir: &Hir) -> Self {
+        let discipline = &hir[discipline].contents;
+        if let Some(flow) = discipline.flow_nature {
+            Self::Flow(
+                hir[flow].contents.ident.name,
+                hir[flow].contents.access.name,
+            )
+        } else {
+            Self::None
         }
     }
 
     fn to_allowed_list(&self) -> Vec<Symbol> {
         match *self {
-            Self::None => vec![],
-            Self::Potential(pot) => vec![keywords::potential, pot],
-            Self::Flow(flow) => vec![keywords::flow, flow],
-            Self::PotentialAndFlow(pot, flow) => {
-                vec![keywords::potential, keywords::flow, pot, flow]
-            }
+            Self::None | Self::PortPotential => vec![],
+            Self::Potential(_, pot) => vec![keywords::potential, pot],
+            Self::Flow(_, flow) => vec![keywords::flow, flow],
+            Self::PotentialAndFlow {
+                flow_nature_access,
+                potential_nature_access,
+                ..
+            } => vec![
+                keywords::potential,
+                keywords::flow,
+                potential_nature_access,
+                flow_nature_access,
+            ],
         }
     }
 }
@@ -77,20 +111,26 @@ impl AllowedNatures {
 impl Display for AllowedNatures {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::None => f.write_fmt(format_args!(
-                "Discrete Disciplines can not be accessed using branch Probes"
+            Self::None => f.write_str(
+                "Discrete Disciplines can not be accessed using branch probes"
+            ),
+            Self::PortPotential => f.write_str(
+                "Only the flow of port branches can be read but this port is defined for a discipline without flow as such it can't be accessed using branch probes"
+            ),
+            Self::Potential(pot, pot_access) => f.write_fmt(format_args!(
+                "It can only be accessed using its Potential ({}) with '{}'/'pot'",
+                pot,
+                pot_access,
             )),
-            Self::Potential(pot) => f.write_fmt(format_args!(
-                "It can only be accessed using its Potential ({})",
-                pot
+            Self::Flow(flow,flow_access) => f.write_fmt(format_args!(
+                "It can only be accessed using its Flow ({})  with '{}'/'flow'",
+                flow,
+                flow_access
             )),
-            Self::Flow(flow) => f.write_fmt(format_args!(
-                "It can only be accessed using its Flow ({})",
-                flow
-            )),
-            Self::PotentialAndFlow(pot, flow) => f.write_fmt(format_args!(
-                "It can only be accessed using its Potential ({}) or Flow ({})",
-                pot, flow
+            Self::PotentialAndFlow{ potential_nature, potential_nature_access, flow_nature, flow_nature_access } => f.write_fmt(format_args!(
+                "It can only be accessed using its Potential ({}) with '{}'/'flow' or its Flow ({}) with '{}'/'flow'",
+                potential_nature, potential_nature_access,
+                flow_nature, flow_nature_access,
             )),
         }
     }
@@ -99,10 +139,14 @@ impl Display for AllowedNatures {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NonConstantExpression {
     VariableReference,
+    ParameterReference,
+    PortReferences,
+    NetReferences,
     BranchAccess,
     FunctionCall,
     AnalogFilter,
 }
+
 impl Display for NonConstantExpression {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
@@ -110,6 +154,9 @@ impl Display for NonConstantExpression {
             Self::BranchAccess => f.write_str("Branch probe calls"),
             Self::FunctionCall => f.write_str("Function calls"),
             Self::AnalogFilter => f.write_str("Analog filters"),
+            Self::ParameterReference => f.write_str("Parameter references"),
+            Self::PortReferences => f.write_str("Port references"),
+            Self::NetReferences => f.write_str("Net references"),
         }
     }
 }
@@ -141,13 +188,16 @@ pub enum MockSymbolDeclaration {
     Block,
     Variable,
     Branch,
+    PortBranch,
     Net,
     Port,
     Function,
     Discipline,
     Nature,
+    NatureAccess,
     Parameter,
 }
+
 impl Display for MockSymbolDeclaration {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
@@ -155,26 +205,156 @@ impl Display for MockSymbolDeclaration {
             Self::Block => f.write_str("block"),
             Self::Variable => f.write_str("variable"),
             Self::Branch => f.write_str("branch"),
+            Self::PortBranch => f.write_str("port branch"),
             Self::Net => f.write_str("net"),
             Self::Port => f.write_str("port"),
             Self::Function => f.write_str("function"),
             Self::Discipline => f.write_str("discipline"),
             Self::Nature => f.write_str("nature"),
+            Self::NatureAccess => f.write_str("nature access"),
             Self::Parameter => f.write_str("parameter"),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum AttributeKind {
+    DisciplinePotential(Ident),
+    DisciplineFlow(Ident),
+    DisciplineDomain(Ident),
+    NatureAttribute(NatureAttribute, Ident),
+}
+
+impl AttributeKind {
+    pub fn short(&self) -> Symbol {
+        match self {
+            Self::DisciplinePotential(_) => keywords::potential,
+            Self::DisciplineFlow(_) => keywords::flow,
+            Self::DisciplineDomain(_) => keywords::domain,
+            Self::NatureAttribute(NatureAttribute::Abstol, _) => keywords::abstol,
+            Self::NatureAttribute(NatureAttribute::Access, _) => keywords::access,
+            Self::NatureAttribute(NatureAttribute::DerivativeNature, _) => keywords::ddt_nature,
+            Self::NatureAttribute(NatureAttribute::AntiDerivativeNature, _) => keywords::idt_nature,
+            Self::NatureAttribute(NatureAttribute::Units, _) => keywords::units,
+            Self::NatureAttribute(NatureAttribute::User(ident), _) => ident.name,
+        }
+    }
+}
+
+impl Display for AttributeKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DisciplineDomain(discipline) => {
+                f.write_fmt(format_args!("The potential nature of {}", discipline))
+            }
+
+            Self::DisciplinePotential(discipline) => {
+                f.write_fmt(format_args!("The flow nature of {}", discipline))
+            }
+
+            Self::DisciplineFlow(discipline) => {
+                f.write_fmt(format_args!("The domain of {}", discipline))
+            }
+
+            Self::NatureAttribute(NatureAttribute::Abstol, nature) => {
+                f.write_fmt(format_args!("The 'abstol' attribute of {}", nature))
+            }
+
+            Self::NatureAttribute(NatureAttribute::Access, nature) => {
+                f.write_fmt(format_args!("The 'access' attribute of {}", nature))
+            }
+            Self::NatureAttribute(NatureAttribute::DerivativeNature, nature) => {
+                f.write_fmt(format_args!("The 'ddt_nature' attribute of {}", nature))
+            }
+            Self::NatureAttribute(NatureAttribute::AntiDerivativeNature, nature) => {
+                f.write_fmt(format_args!("The 'idt_nature' attribute of {}", nature))
+            }
+            Self::NatureAttribute(NatureAttribute::Units, nature) => {
+                f.write_fmt(format_args!("The 'units' attribute of {}", nature))
+            }
+            Self::NatureAttribute(NatureAttribute::User(ident), nature) => {
+                f.write_fmt(format_args!("The user attribute '{}' of {}", ident, nature))
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum IllegalNatureAttributeOverwriteKind {
+    Abstol,
+    Access,
+}
+
+impl Display for IllegalNatureAttributeOverwriteKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Abstol => f.write_str("'abstol'"),
+            Self::Access => f.write_str("'access'"),
         }
     }
 }
 
 #[derive(Error, Clone, Debug)]
 pub enum Error {
+    #[error("Overwriting {kind} in derived nature '{nature}' is forbidden! ")]
+    IllegalNatureAttributeOverwrite {
+        kind: IllegalNatureAttributeOverwriteKind,
+        nature: Ident,
+        parent: Ident,
+        overwrite: Span,
+    },
+
+    #[error("The nature {name} is derived from {parent} which is itself derived from {name}")]
+    CircularAttributeInheritance {
+        name: Ident,
+        parent: Ident,
+        trace_back: Vec<Ident>,
+    },
+
+    #[error("Disciplines in the discrete Domain may not define flow/potential natures")]
+    DiscreteDisciplineHasNatures {
+        span: Span,
+        discrete_declaration: Span,
+        first_nature: Span,
+        second_nature: Option<Span>,
+    },
+
+    #[error("{attribute_kind} was defined multiple times")]
+    AttributeAlreadyDefined {
+        attribute_kind: AttributeKind,
+        old: Span,
+        new: Span,
+    },
+
+    #[error("Module ports declared in Module body when already declared in Module Head")]
+    PortRedeclaration {
+        module_head: Span,
+        body_declaration: Span,
+    },
+
+    #[error("{port} has to be listed in the Module head!")]
+    PortNotPreDeclaredInModuleHead { port_list: Span, port: Ident },
+
+    #[error("Port {0} was pre declared in module head but not defined in the module body")]
+    PortPreDeclaredNotDefined(Ident),
+
+    #[error("Nature {1} is missing the required attributes {0}")]
+    RequiredBaseNatureAttributesNotDefined(ListFormatter<Vec<Symbol>>, Ident, Span),
+
+    #[error("Case statements may only have one default case")]
+    MultipleDefaultDeclarations { old: Span, new: Span },
+
     #[error("Function argument {0} is missing separate type declaration")]
     FunctionArgTypeDeclarationMissing(Ident),
 
     #[error("'{0}' was not found in the current scope!")]
     NotFound(Ident),
 
-    #[error("'{0}' was not found in {1} the current scope!")]
+    #[error("'{0}' was not found in '{1}'!")]
     NotFoundIn(Ident, Symbol),
+
+    #[error("'{0}' was declared without a discipline! This is not valid in the analog subset of VerilogAMS")]
+    NetWithoutDiscipline(Ident),
 
     #[error("{declaration_name} is not a scope!")]
     NotAScope {
@@ -197,8 +377,8 @@ pub enum Error {
     #[error("Branch probe functions expect at least 1 Argument")]
     EmptyBranchAccess { nature: Symbol, span: Span },
 
-    #[error("Branch probe function calls only accepts nets and branches as arguments!")]
-    UnexpectedToken(Span),
+    #[error("{0} only accepts identifiers!")]
+    ExpectedIdentifier(&'static str, Span),
 
     #[error("This branch can not be accessed by {nature}. {allowed_natures}")]
     NatureNotPotentialOrFlow {
@@ -209,20 +389,43 @@ pub enum Error {
     #[error("The disciplines of {0} and {1} are incompatible")]
     DisciplineMismatch(NetInfo, NetInfo, Span),
 
-    #[error("{0} are not allowed in constant expressions!")]
+    #[error("{0} are not allowed in this expressions!")]
     NotAllowedInConstantContext(NonConstantExpression, Span),
 
     #[error("{0} is now allowed inside analog functions!")]
     NotAllowedInFunction(NotAllowedInFunction, Span),
 
-    #[error("frontend does currently not support {0}")]
-    Unsupported(Unsupported, Span),
-
     #[error("Partial derivatives may only be calculated over node potentials or branch flows")]
     DerivativeNotAllowed(Span),
+
+    #[error("Contribution can only be made to branch probes (for example 'I(net1,net2)', 'pot(net)' or 'flow(branch)')")]
+    ContributeToNonBranchProbe(Span),
+
+    #[error("Port branches ( like (<PORT>) ) can only be read but not contributed to")]
+    ContributeToBranchPortProbe(Span),
 }
 
 impl LibraryDiagnostic for Error {
+    #[inline(always)]
+    fn footer(&self) -> Vec<FooterItem> {
+        match self{
+            Self::CircularAttributeInheritance { trace_back, .. }  => vec![FooterItem {
+                id: None,
+                label: Text::owned(format!(
+                    "Traceback: {}",
+                    ListFormatter(trace_back.as_slice(), "", ", ")
+                )),
+                annotation_type: AnnotationType::Info,
+            }],
+            Self::RequiredBaseNatureAttributesNotDefined(_, _, _) => vec![FooterItem {
+                id: None,
+                label: Text::const_str("Every base nature (a nature that has not parent) has to define the 'abstol', 'access' and 'units' attribute"),
+                annotation_type: AnnotationType::Help,
+            }],
+            _ => Vec::new(),
+        }
+    }
+
     #[inline(always)]
     fn id(&self) -> Option<&'static str> {
         // TODO error documentation
@@ -235,6 +438,129 @@ impl LibraryDiagnostic for Error {
 
     fn slices(&self) -> Vec<DiagnosticSlice> {
         match self {
+            Self::DiscreteDisciplineHasNatures {
+                span,
+                discrete_declaration,
+                first_nature,
+                second_nature,
+            } => {
+                let mut messages = vec![
+                    (
+                        AnnotationType::Info,
+                        Text::const_str("Declared as discrete here"),
+                        discrete_declaration.data(),
+                    ),
+                    (
+                        AnnotationType::Error,
+                        Text::const_str("Nature declared here"),
+                        first_nature.data(),
+                    ),
+                ];
+                if let Some(nature) = second_nature {
+                    messages.push((
+                        AnnotationType::Error,
+                        Text::const_str("Nature declared here"),
+                        nature.data(),
+                    ))
+                }
+                vec![DiagnosticSlice {
+                    slice_span: span.data(),
+                    messages,
+                    fold: true,
+                }]
+            }
+
+            Self::AttributeAlreadyDefined {
+                attribute_kind,
+                old,
+                new,
+            } => vec![DiagnosticSlice {
+                slice_span: old.data().extend(new.data()),
+                messages: vec![
+                    (
+                        AnnotationType::Info,
+                        Text::owned(format!("{} is declared here first", attribute_kind.short())),
+                        old.data(),
+                    ),
+                    (
+                        AnnotationType::Error,
+                        Text::owned(format!(
+                            "{} is later re declared here",
+                            attribute_kind.short()
+                        )),
+                        new.data(),
+                    ),
+                ],
+                fold: true,
+            }],
+
+            Self::PortRedeclaration {
+                module_head,
+                body_declaration,
+            } => vec![
+                DiagnosticSlice {
+                    slice_span: module_head.data(),
+                    messages: vec![(
+                        AnnotationType::Help,
+                        Text::const_str("Ports already declared here"),
+                        module_head.data(),
+                    )],
+                    fold: false,
+                },
+                DiagnosticSlice {
+                    slice_span: body_declaration.data(),
+                    messages: vec![(
+                        AnnotationType::Error,
+                        Text::const_str("Ports may not be declared here"),
+                        body_declaration.data(),
+                    )],
+                    fold: false,
+                },
+            ],
+
+            Self::PortNotPreDeclaredInModuleHead { port_list, port } => vec![
+                DiagnosticSlice {
+                    slice_span: port.span.data(),
+                    messages: vec![(
+                        AnnotationType::Error,
+                        Text::const_str("Not declared in module head"),
+                        port.span.data(),
+                    )],
+                    fold: false,
+                },
+                DiagnosticSlice {
+                    slice_span: port_list.data(),
+                    messages: vec![(
+                        AnnotationType::Help,
+                        Text::owned(format!("{} is missing here", port)),
+                        port_list.data(),
+                    )],
+                    fold: false,
+                },
+            ],
+
+            Self::PortPreDeclaredNotDefined(port) => vec![DiagnosticSlice {
+                slice_span: port.span.data(),
+                messages: vec![(
+                    AnnotationType::Info,
+                    Text::const_str("Port is not defined in module body"),
+                    port.span.data(),
+                )],
+                fold: true,
+            }],
+
+            Self::RequiredBaseNatureAttributesNotDefined(required_attr, _, span) => {
+                vec![DiagnosticSlice {
+                    slice_span: span.data(),
+                    messages: vec![(
+                        AnnotationType::Error,
+                        Text::owned(format!("{} are required", required_attr)),
+                        span.data(),
+                    )],
+                    fold: true,
+                }]
+            }
+
             Self::NotAllowedInFunction(_, span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
@@ -330,7 +656,7 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Self::UnexpectedToken(span) => vec![DiagnosticSlice {
+            Self::ExpectedIdentifier(_, span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
@@ -396,16 +722,6 @@ impl LibraryDiagnostic for Error {
                 fold: false,
             }],
 
-            Self::Unsupported(unsupported, span) => vec![DiagnosticSlice {
-                slice_span: span.data(),
-                messages: vec![(
-                    AnnotationType::Error,
-                    Text::owned(format!("frontend does currently not allow {}", unsupported)),
-                    span.data(),
-                )],
-                fold: false,
-            }],
-
             Self::DerivativeNotAllowed(span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
@@ -414,6 +730,88 @@ impl LibraryDiagnostic for Error {
                     span.data(),
                 )],
                 fold: false,
+            }],
+
+            Self::NetWithoutDiscipline(ident) => vec![DiagnosticSlice {
+                slice_span: ident.span.data(),
+                messages: vec![(
+                    AnnotationType::Help,
+                    Text::const_str("Add discipline (such as 'electrical'"),
+                    ident.span.data(),
+                )],
+                fold: false,
+            }],
+
+            Self::ContributeToNonBranchProbe(span) => vec![DiagnosticSlice {
+                slice_span: span.data(),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::const_str("Can only contribute to branches"),
+                    span.data(),
+                )],
+                fold: false,
+            }],
+
+            Self::ContributeToBranchPortProbe(span) => vec![DiagnosticSlice {
+                slice_span: span.data(),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::const_str("Can only contribute to branches"),
+                    span.data(),
+                )],
+                fold: false,
+            }],
+
+            Self::MultipleDefaultDeclarations { new, old } => vec![DiagnosticSlice {
+                slice_span: old.data().extend(new.data()),
+                messages: vec![
+                    (
+                        AnnotationType::Info,
+                        Text::const_str("Default case declared here"),
+                        new.data(),
+                    ),
+                    (
+                        AnnotationType::Error,
+                        Text::const_str("Second default case is forbidden"),
+                        old.data(),
+                    ),
+                ],
+                fold: false,
+            }],
+
+            Self::CircularAttributeInheritance { name, parent, .. } => vec![DiagnosticSlice {
+                slice_span: name.span.data().extend(parent.span.data()),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::borrowed("Circular derived nature"),
+                    parent.span.data(),
+                )],
+                fold: false,
+            }],
+
+            Self::IllegalNatureAttributeOverwrite {
+                kind,
+                nature,
+                overwrite,
+                parent,
+            } => vec![DiagnosticSlice {
+                slice_span: nature.span.data().extend(parent.span.data()),
+                messages: vec![
+                    (
+                        AnnotationType::Error,
+                        Text::owned(format!(
+                            "Overwriting {} in derived natures is forbidden",
+                            kind
+                        )),
+                        overwrite.data(),
+                    ),
+                    (
+                        AnnotationType::Info,
+                        Text::owned(format!("{} is derived from {}", nature, parent)),
+                        nature.span.data().extend(parent.span.data()),
+                    ),
+                ],
+                fold: true,
             }],
         }
     }

@@ -20,11 +20,11 @@ use crate::diagnostic::{
     DiagnosticSlice, DiagnosticSlicePrinter, FooterItem, LibraryDiagnostic, Text,
     UserMultiDiagnostic, UserResult,
 };
-use crate::ir::mir::ExpressionId;
-use crate::ir::{
-    BranchId, IntegerExpressionId, ModuleId, NatureId, ParameterId, PortId, RealExpressionId,
+use crate::ir::ids::{
+    BranchId, IntegerExpressionId, ModuleId, NatureId, NetId, ParameterId, RealExpressionId,
     StatementId, StringExpressionId, VariableId,
 };
+use crate::ir::mir::ExpressionId;
 use crate::sourcemap::SourceMap;
 use crate::HashMap;
 use crate::GLOBALS;
@@ -38,6 +38,10 @@ use open_vaf_macros::lints;
 use std::error::Error;
 use std::fmt::Display;
 use std::sync::Arc;
+
+// These lints contain builtin lints that are not parse of any algorithem but instead run on their own
+
+pub mod unused;
 
 #[distributed_slice]
 pub static PLUGIN_LINTS: [&'static LintData] = [..];
@@ -121,14 +125,26 @@ fn with_lint_registry<T>(f: impl FnOnce(&LintRegistry) -> T) -> T {
 }
 
 lints! {
-    pub const macro_overwritten = LintData{default_lvl: Warn, documentation_id: None};
     pub const macro_file_cutoff = LintData{default_lvl: Warn, documentation_id: None};
+    pub const macro_overwritten = LintData{default_lvl: Warn, documentation_id: None};
+
     pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id: None};
+
     pub const ignored_display_task = LintData{default_lvl: Warn, documentation_id: None};
+
     pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: None};
-    pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: Some("L001")};
-    pub const constant_overflow = LintData{default_lvl: Deny, documentation_id: Some("L002")};
     pub const noise_derivative = LintData{default_lvl: Warn, documentation_id: None};
+
+    pub const unused_variables = LintData{default_lvl: Warn, documentation_id: None};
+    pub const unused_parameters = LintData{default_lvl: Warn, documentation_id: None};
+    pub const unused_branches = LintData{default_lvl: Warn, documentation_id: None};
+    pub const unused_nets = LintData{default_lvl: Warn, documentation_id: None};
+    pub const dead_code = LintData{default_lvl: Warn, documentation_id: None};
+
+
+    pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: Some("L001")};
+
+    pub const constant_overflow = LintData{default_lvl: Deny, documentation_id: Some("L002")};
 }
 
 define_index_type! {
@@ -180,11 +196,7 @@ impl Lint {
 
     pub fn set_global_overwrite(self, overwrite: Option<LintLevel>) {
         with_linter_mut(|linter| {
-            if linter.overwrites.len_idx() < self {
-                let newlen = with_lint_registry(|registry| registry.lints.len());
-                linter.overwrites.resize(newlen, None);
-            }
-            linter.overwrites.insert(self, overwrite)
+            linter.overwrites[self] = overwrite;
         })
     }
 }
@@ -205,6 +217,7 @@ pub enum LintLevel {
 
 /// The location a late lint occured
 /// This is will be used in the future to figure out the correct lint lvl based on attributes
+#[derive(Debug, Clone, Copy)]
 pub enum LintLocation {
     Statement(StatementId),
     RealExpression(RealExpressionId),
@@ -214,7 +227,7 @@ pub enum LintLocation {
     Nature(NatureId),
     Parameter(ParameterId),
     Variable(VariableId),
-    Port(PortId),
+    Net(NetId),
     Branch(BranchId),
     Root,
 }
@@ -277,9 +290,15 @@ impl From<BranchId> for LintLocation {
     }
 }
 
-impl From<PortId> for LintLocation {
-    fn from(id: PortId) -> Self {
-        Self::Port(id)
+impl From<NetId> for LintLocation {
+    fn from(id: NetId) -> Self {
+        Self::Net(id)
+    }
+}
+
+impl From<VariableId> for LintLocation {
+    fn from(id: VariableId) -> Self {
+        Self::Variable(id)
     }
 }
 
@@ -294,7 +313,6 @@ pub struct LintData {
 }
 
 /// Responsible for managing all lints generated in the current thread
-#[derive(Default)]
 pub struct Linter {
     early_lints: Vec<Box<dyn LintDiagnostic>>,
     late_lints: Vec<(Box<dyn LintDiagnostic>, LintLocation)>,
@@ -302,6 +320,14 @@ pub struct Linter {
 }
 
 impl Linter {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            early_lints: Vec::with_capacity(64),
+            late_lints: Vec::with_capacity(64),
+            overwrites: index_vec![None; with_lint_registry(|registry|registry.lints.len())],
+        }
+    }
     /// Returns user diagnostics for lints that were emitted before type checking
     /// Their lint lvl is **always global** and can not be adjust using attributes
     ///
@@ -389,6 +415,12 @@ impl Linter {
         with_linter_mut(|linter| {
             linter.late_lints.push((diagnostic, location));
         })
+    }
+}
+
+impl Default for Linter {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

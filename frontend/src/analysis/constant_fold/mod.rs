@@ -12,6 +12,8 @@ use core::mem::replace;
 use core::ops::{Add, Div, Mul, Sub};
 use core::option::Option::Some;
 
+use float_cmp::{ApproxEq, F64Margin};
+use log::trace;
 use num_traits::{One, Pow, Zero};
 
 pub use lints::ConstantOverflow;
@@ -20,6 +22,10 @@ pub use resolver::{ConstResolver, ConstantPropagator, NoConstResolution};
 
 use crate::ast::UnaryOperator;
 use crate::ir::hir::DisciplineAccess;
+use crate::ir::ids::{
+    BranchId, IntegerExpressionId, NetId, ParameterId, PortId, RealExpressionId,
+    StringExpressionId, VariableId,
+};
 use crate::ir::mir::fold::integer_expressions::{
     IntegerBinaryOperatorFold, IntegerComparisonFold, IntegerExprFold, RealComparisonFold,
 };
@@ -28,10 +34,7 @@ use crate::ir::mir::fold::real_expressions::{
 };
 use crate::ir::mir::fold::string_expressions::StringExprFold;
 use crate::ir::mir::Mir;
-use crate::ir::{
-    BranchId, BuiltInFunctionCall1p, BuiltInFunctionCall2p, IntegerExpressionId, NetId, Node,
-    NoiseSource, ParameterId, PortId, RealExpressionId, StringExpressionId, VariableId,
-};
+use crate::ir::{DoubleArgMath, NoiseSource, SingleArgMath, Spanned};
 use crate::lints::Linter;
 use crate::literals::StringLiteral;
 use crate::mir::fold::integer_expressions::walk_integer_expression;
@@ -42,8 +45,6 @@ use crate::mir::{
     RealExpression, StringExpression,
 };
 use crate::sourcemap::Span;
-use float_cmp::{ApproxEq, F64Margin};
-use log::trace;
 
 mod lints;
 mod propagation;
@@ -295,7 +296,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprFold
     fn fold_binary_operator(
         &mut self,
         lhs: RealExpressionId,
-        op: Node<RealBinaryOperator>,
+        op: Spanned<RealBinaryOperator>,
         rhs: RealExpressionId,
     ) -> Option<f64> {
         self.fold_real_binary_op(lhs, op.contents, rhs)
@@ -344,6 +345,10 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprFold
         None
     }
 
+    fn fold_port_flow_access(&mut self, _port: PortId, _time_derivative_order: u8) -> Option<f64> {
+        None
+    }
+
     fn fold_noise(
         &mut self,
         _noise_src: NoiseSource<RealExpressionId, ()>,
@@ -354,7 +359,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprFold
 
     fn fold_builtin_function_call_1p(
         &mut self,
-        call: BuiltInFunctionCall1p,
+        call: SingleArgMath,
         arg: RealExpressionId,
     ) -> Option<f64> {
         self.fold_real_builtin_function_call_1p(call, arg)
@@ -362,7 +367,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> RealExprFold
 
     fn fold_builtin_function_call_2p(
         &mut self,
-        call: BuiltInFunctionCall2p,
+        call: DoubleArgMath,
         arg1: RealExpressionId,
         arg2: RealExpressionId,
     ) -> Option<f64> {
@@ -598,7 +603,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprFold
     fn fold_binary_operator(
         &mut self,
         lhs: IntegerExpressionId,
-        op: Node<IntegerBinaryOperator>,
+        op: Spanned<IntegerBinaryOperator>,
         rhs: IntegerExpressionId,
     ) -> Option<i64> {
         self.fold_integer_binary_op(lhs, op.contents, rhs)
@@ -607,7 +612,7 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprFold
     fn fold_integer_comparison(
         &mut self,
         lhs: IntegerExpressionId,
-        op: Node<ComparisonOperator>,
+        op: Spanned<ComparisonOperator>,
         rhs: IntegerExpressionId,
     ) -> Option<i64> {
         IntegerComparisonFold::fold_integer_comparison(self, lhs, op.contents, rhs)
@@ -616,13 +621,17 @@ impl<'lt, T: ConstantFoldType, R: ConstResolver> IntegerExprFold
     fn fold_real_comparison(
         &mut self,
         lhs: RealExpressionId,
-        op: Node<ComparisonOperator>,
+        op: Spanned<ComparisonOperator>,
         rhs: RealExpressionId,
     ) -> Option<i64> {
         RealComparisonFold::fold_real_comparison(self, lhs, op.contents, rhs)
     }
 
-    fn fold_unary_op(&mut self, op: Node<UnaryOperator>, arg: IntegerExpressionId) -> Option<i64> {
+    fn fold_unary_op(
+        &mut self,
+        op: Spanned<UnaryOperator>,
+        arg: IntegerExpressionId,
+    ) -> Option<i64> {
         let arg = self.fold_integer_expr(arg)?;
         let res = match op.contents {
             UnaryOperator::BitNegate | UnaryOperator::LogicNegate => !arg,

@@ -1,5 +1,5 @@
 use open_vaf::diagnostic::UserResult;
-use open_vaf::parser::tokenstream::TokenStream;
+use open_vaf::parser::TokenStream;
 use open_vaf::preprocessor::{preprocess_user_facing, std_path};
 use open_vaf::sourcemap::FileId;
 use open_vaf::SourceMap;
