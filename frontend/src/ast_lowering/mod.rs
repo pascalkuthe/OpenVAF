@@ -34,7 +34,6 @@
 //!   During the fold these [states](VerilogContext) are tracked and errors are generated when an illegal expressions/statements is used
 //!
 //!
-//! The lowering process happens in a series of folds implemented in the [`ast_to_hir_fold`] module
 //!
 
 use std::sync::Arc;
@@ -84,7 +83,7 @@ pub mod lints;
 //TODO input/output enforcement
 
 /// A struct that contains data and functionality all ast to hir folds share
-/// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` macros and [`BranchResolver`](crate::ast_lowering::branch_resolution::BranchResolver)
+/// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` macros and [`BranchResolver`](crate::ast_lowering::branches::resolver::BranchResolver)
 pub struct Fold<'lt> {
     pub resolver: Resolver<'lt>,
     pub errors: MultiDiagnostic<Error>,

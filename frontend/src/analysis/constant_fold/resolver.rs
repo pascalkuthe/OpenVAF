@@ -66,6 +66,53 @@ impl ConstResolver for NoConstResolution {
         None
     }
 }
+/// An implimentation of `ConstResolver` used during [constant propagation][crate::analysis::constant_fold::propagation]
+/// It is used instead of [`ConstantPropagator`] when a statement does not depend on any variables
+///
+/// Compared to [`NoConstResolution`] this resolver does resolve parameters
+///
+#[derive(Debug)]
+pub struct ConstantParameterResolver<K: Borrow<PropagatedConstants>> {
+    pub known_values: K,
+}
+
+impl<K: Borrow<PropagatedConstants>> ConstResolver for ConstantParameterResolver<K> {
+    fn real_variable_value(&mut self, _var: VariableId) -> Option<f64> {
+        None
+    }
+
+    fn int_variable_value(&mut self, _var: VariableId) -> Option<i64> {
+        None
+    }
+
+    fn str_variable_value(&mut self, _var: VariableId) -> Option<StringLiteral> {
+        None
+    }
+
+    fn real_parameter_value(&mut self, param: ParameterId) -> Option<f64> {
+        self.known_values
+            .borrow()
+            .real_parameters
+            .get(&param)
+            .copied()
+    }
+
+    fn int_parameter_value(&mut self, param: ParameterId) -> Option<i64> {
+        self.known_values
+            .borrow()
+            .int_parameters
+            .get(&param)
+            .copied()
+    }
+
+    fn str_parameter_value(&mut self, param: ParameterId) -> Option<StringLiteral> {
+        self.known_values
+            .borrow()
+            .string_parameters
+            .get(&param)
+            .copied()
+    }
+}
 
 /// An implimentation of `ConstResolver` used during [constant propagation][const_propagation]
 /// One instance is intended to be used for folding a single statement (or terminator condition)

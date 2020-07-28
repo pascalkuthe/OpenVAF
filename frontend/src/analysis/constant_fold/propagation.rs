@@ -11,7 +11,7 @@ use float_cmp::{ApproxEq, F64Margin};
 use log::debug;
 
 use crate::analysis::constant_fold::resolver::{
-    ConstResolver, ConstantPropagator, NoConstResolution,
+    ConstResolver, ConstantParameterResolver, ConstantPropagator,
 };
 use crate::cfg::ControlFlowGraph;
 use crate::{HashMap, StringLiteral};
@@ -84,7 +84,12 @@ impl ControlFlowGraph {
                     res
                 } else {
                     //we dont need to handle dependencies since there are none
-                    mir.constant_fold_int_expr(condition, &mut NoConstResolution)
+                    mir.constant_fold_int_expr(
+                        condition,
+                        &mut ConstantParameterResolver {
+                            known_values: &mut *known_values,
+                        },
+                    )
                 };
 
                 match folded_condition {
@@ -130,7 +135,13 @@ impl Mir {
                 }
             } else {
                 //we dont need to handle dependencies since there are none
-                self.constant_fold_stmt(stmt, NoConstResolution, |_| known_values);
+                self.constant_fold_stmt(
+                    stmt,
+                    ConstantParameterResolver {
+                        known_values: &mut *known_values,
+                    },
+                    |resolver| resolver.known_values,
+                );
             }
         }
     }

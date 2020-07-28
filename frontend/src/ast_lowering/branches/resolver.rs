@@ -175,7 +175,7 @@ impl<'lt> BranchResolver {
     ///
     /// # Note
     ///
-    /// This should only be called with `hi`/`lo` that have been [checked](crate::ast_lowering::branch_resolution::BranchResolver::unnamed_branch)
+    /// This should only be called with `hi`/`lo` that have been [checked](crate::ast_lowering::branches::resolver::BranchResolver::unnamed_branch)
     pub fn unnamed_branch<'fold>(
         &mut self,
         span: Span,
