@@ -42,7 +42,7 @@ use crate::mir::{
 use crate::SourceMap;
 use std::sync::Arc;
 
-pub mod control_flow;
+mod control_flow;
 pub mod error;
 mod expression_semantic;
 

@@ -152,7 +152,7 @@ pub mod ast_lowering;
 pub mod data_structures;
 pub mod derivatives;
 pub mod diagnostic;
-mod hir_lowering;
+pub mod hir_lowering;
 mod literals;
 pub mod parser;
 pub mod preprocessor;
