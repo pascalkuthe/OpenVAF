@@ -9,21 +9,20 @@
 use std::mem::swap;
 
 use crate::analysis::data_flow::framework::{Analysis, DataFlowGraph, Direction};
-use crate::data_structures::BitSet;
 use crate::ir::cfg::ControlFlowGraph;
-use log::trace;
+use log::{debug, trace};
 
 /// A worklist based DFA solver
-pub struct Engine<'lt, A: Analysis<'lt>> {
+pub struct Engine<'lt, A: Analysis> {
     pub analysis: &'lt mut A,
-    pub dfg: DataFlowGraph<A::SetType>,
+    pub dfg: DataFlowGraph<A::Set>,
     pub cfg: &'lt ControlFlowGraph,
 }
 
-impl<'lt, A: Analysis<'lt>> Engine<'lt, A> {
+impl<'lt, A: Analysis> Engine<'lt, A> {
     pub fn new(cfg: &'lt ControlFlowGraph, analysis: &'lt mut A) -> Self {
         Self {
-            dfg: DataFlowGraph::new(analysis.max_idx(), cfg),
+            dfg: DataFlowGraph::new(analysis.new_set(), cfg),
             analysis,
             cfg,
         }
@@ -37,26 +36,33 @@ impl<'lt, A: Analysis<'lt>> Engine<'lt, A> {
     /// If the destination insets changed the elements are added back to the worklist
     ///
     #[must_use]
-    pub fn iterate_to_fixpoint(mut self) -> DataFlowGraph<A::SetType> {
-        let mut worklist =
-            <<A as Analysis<'lt>>::Direction as Direction<'lt>>::inital_work_queue(self.cfg);
-        let mut temporary_set = BitSet::new_empty(self.analysis.max_idx());
+    pub fn iterate_to_fixpoint(mut self) -> DataFlowGraph<A::Set> {
+        let mut worklist = <<A as Analysis>::Direction as Direction>::inital_work_queue(self.cfg);
+
+        <<A as Analysis>::Direction as Direction>::setup_entry(self.cfg, |entry| {
+            self.analysis.setup_entry(entry, &mut self.dfg)
+        });
+
+        let mut temporary_set = self.analysis.new_set();
+
         trace!("Data Flow Engine: Starting with worklist: {:?}", worklist);
+
         while let Some(bb) = worklist.pop() {
-            trace!("Data Flow Engine: Processing {:?}", bb);
+            debug!("Data Flow Engine: Processing {:?}", bb);
+
             self.analysis.transfer_function(
                 &self.dfg.in_sets[bb],
                 &mut temporary_set,
                 bb,
                 self.cfg,
             );
+
             if temporary_set != self.dfg.out_sets[bb] {
                 swap(&mut temporary_set, &mut self.dfg.out_sets[bb]);
 
                 A::Direction::propagate_result(bb, self.cfg, |dst| {
                     worklist.insert(dst);
-                    self.analysis
-                        .join(&mut self.dfg.in_sets[dst], &self.dfg.out_sets[bb])
+                    self.analysis.join(bb, dst, &mut self.dfg)
                 });
             }
         }

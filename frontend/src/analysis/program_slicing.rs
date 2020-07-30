@@ -10,7 +10,7 @@ use crate::analysis::ProgramDependenceGraph;
 use crate::cfg::ControlFlowGraph;
 use crate::data_structures::{BitSet, HybridBitSet, WorkQueue};
 use crate::ir::ids::{StatementId, VariableId};
-use log::debug;
+use log::{debug, trace};
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 
@@ -103,7 +103,7 @@ impl ControlFlowGraph {
                     }
                 }
 
-                debug!(
+                trace!(
                     "Backwardslice: stmt work-list after iteration {:?}",
                     stmt_work_queue
                 );

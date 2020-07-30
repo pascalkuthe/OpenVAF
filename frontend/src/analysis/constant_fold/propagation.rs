@@ -1,222 +1,171 @@
-//  * ******************************************************************************************
-//  * Copyright (c) 2019 Pascal Kuthe. This file is part of the frontend project.
-//  * It is subject to the license terms in the LICENSE file found in the top-level directory
-//  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
-//  *  No part of frontend, including this file, may be copied, modified, propagated, or
-//  *  distributed except according to the terms contained in the LICENSE file.
-//  * *******************************************************************************************
-
-//! Constant folding and propagation along control flow
-use float_cmp::{ApproxEq, F64Margin};
-use log::debug;
-
-use crate::analysis::constant_fold::resolver::{
-    ConstResolver, ConstantParameterResolver, ConstantPropagator,
-};
-use crate::cfg::ControlFlowGraph;
-use crate::{HashMap, StringLiteral};
-
-use crate::analysis::data_flow::reaching_definitions::UseDefGraph;
+use crate::analysis::constant_fold::lattice::ProductLattice;
+use crate::analysis::constant_fold::resolver::LocalConstantPropagator;
+use crate::analysis::constant_fold::{DiamondLattice, TypedDiamondLattice};
+use crate::analysis::data_flow::framework::{Analysis, DataFlowGraph, Engine, Forward};
 use crate::cfg::Terminator;
-use crate::ir::ids::{ParameterId, StatementId};
-use crate::mir::{ExpressionId, Mir, Statement};
+use crate::ir::cfg::{BasicBlockId, ControlFlowGraph};
+use crate::ir::ids::ParameterId;
+use crate::mir::{Mir, Statement};
+use crate::{HashMap, StringLiteral};
+use index_vec::index_vec;
 
-/// This struct maps all variable assigments and parameters to their values that are already known during constant propagation
+// For constants that shall be substituted everywhere
 #[derive(Clone, Debug, Default)]
-pub struct PropagatedConstants {
-    pub real_definitions: HashMap<StatementId, f64>,
-    pub integer_definitions: HashMap<StatementId, i64>,
-    pub string_definitions: HashMap<StatementId, StringLiteral>,
+pub struct GlobalConstants {
     pub real_parameters: HashMap<ParameterId, f64>,
     pub int_parameters: HashMap<ParameterId, i64>,
     pub string_parameters: HashMap<ParameterId, StringLiteral>,
 }
 
-impl ControlFlowGraph {
-    /// Walks `self` in reverse post order and [constant folds](crate::mir::Mir::constant_fold_real_expr)
-    /// any encountered expressions. Variables are propagated along control flow if their assignments were constant folded.
-    ///
-    /// # Arguments
-    ///
-    /// * `mir` - The MIR belonging to this cfg. Statements and expressions in this mir may be constant folded
-    ///
-    /// * `udg` - The result of [reaching variable analysis][reaching]. Used to propgate constant variables.
-    ///     Dependencies that are removed by inlining variables will be removed during propagation
-    ///
-    /// * `known_values` - Variable assigments and parameters that will be assumed as known at the start of the cfg
-    ///
-    ///
-    /// # Note
-    ///
-    /// Constant propagation currently always modifies the `mir` as such calling `constant_propagation`
-    /// on multiple overlapping cfgs is both inefficient and may lead to incorrect constant folds
-    /// if different `known_values` were passed
-    ///
-    /// [reaching]: crate::analysis::data_flow::reaching_definitions
+#[derive(Debug, Clone, PartialEq)]
+pub struct BasicBlockConstants {
+    unreachable: bool,
+    product_lattice: ProductLattice,
+}
+impl BasicBlockConstants {
+    pub fn mark_unreachable(&mut self) {
+        self.unreachable = true;
+        for x in &mut self.product_lattice {
+            *x = TypedDiamondLattice::Unknown
+        }
+    }
 
-    pub fn constant_propagation(
+    pub fn meet(&mut self, other: &Self) {
+        for (lattic, other) in self.product_lattice.iter_mut().zip(&other.product_lattice) {
+            *lattic = lattic.meet(*other)
+        }
+    }
+}
+
+pub struct ConditionalConstantPropagation<'lt> {
+    pub globals: &'lt GlobalConstants,
+    pub mir: &'lt Mir,
+    pub cfg: &'lt ControlFlowGraph,
+}
+
+impl<'lt> Analysis for ConditionalConstantPropagation<'lt> {
+    type Set = BasicBlockConstants;
+    type Direction = Forward;
+
+    fn transfer_function(
         &mut self,
-        mir: &mut Mir,
-        udg: &mut UseDefGraph,
-        known_values: &mut PropagatedConstants,
+        in_set: &Self::Set,
+        out_set: &mut Self::Set,
+        basic_bock: BasicBlockId,
+        cfg: &ControlFlowGraph,
     ) {
-        for (id, bb) in self.reverse_postorder_itermut() {
-            mir.constant_fold_statements(&bb.statements, udg, known_values);
+        if in_set.unreachable {
+            out_set.unreachable = true
+        } else {
+            out_set
+                .product_lattice
+                .copy_from_slice(&in_set.product_lattice);
+            out_set.unreachable = false;
+            for stmt in &cfg[basic_bock].statements {
+                if let Statement::Assignment(var, val) = self.mir[*stmt].contents {
+                    out_set.product_lattice[var] = self.mir.constant_eval_expr(
+                        val,
+                        &mut LocalConstantPropagator(&out_set.product_lattice, self.globals),
+                    )
+                }
+            }
+        }
+    }
+
+    fn join(&mut self, src: BasicBlockId, dst: BasicBlockId, graph: &mut DataFlowGraph<Self::Set>) {
+        if !graph.out_sets[src].unreachable {
+            // try to constant fold terminator and mark as unreachable
+            if let Terminator::Split {
+                condition,
+                false_block,
+                ..
+            } = self.cfg[src].terminator
+            {
+                if let DiamondLattice::Val(val) = self.mir.constant_eval_int_expr(
+                    condition,
+                    &mut LocalConstantPropagator(
+                        &graph.out_sets[src].product_lattice,
+                        self.globals,
+                    ),
+                ) {
+                    if (val == 0) != (dst == false_block) {
+                        // unreachable don't propagate constants
+                        return;
+                    }
+                }
+            }
+
+            graph.in_sets[dst].unreachable = false;
+            graph.in_sets[dst].meet(&graph.out_sets[src])
+        }
+    }
+
+    fn new_set(&self) -> Self::Set {
+        BasicBlockConstants {
+            unreachable: true,
+            product_lattice: index_vec![TypedDiamondLattice::Unknown;self.mir.variables.len()],
+        }
+    }
+
+    fn setup_entry(&mut self, block: BasicBlockId, graph: &mut DataFlowGraph<Self::Set>) {
+        graph.in_sets[block].unreachable = false
+    }
+}
+
+impl ControlFlowGraph {
+    pub fn propagate_constants(&mut self, mir: &mut Mir, globals: &GlobalConstants) {
+        let dfg = Engine::new(
+            self,
+            &mut ConditionalConstantPropagation {
+                globals,
+                mir,
+                cfg: &self,
+            },
+        )
+        .iterate_to_fixpoint();
+
+        for (bb, mut local_constants) in dfg.in_sets.into_iter_enumerated() {
+            if local_constants.unreachable {
+                continue;
+            }
+
+            for stmt in &self[bb].statements {
+                match mir[*stmt].contents {
+                    Statement::Assignment(var, val) => {
+                        local_constants.product_lattice[var] = mir.constant_fold_expr(
+                            val,
+                            &mut LocalConstantPropagator(&local_constants.product_lattice, globals),
+                        )
+                    }
+
+                    Statement::Contribute(_, _, expr) => {
+                        mir.constant_fold_real_expr(
+                            expr,
+                            &mut LocalConstantPropagator(&local_constants.product_lattice, globals),
+                        );
+                    }
+                    Statement::StopTask(_, _) => {}
+                }
+            }
 
             if let Terminator::Split {
                 condition,
                 true_block,
                 false_block,
-                merge,
-            } = bb.terminator
+                ..
+            } = self[bb].terminator
             {
-                let folded_condition = if let Some(dependencies) =
-                    &mut udg.terminator_use_def_chains[id]
-                {
-                    let mut resolver =
-                        ConstantPropagator::new(&mut *known_values, dependencies, &udg.assignments);
-                    let res = mir.constant_fold_int_expr(condition, &mut resolver);
-
-                    if res.is_some() {
-                        udg.terminator_use_def_chains[id] = None
+                if let DiamondLattice::Val(cond) = mir.constant_fold_int_expr(
+                    condition,
+                    &mut LocalConstantPropagator(&local_constants.product_lattice, globals),
+                ) {
+                    if cond == 0 {
+                        self[bb].terminator = Terminator::Goto(false_block)
+                    } else {
+                        self[bb].terminator = Terminator::Goto(true_block)
                     }
-
-                    res
-                } else {
-                    //we dont need to handle dependencies since there are none
-                    mir.constant_fold_int_expr(
-                        condition,
-                        &mut ConstantParameterResolver {
-                            known_values: &mut *known_values,
-                        },
-                    )
-                };
-
-                match folded_condition {
-                    Some(0) => {
-                        debug!(
-                            "{:?}->(false: {:?}, true: {:?}) always false (condition: {:?})",
-                            id, false_block, true_block, condition
-                        );
-
-                        bb.terminator = Terminator::Goto(false_block);
-                    }
-
-                    Some(_) => {
-                        if merge == id {
-                            panic!("Found constant infinite loop!")
-                        }
-
-                        bb.terminator = Terminator::Goto(true_block);
-                    }
-
-                    None => (),
                 }
             }
         }
-    }
-}
-
-impl Mir {
-    /// See [`constant_fold_stmt`](crate::mir::Mir::constant_fold_stmt)
-    fn constant_fold_statements(
-        &mut self,
-        statements: &[StatementId],
-        udg: &mut UseDefGraph,
-        known_values: &mut PropagatedConstants,
-    ) {
-        for &stmt in statements.iter().rev() {
-            if let Some(dependencies) = &mut udg.stmt_use_def_chains[stmt] {
-                let resolver =
-                    ConstantPropagator::new(&mut *known_values, dependencies, &udg.assignments);
-
-                if self.constant_fold_stmt(stmt, resolver, |resolver| resolver.known_values) {
-                    udg.stmt_use_def_chains[stmt] = None
-                }
-            } else {
-                //we dont need to handle dependencies since there are none
-                self.constant_fold_stmt(
-                    stmt,
-                    ConstantParameterResolver {
-                        known_values: &mut *known_values,
-                    },
-                    |resolver| resolver.known_values,
-                );
-            }
-        }
-    }
-
-    /// [Constant folds](crate::mir::Mir::constant_fold_real_expr) the expressions in an statement
-    /// and adds the resulting value to the `known_values` if `stmt` is an assignment
-    ///
-    /// # Returns
-    /// whether the statement was constant folded successfully
-
-    fn constant_fold_stmt<'lt, T: ConstResolver>(
-        &mut self,
-        stmt: StatementId,
-        mut resolver: T,
-        known_values: impl FnOnce(T) -> &'lt mut PropagatedConstants,
-    ) -> bool {
-        match self[stmt].contents {
-            Statement::Assignment(_, val) => match val {
-                ExpressionId::Real(val) => {
-                    if let Some(val) = self.constant_fold_real_expr(val, &mut resolver) {
-                        let old = known_values(resolver).real_definitions.insert(stmt, val);
-                        #[cfg(debug_assertions)]
-                        match old{
-                            Some(new) if new.approx_ne(val,F64Margin::default())  => panic!(
-                                "Statement {} was assigned twice with different values (old={},new={})!",
-                                stmt,
-                                old.unwrap(),
-                                val
-                            ),
-                            _ => ()
-                        }
-                        return true;
-                    }
-                }
-
-                ExpressionId::Integer(val) => {
-                    if let Some(val) = self.constant_fold_int_expr(val, &mut resolver) {
-                        let old = known_values(resolver).integer_definitions.insert(stmt, val);
-                        #[cfg(debug_assertions)]
-                        match old{
-                            Some(new) if new != val => panic!(
-                                "Statement {} was assigned twice with different values (old={},new={})!",
-                                stmt,
-                                old.unwrap(),
-                                val
-                            ),
-                            _ => ()
-                        }
-                        return true;
-                    }
-                }
-                ExpressionId::String(val) => {
-                    if let Some(val) = self.constant_fold_str_expr(val, &mut resolver) {
-                        let old = known_values(resolver).string_definitions.insert(stmt, val);
-                        #[cfg(debug_assertions)]
-                        match old{
-                            Some(old) if old != val => panic!(
-                                "Statement {} was assigned twice with different values (old={},new={})!",
-                                stmt,
-                                old,
-                                val
-                            ),
-                            _ => ()
-                        }
-                        return true;
-                    }
-                }
-            },
-
-            Statement::Contribute(_, _, val) => {
-                return self.constant_fold_real_expr(val, &mut resolver).is_some()
-            }
-
-            _ => (),
-        }
-        false
     }
 }

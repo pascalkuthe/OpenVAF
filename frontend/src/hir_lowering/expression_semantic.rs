@@ -542,13 +542,15 @@ impl<'hirref> HirToMirFold<'hirref> {
                     NoiseSource::Table(_) | NoiseSource::TableLog(_) => todo!(),
                 };
                 // no error here if const folding failed because that happens during ast lowering
-                let name = name.and_then(|name| {
-                    self.fold_string_expression(name, analysis)
-                        .and_then(|name| {
+                let name = name
+                    .and_then(|name| self.fold_string_expression(name, analysis))
+                    .map(|name| {
+                        {
                             self.mir
                                 .constant_eval_str_expr(name, &mut NoConstResolution)
-                        })
-                });
+                        }
+                        .unwrap()
+                    });
 
                 RealExpression::Noise(source, name)
             }

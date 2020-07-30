@@ -17,18 +17,19 @@ pub use graph::Graph as DataFlowGraph;
 mod engine;
 mod graph;
 
+use crate::analysis::data_flow::framework::graph::Graph;
 use crate::data_structures::{BitSet, BitSetOperations, WorkQueue};
 use crate::ir::cfg::{BasicBlockId, ControlFlowGraph};
 use index_vec::{Idx, IndexVec};
 
 /// This trait forms the core of the Data flow framework
 /// Every Data flow analysis needs to implement this trait
-pub trait Analysis<'lt>: Sized {
-    /// The [Id type](crate::data_structures::bit_set) used for the BitSets in this analysis Pass
-    type SetType: Idx + From<usize>;
+pub trait Analysis: Sized {
+    /// The kind of set to use for this data flow analysis (for example a BitSet)
+    type Set: Clone + PartialEq;
 
     /// The direction in which this data flow analysis should be solved (eg. Backward/Postorder or Forward/Reverse Postorder)
-    type Direction: Direction<'lt>;
+    type Direction: Direction;
 
     /// The transfer function of the data flow analysis
     /// This should be a pure function from `in_set` to `out_set` (the cfg and basic block can however be used)
@@ -40,8 +41,8 @@ pub trait Analysis<'lt>: Sized {
     ///
     fn transfer_function(
         &mut self,
-        in_set: &BitSet<Self::SetType>,
-        out_set: &mut BitSet<Self::SetType>,
+        in_set: &Self::Set,
+        out_set: &mut Self::Set,
         basic_bock: BasicBlockId,
         cfg: &ControlFlowGraph,
     );
@@ -51,29 +52,31 @@ pub trait Analysis<'lt>: Sized {
     ///
     /// Generally a set unition is appropriate here but somtimes intersection might be required
 
-    fn join(&mut self, inout_set: &mut BitSet<Self::SetType>, in_set: &BitSet<Self::SetType>) {
-        inout_set.union_with(in_set);
-    }
+    fn join(&mut self, src: BasicBlockId, dst: BasicBlockId, graph: &mut DataFlowGraph<Self::Set>);
 
-    /// The max of the analysis domain (for example the total count of statements for reaching definitions analysis)
-    /// Note that attemting to insert an `index > self.max_indx()` into a set during analysis wil **cause a panic**
-    fn max_idx(&self) -> Self::SetType;
+    /// Create a new empty set
+    /// This shall be a pure function in the sense that it should not make a difference whether
+    /// the resulting set is cloned or this function is called again
+    fn new_set(&self) -> Self::Set;
+    fn setup_entry(&mut self, block: BasicBlockId, graph: &mut DataFlowGraph<Self::Set>);
 }
 
 /// The dirction in which a data flow analysis should be performed
-pub trait Direction<'lt> {
+pub trait Direction {
     /// The work queue with which the engine starts the solution process
     /// This should be **all** relevant blocks in correct order
     fn inital_work_queue(cfg: &ControlFlowGraph) -> WorkQueue<BasicBlockId>;
 
     /// Propagate the outset of `bb` to the insets of dependent nodes using `apply(dependent_block)`
     fn propagate_result(bb: BasicBlockId, cfg: &ControlFlowGraph, apply: impl FnMut(BasicBlockId));
+
+    fn setup_entry(cfg: &ControlFlowGraph, apply: impl FnMut(BasicBlockId));
 }
 
 /// [Reverse postorder](crate::cfg::transversal::ReversePostorder) DFA [direction](Direction)
 pub struct Forward;
 
-impl<'lt> Direction<'lt> for Forward {
+impl<'lt> Direction for Forward {
     fn inital_work_queue(cfg: &ControlFlowGraph) -> WorkQueue<BasicBlockId> {
         let mut res = WorkQueue::with_none(cfg.blocks.len_idx());
         for id in cfg.reverse_postorder() {
@@ -91,12 +94,16 @@ impl<'lt> Direction<'lt> for Forward {
             apply(bb)
         }
     }
+
+    fn setup_entry(cfg: &ControlFlowGraph, mut apply: impl FnMut(BasicBlockId)) {
+        apply(cfg.start())
+    }
 }
 
 /// [Postorder](crate::cfg::transversal::Postorder) DFA [direction](Direction)
 pub struct Backward;
 
-impl<'lt> Direction<'lt> for Backward {
+impl<'lt> Direction for Backward {
     fn inital_work_queue(cfg: &ControlFlowGraph) -> WorkQueue<BasicBlockId> {
         let mut res = WorkQueue::with_none(cfg.blocks.len_idx());
         for (id, _) in cfg.postorder_iter() {
@@ -114,6 +121,10 @@ impl<'lt> Direction<'lt> for Backward {
             apply(bb)
         }
     }
+
+    fn setup_entry(cfg: &ControlFlowGraph, mut apply: impl FnMut(BasicBlockId)) {
+        apply(cfg.end())
+    }
 }
 
 /// Gen kill analysis is a special form of data flow analysis
@@ -125,12 +136,12 @@ impl<'lt> Direction<'lt> for Backward {
 ///
 /// The join function of GenKillAnalysis is currently always set union in this implimentation
 ///
-pub trait GenKillAnalysis<'lt>: Sized {
-    /// See [`Analysis::SetType`]
+pub trait GenKillAnalysis: Sized {
+    /// The typed used for the bitset
     type SetType: Idx + From<usize>;
 
     /// See [`Analysis::Direction`]
-    type Direction: Direction<'lt>;
+    type Direction: Direction;
 
     /// The transfer function is called **once before** the analysis begins
     /// to generate the `gen_kill_set`.
@@ -143,16 +154,18 @@ pub trait GenKillAnalysis<'lt>: Sized {
 
     /// See [`Analysis::max_idx`]
     fn max_idx(&self) -> Self::SetType;
+
+    fn setup_entry(&mut self, block: BasicBlockId, graph: &mut Graph<BitSet<Self::SetType>>);
 }
 
 /// A `GenKillEngine` is a wrapper around an `GenKillAnalysis`
 /// which impliments [`Analysis`] and can be solved using the DFA engine
-pub struct GenKillEngine<'lt, A: GenKillAnalysis<'lt>> {
+pub struct GenKillEngine<'lt, A: GenKillAnalysis> {
     analysis: &'lt mut A,
     pub transfer_functions: IndexVec<BasicBlockId, GenKillSet<A::SetType>>,
 }
 
-impl<'lt, A: GenKillAnalysis<'lt>> GenKillEngine<'lt, A> {
+impl<'lt, A: GenKillAnalysis> GenKillEngine<'lt, A> {
     pub fn new(cfg: &ControlFlowGraph, analysis: &'lt mut A) -> Self {
         let gen_kill_set = GenKillSet::new(analysis.max_idx());
         let transfer_functions = cfg
@@ -172,14 +185,14 @@ impl<'lt, A: GenKillAnalysis<'lt>> GenKillEngine<'lt, A> {
     }
 }
 
-impl<'lt, A: GenKillAnalysis<'lt>> Analysis<'lt> for GenKillEngine<'lt, A> {
-    type SetType = A::SetType;
+impl<'lt, A: GenKillAnalysis> Analysis for GenKillEngine<'lt, A> {
+    type Set = BitSet<A::SetType>;
     type Direction = A::Direction;
 
     fn transfer_function(
         &mut self,
-        in_set: &BitSet<Self::SetType>,
-        out_set: &mut BitSet<Self::SetType>,
+        in_set: &Self::Set,
+        out_set: &mut Self::Set,
         basic_bock: BasicBlockId,
         _: &ControlFlowGraph,
     ) {
@@ -188,8 +201,17 @@ impl<'lt, A: GenKillAnalysis<'lt>> Analysis<'lt> for GenKillEngine<'lt, A> {
         out_set.difference_with(&self.transfer_functions[basic_bock].kill);
         out_set.union_with(&self.transfer_functions[basic_bock].gen);
     }
-    fn max_idx(&self) -> Self::SetType {
-        self.analysis.max_idx()
+
+    fn join(&mut self, src: BasicBlockId, dst: BasicBlockId, graph: &mut DataFlowGraph<Self::Set>) {
+        graph.in_sets[dst].union_with(&graph.out_sets[src])
+    }
+
+    fn new_set(&self) -> Self::Set {
+        BitSet::new_empty(self.analysis.max_idx())
+    }
+
+    fn setup_entry(&mut self, block: BasicBlockId, graph: &mut Graph<Self::Set>) {
+        self.analysis.setup_entry(block, graph)
     }
 }
 

@@ -7,7 +7,7 @@
 //  * *******************************************************************************************
 
 use common::{preprocess_test, PrettyError, TEST_EXPANSION_HINT};
-use open_vaf::analysis::constant_fold::PropagatedConstants;
+use open_vaf::analysis::constant_fold::GlobalConstants;
 use open_vaf::analysis::data_flow::reaching_definitions::ReachingDefinitionsAnalysis;
 use open_vaf::analysis::ProgramDependenceGraph;
 use open_vaf::ast::Ast;
@@ -26,7 +26,7 @@ fn extraction_integration_test(
 ) -> Result<(), PrettyError> {
     fern::Dispatch::new()
         .format(|out, message, _record| out.finish(*message))
-        .level(log::LevelFilter::Warn)
+        .level(log::LevelFilter::Debug)
         .chain(std::io::stderr())
         .apply();
 
@@ -76,8 +76,9 @@ fn extraction_integration_test(
         let cfg = mir[module].contents.analog_cfg.clone();
         let mut cfg_borrow = cfg.borrow_mut();
 
-        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg_borrow);
+        cfg_borrow.propagate_constants(&mut mir, &mut GlobalConstants::default());
 
+        let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg_borrow);
         let mut udg = reaching_analysis.run(&mut cfg_borrow);
         #[cfg(feature = "graph_debug")]
         {
@@ -103,8 +104,6 @@ fn extraction_integration_test(
             let mut file = File::create("control_dependence.dot").unwrap();
             cfg.render_control_dependence_to(&mut file, &control_dependencies);
         }
-
-        cfg_borrow.constant_propagation(&mut mir, &mut udg, &mut PropagatedConstants::default());
 
         #[cfg(feature = "graph_debug")]
         {
