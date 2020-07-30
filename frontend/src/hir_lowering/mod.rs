@@ -26,7 +26,6 @@
 //!
 
 use crate::analysis::constant_fold::NoConstResolution;
-use crate::ast;
 use crate::data_structures::sync::{Lrc, RwLock};
 use crate::diagnostic::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use crate::hir::Hir;
@@ -40,6 +39,7 @@ use crate::mir::{
     Variable, VariableType,
 };
 use crate::SourceMap;
+use crate::{ast, StringLiteral};
 use std::sync::Arc;
 
 mod control_flow;
@@ -281,19 +281,21 @@ impl<'lt> HirToMirFold<'lt> {
     pub fn fold_nature(&mut self, nature: &hir::Nature) -> Nature {
         let units = ConstantSchematicAnalysis
             .fold_string_expression(self, nature.units)
-            .and_then(|expr| {
+            .map(|expr| {
                 self.mir
                     .constant_eval_str_expr(expr, &mut NoConstResolution)
+                    .unwrap()
             })
-            .unwrap();
+            .unwrap_or(StringLiteral::DUMMY);
+
         let abstol = ConstantSchematicAnalysis
             .fold_real_expression(self, nature.abstol)
-            .and_then(|expr| {
+            .map(|expr| {
                 self.mir
                     .constant_eval_real_expr(expr, &mut NoConstResolution)
+                    .unwrap()
             })
-            .unwrap();
-
+            .unwrap_or(0.0);
         Nature {
             ident: nature.ident,
             abstol,

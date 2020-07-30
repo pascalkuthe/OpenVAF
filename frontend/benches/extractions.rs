@@ -1,10 +1,9 @@
 use criterion::{black_box, Criterion};
 use criterion::{criterion_group, criterion_main};
-use open_vaf::analysis::constant_fold::PropagatedConstants;
+use open_vaf::analysis::constant_fold::GlobalConstants;
 use open_vaf::analysis::data_flow::reaching_definitions::ReachingDefinitionsAnalysis;
 use open_vaf::analysis::ProgramDependenceGraph;
 use open_vaf::ast::Ast;
-use open_vaf::cfg::ControlFlowGraph;
 use open_vaf::diagnostic::{StandardPrinter, UserResult};
 use open_vaf::parser::TokenStream;
 use open_vaf::preprocessor::{preprocess_user_facing, std_path};
@@ -85,6 +84,7 @@ pub fn bsimsoi(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
     for module in mir.modules.indices() {
         let mut cfg = mir[module].contents.analog_cfg.clone();
         let cfg_ref = &mut cfg.borrow_mut();
+        cfg_ref.propagate_constants(&mut mir, &GlobalConstants::default());
 
         let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg_ref);
 
@@ -112,8 +112,6 @@ pub fn bsimsoi(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
             let mut file = File::create("control_dependence.dot").unwrap();
             cfg_ref.render_control_dependence_to(&mut file, &control_dependencies);
         }
-
-        cfg_ref.constant_propagation(&mut mir, &mut udg, &mut PropagatedConstants::default());
 
         #[cfg(feature = "graph_debug")]
         {
@@ -170,6 +168,8 @@ pub fn hl2(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
         let mut cfg = mir[module].contents.analog_cfg.clone();
         let mut cfg_ref = cfg.borrow_mut();
 
+        cfg_ref.propagate_constants(&mut mir, &GlobalConstants::default());
+
         let reaching_analysis = ReachingDefinitionsAnalysis::new(&mir, &cfg_ref);
 
         let mut udg = reaching_analysis.run(&mut cfg_ref);
@@ -196,8 +196,6 @@ pub fn hl2(sm: SourceMap, main_file: FileId) -> Result<(), PrettyError> {
             let mut file = File::create("control_dependence.dot").unwrap();
             cfg_ref.render_control_dependence_to(&mut file, &control_dependencies);
         }
-
-        cfg_ref.constant_propagation(&mut mir, &mut udg, &mut PropagatedConstants::default());
 
         #[cfg(feature = "graph_debug")]
         {

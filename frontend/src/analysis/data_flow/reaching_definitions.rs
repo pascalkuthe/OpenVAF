@@ -8,7 +8,7 @@
 #![allow(clippy::similar_names)]
 
 use crate::analysis::data_flow::framework::{
-    Engine, Forward, GenKillAnalysis, GenKillEngine, GenKillSet,
+    DataFlowGraph, Engine, Forward, GenKillAnalysis, GenKillEngine, GenKillSet,
 };
 
 use crate::cfg::ControlFlowGraph;
@@ -137,7 +137,7 @@ impl<'lt> ReachingDefinitionsAnalysis<'lt> {
     }
 }
 
-impl<'lt> GenKillAnalysis<'_> for ReachingDefinitionsAnalysis<'lt> {
+impl<'lt> GenKillAnalysis for ReachingDefinitionsAnalysis<'lt> {
     type SetType = StatementId;
     type Direction = Forward;
 
@@ -162,6 +162,13 @@ impl<'lt> GenKillAnalysis<'_> for ReachingDefinitionsAnalysis<'lt> {
 
     fn max_idx(&self) -> Self::SetType {
         self.graph.stmt_len_idx()
+    }
+
+    fn setup_entry(
+        &mut self,
+        _block: BasicBlockId,
+        _graph: &mut DataFlowGraph<BitSet<Self::SetType>>,
+    ) {
     }
 }
 

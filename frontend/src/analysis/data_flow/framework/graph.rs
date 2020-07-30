@@ -7,17 +7,16 @@
 //  * *******************************************************************************************
 
 use crate::cfg::{BasicBlockId, ControlFlowGraph};
-use crate::data_structures::BitSet;
-use index_vec::{index_vec, Idx, IndexVec};
+use index_vec::{index_vec, IndexVec};
 
-pub struct Graph<SetType: Idx + From<usize>> {
-    pub in_sets: IndexVec<BasicBlockId, BitSet<SetType>>,
-    pub out_sets: IndexVec<BasicBlockId, BitSet<SetType>>,
+pub struct Graph<Set> {
+    pub in_sets: IndexVec<BasicBlockId, Set>,
+    pub out_sets: IndexVec<BasicBlockId, Set>,
 }
 
-impl<SetType: Idx + From<usize>> Graph<SetType> {
-    pub fn new(max_id: SetType, cfg: &ControlFlowGraph) -> Self {
-        let in_sets = index_vec![BitSet::new_empty(max_id);cfg.blocks.len()];
+impl<Set: Clone> Graph<Set> {
+    pub fn new(empty_set: Set, cfg: &ControlFlowGraph) -> Self {
+        let in_sets = index_vec![empty_set;cfg.blocks.len()];
         Self {
             out_sets: in_sets.clone(),
             in_sets,
