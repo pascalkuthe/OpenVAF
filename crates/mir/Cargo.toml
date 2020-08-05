@@ -1,0 +1,22 @@
+[package]
+name = "openvaf-mir"
+version = "0.7.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+
+maintenance = { status = "actively-developed" }
+
+
+[dependencies]
+
+openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
+
+openvaf-hir = {version = "0.7.0", path = "../hir"}
+openvaf-ir = {version = "0.7.0", path = "../ir"}
+openvaf-session = {version = "0.7.0", path = "../session"}
