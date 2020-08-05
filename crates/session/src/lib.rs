@@ -83,6 +83,7 @@ macro_rules! session_data {
             unsafe fn [<__openvaf_session_cleanup_ $name>](ptr: usize){
                 // Drop the data
                 Box::from_raw(ptr as *mut $ty);
+                [<__ $name _data>].with(|cell| cell.set(0));
             }
 
 
