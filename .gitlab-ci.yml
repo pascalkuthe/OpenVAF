@@ -5,7 +5,7 @@ default:
 
     paths:
       - .cargo/
-      - target/
+      - crates/target/
 
 stages:
   - build
@@ -24,10 +24,12 @@ workflow:
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
+  RUSTDOCFLAGS: --enable-index-page -Zunstable-options
 
 build:
   stage: build
   script:
+    - cd crates
     - rustc --version
     - cargo --version
     - cargo update
@@ -36,6 +38,7 @@ build:
 test:
   stage: test
   script:
+    - cd crates
     - rustc --version
     - cargo --version
     - cd frontend
@@ -49,6 +52,7 @@ test_fmt:
     - rustup component add rustfmt
 
   script:
+    - cd crates
     - cargo fmt -- --check
 
   cache:
@@ -64,6 +68,7 @@ test_clippy:
     - rustup component add clippy
 
   script:
+    - cd crates
     - cargo clippy -- -D warnings
 
 
@@ -86,12 +91,11 @@ rustdoc:
   image: "rustlang/rust:nightly"
   stage: doc
   script:
+    - cd crates
     - cargo doc --workspace --document-private-items
-    - cp -R target/doc dev_doc
-    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > dev_doc/index.html
+    - cp -R target/doc ../dev_doc
     - cargo doc --workspace
-    - cp -R target/doc api_doc
-    - echo '<meta http-equiv="refresh" content="0; url=open_vaf/index.html">' > api_doc/index.html
+    - cp -R target/doc ../api_doc
 
   artifacts:
     paths:
@@ -112,8 +116,8 @@ pages:
     - book
 
   script:
-    - cp -R dev_doc public/dev_doc
-    - cp -R api_doc public/api_doc
+    - mv dev_doc public/dev_doc
+    - mv api_doc public/api_doc
 
   artifacts:
     paths:

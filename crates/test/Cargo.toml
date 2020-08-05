@@ -1,0 +1,39 @@
+[package]
+name = "openvaf-test"
+version = "0.7.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+
+maintenance = { status = "actively-developed" }
+
+
+[dependencies]
+
+openvaf-session = {version = "0.7.0", path = "../session"}
+openvaf-parser = {version = "0.7.0", path = "../parser"}
+openvaf-preprocessor = {version = "0.7.0", path = "../preprocessor"}
+
+
+fern = "0.6"
+log = "0.4"
+
+[dev-dependencies]
+
+openvaf-ast = {version = "0.7.0", path = "../ast"}
+openvaf-ir = {version = "0.7.0", path = "../ir"}
+openvaf-ast-lowering = {version = "0.7.0", path = "../ast_lowering"}
+openvaf-hir-lowering = {version = "0.7.0", path = "../hir_lowering"}
+openvaf-analysis = {version = "0.7.0", path = "../analysis"}
+openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
+openvaf-derivatives = {version = "0.7.0", path = "../derivatives"}
+
+
+
+
+

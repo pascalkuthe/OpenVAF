@@ -1,0 +1,31 @@
+[workspace]
+
+members = [
+    "analysis",
+
+    "ast",
+    "ast_lowering",
+
+    "constants",
+
+    "constant_fold",
+
+    "derivatives",
+
+    "data_structures",
+
+    "diagnostics",
+
+    "hir",
+    "hir_lowering",
+    "ir",
+    "mir",
+
+    "macros",
+
+    "parser",
+    "preprocessor",
+
+    "session",
+    "test"
+]

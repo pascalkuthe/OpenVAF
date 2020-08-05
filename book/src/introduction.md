@@ -10,10 +10,10 @@ As such tool developers are encouraged to link to this book in their user docume
 
 ## API docs
 
-If you wish to build a tool based upon OpenVAF or even contribute you may find the API documentation more useful:
+If you wish to build a tool based upon OpenVAF or contribute you may find the API documentation more useful:
 
-* public [API doc](https://dspom.gitlab.io/OpenVAF/api_doc/open_vaf/index.html) (for tool developers)
-* internal [API doc](https://dspom.gitlab.io/OpenVAF/dev_doc/open_vaf/index.html) (for OpenVAF developers)
+* public [API doc](https://dspom.gitlab.io/OpenVAF/api_doc/index.html) (for tool developers)
+* internal [API doc](https://dspom.gitlab.io/OpenVAF/dev_doc/index.html) (for OpenVAF developers)
 
 ## Contributing
 

@@ -1,0 +1,38 @@
+[package]
+name = "openvaf-parser"
+version = "0.7.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../../README.md"
+
+build = "build.rs" # LALRPOP preprocessing
+
+
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+
+[dependencies]
+
+# Parsing
+logos = "0.11"
+lalrpop-util = "0.19"
+
+# Error reporting
+log="0.4"
+thiserror = "1.0"
+more-asserts = "0.2"
+
+openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
+
+openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
+openvaf-ast = {version = "0.7.0", path = "../ast"}
+openvaf-ir = {version = "0.7.0", path = "../ir"}
+openvaf-session = {version = "0.7.0", path = "../session"}
+
+[build-dependencies]
+lalrpop = "0.19.0"
