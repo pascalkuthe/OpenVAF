@@ -24,7 +24,6 @@ workflow:
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
-  RUSTDOCFLAGS: --enable-index-page -Zunstable-options
 
 build:
   stage: build
@@ -87,6 +86,11 @@ book:
   cache: {}
 
 rustdoc:
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+    APT_CACHE_DIR: $CI_PROJECT_DIR/apt
+    RUSTDOCFLAGS: --enable-index-page -Zunstable-options
+
   image: "rustlang/rust:nightly"
   stage: doc
   script:
