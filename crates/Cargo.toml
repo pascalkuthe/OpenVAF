@@ -9,6 +9,7 @@ members = [
     "constants",
 
     "constant_fold",
+    "codegen_rust",
 
     "derivatives",
 

@@ -1,12 +1,12 @@
 [package]
-name = "verilog-arc"
-version = "0.6.0"
+name = "openvaf_codegen_rust"
+version = "0.7.0"
 authors = ["DSOM <dspom@protonmail.com>"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/verilogarc"
 description = "A rust proc macro based code generation backend for OpenVAF"
 license="GPL-3.0"
-readme="README.md"
+readme="../README.md"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -15,7 +15,7 @@ maintenance = { status = "actively-developed" }
 proc-macro2 = "1.0.18"
 quote = "1.0.7"
 log = "0.4.8"
-open-vaf = {version = "0.6.0",path = "../frontend"}
 
-[features]
-graph_debug = ["open-vaf/graph_debug"]
+openvaf-mir = {version = "0.7.0", path = "../mir"}
+openvaf-ir = {version = "0.7.0", path = "../ir"}
+openvaf-session = {version = "0.7.0", path = "../session"}

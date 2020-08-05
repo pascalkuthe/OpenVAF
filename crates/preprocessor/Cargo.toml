@@ -6,7 +6,7 @@ edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
 description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
 license="GPL-3.0"
-readme="../../README.md"
+readme="../README.md"
 
 
 [badges]
