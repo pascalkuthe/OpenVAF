@@ -41,7 +41,6 @@ test:
     - cd crates
     - rustc --version
     - cargo --version
-    - cd frontend
     - cargo test --verbose
 
 
