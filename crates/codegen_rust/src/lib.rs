@@ -6,25 +6,23 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-pub use open_vaf;
-use open_vaf::ast::{UnaryOperator, VariableType};
-use open_vaf::cfg::ControlFlowGraph;
-use open_vaf::cfg::{BasicBlockId, Terminator};
-use open_vaf::hir::DisciplineAccess;
-use open_vaf::ir::ids::{
+use openvaf_ir::ids::{
     BranchId, IntegerExpressionId, NetId, ParameterId, PortId, RealExpressionId, StatementId,
     StringExpressionId, VariableId,
 };
-use open_vaf::ir::mir::RealExpression;
-use open_vaf::ir::{DoubleArgMath, NoiseSource, PrintOnFinish, SingleArgMath, StopTaskKind};
-use open_vaf::mir::ExpressionId;
-use open_vaf::mir::{
+use openvaf_ir::{DoubleArgMath, NoiseSource, PrintOnFinish, SingleArgMath, StopTaskKind};
+use openvaf_mir::cfg::ControlFlowGraph;
+use openvaf_mir::cfg::{BasicBlockId, Terminator};
+use openvaf_mir::DisciplineAccess;
+use openvaf_mir::ExpressionId;
+use openvaf_mir::RealExpression;
+use openvaf_mir::UnaryOperator;
+use openvaf_mir::{
     ComparisonOperator, IntegerBinaryOperator, IntegerExpression, Mir, ParameterType,
     RealBinaryOperator, Statement, StringExpression,
 };
-use open_vaf::SourceMap;
-use open_vaf::StringLiteral;
-use proc_macro2::{Ident, Literal, Span, TokenStream, TokenTree};
+use openvaf_session::sourcemap::{SourceMap, StringLiteral};
+use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::{quote, ToTokens, TokenStreamExt};
 
 pub struct RealNumberInterpolator(pub f64);
@@ -982,7 +980,7 @@ pub fn gen_port_ident(port: PortId) -> Ident {
         proc_macro2::Span::call_site(),
     )
 }
-
+/*
 #[must_use]
 pub fn generate_variable_type(variable_type: VariableType) -> TokenTree {
     match variable_type {
@@ -991,10 +989,10 @@ pub fn generate_variable_type(variable_type: VariableType) -> TokenTree {
         }
         VariableType::Real => TokenTree::Ident(Ident::new("f64", proc_macro2::Span::call_site())),
         VariableType::String => {
-            TokenTree::Ident(Ident::new("String", proc_macro2::Span::call_site()))
+            TokenTree::Ident(Ident::new("&str", proc_macro2::Span::call_site()))
         }
     }
-}
+}*/
 
 #[must_use]
 pub fn gen_net_ident(net: NetId) -> Ident {
