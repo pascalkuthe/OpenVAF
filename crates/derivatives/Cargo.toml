@@ -9,7 +9,6 @@ license="GPL-3.0"
 readme="../README.md"
 
 [badges]
-
 maintenance = { status = "actively-developed" }
 
 
@@ -19,8 +18,9 @@ openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
 openvaf-session = {version = "0.7.0", path = "../session"}
 openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
 
-openvaf-mir = {version = "0.7.0", path = "../mir"}
+openvaf-middle = {version = "0.7.0", path = "../middle" }
 openvaf-ir = {version = "0.7.0", path = "../ir"}
 
 log = "0.4"
 thiserror = "1.0"
+enum-map = "0.6"

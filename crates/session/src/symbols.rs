@@ -39,7 +39,6 @@ use std::iter::{FromIterator, Iterator};
 
 use bumpalo::Bump;
 
-use crate::session_data;
 use crate::sourcemap::span::DUMMY_SP;
 use crate::sourcemap::Span;
 use core::fmt::Formatter;
@@ -48,8 +47,12 @@ use openvaf_data_structures::index_vec::{define_index_type, IndexVec};
 use openvaf_data_structures::sync::Lock;
 use openvaf_data_structures::HashMap;
 use openvaf_macros::symbols;
+
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
+
+#[cfg(feature = "serde_dump")]
+use serde::{Serialize, Serializer};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Ident {
@@ -127,6 +130,16 @@ impl fmt::Display for Ident {
     }
 }
 
+#[cfg(feature = "serde_dump")]
+impl Serialize for Ident {
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where
+        S: Serializer,
+    {
+        self.name.serialize(serializer)
+    }
+}
+
 define_index_type! {
             /// An interned string.
             ///
@@ -161,6 +174,16 @@ impl Symbol {
     /// # Safety
     pub fn as_str(self) -> SymbolStr {
         with_interner(|interner| SymbolStr::new(interner.get(self)))
+    }
+}
+
+#[cfg(feature = "serde_dump")]
+impl Serialize for Symbol {
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where
+        S: Serializer,
+    {
+        self.with(|s| serializer.serialize_str(s))
     }
 }
 
@@ -213,7 +236,7 @@ impl Interner {
 symbols! {
     EMPTY: " ",
     OpenVAF,
-    temperature: "$temperature",
+    temperature,
     flow,
     potential,
     abstol,
@@ -223,6 +246,10 @@ symbols! {
     ddt_nature,
     desc,
     domain,
+    openvaf_allow,
+    openvaf_warn,
+    openvaf_deny,
+    openvaf_forbid,
 
 }
 

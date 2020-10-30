@@ -93,6 +93,13 @@ impl<T: Clone> Clone for Lock<T> {
     }
 }
 
+impl<T: Clone> Clone for RwLock<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        RwLock::new(self.borrow().clone())
+    }
+}
+
 #[derive(Debug)]
 pub struct RwLock<T>(InnerRwLock<T>);
 

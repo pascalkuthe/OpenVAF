@@ -25,22 +25,22 @@ variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
 
-build:
-  stage: build
-  script:
-    - cd crates
-    - rustc --version
-    - cargo --version
-    - cargo update
-    - cargo build --verbose
-
-test:
-  stage: test
-  script:
-    - cd crates
-    - rustc --version
-    - cargo --version
-    - cargo test --verbose
+#build:
+#  stage: build
+#  script:
+#    - cd crates
+#    - rustc --version
+#    - cargo --version
+#    - cargo update
+#    - cargo build --verbose
+#
+#test:
+#  stage: test
+#  script:
+#    - cd crates
+#    - rustc --version
+#    - cargo --version
+#    - cargo test --verbose
 
 
 test_fmt:

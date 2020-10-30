@@ -19,11 +19,11 @@ pub use crate::sourcemap::context::SyntaxContextInterner;
 pub use crate::sourcemap::span::Span;
 use crate::sourcemap::span::SpanData;
 pub use crate::sourcemap::span::SpanInterner;
-use log::error;
 use more_asserts::{assert_le, assert_lt, debug_assert_le, debug_assert_lt};
 use std::cmp::Ordering;
 use std::ops::{Index, Range};
 use std::path::PathBuf;
+use tracing::error;
 
 pub use string_literals::StringLiteral;
 

@@ -14,19 +14,24 @@ use crate::Statements;
 use crate::VerilogContext;
 use resolver::BranchResolver;
 
+use crate::expression::AllowedReferences;
 use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_hir::Branch;
+use openvaf_hir::{Branch, SyntaxContextData};
 use openvaf_ir::ids::PortId;
+use openvaf_session::symbols::Symbol;
+use tracing::trace_span;
 
 pub mod resolver;
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
-pub struct Branches<'lt> {
-    pub(super) base: Fold<'lt>,
+pub struct Branches<'lt, F: Fn(Symbol) -> AllowedReferences> {
+    pub(super) base: Fold<'lt, F>,
 }
-impl<'lt> Branches<'lt> {
-    pub fn fold(mut self) -> std::result::Result<Statements<'lt>, MultiDiagnostic<Error>> {
+impl<'lt, F: Fn(Symbol) -> AllowedReferences> Branches<'lt, F> {
+    pub fn fold(mut self) -> std::result::Result<Statements<'lt, F>, MultiDiagnostic<Error>> {
+        let span = trace_span!("branches_fold");
+        let _enter = span.enter();
         let mut branch_resolver = BranchResolver::new(self.base.ast);
         for module in self.base.ast.modules.iter() {
             self.base
@@ -40,13 +45,20 @@ impl<'lt> Branches<'lt> {
                     &declaration.contents.hi_net,
                     declaration.contents.lo_net.as_ref(),
                 ) {
-                    self.base.fold_attributes(declaration.attributes);
+                    let sctx = self.base.hir.syntax_ctx.push(SyntaxContextData {
+                        span: declaration.span,
+                        attributes: declaration.attributes,
+                        parent: None,
+                    });
+
                     debug_assert_eq!(self.base.hir.branches.len_idx(), id);
-                    self.base.hir.branches.push(declaration.map(Branch {
+
+                    self.base.hir.branches.push(Branch {
                         ident: declaration.contents.ident,
                         hi,
                         lo,
-                    }));
+                        sctx,
+                    });
                 }
             }
 

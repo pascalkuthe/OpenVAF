@@ -8,123 +8,119 @@
  * *****************************************************************************************
 */
 
-use openvaf_data_structures::sync::WriteGuard;
-use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_ir::ids::{StatementId, VariableId};
-use openvaf_ir::Unknown;
-use openvaf_mir::cfg::ControlFlowGraph;
-use openvaf_mir::{ExpressionId, Mir, Statement};
-
 use crate::error::Error;
+use enum_map::EnumMap;
+use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_diagnostics::MultiDiagnostic;
+use openvaf_ir::ids::StatementId;
+use openvaf_middle::cfg::{ControlFlowGraph, PhiData};
+use openvaf_middle::{
+    COperand, CallType, CallTypeDerivative, Derivative, Mir, Statement, StmntKind,
+};
+use std::mem::replace;
 
 pub mod error;
-pub mod expression_derivatives;
 pub mod lints;
+mod rvalue;
 
-pub struct AutoDiff<'lt> {
-    pub errors: MultiDiagnostic<Error>,
-    pub mir: &'lt mut Mir,
+pub fn generate_derivatives<C: CallType, MC: CallType>(
+    cfg: &mut ControlFlowGraph<C>,
+    mir: &Mir<MC>,
+    errors: &mut MultiDiagnostic<Error>,
+) {
+    AutoDiff {
+        cfg,
+        mir,
+        errors,
+        forward_stmnts: IndexVec::with_capacity(128),
+    }
+    .run()
 }
 
-impl<'lt> AutoDiff<'lt> {
-    pub fn new(mir: &'lt mut Mir) -> Self {
-        Self {
-            mir,
-            errors: MultiDiagnostic(Vec::with_capacity(8)),
-        }
-    }
+struct AutoDiff<'lt, C: CallType, MC: CallType> {
+    cfg: &'lt mut ControlFlowGraph<C>,
+    mir: &'lt Mir<MC>,
+    errors: &'lt mut MultiDiagnostic<Error>,
+    forward_stmnts: IndexVec<StatementId, Statement<C>>,
 }
 
-pub fn calculate_all_registered_derivatives(mir: &mut Mir) -> Result<(), MultiDiagnostic<Error>> {
-    let mut errors = MultiDiagnostic(Vec::new());
-    // TODO hierarchical module structure
-    for module in mir.modules.indices() {
-        let cfg = mir[module].contents.analog_cfg.clone();
-        let mut cfg_ref: WriteGuard<'_, ControlFlowGraph> = cfg.borrow_mut();
-        if let Err(err) = calculate_all_registered_derivatives_for_cfg(&mut cfg_ref, mir) {
-            errors.add_all(err);
-        }
-    }
+impl<'lt, C: CallType, MC: CallType> AutoDiff<'lt, C, MC> {
+    pub fn run(mut self) {
+        let postorder: Vec<_> = self.cfg.postorder_iter().map(|(id, _)| id).collect();
+        let mut cache = EnumMap::new();
 
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
-    }
-}
+        for id in postorder {
+            let new_stmts = IndexVec::with_capacity(2 * self.cfg[id].statements.len());
+            let old_stmts = replace(&mut self.cfg[id].statements, new_stmts);
 
-pub fn demand_derivatives(
-    cfg: &mut ControlFlowGraph,
-    mir: &mut Mir,
-    mut derivative_predicate: impl FnMut(&mut AutoDiff, VariableId, StatementId, Unknown) -> bool,
-    upperbound: f64,
-) -> Result<(), MultiDiagnostic<Error>> {
-    // Try to approximate an upper bound by which a statement count is increased
-    let factor = upperbound + 1.0;
+            for (stmnt, info) in old_stmts.into_iter().rev() {
+                match stmnt {
+                    StmntKind::Assignment(lhs, rhs) => {
+                        for (unkown, local) in self
+                            .cfg
+                            .derivatives
+                            .get(&lhs)
+                            .cloned()
+                            .into_iter()
+                            .flatten()
+                        {
+                            let rhs = self.rvalue_derivative(lhs, &rhs, unkown, info, &mut cache);
+                            self.cfg[id]
+                                .statements
+                                .push((StmntKind::Assignment(local, rhs), info));
+                        }
+                        self.forward_stmnts.reverse();
+                        self.cfg[id].statements.append(&mut self.forward_stmnts);
 
-    let mut ad = AutoDiff::new(mir);
-
-    for (_, block) in cfg.postorder_itermut() {
-        let upperbound_approx = (factor * block.statements.len() as f64).ceil() as usize;
-        let mut old = Vec::with_capacity(upperbound_approx);
-        std::mem::swap(&mut old, &mut block.statements);
-
-        for stmt in old.into_iter().rev() {
-            block.statements.push(stmt);
-            ad.stmt_derivatives(&mut block.statements, stmt, &mut derivative_predicate)
-        }
-
-        block.statements.reverse();
-    }
-
-    cfg.statement_owner_cache
-        .invalidate(ad.mir.statements().len());
-
-    if ad.errors.is_empty() {
-        Ok(())
-    } else {
-        Err(ad.errors)
-    }
-}
-
-/// Use this with care calling this on multiple overlapping cfgs will calculate derivatives multiple times
-pub fn calculate_all_registered_derivatives_for_cfg(
-    cfg: &mut ControlFlowGraph,
-    mir: &mut Mir,
-) -> Result<(), MultiDiagnostic<Error>> {
-    let derivative_count = mir.derivatives().values().flatten().count();
-
-    // `2 * count` instead of just `count` to take transitive dependencies into account
-    let upperbound = (2 * derivative_count) as f64 / mir.variables.len() as f64;
-    demand_derivatives(cfg, mir, |_, _, _, _| true, upperbound)
-}
-
-impl<'lt> AutoDiff<'lt> {
-    pub fn stmt_derivatives(
-        &mut self,
-        dst: &mut Vec<StatementId>,
-        stmt: StatementId,
-        derivative_predicate: &mut impl FnMut(&mut AutoDiff, VariableId, StatementId, Unknown) -> bool,
-    ) {
-        if let Statement::Assignment(var, expr) = self.mir[stmt].contents {
-            if let Some(partial_derivatives) = self.mir.derivatives().get(&var).cloned() {
-                for (derive_by, derivative_var) in partial_derivatives {
-                    if !derivative_predicate(self, var, stmt, derive_by) {
-                        continue;
+                        self.cfg[id]
+                            .statements
+                            .push((StmntKind::Assignment(lhs, rhs), info));
                     }
 
-                    let derivative = self.partial_derivative(expr, derive_by);
+                    // No need to keep NoOps around
+                    StmntKind::NoOp => (),
 
-                    let stmt = self.mir.add_modified_stmt(
-                        Statement::Assignment(derivative_var, ExpressionId::Real(derivative)),
-                        stmt,
-                    );
+                    stmnt => {
+                        self.cfg[id].statements.push((stmnt, info));
+                    }
+                }
+                cache.clear();
+            }
+            self.cfg[id].statements.reverse();
 
-                    dst.push(stmt);
-                    // Higher order derivatives
-                    self.stmt_derivatives(dst, stmt, derivative_predicate)
+            let phis = IndexVec::with_capacity(self.cfg[id].phi_statements.len());
+            let mut phis = replace(&mut self.cfg[id].phi_statements, phis);
+
+            for phi in &phis {
+                for (unkown, dst) in self
+                    .cfg
+                    .derivatives
+                    .get(&phi.dst)
+                    .cloned()
+                    .into_iter()
+                    .flatten()
+                {
+                    let sources = phi
+                        .sources
+                        .iter()
+                        .map(|(bb, local)| {
+                            (*bb, self.cfg.demand_derivative_unchecked(*local, unkown))
+                        })
+                        .collect();
+
+                    self.cfg[id].phi_statements.push(PhiData {
+                        dst,
+                        sources,
+                        sctx: phi.sctx,
+                    });
                 }
             }
+
+            self.cfg[id].phi_statements.append(&mut phis)
         }
     }
+}
+
+fn operand_to_derivative<C: CallType>(operand: COperand<C>) -> CallTypeDerivative<C> {
+    Derivative::Operand(operand.contents)
 }

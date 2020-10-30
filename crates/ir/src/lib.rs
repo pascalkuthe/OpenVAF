@@ -10,17 +10,27 @@
 
 pub use crate::ids::IdRange;
 
+#[cfg(feature = "serde_dump")]
+#[doc(hidde)]
+pub mod __reexport {
+    pub use serde;
+}
+
 use crate::ids::{AttributeId, BranchId, ExpressionId, NetId, ParameterId};
 use core::convert::TryFrom;
 use core::fmt::Debug;
-use openvaf_session::sourcemap::Span;
+use openvaf_session::sourcemap::{Span, StringLiteral};
 use openvaf_session::symbols::Ident;
 use std::ops::Range;
 
+pub type ConstVal = osdi_types::ConstVal<StringLiteral>;
+pub use osdi_types::{SimpleConstVal, SimpleType, Type, TypeInfo};
+
 #[macro_use]
 pub mod ids;
+pub mod convert;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Spanned<T> {
     pub span: Span,
     pub contents: T,
@@ -55,11 +65,10 @@ impl<T: Clone> Spanned<T> {
 #[derive(Clone, Debug)]
 pub struct Attribute {
     pub ident: Ident,
-    // TODO make arrays actual expressions
-    pub value: Vec<ExpressionId>,
+    pub value: Option<ExpressionId>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Attributes {
     pub start: AttributeId,
     pub len: u8,
@@ -114,7 +123,7 @@ impl Default for Attributes {
 }
 
 /// A special type of IR Node. Contains a Span and attributes in addition to whatever that node holds
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Node<T> {
     pub attributes: Attributes,
     pub span: Span,
@@ -165,7 +174,6 @@ pub enum UnaryOperator {
     BitNegate,
     LogicNegate,
     ArithmeticNegate,
-    ExplicitPositive,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -173,11 +181,9 @@ pub enum Unknown {
     Parameter(ParameterId),
     NodePotential(NetId),
     Flow(BranchId),
-    Temperature,
-    Time,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum SingleArgMath {
     Sqrt,
     Exp(bool),
@@ -231,7 +237,7 @@ impl SingleArgMath {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DoubleArgMath {
     Pow,
     Hypot,
@@ -241,7 +247,7 @@ pub enum DoubleArgMath {
 }
 
 impl DoubleArgMath {
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
             Self::Pow => "pow",
             Self::Hypot => "hypot",
@@ -285,18 +291,27 @@ pub struct Port {
 }
 
 // TODO add system to generalise (dynamically add more)
-// TODO add a way to constant fold these
-#[derive(Clone, Debug)]
-pub enum SystemFunctionCall<RealExpr, StrExpr, Port, Parameter> {
+#[derive(Copy, Clone, Debug)]
+pub enum SystemFunctionCall<Port, Parameter> {
     Temperature,
-    Vt(Option<RealExpr>),
-    Simparam(StrExpr, Option<RealExpr>),
-    SimparamStr(StrExpr),
+    Vt(Option<ExpressionId>),
+    Simparam(ExpressionId, Option<ExpressionId>),
+    SimparamStr(ExpressionId),
     PortConnected(Port),
     ParameterGiven(Parameter),
 }
 
-#[derive(Clone, Debug, Copy)]
+impl<Port, Parameter> SystemFunctionCall<Port, Parameter> {
+    pub fn ty(&self) -> Type {
+        match self {
+            Self::Temperature | Self::Vt(_) | Self::Simparam(_, _) => Type::REAL,
+            Self::SimparamStr(_) => Type::STRING,
+            Self::PortConnected(_) | Self::ParameterGiven(_) => Type::INT,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Copy, Eq, PartialEq)]
 pub enum StopTaskKind {
     Stop,
     Finish,
@@ -311,16 +326,17 @@ impl StopTaskKind {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Eq, PartialEq)]
 pub enum PrintOnFinish {
     Nothing,
     Location,
     LocationAndResourceUsage,
 }
-impl TryFrom<u32> for PrintOnFinish {
+
+impl TryFrom<i64> for PrintOnFinish {
     type Error = ();
 
-    fn try_from(finish_number: u32) -> Result<Self, Self::Error> {
+    fn try_from(finish_number: i64) -> Result<Self, Self::Error> {
         Ok(match finish_number {
             0 => Self::Nothing,
             1 => Self::Location,
@@ -347,6 +363,7 @@ pub struct ParameterRangeConstraintBound<T> {
     pub inclusive: bool,
     pub bound: T,
 }
+
 impl<T: Copy> ParameterRangeConstraintBound<T> {
     pub fn copy_with<N>(self, f: impl FnOnce(T) -> N) -> ParameterRangeConstraintBound<N> {
         ParameterRangeConstraintBound {

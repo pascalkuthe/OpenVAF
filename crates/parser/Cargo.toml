@@ -23,7 +23,7 @@ logos = "0.11"
 lalrpop-util = "0.19"
 
 # Error reporting
-log="0.4"
+tracing = "0.1"
 thiserror = "1.0"
 more-asserts = "0.2"
 

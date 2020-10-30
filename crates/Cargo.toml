@@ -1,15 +1,12 @@
 [workspace]
 
 members = [
-    "analysis",
-
     "ast",
     "ast_lowering",
 
     "constants",
 
-    "constant_fold",
-    "codegen_rust",
+    "codegen_llvm",
 
     "derivatives",
 
@@ -20,7 +17,7 @@ members = [
     "hir",
     "hir_lowering",
     "ir",
-    "mir",
+    "middle",
 
     "macros",
 
@@ -28,5 +25,8 @@ members = [
     "preprocessor",
 
     "session",
+
+    "transformations",
+
     "test"
 ]

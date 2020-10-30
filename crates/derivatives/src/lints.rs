@@ -14,9 +14,7 @@ use std::error::Error;
 use std::fmt::Display;
 
 #[derive(Clone, Debug)]
-pub struct RoundingDerivativeNotFullyDefined {
-    pub span: Span,
-}
+pub struct RoundingDerivativeNotFullyDefined(pub Span);
 
 impl Error for RoundingDerivativeNotFullyDefined {}
 
@@ -33,11 +31,11 @@ impl LintDiagnostic for RoundingDerivativeNotFullyDefined {
 
     fn slices(&self, main_annotation_type: AnnotationType) -> Vec<DiagnosticSlice> {
         vec![DiagnosticSlice {
-            slice_span: self.span.data(),
+            slice_span: self.0.data(),
             messages: vec![(
                 main_annotation_type,
                 Text::const_str("Required while deriving this"),
-                self.span.data(),
+                self.0.data(),
             )],
             fold: false,
         }]

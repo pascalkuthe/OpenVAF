@@ -12,7 +12,6 @@ use core::intrinsics::transmute;
 use core::mem::swap;
 use std::path::PathBuf;
 
-use log::debug;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 
 pub use error::{Error, Result};
@@ -35,7 +34,7 @@ use openvaf_session::sourcemap::string_literals::{unesacpe_string, StringLiteral
 use openvaf_session::sourcemap::Span;
 use openvaf_session::sourcemap::{BytePos, FileId, SourceMap, SyntaxContext};
 use openvaf_session::symbols::{keywords, Ident, Symbol};
-
+use tracing::{debug, debug_span, trace_span};
 mod lints;
 
 macro_rules! skip_to_nested_end {
@@ -93,9 +92,15 @@ pub fn preprocess(
     main_file: FileId,
     paths: HashMap<&'static str, PathBuf>,
 ) -> std::result::Result<ParserTokenStream, MultiDiagnostic<Error>> {
+    let span = trace_span!(
+        "preprocessor",
+        main_file = display(source_map[main_file].path.display())
+    );
+    let _scope = span.enter();
     let mut precprocessor = Preprocessor::new(&mut source_map, main_file, paths);
     precprocessor.run();
     let Preprocessor { errors, dst, .. } = precprocessor;
+
     unsafe { init_sourcemap(source_map) };
     if errors.is_empty() {
         Ok(dst)
@@ -130,7 +135,10 @@ pub fn std_path(constants: PathBuf, disciplines: PathBuf) -> HashMap<&'static st
         ("constants.h", constants),
         ("disciplines.vams", disciplines.clone()),
         ("disciplines.va", disciplines.clone()),
-        ("disciplines.h", disciplines),
+        ("disciplines.h", disciplines.clone()),
+        ("discipline.vams", disciplines.clone()),
+        ("discipline.va", disciplines.clone()),
+        ("discipline.h", disciplines),
     ]
     .into_iter()
     .collect()
@@ -285,18 +293,22 @@ impl<'sm> Preprocessor<'sm> {
         match self.lexer.expect_simple_ident() {
             Ok(macro_ident) => {
                 if invert == self.macros.contains_key(&macro_ident.name) {
-                    debug!(
-                        "Preprocessor: Condition if{}def {} is not fulfilled",
-                        if invert { "n" } else { "" },
-                        macro_ident
+                    let span = debug_span!(
+                        "condition",
+                        inverted = invert,
+                        macro_name = display(macro_ident),
+                        fullfilled = false
                     );
+                    let _enter = span.enter();
                     not_fullfilled(self, macro_ident)
                 } else {
-                    debug!(
-                        "Preprocessor: Condition if{}def {} is fulfilled",
-                        if invert { "n" } else { "" },
-                        macro_ident
+                    let span = debug_span!(
+                        "condition",
+                        inverted = invert,
+                        macro_name = display(macro_ident),
+                        fullfilled = true
                     );
+                    let _enter = span.enter();
                     self.process_fulfilled_condition(macro_ident.span)
                 }
             }
@@ -321,7 +333,11 @@ impl<'sm> Preprocessor<'sm> {
     }
 
     fn declare_macro(&mut self, name: Symbol, def: Macro) {
-        debug!("Macro {} was declared", name);
+        debug!(
+            name = display(name),
+            arg_count = def.arg_len_idx.index(),
+            "Macro declaration"
+        );
         let new_location = def.head;
         if let Some(old) = self.macros.insert(name, def) {
             Linter::dispatch_early(Box::new(MacroOverwritten {
@@ -354,13 +370,19 @@ impl<'sm> Preprocessor<'sm> {
             Token::MacroDefinition(name, def) => self.declare_macro(name, def),
 
             Token::MacroCall(call) => {
-                debug!("Resolving macro {}", call.name);
+                let tspan = trace_span!(
+                    "macro",
+                    name = display(call.name),
+                    arg_count = display(call.arg_bindings.len())
+                );
+                let _enter = tspan.enter();
                 let ctxt = SyntaxContext::create(span);
                 if let Some(def) = self.macros.get(&call.name).cloned() {
-                    debug!("Resolved macro {}!", call.name);
                     //the borrow checker hates this
                     let mut new_args = IndexVec::with_capacity(call.arg_bindings.len());
                     for arg in call.arg_bindings {
+                        let tspan = trace_span!("macro_argument");
+                        let _enter = tspan.enter();
                         let mut tokens = ParserTokenStream::with_capacity(arg.len());
                         std::mem::swap(&mut tokens, &mut self.dst);
                         for (token, span) in arg {
@@ -376,6 +398,7 @@ impl<'sm> Preprocessor<'sm> {
                             self.resolve_macro_token(&new_args, token, span.data().with_ctxt(ctxt));
                         }
                     } else {
+                        debug!(expected = def.arg_len_idx.index(), "arg count mismatch");
                         self.errors.add(Error::MacroArgumentCountMissmatch {
                             expected: def.arg_len_idx,
                             found: new_args.len(),
@@ -383,6 +406,7 @@ impl<'sm> Preprocessor<'sm> {
                         })
                     }
                 } else {
+                    debug!("not found");
                     self.errors.add(Error::MacroNotFound(call.name, span))
                 }
             }
@@ -427,21 +451,21 @@ impl<'sm> Preprocessor<'sm> {
     }
 
     fn process_file(&mut self, path: String, ctxt: SyntaxContext) -> std::io::Result<()> {
+        let span = trace_span!("file", path = path.as_str());
         let path = if let Some(path) = self.paths.get(path.as_str()) {
             path.clone()
         } else {
             self.workingdir.join(&path)
         };
 
-        debug!("Entering {}", path.display());
         let file = self.source_map.add_file_from_fs(path)?;
+        let _enter = span.enter();
 
         let mut lexer = self.new_lexer(file, ctxt);
-
         std::mem::swap(&mut self.lexer, &mut lexer);
         self.run();
         std::mem::swap(&mut self.lexer, &mut lexer);
-        debug!("Done with file");
+
         Ok(())
     }
 
@@ -594,14 +618,15 @@ impl<'lt> TokenProcessor<'lt> for Preprocessor<'lt> {
                 arg_bindings.push(arg);
             }
         }
-        debug!("Resolving macro {}", ident.name);
+        let span = trace_span!("macro", name = display(ident));
+        let enter = span.enter();
         let called_macro = if let Some(m) = self.macros.get(&ident.name) {
             m
         } else {
             self.errors.add(MacroNotFound(ident.name, ident.span));
             return Ok(());
         };
-        debug!("Resolved macro {}!", ident.name);
+        drop(enter);
 
         let call_span = self.lexer.extend_span_to_current_end(ident.span);
 

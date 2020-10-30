@@ -8,8 +8,6 @@
  * *****************************************************************************************
  */
 
-use log::debug;
-
 use crate::ast::{Ast, DisciplineItem};
 use crate::error::Error::{
     AttributeAlreadyDefined, CircularAttributeInheritance, DiscreteDisciplineHasNatures,
@@ -23,30 +21,37 @@ use openvaf_ast::NatureAttribute;
 use openvaf_data_structures::HashMap;
 use openvaf_diagnostics::format_list;
 use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_hir::{Discipline, Nature, Net};
-use openvaf_ir::ids::{ExpressionId, NatureId};
+use openvaf_hir::{Discipline, Nature, Net, SyntaxContextData};
+use openvaf_ir::ids::{ExpressionId, NatureId, SyntaxCtx};
 use openvaf_ir::{Node, Spanned};
-use openvaf_session::symbols::{keywords, Ident};
+use openvaf_session::symbols::{keywords, Ident, Symbol};
+use tracing::{debug, trace_span};
 
 /// This is the first fold. All Items that are defined globally or do not reference other items (nets & ports) are folded here
-pub struct Global<'lt> {
-    pub(super) base: Fold<'lt>,
+pub struct Global<'a, F: Fn(Symbol) -> AllowedReferences> {
+    pub(super) base: Fold<'a, F>,
 }
 
-impl<'lt> Global<'lt> {
-    pub fn new(ast: &'lt mut Ast) -> Self {
+impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
+    pub fn new(ast: &'a mut Ast, allowed_attribute_references: F) -> Self {
         Self {
-            base: Fold::new(ast),
+            base: Fold::new(ast, allowed_attribute_references),
         }
     }
 
-    pub fn fold(mut self) -> std::result::Result<Branches<'lt>, MultiDiagnostic<Error>> {
+    pub fn fold(mut self) -> std::result::Result<Branches<'a, F>, MultiDiagnostic<Error>> {
+        let span = trace_span!("Globals");
+        let _enter = span.enter();
         self.base.hir.natures = self
             .base
             .ast
             .natures
             .iter_enumerated()
-            .filter_map(|(id, nature)| self.fold_nature(id, nature))
+            .filter_map(|(id, nature)| {
+                let span = trace_span!("nature", name = display(nature.contents.ident));
+                let _enter = span.enter();
+                self.fold_nature(id, nature)
+            })
             .collect();
 
         self.base.hir.disciplines = self
@@ -54,7 +59,11 @@ impl<'lt> Global<'lt> {
             .ast
             .disciplines
             .iter()
-            .map(|discipline| self.fold_discipline(discipline))
+            .map(|discipline| {
+                let span = trace_span!("discipline", name = display(discipline.contents.ident));
+                let _enter = span.enter();
+                self.fold_discipline(discipline)
+            })
             .collect();
 
         self.base.hir.nets = self
@@ -62,7 +71,11 @@ impl<'lt> Global<'lt> {
             .ast
             .nets
             .iter()
-            .filter_map(|net| self.fold_net(net))
+            .filter_map(|net| {
+                let span = trace_span!("net", name = display(net.contents.ident));
+                let _enter = span.enter();
+                self.fold_net(net)
+            })
             .collect();
 
         if self.base.errors.is_empty() {
@@ -72,8 +85,10 @@ impl<'lt> Global<'lt> {
         }
     }
 
-    fn fold_discipline(&mut self, discipline: &Node<ast::Discipline>) -> Node<Discipline> {
-        self.base.fold_attributes(discipline.attributes);
+    fn fold_discipline(&mut self, discipline: &Node<ast::Discipline>) -> Discipline {
+        self.base
+            .enter_sctxt(discipline.span, discipline.attributes);
+
         let mut pot_nature: Option<Spanned<Ident>> = None;
         let mut flow_nature: Option<Spanned<Ident>> = None;
         let mut domain: Option<Spanned<bool>> = None;
@@ -129,10 +144,7 @@ impl<'lt> Global<'lt> {
                     }
                 }
                 DisciplineItem::Error => {
-                    debug!(
-                        "Encountered error discipline item in  {}",
-                        discipline.contents.ident
-                    );
+                    debug!("Encountered error node");
                     continue;
                 }
             }
@@ -183,20 +195,23 @@ impl<'lt> Global<'lt> {
              }| resolve!(self.base; ident as Nature(id) => id),
         );
 
-        discipline.map_with(|old| Discipline {
-            ident: old.ident,
+        Discipline {
+            ident: discipline.contents.ident,
             flow_nature,
             potential_nature,
             continuous,
-        })
+            sctx: self.base.exit_sctxt(),
+        }
     }
 
-    fn fold_nature(
-        &mut self,
-        id: NatureId,
-        nature_node: &Node<ast::Nature>,
-    ) -> Option<Node<Nature>> {
+    fn fold_nature(&mut self, id: NatureId, nature_node: &Node<ast::Nature>) -> Option<Nature> {
         self.base.fold_attributes(nature_node.attributes);
+
+        let sctx = self.base.hir.syntax_ctx.push(SyntaxContextData {
+            span: nature_node.span,
+            attributes: nature_node.attributes,
+            parent: Some(SyntaxCtx::ROOT),
+        });
 
         let nature = &nature_node.contents;
         let mut attributes: HashMap<NatureAttribute, Spanned<ExpressionId>> =
@@ -350,18 +365,25 @@ impl<'lt> Global<'lt> {
 
         self.base.resolver.insert_nature_access(access, id);
 
-        Some(self.base.ast[id].map(Nature {
+        Some(Nature {
             ident: nature.ident,
             abstol: abstol?,
             units: units?,
             access,
             idt_nature,
             ddt_nature,
-        }))
+            sctx,
+        })
     }
 
     /// Only the discpline is resolved here the rest is just a copy
-    fn fold_net(&mut self, net: &Node<ast::Net>) -> Option<Node<Net>> {
+    fn fold_net(&mut self, net: &Node<ast::Net>) -> Option<Net> {
+        let sctx = self.base.hir.syntax_ctx.push(SyntaxContextData {
+            span: net.span,
+            attributes: net.attributes,
+            parent: None,
+        });
+
         let discipline = if let Some(ident) = &net.contents.discipline {
             resolve!(self.base; ident as Discipline(id) => id)?
         } else {
@@ -369,11 +391,12 @@ impl<'lt> Global<'lt> {
             return None;
         };
 
-        Some(net.copy_with(|old| Net {
-            ident: old.ident,
+        Some(Net {
+            ident: net.contents.ident,
             discipline,
-            net_type: old.net_type,
-        }))
+            net_type: net.contents.net_type,
+            sctx,
+        })
     }
 
     pub fn fold_constant_expr(&mut self, expr: ExpressionId) -> Option<ExpressionId> {

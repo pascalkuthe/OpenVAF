@@ -83,14 +83,14 @@ impl<'p, 'sm> MacroParser<'p, 'sm> {
         let mut true_tokens = Vec::with_capacity(32);
 
         std::mem::swap(&mut self.dst, &mut true_tokens);
+        let mut else_ifs = Vec::new();
 
         loop {
             let (token, span) = self
                 .parent
-                .lookahead_expecting(name.span, LexicalToken::MacroEndIf)?;
+                .next_expecting(name.span, LexicalToken::MacroEndIf)?;
             match token {
                 LexicalToken::MacroEndIf => {
-                    self.parent.lexer.consume_lookahead();
                     std::mem::swap(&mut self.dst, &mut true_tokens);
                     return Ok(UnresolvedCondition {
                         if_def: name.name,
@@ -101,10 +101,13 @@ impl<'p, 'sm> MacroParser<'p, 'sm> {
                     });
                 }
 
-                LexicalToken::MacroElsif => break,
+                LexicalToken::MacroElsif => {
+                    let else_if = self.parse_else_ifdef()?;
+                    else_ifs.push(else_if);
+                    break;
+                }
 
                 LexicalToken::MacroElse => {
-                    self.parent.lexer.consume_lookahead();
                     let else_tokens = self.parse_else(name.span)?;
                     return Ok(UnresolvedCondition {
                         if_def: name.name,
@@ -125,24 +128,20 @@ impl<'p, 'sm> MacroParser<'p, 'sm> {
         }
 
         let mut else_tokens = Vec::new();
-        let mut else_ifs = Vec::new();
 
         loop {
-            let (token, span) = self.parent.lookahead(name.span)?;
+            let (token, span) = self.parent.next_from(name.span)?;
             match token {
                 LexicalToken::MacroEndIf => {
-                    self.parent.lexer.consume_lookahead();
                     break;
                 }
 
                 LexicalToken::MacroElsif => {
-                    self.parent.lexer.consume_lookahead();
                     let else_if = self.parse_else_ifdef()?;
                     else_ifs.push(else_if)
                 }
 
                 LexicalToken::MacroElse => {
-                    self.parent.lexer.consume_lookahead();
                     else_tokens = self.parse_else(span)?;
                     break;
                 }
@@ -171,12 +170,15 @@ impl<'p, 'sm> MacroParser<'p, 'sm> {
                 LexicalToken::MacroEndIf | LexicalToken::MacroElsif | LexicalToken::MacroElse => {
                     break
                 }
-                _ => self.process_token_inside_directive(
-                    token,
-                    span,
-                    name.span,
-                    LexicalToken::MacroEndIf,
-                )?,
+                _ => {
+                    self.parent.lexer.consume_lookahead();
+                    self.process_token_inside_directive(
+                        token,
+                        span,
+                        name.span,
+                        LexicalToken::MacroEndIf,
+                    )?
+                }
             }
         }
         std::mem::swap(&mut self.dst, &mut tokens);
@@ -189,10 +191,9 @@ impl<'p, 'sm> MacroParser<'p, 'sm> {
         loop {
             let (token, span) = self
                 .parent
-                .lookahead_expecting(else_span, LexicalToken::MacroEndIf)?;
+                .next_expecting(else_span, LexicalToken::MacroEndIf)?;
             match token {
                 LexicalToken::MacroEndIf => {
-                    self.parent.lexer.consume_lookahead();
                     break;
                 }
                 _ => self.process_token_inside_directive(

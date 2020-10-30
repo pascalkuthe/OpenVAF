@@ -9,7 +9,7 @@
  */
 
 use crate::ast;
-use crate::ast::{NumericParameterConstraint, PortList};
+use crate::ast::{OrderedParameterConstraint, PortList};
 use crate::branches::resolver::{BranchProbeKind, BranchResolver, NatureAccess};
 use crate::error::Error::{
     ContributeToBranchPortProbe, ContributeToNonBranchProbe, FunctionArgTypeDeclarationMissing,
@@ -21,32 +21,36 @@ use crate::expression::{AllowedReferences, ConstantExpressionFolder, StatementEx
 use crate::lints::IgnoredDisplayTask;
 use crate::{ExpressionFolder, Fold, VerilogContext};
 use openvaf_ast::symbol_table::SymbolDeclaration;
-use openvaf_ast::StringParameterConstraint;
+use openvaf_ast::UnorderedParameterConstraint;
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_hir::{Block, CaseItem, Cases, ForLoop, Parameter};
+use openvaf_hir::{Block, CaseItem, Cases, ForLoop, Parameter, Variable};
 use openvaf_hir::{DisciplineAccess, Function, FunctionArg};
-use openvaf_hir::{Hir, ParameterType};
+use openvaf_hir::{Hir, ParameterConstraint};
 use openvaf_hir::{Module, Statement};
 use openvaf_ir::ids::IdRange;
 use openvaf_ir::ids::{
     BlockId, BranchId, ExpressionId, FunctionId, ParameterId, StatementId, VariableId,
 };
-use openvaf_ir::{Node, ParameterExcludeConstraint, Spanned};
+use openvaf_ir::{Attributes, ParameterExcludeConstraint, Spanned};
 use openvaf_ir::{ParameterRangeConstraint, ParameterRangeConstraintBound};
+use openvaf_session::symbols::Symbol;
 use std::ops::Range;
+use tracing::trace_span;
 
 /// The last fold folds all statements in textual order
-pub struct Statements<'lt> {
+pub struct Statements<'lt, F: Fn(Symbol) -> AllowedReferences> {
     pub(super) branch_resolver: BranchResolver,
     pub(super) state: VerilogContext,
-    pub(super) base: Fold<'lt>,
+    pub(super) base: Fold<'lt, F>,
 }
 
-impl<'lt> Statements<'lt> {
+impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
     pub fn fold(mut self) -> Result<Hir, MultiDiagnostic<Error>> {
+        let span = trace_span!("statements fold");
+        let _enter = span.enter();
         for module in &self.base.ast.modules {
-            self.base.fold_attributes(module.attributes);
+            self.base.enter_sctxt(module.span, module.attributes);
 
             self.base
                 .resolver
@@ -61,24 +65,32 @@ impl<'lt> Statements<'lt> {
                     | SymbolDeclaration::Discipline(_) => unreachable!("Parser cant create this"),
 
                     SymbolDeclaration::Branch(id) => {
-                        self.base.fold_attributes(self.base.hir[id].attributes)
+                        let sctx = self.base.hir[id].sctx;
+                        self.base.hir[sctx].parent = Some(self.base.sctx);
+                        self.base.fold_attributes(self.base.hir[sctx].attributes)
                     }
+
                     SymbolDeclaration::Net(id) => {
-                        self.base.fold_attributes(self.base.hir[id].attributes)
+                        let sctx = self.base.hir[id].sctx;
+                        self.base.hir[sctx].parent = Some(self.base.sctx);
+                        self.base.fold_attributes(self.base.hir[sctx].attributes)
                     }
                     SymbolDeclaration::PortBranch(id) => {
+                        // TODO warn that these are ignored
                         self.base.fold_attributes(self.base.ast[id].attributes)
                     }
 
                     SymbolDeclaration::Block(_) => (), // Will visited or will be visited later
 
                     SymbolDeclaration::Port(id) => {
-                        let attributes = self.base.ast[self.base.hir[id].net].attributes;
-                        self.base.fold_attributes(attributes);
+                        let sctx = self.base.hir[self.base.hir[id].net].sctx;
+                        self.base.hir[sctx].parent = Some(self.base.sctx);
+                        self.base.fold_attributes(self.base.hir[sctx].attributes);
+
                         // LLVM should pull the match out of the loop
                         match ports {
                             PortList::Expected(ref mut idents) => {
-                                let ident = self.base.hir[self.base.hir[id].net].contents.ident;
+                                let ident = self.base.hir[self.base.hir[id].net].ident;
                                 if let Some(i) = idents.iter().position(|&e| e == ident) {
                                     idents.remove(i);
                                 } else {
@@ -91,7 +103,8 @@ impl<'lt> Statements<'lt> {
                             PortList::Declarations(declarations)
                                 if module.contents.body_ports.contains(declarations) =>
                             {
-                                let span = self.base.hir[self.base.hir[id].net].span;
+                                let span =
+                                    self.base.hir[self.base.hir[self.base.hir[id].net].sctx].span;
                                 self.base.error(PortRedeclaration {
                                     module_head: module.contents.ports.span,
                                     body_declaration: span,
@@ -106,12 +119,27 @@ impl<'lt> Statements<'lt> {
 
                     SymbolDeclaration::Parameter(param) => {
                         self.state.insert(VerilogContext::CONSTANT);
+                        let span = trace_span!(
+                            "parameter",
+                            id = param.index(),
+                            name = display(self.base.hir[param].ident)
+                        );
+                        let enter = span.enter();
                         self.fold_parameter(param);
+                        drop(enter);
                         self.state.remove(VerilogContext::CONSTANT);
                     }
+
                     SymbolDeclaration::Variable(variable) => {
                         self.state.insert(VerilogContext::CONSTANT);
+                        let span = trace_span!(
+                            "variable",
+                            id = variable.index(),
+                            name = display(self.base.hir[variable].ident)
+                        );
+                        let enter = span.enter();
                         self.fold_variable(variable);
+                        drop(enter);
                         self.state.remove(VerilogContext::CONSTANT);
                     }
                 }
@@ -127,19 +155,21 @@ impl<'lt> Statements<'lt> {
                 PortList::Declarations(start) => IdRange(start..module.contents.body_ports.0.end),
             };
 
-            let analog_stmts_start = self.base.hir.statements.len_idx();
+            let mut analog = Block::with_capacity(module.contents.analog_stmts.len());
 
             for &stmt in &module.contents.analog_stmts {
-                self.fold_statement(stmt);
+                self.fold_statement(stmt, &mut analog);
             }
 
             self.base.resolver.exit_scope();
-            self.base.hir.modules.push(module.map_with(|old| Module {
-                ident: old.ident,
+            let sctx = self.base.exit_sctxt();
+            self.base.hir.modules.push(Module {
+                ident: module.contents.ident,
                 ports,
-                parameters: old.parameters.clone(),
-                analog: IdRange(analog_stmts_start..self.base.hir.statements.len_idx()),
-            }));
+                parameters: module.contents.parameters.clone(),
+                analog,
+                sctx,
+            });
         }
 
         if self.base.errors.is_empty() {
@@ -150,7 +180,8 @@ impl<'lt> Statements<'lt> {
     }
 
     pub fn fold_function(&mut self, id: FunctionId) {
-        self.base.fold_attributes(self.base.ast[id].attributes);
+        self.base
+            .enter_sctxt(self.base.ast[id].span, self.base.ast[id].attributes);
 
         let function = &self.base.ast[id].contents;
         let args = function
@@ -194,14 +225,15 @@ impl<'lt> Statements<'lt> {
 
         self.fold_variable(function.return_variable);
 
-        let start = self.base.hir.statements.len_idx();
-        self.fold_statement(function.body);
-        self.base.hir[id] = self.base.ast[id].map(Function {
+        let mut body = Block::with_capacity(128);
+        self.fold_statement(function.body, &mut body);
+        self.base.hir[id] = Function {
             ident: function.ident,
             args,
             return_variable: function.return_variable,
-            body: IdRange(start..self.base.hir.statements.len_idx()),
-        });
+            body,
+            sctx: self.base.exit_sctxt(),
+        };
         self.base.resolver.exit_function();
         self.state.remove(VerilogContext::FUNCTION);
     }
@@ -210,12 +242,14 @@ impl<'lt> Statements<'lt> {
     /// The way that Statement Blocks are stored also changes. Instead of an Vec<StatementId> we switch to a Range of `StatementId`s
     /// This is possible because this fold adds Statements in the order they are executed (conditions indicate themselves and their block as a statement before&after their block)
     /// As such this function doesn't return the new StatementId instead `empty_range_from_end` and `extend_range_to_end` are used to create the range of the folded block by the calle
-    fn fold_statement(&mut self, id: StatementId) {
+    fn fold_statement(&mut self, id: StatementId, dst: &mut Block) {
+        let span = trace_span!("statement", id = id.index(),);
+        let _enter = span.enter();
         let attributes = self.base.ast[id].attributes;
-        self.base.fold_attributes(attributes);
         let span = self.base.ast[id].span;
+        self.base.enter_sctxt(span, attributes);
 
-        match self.base.ast[id].contents {
+        let stmnt = match self.base.ast[id].contents {
             ast::Statement::Block(id) => {
                 if let Some(scope) = &self.base.ast[id].scope {
                     if self.state.contains(VerilogContext::FUNCTION) {
@@ -245,59 +279,70 @@ impl<'lt> Statements<'lt> {
                     }
 
                     self.state.remove(VerilogContext::CONSTANT);
-                    self.fold_block(id);
+                    self.fold_block(id, dst);
                     self.base.resolver.exit_scope();
                 } else {
-                    self.fold_block(id);
+                    self.fold_block(id, dst);
                 }
+
+                return;
             }
 
             ast::Statement::Condition(cond, true_block, false_block) => {
                 if let Some((cond, true_block, false_block)) =
                     self.fold_condition(cond, true_block, false_block)
                 {
-                    self.base.hir.statements.push(Node {
-                        attributes,
-                        span,
-                        contents: Statement::Condition(cond, true_block, false_block),
-                    });
+                    Statement::Condition(cond, true_block, false_block)
+                } else {
+                    return;
                 }
             }
 
             ast::Statement::While(cond, body) => {
                 let condition = self.fold_expression(cond);
-                let body_start = self.base.hir.statements.len_idx();
-                self.fold_statement(body);
+                let mut new_body = Block::with_capacity(256);
+                self.fold_statement(body, &mut new_body);
                 if let Some(condition) = condition {
-                    self.base.hir.statements.push(Node {
-                        attributes,
-                        span,
-                        contents: Statement::While(
-                            condition,
-                            IdRange(body_start..self.base.hir.statements.len_idx()),
-                        ),
-                    });
+                    Statement::While(condition, new_body)
+                } else {
+                    return;
                 }
             }
 
             ast::Statement::For(ref for_loop) => {
                 let ast::ForLoop {
                     cond,
-                    init: (ref init_var, init_expr),
-                    incr: (ref incr_var, incr_expr),
+                    init: (ref init_var_ident, init_expr),
+                    incr: (ref incr_var_ident, incr_expr),
                     body,
                 } = *for_loop;
 
-                let init_var = resolve_hierarchical!(self.base; init_var as  Variable(id) => id);
+                let init_var =
+                    resolve_hierarchical!(self.base; init_var_ident as  Variable(id) => id);
 
-                let incr_var = resolve_hierarchical!(self.base; incr_var as  Variable(id) => id);
-
+                self.base.enter_sctxt(
+                    init_var_ident.span().extend(self.base.ast[init_expr].span),
+                    Attributes::EMPTY,
+                );
                 let init_expr = self.fold_expression(init_expr);
+                let init_sctx = self.base.exit_sctxt();
+
+                let incr_var =
+                    resolve_hierarchical!(self.base; incr_var_ident as  Variable(id) => id);
+
+                self.base.enter_sctxt(
+                    incr_var_ident.span().extend(self.base.ast[incr_expr].span),
+                    Attributes::EMPTY,
+                );
                 let incr_expr = self.fold_expression(incr_expr);
+                let incr_sctx = self.base.exit_sctxt();
+
                 let cond = self.fold_expression(cond);
 
-                let body_start = self.base.hir.statements.len_idx();
-                self.fold_statement(body);
+                let mut f_body = Block::with_capacity(32);
+
+                self.fold_statement(body, &mut f_body);
+
                 if let (
                     Some(cond),
                     Some(init_var),
@@ -306,26 +351,37 @@ impl<'lt> Statements<'lt> {
                     Some(incr_expr),
                 ) = (cond, init_var, init_expr, incr_var, incr_expr)
                 {
-                    self.base.hir.statements.push(Node {
-                        attributes,
-                        span,
-                        contents: Statement::For(ForLoop {
-                            cond,
-                            body: IdRange(body_start..self.base.hir.statements.len_idx()),
-                            init: (init_var, init_expr),
-                            incr: (incr_var, incr_expr),
-                        }),
-                    });
+                    let init = self
+                        .base
+                        .hir
+                        .statements
+                        .push((Statement::Assignment(init_var, init_expr), init_sctx));
+
+                    let incr = self
+                        .base
+                        .hir
+                        .statements
+                        .push((Statement::Assignment(incr_var, incr_expr), incr_sctx));
+
+                    Statement::For(ForLoop {
+                        cond,
+                        body: f_body,
+                        init,
+                        incr,
+                    })
+                } else {
+                    return;
                 }
             }
 
             ast::Statement::Assignment(ref ident, value) => {
                 let value = self.fold_expression(value);
-                resolve_hierarchical!(self.base; ident as Variable(id) => {
-                    if let Some(value) = value{
-                        self.base.hir.statements.push(Node{attributes,span,contents: Statement::Assignment(id, value)});
-                    }
-                });
+                let var = resolve_hierarchical!(self.base; ident as Variable(id) => id);
+                if let (Some(var), Some(value)) = (var, value) {
+                    Statement::Assignment(var, value)
+                } else {
+                    return;
+                }
             }
 
             ast::Statement::Contribute(access, value) => {
@@ -339,16 +395,15 @@ impl<'lt> Statements<'lt> {
                 if let Some((discipline_access, branch, value)) =
                     self.fold_contribute(access, value)
                 {
-                    self.base.hir.statements.push(Node {
-                        attributes,
-                        span,
-                        contents: Statement::Contribute(discipline_access, branch, value),
-                    });
+                    Statement::Contribute(discipline_access, branch, value)
+                } else {
+                    return;
                 }
             }
 
             ast::Statement::DisplayTask(_task_kind, ref _args) => {
-                Linter::dispatch_early(Box::new(IgnoredDisplayTask { span }))
+                Linter::dispatch_early(Box::new(IgnoredDisplayTask { span }));
+                return;
             }
 
             ast::Statement::StopTask(kind, finish_number) => {
@@ -356,11 +411,7 @@ impl<'lt> Statements<'lt> {
                     ConstantExpressionFolder(AllowedReferences::None).fold(expr, &mut self.base)
                 });
 
-                self.base.hir.statements.push(Node {
-                    attributes,
-                    span,
-                    contents: Statement::StopTask(kind, finish_number),
-                });
+                Statement::StopTask(kind, finish_number)
             }
 
             ast::Statement::Case(cond, ref cases) => {
@@ -378,9 +429,8 @@ impl<'lt> Statements<'lt> {
                             .filter_map(|&value| self.fold_expression(value))
                             .collect();
 
-                        let start = self.base.hir.statements.len_idx();
-                        self.fold_statement(case.stmt?);
-                        let body = IdRange(start..self.base.hir.statements.len_idx());
+                        let mut body = Block::with_capacity(32);
+                        self.fold_statement(case.stmt?, &mut body);
 
                         if !is_default {
                             Some(CaseItem { values, body })
@@ -397,24 +447,25 @@ impl<'lt> Statements<'lt> {
                     })
                     .collect();
 
-                let end = self.base.hir.statements.len_idx();
-                let default = default.map_or(IdRange(end..end), |default| default.contents);
+                let default = default.map_or(Block::new(), |default| default.contents);
 
                 if let Some(expr) = expr {
-                    self.base.hir.statements.push(Node {
-                        attributes,
-                        span,
-                        contents: Statement::Case(Cases {
-                            expr,
-                            cases,
-                            default,
-                        }),
-                    });
+                    Statement::Case(Cases {
+                        expr,
+                        cases,
+                        default,
+                    })
+                } else {
+                    return;
                 }
             }
 
             ast::Statement::Error => unreachable!(),
-        }
+        };
+
+        let sctx = self.base.exit_sctxt();
+        let stmnt = self.base.hir.statements.push((stmnt, sctx));
+        dst.push(stmnt)
     }
 
     fn fold_contribute(
@@ -460,22 +511,18 @@ impl<'lt> Statements<'lt> {
         false_block: Option<StatementId>,
     ) -> Option<(ExpressionId, Block, Block)> {
         let condition = self.fold_expression(cond);
+        let mut f_true_block = Block::with_capacity(128);
+        self.fold_statement(true_block, &mut f_true_block);
 
-        let true_block_start = self.base.hir.statements.len_idx();
+        let false_block = if let Some(statement) = false_block {
+            let mut false_block = Block::with_capacity(128);
+            self.fold_statement(statement, &mut false_block);
+            false_block
+        } else {
+            Block::new()
+        };
 
-        self.fold_statement(true_block);
-        let true_block = IdRange(true_block_start..self.base.hir.statements.len_idx());
-
-        let false_block_start = self.base.hir.statements.len_idx();
-        if let Some(statement) = false_block {
-            self.fold_statement(statement);
-        }
-
-        Some((
-            condition?,
-            true_block,
-            IdRange(false_block_start..self.base.hir.statements.len_idx()),
-        ))
+        Some((condition?, f_true_block, false_block))
     }
 
     /// Just a utility method that makes folding expressions a little more ergonomic
@@ -487,65 +534,65 @@ impl<'lt> Statements<'lt> {
         .fold(expr, &mut self.base)
     }
 
-    fn fold_block(&mut self, block: BlockId) {
+    fn fold_block(&mut self, block: BlockId, dst: &mut Block) {
         for statement in self.base.ast[block].statements.iter().copied() {
-            self.fold_statement(statement);
+            self.fold_statement(statement, dst);
         }
     }
 
     /// Folds a variable
     /// This is just folds the default value if it exists and just copys thre rest
     fn fold_variable(&mut self, id: VariableId) {
-        self.base.hir[id].contents.default = self.base.hir[id]
+        let var = &self.base.ast[id];
+        self.base.enter_sctxt(var.span, var.attributes);
+
+        let default = self.base.ast[id]
             .contents
             .default
             .and_then(|expr| self.fold_expression(expr));
 
-        self.base.fold_attributes(self.base.hir[id].attributes)
+        self.base.hir[id] = Variable {
+            ident: var.contents.ident,
+            ty: var.contents.ty,
+            default,
+            sctx: self.base.exit_sctxt(),
+        }
     }
 
     #[allow(clippy::or_fun_call)]
     fn fold_parameter(&mut self, id: ParameterId) {
+        self.base
+            .enter_sctxt(self.base.ast[id].span, self.base.ast[id].attributes);
+
         let default = self.fold_expression(self.base.ast[id].contents.default);
 
-        let param_type = match self.base.ast[id].contents.param_type {
-            ast::ParameterType::Real(ref constraints) => {
+        let param_type = match self.base.ast[id].contents.param_constraints {
+            ast::ParameterConstraints::Ordered(ref constraints) => {
                 let (from_constraints, exlude_constraints) =
-                    self.fold_numeric_parameter_constraints(constraints);
-                ParameterType::Real(from_constraints, exlude_constraints)
+                    self.fold_ordered_parameter_constraints(constraints);
+                ParameterConstraint::Ordered(from_constraints, exlude_constraints)
             }
 
-            ast::ParameterType::Integer(ref constraints) => {
-                let (from_constraints, exlude_constraints) =
-                    self.fold_numeric_parameter_constraints(constraints);
-                ParameterType::Integer(from_constraints, exlude_constraints)
-            }
-            ast::ParameterType::String(ref constraints) => {
-                let (from_constraints, exlucde_constraitns) =
-                    self.fold_string_parameter_constraints(constraints);
-                ParameterType::String(from_constraints, exlucde_constraitns)
+            ast::ParameterConstraints::Unordered(ref constraints) => {
+                let (from_constraints, exclude_constrains) =
+                    self.fold_unordered_parameter_constraints(constraints);
+                ParameterConstraint::Unordered(from_constraints, exclude_constrains)
             }
         };
 
-        let attributes = self.base.ast[id].attributes;
-        self.base.fold_attributes(attributes);
-
-        let span = self.base.hir[id].span;
-        self.base.hir[id] = Node {
-            span,
-            attributes,
-            contents: Parameter {
-                ident: self.base.ast[id].contents.ident,
-                param_type,
-                // dummy default value in case of error
-                default: default.unwrap_or(ExpressionId::from_raw_unchecked(u32::MAX)),
-            },
+        self.base.hir[id] = Parameter {
+            ident: self.base.ast[id].contents.ident,
+            constraints: param_type,
+            // dummy default value in case of error
+            default: default.unwrap_or(ExpressionId::from_raw_unchecked(u32::MAX)),
+            ty: self.base.ast[id].contents.ty,
+            sctx: self.base.exit_sctxt(),
         };
     }
 
-    fn fold_numeric_parameter_constraints(
+    fn fold_ordered_parameter_constraints(
         &mut self,
-        valid_values: &[NumericParameterConstraint],
+        valid_values: &[OrderedParameterConstraint],
     ) -> (
         Vec<ParameterRangeConstraint<ExpressionId>>,
         Vec<ParameterExcludeConstraint<ExpressionId>>,
@@ -555,19 +602,19 @@ impl<'lt> Statements<'lt> {
 
         for contraints in valid_values {
             match contraints {
-                NumericParameterConstraint::From(range) => {
-                    if let Some(range) = self.fold_numeric_parameter_range_constraint_bound(range) {
+                OrderedParameterConstraint::From(range) => {
+                    if let Some(range) = self.fold_ordered_parameter_range_constraint_bound(range) {
                         from.push(range)
                     }
                 }
 
-                NumericParameterConstraint::Exclude(ParameterExcludeConstraint::Value(val)) => {
+                OrderedParameterConstraint::Exclude(ParameterExcludeConstraint::Value(val)) => {
                     if let Some(val) = self.fold_expression(*val) {
                         excluded.push(ParameterExcludeConstraint::Value(val))
                     }
                 }
-                NumericParameterConstraint::Exclude(ParameterExcludeConstraint::Range(range)) => {
-                    if let Some(range) = self.fold_numeric_parameter_range_constraint_bound(range) {
+                OrderedParameterConstraint::Exclude(ParameterExcludeConstraint::Range(range)) => {
+                    if let Some(range) = self.fold_ordered_parameter_range_constraint_bound(range) {
                         excluded.push(ParameterExcludeConstraint::Range(range))
                     }
                 }
@@ -576,7 +623,7 @@ impl<'lt> Statements<'lt> {
         (from, excluded)
     }
 
-    fn fold_numeric_parameter_range_constraint_bound(
+    fn fold_ordered_parameter_range_constraint_bound(
         &mut self,
         range: &ParameterRangeConstraint<ExpressionId>,
     ) -> Option<Range<ParameterRangeConstraintBound<ExpressionId>>> {
@@ -595,36 +642,40 @@ impl<'lt> Statements<'lt> {
         Some(start..end)
     }
 
-    fn fold_string_parameter_constraints(
+    fn fold_unordered_parameter_constraints(
         &mut self,
-        valid_values: &[StringParameterConstraint],
+        valid_values: &[UnorderedParameterConstraint],
     ) -> (Vec<ExpressionId>, Vec<ExpressionId>) {
         let mut included = Vec::with_capacity(valid_values.len());
         let mut excluded = Vec::with_capacity(valid_values.len());
 
         for contraints in valid_values {
             match contraints {
-                StringParameterConstraint::From(values) => {
-                    self.fold_string_parameter_constraint(values, &mut included)
+                UnorderedParameterConstraint::From(values) => {
+                    self.fold_unordered_parameter_constraint(*values, &mut included)
                 }
 
-                StringParameterConstraint::Exclude(values) => {
-                    self.fold_string_parameter_constraint(values, &mut excluded)
+                UnorderedParameterConstraint::Exclude(values) => {
+                    self.fold_unordered_parameter_constraint(*values, &mut excluded)
                 }
             }
         }
         (included, excluded)
     }
 
-    fn fold_string_parameter_constraint(
+    fn fold_unordered_parameter_constraint(
         &mut self,
-        values: &[ExpressionId],
+        expr: ExpressionId,
         dst: &mut Vec<ExpressionId>,
     ) {
-        for expr in values {
-            if let Some(expr) = self.fold_expression(*expr) {
-                dst.push(expr)
+        if let ast::Expression::Array(values) = &self.base.ast[expr].contents {
+            for expr in values {
+                if let Some(expr) = self.fold_expression(*expr) {
+                    dst.push(expr)
+                }
             }
+        } else if let Some(expr) = self.fold_expression(expr) {
+            dst.push(expr)
         }
     }
 }

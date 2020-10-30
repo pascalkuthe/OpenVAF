@@ -62,11 +62,11 @@ impl<C: Idx + From<usize>, V: Idx + From<usize>> SparseBitSetMatrix<C, V> {
     }
 
     pub fn insert(&mut self, x: C, y: V) {
-        if let Some(row) = self.row_mut(x) {
-            row.insert(y)
+        if let Some(row) = &mut self.data[x] {
+            row.insert(y, self.y_len_idx)
         } else {
-            let mut row = HybridBitSet::new_empty(self.y_len_idx);
-            row.insert(y);
+            let mut row = HybridBitSet::new_empty();
+            row.insert(y, self.y_len_idx);
             self.data[x] = Some(row)
         }
     }

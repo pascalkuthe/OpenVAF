@@ -10,23 +10,28 @@
 use openvaf_data_structures::index_vec::{index_vec, IndexVec};
 
 use openvaf_ast::Ast;
-pub use openvaf_ast::{BinaryOperator, NetType, Variable, VariableType};
+pub use openvaf_ast::{BinaryOperator, NetType, Type};
 
 pub use openvaf_ir::ids::{
     AttributeId, BranchId, DisciplineId, ExpressionId, FunctionId, IdRange, ModuleId, NatureId,
-    NetId, ParameterId, PortId, StatementId, VariableId,
+    NetId, ParameterId, PortId, StatementId, SyntaxCtx, VariableId,
 };
 
 pub use openvaf_ir::{
     impl_id_type, Attribute, Attributes, DoubleArgMath, Node, NoiseSource,
     ParameterExcludeConstraint, ParameterRangeConstraint, Port, SingleArgMath, Spanned,
-    StopTaskKind, SystemFunctionCall, UnaryOperator, Unknown,
+    StopTaskKind, UnaryOperator, Unknown,
 };
 
+pub type SystemFunctionCall = openvaf_ir::SystemFunctionCall<PortId, ParameterId>;
+
 use openvaf_session::sourcemap::span::DUMMY_SP;
-use openvaf_session::sourcemap::StringLiteral;
 use openvaf_session::symbols::Ident;
 use std::mem::take;
+
+pub use openvaf_ast::ConstVal;
+use openvaf_session::sourcemap::Span;
+use std::fmt::{Display, Formatter};
 
 /// An High level (tree) IR representing a Verilog-AMS project;
 /// It provides stable indicies for every Node because the entire Tree is immutable once created;
@@ -35,24 +40,44 @@ use std::mem::take;
 
 #[derive(Default, Debug, Clone)]
 pub struct Hir {
-    pub parameters: IndexVec<ParameterId, Node<Parameter>>,
-    pub branches: IndexVec<BranchId, Node<Branch>>,
-    pub nets: IndexVec<NetId, Node<Net>>,
+    pub parameters: IndexVec<ParameterId, Parameter>,
+    pub branches: IndexVec<BranchId, Branch>,
+    pub nets: IndexVec<NetId, Net>,
     pub ports: IndexVec<PortId, Port>,
-    pub variables: IndexVec<VariableId, Node<Variable>>,
-    pub modules: IndexVec<ModuleId, Node<Module>>,
-    pub functions: IndexVec<FunctionId, Node<Function>>,
-    pub disciplines: IndexVec<DisciplineId, Node<Discipline>>,
-    pub natures: IndexVec<NatureId, Node<Nature>>,
+    pub variables: IndexVec<VariableId, Variable>,
+    pub modules: IndexVec<ModuleId, Module>,
+    pub functions: IndexVec<FunctionId, Function>,
+    pub disciplines: IndexVec<DisciplineId, Discipline>,
+    pub natures: IndexVec<NatureId, Nature>,
     pub expressions: IndexVec<ExpressionId, Spanned<Expression>>,
     pub attributes: IndexVec<AttributeId, Attribute>,
-    pub statements: IndexVec<StatementId, Node<Statement>>,
+    pub statements: IndexVec<StatementId, (Statement, SyntaxCtx)>,
+    pub syntax_ctx: IndexVec<SyntaxCtx, SyntaxContextData>,
 }
 impl Hir {
     pub fn init(ast: &mut Ast) -> Self {
+        let mut syntax_ctx = IndexVec::with_capacity(
+            ast.parameters.len()
+                + ast.variables.len()
+                + ast.nets.len()
+                + ast.disciplines.len()
+                + ast.statements.len()
+                + ast.branches.len()
+                + ast.blocks.len()
+                + ast.modules.len()
+                + ast.functions.len()
+                + 20,
+        );
+
+        syntax_ctx.push(SyntaxContextData {
+            span: DUMMY_SP,
+            attributes: Attributes::EMPTY,
+            parent: None,
+        });
+
         Self {
             // The following AST items do change (references are mapped but the data structure doesnt change so we init it like this)
-            variables: take(&mut ast.variables),
+            variables: index_vec![Variable::PLACEHOLDER; ast.variables.len()],
             attributes: take(&mut ast.attributes),
             ports: take(&mut ast.ports),
 
@@ -66,56 +91,67 @@ impl Hir {
             natures: IndexVec::new(),
             expressions: IndexVec::with_capacity(ast.expressions.len()),
             statements: IndexVec::with_capacity(ast.statements.len()),
+            syntax_ctx,
         }
     }
 }
 
-impl_id_type!(BranchId in Hir::branches -> Node<Branch>);
-impl_id_type!(NetId in Hir::nets -> Node<Net>);
-impl_id_type!(PortId in Hir::ports -> Port);
-impl_id_type!(VariableId in Hir::variables ->  Node<Variable>);
-impl_id_type!(ModuleId in Hir::modules -> Node<Module>);
-impl_id_type!(FunctionId in Hir::functions -> Node<Function>);
-impl_id_type!(DisciplineId in Hir::disciplines -> Node<Discipline>);
-impl_id_type!(ExpressionId in Hir::expressions -> Spanned<Expression>);
-impl_id_type!(AttributeId in Hir::attributes -> Attribute);
-impl_id_type!(StatementId in Hir::statements -> Node<Statement>);
-impl_id_type!(NatureId in Hir::natures -> Node<Nature>);
-impl_id_type!(ParameterId in Hir::parameters -> Node<Parameter>);
+impl_id_type!(BranchId in Hir => branches as Branch);
+impl_id_type!(NetId in Hir => nets as Net);
+impl_id_type!(PortId in Hir => ports as Port);
+impl_id_type!(VariableId in Hir => variables as  Variable);
+impl_id_type!(ModuleId in Hir => modules as Module);
+impl_id_type!(FunctionId in Hir => functions as Function);
+impl_id_type!(DisciplineId in Hir => disciplines as Discipline);
+impl_id_type!(ExpressionId in Hir => expressions as Spanned<Expression>);
+impl_id_type!(AttributeId in Hir => attributes as Attribute);
+impl_id_type!(StatementId in Hir => statements as (Statement, SyntaxCtx));
+impl_id_type!(NatureId in Hir => natures as Nature);
+impl_id_type!(ParameterId in Hir => parameters as Parameter);
+impl_id_type!(SyntaxCtx in Hir => syntax_ctx as SyntaxContextData);
 
-#[derive(Clone, Debug)]
-pub struct Parameter {
+#[derive(Clone, Copy, Debug)]
+pub struct Variable {
     pub ident: Ident,
-    pub param_type: ParameterType,
-    pub default: ExpressionId,
+    pub ty: Type,
+    pub default: Option<ExpressionId>,
+    pub sctx: SyntaxCtx,
 }
-impl Parameter {
-    pub const PLACEHOLDER: Node<Self> = {
-        let contents = Parameter {
-            ident: Ident::DUMMY,
-            param_type: ParameterType::Real(Vec::new(), Vec::new()),
-            default: ExpressionId::from_raw_unchecked(u32::MAX),
-        };
 
-        Node {
-            contents,
-            attributes: Attributes::EMPTY,
-            span: DUMMY_SP,
-        }
+impl Variable {
+    pub const PLACEHOLDER: Self = Self {
+        ident: Ident::DUMMY,
+        ty: Type::INT,
+        default: None,
+        sctx: SyntaxCtx::ROOT,
     };
 }
 
 #[derive(Clone, Debug)]
-pub enum ParameterType {
-    Real(
+pub struct Parameter {
+    pub ident: Ident,
+    pub constraints: ParameterConstraint,
+    pub default: ExpressionId,
+    pub ty: Type,
+    pub sctx: SyntaxCtx,
+}
+impl Parameter {
+    pub const PLACEHOLDER: Self = Self {
+        ident: Ident::DUMMY,
+        constraints: ParameterConstraint::Ordered(Vec::new(), Vec::new()),
+        default: ExpressionId::from_raw_unchecked(u32::MAX),
+        ty: Type::INT,
+        sctx: SyntaxCtx::ROOT,
+    };
+}
+
+#[derive(Clone, Debug)]
+pub enum ParameterConstraint {
+    Ordered(
         Vec<ParameterRangeConstraint<ExpressionId>>,
         Vec<ParameterExcludeConstraint<ExpressionId>>,
     ),
-    Integer(
-        Vec<ParameterRangeConstraint<ExpressionId>>,
-        Vec<ParameterExcludeConstraint<ExpressionId>>,
-    ),
-    String(Vec<ExpressionId>, Vec<ExpressionId>),
+    Unordered(Vec<ExpressionId>, Vec<ExpressionId>),
 }
 
 #[derive(Clone, Debug)]
@@ -124,27 +160,16 @@ pub struct Function {
     pub args: Vec<FunctionArg>,
     pub return_variable: VariableId,
     pub body: Block,
+    pub sctx: SyntaxCtx,
 }
 
 impl Function {
-    pub const PLACEHOLDER: Node<Self> = {
-        let contents = Self {
-            ident: Ident::DUMMY,
-            args: Vec::new(),
-            return_variable: VariableId::from_raw_unchecked(u32::MAX),
-            body: IdRange(
-                StatementId::from_raw_unchecked(u32::MAX)
-                    ..StatementId::from_raw_unchecked(u32::MAX),
-            ),
-        };
-        Node {
-            attributes: Attributes {
-                start: AttributeId::from_raw_unchecked(u16::MAX),
-                len: 0,
-            },
-            span: DUMMY_SP,
-            contents,
-        }
+    pub const PLACEHOLDER: Self = Self {
+        ident: Ident::DUMMY,
+        args: Vec::new(),
+        return_variable: VariableId::from_raw_unchecked(u32::MAX),
+        body: Vec::new(),
+        sctx: SyntaxCtx::ROOT,
     };
 }
 
@@ -161,6 +186,7 @@ pub struct Discipline {
     pub flow_nature: Option<NatureId>,
     pub potential_nature: Option<NatureId>,
     pub continuous: bool,
+    pub sctx: SyntaxCtx,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -171,6 +197,7 @@ pub struct Nature {
     pub access: Ident,
     pub idt_nature: NatureId,
     pub ddt_nature: NatureId,
+    pub sctx: SyntaxCtx,
 }
 
 #[derive(Clone, Debug)]
@@ -179,14 +206,16 @@ pub struct Module {
     pub ports: IdRange<PortId>,
     pub parameters: IdRange<ParameterId>,
     pub analog: Block,
+    pub sctx: SyntaxCtx,
 }
-pub type Block = IdRange<StatementId>;
+pub type Block = Vec<StatementId>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Branch {
     pub ident: Ident,
     pub hi: NetId,
     pub lo: NetId,
+    pub sctx: SyntaxCtx,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -194,11 +223,22 @@ pub struct Net {
     pub ident: Ident,
     pub discipline: DisciplineId,
     pub net_type: NetType,
+    pub sctx: SyntaxCtx,
 }
+
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum DisciplineAccess {
     Potential,
     Flow,
+}
+
+impl Display for DisciplineAccess {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Potential => f.write_str("pot"),
+            Self::Flow => f.write_str("flow"),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -233,24 +273,43 @@ pub struct CaseItem {
 #[derive(Clone, Debug)]
 pub struct ForLoop {
     pub cond: ExpressionId,
-    pub init: (VariableId, ExpressionId),
-    pub incr: (VariableId, ExpressionId),
+    pub init: StatementId,
+    pub incr: StatementId,
     pub body: Block,
+}
+
+#[derive(Debug, Clone)]
+pub struct SyntaxContextData {
+    pub span: Span,
+    pub attributes: Attributes,
+    pub parent: Option<SyntaxCtx>,
 }
 
 #[derive(Clone, Debug)]
 pub enum Expression {
     BinaryOperator(ExpressionId, Spanned<BinaryOperator>, ExpressionId),
+    BuiltInFunctionCall2p(DoubleArgMath, ExpressionId, ExpressionId),
+
     UnaryOperator(Spanned<UnaryOperator>, ExpressionId),
-    Condtion(ExpressionId, ExpressionId, ExpressionId),
+    BuiltInFunctionCall1p(SingleArgMath, ExpressionId),
+
+    Condition(ExpressionId, ExpressionId, ExpressionId),
+
+    PartialDerivative(ExpressionId, Unknown),
+    TimeDerivative(ExpressionId),
+
+    FunctionCall(FunctionId, Vec<ExpressionId>),
+    SystemFunctionCall(SystemFunctionCall),
+
+    Noise(NoiseSource<ExpressionId, ()>, Option<ExpressionId>),
+
     Primary(Primary),
+    Array(Vec<ExpressionId>),
 }
+
 #[derive(Clone, Debug)]
 pub enum Primary {
-    Integer(i64),
-    UnsignedInteger(u32),
-    Real(f64),
-    String(StringLiteral),
+    Constant(ConstVal),
 
     VariableReference(VariableId),
     NetReference(NetId),
@@ -259,11 +318,4 @@ pub enum Primary {
 
     PortFlowAccess(PortId),
     BranchAccess(DisciplineAccess, BranchId),
-    Derivative(ExpressionId, Unknown),
-
-    BuiltInFunctionCall1p(SingleArgMath, ExpressionId),
-    BuiltInFunctionCall2p(DoubleArgMath, ExpressionId, ExpressionId),
-    FunctionCall(FunctionId, Vec<ExpressionId>),
-    SystemFunctionCall(SystemFunctionCall<ExpressionId, ExpressionId, PortId, ParameterId>),
-    Noise(NoiseSource<ExpressionId, ()>, Option<ExpressionId>),
 }

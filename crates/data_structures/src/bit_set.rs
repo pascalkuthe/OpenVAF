@@ -356,7 +356,7 @@ impl<I: Idx + From<usize>> BitSet<I> {
         match self.count_ones(..) {
             0 => None,
             1..=SPARSE_MAX => {
-                let mut res = SparseBitSet::new_empty(self.len_idx());
+                let mut res = SparseBitSet::new_empty();
                 for x in self.ones() {
                     res.insert(x)
                 }

@@ -9,21 +9,21 @@
  */
 
 use openvaf_ast::NetType::{UNDECLARED, WIRE};
-use openvaf_ast::VariableType;
-use openvaf_ast::VariableType::{Integer, Real};
 use openvaf_ast::{NetType, PortList};
 
 use crate::{test_session, PrettyError};
 use openvaf_ast::symbol_table::{SymbolDeclaration, SymbolTable};
 use openvaf_ast::Ast;
 use openvaf_ir::IdRange;
+use openvaf_middle::Type;
 use openvaf_parser::parse_user_facing;
 use openvaf_session::symbols::Symbol;
+use std::error::Error;
 use std::path::Path;
 
 fn parser_test_session(
     file: impl AsRef<Path>,
-    test: impl FnOnce(Ast) -> Result<(), PrettyError>,
+    test: impl FnOnce(Ast) -> Result<(), Box<dyn Error>>,
 ) -> Result<(), PrettyError> {
     test_session(Path::new("parser").join(file), |ts| {
         test(parse_user_facing(ts)?)
@@ -184,10 +184,10 @@ fn assert_port_branch_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, po
         panic!("Branch {} not found", name)
     }
 }
-fn assert_variable_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, vtype: VariableType) {
+fn assert_variable_decl(symbol_table: &SymbolTable, ast: &Ast, name: &str, vtype: Type) {
     if let Some(SymbolDeclaration::Variable(variableid)) = symbol_table.get(&Symbol::intern(name)) {
         let variable = &ast[*variableid].contents;
-        assert_eq!(variable.var_type, vtype)
+        assert_eq!(variable.ty, vtype)
     } else {
         panic!("Variable {} not found", name)
     }
@@ -228,11 +228,11 @@ fn get_module_symbol_table<'lt>(
 pub fn variable_decl() -> Result<(), PrettyError> {
     parser_test_session("variable_declaration.va", |ast| {
         let symbol_table = get_module_symbol_table(&ast.top_symbols, &ast, "test");
-        assert_variable_decl(&symbol_table, &ast, "x", Real);
-        assert_variable_decl(&symbol_table, &ast, "y", Integer);
-        assert_variable_decl(&symbol_table, &ast, "z", Integer);
-        assert_variable_decl(&symbol_table, &ast, "t", Integer);
-        assert_variable_decl(&symbol_table, &ast, "rt", Real);
+        assert_variable_decl(&symbol_table, &ast, "x", Type::REAL);
+        assert_variable_decl(&symbol_table, &ast, "y", Type::INT);
+        assert_variable_decl(&symbol_table, &ast, "z", Type::INT);
+        assert_variable_decl(&symbol_table, &ast, "t", Type::INT);
+        assert_variable_decl(&symbol_table, &ast, "rt", Type::REAL);
         Ok(())
     })
 }
@@ -280,7 +280,7 @@ pub fn linear() -> Result<(), PrettyError> {
         assert_branch_decl(symbol_table, &ast, "xb", "x", "B");
         assert_branch_decl(symbol_table, &ast, "yb", "y", "B");
         assert_branch_decl(symbol_table, &ast, "xy", "x", "y");
-        assert_variable_decl(symbol_table, &ast, "C", Real);
+        assert_variable_decl(symbol_table, &ast, "C", Type::REAL);
         Ok(())
     })
 }

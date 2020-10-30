@@ -8,285 +8,363 @@
  * *****************************************************************************************
  */
 
-//! This module is responsible for lowering an [`Hir`](openvaf_hir::Hir) to an [`Mir`](openvaf_mir::Mir)
-//!
-//! This entails three main transformations
-//!
-//! ## Adding explicit type information
-//!
-//! Code generation generally requires explicit type information.
-//! This is represented in the MIR with distinct expression types for [real](openvaf_mir::RealExpression) and [integers](openvaf_mir::IntegerExpression).
-//! Most expressions have a distinct type input and output types. Those that do not are resolved based on type conversion rules
-//! Instead of being implicit type conversions are now distinct expressions that are added when required and legal
-//!
-//! ## TypeChecking
-//!
-//! VerilogAMS only permits implicit type conversion under special circumstance and some operators are not defined for reals at all.
-//! During the other two transformations it is ensured that these rules are adhered (in fact without these rules the other transformation wouldn't be possible)
-//!
-
-use crate::error::Error::TypeMissmatch;
-use crate::error::{Error, MockType};
-use crate::expression_semantic::{ConstantSchematicAnalysis, SchematicAnalysis};
-use openvaf_constant_fold::{constant_eval_real_expr, constant_eval_str_expr, NoConstResolution};
-use openvaf_data_structures::sync::{Lrc, RwLock};
-use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
-use openvaf_hir as hir;
-use openvaf_hir::Hir;
-use openvaf_ir::ids::{IntegerExpressionId, RealExpressionId, StringExpressionId};
-use openvaf_ir::Spanned;
-use openvaf_mir::{
-    Attribute, ExpressionId, IntegerExpression, Mir, Module, Nature, Parameter, ParameterType,
-    Variable, VariableType,
+use crate::error::{Error, TyPrinter};
+use openvaf_diagnostics::{lints::Lint, DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
+use openvaf_hir::{DisciplineAccess, ExpressionId, Hir, Primary};
+use openvaf_ir::{
+    Attribute, NoiseSource, ParameterExcludeConstraint, ParameterRangeConstraint,
+    ParameterRangeConstraintBound, PrintOnFinish, StopTaskKind, SystemFunctionCall,
 };
-use openvaf_session::sourcemap::StringLiteral;
-mod control_flow;
-pub mod error;
-mod expression_semantic;
+use openvaf_middle::osdi_types::ConstVal::Scalar;
+use openvaf_middle::osdi_types::SimpleConstVal::{Integer, Real, String};
+use openvaf_middle::{
+    CallType, ConstVal, Expression, Mir, Module, Nature, Operand, OperandData, Parameter,
+    ParameterCallType, ParameterConstraint, ParameterInput, RValue, RealConstCallType, StmntKind,
+    SyntaxContextData, Type, Variable,
+};
+use openvaf_session::symbols::keywords;
 
-pub struct HirToMirFold<'lt> {
-    pub errors: MultiDiagnostic<Error>,
-    hir: &'lt Hir,
-    mir: Mir,
+use crate::error::Error::{ExpectedLintName, TypeMissmatch};
+use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_data_structures::{BitSet, HashMap};
+
+use openvaf_ir::ids::{
+    BranchId, DisciplineId, ModuleId, NatureId, NetId, ParameterId, PortId, StatementId, SyntaxCtx,
+    VariableId,
+};
+
+use openvaf_session::sourcemap::{Span, StringLiteral};
+
+use openvaf_data_structures::sync::RwLock;
+use std::mem::take;
+
+mod cfg_builder;
+
+use tracing::trace_span;
+
+use crate::lints::{EmptyBuiltinAttribute, LintLevelOverwrite, UnknownLint};
+pub use cfg_builder::LocalCtx;
+use openvaf_diagnostics::lints::{LintLevel, Linter};
+use openvaf_middle::cfg::TerminatorKind;
+
+mod error;
+mod lints;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum AttributeCtx {
+    Variable(VariableId),
+    Parameter(ParameterId),
+    Net(NetId),
+    Branch(BranchId),
+    Module(ModuleId),
+    Nature(NatureId),
+    Discipline(DisciplineId),
+    Syntactic,
 }
-impl<'lt> HirToMirFold<'lt> {
-    pub fn new(hir: &'lt mut Hir) -> Self {
-        Self {
-            errors: MultiDiagnostic(Vec::with_capacity(32)),
-            mir: Mir::initalize(hir),
-            hir: &*hir,
+
+pub trait HirLowering: Sized {
+    type AnalogBlockExprLower: ExpressionLowering;
+    fn handle_attribute(
+        ctx: &mut HirFold<Self>,
+        attr: &Attribute,
+        src: AttributeCtx,
+        sctx: SyntaxCtx,
+    );
+    fn handle_statement_attribute<'a, 'h, C: ExpressionLowering>(
+        ctx: &mut LocalCtx<'a, 'h, C, Self>,
+        attr: &Attribute,
+        stmt: StatementId,
+        sctx: SyntaxCtx,
+    );
+}
+
+// TODO enforce times somehow?
+pub trait ExpressionLowering: CallType {
+    fn port_flow<L: HirLowering>(
+        ctx: &mut LocalCtx<Self, L>,
+        port: PortId,
+        span: Span,
+    ) -> Option<RValue<Self>>;
+
+    fn branch_access<L: HirLowering>(
+        ctx: &mut LocalCtx<Self, L>,
+        access: DisciplineAccess,
+        branch: BranchId,
+        span: Span,
+    ) -> Option<RValue<Self>>;
+
+    fn parameter_ref<L: HirLowering>(
+        ctx: &mut LocalCtx<Self, L>,
+        param: ParameterId,
+        span: Span,
+    ) -> Option<RValue<Self>>;
+
+    fn time_derivative<L: HirLowering>(
+        ctx: &mut LocalCtx<Self, L>,
+        expr: ExpressionId,
+        span: Span,
+    ) -> Option<RValue<Self>>;
+
+    fn noise<L: HirLowering>(
+        ctx: &mut LocalCtx<Self, L>,
+        source: NoiseSource<ExpressionId, ()>,
+        name: Option<ExpressionId>,
+        span: Span,
+    ) -> Option<RValue<Self>>;
+
+    fn system_function_call<L: HirLowering>(
+        ctx: &mut LocalCtx<Self, L>,
+        call: SystemFunctionCall<PortId, ParameterId>,
+        span: Span,
+    ) -> Option<RValue<Self>>;
+
+    fn stop_task<L: HirLowering>(
+        ctx: &mut LocalCtx<Self, L>,
+        kind: StopTaskKind,
+        finish: PrintOnFinish,
+        span: Span,
+    ) -> Option<StmntKind<Self>>;
+}
+
+impl ExpressionLowering for ParameterCallType {
+    fn port_flow<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: PortId,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn branch_access<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: DisciplineAccess,
+        _: BranchId,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn parameter_ref<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        param: ParameterId,
+        span: Span,
+    ) -> Option<RValue<Self>> {
+        Some(RValue::Use(Operand::new(
+            OperandData::Read(ParameterInput(param)),
+            span,
+        )))
+    }
+
+    fn time_derivative<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: ExpressionId,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn noise<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: NoiseSource<ExpressionId, ()>,
+        _: Option<ExpressionId>,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn system_function_call<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: SystemFunctionCall<PortId, ParameterId>,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn stop_task<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: StopTaskKind,
+        _: PrintOnFinish,
+        _: Span,
+    ) -> Option<StmntKind<Self>> {
+        unimplemented!()
+    }
+}
+
+impl ExpressionLowering for RealConstCallType {
+    fn port_flow<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: PortId,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn branch_access<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: DisciplineAccess,
+        _: BranchId,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn parameter_ref<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: ParameterId,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn time_derivative<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: ExpressionId,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn noise<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: NoiseSource<ExpressionId, ()>,
+        _: Option<ExpressionId>,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn system_function_call<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: SystemFunctionCall<PortId, ParameterId>,
+        _: Span,
+    ) -> Option<RValue<Self>> {
+        unimplemented!()
+    }
+
+    fn stop_task<L: HirLowering>(
+        _: &mut LocalCtx<Self, L>,
+        _: StopTaskKind,
+        _: PrintOnFinish,
+        _: Span,
+    ) -> Option<StmntKind<Self>> {
+        unimplemented!()
+    }
+}
+
+pub struct HirFold<'a, L: HirLowering> {
+    pub lowering: &'a mut L,
+    pub hir: &'a Hir,
+    pub mir: Mir<L::AnalogBlockExprLower>,
+    pub errors: MultiDiagnostic<Error>,
+    pub sctx: SyntaxCtx,
+    pub lower_sctx: BitSet<SyntaxCtx>,
+}
+
+impl<'h, L: HirLowering> HirFold<'h, L> {
+    pub fn handle_attributes_with(
+        &mut self,
+        sctx: SyntaxCtx,
+        src: AttributeCtx,
+        mut handle_attribute: impl FnMut(&mut Self, &Attribute) -> bool,
+    ) {
+        if !self.lower_sctx.remove(sctx) && cfg!(debug_assertions) {
+            unreachable!("{:?} was processed twice!", sctx);
+        }
+
+        for attr in self.hir[sctx].attributes.into_iter() {
+            let attr = &self.hir[attr];
+            if !(self.handle_builtin_attribute(attr, sctx) || handle_attribute(self, attr)) {
+                L::handle_attribute(self, attr, src, sctx)
+            }
         }
     }
 
-    fn fold(mut self) -> Result<Mir, MultiDiagnostic<Error>> {
-        self.mir.natures = self
-            .hir
-            .natures
-            .iter()
-            .map(|nature| nature.map_with(|old| self.fold_nature(old)))
-            .collect();
+    pub fn handle_attributes(&mut self, sctx: SyntaxCtx, src: AttributeCtx) {
+        let span = trace_span!("attributes", sctx = sctx.index(), src = debug(src));
+        let _enter = span.enter();
+        self.handle_attributes_with(sctx, src, |_, _| false)
+    }
 
-        self.mir.parameters = self
-            .hir
-            .parameters
-            .iter()
-            .map(|param| param.map_with(|old| self.fold_parameter(old)))
-            .collect();
+    pub fn handle_builtin_attribute(&mut self, attr: &Attribute, sctx: SyntaxCtx) -> bool {
+        let lvl = match attr.ident.name {
+            keywords::openvaf_allow => LintLevel::Allow,
+            keywords::openvaf_warn => LintLevel::Warn,
+            keywords::openvaf_deny => LintLevel::Deny,
+            keywords::openvaf_forbid => LintLevel::Forbid,
+            _ => return false,
+        };
 
-        self.mir.variables = self
-            .hir
-            .variables
-            .iter()
-            .map(|var| var.map_with(|old| self.fold_variable(old)))
-            .collect();
-
-        self.mir.attributes = self
-            .hir
-            .attributes
-            .iter()
-            .map(|attr| {
-                let value = attr
-                    .value
-                    .iter()
-                    .filter_map(|&val| ConstantSchematicAnalysis.fold_expression(&mut self, val))
-                    .collect();
-
-                Attribute {
-                    ident: attr.ident,
-                    value,
+        let names = if let Some(expr) = attr.value {
+            match self.hir[expr].contents {
+                openvaf_hir::Expression::Primary(Primary::Constant(Scalar(String(val)))) => {
+                    vec![(val, self.hir[expr].span)]
                 }
-            })
-            .collect();
+                openvaf_hir::Expression::Array(ref expressions) => {
+                    let res = expressions
+                        .iter()
+                        .filter_map(|expr| {
+                            if let openvaf_hir::Expression::Primary(Primary::Constant(Scalar(
+                                String(val),
+                            ))) = self.hir[*expr].contents
+                            {
+                                Some((val, self.hir[*expr].span))
+                            } else {
+                                self.errors.add(ExpectedLintName {
+                                    attr: attr.ident.name,
+                                    span: self.hir[*expr].span,
+                                });
+                                None
+                            }
+                        })
+                        .collect();
+                    res
+                }
 
-        self.mir.modules = self
-            .hir
-            .modules
-            .iter()
-            .map(|module| {
-                module.map_with(|old| Module {
-                    ident: old.ident,
-                    port_list: old.ports.clone(),
-                    analog_cfg: Lrc::new(RwLock::new(self.fold_block_into_cfg(old.analog.clone()))),
-                })
-            })
-            .collect();
-
-        if self.errors.is_empty() {
-            Ok(self.mir)
+                _ => {
+                    self.errors.add(ExpectedLintName {
+                        attr: attr.ident.name,
+                        span: self.hir[expr].span,
+                    });
+                    return true;
+                }
+            }
         } else {
-            Err(self.errors)
-        }
-    }
-
-    /// folds a variable by foldings its default value (to a typed representation)
-    fn fold_variable(&mut self, variable: &hir::Variable) -> Variable {
-        let variable_type = match variable.var_type {
-            hir::VariableType::Real => {
-                let default_value = variable
-                    .default
-                    .and_then(|expr| ConstantSchematicAnalysis.fold_real_expression(self, expr));
-                VariableType::Real(default_value)
-            }
-
-            hir::VariableType::Integer => {
-                let default_value = if let Some(default_value) = variable.default {
-                    match ConstantSchematicAnalysis.fold_expression(self, default_value) {
-                        Some(ExpressionId::Integer(expr)) => Some(expr),
-
-                        Some(ExpressionId::Real(real_expr)) => {
-                            Some(self.mir.integer_expressions.push(Spanned {
-                                span: self.mir[real_expr].span,
-                                contents: IntegerExpression::RealCast(real_expr),
-                            }))
-                        }
-
-                        Some(ExpressionId::String(_)) => {
-                            self.errors.add(TypeMissmatch {
-                                expected_type: MockType::Numeric,
-                                span: self.hir[default_value].span,
-                            });
-
-                            None
-                        }
-
-                        None => None,
-                    }
-                } else {
-                    None
-                };
-                VariableType::Integer(default_value)
-            }
-            hir::VariableType::String => {
-                let default_value = variable
-                    .default
-                    .and_then(|expr| ConstantSchematicAnalysis.fold_string_expression(self, expr));
-                VariableType::String(default_value)
-            }
+            Linter::dispatch_late(Box::new(EmptyBuiltinAttribute(attr.ident)), sctx);
+            return true;
         };
 
-        Variable {
-            ident: variable.ident,
-            variable_type,
+        for (name, span) in names.into_iter() {
+            let name = name.unescaped_contents();
+            if let Some(lint) = Lint::from_name(&name) {
+                if let Some(old) = self.mir.syntax_ctx[sctx].lint_levels.insert(lint, lvl) {
+                    Linter::dispatch_late(
+                        Box::new(LintLevelOverwrite {
+                            span,
+                            lint: name,
+                            old,
+                            new: lvl,
+                        }),
+                        sctx,
+                    );
+                }
+            } else {
+                Linter::dispatch_late(Box::new(UnknownLint { span, lint: name }), sctx);
+            }
         }
+
+        true
     }
 
-    /// folds a parameter by evaluating the default value and any range bounds
-    fn fold_parameter(&mut self, parameter: &hir::Parameter) -> Parameter {
-        let parameter_type = match parameter.param_type {
-            hir::ParameterType::String(ref included, ref excluded) => {
-                let included = included
-                    .iter()
-                    .filter_map(|&expr| {
-                        ConstantSchematicAnalysis.fold_string_expression(self, expr)
-                    })
-                    .collect();
+    fn lower_nature(&mut self, id: NatureId, nature: &openvaf_hir::Nature) -> Nature {
+        let span = trace_span!("nature", id = id.index(), name = display(nature.ident));
+        let _enter = span.enter();
+        self.sctx = nature.sctx;
+        self.handle_attributes(nature.sctx, AttributeCtx::Nature(id));
+        let abstol = self.eval_real_constant(nature.abstol).unwrap_or(0.0);
+        let units = self
+            .eval_string_constant(nature.units)
+            .unwrap_or(StringLiteral::DUMMY);
 
-                let excluded = excluded
-                    .iter()
-                    .filter_map(|&expr| {
-                        ConstantSchematicAnalysis.fold_string_expression(self, expr)
-                    })
-                    .collect();
-
-                #[allow(clippy::or_fun_call)]
-                let default_value = ConstantSchematicAnalysis
-                    .fold_string_expression(self, parameter.default)
-                    .unwrap_or(StringExpressionId::from_usize_unchecked(0));
-
-                ParameterType::String {
-                    included,
-                    excluded,
-                    default_value,
-                }
-            }
-
-            hir::ParameterType::Integer(ref included, ref excluded) => {
-                let included = included
-                    .iter()
-                    .filter_map(|range| {
-                        let start = range.start.try_copy_with(|expr| {
-                            ConstantSchematicAnalysis.fold_integer_expression(self, expr)
-                        });
-                        let end = range.end.try_copy_with(|expr| {
-                            ConstantSchematicAnalysis.fold_integer_expression(self, expr)
-                        });
-                        Some(start?..end?)
-                    })
-                    .collect();
-
-                let excluded = excluded
-                    .iter()
-                    .filter_map(|exclude| {
-                        exclude.try_clone_with(|expr| {
-                            ConstantSchematicAnalysis.fold_integer_expression(self, expr)
-                        })
-                    })
-                    .collect();
-
-                #[allow(clippy::or_fun_call)]
-                let default_value = ConstantSchematicAnalysis
-                    .fold_integer_expression(self, parameter.default)
-                    .unwrap_or(IntegerExpressionId::from_usize_unchecked(0));
-
-                ParameterType::Integer {
-                    included,
-                    excluded,
-                    default_value,
-                }
-            }
-
-            hir::ParameterType::Real(ref included, ref excluded) => {
-                let included = included
-                    .iter()
-                    .filter_map(|range| {
-                        let start = range.start.try_copy_with(|expr| {
-                            ConstantSchematicAnalysis.fold_real_expression(self, expr)
-                        });
-                        let end = range.end.try_copy_with(|expr| {
-                            ConstantSchematicAnalysis.fold_real_expression(self, expr)
-                        });
-                        Some(start?..end?)
-                    })
-                    .collect();
-
-                let excluded = excluded
-                    .iter()
-                    .filter_map(|exclude| {
-                        exclude.try_clone_with(|expr| {
-                            ConstantSchematicAnalysis.fold_real_expression(self, expr)
-                        })
-                    })
-                    .collect();
-
-                #[allow(clippy::or_fun_call)]
-                let default_value = ConstantSchematicAnalysis
-                    .fold_real_expression(self, parameter.default)
-                    .unwrap_or(RealExpressionId::from_usize_unchecked(0));
-                ParameterType::Real {
-                    included,
-                    excluded,
-                    default_value,
-                }
-            }
-        };
-
-        Parameter {
-            ident: parameter.ident,
-            parameter_type,
-        }
-    }
-
-    pub fn fold_nature(&mut self, nature: &hir::Nature) -> Nature {
-        let units = ConstantSchematicAnalysis
-            .fold_string_expression(self, nature.units)
-            .map_or(StringLiteral::DUMMY, |expr| {
-                constant_eval_str_expr(&self.mir, expr, &mut NoConstResolution).unwrap()
-            });
-
-        let abstol = ConstantSchematicAnalysis
-            .fold_real_expression(self, nature.abstol)
-            .map(|expr| constant_eval_real_expr(&self.mir, expr, &mut NoConstResolution).unwrap())
-            .unwrap_or(0.0);
         Nature {
             ident: nature.ident,
             abstol,
@@ -294,26 +372,401 @@ impl<'lt> HirToMirFold<'lt> {
             access: nature.access,
             idt_nature: nature.idt_nature,
             ddt_nature: nature.ddt_nature,
+            sctx: nature.sctx,
         }
+    }
+
+    fn lower_variable(&mut self, id: VariableId, var: &openvaf_hir::Variable) -> Variable {
+        let span = trace_span!("variable", id = id.index(), name = display(var.ident));
+        let _enter = span.enter();
+        let (unit, desc) =
+            self.lower_units_and_desc_attributes(var.sctx, AttributeCtx::Variable(id));
+        let default = var
+            .default
+            .and_then(|e| self.lower_assign_expr(e, var.ty))
+            .unwrap_or_else(|| {
+                let default = match var.ty {
+                    Type::INT => ConstVal::Scalar(Integer(0)),
+                    Type::REAL => ConstVal::Scalar(Real(0.0)),
+                    Type::STRING => ConstVal::Scalar(String(StringLiteral::DUMMY)),
+                    _ => todo!("Array defaults?"),
+                };
+
+                Expression::<ParameterCallType>::new_const(default, self.mir[var.sctx].span)
+            });
+
+        Variable {
+            ident: var.ident,
+            variable_type: var.ty,
+            default: RwLock::new(default),
+            unit,
+            desc,
+            sctx: var.sctx,
+        }
+    }
+
+    fn lower_units_and_desc_attributes(
+        &mut self,
+        sctx: SyntaxCtx,
+        src: AttributeCtx,
+    ) -> (Option<StringLiteral>, Option<StringLiteral>) {
+        let mut unit = None;
+        let mut desc = None;
+
+        self.handle_attributes_with(sctx, src, |fold, attr| match attr.ident.name {
+            keywords::desc => {
+                if let Some(val) = attr.value {
+                    desc = fold.eval_string_constant(val)
+                } else {
+                    Linter::dispatch_late(Box::new(EmptyBuiltinAttribute(attr.ident)), sctx)
+                }
+                true
+            }
+            keywords::units => {
+                if let Some(val) = attr.value {
+                    unit = fold.eval_string_constant(val)
+                } else {
+                    Linter::dispatch_late(Box::new(EmptyBuiltinAttribute(attr.ident)), sctx)
+                }
+                true
+            }
+            _ => false,
+        });
+
+        (unit, desc)
+    }
+
+    fn lower_parameter(
+        &mut self,
+        id: ParameterId,
+        param: &openvaf_hir::Parameter,
+    ) -> Option<Parameter> {
+        let span = trace_span!("parameter", id = id.index(), name = display(param.ident));
+        let _enter = span.enter();
+
+        self.sctx = param.sctx;
+
+        let (unit, desc) =
+            self.lower_units_and_desc_attributes(param.sctx, AttributeCtx::Parameter(id));
+
+        let default = self.lower_assign_expr(param.default, param.ty);
+
+        let kind = match &param.constraints {
+            openvaf_hir::ParameterConstraint::Ordered(included, excluded) => {
+                let included = included
+                    .iter()
+                    .filter_map(|b| self.lower_parameter_range_constraint(b, param.ty))
+                    .collect();
+                let excluded = excluded
+                    .iter()
+                    .filter_map(|b| self.lower_parameter_exclude_constraint(b, param.ty))
+                    .collect();
+                ParameterConstraint::Ordered { included, excluded }
+            }
+            openvaf_hir::ParameterConstraint::Unordered(included, excluded) => {
+                let included = included
+                    .iter()
+                    .filter_map(|e| self.lower_assign_expr(*e, param.ty))
+                    .collect();
+                let excluded = excluded
+                    .iter()
+                    .filter_map(|e| self.lower_assign_expr(*e, param.ty))
+                    .collect();
+                ParameterConstraint::UnOrdered { included, excluded }
+            }
+        };
+
+        Some(Parameter {
+            ident: param.ident,
+            ty: param.ty,
+            default: RwLock::new(default?),
+            kind: RwLock::new(kind),
+            unit,
+            sctx: param.sctx,
+            desc,
+        })
+    }
+
+    fn lower_parameter_exclude_constraint(
+        &mut self,
+        bound: &ParameterExcludeConstraint<ExpressionId>,
+        ty: Type,
+    ) -> Option<ParameterExcludeConstraint<Expression<ParameterCallType>>> {
+        let res = match bound {
+            ParameterExcludeConstraint::Value(expr) => {
+                let expr = self.lower_assign_expr(*expr, ty)?;
+                ParameterExcludeConstraint::Value(expr)
+            }
+            ParameterExcludeConstraint::Range(ref range) => {
+                let range = self.lower_parameter_range_constraint(range, ty)?;
+                ParameterExcludeConstraint::Range(range)
+            }
+        };
+
+        Some(res)
+    }
+
+    fn lower_parameter_range_constraint(
+        &mut self,
+        bound: &ParameterRangeConstraint<ExpressionId>,
+        ty: Type,
+    ) -> Option<ParameterRangeConstraint<Expression<ParameterCallType>>> {
+        let lo = self.lower_parameter_range_constraint_bound(bound.start, ty);
+        let hi = self.lower_parameter_range_constraint_bound(bound.end, ty);
+        Some(lo?..hi?)
+    }
+
+    fn lower_parameter_range_constraint_bound(
+        &mut self,
+        bound: ParameterRangeConstraintBound<ExpressionId>,
+        ty: Type,
+    ) -> Option<ParameterRangeConstraintBound<Expression<ParameterCallType>>> {
+        Some(ParameterRangeConstraintBound {
+            inclusive: bound.inclusive,
+            bound: self.lower_assign_expr(bound.bound, ty)?,
+        })
+    }
+
+    fn lower_module(
+        &mut self,
+        id: ModuleId,
+        module: &openvaf_hir::Module,
+    ) -> Module<L::AnalogBlockExprLower> {
+        let span = trace_span!("module", id = id.index(), name = display(module.ident));
+        let _enter = span.enter();
+
+        self.sctx = module.sctx;
+        self.handle_attributes(module.sctx, AttributeCtx::Module(id));
+
+        let mut local_ctx = LocalCtx::new_main(self);
+        local_ctx.lower_block(&module.analog);
+        local_ctx.terminate_bb(local_ctx.current, TerminatorKind::End);
+        debug_assert_eq!(local_ctx.current, local_ctx.cfg.blocks.last_idx());
+
+        Module {
+            ident: module.ident,
+            ports: module.ports.clone(),
+            parameters: module.parameters.clone(),
+            analog_cfg: RwLock::new(local_ctx.cfg),
+            sctx: module.sctx,
+        }
+    }
+
+    pub fn lower_expression<C: ExpressionLowering>(
+        &mut self,
+        expr: ExpressionId,
+    ) -> Option<Expression<C>> {
+        let span = self.hir[expr].span;
+        let mut lctx = LocalCtx::new_small(self);
+        let expr = lctx.lower_expr(expr)?;
+        let operand = lctx.rvalue_to_operand(expr, span);
+        lctx.terminate(TerminatorKind::End);
+        let cfg = lctx.cfg;
+        Some(Expression(cfg, operand))
+    }
+
+    pub fn lower_assign_expr<C: ExpressionLowering>(
+        &mut self,
+        expr: ExpressionId,
+        ty: Type,
+    ) -> Option<Expression<C>> {
+        let span = self.hir[expr].span;
+        let mut lctx = LocalCtx::new_small(self);
+        let expr = lctx.lower_assignment_expr(expr, ty)?;
+        let operand = lctx.rvalue_to_operand(expr, span);
+        if lctx.cfg.blocks.iter().all(|x| x.statements.is_empty()) {
+            lctx.cfg.blocks.clear()
+        } else {
+            lctx.terminate_bb(lctx.cfg.blocks.last_idx(), TerminatorKind::End);
+        }
+
+        let cfg = lctx.cfg;
+        Some(Expression(cfg, operand))
+    }
+
+    pub fn lower_real_expression<C: ExpressionLowering>(
+        &mut self,
+        expr: ExpressionId,
+    ) -> Option<Expression<C>> {
+        let mut lctx = LocalCtx::new_small(self);
+        let operand = lctx.fold_real(expr)?;
+        lctx.terminate(TerminatorKind::End);
+        let cfg = lctx.cfg;
+        Some(Expression(cfg, operand))
+    }
+
+    pub fn lower_string_expression<C: ExpressionLowering>(
+        &mut self,
+        expr: ExpressionId,
+    ) -> Option<Expression<C>> {
+        let span = self.hir[expr].span;
+        let mut lctx = LocalCtx::new_small(self);
+        let res = lctx.lower_expr(expr)?;
+        if res.ty == Type::STRING {
+            let operand = lctx.rvalue_to_operand(res, span);
+            lctx.terminate(TerminatorKind::End);
+            let cfg = lctx.cfg;
+            Some(Expression(cfg, operand))
+        } else {
+            self.errors.add(TypeMissmatch {
+                span,
+                expected_type: TyPrinter(Type::STRING),
+                found: res.ty.into(),
+            });
+            None
+        }
+    }
+
+    pub fn eval_string_constant(&mut self, expr: ExpressionId) -> Option<StringLiteral> {
+        self.lower_string_expression::<RealConstCallType>(expr)
+            .map(|x| x.const_eval().unwrap())
+            .and_then(|x| {
+                if let Scalar(String(val)) = x {
+                    Some(val)
+                } else {
+                    None
+                }
+            })
+    }
+
+    pub fn eval_real_constant(&mut self, expr: ExpressionId) -> Option<f64> {
+        self.lower_real_expression::<RealConstCallType>(expr)
+            .map(|x| x.const_eval().unwrap())
+            .and_then(|x| {
+                if let Scalar(Real(val)) = x {
+                    Some(val)
+                } else {
+                    None
+                }
+            })
+    }
+
+    pub fn eval_int_constant(&mut self, expr: ExpressionId) -> Option<i64> {
+        self.lower_real_expression::<RealConstCallType>(expr)
+            .map(|x| x.const_eval().unwrap())
+            .and_then(|x| {
+                if let Scalar(Integer(val)) = x {
+                    Some(val)
+                } else {
+                    None
+                }
+            })
     }
 }
 
-/// Folds an hir to an mir by adding and checking type information
-/// Returns any errors that occur
-pub fn lower_hir(mut hir: Hir) -> Result<Mir, MultiDiagnostic<Error>> {
-    HirToMirFold::new(&mut hir).fold()
-}
-
-/// Folds an hir to an mir by adding and checking type information
-/// Returns any errors that occur
-pub fn lower_hir_userfacing(hir: Hir) -> UserResult<Mir> {
-    lower_hir_userfacing_with_printer(hir)
-}
-
-/// Folds an hir to an mir by adding and checking type information
-/// Returns any errors that occur
-pub fn lower_hir_userfacing_with_printer<P: DiagnosticSlicePrinter>(
+pub fn lower_hir_userfacing<L: HirLowering>(
     hir: Hir,
-) -> UserResult<Mir, P> {
-    lower_hir(hir).map_err(|error| error.user_facing())
+    lowering: &mut L,
+) -> UserResult<Mir<L::AnalogBlockExprLower>> {
+    lower_hir_userfacing_with_printer(hir, lowering)
+}
+
+pub fn lower_hir_userfacing_with_printer<L: HirLowering, P: DiagnosticSlicePrinter>(
+    hir: Hir,
+    lowering: &mut L,
+) -> UserResult<Mir<L::AnalogBlockExprLower>, P> {
+    lower_hir(hir, lowering).map_err(|err| err.user_facing())
+}
+
+pub fn lower_hir<L: HirLowering>(
+    mut src: Hir,
+    lowering: &mut L,
+) -> Result<Mir<L::AnalogBlockExprLower>, MultiDiagnostic<Error>> {
+    let span = trace_span!("hir_lowering");
+    let _enter = span.enter();
+
+    let syntax_ctx: IndexVec<SyntaxCtx, _> = src
+        .syntax_ctx
+        .iter()
+        .map(|data| SyntaxContextData {
+            span: data.span,
+            lint_levels: HashMap::default(),
+            parent: data.parent,
+        })
+        .collect();
+
+    let dst = Mir {
+        branches: take(&mut src.branches),
+        nets: take(&mut src.nets),
+        ports: take(&mut src.ports),
+        disciplines: take(&mut src.disciplines),
+        modules: IndexVec::new(),
+        parameters: IndexVec::new(),
+        variables: IndexVec::new(),
+        natures: IndexVec::new(),
+        syntax_ctx,
+    };
+
+    let mut fold = HirFold {
+        lowering,
+        hir: &src,
+        mir: dst,
+        errors: MultiDiagnostic(Vec::with_capacity(64)),
+        sctx: SyntaxCtx::ROOT,
+        lower_sctx: BitSet::new_filled(src.syntax_ctx.len_idx()),
+    };
+
+    // These were just copied from the HIR
+    // Only thing to do here is fold attributes
+
+    let discipline_iter = fold
+        .mir
+        .disciplines
+        .iter_enumerated()
+        .map(|(id, discipline)| (discipline.sctx, AttributeCtx::Discipline(id)));
+    let branch_iter = fold
+        .mir
+        .branches
+        .iter_enumerated()
+        .map(|(id, branch)| (branch.sctx, AttributeCtx::Branch(id)));
+    let net_iter = fold
+        .mir
+        .nets
+        .iter_enumerated()
+        .map(|(id, net)| (net.sctx, AttributeCtx::Net(id)));
+
+    let attributes: Vec<_> = discipline_iter.chain(branch_iter).chain(net_iter).collect();
+
+    for (sctx, src) in attributes {
+        fold.handle_attributes(sctx, src);
+    }
+
+    fold.mir.natures = src
+        .natures
+        .iter_enumerated()
+        .map(|(id, nature)| fold.lower_nature(id, nature))
+        .collect();
+
+    fold.mir.parameters = src
+        .parameters
+        .iter_enumerated()
+        .filter_map(|(id, param)| fold.lower_parameter(id, param))
+        .collect();
+
+    fold.mir.variables = src
+        .variables
+        .iter_enumerated()
+        .map(|(id, nature)| fold.lower_variable(id, nature))
+        .collect();
+
+    fold.mir.modules = src
+        .modules
+        .iter_enumerated()
+        .map(|(id, module)| fold.lower_module(id, module))
+        .collect();
+
+    // Process the attributes of the remaining contexts
+    // These will belong to objects that were dropped during ast_lowering or hir_lowering (most notably blocks and functions)
+    // and as such have no associated mir object (AttributeCtxt)
+
+    let ones: Vec<_> = fold.lower_sctx.ones().collect();
+    for sctx in ones {
+        fold.handle_attributes(sctx, AttributeCtx::Syntactic)
+    }
+
+    if fold.errors.is_empty() {
+        Ok(fold.mir)
+    } else {
+        Err(fold.errors)
+    }
 }

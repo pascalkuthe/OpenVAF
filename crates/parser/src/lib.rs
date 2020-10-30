@@ -11,7 +11,7 @@ use lalrpop_util::lalrpop_mod;
 use declarations::SymbolTableBuilder;
 
 use crate::error::{ArgumentCountMissmatch, Error};
-use openvaf_ast::{Ast, Expression, Parameter, ParameterType, Variable, VariableType};
+use openvaf_ast::{Ast, Expression, Parameter, ParameterConstraints, Type, Variable};
 use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use openvaf_ir::{Node, Spanned};
 use openvaf_session::sourcemap::Span;
@@ -137,13 +137,15 @@ fn insert_params<R>(
     errors: &mut MultiDiagnostic<Error>,
     symbols: &mut SymbolTableBuilder,
     node: Node<Vec<(Ident, ExpressionId, Vec<R>)>>,
-    mut param_type: impl FnMut(Vec<R>) -> ParameterType,
+    mut constraint: impl FnMut(Vec<R>) -> ParameterConstraints,
+    ty: Type,
 ) {
     for (ident, default, ranges) in node.contents {
         let param = Parameter {
             ident,
             default,
-            param_type: param_type(ranges),
+            param_constraints: constraint(ranges),
+            ty,
         };
 
         let node = Node {
@@ -162,13 +164,13 @@ fn insert_vars(
     ast: &mut Ast,
     errors: &mut MultiDiagnostic<Error>,
     symbols: &mut SymbolTableBuilder,
-    node: Node<(VariableType, Vec<(Ident, Option<ExpressionId>)>)>,
+    node: Node<(Type, Vec<(Ident, Option<ExpressionId>)>)>,
 ) {
     for (ident, default) in node.contents.1 {
         let var = Variable {
             ident,
             default,
-            var_type: node.contents.0,
+            ty: node.contents.0,
         };
 
         let node = Node {

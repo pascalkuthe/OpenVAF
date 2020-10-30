@@ -11,17 +11,20 @@ use core::fmt::Debug;
 
 use openvaf_data_structures::index_vec::IndexVec;
 
-pub use openvaf_ir::ids::{
+use openvaf_ir::ids::{
     AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, IdRange, ModuleId,
     NatureId, NetId, ParameterId, PortBranchId, PortId, StatementId, VariableId,
 };
 
 pub use openvaf_ir::{
-    impl_id_type, Attribute, DisplayTaskKind, DoubleArgMath, Node, ParameterExcludeConstraint,
-    ParameterRangeConstraint, ParameterRangeConstraintBound, Port, SingleArgMath, Spanned,
-    StopTaskKind, UnaryOperator,
+    impl_id_type, Attribute, ConstVal, DisplayTaskKind, DoubleArgMath, Node,
+    ParameterExcludeConstraint, ParameterRangeConstraint, ParameterRangeConstraintBound, Port,
+    SingleArgMath, Spanned, StopTaskKind, Type, UnaryOperator,
 };
 
+pub type SystemFunctionCall = openvaf_ir::SystemFunctionCall<ExpressionId, ExpressionId>;
+
+use openvaf_ir::SimpleConstVal;
 use openvaf_session::sourcemap::Span;
 use openvaf_session::sourcemap::StringLiteral;
 use openvaf_session::symbols::Ident;
@@ -77,33 +80,33 @@ impl Ast {
     }
 }
 
-impl_id_type!(BranchId in Ast::branches -> Node<Branch>);
+impl_id_type!(BranchId in Ast => branches as Node<Branch>);
 
-impl_id_type!(PortBranchId in Ast::port_branches -> Node<PortBranch>);
+impl_id_type!(PortBranchId in Ast => port_branches as Node<PortBranch>);
 
-impl_id_type!(NetId in Ast::nets -> Node<Net>);
+impl_id_type!(NetId in Ast => nets as Node<Net>);
 
-impl_id_type!(PortId in Ast::ports -> Port);
+impl_id_type!(PortId in Ast => ports as Port);
 
-impl_id_type!(ParameterId in Ast::parameters -> Node<Parameter>);
+impl_id_type!(ParameterId in Ast => parameters as Node<Parameter>);
 
-impl_id_type!(VariableId in Ast::variables -> Node<Variable>);
+impl_id_type!(VariableId in Ast => variables as Node<Variable>);
 
-impl_id_type!(ModuleId in Ast::modules -> Node<Module>);
+impl_id_type!(ModuleId in Ast => modules as Node<Module>);
 
-impl_id_type!(FunctionId in Ast::functions -> Node<Function>);
+impl_id_type!(FunctionId in Ast => functions as Node<Function>);
 
-impl_id_type!(DisciplineId in Ast::disciplines -> Node<Discipline>);
+impl_id_type!(DisciplineId in Ast => disciplines as Node<Discipline>);
 
-impl_id_type!(ExpressionId in Ast::expressions -> Spanned<Expression>);
+impl_id_type!(ExpressionId in Ast => expressions as Spanned<Expression>);
 
-impl_id_type!(AttributeId in Ast::attributes -> Attribute);
+impl_id_type!(AttributeId in Ast => attributes as Attribute);
 
-impl_id_type!(StatementId in Ast::statements -> Node<Statement>);
+impl_id_type!(StatementId in Ast => statements as Node<Statement>);
 
-impl_id_type!(BlockId in Ast::blocks -> Block);
+impl_id_type!(BlockId in Ast => blocks as Block);
 
-impl_id_type!(NatureId in Ast::natures -> Node<Nature>);
+impl_id_type!(NatureId in Ast => natures as Node<Nature>);
 
 #[derive(Clone, Debug)]
 pub struct Nature {
@@ -155,8 +158,9 @@ pub struct Module {
 #[derive(Clone, Debug)]
 pub struct Parameter {
     pub ident: Ident,
-    pub param_type: ParameterType,
+    pub param_constraints: ParameterConstraints,
     pub default: ExpressionId,
+    pub ty: Type,
 }
 
 #[derive(Clone, Debug)]
@@ -165,18 +169,17 @@ pub enum ParameterConstraint<F, E> {
     Exclude(E),
 }
 
-pub type NumericParameterConstraint = ParameterConstraint<
+pub type OrderedParameterConstraint = ParameterConstraint<
     Range<ParameterRangeConstraintBound<ExpressionId>>,
     ParameterExcludeConstraint<ExpressionId>,
 >;
 
-pub type StringParameterConstraint = ParameterConstraint<Vec<ExpressionId>, Vec<ExpressionId>>;
+pub type UnorderedParameterConstraint = ParameterConstraint<ExpressionId, ExpressionId>;
 
 #[derive(Clone, Debug)]
-pub enum ParameterType {
-    Real(Vec<NumericParameterConstraint>),
-    Integer(Vec<NumericParameterConstraint>),
-    String(Vec<StringParameterConstraint>),
+pub enum ParameterConstraints {
+    Ordered(Vec<OrderedParameterConstraint>),
+    Unordered(Vec<UnorderedParameterConstraint>),
 }
 
 #[derive(Clone, Debug)]
@@ -242,7 +245,7 @@ impl Default for Net {
 #[derive(Clone, Copy, Debug)]
 pub struct Variable {
     pub ident: Ident,
-    pub var_type: VariableType,
+    pub ty: Type,
     pub default: Option<ExpressionId>,
 }
 
@@ -325,19 +328,15 @@ pub enum Expression {
     UnaryOperator(Spanned<UnaryOperator>, ExpressionId),
     Condition(ExpressionId, ExpressionId, ExpressionId),
     Primary(Primary),
+    Array(Vec<ExpressionId>),
     Error,
 }
-
-pub type SystemFunctionCall =
-    openvaf_ir::SystemFunctionCall<ExpressionId, ExpressionId, ExpressionId, ExpressionId>;
 
 pub type NoiseSource = openvaf_ir::NoiseSource<ExpressionId, ()>;
 
 #[derive(Clone, Debug)]
 pub enum Primary {
-    Integer(i64),
-    Real(f64),
-    String(StringLiteral),
+    Constant(ConstVal),
 
     Reference(HierarchicalId),
 
@@ -357,25 +356,25 @@ pub enum Primary {
 
 impl From<i64> for Primary {
     fn from(val: i64) -> Self {
-        Self::Integer(val)
+        Self::Constant(ConstVal::Scalar(SimpleConstVal::Integer(val)))
     }
 }
 
 impl From<u32> for Primary {
     fn from(val: u32) -> Self {
-        Self::Integer(val.into())
+        Self::Constant(ConstVal::Scalar(SimpleConstVal::Integer(val.into())))
     }
 }
 
 impl From<f64> for Primary {
     fn from(val: f64) -> Self {
-        Self::Real(val)
+        Self::Constant(ConstVal::Scalar(SimpleConstVal::Real(val)))
     }
 }
 
 impl From<StringLiteral> for Primary {
     fn from(val: StringLiteral) -> Self {
-        Self::String(val)
+        Self::Constant(ConstVal::Scalar(SimpleConstVal::String(val)))
     }
 }
 
@@ -417,13 +416,6 @@ pub enum BinaryOperator {
     NXor,
     And,
     Or,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum VariableType {
-    Integer,
-    Real,
-    String,
 }
 
 #[derive(Clone, Debug)]
