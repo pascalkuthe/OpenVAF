@@ -59,15 +59,15 @@ test_fmt:
 
 
 
-test_clippy:
-  stage: test
-
-  before_script:
-    - rustup component add clippy
-
-  script:
-    - cd crates
-    - cargo clippy -- -D warnings
+#test_clippy:
+#  stage: test
+#
+#  before_script:
+#    - rustup component add clippy
+#
+#  script:
+#    - cd crates
+#    - cargo clippy -- -D warnings
 
 
 book:
