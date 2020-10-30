@@ -34,7 +34,29 @@ macro_rules! id_type {
 
             IMPL_RAW_CONVERSIONS = true;
         }
+
+        #[cfg(feature = "serde_dump")]
+        impl $crate::__reexport::serde::Serialize for $name {
+            fn serialize<S>(
+                &self,
+                serializer: S,
+            ) -> Result<
+                <S as $crate::__reexport::serde::Serializer>::Ok,
+                <S as $crate::__reexport::serde::Serializer>::Error,
+            >
+            where
+                S: $crate::__reexport::serde::Serializer,
+            {
+                serializer.serialize_newtype_struct(stringify!($name), &self.raw())
+            }
+        }
     };
+}
+
+id_type!(SyntaxCtx(u32));
+
+impl SyntaxCtx {
+    pub const ROOT: Self = Self::from_raw_unchecked(0);
 }
 
 id_type!(BranchId(u16));
@@ -84,6 +106,10 @@ impl<I: Idx> IdRange<I> {
 
     pub fn contains(&self, id: I) -> bool {
         self.0.start <= id && id < self.0.end
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.start == self.0.end
     }
 }
 
@@ -189,41 +215,45 @@ impl<I: Idx> DoubleEndedIterator for IdRange<I> {
 
 #[macro_export]
 macro_rules! impl_id_type {
-    ($name:ident in $container:ident::$sub_container:ident -> $type:ty) => {
-        impl ::std::ops::Index<$name> for $container {
+    ($name:ident in $container:ty => $sub_container:ident as $type:ty) => {
+        impl_id_type!($name in $container => $sub_container as $type where);
+    };
+
+    ($name:ident in $container:ty => $sub_container:ident as $type:ty where $($generics:tt)*) => {
+        impl$($generics)* ::std::ops::Index<$name> for $container {
             type Output = $type;
             fn index(&self, index: $name) -> &Self::Output {
                 &self.$sub_container[index]
             }
         }
 
-        impl ::std::ops::IndexMut<$name> for $container {
+        impl$($generics)* ::std::ops::IndexMut<$name> for $container {
             fn index_mut(&mut self, index: $name) -> &mut Self::Output {
                 &mut self.$sub_container[index]
             }
         }
 
-        impl ::std::ops::Index<::core::ops::Range<$name>> for $container {
+        impl$($generics)* ::std::ops::Index<::core::ops::Range<$name>> for $container {
             type Output = openvaf_data_structures::index_vec::IndexSlice<$name, [$type]>;
             fn index(&self, range: ::core::ops::Range<$name>) -> &Self::Output {
                 &self.$sub_container[range]
             }
         }
 
-        impl ::std::ops::IndexMut<::core::ops::Range<$name>> for $container {
+        impl$($generics)* ::std::ops::IndexMut<::core::ops::Range<$name>> for $container {
             fn index_mut(&mut self, range: ::core::ops::Range<$name>) -> &mut Self::Output {
                 &mut self.$sub_container[range]
             }
         }
 
-        impl ::std::ops::Index<$crate::ids::IdRange<$name>> for $container {
+        impl$($generics)* ::std::ops::Index<$crate::ids::IdRange<$name>> for $container {
             type Output = ::openvaf_data_structures::index_vec::IndexSlice<$name, [$type]>;
             fn index(&self, range: $crate::ids::IdRange<$name>) -> &Self::Output {
                 &self.$sub_container[range.0]
             }
         }
 
-        impl ::std::ops::IndexMut<$crate::ids::IdRange<$name>> for $container {
+        impl$($generics)* ::std::ops::IndexMut<$crate::ids::IdRange<$name>> for $container {
             fn index_mut(&mut self, range: $crate::ids::IdRange<$name>) -> &mut Self::Output {
                 &mut self.$sub_container[range.0]
             }

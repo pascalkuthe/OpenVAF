@@ -57,32 +57,24 @@ pub enum AllowedNatures {
 
 impl AllowedNatures {
     pub fn from_discipline(discipline: DisciplineId, hir: &Hir) -> Self {
-        let discipline = &hir[discipline].contents;
+        let discipline = &hir[discipline];
         match (discipline.potential_nature, discipline.flow_nature) {
             (None, None) => Self::None,
-            (Some(pot), None) => {
-                Self::Potential(hir[pot].contents.ident.name, hir[pot].contents.access.name)
-            }
-            (None, Some(flow)) => Self::Flow(
-                hir[flow].contents.ident.name,
-                hir[flow].contents.access.name,
-            ),
+            (Some(pot), None) => Self::Potential(hir[pot].ident.name, hir[pot].access.name),
+            (None, Some(flow)) => Self::Flow(hir[flow].ident.name, hir[flow].access.name),
             (Some(pot), Some(flow)) => Self::PotentialAndFlow {
-                potential_nature: hir[pot].contents.ident.name,
-                potential_nature_access: hir[pot].contents.access.name,
-                flow_nature: hir[flow].contents.ident.name,
-                flow_nature_access: hir[flow].contents.access.name,
+                potential_nature: hir[pot].ident.name,
+                potential_nature_access: hir[pot].access.name,
+                flow_nature: hir[flow].ident.name,
+                flow_nature_access: hir[flow].access.name,
             },
         }
     }
 
     pub fn from_port_discipline(discipline: DisciplineId, hir: &Hir) -> Self {
-        let discipline = &hir[discipline].contents;
+        let discipline = &hir[discipline];
         if let Some(flow) = discipline.flow_nature {
-            Self::Flow(
-                hir[flow].contents.ident.name,
-                hir[flow].contents.access.name,
-            )
+            Self::Flow(hir[flow].ident.name, hir[flow].access.name)
         } else {
             Self::None
         }

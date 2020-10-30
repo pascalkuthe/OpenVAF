@@ -28,12 +28,8 @@ use once_cell::sync::OnceCell;
 use openvaf_data_structures::index_vec::{define_index_type, index_vec, IndexSlice, IndexVec};
 use openvaf_data_structures::sync::RwLock;
 use openvaf_data_structures::HashMap;
-use openvaf_ir::ids::{
-    BranchId, IntegerExpressionId, ModuleId, NatureId, NetId, ParameterId, RealExpressionId,
-    StatementId, StringExpressionId, VariableId,
-};
+use openvaf_ir::ids::SyntaxCtx;
 use openvaf_macros::lints;
-use openvaf_mir::ExpressionId;
 use openvaf_session::session_data;
 use std::error::Error;
 use std::fmt::Display;
@@ -133,6 +129,7 @@ lints! {
     pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id: None};
 
     pub const ignored_display_task = LintData{default_lvl: Warn, documentation_id: None};
+    pub const empty_builtin_attribute = LintData{default_lvl: Warn, documentation_id: None};
 
     pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: None};
     pub const noise_derivative = LintData{default_lvl: Warn, documentation_id: None};
@@ -147,6 +144,12 @@ lints! {
     pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: Some("L001")};
 
     pub const constant_overflow = LintData{default_lvl: Deny, documentation_id: Some("L002")};
+    pub const infinte_loop = LintData{default_lvl: Deny, documentation_id: None};
+
+    pub const unkown_lint = LintData{default_lvl: Deny, documentation_id: None};
+    pub const lint_level_owerwrite = LintData{default_lvl: Warn, documentation_id: None};
+
+
 }
 
 define_index_type! {
@@ -217,93 +220,6 @@ pub enum LintLevel {
     Allow,
 }
 
-/// The location a late lint occured
-/// This is will be used in the future to figure out the correct lint lvl based on attributes
-#[derive(Debug, Clone, Copy)]
-pub enum LintLocation {
-    Statement(StatementId),
-    RealExpression(RealExpressionId),
-    IntegerExpression(IntegerExpressionId),
-    StringExpression(StringExpressionId),
-    Module(ModuleId),
-    Nature(NatureId),
-    Parameter(ParameterId),
-    Variable(VariableId),
-    Net(NetId),
-    Branch(BranchId),
-    Root,
-}
-
-impl From<RealExpressionId> for LintLocation {
-    fn from(id: RealExpressionId) -> Self {
-        Self::RealExpression(id)
-    }
-}
-
-impl From<IntegerExpressionId> for LintLocation {
-    fn from(id: IntegerExpressionId) -> Self {
-        Self::IntegerExpression(id)
-    }
-}
-
-impl From<StringExpressionId> for LintLocation {
-    fn from(id: StringExpressionId) -> Self {
-        Self::StringExpression(id)
-    }
-}
-
-impl From<ExpressionId> for LintLocation {
-    fn from(id: ExpressionId) -> Self {
-        match id {
-            ExpressionId::Real(expr) => Self::RealExpression(expr),
-            ExpressionId::String(expr) => Self::StringExpression(expr),
-            ExpressionId::Integer(expr) => Self::IntegerExpression(expr),
-        }
-    }
-}
-
-impl From<StatementId> for LintLocation {
-    fn from(id: StatementId) -> Self {
-        Self::Statement(id)
-    }
-}
-
-impl From<ModuleId> for LintLocation {
-    fn from(id: ModuleId) -> Self {
-        Self::Module(id)
-    }
-}
-
-impl From<NatureId> for LintLocation {
-    fn from(id: NatureId) -> Self {
-        Self::Nature(id)
-    }
-}
-
-impl From<ParameterId> for LintLocation {
-    fn from(id: ParameterId) -> Self {
-        Self::Parameter(id)
-    }
-}
-
-impl From<BranchId> for LintLocation {
-    fn from(id: BranchId) -> Self {
-        Self::Branch(id)
-    }
-}
-
-impl From<NetId> for LintLocation {
-    fn from(id: NetId) -> Self {
-        Self::Net(id)
-    }
-}
-
-impl From<VariableId> for LintLocation {
-    fn from(id: VariableId) -> Self {
-        Self::Variable(id)
-    }
-}
-
 /// The data associated with a lint
 /// Please dont create and register this directly if you are writing a plugin
 /// use [`declare_plugin_lint!`](crate::declare_plugin_lint) instead
@@ -317,7 +233,7 @@ pub struct LintData {
 /// Responsible for managing all lints generated in the current thread
 pub struct Linter {
     early_lints: Vec<Box<dyn LintDiagnostic>>,
-    late_lints: Vec<(Box<dyn LintDiagnostic>, LintLocation)>,
+    late_lints: Vec<(Box<dyn LintDiagnostic>, SyntaxCtx)>,
     overwrites: IndexVec<Lint, Option<LintLevel>>,
 }
 
@@ -407,7 +323,7 @@ impl Linter {
     }
 
     #[inline]
-    pub fn dispatch_late(diagnostic: Box<dyn LintDiagnostic>, location: LintLocation) {
+    pub fn dispatch_late(diagnostic: Box<dyn LintDiagnostic>, location: SyntaxCtx) {
         with_linter_mut(|linter| {
             linter.late_lints.push((diagnostic, location));
         })

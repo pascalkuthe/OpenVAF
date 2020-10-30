@@ -315,8 +315,7 @@ impl<'lt> Resolver<'lt> {
     /// This functions first tries to find `ident in the current scope, then in the previous scope and so on
     /// If it can't find ident in the global (first) Scope it returns an NotFound Error
     pub fn resolve(&self, ident: &Ident) -> Result<SymbolReference> {
-        let mut depth = 0;
-        for scope in self.scope_stack.iter().rev() {
+        for (depth, scope) in self.scope_stack.iter().rev().enumerate() {
             if let Some(&res) = scope.get(&ident.name) {
                 if self.inside_function
                     && depth > 0
@@ -326,8 +325,8 @@ impl<'lt> Resolver<'lt> {
                 }
                 return Ok(res.into());
             }
-            depth += 1;
         }
+
         if let Some(&access) = self.nature_access_symbol_table.get(ident) {
             Ok(SymbolReference::NatureAccess(access))
         } else {

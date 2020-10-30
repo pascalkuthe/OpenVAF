@@ -9,10 +9,11 @@
  */
 
 use core::fmt::Formatter;
-use openvaf_diagnostics::{AnnotationType, DiagnosticSlice, LibraryDiagnostic, Text, Unsupported};
-use openvaf_ir::Node;
-use openvaf_mir::ParameterType;
-use openvaf_mir::{Parameter, Variable, VariableType};
+use openvaf_diagnostics::{
+    AnnotationType, DiagnosticSlice, FooterItem, LibraryDiagnostic, ListFormatter, Text,
+    Unsupported,
+};
+use openvaf_middle::Type;
 use openvaf_session::sourcemap::Span;
 use openvaf_session::symbols::{Ident, Symbol};
 use std::fmt::Display;
@@ -52,39 +53,70 @@ impl Display for ReferenceKind {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct TyPrinter(pub Type);
+
+impl From<Type> for TyPrinter {
+    fn from(x: Type) -> Self {
+        Self(x)
+    }
+}
+
+impl Display for TyPrinter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.with_info(|x| Display::fmt(x, f))
+    }
+}
+
 #[derive(Error, Clone, Debug)]
 pub enum Error {
-    #[error("Expected {expected_type} valued expression")]
-    TypeMissmatch { span: Span, expected_type: MockType },
+    #[error("Expected '{expected_type}' valued expression buf found '{found}'")]
+    TypeMissmatch {
+        span: Span,
+        expected_type: TyPrinter,
+        found: TyPrinter,
+    },
 
-    #[error("Expected {expected_type} value but found {found_type} {ref_kind} {name}")]
+    #[error(
+        "The OpenVAF builtin attribute '{attr}' expects a list of lint names as string literals"
+    )]
+    ExpectedLintName { attr: Symbol, span: Span },
+
+    #[error("Expected numeric expression buf found '{found}'")]
+    ExpectedNumeric { span: Span, found: TyPrinter },
+
+    #[error("Expected {expected_type} {ref_kind} but found {found_type} {ref_kind} {name}")]
     ReferenceTypeMissmatch {
-        expected_type: MockType,
-        found_type: MockType,
+        expected_type: TyPrinter,
+        found_type: TyPrinter,
         name: Ident,
         ref_span: Span,
         ref_kind: ReferenceKind,
         decl_span: Span,
     },
 
-    #[error("Strings cannot be compared to numbers")]
-    CannotCompareStringToNumber(Span),
-
-    #[error("Conditional expressions must evaluate to a String or a Number on both sides")]
-    CondtionTypeMissmatch {
-        string: Span,
-        number: Span,
+    #[error("Expected '{expected_type}' value but found '{found_type}'")]
+    DstTypeMissmatch {
+        expected_type: TyPrinter,
+        found_type: TyPrinter,
+        name: Ident,
+        decl_span: Span,
         span: Span,
     },
 
-    // #[error("'output'/'inout' arguments can only accept variables!")]
-    // ImplicitSolverDeltaIsNotAValidString(Span),
-    #[error("'output'/'inout' arguments can only accept variables")]
+    #[error("Types {types} are not compatible")]
+    MultiTypeMissmatch {
+        span: Span,
+        types: ListFormatter<Vec<TyPrinter>>,
+        type_spans: Vec<Span>,
+    },
+
+    #[error("'output'/'inout' arguments can only accept variable reference")]
     ExpectedVariableForFunctionOutput(Span),
 
     #[error("Function argument count mismatch: Expected {expected} found {found}")]
     WrongFunctionArgCount {
-        expected: u8,
+        expected: usize,
         found: usize,
         span: Span,
     },
@@ -104,42 +136,6 @@ pub enum Error {
         recursion_span: Span,
         recursion_traceback: Vec<(Symbol, Span)>,
     },
-}
-
-impl Error {
-    pub fn expected_parameter_type(expected: MockType, param: &Node<Parameter>, at: Span) -> Self {
-        let found_type = match param.contents.parameter_type {
-            ParameterType::Integer { .. } => MockType::Integer,
-            ParameterType::Real { .. } => MockType::Real,
-            ParameterType::String { .. } => MockType::String,
-        };
-
-        Self::ReferenceTypeMissmatch {
-            expected_type: expected,
-            found_type,
-            name: param.contents.ident,
-            ref_span: at,
-            ref_kind: ReferenceKind::Parameter,
-            decl_span: param.span,
-        }
-    }
-
-    pub fn expected_variable_type(expected: MockType, var: &Node<Variable>, at: Span) -> Self {
-        let found_type = match var.contents.variable_type {
-            VariableType::Integer { .. } => MockType::Integer,
-            VariableType::Real { .. } => MockType::Real,
-            VariableType::String { .. } => MockType::String,
-        };
-
-        Self::ReferenceTypeMissmatch {
-            expected_type: expected,
-            found_type,
-            name: var.contents.ident,
-            ref_span: at,
-            ref_kind: ReferenceKind::Variable,
-            decl_span: var.span,
-        }
-    }
 }
 
 struct FunctionContext<'lt>(Option<&'lt (Symbol, Span)>);
@@ -175,6 +171,7 @@ impl LibraryDiagnostic for Error {
             Self::TypeMissmatch {
                 span,
                 expected_type,
+                ..
             } => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
@@ -212,36 +209,32 @@ impl LibraryDiagnostic for Error {
                 },
             ],
 
-            Self::CannotCompareStringToNumber(span) => vec![DiagnosticSlice {
-                slice_span: span.data(),
-                messages: vec![(
-                    AnnotationType::Error,
-                    Text::const_str("Illegal comparison"),
-                    span.data(),
-                )],
-                fold: false,
-            }],
-
-            Self::CondtionTypeMissmatch {
-                string,
-                number,
-                span,
-            } => vec![DiagnosticSlice {
-                slice_span: span.data(),
-                messages: vec![
-                    (
+            Self::DstTypeMissmatch {
+                expected_type,
+                name,
+                decl_span,
+                span: assign_span,
+                ..
+            } => vec![
+                DiagnosticSlice {
+                    slice_span: assign_span.data(),
+                    messages: vec![(
                         AnnotationType::Error,
-                        Text::const_str("This evalulates to a string"),
-                        string.data(),
-                    ),
-                    (
-                        AnnotationType::Error,
-                        Text::const_str("This evalulates to a number"),
-                        number.data(),
-                    ),
-                ],
-                fold: false,
-            }],
+                        Text::owned(format!("Expected {}", expected_type)),
+                        assign_span.data(),
+                    )],
+                    fold: false,
+                },
+                DiagnosticSlice {
+                    slice_span: decl_span.data(),
+                    messages: vec![(
+                        AnnotationType::Info,
+                        Text::owned(format!("{} was declared here", name)),
+                        name.span.data(),
+                    )],
+                    fold: false,
+                },
+            ],
 
             Self::ExpectedVariableForFunctionOutput(span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
@@ -314,6 +307,66 @@ impl LibraryDiagnostic for Error {
                 res
             }
             Self::DerivativeError(err) => err.slices(),
+            Self::MultiTypeMissmatch {
+                span,
+                types,
+                type_spans,
+            } => {
+                let mut messages = Vec::with_capacity(types.1.len() + 1);
+                messages[0] = (
+                    AnnotationType::Error,
+                    Text::const_str("Types mismatched"),
+                    span.data(),
+                );
+
+                for (ty, span) in types.0.iter().zip(type_spans) {
+                    messages.push((
+                        AnnotationType::Info,
+                        Text::owned(format!("This has type '{}'", ty)),
+                        span.data(),
+                    ))
+                }
+
+                vec![DiagnosticSlice {
+                    slice_span: span.data(),
+                    messages,
+                    fold: true,
+                }]
+            }
+            Self::ExpectedNumeric { span, .. } => vec![DiagnosticSlice {
+                slice_span: span.data(),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::const_str("Expected numeric value "),
+                    span.data(),
+                )],
+                fold: false,
+            }],
+            Self::ExpectedLintName { span, .. } => vec![DiagnosticSlice {
+                slice_span: span.data(),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::const_str("Expected a string literal"),
+                    span.data(),
+                )],
+                fold: false,
+            }],
+        }
+    }
+
+    #[inline]
+    fn footer(&self) -> Vec<FooterItem> {
+        if let Self::ExpectedLintName { attr, .. } = self {
+            vec![FooterItem {
+                id: None,
+                label: Text::owned(format!(
+                    "Valid examples are {0}=\"lint_a\", {0}='{{\"lint_a\",\"lint_b\",\"lint_c\"}}",
+                    attr
+                )),
+                annotation_type: AnnotationType::Help,
+            }]
+        } else {
+            Vec::new()
         }
     }
 }

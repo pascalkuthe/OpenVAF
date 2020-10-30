@@ -1,0 +1,23 @@
+[package]
+name = "openvaf-codegen-llvm"
+version = "0.7.0"
+authors = ["DSOM <dspom@protonmail.com>"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/verilogarc"
+description = "A rust proc macro based code generation backend for OpenVAF"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+
+openvaf-ir = {version = "0.7.0", path = "../ir"}
+openvaf-middle = {version= "0.7.0", path = "../middle"}
+openvaf-session = {version = "0.7.0", path = "../session"}
+openvaf-data-structures = {version = "0.7.0", path = "../data_structures"}
+
+enum-map = "0.6"
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm10-0"] }
+tracing = "0.1"

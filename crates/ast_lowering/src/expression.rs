@@ -19,10 +19,11 @@ use openvaf_ir::ids::ExpressionId;
 use openvaf_ir::NoiseSource;
 use openvaf_ir::Unknown;
 use openvaf_ir::{Spanned, SystemFunctionCall};
-use openvaf_session::symbols::keywords;
+use openvaf_session::symbols::{keywords, Symbol};
+use tracing::trace_span;
 
-pub trait ExpressionFolder<'lt> {
-    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<'lt>) -> Option<ExpressionId>;
+pub trait ExpressionFolder<F: Fn(Symbol) -> AllowedReferences> {
+    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<F>) -> Option<ExpressionId>;
 
     fn allowed_references(&self) -> AllowedReferences;
 }
@@ -36,9 +37,11 @@ pub enum AllowedReferences {
 
 /// Folds real constants. These may not even contain references to parameters
 pub struct ConstantExpressionFolder(pub AllowedReferences);
-impl<'lt> ExpressionFolder<'lt> for ConstantExpressionFolder {
+impl<F: Fn(Symbol) -> AllowedReferences> ExpressionFolder<F> for ConstantExpressionFolder {
     #[inline]
-    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<'lt>) -> Option<ExpressionId> {
+    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<F>) -> Option<ExpressionId> {
+        let span = trace_span!("expression", id = expression_id.index());
+        let _enter = span.enter();
         base.fold_expression(expression_id, self)
     }
 
@@ -47,13 +50,16 @@ impl<'lt> ExpressionFolder<'lt> for ConstantExpressionFolder {
     }
 }
 
-impl<'lt> Fold<'lt> {
+impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
     #[inline]
     fn fold_expression(
         &mut self,
         expression_id: ExpressionId,
-        expr_folder: &mut impl ExpressionFolder<'lt>,
+        expr_folder: &mut impl ExpressionFolder<F>,
     ) -> Option<ExpressionId> {
+        let tspan = trace_span!("expression", id = expression_id.index());
+        let _enter = tspan.enter();
+
         let expression = &self.ast[expression_id];
         let res = match expression.contents {
             ast::Expression::BinaryOperator(lhs, op, rhs) => {
@@ -73,24 +79,10 @@ impl<'lt> Fold<'lt> {
                 })
             }
 
-            ast::Expression::Primary(ast::Primary::Integer(val)) => {
+            ast::Expression::Primary(ast::Primary::Constant(ref val)) => {
                 self.hir.expressions.push(Spanned {
+                    contents: Expression::Primary(Primary::Constant(val.clone())),
                     span: expression.span,
-                    contents: Expression::Primary(Primary::Integer(val)),
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::Real(val)) => {
-                self.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::Primary(Primary::Real(val)),
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::String(val)) => {
-                self.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::Primary(Primary::String(val)),
                 })
             }
 
@@ -98,9 +90,7 @@ impl<'lt> Fold<'lt> {
                 let arg1 = expr_folder.fold(arg1, &mut *self);
                 let arg2 = expr_folder.fold(arg2, &mut *self);
                 self.hir.expressions.push(Spanned {
-                    contents: Expression::Primary(Primary::BuiltInFunctionCall2p(
-                        call, arg1?, arg2?,
-                    )),
+                    contents: Expression::BuiltInFunctionCall2p(call, arg1?, arg2?),
                     span: expression.span,
                 })
             }
@@ -108,7 +98,7 @@ impl<'lt> Fold<'lt> {
             ast::Expression::Primary(ast::Primary::SingleArgMath(call, arg)) => {
                 let arg = expr_folder.fold(arg, &mut *self)?;
                 self.hir.expressions.push(Spanned {
-                    contents: Expression::Primary(Primary::BuiltInFunctionCall1p(call, arg)),
+                    contents: Expression::BuiltInFunctionCall1p(call, arg),
                     span: expression.span,
                 })
             }
@@ -119,7 +109,7 @@ impl<'lt> Fold<'lt> {
                 let else_val = expr_folder.fold(else_val, &mut *self);
                 self.hir.expressions.push(Spanned {
                     span: expression.span,
-                    contents: Expression::Condtion(condition?, if_val?, else_val?),
+                    contents: Expression::Condition(condition?, if_val?, else_val?),
                 })
             }
 
@@ -175,6 +165,16 @@ impl<'lt> Fold<'lt> {
                 )?
             }
 
+            ast::Expression::Array(ref arr) => {
+                let arr = arr
+                    .iter()
+                    .filter_map(|expr| expr_folder.fold(*expr, self))
+                    .collect();
+                self.hir
+                    .expressions
+                    .push(Spanned::new(Expression::Array(arr), expression.span))
+            }
+
             // These are "real" constant. Standard allows this but we just cant do this here
             ast::Expression::Primary(ast::Primary::FunctionCall(_, _))
             | ast::Expression::Primary(ast::Primary::SystemFunctionCall(_)) => {
@@ -196,10 +196,8 @@ impl<'lt> Fold<'lt> {
 
                 return None;
             }
-            ast::Expression::Error => {
-                //TODO silently ignore this and just warn
-                unreachable!("encountered error node in hir lowerinfg")
-            }
+
+            ast::Expression::Error => unreachable!("encountered error node in hir lowerinfg"),
         };
         Some(res)
     }
@@ -210,12 +208,8 @@ pub struct StatementExpressionFolder<'lt> {
     pub(super) branch_resolver: &'lt mut BranchResolver,
 }
 
-impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
-    fn fold(
-        &mut self,
-        expression_id: ExpressionId,
-        base: &mut Fold<'fold>,
-    ) -> Option<ExpressionId> {
+impl<'a, F: Fn(Symbol) -> AllowedReferences> ExpressionFolder<F> for StatementExpressionFolder<'a> {
+    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<F>) -> Option<ExpressionId> {
         let expression = &base.ast[expression_id];
         let res = match expression.contents {
             ast::Expression::Primary(ast::Primary::PortFlowProbe(access, ref port)) => {
@@ -231,7 +225,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
                 let port = resolve_hierarchical!(base; port as Port(id) => id);
                 let access = NatureAccess::resolve_from_ident(access, base)?;
                 let port = port?;
-                let discipline = base.hir[base.hir[port].net].contents.discipline;
+                let discipline = base.hir[base.hir[port].net].discipline;
                 BranchResolver::check_port_discipline_access(base, access, discipline);
                 base.hir.expressions.push(Spanned {
                     span: expression.span,
@@ -250,7 +244,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
                 let expr = self.fold(expr, base)?;
                 base.hir.expressions.push(Spanned {
                     span: expression.span,
-                    contents: Expression::Primary(Primary::Derivative(expr, Unknown::Time)),
+                    contents: Expression::TimeDerivative(expr),
                 })
             }
 
@@ -275,7 +269,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
 
                 base.hir.expressions.push(Spanned {
                     span: expression.span,
-                    contents: Expression::Primary(Primary::Noise(source, src)),
+                    contents: Expression::Noise(source, src),
                 })
             }
 
@@ -303,7 +297,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
                             *access_ident,
                             &args,
                             |_, base, net, _span| {
-                                let discipline = base.hir[net].contents.discipline;
+                                let discipline = base.hir[net].discipline;
                                 let access = BranchResolver::resolve_discipline_access(
                                     base, access?, discipline,
                                 )?;
@@ -319,7 +313,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
                             },
                             |resolver, base, hi, lo, span| {
                                 BranchResolver::check_branch(hi, lo, span, base);
-                                let discipline = base.hir[hi].contents.discipline;
+                                let discipline = base.hir[hi].discipline;
                                 let access = BranchResolver::resolve_discipline_access(
                                     base, access?, discipline,
                                 )?;
@@ -334,8 +328,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
                                 }
                             },
                             |_, base, branch, span| {
-                                let discipline =
-                                    base.hir[base.hir[branch].contents.hi].contents.discipline;
+                                let discipline = base.hir[base.hir[branch].hi].discipline;
                                 let access = BranchResolver::resolve_discipline_access(
                                     base, access?, discipline,
                                 )?;
@@ -361,7 +354,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
 
                 base.hir.expressions.push(Spanned {
                     span: expression.span,
-                    contents: Expression::Primary(Primary::Derivative(expr_to_derive?, unknown)),
+                    contents: Expression::PartialDerivative(expr_to_derive?, unknown),
                 })
             }
 
@@ -380,7 +373,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
 
                                 return Some(base.hir.expressions.push(Spanned{
                                     span:expression.span,
-                                    contents:Expression::Primary(Primary::FunctionCall(fid,parameters))
+                                    contents:Expression::FunctionCall(fid,parameters)
                                 }))
                             },
 
@@ -441,7 +434,7 @@ impl<'lt, 'fold> ExpressionFolder<'fold> for StatementExpressionFolder<'lt> {
 
                 base.hir.expressions.push(Spanned {
                     span: expression.span,
-                    contents: Expression::Primary(Primary::SystemFunctionCall(new_call)),
+                    contents: Expression::SystemFunctionCall(new_call),
                 })
             }
 

@@ -20,13 +20,15 @@ Some highlights of OpenVAF include:
 
 * High quality diagnostic messages
 * A lining framework (similar to rustc) built on this framework
-* A Data flow analysis framework (currently a reaching definitions algorithm is implemented)
+* A Data flow analysis framework
 * Algorithms to construct control dependence graph (combined with reaching definitions this allows construction of a program dependence graph)
 * A state-of-the art backward slicing algorithm using the program dependence graph
 * Simple constant folding 
 * A backend to automatically generate rust code in procedural macros or for build script
-* High performance (even for complex model such as HICUM generating multiple large program slices takes ~100ms including rust code generation and io on an i7 6700k)
+* High performance
 * Automatic derivative calculation (currently requires that the variable and the unknown it is derived by is known. A forward autodiff algorithm may be added in the future)
+* Fast binary generation using LLVM
+* Modular setup to easily allow construction of multiiple compilers
 
 # Acknowledgement
 

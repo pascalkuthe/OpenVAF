@@ -1,7 +1,17 @@
+/*
+ * ******************************************************************************************
+ * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
+ * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ * *****************************************************************************************
+ */
+
 use crate::error::Error;
 use crate::error::Error::AlreadyDeclaredInThisScope;
 use openvaf_ast::symbol_table::{SymbolDeclaration, SymbolTable};
-use openvaf_ast::{Ast, Net, NetType, Variable, VariableType};
+use openvaf_ast::{Ast, Net, NetType, Type, Variable};
 use openvaf_diagnostics::MultiDiagnostic;
 use openvaf_ir::ids::{NetId, VariableId};
 use openvaf_ir::{Attributes, Node};
@@ -24,7 +34,7 @@ impl SymbolTableBuilder {
     pub fn enter_function_scope(&mut self, ident: Ident, ast: &mut Ast) -> VariableId {
         let return_var = Variable {
             ident,
-            var_type: VariableType::Real,
+            ty: Type::REAL,
             default: None,
         };
         let return_var = ast.variables.push(Node {

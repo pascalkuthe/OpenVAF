@@ -15,10 +15,11 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-log="0.4"
 thiserror = "1.0"
 logos = "0.11"
 more-asserts = "0.2"
+
+tracing = "0.1"
 
 openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
 openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
@@ -26,5 +27,5 @@ openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
 openvaf-parser = {version = "0.7.0", path = "../parser"}
 openvaf-session = {version = "0.7.0", path = "../session"}
 
-[dev-dependencies]
-openvaf-test = {version = "0.7.0", path = "../test"}
+#[dev-dependencies]
+#openvaf-test = {version = "0.7.0", path = "../test"}

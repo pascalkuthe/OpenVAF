@@ -51,17 +51,20 @@ use statements::Statements;
 
 use crate::error::Error;
 use crate::error::Error::ExpectedIdentifier;
-use crate::expression::{AllowedReferences, ConstantExpressionFolder};
+
+pub use crate::expression::AllowedReferences;
+use crate::expression::ConstantExpressionFolder;
 use crate::name_resolution::Resolver;
-use bitflags::_core::mem::take;
 use openvaf_ast as ast;
 use openvaf_ast::{Ast, HierarchicalId};
 use openvaf_data_structures::BitSet;
 use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
-use openvaf_hir::Hir;
-use openvaf_ir::ids::{AttributeId, ExpressionId};
+use openvaf_hir::{Hir, SyntaxContextData};
+use openvaf_ir::ids::{AttributeId, SyntaxCtx};
 use openvaf_ir::{Attributes, Spanned};
-use openvaf_session::symbols::Ident;
+use openvaf_session::sourcemap::Span;
+use openvaf_session::symbols::{Ident, Symbol};
+use tracing::trace_span;
 
 #[macro_use]
 pub mod name_resolution;
@@ -82,26 +85,46 @@ pub mod lints;
 
 /// A struct that contains data and functionality all ast to hir folds share
 /// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` openvaf_macros and [`BranchResolver`](crate::branches::resolver::BranchResolver)
-pub struct Fold<'lt> {
+pub struct Fold<'lt, F: Fn(Symbol) -> AllowedReferences> {
     pub resolver: Resolver<'lt>,
     pub errors: MultiDiagnostic<Error>,
     pub hir: Hir,
     pub ast: &'lt Ast,
+    pub sctx: SyntaxCtx,
     folded_attribute: BitSet<AttributeId>,
+    allowed_attribute_references: F,
 }
 
-impl<'lt> Fold<'lt> {
-    pub fn new(ast: &'lt mut Ast) -> Self {
+impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
+    pub fn new(ast: &'lt mut Ast, allowed_attribute_references: F) -> Self {
         let folded_attribute = BitSet::new_empty(ast.attributes.len_idx());
         let mut res = Self {
             hir: Hir::init(ast),
             ast: &*ast,
             errors: MultiDiagnostic(Vec::with_capacity(32)),
             resolver: Resolver::new(&*ast),
+            sctx: SyntaxCtx::ROOT,
             folded_attribute,
+            allowed_attribute_references,
         };
         res.resolver.enter_scope(&ast.top_symbols);
         res
+    }
+
+    pub fn enter_sctxt(&mut self, span: Span, attributes: Attributes) {
+        self.fold_attributes(attributes);
+
+        self.sctx = self.hir.syntax_ctx.push(SyntaxContextData {
+            span,
+            attributes,
+            parent: Some(self.sctx),
+        })
+    }
+
+    pub fn exit_sctxt(&mut self) -> SyntaxCtx {
+        let old_ctx = self.sctx;
+        self.sctx = self.hir[old_ctx].parent.unwrap();
+        old_ctx
     }
 
     pub fn error(&mut self, error: Error) {
@@ -137,28 +160,26 @@ impl<'lt> Fold<'lt> {
             }
         }
     }
-}
 
-impl<'lt> Fold<'lt> {
     pub fn fold_attributes(&mut self, attributes: Attributes) {
         for attribute in attributes {
             if self.folded_attribute.put(attribute) {
                 //attribute has already been folded
                 continue;
             }
+            let span = trace_span!(
+                "attribute",
+                id = attribute.index(),
+                name = display(self.hir[attribute].ident)
+            );
+            let _enter = span.enter();
 
-            let mut values = take(&mut self.hir[attribute].value);
-            for value in &mut values {
-                if let Some(expr) =
-                    ConstantExpressionFolder(AllowedReferences::All).fold(*value, self)
-                {
-                    *value = expr
-                } else {
-                    *value = ExpressionId::MAX_INDEX.into();
-                }
-            }
-
-            self.hir[attribute].value = values
+            self.hir[attribute].value = self.hir[attribute].value.and_then(|value| {
+                ConstantExpressionFolder((self.allowed_attribute_references)(
+                    self.hir[attribute].ident.name,
+                ))
+                .fold(value, self)
+            })
         }
     }
 }
@@ -177,18 +198,34 @@ bitflags! {
 }
 
 /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
-pub fn lower_ast_userfacing(ast: Ast) -> UserResult<Hir> {
-    lower_ast_userfacing_with_printer(ast)
+pub fn lower_ast_userfacing<F: Fn(Symbol) -> AllowedReferences>(
+    ast: Ast,
+    allowed_attributes: F,
+) -> UserResult<Hir> {
+    lower_ast_userfacing_with_printer(ast, allowed_attributes)
 }
 
 /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
-pub fn lower_ast_userfacing_with_printer<P: DiagnosticSlicePrinter>(
+pub fn lower_ast_userfacing_with_printer<
+    P: DiagnosticSlicePrinter,
+    F: Fn(Symbol) -> AllowedReferences,
+>(
     ast: Ast,
+    allowed_attributes: F,
 ) -> UserResult<Hir, P> {
-    lower_ast(ast).map_err(openvaf_diagnostics::MultiDiagnostic::user_facing)
+    lower_ast(ast, allowed_attributes).map_err(openvaf_diagnostics::MultiDiagnostic::user_facing)
 }
 
 /// A Helper method to avoid code duplication until try blocks are stable
-pub fn lower_ast(mut ast: Ast) -> Result<Hir, MultiDiagnostic<Error>> {
-    Ok(Global::new(&mut ast).fold()?.fold()?.fold()?)
+pub fn lower_ast<F: Fn(Symbol) -> AllowedReferences>(
+    mut ast: Ast,
+    allowed_attributes: F,
+) -> Result<Hir, MultiDiagnostic<Error>> {
+    let span = trace_span!("ast_lowering");
+    let _enter = span.enter();
+
+    Global::new(&mut ast, allowed_attributes)
+        .fold()?
+        .fold()?
+        .fold()
 }

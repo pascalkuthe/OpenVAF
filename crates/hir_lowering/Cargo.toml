@@ -18,13 +18,12 @@ maintenance = { status = "actively-developed" }
 openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
 openvaf-session = {version = "0.7.0", path = "../session"}
 openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
-openvaf-constant-fold = {version = "0.7.0", path = "../constant_fold"}
 
 openvaf-hir = {version = "0.7.0", path = "../hir"}
-openvaf-mir = {version = "0.7.0", path = "../mir"}
+openvaf-middle = {version = "0.7.0", path = "../middle" }
 openvaf-ir = {version = "0.7.0", path = "../ir"}
 openvaf-constants = {version = "0.7.0", path = "../constants"}
 openvaf-derivatives = {version = "0.7.0", path = "../derivatives"}
 
-log = "0.4"
+tracing = "0.1"
 thiserror = "1.0"

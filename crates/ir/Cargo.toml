@@ -19,3 +19,10 @@ more-asserts = "0.2"
 openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
 
 openvaf-session = {version = "0.7.0", path = "../session"}
+osdi-types = {version = "0.1", git = "https://gitlab.com/DSPOM/osdi"}
+serde = {version = "1.0", features = ["derive"], optional = true}
+
+[features]
+
+default = []
+serde_dump  = ["serde", "osdi-types/serialize"]

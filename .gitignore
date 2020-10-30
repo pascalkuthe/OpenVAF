@@ -31,8 +31,6 @@ frontend/Cargo.lock
 # *.iml
 # *.ipr
 
-# CMake
-cmake-build-*/
 
 # Mongo Explorer plugin
 .idea/**/mongoSettings.xml
@@ -69,13 +67,7 @@ fabric.properties
 .idea/modules.xml
 .idea/vcs.xml
 Cargo.lock
-frontend/cfg_sliced.dot
-frontend/control_dependence.dot
-frontend/data_dependencies.dot
-frontend/ipdom.dot
-frontend/perf.data
-frontend/perf.data.old
-frontend/target/
-macros/Cargo.lock
-macros/target
-!/rust_codegen/
+
+**/target/
+**/*.yml
+!/crates/test/src/middle.rs

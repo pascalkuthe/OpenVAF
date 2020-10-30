@@ -12,27 +12,35 @@ readme="../README.md"
 
 maintenance = { status = "actively-developed" }
 
-
 [dependencies]
 
 openvaf-session = {version = "0.7.0", path = "../session"}
 openvaf-parser = {version = "0.7.0", path = "../parser"}
 openvaf-preprocessor = {version = "0.7.0", path = "../preprocessor"}
-
-
-fern = "0.6"
-log = "0.4"
+openvaf-ast = {version = "0.7.0", path = "../ast"}
+openvaf-ir = {version = "0.7.0", path = "../ir"}
+openvaf-hir-lowering = {version = "0.7.0", path = "../hir_lowering"}
+openvaf-middle = {version = "0.7.0", path = "../middle", features = ["serde_dump"]}
+openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
+openvaf-ast-lowering = {version = "0.7.0", path = "../ast_lowering"}
+openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
+openvaf-transformations = {version = "0.7.0", path = "../transformations"}
+openvaf-codegen-llvm = {version = "0.7.0", path = "../codegen_llvm"}
+tracing = {version = "0.1", features = ["max_level_trace"]}
+tracing-tree = "0.1"
+tracing-subscriber = "0.2"
 
 [dev-dependencies]
 
-openvaf-ast = {version = "0.7.0", path = "../ast"}
-openvaf-ir = {version = "0.7.0", path = "../ir"}
-openvaf-ast-lowering = {version = "0.7.0", path = "../ast_lowering"}
-openvaf-hir-lowering = {version = "0.7.0", path = "../hir_lowering"}
-openvaf-analysis = {version = "0.7.0", path = "../analysis"}
-openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
 openvaf-derivatives = {version = "0.7.0", path = "../derivatives"}
+serde_yaml = "0.8"
+serde_json = "1.0"
+paste = "1.0"
+rand = "0.7"
 
+[features]
+default = ["middle_dump"]
+middle_dump = ["openvaf-middle/serde_dump","openvaf-transformations/serde_dump"]
 
 
 

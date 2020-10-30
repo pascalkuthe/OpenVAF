@@ -11,6 +11,7 @@
 mod bit_set;
 pub mod sync;
 mod work_queue;
+pub use arrayvec;
 pub use bit_set::BitSet;
 pub use bit_set::BitSetOperations;
 pub use bit_set::HybridBitSet;

@@ -12,9 +12,9 @@ use std::vec::Vec;
 
 use openvaf_diagnostics::MultiDiagnostic;
 use openvaf_data_structures::HashMap;
-use openvaf_ir::{Attribute, Attributes, DisplayTaskKind, Node,Spanned};
+use openvaf_ir::{Attribute, Attributes, DisplayTaskKind, Node, Spanned, Type};
 use openvaf_ast as ast;
-use openvaf_ast::{Ast, BinaryOperator, Block, Branch, PortBranch, Expression, HierarchicalId, Primary, FunctionArg};
+use openvaf_ast::{Ast, BinaryOperator, Block, Branch, PortBranch, Expression, HierarchicalId, FunctionArg};
 use openvaf_ir::ids::{AttributeId, BranchId, PortBranchId, IdRange, StatementId, ExpressionId, PortId, ParameterId, VariableId};
 use openvaf_diagnostics::lints::Linter;
 use crate::{extract_double_arg, extract_single_arg, extract_single_or_double_arg, SymbolTableBuilder, Token};
@@ -69,7 +69,6 @@ Node<Rule>: ast::Node<Rule> =
 
 SCOPE: Ident = <IDENT> => {scopes.enter_scope(); <>};
 
-array_init: Vec<ExpressionId> = "'" "{" <List<EXPR>> "}";
 
 REAL_TYPE: ()= {<"real">,<"realtime">};
 INT_TYPE: ()= {<"integer">,<"time">};
@@ -140,15 +139,8 @@ FunctionArgs: Vec<ExpressionId> = "(" <List<EXPR>> ")";
 
 
 
-Attribute: Attribute = {
-    // Currently only attributes support arrays
-    // if we allow arrays everywhere this special casing here will go away
-    // This is also not really standard compliant so users should wrap this in a macro if they want to use this elsewhere
-    <ident: ATTR_IDENT> => Attribute{ident, value: vec![]},
-    <ident: ATTR_IDENT> "=" <value: EXPR> => Attribute{ident, value: vec![value]},
-    <ident: ATTR_IDENT> "=" <value: array_init> => Attribute{ident, value},
+Attribute: Attribute = <ident: ATTR_IDENT> <value: ("=" <EXPR>)?> => Attribute{ident, value};
 
-}
 
 ATTR_IDENT: Ident= {
     <@L> "units" => Ident::new(keywords::units,<>),
@@ -192,6 +184,17 @@ ATTR: Attributes =
 
 
 EXPR: ExpressionId ={
+    <l: @L> "'" "{" <arr: List<EXPR>> "}" <r: @R> => {
+        let expr = ast::Expression::Array(arr);
+        let span = l.extend(r);
+        let spanned = Spanned::new(expr,span);
+        ast.expressions.push(spanned)
+    },
+
+    <SelectExpr>
+}
+
+SelectExpr: ExpressionId = {
     <l: @L> <cond: LogicOrExpr> "?" <true_val: EXPR> ":" <false_val: EXPR> <r: @R> => {
         let expr = ast::Expression::Condition(cond, true_val, false_val);
         let span = l.extend(r);
@@ -287,6 +290,9 @@ NonBinaryExpression: ExpressionId = {
         ast.expressions.push(spanned)
     },
 
+    // Explicit positive can be ignored
+    "+" <NonBinaryExpression>,
+
     <MultiSp<Primary>> => {
         let expr = ast::Expression::Primary(<>.contents);
         let spanned = Spanned::new(expr,<>.span);
@@ -300,7 +306,6 @@ UnaryOp: ast::UnaryOperator = {
     "!" => ast::UnaryOperator::LogicNegate,
     "~" => ast::UnaryOperator::BitNegate,
     "-" => ast::UnaryOperator::ArithmeticNegate,
-    "+" => ast::UnaryOperator::ExplicitPositive,
 }
 
 
@@ -588,7 +593,7 @@ PARAM_DECL: () = {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
-        insert_params(ast, errors, scopes, res, ast::ParameterType::Real)
+        insert_params(ast, errors, scopes, res, ast::ParameterConstraints::Ordered, Type::REAL)
     },
 
 
@@ -596,33 +601,32 @@ PARAM_DECL: () = {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
-        insert_params(ast, errors, scopes, res, ast::ParameterType::Integer)
+        insert_params(ast, errors, scopes, res,ast::ParameterConstraints::Ordered, Type::INT)
     },
 
     <res: Node< ("parameter" "string" <ListAtLeastOne<StringParameter>> )>> <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
-        insert_params(ast, errors, scopes, res, ast::ParameterType::String)
+        insert_params(ast, errors, scopes, res, ast::ParameterConstraints::Unordered, Type::STRING)
     },
 }
 
 
 
 
-NumericalParameter: (Ident, ExpressionId, Vec<ast::NumericParameterConstraint>) = <(<IDENT> "=" <EXPR> <numeric_value_range*>)>;
-StringParameter: (Ident, ExpressionId, Vec<ast::StringParameterConstraint>) = <(<IDENT> "=" <EXPR> <string_value_range*>)>;
+NumericalParameter: (Ident, ExpressionId, Vec<ast::OrderedParameterConstraint>) = <(<IDENT> "=" <EXPR> <numeric_value_range*>)>;
+StringParameter: (Ident, ExpressionId, Vec<ast::UnorderedParameterConstraint>) = <(<IDENT> "=" <EXPR> <string_value_range*>)>;
 
-numeric_value_range: ast::NumericParameterConstraint = {
+numeric_value_range: ast::OrderedParameterConstraint = {
     "from" <numeric_param_range> => ast::ParameterConstraint::From(<>),
     "exclude" <numeric_param_range> => ast::ParameterConstraint::Exclude(<>.into()),
     "exclude" <EXPR> => ast::ParameterConstraint::Exclude(<>.into()),
 }
 
-string_value_range: ast::StringParameterConstraint = {
-    "from" <array_init> => ast::ParameterConstraint::From(<>),
-    "exclude" <array_init> => ast::ParameterConstraint::Exclude(<>),
-    "exclude" <EXPR> => ast::ParameterConstraint::Exclude(vec![<>]),
+string_value_range: ast::UnorderedParameterConstraint = {
+    "from" <EXPR> => ast::ParameterConstraint::From(<>),
+    "exclude" <EXPR> => ast::ParameterConstraint::Exclude(<>),
 }
 
 numeric_param_range: ast::ParameterRangeConstraint<ExpressionId> =
@@ -635,13 +639,13 @@ numeric_param_range: ast::ParameterRangeConstraint<ExpressionId> =
 #[inline]
 value_range_expr: ExpressionId = {
     <@L> "inf" => {
-        let expr = Expression::Primary(Primary::Real( f64::INFINITY ));
+        let expr = Expression::Primary( f64::INFINITY.into());
         let spanned = Spanned::new(expr,<>);
         ast.expressions.push(spanned)
     },
 
     <@L> "-inf" => {
-        let expr = Expression::Primary(Primary::Real( f64::NEG_INFINITY ));
+        let expr = Expression::Primary((-f64::INFINITY).into());
         let spanned = Spanned::new(expr,<>);
         ast.expressions.push(spanned)
     },
@@ -650,15 +654,15 @@ value_range_expr: ExpressionId = {
 };
 
 
-VAR_TYPE: ast::VariableType = {
-    REAL_TYPE => ast::VariableType::Real,
-    INT_TYPE => ast::VariableType::Integer,
-    "string" => ast::VariableType::String,
+TYPE: Type = {
+    REAL_TYPE => Type::REAL,
+    INT_TYPE => Type::INT,
+    "string" => Type::STRING,
 }
 
 #[inline]
 VAR_DECL: () =
-    <res: Node< (<VAR_TYPE> <ListAtLeastOne<var_declaration>>) >>  <r: @R> <err: !?> ";" => {
+    <res: Node< (<TYPE> <ListAtLeastOne<var_declaration>>) >>  <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
@@ -813,7 +817,7 @@ FUNC_DECL: () = <Node<raw_function>> => {
 func_scope: (Ident, VariableId) = <IDENT> => (<>,scopes.enter_function_scope(<>,ast));
 
 raw_function: ast::Function = {
-    "function" <return_type: VAR_TYPE?> <ident_and_var: func_scope> SkipExtraTokens ";"
+    "function" <return_type: TYPE?> <ident_and_var: func_scope> SkipExtraTokens ";"
         <declarations: function_item_decl*>
         <body: STMT>
     "endfunction" => {
@@ -824,7 +828,7 @@ raw_function: ast::Function = {
             .collect();
 
         if let Some(return_type) = return_type{
-            ast[return_variable].contents.var_type = return_type;
+            ast[return_variable].contents.ty = return_type;
         }
 
         ast::Function{
