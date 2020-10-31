@@ -12,7 +12,7 @@ pub use inkwell;
 use inkwell::basic_block::BasicBlock as LlvmBasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::Module;
+use inkwell::module::{Linkage, Module};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use openvaf_data_structures::index_vec::{index_vec, IndexSlice, IndexVec};
@@ -88,6 +88,7 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
             let location =
                 self.module
                     .add_global(data.get_type(), Some(AddressSpace::Const), &name);
+            location.set_linkage(Linkage::Private);
             location.set_initializer(&data);
             let ptr = location.as_pointer_value();
             let zero = self.context.i32_type().const_zero();
