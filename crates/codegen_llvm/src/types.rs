@@ -114,7 +114,7 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
                     } else {
                         self.array_ty(element, dimensions).as_basic_type_enum()
                     };
-                    element.ptr_type(AddressSpace::Generic)
+                    element.ptr_type(AddressSpace::Generic).as_basic_type_enum()
                 }
             }
         })
