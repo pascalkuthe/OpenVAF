@@ -312,9 +312,9 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>>
             .build_intrinsic_call(Intrinsic::StringCmp, &[lhs, rhs])
             .into_int_value();
         let predicate = if invert {
-            IntPredicate::EQ
-        } else {
             IntPredicate::NE
+        } else {
+            IntPredicate::EQ
         };
 
         self.ctx
