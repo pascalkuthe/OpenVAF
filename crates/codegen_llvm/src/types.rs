@@ -14,8 +14,8 @@ use inkwell::values::{ArrayValue, BasicValue, BasicValueEnum, FloatValue, IntVal
 use inkwell::AddressSpace;
 use openvaf_middle::osdi_types::ConstVal::{Array, Scalar};
 use openvaf_middle::osdi_types::SimpleConstVal::{Bool, Integer, Real, String};
-use openvaf_middle::SimpleConstVal;
 use openvaf_middle::{CallType, ConstVal, Local, SimpleType, Type};
+use openvaf_middle::{SimpleConstVal, TypeInfo};
 
 pub trait ArrayCreation<'ctx>: Copy {
     type Value: 'ctx;
@@ -80,20 +80,22 @@ pub fn array<'c, T: ArrayCreation<'c> + BasicType<'c>>(
 
 impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
     pub fn ty(&self, ty: Type) -> BasicTypeEnum<'c> {
-        ty.with_info(|info| {
-            let element = match info.element {
-                SimpleType::Integer => self.integer_ty().as_basic_type_enum(),
-                SimpleType::Real => self.real_ty().as_basic_type_enum(),
-                SimpleType::String => self.string_ty().as_basic_type_enum(),
-                SimpleType::Bool => self.bool_ty().as_basic_type_enum(),
-            };
-            if info.dimensions.is_empty() {
-                element
-            } else {
-                self.array_ty(element, &info.dimensions)
-                    .as_basic_type_enum()
-            }
-        })
+        ty.with_info(|info| self.ty_from_info(info))
+    }
+
+    pub fn ty_from_info(&self, info: &TypeInfo) -> BasicTypeEnum<'c> {
+        let element = match info.element {
+            SimpleType::Integer => self.integer_ty().as_basic_type_enum(),
+            SimpleType::Real => self.real_ty().as_basic_type_enum(),
+            SimpleType::String => self.string_ty().as_basic_type_enum(),
+            SimpleType::Bool => self.bool_ty().as_basic_type_enum(),
+        };
+        if info.dimensions.is_empty() {
+            element
+        } else {
+            self.array_ty(element, &info.dimensions)
+                .as_basic_type_enum()
+        }
     }
 
     pub fn integer_ty(&self) -> IntType<'c> {
