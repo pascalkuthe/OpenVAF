@@ -76,23 +76,10 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
             val
         } else {
             let val = literal.unescaped_contents();
-            let name = format!("StringLiteral{} = \"{}\"", literal, val);
-            let val = CString::new(val).unwrap();
-            let char_ty = self.context.i8_type();
-            let data: Vec<_> = val
-                .as_bytes_with_nul()
-                .iter()
-                .map(|&b| char_ty.const_int(b as u64, false))
-                .collect();
-            let data = char_ty.const_array(&data);
-            let location =
-                self.module
-                    .add_global(data.get_type(), Some(AddressSpace::Const), &name);
-            location.set_linkage(Linkage::Private);
-            location.set_initializer(&data);
+            let name = format!("StringLit{}", literal);
+            let location = unsafe { self.builder.build_global_string(&val, &name) };
             let ptr = location.as_pointer_value();
             let zero = self.context.i32_type().const_zero();
-            // Not entirely sure why we need two zeros but llvm does that same in the builtin createglobalstringptr function
             let char_ptr = unsafe { ptr.const_gep(&[zero, zero]) };
             self.string_literals[literal] = Some(char_ptr);
             char_ptr
@@ -335,8 +322,8 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>>
             .build_int_compare(
                 predicate,
                 res,
-                res.get_type().const_int(0, false),
-                "string_neq",
+                res.get_type().const_zero(),
+                "string_comparison",
             )
             .as_basic_value_enum()
     }
