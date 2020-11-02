@@ -84,18 +84,40 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
     }
 
     pub fn ty_from_info(&self, info: &TypeInfo) -> BasicTypeEnum<'c> {
-        let element = match info.element {
-            SimpleType::Integer => self.integer_ty().as_basic_type_enum(),
-            SimpleType::Real => self.real_ty().as_basic_type_enum(),
-            SimpleType::String => self.string_ty().as_basic_type_enum(),
-            SimpleType::Bool => self.bool_ty().as_basic_type_enum(),
-        };
+        let element = self.simple_ty(info.element);
         if info.dimensions.is_empty() {
             element
         } else {
             self.array_ty(element, &info.dimensions)
                 .as_basic_type_enum()
         }
+    }
+
+    pub fn simple_ty(&self, simple_ty: SimpleType) -> BasicTypeEnum<'c> {
+        match simple_ty {
+            SimpleType::Integer => self.integer_ty().as_basic_type_enum(),
+            SimpleType::Real => self.real_ty().as_basic_type_enum(),
+            SimpleType::String => self.string_ty().as_basic_type_enum(),
+            SimpleType::Bool => self.bool_ty().as_basic_type_enum(),
+        }
+    }
+
+    /// Converts an openvaf type to an llvm type that can be passed as arugments/return values of cabi functions
+    pub fn cabi_parameter_ty(&self, ty: Type) -> BasicTypeEnum<'c> {
+        ty.with_info(|info| {
+            let element = self.simple_ty(info.element);
+            match info.dimensions.as_slice() {
+                [] => element,
+                [dimensions @ .., _] => {
+                    let element = if dimensions.is_empty() {
+                        element
+                    } else {
+                        self.array_ty(element, dimensions).as_basic_type_enum()
+                    };
+                    element.ptr_type(AddressSpace::Generic)
+                }
+            }
+        })
     }
 
     pub fn integer_ty(&self) -> IntType<'c> {
