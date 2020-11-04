@@ -261,7 +261,7 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>>
         rhs: BasicValueEnum<'c>,
     ) -> BasicValueEnum<'c> {
         let pred = match op {
-            ComparisonOp::LessThen => FloatPredicate::OLE,
+            ComparisonOp::LessThen => FloatPredicate::OLT,
             ComparisonOp::LessEqual => FloatPredicate::OLE,
             ComparisonOp::GreaterThen => FloatPredicate::OGT,
             ComparisonOp::GreaterEqual => FloatPredicate::OGE,

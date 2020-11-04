@@ -1102,8 +1102,8 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
             }
         };
 
-        let sum2 = if let Some(res) = self.chain_rule(
-            rhs,
+        let sum2 = if let Some(res) = self.chain_rule_with_known_derivative(
+            rhs_derivative,
             |fold| {
                 let bottom = fold.gen_binop(BinOp::Multiply, rhs.clone(), rhs.clone(), span);
                 RValue::BinaryOperation(Spanned::new(BinOp::Divide, span), lhs.clone(), bottom)
@@ -1170,6 +1170,16 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
         cache_slot: OuterDerivativeCacheSlot,
     ) -> Option<RValue<C>> {
         let derivative = self.derivative(arg);
+        self.chain_rule_with_known_derivative(derivative, generate_outer, span, cache_slot)
+    }
+
+    fn chain_rule_with_known_derivative(
+        &mut self,
+        derivative: CallTypeDerivative<C>,
+        generate_outer: impl FnOnce(&mut Self) -> RValue<C>,
+        span: Span,
+        cache_slot: OuterDerivativeCacheSlot,
+    ) -> Option<RValue<C>> {
         match derivative {
             Derivative::Zero => None,
             Derivative::One => Some(generate_outer(self)),
@@ -1183,7 +1193,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
                     outer
                 };
 
-                let inner = Operand::new(inner, arg.span);
+                let inner = Operand::new(inner, span);
                 Some(RValue::BinaryOperation(
                     Spanned::new(BinOp::Multiply, span),
                     inner,

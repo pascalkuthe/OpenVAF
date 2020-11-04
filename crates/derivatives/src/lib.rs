@@ -13,9 +13,11 @@ use enum_map::EnumMap;
 use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_diagnostics::MultiDiagnostic;
 use openvaf_ir::ids::StatementId;
+use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, PhiData};
 use openvaf_middle::{
-    COperand, CallType, CallTypeDerivative, Derivative, Mir, Statement, StmntKind,
+    COperand, CallType, CallTypeDerivative, Derivative, Mir, Operand, OperandData, RValue,
+    Statement, StmntKind,
 };
 use std::mem::replace;
 
@@ -55,22 +57,37 @@ impl<'lt, C: CallType, MC: CallType> AutoDiff<'lt, C, MC> {
 
             for (stmnt, info) in old_stmts.into_iter().rev() {
                 match stmnt {
-                    StmntKind::Assignment(lhs, rhs) => {
-                        for (unkown, local) in self
-                            .cfg
-                            .derivatives
-                            .get(&lhs)
-                            .cloned()
-                            .into_iter()
-                            .flatten()
-                        {
-                            let rhs = self.rvalue_derivative(lhs, &rhs, unkown, info, &mut cache);
-                            self.cfg[id]
-                                .statements
-                                .push((StmntKind::Assignment(local, rhs), info));
+                    StmntKind::Assignment(mut lhs, rhs) => {
+                        let derivatives = self.cfg.derivatives.get(&lhs).cloned();
+
+                        if let Some(derivatives) = derivatives {
+                            if !derivatives.is_empty() {
+                                let assignment_temporary =
+                                    self.cfg.new_temporary(self.cfg.locals[lhs].ty);
+                                let new_rhs = RValue::Use(Operand::new(
+                                    OperandData::Copy(assignment_temporary),
+                                    rhs.span(),
+                                ));
+                                self.cfg[id]
+                                    .statements
+                                    .push((StmntKind::Assignment(lhs, new_rhs), info));
+                                lhs = assignment_temporary;
+                                for (unkown, local) in derivatives {
+                                    let rhs = self.rvalue_derivative(
+                                        assignment_temporary,
+                                        &rhs,
+                                        unkown,
+                                        info,
+                                        &mut cache,
+                                    );
+                                    self.cfg[id]
+                                        .statements
+                                        .push((StmntKind::Assignment(local, rhs), info));
+                                }
+                                self.forward_stmnts.reverse();
+                                self.cfg[id].statements.append(&mut self.forward_stmnts);
+                            }
                         }
-                        self.forward_stmnts.reverse();
-                        self.cfg[id].statements.append(&mut self.forward_stmnts);
 
                         self.cfg[id]
                             .statements
