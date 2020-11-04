@@ -93,17 +93,6 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
             cfg.run_pass(SimplifyBranches);
             cfg.run_pass(Simplify);
 
-            let file_name = format!("{}_{}_cfg.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&CfgDump {
-                    mir: &mir,
-                    cfg: &cfg,
-                    blocks_in_resverse_postorder: true,
-                })
-                .expect("Serialization failed!"),
-            )?;
-
             let locations = cfg.intern_locations();
             let pdg = cfg.run_pass(BuildPDG(&locations));
             cfg.run_pass(BackwardSlice::new(&pdg, &locations).requiring_local(local));

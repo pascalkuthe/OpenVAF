@@ -12,9 +12,9 @@ pub use inkwell;
 use inkwell::basic_block::BasicBlock as LlvmBasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::{Linkage, Module};
+use inkwell::module::Module;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
-use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
+use inkwell::{FloatPredicate, IntPredicate};
 use openvaf_data_structures::index_vec::{index_vec, IndexSlice, IndexVec};
 use openvaf_ir::ids::BranchId;
 use openvaf_middle::cfg::{BasicBlock, ControlFlowGraph, PhiData, TerminatorKind};
@@ -23,7 +23,6 @@ use openvaf_middle::{
     Mir, OperandData, RValue, StmntKind, Type, VariableLocalKind,
 };
 use openvaf_session::sourcemap::StringLiteral;
-use std::ffi::CString;
 
 mod intrinsics;
 mod rvalue;
