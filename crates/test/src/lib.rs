@@ -188,7 +188,7 @@ impl InputKind for Input {
             Self::BranchAccess(_, _) | Self::PortFlow(_) | Self::Temperature | Self::SimParam => {
                 Type::REAL
             }
-            Self::PortConnected(_) | Self::ParamGiven(_) => Type::INT,
+            Self::PortConnected(_) | Self::ParamGiven(_) => Type::BOOL,
             Self::SimParamStr => Type::STRING,
         }
     }

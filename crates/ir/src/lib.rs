@@ -306,7 +306,7 @@ impl<Port, Parameter> SystemFunctionCall<Port, Parameter> {
         match self {
             Self::Temperature | Self::Vt(_) | Self::Simparam(_, _) => Type::REAL,
             Self::SimparamStr(_) => Type::STRING,
-            Self::PortConnected(_) | Self::ParameterGiven(_) => Type::INT,
+            Self::PortConnected(_) | Self::ParameterGiven(_) => Type::BOOL,
         }
     }
 }

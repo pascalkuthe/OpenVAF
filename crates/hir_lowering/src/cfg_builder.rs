@@ -1218,12 +1218,12 @@ impl<'a, 'h, C: ExpressionLowering, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
             (Type::INT, Type::BOOL) => {
                 rhs = self.implicit_cast(rhs, Type::INT, span);
-                Type::REAL
+                Type::INT
             }
 
             (Type::BOOL, Type::INT) => {
                 lhs = self.implicit_cast(lhs, Type::INT, span);
-                Type::REAL
+                Type::INT
             }
 
             (x, y) => {
