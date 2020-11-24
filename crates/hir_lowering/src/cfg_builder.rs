@@ -254,9 +254,9 @@ impl<'a, 'h, C: ExpressionLowering, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                     let end = self.create_block();
 
                     for CaseItem { values, body } in cases {
-                        let body_head = self.current;
 
                         self.enter_new_block();
+                        let body_head = self.current;
                         self.lower_block(body);
                         self.terminate(TerminatorKind::Goto(end));
                         self.current = start;
