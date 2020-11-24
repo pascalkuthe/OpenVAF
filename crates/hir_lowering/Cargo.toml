@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-hir-lowering"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -15,15 +15,15 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
-openvaf-session = {version = "0.7.0", path = "../session"}
-openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
+openvaf-data-structures = {version = "0.7.1", path = "../data_structures" }
+openvaf-session = {version = "0.7.1", path = "../session"}
+openvaf-diagnostics = {version = "0.7.1", path = "../diagnostics"}
 
-openvaf-hir = {version = "0.7.0", path = "../hir"}
-openvaf-middle = {version = "0.7.0", path = "../middle" }
-openvaf-ir = {version = "0.7.0", path = "../ir"}
-openvaf-constants = {version = "0.7.0", path = "../constants"}
-openvaf-derivatives = {version = "0.7.0", path = "../derivatives"}
+openvaf-hir = {version = "0.7.1", path = "../hir"}
+openvaf-middle = {version = "0.7.1", path = "../middle" }
+openvaf-ir = {version = "0.7.1", path = "../ir"}
+openvaf-constants = {version = "0.7.1", path = "../constants"}
+openvaf-derivatives = {version = "0.7.1", path = "../derivatives"}
 
 tracing = "0.1"
 thiserror = "1.0"

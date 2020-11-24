@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-middle"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -15,11 +15,11 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
-openvaf-hir = {version = "0.7.0", path = "../hir"}
-openvaf-ir = {version = "0.7.0", path = "../ir"}
-openvaf-session = {version = "0.7.0", path = "../session"}
-openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics" }
+openvaf-data-structures = {version = "0.7.1", path = "../data_structures" }
+openvaf-hir = {version = "0.7.1", path = "../hir"}
+openvaf-ir = {version = "0.7.1", path = "../ir"}
+openvaf-session = {version = "0.7.1", path = "../session"}
+openvaf-diagnostics = {version = "0.7.1", path = "../diagnostics" }
 osdi-types = {version = "0.1", git = "https://gitlab.com/DSPOM/osdi"}
 log = "0.4"
 serde = {version = "1.0", features = ["derive"], optional = true}

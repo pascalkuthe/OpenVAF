@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-data-structures"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"

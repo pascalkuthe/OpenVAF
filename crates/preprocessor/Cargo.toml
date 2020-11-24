@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-preprocessor"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -21,11 +21,11 @@ more-asserts = "0.2"
 
 tracing = "0.1"
 
-openvaf-data-structures = {version = "0.7.0", path = "../data_structures" }
-openvaf-diagnostics = {version = "0.7.0", path = "../diagnostics"}
+openvaf-data-structures = {version = "0.7.1", path = "../data_structures" }
+openvaf-diagnostics = {version = "0.7.1", path = "../diagnostics"}
 
-openvaf-parser = {version = "0.7.0", path = "../parser"}
-openvaf-session = {version = "0.7.0", path = "../session"}
+openvaf-parser = {version = "0.7.1", path = "../parser"}
+openvaf-session = {version = "0.7.1", path = "../session"}
 
 #[dev-dependencies]
-#openvaf-test = {version = "0.7.0", path = "../test"}
+#openvaf-test = {version = "0.7.1", path = "../test"}

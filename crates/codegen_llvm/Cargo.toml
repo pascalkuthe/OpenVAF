@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-codegen-llvm"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["DSOM <dspom@protonmail.com>"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/verilogarc"
@@ -13,10 +13,10 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-openvaf-ir = {version = "0.7.0", path = "../ir"}
-openvaf-middle = {version= "0.7.0", path = "../middle"}
-openvaf-session = {version = "0.7.0", path = "../session"}
-openvaf-data-structures = {version = "0.7.0", path = "../data_structures"}
+openvaf-ir = {version = "0.7.1", path = "../ir"}
+openvaf-middle = {version= "0.7.1", path = "../middle"}
+openvaf-session = {version = "0.7.1", path = "../session"}
+openvaf-data-structures = {version = "0.7.1", path = "../data_structures"}
 
 enum-map = "0.6"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm10-0"] }
