@@ -1,7 +1,6 @@
 use crate::List;
-use proc_macro2::{Literal, TokenStream};
+use proc_macro2::{Literal, Span, TokenStream};
 use quote::{format_ident, quote, ToTokens};
-use syn::export::Span;
 use syn::parse::{Parse, ParseBuffer, Result};
 use syn::spanned::Spanned;
 use syn::token::Colon;

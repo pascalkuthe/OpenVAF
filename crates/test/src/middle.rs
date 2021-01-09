@@ -25,6 +25,12 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
     file_name.push_str(".va");
 
     middle_test(main_file.join(file_name), |mir| {
+        for x in &mir.parameters {
+            if x.ident.as_str() == "vptci" {
+                print!("{:?}", x.kind.borrow())
+            }
+        }
+
         //if cfg!(feature="middle_dump"){
         for module in &mir.modules {
             let mut cfg = module.analog_cfg.borrow_mut();
@@ -81,7 +87,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                 }
             })
             .unwrap(); */
-            let local = thread_rng().gen_range(0, cfg.locals.len());
+            let local = thread_rng().gen_range(0..cfg.locals.len());
             let local = Local::new(local);
             info!(
                 id = local.index(),
@@ -180,3 +186,4 @@ middle_tests!(BSIMCMG);
 middle_tests!(BSIMIMG);
 middle_tests!(VBIC_4T_IT_XF_HO);
 middle_tests!(DIODE);
+// middle_tests!(ASMHEMT);

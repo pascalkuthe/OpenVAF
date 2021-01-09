@@ -17,7 +17,7 @@ maintenance = { status = "actively-developed" }
 
 more-asserts = "0.2"
 arrayvec = "0.5"
-ahash = "0.5"
+ahash = "0.6"
 parking_lot = "0.11"
 once_cell = "1.4"
 

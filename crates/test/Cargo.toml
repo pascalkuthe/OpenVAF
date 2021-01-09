@@ -36,7 +36,7 @@ openvaf-derivatives = {version = "0.7.1", path = "../derivatives"}
 serde_yaml = "0.8"
 serde_json = "1.0"
 paste = "1.0"
-rand = "0.7"
+rand = "0.8"
 
 [features]
 default = ["middle_dump"]
