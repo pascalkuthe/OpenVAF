@@ -154,7 +154,7 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
             Scalar(val) => self.simple_constant(*val),
             Array(data, ty) => {
                 let array = ty.with_info(|info| {
-                    debug_assert_eq!(data.len(), info.size() as usize);
+                    debug_assert_eq!(data.len(), info.dim() as usize);
 
                     match info.element {
                         SimpleType::Integer => {

@@ -19,24 +19,6 @@ use openvaf_session::symbols::{Ident, Symbol};
 use std::fmt::Display;
 use thiserror::Error;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum MockType {
-    Real,
-    Integer,
-    String,
-    Numeric,
-}
-
-impl Display for MockType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Real => f.write_str("real"),
-            Self::Integer => f.write_str("integer"),
-            Self::String => f.write_str("string"),
-            Self::Numeric => f.write_str("numeric (integer or real)"),
-        }
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ReferenceKind {

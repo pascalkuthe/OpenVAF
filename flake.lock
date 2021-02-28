@@ -1,0 +1,76 @@
+{
+  "nodes": {
+    "crate2nixGit": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1611576197,
+        "narHash": "sha256-bsLuKU0A8nk1ThGbauUfq9DfXjMKGr7QHa6qNXjS1S0=",
+        "owner": "kolloch",
+        "repo": "crate2nix",
+        "rev": "509918492f7c5e6cff1697e1857a383f46bf6a76",
+        "type": "github"
+      },
+      "original": {
+        "owner": "kolloch",
+        "repo": "crate2nix",
+        "type": "github"
+      }
+    },
+    "gitignore": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1611672876,
+        "narHash": "sha256-qHu3uZ/o9jBHiA3MEKHJ06k7w4heOhA+4HCSIvflRxo=",
+        "owner": "hercules-ci",
+        "repo": "gitignore.nix",
+        "rev": "211907489e9f198594c0eb0ca9256a1949c9d412",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "gitignore.nix",
+        "type": "github"
+      }
+    },
+    "mozilla": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1603906276,
+        "narHash": "sha256-RsNPnEKd7BcogwkqhaV5kI/HuNC4flH/OQCC/4W5y/8=",
+        "owner": "mozilla",
+        "repo": "nixpkgs-mozilla",
+        "rev": "8c007b60731c07dd7a052cce508de3bb1ae849b4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "mozilla",
+        "repo": "nixpkgs-mozilla",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1613506613,
+        "narHash": "sha256-S5M2biVBTkrx+DzrTnJ/k4n9N6TQMpV/Ummwh2sNiRI=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "8a2bd1342e06b5ee9e6f3c3847d3e2dc2e4e38fe",
+        "type": "github"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      }
+    },
+    "root": {
+      "inputs": {
+        "crate2nixGit": "crate2nixGit",
+        "gitignore": "gitignore",
+        "mozilla": "mozilla",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

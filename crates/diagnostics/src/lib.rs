@@ -20,6 +20,7 @@ use openvaf_session::sourcemap::{Location, SourceMap, SyntaxContext};
 use openvaf_session::with_sourcemap;
 use std::error::Error;
 use std::fmt::{Display, Write};
+use std::ops::Deref;
 
 pub mod lints;
 
@@ -47,10 +48,12 @@ impl<C: Debug> Debug for ListFormatter<C> {
     }
 }
 
-impl<'lt, T: Display> Display for ListFormatter<&'lt [T]> {
+
+
+impl<X: Display, T: Deref<Target=[X]>> Display for ListFormatter<T> {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self.0 {
+        match self.0.deref() {
             [] => f.write_str(" "),
             [x] => {
                 f.write_str(self.1)?;
@@ -76,26 +79,26 @@ impl<'lt, T: Display> Display for ListFormatter<&'lt [T]> {
     }
 }
 
-impl<T: Display> Display for ListFormatter<Vec<T>> {
-    #[inline]
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        ListFormatter(self.0.as_slice(), self.1, self.2).fmt(f)
-    }
-}
-
-impl<'lt, T: Display + Clone> Display for ListFormatter<beef::Cow<'lt, [T]>> {
-    #[inline]
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        Display::fmt(&ListFormatter(self.0.as_ref(), self.1, self.2), f)
-    }
-}
-
-impl<'lt, T: Display + Clone> Display for ListFormatter<beef::lean::Cow<'lt, [T]>> {
-    #[inline]
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        Display::fmt(&ListFormatter(self.0.as_ref(), self.1, self.2), f)
-    }
-}
+// impl<T: Display> Display for ListFormatter<Vec<T>> {
+//     #[inline]
+//     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+//         ListFormatter(self.0.as_slice(), self.1, self.2).fmt(f)
+//     }
+// }
+//
+// impl<'lt, T: Display + Clone> Display for ListFormatter<beef::Cow<'lt, [T]>> {
+//     #[inline]
+//     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+//         Display::fmt(&ListFormatter(self.0.as_ref(), self.1, self.2), f)
+//     }
+// }
+//
+// impl<'lt, T: Display + Clone> Display for ListFormatter<beef::lean::Cow<'lt, [T]>> {
+//     #[inline]
+//     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+//         Display::fmt(&ListFormatter(self.0.as_ref(), self.1, self.2), f)
+//     }
+// }
 
 pub type UserResult<T, Printer = StandardPrinter> = Result<T, UserMultiDiagnostic<Printer>>;
 #[derive(Clone, Copy, Debug)]

@@ -920,7 +920,7 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
         if unknown {
             DiamondLattice::Unknown
         } else {
-            DiamondLattice::Val(ConstVal::Array(res, ty))
+            DiamondLattice::Val(ConstVal::Array(res.into_boxed_slice(), ty))
         }
     }
 }
