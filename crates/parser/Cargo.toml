@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-parser"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -19,7 +19,6 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 
 # Parsing
-logos = "0.11"
 lalrpop-util = "0.19"
 
 # Error reporting
@@ -27,12 +26,12 @@ tracing = "0.1"
 thiserror = "1.0"
 more-asserts = "0.2"
 
-openvaf-data-structures = {version = "0.7.1", path = "../data_structures" }
+openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
 
-openvaf-diagnostics = {version = "0.7.1", path = "../diagnostics"}
-openvaf-ast = {version = "0.7.1", path = "../ast"}
-openvaf-ir = {version = "0.7.1", path = "../ir"}
-openvaf-session = {version = "0.7.1", path = "../session"}
+openvaf-diagnostics = {version = "0.8.0", path = "../diagnostics"}
+openvaf-ast = {version = "0.8.0", path = "../ast"}
+openvaf-ir = {version = "0.8.0", path = "../ir"}
+openvaf-session = {version = "0.8.0", path = "../session"}
 
 [build-dependencies]
 lalrpop = "0.19.0"

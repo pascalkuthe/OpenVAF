@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-transformations"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -13,12 +13,12 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-openvaf-data-structures = {version = "0.7.1", path = "../data_structures" }
-openvaf-session = {version = "0.7.1", path = "../session"}
-openvaf-diagnostics = {version = "0.7.1", path = "../diagnostics"}
+openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
+openvaf-session = {version = "0.8.0", path = "../session"}
+openvaf-diagnostics = {version = "0.8.0", path = "../diagnostics"}
 
-openvaf-middle = {version = "0.7.1", path = "../middle" }
-openvaf-ir = {version = "0.7.1", path = "../ir"}
+openvaf-middle = {version = "0.8.0", path = "../middle" }
+openvaf-ir = {version = "0.8.0", path = "../ir"}
 
 
 serde = {version = "1.0", features = ["derive"], optional = true}

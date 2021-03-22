@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-ir"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -16,9 +16,9 @@ maintenance = { status = "actively-developed" }
 
 more-asserts = "0.2"
 
-openvaf-data-structures = {version = "0.7.1", path = "../data_structures" }
+openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
 
-openvaf-session = {version = "0.7.1", path = "../session"}
+openvaf-session = {version = "0.8.0", path = "../session"}
 osdi-types = {version = "0.1", git = "https://gitlab.com/DSPOM/osdi"}
 serde = {version = "1.0", features = ["derive"], optional = true}
 

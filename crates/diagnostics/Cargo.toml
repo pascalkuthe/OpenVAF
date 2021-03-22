@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-diagnostics"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["DSPOM"]
 edition = "2018"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
@@ -14,17 +14,17 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-beef = "0.4"
+beef = "0.5"
 linkme = "0.2"
 once_cell = "1.4"
 more-asserts = "0.2"
 paste = "1.0"
 
-openvaf-data-structures = {version = "0.7.1", path = "../data_structures" }
-openvaf-session = {version = "0.7.1", path = "../session"}
+openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
+openvaf-session = {version = "0.8.0", path = "../session"}
 
-openvaf-macros = {version = "0.7.1", path = "../macros"}
-openvaf-ir = {version = "0.7.1", path = "../ir"}
+openvaf-macros = {version = "0.8.0", path = "../macros"}
+openvaf-ir = {version = "0.8.0", path = "../ir"}
 
 [dependencies.annotate-snippets]
 version = "0.9"
