@@ -5,9 +5,7 @@ use openvaf_diagnostics::{MultiDiagnostic, StandardPrinter};
 use openvaf_middle::cfg::serde_dump::CfgDump;
 use openvaf_middle::const_fold::ConstantPropagation;
 use openvaf_middle::{Local, LocalKind, VariableLocalKind};
-use openvaf_transformations::{
-    BackwardSlice, BuildPDG, RemoveDeadLocals, Simplify, SimplifyBranches, Verify,
-};
+use openvaf_transformations::{BackwardSlice, BuildPDG, RemoveDeadLocals, Simplify, SimplifyBranches, Verify, CalculateDataDependence};
 use rand::{thread_rng, Rng};
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -100,8 +98,8 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
             cfg.run_pass(Simplify);
 
             let locations = cfg.intern_locations();
-            let pdg = cfg.run_pass(BuildPDG(&locations));
-            cfg.run_pass(BackwardSlice::new(&pdg, &locations).requiring_local(local));
+            let pdg = cfg.run_pass(BuildPDG{ locations: &locations, data_dependence: CalculateDataDependence });
+            cfg.run_pass(BackwardSlice::new(&pdg, &locations).requiring_local_everywhere(local));
 
             let malformations = cfg.run_pass(Verify(&mir));
             let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);

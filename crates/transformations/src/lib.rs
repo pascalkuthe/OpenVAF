@@ -20,7 +20,7 @@ mod verify;
 pub use backward_slice::BackwardSlice;
 pub use program_dependence::{
     BuildPDG, ControlDependenceGraph, ProgramDependenceGraph, ReachingDefinitionsAnalysis,
-    UseDefGraph,
+    UseDefGraph, CalculateDataDependence
 };
 pub use remove_dead_locals::RemoveDeadLocals;
 pub use simplify::Simplify;

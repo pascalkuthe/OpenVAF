@@ -27,7 +27,7 @@ pub struct ReachingDefinitionsAnalysis<'a> {
 
 impl<'a> ReachingDefinitionsAnalysis<'a> {
     pub fn new<C: CallType>(
-        cfg: &'a ControlFlowGraph<C>,
+        cfg: & ControlFlowGraph<C>,
         locations: &'a InternedLocations,
     ) -> Self {
         let mut graph = UseDefGraph {
@@ -72,10 +72,14 @@ impl<'a> ReachingDefinitionsAnalysis<'a> {
         self.graph.use_def_chains[location] = tmp.to_hybrid();
     }
 
-    pub fn run<C: CallType>(mut self, cfg: &ControlFlowGraph<C>) -> UseDefGraph {
-        let mut genkill_engine = GenKillEngine::new(cfg, &mut self);
+    pub fn solve<C: CallType>(&mut self, cfg: &ControlFlowGraph<C>) -> DfGraph<BitSet<LocationId>>{
+        let mut genkill_engine = GenKillEngine::new(cfg, self);
         let engine = Engine::new(cfg, &mut genkill_engine);
-        let mut dfg = engine.iterate_to_fixpoint();
+        engine.iterate_to_fixpoint()
+    }
+
+    pub fn to_use_def<C: CallType>(mut self, cfg: &ControlFlowGraph<C>, mut dfg: DfGraph<BitSet<LocationId>>) -> UseDefGraph {
+
 
         for (block, data) in cfg.blocks.iter_enumerated() {
             // reusing the in set because we dont need it afterwards anyway
