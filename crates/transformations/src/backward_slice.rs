@@ -42,24 +42,45 @@ impl<'a> BackwardSlice<'a> {
         }
     }
 
-    pub fn requiring_local(mut self, local: Local) -> Self {
-        self.require_local(local);
+    pub fn requiring_local_in(mut self, local: Local, reaching_definitions: &BitSet<LocationId>) -> Self {
+        self.require_local_in(local, reaching_definitions);
         self
     }
 
-    pub fn require_local(&mut self, local: Local) {
-        self.relevant_locations
-            .union_with(&self.pdg.data_dependencies.assignments[local]);
+    pub fn require_local_in(&mut self, local: Local, reaching_definitions: &BitSet<LocationId>) {
+        if let Some(assignments) = &self.pdg.data_dependencies.assignments[local]{
+            self.relevant_locations.extend(assignments.ones().filter(|x|reaching_definitions.contains(*x)))
+        }
     }
 
-    pub fn requiring_locals(mut self, locals: impl IntoIterator<Item = Local>) -> Self {
-        self.require_locals(locals);
+    pub fn requiring_locals_in(mut self, locals: impl IntoIterator<Item = Local>, reaching_definitions: &BitSet<LocationId>) -> Self {
+        self.require_locals_in(locals, reaching_definitions);
         self
     }
 
-    pub fn require_locals(&mut self, locals: impl IntoIterator<Item = Local>) {
+    pub fn require_locals_in(&mut self, locals: impl IntoIterator<Item = Local>, reaching_definitions: &BitSet<LocationId>) {
         for local in locals {
-            self.require_local(local)
+            self.require_local_in(local, reaching_definitions)
+        }
+    }
+
+    pub fn requiring_local_everywhere(mut self, local: Local) -> Self {
+        self.require_local_everywhere(local);
+        self
+    }
+
+    pub fn require_local_everywhere(&mut self, local: Local) {
+        self.relevant_locations.union_with(&self.pdg.data_dependencies.assignments[local])
+    }
+
+    pub fn requiring_locals_everywhere(mut self, locals: impl IntoIterator<Item = Local>) -> Self {
+        self.require_locals_everywhere(locals);
+        self
+    }
+
+    pub fn require_locals_everywhere(&mut self, locals: impl IntoIterator<Item = Local>) {
+        for local in locals {
+            self.require_local_everywhere(local)
         }
     }
 }
