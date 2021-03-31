@@ -19,7 +19,7 @@ use openvaf_session::sourcemap::span::SpanData;
 use openvaf_session::sourcemap::{Location, SourceMap, SyntaxContext};
 use openvaf_session::with_sourcemap;
 use std::error::Error;
-use std::fmt::{Display, Write};
+use std::fmt::{Display};
 use std::ops::Deref;
 
 pub mod lints;
@@ -127,7 +127,7 @@ impl<T: LibraryDiagnostic> Display for MultiDiagnostic<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for err in &self.0 {
             Display::fmt(err, f)?;
-            f.write_char('\n')?;
+            f.write_str("\n")?;
         }
         Ok(())
     }
@@ -171,11 +171,11 @@ pub struct UserMultiDiagnostic<Printer: DiagnosticSlicePrinter = StandardPrinter
 impl<'a, Printer: DiagnosticSlicePrinter> Display for UserMultiDiagnostic<Printer> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if !self.0.is_empty() {
-            f.write_char('\n')?;
+            f.write_str("\n")?;
         }
         for err in &self.0 {
             Display::fmt(err, f)?;
-            f.write_char('\n')?;
+            f.write_str("\n")?;
         }
         Ok(())
     }

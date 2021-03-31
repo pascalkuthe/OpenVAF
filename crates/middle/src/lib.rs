@@ -25,7 +25,7 @@ use openvaf_session::sourcemap::{Span, StringLiteral};
 
 use openvaf_session::symbols::Ident;
 
-use crate::cfg::ControlFlowGraph;
+use crate::cfg::{ControlFlowGraph,};
 
 pub mod cfg;
 pub mod const_fold;
@@ -37,7 +37,7 @@ use crate::const_fold::DiamondLattice;
 pub use fold::{fold_rvalue, RValueFold};
 use openvaf_data_structures::HashMap;
 pub use osdi_types::{SimpleType, Type, TypeInfo};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::iter::FromIterator;
 
 use openvaf_diagnostics::lints::{Lint, LintLevel};
@@ -49,6 +49,8 @@ pub type SimpleConstVal = osdi_types::SimpleConstVal<StringLiteral>;
 use openvaf_data_structures::sync::RwLock;
 use openvaf_ir::convert::Convert;
 pub use osdi_types;
+use std::fmt;
+use openvaf_diagnostics::ListFormatter;
 
 #[derive(Debug, Clone)]
 pub struct SyntaxContextData {
@@ -117,6 +119,12 @@ impl InputKind for NoInput {
     }
 }
 
+impl Display for NoInput{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("ILLEGAL")
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct ParameterInput(pub ParameterId);
 
@@ -133,6 +141,13 @@ impl InputKind for ParameterInput {
         mir[self.0].ty
     }
 }
+
+impl Display for ParameterInput{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&self.0,f )
+    }
+}
+
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct ParameterCallType;
@@ -154,6 +169,12 @@ impl CallType for ParameterCallType {
     }
 }
 
+impl Display for ParameterCallType{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("ILLEGAL")
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct RealConstCallType;
 
@@ -167,6 +188,18 @@ impl InputKind for RealConstInputType {
 
     fn ty<C: CallType>(&self, _: &Mir<C>) -> Type {
         unreachable!()
+    }
+}
+
+impl Display for RealConstCallType{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("ILLEGAL")
+    }
+}
+
+impl Display for RealConstInputType{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("ILLEGAL")
     }
 }
 
@@ -251,6 +284,24 @@ pub enum BinOp {
     Or,
 }
 
+impl Display for BinOp{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            BinOp::Plus => f.write_str("+"),
+            BinOp::Minus => f.write_str("-"),
+            BinOp::Multiply => f.write_str("*"),
+            BinOp::Divide => f.write_str("/"),
+            BinOp::Modulus => f.write_str("%"),
+            BinOp::ShiftLeft => f.write_str("<<"),
+            BinOp::ShiftRight => f.write_str(">>"),
+            BinOp::Xor => f.write_str("XOR"),
+            BinOp::NXor => f.write_str("EQ"),
+            BinOp::And => f.write_str("&"),
+            BinOp::Or => f.write_str("|"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ComparisonOp {
     LessThen,
@@ -261,7 +312,21 @@ pub enum ComparisonOp {
     NotEqual,
 }
 
-pub trait InputKind: Clone + Sized + Debug + PartialEq {
+impl Display for ComparisonOp{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let raw = match self{
+            ComparisonOp::LessThen => "<",
+            ComparisonOp::LessEqual => "<=",
+            ComparisonOp::GreaterThen => ">",
+            ComparisonOp::GreaterEqual => ">=",
+            ComparisonOp::Equal => "==",
+            ComparisonOp::NotEqual => "!=",
+        };
+        f.write_str(raw)
+    }
+}
+
+pub trait InputKind: Clone + Sized + Debug + PartialEq + Display{
     fn derivative<C: CallType>(&self, unknown: Unknown, mir: &Mir<C>) -> Derivative<Self>;
 
     fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type;
@@ -310,7 +375,7 @@ pub enum LocalKind {
 
 pub type Operand<I> = Spanned<OperandData<I>>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum OperandData<I: InputKind> {
     Constant(ConstVal),
 
@@ -347,18 +412,34 @@ impl<I: InputKind> OperandData<I> {
     }
 }
 
+impl<I: InputKind> Display for OperandData<I>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            OperandData::Constant(val) => write!(f, "{:?}", val),
+            OperandData::Copy(local) => Display::fmt(local,f),
+            OperandData::Read(input) =>  Display::fmt(input,f),
+        }
+    }
+}
+
+impl<I: InputKind> Debug for OperandData<I>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
+}
+
+
 define_index_type! {
 
     pub struct Local = u32;
 
-    DISPLAY_FORMAT = "{}";
-
-    DEBUG_FORMAT = stringify!(<Local {}>);
+    DISPLAY_FORMAT = "_{}";
+    DEBUG_FORMAT = "_{}";
 
     IMPL_RAW_CONVERSIONS = true;
 }
 
-pub trait CallType: Debug + Clone + PartialEq {
+pub trait CallType: Debug + Clone + PartialEq + Display {
     type I: InputKind;
 
     fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice;
@@ -391,7 +472,7 @@ impl<C: CallType> From<TyRValue<C>> for RValue<C> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum RValue<C: CallType> {
     UnaryOperation(Spanned<UnaryOperator>, COperand<C>),
     BinaryOperation(Spanned<BinOp>, COperand<C>, COperand<C>),
@@ -406,6 +487,63 @@ pub enum RValue<C: CallType> {
     Call(C, IndexVec<CallArg, COperand<C>>, Span),
     Array(Vec<COperand<C>>, Span),
 }
+
+
+impl<C: CallType> Display for RValue<C>
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            RValue::UnaryOperation(operator, operand) => {
+                write!(f,"{}{}",operator, operand)
+            },
+
+            RValue::BinaryOperation(op, lhs, rhs) => {
+                write!(f,"{} {} {}",lhs, op, rhs)
+            }
+
+            RValue::SingleArgMath(fun, op) => {
+                write!(f,"{}({})",fun, op)
+
+            }
+
+            RValue::DoubleArgMath(fun, op1, op2) => {
+                write!(f,"{}({}, {})",fun, op1,op2)
+
+            }
+
+            RValue::Comparison(op, lhs, rhs, _) => {
+                write!(f,"{} {} {}",lhs, op, rhs)
+
+            },
+
+            RValue::Select(cond, true_val, false_val) => {
+                write!(f,"if {} {{ {} }} else {{ {} }}",cond, true_val, false_val)
+            }
+            RValue::Cast(op) => {
+                write!(f,"{} as _", op)
+
+            },
+            RValue::Use(op) => {
+                Display::fmt(op, f)
+            }
+            RValue::Call(call, operands, _) => {
+                write!(f,"{}({})",call, ListFormatter(operands.raw.as_slice(), "", ", "))
+            }
+            RValue::Array(vals, _) => {
+                write!(f,"[{}]",ListFormatter(vals.as_slice(), "", ", "))
+            }
+        }
+    }
+}
+
+impl<C: CallType> Debug for RValue<C>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
+}
+
+
+
 
 impl<A, B> Convert<RValue<B>> for RValue<A>
 where
@@ -642,20 +780,37 @@ impl<C: CallType> RValue<C> {
 
             Self::Select(op1, _op2, op3) => op1.span.extend(op3.span),
             Self::Call(_, _, span) => *span,
-            RValue::Array(_, span) => *span,
+            Self::Array(_, span) => *span,
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum StmntKind<C: CallType> {
     Assignment(Local, RValue<C>),
     Call(C, IndexVec<CallArg, COperand<C>>, Span),
 
     /// No Operation (does nothing)
     /// Statements are often overwritten with NoOp instead of being deleted because its cheaper
-    NoOp,
+    NoOp, // TODO REMOVE?
 }
+
+impl<C: CallType> Display for StmntKind<C>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            StmntKind::Assignment(dst,val) => write!(f, "{} = {}", dst, val),
+            StmntKind::Call(call, args, _) => write!(f, "{}({})", call, ListFormatter(&args.as_slice().raw,"",", ")),
+            StmntKind::NoOp => Ok(())
+        }
+    }
+}
+
+impl<C: CallType> Debug for StmntKind<C>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
+}
+
 
 impl<A, B> Convert<StmntKind<B>> for StmntKind<A>
 where

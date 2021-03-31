@@ -57,15 +57,4 @@ pub fn unesacpe_string(raw: &str) -> String {
         .replace(r#"\""#, "\"")
 }
 
-#[cfg(feature = "serde_dump")]
-use serde::{Serialize, Serializer};
 
-#[cfg(feature = "serde_dump")]
-impl Serialize for StringLiteral {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.unescaped_contents())
-    }
-}

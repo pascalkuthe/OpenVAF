@@ -25,4 +25,4 @@ pub use program_dependence::{
 pub use remove_dead_locals::RemoveDeadLocals;
 pub use simplify::Simplify;
 pub use simplify_branches::SimplifyBranches;
-pub use verify::{Malformation, MalformedCfg, Verify};
+pub use verify::{MalformationKind, Malformation, Verify};

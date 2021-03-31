@@ -8,12 +8,12 @@ use openvaf_codegen_llvm::inkwell::OptimizationLevel;
 use openvaf_codegen_llvm::LlvmCodegen;
 use openvaf_derivatives::generate_derivatives;
 use openvaf_diagnostics::{MultiDiagnostic, StandardPrinter};
-use openvaf_middle::cfg::serde_dump::CfgDump;
 use openvaf_middle::cfg::{ControlFlowGraph, START_BLOCK};
 use openvaf_middle::const_fold::ConstantPropagation;
 use openvaf_transformations::{Simplify, SimplifyBranches, Verify};
 use std::path::PathBuf;
 use tracing::info_span;
+use std::borrow::Borrow;
 
 fn codegen_test(model: &'static str) -> Result<(), PrettyError> {
     let tspan = info_span!(target: "test", "HIR_LOWERING", model = model);
@@ -27,7 +27,7 @@ fn codegen_test(model: &'static str) -> Result<(), PrettyError> {
     file_name.push_str(".va");
 
     middle_test(main_file.join(file_name), |mir| {
-        for module in &mir.modules {
+        for (id, module) in mir.modules.iter_enumerated() {
             let mut cfg = module.analog_cfg.borrow_mut();
 
             let mut errors = MultiDiagnostic(Vec::new());
@@ -42,23 +42,13 @@ fn codegen_test(model: &'static str) -> Result<(), PrettyError> {
             cfg.run_pass(Simplify);
 
             let malformations = cfg.run_pass(Verify(&mir));
+            malformations.print_to_file(main_file.join(format!("cg_{}.log", model)));
 
-            let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&malformations).expect("Serialization failed!"),
-            )?;
-
-            let file_name = format!("{}_{}_cfg_simplified.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&CfgDump {
-                    mir: &mir,
-                    cfg: &cfg,
-                    blocks_in_resverse_postorder: true,
-                })
-                .expect("Serialization failed!"),
-            )?;
+            if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                mir.print_to_file_with_shared(main_file.join(format!("cg_{}_invalid.mir", model)), id, cfg.borrow());
+                unreachable!("Invalid cfg resulted from simplify")
+            }
 
             assert!(malformations.is_empty());
         }

@@ -20,7 +20,7 @@ openvaf-preprocessor = {version = "0.8.0", path = "../preprocessor"}
 openvaf-ast = {version = "0.8.0", path = "../ast"}
 openvaf-ir = {version = "0.8.0", path = "../ir"}
 openvaf-hir-lowering = {version = "0.8.0", path = "../hir_lowering"}
-openvaf-middle = {version = "0.8.0", path = "../middle", features = ["serde_dump"]}
+openvaf-middle = {version = "0.8.0", path = "../middle"}
 openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
 openvaf-ast-lowering = {version = "0.8.0", path = "../ast_lowering"}
 openvaf-diagnostics = {version = "0.8.0", path = "../diagnostics"}
@@ -33,14 +33,11 @@ tracing-subscriber = "0.2"
 [dev-dependencies]
 
 openvaf-derivatives = {version = "0.8.0", path = "../derivatives"}
-serde_yaml = "0.8"
-serde_json = "1.0"
 paste = "1.0"
 rand = "0.8"
 
 [features]
-default = ["middle_dump"]
-middle_dump = ["openvaf-middle/serde_dump","openvaf-transformations/serde_dump"]
+default = []
 
 
 

@@ -51,8 +51,6 @@ use openvaf_macros::symbols;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
-#[cfg(feature = "serde_dump")]
-use serde::{Serialize, Serializer};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Ident {
@@ -130,15 +128,7 @@ impl fmt::Display for Ident {
     }
 }
 
-#[cfg(feature = "serde_dump")]
-impl Serialize for Ident {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
-    where
-        S: Serializer,
-    {
-        self.name.serialize(serializer)
-    }
-}
+
 
 define_index_type! {
             /// An interned string.
@@ -177,15 +167,7 @@ impl Symbol {
     }
 }
 
-#[cfg(feature = "serde_dump")]
-impl Serialize for Symbol {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
-    where
-        S: Serializer,
-    {
-        self.with(|s| serializer.serialize_str(s))
-    }
-}
+
 
 impl Display for Symbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

@@ -34,22 +34,6 @@ macro_rules! id_type {
 
             IMPL_RAW_CONVERSIONS = true;
         }
-
-        #[cfg(feature = "serde_dump")]
-        impl $crate::__reexport::serde::Serialize for $name {
-            fn serialize<S>(
-                &self,
-                serializer: S,
-            ) -> Result<
-                <S as $crate::__reexport::serde::Serializer>::Ok,
-                <S as $crate::__reexport::serde::Serializer>::Error,
-            >
-            where
-                S: $crate::__reexport::serde::Serializer,
-            {
-                serializer.serialize_newtype_struct(stringify!($name), &self.raw())
-            }
-        }
     };
 }
 

@@ -2,7 +2,6 @@ use crate::{middle_test, PrettyError};
 use openvaf_derivatives::generate_derivatives;
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::{MultiDiagnostic, StandardPrinter};
-use openvaf_middle::cfg::serde_dump::CfgDump;
 use openvaf_middle::const_fold::ConstantPropagation;
 use openvaf_middle::{Local, LocalKind, VariableLocalKind};
 use openvaf_transformations::{BackwardSlice, BuildPDG, RemoveDeadLocals, Simplify, SimplifyBranches, Verify, CalculateDataDependence};
@@ -30,7 +29,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
         }
 
         //if cfg!(feature="middle_dump"){
-        for module in &mir.modules {
+        for (id, module) in mir.modules.iter_enumerated() {
             let mut cfg = module.analog_cfg.borrow_mut();
 
             let mut errors = MultiDiagnostic(Vec::new());
@@ -40,39 +39,26 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                 return Err(errors.user_facing::<StandardPrinter>().into());
             }
 
-            let file_name = format!("{}_{}_cfg.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&CfgDump {
-                    mir: &mir,
-                    cfg: &cfg,
-                    blocks_in_resverse_postorder: true,
-                })
-                .expect("Serialization failed!"),
-            )?;
+            mir.print_to_file_with_shared(main_file.join(format!("{}.mir", model)), id, &cfg);
 
             let malformations = cfg.run_pass(Verify(&mir));
-            let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&malformations).expect("Serialization failed!"),
-            )?;
+            malformations.print_to_file(main_file.join(format!("{}.log", model)));
 
             if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                mir.print_to_file_with_shared(main_file.join(format!("{}_invalid.mir", model)), id, &cfg);
                 unreachable!("Invalid cfg resulted from simplify")
             }
 
             cfg.insert_variable_declarations(&mir);
 
             let malformations = cfg.run_pass(Verify(&mir));
-            let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&malformations).expect("Serialization failed!"),
-            )?;
+            malformations.print_to_file(main_file.join(format!("{}.log", model)));
 
             if !malformations.is_empty() {
-                unreachable!("Invalid cfg resulted from simplify")
+                eprintln!("{}", malformations);
+                mir.print_to_file_with_shared(main_file.join(format!("{}_invalid.mir", model)), id, &cfg);
+                unreachable!("Invalid cfg resulted from variable delcaration insertion")
             }
 
             /*let local = cfg
@@ -102,63 +88,44 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
             cfg.run_pass(BackwardSlice::new(&pdg, &locations).requiring_local_everywhere(local));
 
             let malformations = cfg.run_pass(Verify(&mir));
-            let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&malformations).expect("Serialization failed!"),
-            )?;
+            malformations.print_to_file(main_file.join(format!("{}.log", model)));
+
             if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                mir.print_to_file_with_shared(main_file.join(format!("{}_invalid.mir", model)), id, &cfg);
                 unreachable!("Invalid cfg resulted from slice")
             }
 
             cfg.run_pass(Simplify);
+
+            cfg.run_pass(ConstantPropagation::default());
+
+            cfg.run_pass(Simplify);
+
+            let malformations = cfg.run_pass(Verify(&mir));
+            malformations.print_to_file(main_file.join(format!("{}.log", model)));
+
+            if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                mir.print_to_file_with_shared(main_file.join(format!("{}_invalid.mir", model)), id, &cfg);
+                unreachable!("Invalid cfg resulted from simplify")
+            }
 
             cfg.run_pass(RemoveDeadLocals);
 
             println!("{}", Linter::late_user_diagnostics::<StandardPrinter>()?);
 
             let malformations = cfg.run_pass(Verify(&mir));
-            let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&malformations).expect("Serialization failed!"),
-            )?;
+            malformations.print_to_file(main_file.join(format!("{}.log", model)));
+
             if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                mir.print_to_file_with_shared(main_file.join(format!("{}_invalid.mir", model)), id, &cfg);
                 unreachable!("Invalid cfg resulted from remove dead locals")
             }
 
-            let malformations = cfg.run_pass(Verify(&mir));
-            let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&malformations).expect("Serialization failed!"),
-            )?;
-            if !malformations.is_empty() {
-                unreachable!("Invalid cfg resulted from simplify")
-            }
+            mir.print_to_file_with_shared(main_file.join(format!("{}_sliced.mir", model)), id, &cfg);
 
-            let file_name = format!("{}_{}_cfg_sliced.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&CfgDump {
-                    mir: &mir,
-                    cfg: &cfg,
-                    blocks_in_resverse_postorder: true,
-                })
-                .expect("Serialization failed!"),
-            )?;
-
-            let malformations = cfg.run_pass(Verify(&mir));
-
-            let file_name = format!("{}_{}_cfg_malformations.yaml", model, module.ident);
-            std::fs::write(
-                main_file.join(file_name),
-                serde_yaml::to_string(&malformations).expect("Serialization failed!"),
-            )?;
-
-            if !malformations.is_empty() {
-                unreachable!("Invalid cfg resulted from simplify")
-            }
         }
 
         Ok(())

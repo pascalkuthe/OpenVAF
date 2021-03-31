@@ -10,11 +10,7 @@
 
 pub use crate::ids::IdRange;
 
-#[cfg(feature = "serde_dump")]
-#[doc(hidde)]
-pub mod __reexport {
-    pub use serde;
-}
+
 
 use crate::ids::{AttributeId, BranchId, ExpressionId, NetId, ParameterId};
 use core::convert::TryFrom;
@@ -25,6 +21,8 @@ use std::ops::Range;
 
 pub type ConstVal = osdi_types::ConstVal<StringLiteral>;
 pub use osdi_types::{SimpleConstVal, SimpleType, Type, TypeInfo};
+use std::fmt::{Display, Formatter};
+use std::fmt;
 
 #[macro_use]
 pub mod ids;
@@ -59,6 +57,12 @@ impl<T: Clone> Spanned<T> {
             span: self.span,
             contents,
         }
+    }
+}
+
+impl<T: Display> Display for Spanned<T>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.contents.fmt(f)
     }
 }
 
@@ -176,6 +180,17 @@ pub enum UnaryOperator {
     ArithmeticNegate,
 }
 
+
+impl Display for UnaryOperator{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            UnaryOperator::BitNegate => f.write_str("!"),
+            UnaryOperator::LogicNegate => f.write_str("^"),
+            UnaryOperator::ArithmeticNegate => f.write_str("-"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Unknown {
     Parameter(ParameterId),
@@ -210,12 +225,17 @@ pub enum SingleArgMath {
     ArcTanH,
 }
 
+impl Display for SingleArgMath{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
 impl SingleArgMath {
     pub fn name(self) -> &'static str {
         match self {
             Self::Sqrt => "sqrt",
-            Self::Exp(true) => "limexp",
-            Self::Exp(false) => "exp",
+            Self::Exp(_) => "exp",
             Self::Ln => "ln",
             Self::Log => "log",
             Self::Abs => "abs",
@@ -255,6 +275,12 @@ impl DoubleArgMath {
             Self::Max => "max",
             Self::ArcTan2 => "arctan2",
         }
+    }
+}
+
+impl Display for DoubleArgMath{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
@@ -311,11 +337,24 @@ impl<Port, Parameter> SystemFunctionCall<Port, Parameter> {
     }
 }
 
-#[derive(Clone, Debug, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum StopTaskKind {
     Stop,
     Finish,
 }
+
+impl Display for StopTaskKind{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl Debug for StopTaskKind{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
+}
+
 
 impl StopTaskKind {
     pub fn name(self) -> &'static str {
@@ -325,6 +364,7 @@ impl StopTaskKind {
         }
     }
 }
+
 
 #[derive(Clone, Debug, Copy, Eq, PartialEq)]
 pub enum PrintOnFinish {

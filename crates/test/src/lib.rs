@@ -40,6 +40,7 @@ use openvaf_session::Session;
 use std::error::Error;
 use std::sync::Arc;
 use tracing::debug;
+use std::fmt;
 
 #[cfg(test)]
 mod parser;
@@ -194,6 +195,21 @@ impl InputKind for Input {
     }
 }
 
+impl Display for Input{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            Self::Parameter(param) => Debug::fmt(param,f),
+            Self::PortConnected(port) => write!(f, "$port_connected({:?})",port),
+            Self::ParamGiven(param) => write!(f, "$param_given({:?})",param),
+            Self::SimParam => f.write_str("$simparam (ignored)"),
+            Self::SimParamStr => f.write_str("$simparam str (ignored)"),
+            Self::BranchAccess(access, branch) => write!(f, "{}({:?})",access,branch),
+            Self::PortFlow(port) => write!(f, "flow({:?})",port),
+            Self::Temperature => f.write_str("$temp"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum Call {
     StopTask(StopTaskKind, PrintOnFinish),
@@ -216,6 +232,15 @@ impl CallType for Call {
         match self {
             Self::StopTask(_, _) => unreachable!(),
             Self::Noise => Derivative::Zero,
+        }
+    }
+}
+
+impl Display for Call{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            Self::StopTask(kind, print_mode) => write!(f, "{}({:?})", kind, print_mode),
+            Self::Noise => f.write_str("noise (ignored)"),
         }
     }
 }

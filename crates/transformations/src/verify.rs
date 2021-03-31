@@ -16,31 +16,97 @@ use openvaf_middle::cfg::{
 use openvaf_middle::{
     impl_pass_span, BinOp, CallType, ComparisonOp, Local, LocalKind, Mir, RValue, StmntKind, Type,
 };
+use std::fmt::{Display, Formatter, Debug};
+use std::io::Write;
+use std::{fmt, io};
+use std::path::Path;
 
-#[cfg_attr(feature = "serde_dump", derive(serde::Serialize))]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Malformation {
+pub enum MalformationKind {
     MissingTerminator,
-    DstTypeMissmatch,
+    DstTypeMissmatch(Type,Type),
     OperandTypeMissmatch,
-    UndefinedCast,
-    DoubleWriteToTemporary,
+    UndefinedCast(Type,Type),
+    DoubleWriteToTemporary(Local),
     PhiTakingNonPredecessor(BasicBlock),
     PhiMissingPredecessor(BasicBlock),
-    UnknownLocal { local: usize, last_local: usize },
+    UnknownLocal { local: Local, last_local: Local },
 }
 
-#[cfg_attr(feature = "serde_dump", derive(serde::Serialize))]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MalformedCfg {
+#[derive(Clone, Copy, PartialEq)]
+pub struct Malformation {
     location: Location,
-    error: Malformation,
+    error: MalformationKind,
 }
+
+const ALIGN: usize = 15;
+
+impl Display for Malformation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self.error{
+            MalformationKind::MissingTerminator => write!(f, "{:?} is missing a terminator", self.location.block),
+            MalformationKind::DstTypeMissmatch(expected, found) =>{
+                expected.with_info(
+                    |expected|{
+                        found.with_info(|found|{
+                            write!(f, "{:A$} Rvalue type does not match dest type! Expected {} found {} ", self.location, expected, found, A = ALIGN)
+                        })
+                    }
+                )
+            }
+            MalformationKind::OperandTypeMissmatch =>  write!(f, "{:A$} Operands have illegal types", self.location, A = ALIGN),
+            MalformationKind::UndefinedCast(src, dst) =>                 src.with_info(
+                |src|{
+                    dst.with_info(|dst|{
+                        write!(f, "{:A$} cast from {} to {} are not defined", self.location, src, dst, A=ALIGN)
+                    })
+                }
+            ),
+            MalformationKind::DoubleWriteToTemporary(local) => write!(f, "{:A$} double write to SSA temporary {}", self.location, local, A = ALIGN),
+            MalformationKind::PhiTakingNonPredecessor(bb) =>  write!(f, "{:A$} {:?} is not a predecessor of this bb", self.location, bb, A = ALIGN),
+            MalformationKind::PhiMissingPredecessor(bb) => write!(f, "{:A$} Predecessor {:?} is missing", self.location, bb, A = ALIGN),
+            MalformationKind::UnknownLocal { local, last_local} => write!(f, "{:A$} Unknown local {}. Last known local is {} ", self.location, local, last_local, A = ALIGN),
+        }
+    }
+}
+
+impl Debug for Malformation{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
+}
+
+pub struct Malformations(pub Vec<Malformation>);
+
+impl Malformations{
+    pub fn is_empty(&self)->bool{
+        self.0.is_empty()
+    }
+
+    pub fn print_to_file(&self, path: impl AsRef<Path>) -> io::Result<()>{
+        let mut file = std::fs::File::create(path)?;
+        for malformation in &self.0{
+            writeln!(file, "{}", malformation)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for Malformations{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for malformation in &self.0{
+            writeln!(f, "{}", malformation)?;
+        }
+
+        Ok(())
+    }
+}
+
 
 pub struct Verify<'a, A: CallType>(pub &'a Mir<A>);
 
 impl<'a, A: CallType, C: CallType> CfgPass<'_, C> for Verify<'a, A> {
-    type Result = Vec<MalformedCfg>;
+    type Result = Malformations;
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
         let mut verify = VerifyImpl {
@@ -58,7 +124,7 @@ impl<'a, A: CallType, C: CallType> CfgPass<'_, C> for Verify<'a, A> {
                 verify.verify_phis(block, block_data);
             }
         }
-        verify.errors
+        Malformations(verify.errors)
     }
 
     impl_pass_span!("verify");
@@ -67,7 +133,7 @@ impl<'a, A: CallType, C: CallType> CfgPass<'_, C> for Verify<'a, A> {
 struct VerifyImpl<'a, C: CallType, A: CallType> {
     cfg: &'a ControlFlowGraph<C>,
     mir: &'a Mir<A>,
-    errors: Vec<MalformedCfg>,
+    errors: Vec<Malformation>,
     written_locals: BitSet<Local>,
     terminators_valid: bool,
 }
@@ -86,25 +152,25 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
 
             for (block, local) in &phi.sources {
                 if !predecessor.contains(&block) {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::PhiTakingNonPredecessor(*block),
+                        error: MalformationKind::PhiTakingNonPredecessor(*block),
                     });
                 }
 
                 if self.cfg.locals[*local].ty != ty {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::OperandTypeMissmatch,
+                        error: MalformationKind::OperandTypeMissmatch,
                     });
                 }
             }
 
             for predecessor in predecessor {
                 if !phi.sources.contains_key(predecessor) {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::PhiMissingPredecessor(block),
+                        error: MalformationKind::PhiMissingPredecessor(block),
                     });
                 }
             }
@@ -143,9 +209,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 self.verify_rvalue(condition, Type::BOOL, terminator_loc);
             }
         } else {
-            self.errors.push(MalformedCfg {
+            self.errors.push(Malformation {
                 location: terminator_loc,
-                error: Malformation::MissingTerminator,
+                error: MalformationKind::MissingTerminator,
             });
             self.terminators_valid = false
         }
@@ -155,17 +221,17 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
         if self.written_locals.put(local)
             && matches!(self.cfg.locals[local].kind, LocalKind::Temporary)
         {
-            self.errors.push(MalformedCfg {
+            self.errors.push(Malformation {
                 location,
-                error: Malformation::DoubleWriteToTemporary,
+                error: MalformationKind::DoubleWriteToTemporary(local),
             })
         }
         if local > self.cfg.locals.last_idx() {
-            self.errors.push(MalformedCfg {
+            self.errors.push(Malformation {
                 location,
-                error: Malformation::UnknownLocal {
-                    local: local.index(),
-                    last_local: self.cfg.locals.last_idx().index(),
+                error: MalformationKind::UnknownLocal {
+                    local,
+                    last_local: self.cfg.locals.last_idx(),
                 },
             })
         }
@@ -182,9 +248,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
 
                     (UnaryOperator::ArithmeticNegate, Type::REAL) => Type::REAL,
                     (_, _) => {
-                        self.errors.push(MalformedCfg {
+                        self.errors.push(Malformation {
                             location,
-                            error: Malformation::OperandTypeMissmatch,
+                            error: MalformationKind::OperandTypeMissmatch,
                         });
                         return;
                     }
@@ -194,9 +260,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 let lhs_ty = lhs.contents.ty(self.mir, self.cfg);
                 let rhs_ty = rhs.contents.ty(self.mir, self.cfg);
                 if lhs_ty != rhs_ty {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::OperandTypeMissmatch,
+                        error: MalformationKind::OperandTypeMissmatch,
                     });
                     return;
                 }
@@ -215,9 +281,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     | (BinOp::And, Type::BOOL) => Type::BOOL,
 
                     _ => {
-                        self.errors.push(MalformedCfg {
+                        self.errors.push(Malformation {
                             location,
-                            error: Malformation::OperandTypeMissmatch,
+                            error: MalformationKind::OperandTypeMissmatch,
                         });
                         return;
                     }
@@ -230,9 +296,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     (SingleArgMath::Abs, Type::INT) => Type::INT,
                     (_, Type::REAL) => Type::REAL,
                     (_, _) => {
-                        self.errors.push(MalformedCfg {
+                        self.errors.push(Malformation {
                             location,
-                            error: Malformation::OperandTypeMissmatch,
+                            error: MalformationKind::OperandTypeMissmatch,
                         });
                         return;
                     }
@@ -242,9 +308,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 let arg1_ty = arg1.contents.ty(self.mir, self.cfg);
                 let arg2_ty = arg2.contents.ty(self.mir, self.cfg);
                 if arg1_ty != arg2_ty {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::OperandTypeMissmatch,
+                        error: MalformationKind::OperandTypeMissmatch,
                     });
                     return;
                 }
@@ -252,9 +318,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     (DoubleArgMath::Min, Type::INT) | (DoubleArgMath::Max, Type::INT) => Type::INT,
                     (_, Type::REAL) => Type::REAL,
                     (_, _) => {
-                        self.errors.push(MalformedCfg {
+                        self.errors.push(Malformation {
                             location,
-                            error: Malformation::OperandTypeMissmatch,
+                            error: MalformationKind::OperandTypeMissmatch,
                         });
                         return;
                     }
@@ -265,9 +331,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 let lhs_ty = lhs.contents.ty(self.mir, self.cfg);
                 let rhs_ty = rhs.contents.ty(self.mir, self.cfg);
                 if lhs_ty != rhs_ty || *ty != lhs_ty {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::OperandTypeMissmatch,
+                        error: MalformationKind::OperandTypeMissmatch,
                     });
                     return;
                 }
@@ -285,9 +351,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     (ComparisonOp::Equal, _) | (ComparisonOp::NotEqual, _) => Type::BOOL,
 
                     (_, _) => {
-                        self.errors.push(MalformedCfg {
+                        self.errors.push(Malformation {
                             location,
-                            error: Malformation::OperandTypeMissmatch,
+                            error: MalformationKind::OperandTypeMissmatch,
                         });
                         return;
                     }
@@ -296,18 +362,18 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
 
             RValue::Select(cond, true_val, false_val) => {
                 if cond.contents.ty(self.mir, self.cfg) != Type::BOOL {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::OperandTypeMissmatch,
+                        error: MalformationKind::OperandTypeMissmatch,
                     })
                 }
 
                 let true_val_ty = true_val.contents.ty(self.mir, self.cfg);
                 let false_val_ty = false_val.contents.ty(self.mir, self.cfg);
                 if true_val_ty != false_val_ty {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::OperandTypeMissmatch,
+                        error: MalformationKind::OperandTypeMissmatch,
                     });
                     return;
                 }
@@ -324,9 +390,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                         | (Type::BOOL, Type::INT)
                         | (Type::BOOL, Type::REAL)
                 ) {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::UndefinedCast,
+                        error: MalformationKind::UndefinedCast(arg_ty, dst_ty),
                     });
                 }
                 return;
@@ -347,9 +413,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     .contents
                     .ty(self.mir, self.cfg);
                 if iter.any(|x| x.contents.ty(self.mir, self.cfg) != ty) {
-                    self.errors.push(MalformedCfg {
+                    self.errors.push(Malformation {
                         location,
-                        error: Malformation::OperandTypeMissmatch,
+                        error: MalformationKind::OperandTypeMissmatch,
                     })
                 }
                 ty
@@ -357,9 +423,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
         };
 
         if dst_ty != ty {
-            self.errors.push(MalformedCfg {
+            self.errors.push(Malformation {
                 location,
-                error: Malformation::DstTypeMissmatch,
+                error: MalformationKind::DstTypeMissmatch(dst_ty, ty),
             })
         }
     }

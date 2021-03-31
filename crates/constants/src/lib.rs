@@ -49,7 +49,7 @@ impl Display for Constant {
 /// OpenVAF uses NIST2010 physical constants by default
 pub mod defaults {
     pub const KB: f64 = 1.3806488e-23;
-    pub const Q: f64 = 1.602176565e-19;
+    pub const Q:  f64 = 1.602176565e-19;
 }
 
 /// The set of physical constants that OpenVAF uses

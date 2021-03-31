@@ -31,15 +31,17 @@ use std::hash::Hash;
 use std::iter::once;
 use std::ops::Index;
 use tracing::Span;
+use std::fmt::{Display, Formatter, Debug};
+use std::fmt;
 
 pub mod predecessors;
 pub mod transversal;
 
 #[cfg(feature = "graphviz")]
 mod graphviz;
+mod print;
 
-#[cfg(feature = "serde_dump")]
-pub mod serde_dump;
+
 
 // Macros that call functions that produce a cfg with more or less blocks (and therefore a new tag)
 id_type!(BasicBlock(u16));
@@ -86,19 +88,40 @@ impl Index<BasicBlock> for InternedLocations {
     }
 }
 
-#[cfg_attr(feature = "serde_dump", derive(serde::Serialize))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Location {
     pub block: BasicBlock,
     pub kind: LocationKind,
 }
 
-#[cfg_attr(feature = "serde_dump", derive(serde::Serialize))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+impl Debug for Location{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
+}
+
+impl Display for Location{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} -> {:?}", self.block, self.kind)
+    }
+}
+
+
+#[derive(Clone, Copy , Eq, PartialEq, Hash)]
 pub enum LocationKind {
     Phi(Phi),
     Statement(StatementId),
     Terminator,
+}
+
+impl Debug for LocationKind{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            Self::Phi(phi) => Debug::fmt(phi,f),
+            Self::Statement(stmnt) => Debug::fmt(stmnt,f),
+            Self::Terminator => f.write_str("terminator")
+        }
+    }
 }
 
 pub type Successors = AtMostTwoIter<BasicBlock>;
@@ -488,11 +511,27 @@ impl<C: CallType> ControlFlowGraph<C> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PhiData {
     pub dst: Local,
     pub sources: HashMap<BasicBlock, Local>,
     pub sctx: SyntaxCtx,
+}
+
+impl Display for PhiData{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} = phi {{ ", self.dst)?;
+        for (bb, src) in self.sources.iter(){
+            write!(f, "{} => {},", bb,src)?;
+        }
+        Ok(())
+    }
+}
+
+impl Debug for PhiData{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -658,7 +697,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum TerminatorKind<C: CallType> {
     Goto(BasicBlock),
     Split {
@@ -668,6 +707,26 @@ pub enum TerminatorKind<C: CallType> {
         loop_head: bool,
     },
     End,
+}
+
+impl<C: CallType> Display for TerminatorKind<C>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self{
+            Self::Goto(bb) => {
+                write!(f,"goto {}",bb)
+            }
+            TerminatorKind::Split {condition, true_block,false_block,.. } => {
+                write!(f, "if {} {{ goto {} }} else {{ goto {} }}",condition,true_block,false_block)
+            }
+            TerminatorKind::End => write!(f,"terminate")
+        }
+    }
+}
+
+impl<C: CallType> Debug for TerminatorKind<C>{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
 }
 
 impl<C: CallType> TerminatorKind<C> {
@@ -713,5 +772,9 @@ impl<C: CallType> TerminatorKind<C> {
 
             Self::End => (),
         }
+    }
+
+    pub fn is_loop_head(&self)->bool{
+        matches!(self, Self::Split {loop_head: true,..})
     }
 }
