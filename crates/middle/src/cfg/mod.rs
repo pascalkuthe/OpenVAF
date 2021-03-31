@@ -522,8 +522,9 @@ impl Display for PhiData{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{} = phi {{ ", self.dst)?;
         for (bb, src) in self.sources.iter(){
-            write!(f, "{} => {},", bb,src)?;
+            write!(f, "{:?} => {}, ", bb,src)?;
         }
+        f.write_str("}");
         Ok(())
     }
 }
@@ -713,10 +714,10 @@ impl<C: CallType> Display for TerminatorKind<C>{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self{
             Self::Goto(bb) => {
-                write!(f,"goto {}",bb)
+                write!(f,"goto {:?}",bb)
             }
             TerminatorKind::Split {condition, true_block,false_block,.. } => {
-                write!(f, "if {} {{ goto {} }} else {{ goto {} }}",condition,true_block,false_block)
+                write!(f, "if {} {{ goto {:?} }} else {{ goto {:?} }}",condition,true_block,false_block)
             }
             TerminatorKind::End => write!(f,"terminate")
         }

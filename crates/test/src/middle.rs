@@ -39,6 +39,8 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                 return Err(errors.user_facing::<StandardPrinter>().into());
             }
 
+            cfg.insert_variable_declarations(&mir);
+
             mir.print_to_file_with_shared(main_file.join(format!("{}.mir", model)), id, &cfg);
 
             let malformations = cfg.run_pass(Verify(&mir));

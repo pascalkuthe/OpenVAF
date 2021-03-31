@@ -6,7 +6,7 @@ use std::path::Path;
 
 const INDENT: &str = "    ";
 /// Alignment for lining up comments following MIR statements
-const ALIGN: usize = 80;
+const ALIGN: usize = 120;
 
 
 impl<C: CallType> Mir<C>{
