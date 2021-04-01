@@ -34,9 +34,8 @@
       rustOverlay = final: prev:
         let
           rustChannel = prev.rustChannelOf {
-            # date = "2021-02-16";
             channel = "beta";
-            sha256 = "sha256-ODUOh79XvmQ99BGd7Xjk45hrcK4kg5yM9rotvLhd5hs=";
+            sha256 = "sha256-GnlDd27tE5AcuNph68YHL9aMLl2n8eWbtrodoiE4++E";
           };
         in
           {
