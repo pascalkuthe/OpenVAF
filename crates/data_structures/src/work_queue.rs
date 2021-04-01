@@ -115,6 +115,14 @@ impl<T: Idx + From<usize>> WorkQueue<T> {
     }
 }
 
+impl<T: Idx + From<usize>> Extend<T> for WorkQueue<T>{
+    fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
+        let set = &mut self.set;
+        let iter = iter.into_iter().filter(|x|!set.put(*x));
+        self.deque.extend(iter)
+    }
+}
+
 impl<I: Idx + From<usize>> From<BitSet<I>> for WorkQueue<I> {
     fn from(set: BitSet<I>) -> Self {
         Self {

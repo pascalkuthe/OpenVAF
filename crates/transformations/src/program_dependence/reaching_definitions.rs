@@ -20,6 +20,24 @@ pub struct UseDefGraph {
     pub use_def_chains: SparseBitSetMatrix<LocationId, LocationId>,
     pub assignments: SparseBitSetMatrix<Local, LocationId>,
 }
+
+impl UseDefGraph{
+    pub fn inverse(&self)->DefUserGraph{
+        let mut def_use_chains = SparseBitSetMatrix::new_empty(self.use_def_chains.y_len_idx(), self.use_def_chains.x_len_idx());
+        for (use_loc, definitions) in self.use_def_chains.rows_enumerated(){
+            for def_loc in definitions.ones(){
+                def_use_chains.insert(def_loc, use_loc)
+            }
+        }
+        DefUserGraph{def_use_chains}
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DefUserGraph{
+    pub def_use_chains: SparseBitSetMatrix<LocationId, LocationId>,
+}
+
 pub struct ReachingDefinitionsAnalysis<'a> {
     graph: UseDefGraph,
     locations: &'a InternedLocations,

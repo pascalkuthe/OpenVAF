@@ -16,6 +16,7 @@ mod remove_dead_locals;
 mod simplify;
 mod simplify_branches;
 mod verify;
+mod forward_slice;
 
 pub use backward_slice::BackwardSlice;
 pub use program_dependence::{

@@ -16,6 +16,8 @@ use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, InternedLocations, Location
 use openvaf_middle::{impl_pass_span, CallType};
 use openvaf_middle::dfa::DfGraph;
 use openvaf_data_structures::BitSet;
+use crate::program_dependence::reaching_definitions::DefUserGraph;
+use crate::program_dependence::control_dependence::InvControlDependenceGraph;
 
 mod control_dependence;
 mod post_dominance;
@@ -25,6 +27,23 @@ pub struct ProgramDependenceGraph {
     pub data_dependencies: UseDefGraph,
     pub control_dependencies: ControlDependenceGraph,
 }
+
+pub struct InvProgramDependenceGraph {
+    pub data_dependencies: DefUserGraph,
+    pub control_dependencies: InvControlDependenceGraph,
+}
+
+impl ProgramDependenceGraph{
+    pub fn inverse(&self)-> InvProgramDependenceGraph{
+        InvProgramDependenceGraph{
+            data_dependencies: self.data_dependencies.inverse(),
+            control_dependencies: self.control_dependencies.inverse()
+        }
+    }
+}
+
+
+
 
 pub struct CalculateDataDependence;
 

@@ -29,7 +29,7 @@ impl ControlDependenceGraph {
     /// Calculates the Control Dependence Graph of a CFG.
     /// A basic block is control dependent on a statement if this statements decides whether the block is executed (for example an if statement).
     /// Statements that cause control flow are not represented as statements but as basic block terminators in the cfg.
-    /// As such the control dependence Graph simply maps basic blocks to all basics block whos terminator affats whether a statements is executed
+    /// As such the control dependence Graph simply maps basic blocks to all basics block whose terminator affects whether a statements is executed
     pub fn from_cfg<C: CallType>(cfg: &ControlFlowGraph<C>) -> Self {
         Self::from_ipdom(cfg, &PostDominators::new(cfg))
     }
@@ -92,5 +92,27 @@ impl ControlDependenceGraph {
             from = ipdom[from];
         }
         trace!("Done")
+    }
+
+    pub fn inverse(&self)->InvControlDependenceGraph{
+        let mut data = SparseBitSetMatrix::new_empty(self.data.y_len_idx(), self.data.x_len_idx());
+        for (bb, control_dependencies) in self.data.rows_enumerated(){
+            for control_dependency in control_dependencies.ones(){
+                data.insert(control_dependency, bb)
+            }
+        }
+        InvControlDependenceGraph{data}
+    }
+}
+
+pub struct InvControlDependenceGraph{
+    data: SparseBitSetMatrix<BasicBlock, BasicBlock>,
+}
+
+impl Index<BasicBlock> for InvControlDependenceGraph {
+    type Output = Option<HybridBitSet<BasicBlock>>;
+
+    fn index(&self, index: BasicBlock) -> &Self::Output {
+        &self.data.row(index)
     }
 }
