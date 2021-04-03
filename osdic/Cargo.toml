@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "linker",
+    "lld",
+    "hir_lowering",
+    "targets",
+]

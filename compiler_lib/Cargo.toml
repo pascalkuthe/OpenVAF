@@ -1,0 +1,33 @@
+[workspace]
+
+members = [
+    "ast",
+    "ast_lowering",
+
+    "constants",
+
+    "codegen_llvm",
+
+    "derivatives",
+
+    "data_structures",
+
+    "diagnostics",
+
+    "hir",
+    "hir_lowering",
+    "ir",
+    "middle",
+
+    "macros",
+
+    "parser",
+    "preprocessor",
+
+    "session",
+
+    "transformations",
+    "targets",
+
+    "test"
+]
