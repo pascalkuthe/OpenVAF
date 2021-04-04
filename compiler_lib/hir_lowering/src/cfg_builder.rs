@@ -37,7 +37,7 @@ use openvaf_session::sourcemap::Span;
 use std::convert::TryFrom;
 use std::mem::replace;
 
-pub struct LocalCtx<'a, 'h, C: ExpressionLowering, L: HirLowering> {
+pub struct LocalCtx<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> {
     pub cfg: ControlFlowGraph<C>,
     pub fold: &'a mut HirFold<'h, L>,
     vars: IndexVec<VariableId, Option<Local>>,
@@ -47,7 +47,7 @@ pub struct LocalCtx<'a, 'h, C: ExpressionLowering, L: HirLowering> {
     call_stack: Vec<(FunctionId, Span)>,
 }
 
-impl<'a, 'h, C: ExpressionLowering, L: HirLowering> LocalCtx<'a, 'h, C, L> {
+impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
     pub fn handle_stmnt_attributes(&mut self, stmt: StatementId) {
         let sctx = self.fold.hir[stmt].1;
         let span = trace_span!("attributes", src = debug(stmt), sctx = sctx.index());

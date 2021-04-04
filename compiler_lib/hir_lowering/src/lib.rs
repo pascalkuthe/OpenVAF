@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use crate::error::{Error, TyPrinter};
+pub use crate::error::{Error, TyPrinter};
 use openvaf_diagnostics::{lints::Lint, DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use openvaf_hir::{DisciplineAccess, ExpressionId, Hir, Primary};
 use openvaf_ir::{
@@ -65,14 +65,15 @@ pub enum AttributeCtx {
 }
 
 pub trait HirLowering: Sized {
-    type AnalogBlockExprLower: ExpressionLowering;
+    type AnalogBlockExprLower: ExpressionLowering<Self>;
     fn handle_attribute(
         ctx: &mut HirFold<Self>,
         attr: &Attribute,
         src: AttributeCtx,
         sctx: SyntaxCtx,
     );
-    fn handle_statement_attribute<'a, 'h, C: ExpressionLowering>(
+
+    fn handle_statement_attribute<'a, 'h, C: ExpressionLowering<Self>>(
         ctx: &mut LocalCtx<'a, 'h, C, Self>,
         attr: &Attribute,
         stmt: StatementId,
@@ -81,46 +82,42 @@ pub trait HirLowering: Sized {
 }
 
 // TODO enforce times somehow?
-pub trait ExpressionLowering: CallType {
-    fn port_flow<L: HirLowering>(
-        ctx: &mut LocalCtx<Self, L>,
-        port: PortId,
-        span: Span,
-    ) -> Option<RValue<Self>>;
+pub trait ExpressionLowering<L: HirLowering>: CallType {
+    fn port_flow(ctx: &mut LocalCtx<Self, L>, port: PortId, span: Span) -> Option<RValue<Self>>;
 
-    fn branch_access<L: HirLowering>(
+    fn branch_access(
         ctx: &mut LocalCtx<Self, L>,
         access: DisciplineAccess,
         branch: BranchId,
         span: Span,
     ) -> Option<RValue<Self>>;
 
-    fn parameter_ref<L: HirLowering>(
+    fn parameter_ref(
         ctx: &mut LocalCtx<Self, L>,
         param: ParameterId,
         span: Span,
     ) -> Option<RValue<Self>>;
 
-    fn time_derivative<L: HirLowering>(
+    fn time_derivative(
         ctx: &mut LocalCtx<Self, L>,
         expr: ExpressionId,
         span: Span,
     ) -> Option<RValue<Self>>;
 
-    fn noise<L: HirLowering>(
+    fn noise(
         ctx: &mut LocalCtx<Self, L>,
         source: NoiseSource<ExpressionId, ()>,
         name: Option<ExpressionId>,
         span: Span,
     ) -> Option<RValue<Self>>;
 
-    fn system_function_call<L: HirLowering>(
+    fn system_function_call(
         ctx: &mut LocalCtx<Self, L>,
         call: &HirSystemFunctionCall,
         span: Span,
     ) -> Option<RValue<Self>>;
 
-    fn stop_task<L: HirLowering>(
+    fn stop_task(
         ctx: &mut LocalCtx<Self, L>,
         kind: StopTaskKind,
         finish: PrintOnFinish,
@@ -128,16 +125,12 @@ pub trait ExpressionLowering: CallType {
     ) -> Option<StmntKind<Self>>;
 }
 
-impl ExpressionLowering for ParameterCallType {
-    fn port_flow<L: HirLowering>(
-        _: &mut LocalCtx<Self, L>,
-        _: PortId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
+impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
+    fn port_flow(_: &mut LocalCtx<Self, L>, _: PortId, _: Span) -> Option<RValue<Self>> {
         unimplemented!()
     }
 
-    fn branch_access<L: HirLowering>(
+    fn branch_access(
         _: &mut LocalCtx<Self, L>,
         _: DisciplineAccess,
         _: BranchId,
@@ -146,7 +139,7 @@ impl ExpressionLowering for ParameterCallType {
         unimplemented!()
     }
 
-    fn parameter_ref<L: HirLowering>(
+    fn parameter_ref(
         _: &mut LocalCtx<Self, L>,
         param: ParameterId,
         span: Span,
@@ -157,7 +150,7 @@ impl ExpressionLowering for ParameterCallType {
         )))
     }
 
-    fn time_derivative<L: HirLowering>(
+    fn time_derivative(
         _: &mut LocalCtx<Self, L>,
         _: ExpressionId,
         _: Span,
@@ -165,7 +158,7 @@ impl ExpressionLowering for ParameterCallType {
         unimplemented!()
     }
 
-    fn noise<L: HirLowering>(
+    fn noise(
         _: &mut LocalCtx<Self, L>,
         _: NoiseSource<ExpressionId, ()>,
         _: Option<ExpressionId>,
@@ -174,7 +167,7 @@ impl ExpressionLowering for ParameterCallType {
         unimplemented!()
     }
 
-    fn system_function_call<L: HirLowering>(
+    fn system_function_call(
         _: &mut LocalCtx<Self, L>,
         _: &HirSystemFunctionCall,
         _: Span,
@@ -182,7 +175,7 @@ impl ExpressionLowering for ParameterCallType {
         unimplemented!()
     }
 
-    fn stop_task<L: HirLowering>(
+    fn stop_task(
         _: &mut LocalCtx<Self, L>,
         _: StopTaskKind,
         _: PrintOnFinish,
@@ -192,16 +185,12 @@ impl ExpressionLowering for ParameterCallType {
     }
 }
 
-impl ExpressionLowering for RealConstCallType {
-    fn port_flow<L: HirLowering>(
-        _: &mut LocalCtx<Self, L>,
-        _: PortId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
+impl<L: HirLowering> ExpressionLowering<L> for RealConstCallType {
+    fn port_flow(_: &mut LocalCtx<Self, L>, _: PortId, _: Span) -> Option<RValue<Self>> {
         unimplemented!()
     }
 
-    fn branch_access<L: HirLowering>(
+    fn branch_access(
         _: &mut LocalCtx<Self, L>,
         _: DisciplineAccess,
         _: BranchId,
@@ -210,15 +199,11 @@ impl ExpressionLowering for RealConstCallType {
         unimplemented!()
     }
 
-    fn parameter_ref<L: HirLowering>(
-        _: &mut LocalCtx<Self, L>,
-        _: ParameterId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
+    fn parameter_ref(_: &mut LocalCtx<Self, L>, _: ParameterId, _: Span) -> Option<RValue<Self>> {
         unimplemented!()
     }
 
-    fn time_derivative<L: HirLowering>(
+    fn time_derivative(
         _: &mut LocalCtx<Self, L>,
         _: ExpressionId,
         _: Span,
@@ -226,7 +211,7 @@ impl ExpressionLowering for RealConstCallType {
         unimplemented!()
     }
 
-    fn noise<L: HirLowering>(
+    fn noise(
         _: &mut LocalCtx<Self, L>,
         _: NoiseSource<ExpressionId, ()>,
         _: Option<ExpressionId>,
@@ -235,7 +220,7 @@ impl ExpressionLowering for RealConstCallType {
         unimplemented!()
     }
 
-    fn system_function_call<L: HirLowering>(
+    fn system_function_call(
         _: &mut LocalCtx<Self, L>,
         _: &HirSystemFunctionCall,
         _: Span,
@@ -243,7 +228,7 @@ impl ExpressionLowering for RealConstCallType {
         unimplemented!()
     }
 
-    fn stop_task<L: HirLowering>(
+    fn stop_task(
         _: &mut LocalCtx<Self, L>,
         _: StopTaskKind,
         _: PrintOnFinish,
@@ -554,7 +539,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         }
     }
 
-    pub fn lower_expression<C: ExpressionLowering>(
+    pub fn lower_expression<C: ExpressionLowering<L>>(
         &mut self,
         expr: ExpressionId,
     ) -> Option<Expression<C>> {
@@ -567,7 +552,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         Some(Expression(cfg, operand))
     }
 
-    pub fn lower_assign_expr<C: ExpressionLowering>(
+    pub fn lower_assign_expr<C: ExpressionLowering<L>>(
         &mut self,
         expr: ExpressionId,
         ty: Type,
@@ -586,7 +571,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         Some(Expression(cfg, operand))
     }
 
-    pub fn lower_real_expression<C: ExpressionLowering>(
+    pub fn lower_real_expression<C: ExpressionLowering<L>>(
         &mut self,
         expr: ExpressionId,
     ) -> Option<Expression<C>> {
@@ -597,7 +582,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         Some(Expression(cfg, operand))
     }
 
-    pub fn lower_string_expression<C: ExpressionLowering>(
+    pub fn lower_string_expression<C: ExpressionLowering<L>>(
         &mut self,
         expr: ExpressionId,
     ) -> Option<Expression<C>> {
