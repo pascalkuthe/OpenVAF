@@ -1,3 +1,3 @@
 mod hir_lowering;
-//mod lim_function;
+mod lim;
 //mod sim_spec;

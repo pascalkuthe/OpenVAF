@@ -138,7 +138,7 @@ impl HirLowering for TestLowering {
         // attribute can be ignored
     }
 
-    fn handle_statement_attribute<'a, 'h, C: ExpressionLowering>(
+    fn handle_statement_attribute<'a, 'h, C: ExpressionLowering<Self>>(
         _: &mut LocalCtx<'a, 'h, C, Self>,
         _: &Attribute,
         _: StatementId,
@@ -249,9 +249,9 @@ impl Display for Call {
 pub const KB: f64 = 1.3806488e-23;
 pub const Q: f64 = 1.602176565e-19;
 
-impl ExpressionLowering for Call {
-    fn port_flow<L: HirLowering>(
-        _ctx: &mut LocalCtx<Self, L>,
+impl ExpressionLowering<TestLowering> for Call {
+    fn port_flow(
+        _ctx: &mut LocalCtx<Self, TestLowering>,
         port: PortId,
         span: Span,
     ) -> Option<RValue<Self>> {
@@ -261,8 +261,8 @@ impl ExpressionLowering for Call {
         )))
     }
 
-    fn branch_access<L: HirLowering>(
-        _ctx: &mut LocalCtx<Self, L>,
+    fn branch_access(
+        _ctx: &mut LocalCtx<Self, TestLowering>,
         access: DisciplineAccess,
         branch: BranchId,
         span: Span,
@@ -273,8 +273,8 @@ impl ExpressionLowering for Call {
         )))
     }
 
-    fn parameter_ref<L: HirLowering>(
-        _ctx: &mut LocalCtx<Self, L>,
+    fn parameter_ref(
+        _ctx: &mut LocalCtx<Self, TestLowering>,
         param: ParameterId,
         span: Span,
     ) -> Option<RValue<Self>> {
@@ -284,8 +284,8 @@ impl ExpressionLowering for Call {
         )))
     }
 
-    fn time_derivative<L: HirLowering>(
-        _ctx: &mut LocalCtx<Self, L>,
+    fn time_derivative(
+        _ctx: &mut LocalCtx<Self, TestLowering>,
         _: ExpressionId,
         _: Span,
     ) -> Option<RValue<Self>> {
@@ -293,8 +293,8 @@ impl ExpressionLowering for Call {
         None
     }
 
-    fn noise<L: HirLowering>(
-        _ctx: &mut LocalCtx<Self, L>,
+    fn noise(
+        _ctx: &mut LocalCtx<Self, TestLowering>,
         _source: NoiseSource<ExpressionId, ()>,
         _name: Option<ExpressionId>,
         span: Span,
@@ -302,8 +302,8 @@ impl ExpressionLowering for Call {
         Some(RValue::Call(Self::Noise, IndexVec::new(), span))
     }
 
-    fn system_function_call<L: HirLowering>(
-        _ctx: &mut LocalCtx<Self, L>,
+    fn system_function_call(
+        _ctx: &mut LocalCtx<Self, TestLowering>,
         call: &HirSystemFunctionCall,
         span: Span,
     ) -> Option<RValue<Self>> {
@@ -345,8 +345,8 @@ impl ExpressionLowering for Call {
         Some(res)
     }
 
-    fn stop_task<L: HirLowering>(
-        _ctx: &mut LocalCtx<Self, L>,
+    fn stop_task(
+        _ctx: &mut LocalCtx<Self, TestLowering>,
         kind: StopTaskKind,
         finish: PrintOnFinish,
         span: Span,
