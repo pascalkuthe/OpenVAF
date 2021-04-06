@@ -9,15 +9,15 @@
  */
 
 use openvaf_hir::{
-    CaseItem, Cases, ConstVal, DisciplineAccess, Expression, ForLoop, SystemFunctionCall,
+    CaseItem, Cases, ConstVal, DisciplineAccess, Expression, ForLoop,
 };
 use openvaf_ir::ids::{BranchId, ExpressionId, FunctionId, VariableId};
 use openvaf_ir::{DoubleArgMath, PrintOnFinish, SingleArgMath, Spanned};
 use openvaf_middle::cfg::{
-    BasicBlock, BasicBlockData, ControlFlowGraph, PhiData, Terminator, TerminatorKind,
+    BasicBlock,  ControlFlowGraph, PhiData,  TerminatorKind,
 };
 use openvaf_middle::{
-    BinOp, COperand, ComparisonOp, Local, LocalDeclaration, LocalKind, Operand, OperandData,
+    BinOp, COperand, ComparisonOp, Local,   Operand, OperandData,
     RValue, SimpleConstVal, StatementId, StmntKind, TyRValue, Type, VariableLocalKind,
 };
 
@@ -27,27 +27,24 @@ use crate::error::Error::{
 };
 use crate::error::{ReferenceKind, TyPrinter};
 use crate::{ExpressionLowering, HirFold, HirLowering};
-use openvaf_data_structures::index_vec::{index_vec, IndexVec};
-use tracing::{trace, trace_span};
+use tracing::{ trace_span};
 
 use openvaf_data_structures::HashMap;
 use openvaf_diagnostics::ListFormatter;
 use openvaf_hir::{BinaryOperator, Primary, Statement, UnaryOperator};
+use openvaf_middle::cfg::builder::CfgBuilder;
 use openvaf_session::sourcemap::Span;
 use std::convert::TryFrom;
 use std::mem::replace;
 
 pub struct LocalCtx<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> {
-    pub cfg: ControlFlowGraph<C>,
     pub fold: &'a mut HirFold<'h, L>,
-    vars: IndexVec<VariableId, Option<Local>>,
-    flows: IndexVec<BranchId, Option<Local>>,
-    potentials: IndexVec<BranchId, Option<Local>>,
-    pub current: BasicBlock,
     call_stack: Vec<(FunctionId, Span)>,
+    pub cfg_builder: CfgBuilder<ControlFlowGraph<C>>,
 }
 
 impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
+
     pub fn handle_stmnt_attributes(&mut self, stmt: StatementId) {
         let sctx = self.fold.hir[stmt].1;
         let span = trace_span!("attributes", src = debug(stmt), sctx = sctx.index());
@@ -67,51 +64,27 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
     }
 
     pub fn new_small(fold: &'a mut HirFold<'h, L>) -> Self {
-        let mut res = Self {
-            cfg: ControlFlowGraph::new(),
+        Self {
+            cfg_builder: CfgBuilder::new_small(),
             fold,
-            vars: IndexVec::new(),
-            flows: IndexVec::new(),
-            potentials: IndexVec::new(),
-            current: BasicBlock::from_raw_unchecked(0),
             call_stack: Vec::new(),
-        };
-        res.enter_new_block();
-        res
+        }
     }
 
     pub fn new_fn(fold: &'a mut HirFold<'h, L>) -> Self {
-        let mut res = Self {
-            cfg: ControlFlowGraph::new(),
-            vars: index_vec![None; fold.hir.variables.len()],
-            flows: IndexVec::new(),
-            potentials: IndexVec::new(),
+        Self {
+            cfg_builder: CfgBuilder::new_fn(fold.mir.variables.len(),fold.sctx),
             fold,
-            current: BasicBlock::from_raw_unchecked(0),
             call_stack: Vec::with_capacity(32),
-        };
-        // CFGS should have an empty entry node to easily prepending basic blocks
-        let entry = res.create_block();
-        res.enter_new_block();
-        res.terminate_bb(entry, TerminatorKind::Goto(res.current));
-        res
+        }
     }
 
     pub fn new_main(fold: &'a mut HirFold<'h, L>) -> Self {
-        let mut res = Self {
-            cfg: ControlFlowGraph::new(),
-            vars: index_vec![None; fold.hir.variables.len()],
-            flows: index_vec![None; fold.mir.branches.len()],
-            potentials: index_vec![None; fold.mir.branches.len()],
+        Self {
+            cfg_builder: CfgBuilder::new_main(fold.mir.variables.len(),fold.mir.branches.len(), fold.sctx),
             fold,
-            current: BasicBlock::from_raw_unchecked(0),
             call_stack: Vec::with_capacity(32),
-        };
-        // CFGS should have an empty entry node to easily prepending basic blocks
-        let entry = res.create_block();
-        res.enter_new_block();
-        res.terminate_bb(entry, TerminatorKind::Goto(res.current));
-        res
+        }
     }
 
     pub fn lower_block(&mut self, block: &[StatementId]) {
@@ -140,17 +113,17 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             Statement::Condition(cond, ref true_block, ref false_block) => {
                 let cond = self.fold_bool_rhs(cond);
                 if let Some(cond) = cond {
-                    let start = self.current;
+                    let start = self.cfg_builder.current;
 
                     self.enter_new_block();
-                    let true_block_head = self.current;
+                    let true_block_head = self.cfg_builder.current;
                     self.lower_block(true_block);
-                    let true_block_tail = self.current;
+                    let true_block_tail = self.cfg_builder.current;
 
                     self.enter_new_block();
-                    let false_block_head = self.current;
+                    let false_block_head = self.cfg_builder.current;
                     self.lower_block(false_block);
-                    let false_block_tail = self.current;
+                    let false_block_tail = self.cfg_builder.current;
 
                     self.enter_new_block();
 
@@ -163,22 +136,22 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                             loop_head: false,
                         },
                     );
-                    self.terminate_bb(true_block_tail, TerminatorKind::Goto(self.current));
-                    self.terminate_bb(false_block_tail, TerminatorKind::Goto(self.current));
+                    self.terminate_bb(true_block_tail, TerminatorKind::Goto(self.cfg_builder.current));
+                    self.terminate_bb(false_block_tail, TerminatorKind::Goto(self.cfg_builder.current));
                 }
             }
             Statement::While(cond, ref body) => {
-                let start = self.current;
+                let start = self.cfg_builder.current;
 
                 self.enter_new_block();
-                let loop_cond_head = self.current;
+                let loop_cond_head = self.cfg_builder.current;
                 let cond = self.fold_bool_rhs(cond);
-                let loop_cond_tail = self.current;
+                let loop_cond_tail = self.cfg_builder.current;
 
                 self.enter_new_block();
-                let loop_body_head = self.current;
+                let loop_body_head = self.cfg_builder.current;
                 self.lower_block(body);
-                let loop_body_tail = self.current;
+                let loop_body_tail = self.cfg_builder.current;
 
                 self.enter_new_block();
 
@@ -188,7 +161,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                         TerminatorKind::Split {
                             condition: cond.val,
                             true_block: loop_body_head,
-                            false_block: self.current,
+                            false_block: self.cfg_builder.current,
                             loop_head: true,
                         },
                     );
@@ -197,24 +170,24 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                 self.terminate_bb(loop_body_tail, TerminatorKind::Goto(loop_cond_head));
             }
             Statement::For(ForLoop {
-                cond,
-                init,
-                incr,
-                ref body,
-            }) => {
+                               cond,
+                               init,
+                               incr,
+                               ref body,
+                           }) => {
                 self.lower_stmt(init);
-                let start = self.current;
+                let start = self.cfg_builder.current;
 
                 self.enter_new_block();
-                let loop_cond_head = self.current;
+                let loop_cond_head = self.cfg_builder.current;
                 let cond = self.fold_bool_rhs(cond);
-                let loop_cond_tail = self.current;
+                let loop_cond_tail = self.cfg_builder.current;
 
                 self.enter_new_block();
-                let loop_body_head = self.current;
+                let loop_body_head = self.cfg_builder.current;
                 self.lower_block(body);
                 self.lower_stmt(incr);
-                let loop_body_tail = self.current;
+                let loop_body_tail = self.cfg_builder.current;
 
                 self.enter_new_block();
 
@@ -224,7 +197,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                         TerminatorKind::Split {
                             condition: cond.val,
                             true_block: loop_body_head,
-                            false_block: self.current,
+                            false_block: self.cfg_builder.current,
                             loop_head: true,
                         },
                     );
@@ -247,7 +220,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                     .unwrap_or(PrintOnFinish::Location);
 
                 if let Some(stmnt) = C::stop_task(self, kind, print_on_finish, span) {
-                    self.cfg.blocks[self.current]
+                    self.cfg_builder.cfg.blocks[self.cfg_builder.current]
                         .statements
                         .push((stmnt, self.fold.sctx));
                 }
@@ -261,7 +234,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                     {
                         let branch = &self.fold.mir.branches[branch];
                         // Node Collapse hint
-                        self.cfg.blocks[self.current].statements.push((
+                        self.cfg_builder.cfg.blocks[self.cfg_builder.current].statements.push((
                             StmntKind::CollapseHint(branch.hi, branch.lo),
                             self.fold.sctx,
                         ));
@@ -276,25 +249,25 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             }
 
             Statement::Case(Cases {
-                expr,
-                ref cases,
-                ref default,
-            }) => {
+                                expr,
+                                ref cases,
+                                ref default,
+                            }) => {
                 if let Some(cond) = self.lower_expr(expr) {
-                    let mut start = self.current;
+                    let mut start = self.cfg_builder.current;
 
                     let end = self.create_block();
 
                     for CaseItem { values, body } in cases {
                         self.enter_new_block();
-                        let body_head = self.current;
+                        let body_head = self.cfg_builder.current;
                         self.lower_block(body);
                         self.terminate(TerminatorKind::Goto(end));
-                        self.current = start;
+                        self.cfg_builder.current = start;
 
                         for value in values {
                             if let Some(cond) =
-                                self.fold_eq_rhs(*value, cond.clone(), self.expr_span(expr), span)
+                            self.fold_eq_rhs(*value, cond.clone(), self.expr_span(expr), span)
                             {
                                 self.enter_new_block();
                                 self.terminate_bb(
@@ -302,19 +275,19 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                                     TerminatorKind::Split {
                                         condition: cond,
                                         true_block: body_head,
-                                        false_block: self.current,
+                                        false_block: self.cfg_builder.current,
                                         loop_head: false,
                                     },
                                 );
 
-                                start = self.current;
+                                start = self.cfg_builder.current;
                             }
                         }
                     }
 
                     self.lower_block(default);
                     self.terminate(TerminatorKind::Goto(end));
-                    self.current = end
+                    self.cfg_builder.current = end
                 }
             }
         }
@@ -378,7 +351,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
             if arg_info.output {
                 let var = if let Expression::Primary(Primary::VariableReference(var)) =
-                    self.fold.hir[*val].contents
+                self.fold.hir[*val].contents
                 {
                     var
                 } else {
@@ -401,12 +374,12 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                 }
 
                 let (lhs, _) = self.variable_local(var);
-                let start = replace(&mut self.current, dst_block);
+                let start = replace(&mut self.cfg_builder.current, dst_block);
                 self.assign(
                     lhs,
                     RValue::Use(Operand::new(OperandData::Copy(local), span)),
                 );
-                self.current = start;
+                self.cfg_builder.current = start;
             }
 
             if arg_info.input {
@@ -426,7 +399,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
         self.call_stack.pop();
 
-        let tail = replace(&mut self.current, dst_block);
+        let tail = replace(&mut self.cfg_builder.current, dst_block);
         self.terminate_bb(tail, TerminatorKind::Goto(dst_block));
 
         let (rvar, rty) = self.variable_local(function.return_variable);
@@ -575,12 +548,12 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
                 BinaryOperator::LogicOr => {
                     let lhs = self.fold_bool_rhs(lhs_expr);
-                    let start = self.current;
+                    let start = self.cfg_builder.current;
                     self.enter_new_block();
-                    let false_block_head = self.current;
+                    let false_block_head = self.cfg_builder.current;
 
                     let rhs = self.fold_bool_rhs(rhs_expr);
-                    let false_block_tail = self.current;
+                    let false_block_tail = self.cfg_builder.current;
                     self.enter_new_block();
                     let true_val = self.assign_temporary(TyRValue {
                         val: RValue::Use(Operand::new(
@@ -589,11 +562,11 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                         )),
                         ty: Type::BOOL,
                     });
-                    let true_block = self.current;
+                    let true_block = self.cfg_builder.current;
                     self.enter_new_block();
 
-                    self.terminate_bb(true_block, TerminatorKind::Goto(self.current));
-                    self.terminate_bb(false_block_tail, TerminatorKind::Goto(self.current));
+                    self.terminate_bb(true_block, TerminatorKind::Goto(self.cfg_builder.current));
+                    self.terminate_bb(false_block_tail, TerminatorKind::Goto(self.cfg_builder.current));
 
                     self.terminate_bb(
                         start,
@@ -610,7 +583,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                     let mut sources = HashMap::with_capacity(2);
                     sources.insert(true_block, true_val);
                     sources.insert(false_block_tail, false_val);
-                    self.cfg[self.current].phi_statements.push(PhiData {
+                    self.cfg_builder.cfg[self.cfg_builder.current].phi_statements.push(PhiData {
                         dst,
                         sources,
                         sctx: self.fold.sctx,
@@ -624,12 +597,12 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
                 BinaryOperator::LogicAnd => {
                     let lhs = self.fold_bool_rhs(lhs_expr);
-                    let start = self.current;
+                    let start = self.cfg_builder.current;
 
                     self.enter_new_block();
-                    let true_block_head = self.current;
+                    let true_block_head = self.cfg_builder.current;
                     let rhs = self.fold_bool_rhs(rhs_expr);
-                    let true_block_tail = self.current;
+                    let true_block_tail = self.cfg_builder.current;
 
                     self.enter_new_block();
                     let false_val = self.assign_temporary(TyRValue {
@@ -639,12 +612,12 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                         )),
                         ty: Type::BOOL,
                     });
-                    let false_block = self.current;
+                    let false_block = self.cfg_builder.current;
 
                     self.enter_new_block();
 
-                    self.terminate_bb(true_block_tail, TerminatorKind::Goto(self.current));
-                    self.terminate_bb(false_block, TerminatorKind::Goto(self.current));
+                    self.terminate_bb(true_block_tail, TerminatorKind::Goto(self.cfg_builder.current));
+                    self.terminate_bb(false_block, TerminatorKind::Goto(self.cfg_builder.current));
                     self.terminate_bb(
                         start,
                         TerminatorKind::Split {
@@ -662,7 +635,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                     sources.insert(false_block, false_val);
 
                     let dst = self.new_temporary(Type::BOOL);
-                    self.cfg[self.current].phi_statements.push(PhiData {
+                    self.cfg_builder.cfg[self.cfg_builder.current].phi_statements.push(PhiData {
                         dst,
                         sources,
                         sctx: self.fold.sctx,
@@ -790,6 +763,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             Expression::PartialDerivative(expr, unkown) => {
                 let arg = self.fold_numeric(expr)?.0;
                 let derivative = self
+                    .cfg_builder
                     .cfg
                     .demand_operand_derivative_unchecked(&self.fold.mir, &arg, unkown)
                     .into_operand();
@@ -931,9 +905,9 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
     pub fn implicit_cast(&mut self, src: TyRValue<C>, dst: Type, span: Span) -> TyRValue<C> {
         // Most common case that can be performed without introducing additional local (important for node collapse)
         if let RValue::Use(Spanned {
-            contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Integer(val))),
-            ..
-        }) = src.val
+                               contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Integer(val))),
+                               ..
+                           }) = src.val
         {
             if dst == Type::REAL {
                 let val = OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(val as f64)));
@@ -971,7 +945,6 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
     pub fn fold_numeric_binop(
         &mut self,
-
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
     ) -> Option<(COperand<C>, COperand<C>, Type)> {
@@ -1185,7 +1158,6 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
     pub fn fold_real_binop(
         &mut self,
-
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
     ) -> Option<(COperand<C>, COperand<C>)> {
@@ -1196,7 +1168,6 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
     pub fn fold_int_binop(
         &mut self,
-
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
     ) -> Option<(COperand<C>, COperand<C>)> {
@@ -1208,7 +1179,6 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
     pub fn fold_compatible_rhs(
         &mut self,
-
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
         span: Span,
@@ -1248,7 +1218,6 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
     pub fn fold_compatible_bin_op(
         &mut self,
-
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
         span: Span,
@@ -1298,7 +1267,6 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
 
     fn fold_eq_rhs(
         &mut self,
-
         lhs_expr: ExpressionId,
         mut rhs: TyRValue<C>,
         rhs_span: Span,
@@ -1341,44 +1309,19 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
     }
 
     fn new_temporary(&mut self, ty: Type) -> Local {
-        self.cfg.new_temporary(ty)
+        self.cfg_builder.new_temporary(ty)
     }
 
     fn variable_local(&mut self, var: VariableId) -> (Local, Type) {
-        if let Some(res) = self.vars[var] {
-            (res, self.cfg.locals[res].ty)
-        } else {
-            let ty = self.fold.hir[var].ty;
-            let local = self.cfg.locals.push(LocalDeclaration {
-                kind: LocalKind::Variable(var, VariableLocalKind::User),
-                ty,
-            });
-            self.vars[var] = Some(local);
-            (local, ty)
-        }
+        self.cfg_builder.variable_local(var, &self.fold.mir)
     }
 
     fn branch_local(&mut self, branch: BranchId, access: DisciplineAccess) -> Local {
-        let local_store = match access {
-            DisciplineAccess::Flow => &mut self.flows,
-            DisciplineAccess::Potential => &mut self.potentials,
-        };
-
-        if let Some(local) = local_store[branch] {
-            local
-        } else {
-            let local = self.cfg.locals.push(LocalDeclaration {
-                kind: LocalKind::Branch(access, branch),
-                ty: Type::REAL,
-            });
-
-            local_store[branch] = Some(local);
-            local
-        }
+        self.cfg_builder.branch_local(branch, access)
     }
 
     pub fn rvalue_to_operand(&mut self, data: TyRValue<C>, span: Span) -> COperand<C> {
-        self.rvalue_to_operand_in_bb(self.current, data, span)
+        self.cfg_builder.rvalue_to_operand(data, span, self.fold.sctx)
     }
 
     pub fn rvalue_to_operand_in_bb(
@@ -1387,70 +1330,41 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         data: TyRValue<C>,
         span: Span,
     ) -> COperand<C> {
-        if let RValue::Use(op) = data.val {
-            op
-        } else {
-            Spanned::new(
-                OperandData::Copy(self.assign_temporary_in_bb(bb, data)),
-                span,
-            )
-        }
+        self.cfg_builder.rvalue_to_operand_in_bb(bb, data, span, self.fold.sctx)
     }
 
     pub fn assign_temporary(&mut self, data: TyRValue<C>) -> Local {
-        self.assign_temporary_in_bb(self.current, data)
+        self.cfg_builder.assign_temporary(data, self.fold.sctx)
     }
 
     pub fn assign_temporary_in_bb(&mut self, bb: BasicBlock, data: TyRValue<C>) -> Local {
-        let lhs = self.new_temporary(data.ty);
-        self.assign_in_bb(bb, lhs, data.val);
-        lhs
+        self.cfg_builder.assign_temporary_in_bb(bb, data, self.fold.sctx)
+
     }
 
     pub fn assign(&mut self, lhs: Local, rhs: RValue<C>) -> StatementId {
-        self.cfg.blocks[self.current]
-            .statements
-            .push((StmntKind::Assignment(lhs, rhs), self.fold.sctx))
+        self.cfg_builder.assign(lhs, rhs, self.fold.sctx)
+
     }
 
     pub fn assign_in_bb(&mut self, bb: BasicBlock, lhs: Local, rhs: RValue<C>) -> StatementId {
-        self.cfg.blocks[bb]
-            .statements
-            .push((StmntKind::Assignment(lhs, rhs), self.fold.sctx))
+        self.cfg_builder.assign_in_bb(bb, lhs, rhs, self.fold.sctx)
+
     }
 
     pub fn terminate_bb(&mut self, block: BasicBlock, kind: TerminatorKind<C>) {
-        trace!(block = block.index(), kind = debug(&kind), "terminating");
-        debug_assert!(
-            self.cfg[block].terminator.is_none(),
-            "terminate: block {:?}={:?} already has a terminator set",
-            block,
-            self.cfg[block]
-        );
-
-        self.cfg[block].terminator = Some(Terminator {
-            sctx: self.fold.sctx,
-            kind,
-        });
+        self.cfg_builder.terminate_bb(block, kind, self.fold.sctx)
     }
 
     pub fn terminate(&mut self, kind: TerminatorKind<C>) {
-        self.terminate_bb(self.current, kind)
+        self.cfg_builder.terminate(kind, self.fold.sctx)
     }
 
     pub fn create_block(&mut self) -> BasicBlock {
-        self.cfg.blocks.push(BasicBlockData {
-            phi_statements: IndexVec::with_capacity(16),
-            statements: IndexVec::with_capacity(128),
-            terminator: None,
-        })
+        self.cfg_builder.create_block()
     }
 
     pub fn enter_new_block(&mut self) {
-        self.current = self.cfg.blocks.push(BasicBlockData {
-            phi_statements: IndexVec::with_capacity(16),
-            statements: IndexVec::with_capacity(128),
-            terminator: None,
-        })
+        self.cfg_builder.enter_new_block()
     }
 }

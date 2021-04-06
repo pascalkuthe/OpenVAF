@@ -131,7 +131,7 @@ supported_targets!(
     ("x86_64-apple-darwin", x86_64_apple_darwin),
     ("x86_64-pc-windows-msvc", x86_64_pc_windows_msvc),
     ("x86_64-unknown-linux-gnu", x86_64_unknown_linux_gnu),
- //   ("x86_64-unknown-linux-musl", x86_64_unknown_linux_musl), TODO MUSL SUPPORT
+    //   ("x86_64-unknown-linux-musl", x86_64_unknown_linux_musl), TODO MUSL SUPPORT
 );
 
 impl Target {

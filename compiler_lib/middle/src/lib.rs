@@ -666,6 +666,50 @@ impl<C: CallType> RValue<C> {
         }
     }
 
+    pub fn map_operands<X: CallType>(
+        self,
+        conversion: &mut impl CallTypeConversion<C, X>,
+    ) -> RValue<X> {
+        match self {
+            RValue::UnaryOperation(op, arg) => {
+                RValue::UnaryOperation(op, conversion.map_operand(arg))
+            }
+            RValue::BinaryOperation(op, arg1, arg2) => RValue::BinaryOperation(
+                op,
+                conversion.map_operand(arg1),
+                conversion.map_operand(arg2),
+            ),
+            RValue::SingleArgMath(fun, arg) => {
+                RValue::SingleArgMath(fun, conversion.map_operand(arg))
+            }
+            RValue::DoubleArgMath(fun, arg1, arg2) => RValue::DoubleArgMath(
+                fun,
+                conversion.map_operand(arg1),
+                conversion.map_operand(arg2),
+            ),
+            RValue::Comparison(op, arg1, arg2, ty) => RValue::Comparison(
+                op,
+                conversion.map_operand(arg1),
+                conversion.map_operand(arg2),
+                ty,
+            ),
+            RValue::Select(cond, true_val, false_val) => RValue::Select(
+                conversion.map_operand(cond),
+                conversion.map_operand(true_val),
+                conversion.map_operand(false_val),
+            ),
+            RValue::Cast(op) => RValue::Cast(conversion.map_operand(op)),
+            RValue::Use(op) => RValue::Use(conversion.map_operand(op)),
+            RValue::Call(call, args, span) => conversion.map_call_val(call, args, span),
+            RValue::Array(vals, span) => RValue::Array(
+                vals.into_iter()
+                    .map(|op| conversion.map_operand(op))
+                    .collect(),
+                span,
+            ),
+        }
+    }
+
     pub fn operands_mut(&mut self) -> impl Iterator<Item = &mut COperand<C>> {
         match self {
             Self::UnaryOperation(_, op)
@@ -889,6 +933,7 @@ pub struct Variable {
     pub unit: Option<StringLiteral>,
     pub desc: Option<StringLiteral>,
     pub sctx: SyntaxCtx,
+    pub ty: Type,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -943,4 +988,29 @@ pub enum ParameterConstraint {
         included: Vec<Expression<ParameterCallType>>,
         excluded: Vec<Expression<ParameterCallType>>,
     },
+}
+
+pub trait CallTypeConversion<S: CallType, D: CallType> {
+    fn map_operand(&mut self, op: COperand<S>) -> COperand<D> {
+        let contents = match op.contents {
+            OperandData::Read(input) => self.map_input(input),
+            OperandData::Constant(val) => OperandData::Constant(val),
+            OperandData::Copy(loc) => OperandData::Copy(loc),
+        };
+        Spanned{contents, span: op.span}
+    }
+
+    fn map_input(&mut self, src: S::I) -> COperandData<D>;
+    fn map_call_val(
+        &mut self,
+        call: S,
+        args: IndexVec<CallArg, COperand<S>>,
+        span: Span,
+    ) -> RValue<D>;
+    fn map_call_stmnt(
+        &mut self,
+        call: S,
+        args: IndexVec<CallArg, COperand<S>>,
+        span: Span,
+    ) -> StmntKind<D>;
 }

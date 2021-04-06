@@ -162,7 +162,7 @@
 `define Min1(x, x0, deltax, xsmooth) \
     xsmooth = 0.5 * (x + x0 - sqrt((x - x0) * (x - x0) + 0.25 * deltax * deltax)); \
 
- // These openvaf_macros represent the subroutines to process the geometry dependent
+ // These macros represent the subroutines to process the geometry dependent
  // parasitics for BSIM-BULK, which calculates Ps, Pd, As, Ad, and Rs and Rd
  // for multi-fingers and various GEO and RGEO options.
 
@@ -2501,7 +2501,7 @@ analog begin
         M0_i = 0.0;
     end
 
-    // Initialize variables used in geometry openvaf_macros
+    // Initialize variables used in geometry macros
     nuEndD = 0.0; nuEndS = 0.0; nuIntD = 0.0; nuIntS = 0.0; Rend = 0.0; Rint = 0.0;
 
     // Process drain series resistance
@@ -4358,7 +4358,7 @@ analog begin
             Pwr(t) <+ -(devsign * sigvds * ids * V(di, si))  + ddt(delTemp1 * cth) + delTemp1 * gth;
         end
     end else begin
-        Temp(t) <+ 0.0;Fg
+        Temp(t) <+ 0.0;
     end
     if (RBODYMOD != 0) begin
         I(bi, sbulk) <+ V(bi, sbulk) * Grbps;

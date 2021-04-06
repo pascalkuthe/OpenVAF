@@ -389,6 +389,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
             unit,
             desc,
             sctx: var.sctx,
+            ty: var.ty
         }
     }
 
@@ -527,14 +528,14 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
 
         let mut local_ctx = LocalCtx::new_main(self);
         local_ctx.lower_block(&module.analog);
-        local_ctx.terminate_bb(local_ctx.current, TerminatorKind::End);
-        debug_assert_eq!(local_ctx.current, local_ctx.cfg.blocks.last_idx());
+        local_ctx.terminate_bb(local_ctx.cfg_builder.current, TerminatorKind::End);
+        debug_assert_eq!(local_ctx.cfg_builder.current, local_ctx.cfg_builder.cfg.blocks.last_idx());
 
         Module {
             ident: module.ident,
             ports: module.ports.clone(),
             parameters: module.parameters.clone(),
-            analog_cfg: RwLock::new(local_ctx.cfg),
+            analog_cfg: RwLock::new(local_ctx.cfg_builder.finish()),
             sctx: module.sctx,
         }
     }
@@ -548,7 +549,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         let expr = lctx.lower_expr(expr)?;
         let operand = lctx.rvalue_to_operand(expr, span);
         lctx.terminate(TerminatorKind::End);
-        let cfg = lctx.cfg;
+        let cfg = lctx.cfg_builder.finish();
         Some(Expression(cfg, operand))
     }
 
@@ -561,13 +562,13 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         let mut lctx = LocalCtx::new_small(self);
         let expr = lctx.lower_assignment_expr(expr, ty)?;
         let operand = lctx.rvalue_to_operand(expr, span);
-        if lctx.cfg.blocks.iter().all(|x| x.statements.is_empty()) {
-            lctx.cfg.blocks.clear()
+        if lctx.cfg_builder.cfg.blocks.iter().all(|x| x.statements.is_empty()) {
+            lctx.cfg_builder.cfg.blocks.clear()
         } else {
-            lctx.terminate_bb(lctx.cfg.blocks.last_idx(), TerminatorKind::End);
+            lctx.terminate_bb(lctx.cfg_builder.cfg.blocks.last_idx(), TerminatorKind::End);
         }
 
-        let cfg = lctx.cfg;
+        let cfg = lctx.cfg_builder.finish();
         Some(Expression(cfg, operand))
     }
 
@@ -578,7 +579,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         let mut lctx = LocalCtx::new_small(self);
         let operand = lctx.fold_real(expr)?;
         lctx.terminate(TerminatorKind::End);
-        let cfg = lctx.cfg;
+        let cfg = lctx.cfg_builder.finish();
         Some(Expression(cfg, operand))
     }
 
@@ -592,7 +593,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         if res.ty == Type::STRING {
             let operand = lctx.rvalue_to_operand(res, span);
             lctx.terminate(TerminatorKind::End);
-            let cfg = lctx.cfg;
+            let cfg = lctx.cfg_builder.finish();
             Some(Expression(cfg, operand))
         } else {
             self.errors.add(TypeMissmatch {

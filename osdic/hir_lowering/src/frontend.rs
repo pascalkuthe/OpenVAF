@@ -1,14 +1,14 @@
 use crate::lim::LimFunction;
-use openvaf_data_structures::index_vec::{index_vec, IndexVec};
-use openvaf_diagnostics::ListFormatter;
+use openvaf_data_structures::{
+    index_vec::{index_vec, IndexVec},
+    HashMap,
+};
+use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult};
 use openvaf_hir::{
-    BranchId, ExpressionId, LimFunction as HirLimFunction, NetId, ParameterId, PortId, StatementId,
-    SyntaxCtx,
+    BranchId, ExpressionId, Hir, LimFunction as HirLimFunction, NetId, ParameterId, PortId,
+    StatementId, SyntaxCtx,
 };
-use openvaf_hir_lowering::{
-    AttributeCtx, Error::WrongFunctionArgCount, ExpressionLowering, HirFold, HirLowering,
-    HirSystemFunctionCall, LocalCtx,
-};
+use openvaf_hir_lowering::{AttributeCtx, Error::WrongFunctionArgCount, ExpressionLowering, HirFold, HirLowering, HirSystemFunctionCall, LocalCtx, lower_hir_userfacing_with_printer};
 use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, Type, Unknown};
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
@@ -18,11 +18,18 @@ use openvaf_middle::{
     CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
 };
-use openvaf_session::sourcemap::string_literals::StringLiteral;
 use openvaf_session::sourcemap::Span;
+use openvaf_session::{
+    sourcemap::{string_literals::StringLiteral, FileId},
+    SourceMap,
+};
 use osdic_target::sim::Simulator;
-use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
+use std::{fmt, path::PathBuf};
+use openvaf_diagnostics::lints::Linter;
+use openvaf_parser::parse_facing_with_printer;
+use openvaf_preprocessor::preprocess_user_facing_with_printer;
+use openvaf_ast_lowering::{lower_ast_userfacing_with_printer, AllowedReferences};
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum GeneralOsdiCall {
@@ -48,9 +55,9 @@ impl CallType for GeneralOsdiCall {
 
     fn derivative<C: CallType>(
         &self,
-        original: Local,
-        mir: &Mir<C>,
-        arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
+        _original: Local,
+        _mir: &Mir<C>,
+        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
     ) -> Derivative<Self::I> {
         unreachable!("Derivative are analysis mode specific!")
     }
@@ -168,9 +175,9 @@ impl InputKind for GeneralOsdiInput {
     }
 }
 
-impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
+impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
     fn port_flow(
-        ctx: &mut LocalCtx<Self, OsdiHirLowerIngCtx<'a>>,
+        ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx<'a>>,
         port: PortId,
         span: Span,
     ) -> Option<RValue<Self>> {
@@ -181,7 +188,7 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
     }
 
     fn branch_access(
-        ctx: &mut LocalCtx<Self, OsdiHirLowerIngCtx<'a>>,
+        ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx<'a>>,
         access: DisciplineAccess,
         branch: BranchId,
         span: Span,
@@ -203,7 +210,7 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
     }
 
     fn parameter_ref(
-        _ctx: &mut LocalCtx<Self, OsdiHirLowerIngCtx<'a>>,
+        _ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx<'a>>,
         param: ParameterId,
         span: Span,
     ) -> Option<RValue<Self>> {
@@ -214,7 +221,7 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
     }
 
     fn time_derivative(
-        ctx: &mut LocalCtx<Self, OsdiHirLowerIngCtx>,
+        ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx>,
         expr: ExpressionId,
         span: Span,
     ) -> Option<RValue<Self>> {
@@ -226,7 +233,7 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
     }
 
     fn noise(
-        _ctx: &mut LocalCtx<Self, OsdiHirLowerIngCtx>,
+        _ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx>,
         _source: NoiseSource<ExpressionId, ()>,
         name: Option<ExpressionId>,
         span: Span,
@@ -235,16 +242,16 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
     }
 
     fn system_function_call(
-        ctx: &mut LocalCtx<Self, OsdiHirLowerIngCtx>,
+        ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx>,
         call: &HirSystemFunctionCall,
         span: Span,
     ) -> Option<RValue<Self>> {
-        let val = match call {
+        let val = match *call {
             HirSystemFunctionCall::Temperature => GeneralOsdiInput::Temperature,
             HirSystemFunctionCall::Lim {
                 access: (DisciplineAccess::Potential, branch),
                 fun: HirLimFunction::Native(name),
-                args,
+                ref args,
             } => {
                 let fun = ctx
                     .fold
@@ -269,12 +276,12 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
                     .args
                     .iter()
                     .zip(args.iter())
-                    .filter_map(|((name, ty), val)| {
+                    .filter_map(|((_name, ty), val)| {
                         ctx.lower_assignment_expr(*val, *ty)
                             .map(|val| ctx.assign_temporary(val))
                     })
                     .collect();
-                let branch = &ctx.fold.mir.branches[*branch];
+                let branch = &ctx.fold.mir.branches[branch];
                 GeneralOsdiInput::Lim {
                     hi: branch.hi,
                     lo: branch.lo,
@@ -293,7 +300,7 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
     }
 
     fn stop_task(
-        _ctx: &mut LocalCtx<Self, OsdiHirLowerIngCtx>,
+        _ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx>,
         kind: StopTaskKind,
         finish: PrintOnFinish,
         span: Span,
@@ -306,11 +313,11 @@ impl<'a> ExpressionLowering<OsdiHirLowerIngCtx<'a>> for GeneralOsdiCall {
     }
 }
 
-pub struct OsdiHirLowerIngCtx<'a> {
+pub struct OsdiHirLoweringCtx<'a> {
     pub sim: &'a Simulator,
 }
 
-impl<'s> HirLowering for OsdiHirLowerIngCtx<'s> {
+impl<'s> HirLowering for OsdiHirLoweringCtx<'s> {
     type AnalogBlockExprLower = GeneralOsdiCall;
 
     fn handle_attribute(
@@ -330,4 +337,24 @@ impl<'s> HirLowering for OsdiHirLowerIngCtx<'s> {
     ) {
         unimplemented!()
     }
+}
+pub fn run_frontend<P: DiagnosticSlicePrinter>(
+    sm: Box<SourceMap>,
+    main_file: FileId,
+    paths: HashMap<&'static str, PathBuf>,
+    sim: & Simulator,
+) -> UserResult<Mir<GeneralOsdiCall>, P> {
+    let ts = preprocess_user_facing_with_printer(sm, main_file, paths)?;
+    let ast = parse_facing_with_printer(ts)?;
+    let hir = lower_ast_userfacing_with_printer(ast, |_| AllowedReferences::All)?;
+    let diagnostic = Linter::early_user_diagnostics()?;
+    eprint!("{}", diagnostic);
+    let mut lowering = OsdiHirLoweringCtx{sim};
+    let mir = lower_hir_userfacing_with_printer(hir, &mut lowering)?;
+    Ok(mir)
+    // if lowering.errors.is_empty() {
+    //     Ok(mir)
+    // } else {
+    //     Err(lowering.errors.user_facing())
+    // }
 }

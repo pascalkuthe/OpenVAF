@@ -15,11 +15,7 @@ use crate::cfg::transversal::ReversePostorderIterMut;
 use crate::cfg::transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
 };
-use crate::{
-    COperand, CallType, CallTypeDerivative, Derivative, Expression, InputKind, Local,
-    LocalDeclaration, LocalKind, Mir, Operand, OperandData, ParameterCallType, ParameterInput,
-    RValue, Statement, StmntKind, VariableLocalKind,
-};
+use crate::{COperand, CallType, CallTypeConversion, CallTypeDerivative, Derivative,  InputKind, Local, LocalDeclaration, LocalKind, Mir,  OperandData, ParameterCallType, ParameterInput, RValue, Statement, StmntKind, VariableLocalKind, Spanned};
 use openvaf_data_structures::HashMap;
 use osdi_types::Type;
 
@@ -33,10 +29,12 @@ use std::hash::Hash;
 use std::iter::once;
 use std::ops::Index;
 use tracing::Span;
+use crate::cfg::builder::CfgBuilder;
 
 pub mod predecessors;
 pub mod transversal;
 
+pub mod builder;
 #[cfg(feature = "graphviz")]
 mod graphviz;
 mod print;
@@ -169,38 +167,40 @@ where
 {
     pub fn insert_variable_declarations<A: CallType>(&mut self, mir: &Mir<A>) {
         let terminator = self.blocks[START_BLOCK].terminator.take().unwrap();
-        let start_sctx = terminator.sctx;
-        let mut terminator = terminator.kind;
-        for (local, decl) in self.locals.clone().iter_enumerated() {
+
+        let old_end = self.end();
+
+        // clone is necessary since additional locals may be added (which we dont want to iterate anywau) which would require mutable aliasingg
+        let old_locals = self.locals.clone();
+        let mut builder = CfgBuilder::edit::<false, false>(self,START_BLOCK,0,0);
+
+        for (local, decl) in old_locals.iter_enumerated() {
             if let LocalKind::Variable(var, kind) = decl.kind {
                 let span = mir[mir.variables[var].sctx].span;
                 let sctx = mir.variables[var].sctx;
 
                 match kind {
                     VariableLocalKind::Derivative => {
-                        self.blocks[START_BLOCK].statements.push((
-                            StmntKind::Assignment(
-                                local,
-                                RValue::Use(Operand::new(
-                                    OperandData::Constant(Scalar(Real(0.0))),
-                                    span,
-                                )),
-                            ),
-                            sctx,
-                        ));
+                        builder.assign(local,RValue::Use(Spanned{span, contents: OperandData::Constant(Scalar(Real(0.0)))}), sctx);
                     }
                     VariableLocalKind::User => {
                         let default = mir.variables[var].default.borrow().clone();
-                        terminator = self.insert_expr(local, sctx, default, terminator);
+                        let val = builder.insert_expr( sctx, default);
+                        builder.assign(local,val, sctx);
                     }
                 }
             }
         }
 
-        self.blocks[START_BLOCK].terminator = Some(Terminator {
-            sctx: start_sctx,
-            kind: terminator,
-        });
+        let start_sctx = terminator.sctx;
+        let mut terminator = terminator.kind;
+        for bb in terminator.successors_mut(){
+            if *bb == old_end{
+                *bb = builder.cfg.end()
+            }
+        }
+
+        builder.terminate(terminator, start_sctx);
         self.predecessor_cache.invalidate();
     }
 }
@@ -325,91 +325,73 @@ impl<C: CallType> ControlFlowGraph<C> {
         buff.into_iter().map(|local_ptr| unsafe { &mut *local_ptr })
     }
 
-    /// # Note
-    /// This funciton is optimized for joining multiple cfgs late in the compilation process.
-    /// It therefore doesn't join derivative mappings If you need that do it manually (simply join the hashmaps with the second cfgs locals offsetet).
-    /// Furthermore it doesn't invalidate the predecessor cache you need to do that after you are done with modifying the cfg
-    pub fn insert_cfg<X>(
-        &mut self,
-        mut cfg: ControlFlowGraph<X>,
-        mut end_terminator: TerminatorKind<C>,
-    ) -> BasicBlock
-    where
-        X: CallType + Into<C>,
-        X::I: Into<C::I>,
-    {
-        // update blocks to be inserted
-        let block_offset = self.blocks.last_idx();
-        let local_offset = self.locals.len();
-        for block in cfg.blocks.iter_mut() {
-            for succ in block.successors_mut() {
-                *succ += block_offset
-            }
-            block.for_locals_mut(|local| *local = *local + local_offset)
-        }
+    pub fn map<X: CallType>(
+        self,
+        conversion: &mut impl CallTypeConversion<C, X>,
+    ) -> ControlFlowGraph<X> {
+        let blocks = self
+            .blocks
+            .into_iter()
+            .map(|bb| {
+                let statements = bb
+                    .statements
+                    .into_iter()
+                    .map(|(kind, sctx)| {
+                        let kind = match kind {
+                            StmntKind::Assignment(dst, val) => {
+                                StmntKind::Assignment(dst, val.map_operands(conversion))
+                            }
+                            StmntKind::Call(call, args, span) => {
+                                conversion.map_call_stmnt(call, args, span)
+                            }
+                            StmntKind::NoOp => StmntKind::NoOp,
+                            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
+                        };
+                        (kind, sctx)
+                    })
+                    .collect();
 
-        // move the end
-        let new_end = self.end() + cfg.blocks.len();
-        let old_end = self.end();
-        for block in self.blocks.iter_mut() {
-            if let Some(terminator) = &mut block.terminator {
-                for block in terminator.successors_mut() {
-                    if *block == old_end {
-                        *block = new_end
+                let terminator = bb.terminator.map(|term| {
+                    let kind = match term.kind {
+                        TerminatorKind::Goto(dst) => TerminatorKind::Goto(dst),
+                        TerminatorKind::Split {
+                            condition,
+                            true_block,
+                            false_block,
+                            loop_head,
+                        } => TerminatorKind::Split {
+                            condition: condition.map_operands(conversion),
+                            true_block,
+                            false_block,
+                            loop_head,
+                        },
+                        TerminatorKind::End => TerminatorKind::End,
+                    };
+                    Terminator {
+                        kind,
+                        sctx: term.sctx,
                     }
+                });
+
+                BasicBlockData {
+                    phi_statements: bb.phi_statements,
+                    statements,
+                    terminator,
                 }
-            }
-        }
+            })
+            .collect();
 
-        for block in end_terminator.successors_mut() {
-            if *block == old_end {
-                *block = new_end
-            }
-        }
-
-        // insert the data
-        let inserted_cfg_start = self.end();
-
-        self.locals.append(&mut cfg.locals);
-        self.blocks.splice(
-            self.end()..self.end(),
-            cfg.blocks.into_iter().map(|block| block.convert()),
-        );
-
-        self[new_end - 1].terminator_mut().kind = end_terminator;
-
-        inserted_cfg_start
-    }
-
-    /// See `insert_cfg`
-    pub fn insert_expr<X>(
-        &mut self,
-        dst: Local,
-        sctx: SyntaxCtx,
-        expr: Expression<X>,
-        end_terminator: TerminatorKind<C>,
-    ) -> TerminatorKind<C>
-    where
-        X: CallType + Into<C>,
-        X::I: Into<C::I>,
-    {
-        let cfg = expr.0;
-        if cfg.blocks.is_empty() {
-            self.blocks[START_BLOCK].statements.push((
-                StmntKind::Assignment(dst, RValue::Use(expr.1.convert())),
-                sctx,
-            ));
-            end_terminator
-        } else {
-            let start = self.insert_cfg(cfg, end_terminator);
-            let val = expr.1;
-            let end_of_insertion = self.end() - 1;
-            self.blocks[end_of_insertion]
-                .statements
-                .push((StmntKind::Assignment(dst, RValue::Use(val.convert())), sctx));
-            TerminatorKind::Goto(start)
+        ControlFlowGraph {
+            locals: self.locals,
+            blocks,
+            derivatives: self.derivatives,
+            predecessor_cache: self.predecessor_cache,
         }
     }
+
+
+
+
 
     pub fn intern_locations(&mut self) -> InternedLocations {
         let locations: IndexVec<_, _> = self.locations().collect();
@@ -508,6 +490,22 @@ impl<C: CallType> ControlFlowGraph<C> {
     }
 }
 
+impl<A, B> Convert<ControlFlowGraph<B>> for ControlFlowGraph<A>
+where
+    B: CallType,
+    A: Into<B> + CallType,
+    A::I: Into<B::I>,
+{
+    fn convert(self) -> ControlFlowGraph<B> {
+        ControlFlowGraph {
+            locals: self.locals,
+            blocks: self.blocks.into_iter().map(|bb| bb.convert()).collect(),
+            derivatives: self.derivatives,
+            predecessor_cache: self.predecessor_cache,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct PhiData {
     pub dst: Local,
@@ -521,7 +519,7 @@ impl Display for PhiData {
         for (bb, src) in self.sources.iter() {
             write!(f, "{:?} => {}, ", bb, src)?;
         }
-        f.write_str("}");
+        f.write_str("}")?;
         Ok(())
     }
 }

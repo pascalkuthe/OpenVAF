@@ -16,8 +16,8 @@ mod program_dependence;
 mod remove_dead_locals;
 mod simplify;
 mod simplify_branches;
-mod tainted_locations;
 mod verify;
+mod visit;
 
 pub use backward_slice::BackwardSlice;
 pub use forward_slice::ForwardSlice;
@@ -30,3 +30,4 @@ pub use remove_dead_locals::RemoveDeadLocals;
 pub use simplify::Simplify;
 pub use simplify_branches::SimplifyBranches;
 pub use verify::{Malformation, MalformationKind, Verify};
+pub use visit::{CfgVisitor, Visit};

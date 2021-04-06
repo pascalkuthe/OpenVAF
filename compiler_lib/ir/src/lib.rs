@@ -49,7 +49,7 @@ impl<T: Copy> Spanned<T> {
         }
     }
 }
-impl<T: Clone> Spanned<T> {
+impl<T> Spanned<T> {
     pub fn clone_as<X>(&self, contents: X) -> Spanned<X> {
         Spanned {
             span: self.span,

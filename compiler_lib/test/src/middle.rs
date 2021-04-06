@@ -35,6 +35,21 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
         for (id, module) in mir.modules.iter_enumerated() {
             let mut cfg = module.analog_cfg.borrow_mut();
 
+            mir.print_to_file_with_shared(main_file.join(format!("{}.mir", model)), id, &cfg).unwrap();
+
+            let malformations = cfg.run_pass(Verify(&mir));
+            malformations.print_to_file(main_file.join(format!("{}.log", model))).unwrap();
+
+            if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                mir.print_to_file_with_shared(
+                    main_file.join(format!("{}_invalid.mir", model)),
+                    id,
+                    &cfg,
+                ).unwrap();
+                unreachable!("Invalid cfg resulted from simplify")
+            }
+
             let mut errors = MultiDiagnostic(Vec::new());
             generate_derivatives(&mut cfg, &mir, &mut errors);
 
@@ -44,10 +59,10 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
 
             cfg.insert_variable_declarations(&mir);
 
-            mir.print_to_file_with_shared(main_file.join(format!("{}.mir", model)), id, &cfg);
+            mir.print_to_file_with_shared(main_file.join(format!("{}.mir", model)), id, &cfg).unwrap();
 
             let malformations = cfg.run_pass(Verify(&mir));
-            malformations.print_to_file(main_file.join(format!("{}.log", model)));
+            malformations.print_to_file(main_file.join(format!("{}.log", model))).unwrap();
 
             if !malformations.is_empty() {
                 eprintln!("{}", malformations);
@@ -55,14 +70,14 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                     main_file.join(format!("{}_invalid.mir", model)),
                     id,
                     &cfg,
-                );
+                ).unwrap();
                 unreachable!("Invalid cfg resulted from simplify")
             }
 
             cfg.insert_variable_declarations(&mir);
 
             let malformations = cfg.run_pass(Verify(&mir));
-            malformations.print_to_file(main_file.join(format!("{}.log", model)));
+            malformations.print_to_file(main_file.join(format!("{}.log", model))).unwrap();
 
             if !malformations.is_empty() {
                 eprintln!("{}", malformations);
@@ -70,7 +85,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                     main_file.join(format!("{}_invalid.mir", model)),
                     id,
                     &cfg,
-                );
+                ).unwrap();
                 unreachable!("Invalid cfg resulted from variable delcaration insertion")
             }
 
@@ -112,7 +127,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                     main_file.join(format!("{}_invalid.mir", model)),
                     id,
                     &cfg,
-                );
+                ).unwrap();
                 unreachable!("Invalid cfg resulted from slice")
             }
 
@@ -131,7 +146,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                     main_file.join(format!("{}_invalid.mir", model)),
                     id,
                     &cfg,
-                );
+                ).unwrap();
                 unreachable!("Invalid cfg resulted from simplify")
             }
 
@@ -148,7 +163,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                     main_file.join(format!("{}_invalid.mir", model)),
                     id,
                     &cfg,
-                );
+                ).unwrap();
                 unreachable!("Invalid cfg resulted from remove dead locals")
             }
 
@@ -156,7 +171,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                 main_file.join(format!("{}_sliced.mir", model)),
                 id,
                 &cfg,
-            );
+            ).unwrap();
         }
 
         Ok(())
