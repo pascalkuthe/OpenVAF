@@ -28,6 +28,4 @@ members = [
 
     "transformations",
     "targets",
-
-    "test"
 ]

@@ -196,7 +196,7 @@ where
                     }
                     VariableLocalKind::User => {
                         let default = mir.variables[var].default.borrow().clone();
-                        let val = builder.insert_expr(sctx, default);
+                        let val = builder.insert_expr::<_, true, true>(sctx, default);
                         builder.assign(local, val, sctx);
                     }
                 }
@@ -348,17 +348,7 @@ impl<C: CallType> ControlFlowGraph<C> {
                     .statements
                     .into_iter()
                     .map(|(kind, sctx)| {
-                        let kind = match kind {
-                            StmntKind::Assignment(dst, val) => {
-                                StmntKind::Assignment(dst, val.map_operands(conversion))
-                            }
-                            StmntKind::Call(call, args, span) => {
-                                conversion.map_call_stmnt(call, args, span)
-                            }
-                            StmntKind::NoOp => StmntKind::NoOp,
-                            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
-                        };
-                        (kind, sctx)
+                        (conversion.map_stmnt(kind), sctx)
                     })
                     .collect();
 

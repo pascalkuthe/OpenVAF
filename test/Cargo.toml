@@ -1,0 +1,45 @@
+[package]
+name = "openvaf-test"
+version = "0.8.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+
+openvaf-session = {version = "0.8.0", path = "../compiler_lib/session" }
+openvaf-parser = {version = "0.8.0", path = "../compiler_lib/parser" }
+openvaf-preprocessor = {version = "0.8.0", path = "../compiler_lib/preprocessor" }
+openvaf-ast = {version = "0.8.0", path = "../compiler_lib/ast" }
+openvaf-ir = {version = "0.8.0", path = "../compiler_lib/ir" }
+openvaf-hir-lowering = {version = "0.8.0", path = "../compiler_lib/hir_lowering" }
+openvaf-middle = {version = "0.8.0", path = "../compiler_lib/middle" }
+openvaf-data-structures = {version = "0.8.0", path = "../compiler_lib/data_structures" }
+openvaf-ast-lowering = {version = "0.8.0", path = "../compiler_lib/ast_lowering" }
+openvaf-diagnostics = {version = "0.8.0", path = "../compiler_lib/diagnostics" }
+openvaf-transformations = {version = "0.8.0", path = "../compiler_lib/transformations" }
+openvaf-codegen-llvm = {version = "0.8.0", path = "../compiler_lib/codegen_llvm" }
+tracing = {version = "0.1", features = ["max_level_trace"]}
+osdic-hir-lowering = { version = "0.8.0", path = "../osdic/hir_lowering" }
+tracing-tree = "0.1"
+tracing-subscriber = "0.2"
+
+[dev-dependencies]
+
+openvaf-derivatives = {version = "0.8.0", path = "../compiler_lib/derivatives" }
+paste = "1.0"
+rand = "0.8"
+
+[features]
+default = []
+
+
+
+

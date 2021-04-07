@@ -7,7 +7,7 @@ use openvaf_data_structures::{
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult};
 use openvaf_hir::{
-    BranchId, ExpressionId, Hir, LimFunction as HirLimFunction, NetId, ParameterId, PortId,
+    BranchId, ExpressionId,  LimFunction as HirLimFunction, NetId, ParameterId, PortId,
     StatementId, SyntaxCtx,
 };
 use openvaf_hir_lowering::{

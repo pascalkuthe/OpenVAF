@@ -2,7 +2,7 @@ use crate::frontend::GeneralOsdiCall;
 use openvaf_data_structures::index_vec::{index_box, IndexBox, IndexSlice, IndexVec};
 use openvaf_ir::ids::{ParameterId, PortId};
 use openvaf_ir::{ParameterRangeConstraintBound, Spanned, Type};
-use openvaf_middle::cfg::builder::CfgBuilder;
+use openvaf_middle::cfg::builder::{CfgBuilder, CfgEdit};
 use openvaf_middle::cfg::{ControlFlowGraph, PhiData, TerminatorKind};
 use openvaf_middle::const_fold::DiamondLattice;
 use openvaf_middle::{
@@ -15,6 +15,7 @@ use openvaf_session::sourcemap::Span;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Deref, Range};
+use openvaf_hir::SyntaxCtx;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum InitFunctionCallType {
@@ -58,8 +59,8 @@ impl Debug for InitFunctionCallType {
     }
 }
 
-pub fn generate_param_init(
-    mir: &Mir<GeneralOsdiCall>,
+pub fn generate_param_init<A: CallType>(
+    mir: &Mir<A>,
 ) -> (
     ControlFlowGraph<InitFunctionCallType>,
     IndexBox<ParameterId, [Local]>,
@@ -81,7 +82,6 @@ pub fn generate_param_init(
         .map(|param| Local::from_raw_unchecked(param.raw()))
         .collect();
 
-    let mut mapper = ParamInitializationMapper(&param_locals);
     let mut conditions = Vec::with_capacity(8);
 
     for (param, info) in mir.parameters.iter_enumerated() {
@@ -108,8 +108,10 @@ pub fn generate_param_init(
 
         let false_block_head = cfg.current;
 
-        let default = default.read().clone().map(&mut mapper);
-        let val = cfg.insert_expr(sctx, default);
+        let default = default.read().clone();
+        let default = default.map(&mut ParamInitializationMapper(&param_locals, cfg.cfg.locals.len()));
+
+        let val = cfg.insert_expr::<_, false, false>(sctx, default);
         let default_val = cfg.assign_temporary(TyRValue { val, ty: ty }, sctx);
         let false_block_tail = cfg.current;
 
@@ -139,8 +141,9 @@ pub fn generate_param_init(
         );
 
 
-        let mut create_comparison = |cfg: &mut CfgBuilder<_>, expr: &Expression<_>, comparison| {
-            let expr = cfg.insert_expr(sctx, expr.clone().map(&mut mapper));
+        let mut create_comparison = |cfg: &mut CfgBuilder<ControlFlowGraph<_>>, expr: &Expression<_>, comparison| {
+            let expr = expr.clone().map( &mut ParamInitializationMapper(&param_locals, cfg.cfg.locals.len()));
+            let expr = cfg.insert_expr::<_, false, false>(sctx, expr);
             let expr = cfg.rvalue_to_operand(TyRValue { val: expr, ty }, span, sctx);
             let val = Spanned {
                 span,
@@ -178,14 +181,14 @@ pub fn generate_param_init(
                         sctx,
                     );
 
-                    let op = if included_range.start.inclusive {
+                    let op = if included_range.end.inclusive {
                         ComparisonOp::LessThen // should: end >= val ==> err: end < val
                     } else {
                         ComparisonOp::LessEqual // should: end > val ==> err: end <= val
                     };
 
                     let lo_comparison =
-                        create_comparison(&mut cfg, &included_range.start.bound, op);
+                        create_comparison(&mut cfg, &included_range.end.bound, op);
                     let lo_comparison = cfg.rvalue_to_operand(
                         TyRValue {
                             val: lo_comparison,
@@ -229,14 +232,14 @@ pub fn generate_param_init(
                                 sctx,
                             );
 
-                            let op = if excluded_range.start.inclusive {
+                            let op = if excluded_range.end.inclusive {
                                 ComparisonOp::GreaterEqual // err: end >= val
                             } else {
                                 ComparisonOp::GreaterThen // err: end > val
                             };
 
                             let lo_comparison =
-                                create_comparison(&mut cfg, &excluded_range.start.bound, op);
+                                create_comparison(&mut cfg, &excluded_range.end.bound, op);
                             let lo_comparison = cfg.rvalue_to_operand(
                                 TyRValue {
                                     val: lo_comparison,
@@ -330,14 +333,26 @@ pub fn generate_param_init(
             conditions.clear();
         }
     }
-    (cfg.finish(), param_locals)
+    (cfg.finish(SyntaxCtx::ROOT), param_locals)
 }
 
-struct ParamInitializationMapper<'a>(&'a IndexSlice<ParameterId, [Local]>);
+struct ParamInitializationMapper<'a>(&'a IndexSlice<ParameterId, [Local]>, usize);
 
 impl<'a> CallTypeConversion<ParameterCallType, InitFunctionCallType>
     for ParamInitializationMapper<'a>
 {
+    fn map_operand(&mut self, op: COperand<ParameterCallType>) -> COperand<InitFunctionCallType> {
+        let contents = match op.contents {
+            OperandData::Read(input) => self.map_input(input),
+            OperandData::Constant(val) => OperandData::Constant(val),
+            OperandData::Copy(loc) => OperandData::Copy(loc+self.1),
+        };
+        Spanned {
+            contents,
+            span: op.span,
+        }
+    }
+
     fn map_input(&mut self, src: ParameterInput) -> COperandData<InitFunctionCallType> {
         match src {
             ParameterInput::Value(param) => OperandData::Copy(self.0[param]),
@@ -361,5 +376,18 @@ impl<'a> CallTypeConversion<ParameterCallType, InitFunctionCallType>
         _span: Span,
     ) -> StmntKind<InitFunctionCallType> {
         match call {}
+    }
+
+    fn map_stmnt(&mut self, kind: StmntKind<ParameterCallType>) ->StmntKind<InitFunctionCallType>{
+        match kind {
+            StmntKind::Assignment(dst, val) => {
+                StmntKind::Assignment(dst + self.1, val.map_operands(self))
+            }
+            StmntKind::Call(call, args, span) => {
+                self.map_call_stmnt(call, args, span)
+            }
+            StmntKind::NoOp => StmntKind::NoOp,
+            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
+        }
     }
 }

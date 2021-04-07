@@ -1,6 +1,5 @@
 use openvaf_data_structures::index_vec::{define_index_type, IndexBox};
 use osdi_types::Type;
-use std::str::FromStr;
 use thiserror::Error;
 
 define_index_type! {

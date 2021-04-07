@@ -42,12 +42,6 @@ pub struct CfgBuilder<C> {
     pub current: BasicBlock,
 }
 
-impl<C> CfgBuilder<C> {
-    pub fn finish(self) -> C {
-        self.cfg
-    }
-}
-
 impl<C: CallType> CfgBuilder<ControlFlowGraph<C>> {
     pub fn new_small() -> Self {
         let mut res = Self {
@@ -138,15 +132,23 @@ impl<'a, C: CallType> CfgBuilder<&'a mut ControlFlowGraph<C>> {
 }
 
 impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
+    pub fn finish(mut self, sctx: SyntaxCtx) -> CFG {
+        let end = self.cfg.borrow_mut().end();
+        self.terminate_bb(end, TerminatorKind::End, sctx);
+        self.cfg
+    }
+
     /// # Note
     /// This funciton is optimized for joining multiple cfgs late in the compilation process.
     /// It therefore doesn't join derivative mappings If you need that do it manually (simply join the hashmaps with the second cfgs locals offsetet).
     /// Furthermore it doesn't invalidate the predecessor cache you need to do that after you are done with modifying the cfg
-    pub fn insert_cfg<X>(&mut self, mut cfg: ControlFlowGraph<X>) -> BasicBlock
+    pub fn insert_cfg<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(&mut self, mut cfg: ControlFlowGraph<X>) -> BasicBlock
     where
         X: CallType + Into<C>,
         X::I: Into<C::I>,
     {
+        debug_assert!(!cfg.blocks.is_empty());
+
         let dst = self.cfg.borrow_mut();
         // update blocks to be inserted
         let block_offset = dst.blocks.last_idx();
@@ -155,50 +157,78 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             for succ in block.successors_mut() {
                 *succ += block_offset
             }
-            block.for_locals_mut(|local| *local = *local + local_offset)
-        }
-
-        // move the end
-        let new_end = dst.end() + cfg.blocks.len();
-        let old_end = dst.end();
-        for block in dst.blocks.iter_mut() {
-            if let Some(terminator) = &mut block.terminator {
-                for block in terminator.successors_mut() {
-                    if *block == old_end {
-                        *block = new_end
-                    }
-                }
+            if MAP_LOCALS{
+                block.for_locals_mut(|local|  *local += local_offset)
             }
         }
 
-        // insert the data
-        let inserted_cfg_start = dst.end();
-
+        // add locals
         dst.locals.append(&mut cfg.locals);
-        dst.blocks.splice(
-            dst.end()..dst.end(),
-            cfg.blocks.into_iter().map(|block| block.convert()),
-        );
-        dst[new_end - 1].terminator = None;
-        self.current = new_end - 1;
+
+        let new_end = dst.end() + cfg.blocks.len();
+
+        let (inserted_cfg_start, inserted_cfg_end) = if RETAIN_END{
+            let inserted_cfg_start = dst.end();
+
+            // move the end
+            let old_end = dst.end();
+            for block in dst.blocks.iter_mut() {
+                if let Some(terminator) = &mut block.terminator {
+                    for block in terminator.successors_mut() {
+                        if *block == old_end {
+                            *block = new_end
+                        }
+                    }
+                }
+            }
+
+            // Add the blocks before the end block
+            dst.blocks.splice(
+                dst.end()..dst.end(),
+                cfg.blocks.into_iter().map(|block| block.convert()),
+            );
+            (inserted_cfg_start, new_end - 1)
+        }else{
+            let inserted_cfg_start = dst.blocks.len_idx();
+            // add the cfg at the end
+            dst.blocks.extend(cfg.blocks.into_iter().map(|block| block.convert()));
+            (inserted_cfg_start, new_end)
+        };
+
+        dst[inserted_cfg_end].terminator = None;
+        self.current = inserted_cfg_end;
+
         inserted_cfg_start
     }
 
     /// See `insert_cfg`
-    pub fn insert_expr<X>(&mut self, sctx: SyntaxCtx, expr: Expression<X>) -> RValue<C>
+    pub fn insert_expr<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(&mut self, sctx: SyntaxCtx, expr: Expression<X>) -> RValue<C>
     where
         X: CallType + Into<C>,
         X::I: Into<C::I>,
     {
+
+        let mut res = expr.1.convert();
         let cfg = expr.0;
         if !cfg.blocks.is_empty() {
+            if MAP_LOCALS{
+                if let OperandData::Copy(local) = &mut res.contents{
+                    *local += self.cfg.borrow_mut().locals.len()
+                } // shift locals
+            }
+
+
             let pred = self.current;
-            let start = self.insert_cfg(cfg);
+            let start = self.insert_cfg::<X, RETAIN_END, MAP_LOCALS>(cfg);
+
+            // pred must not be moved (either dont retain the end or you are not allowed to call this function with the builder at the end)
+            assert!(!RETAIN_END || self.cfg.borrow_mut().end() != pred);
             if pred != start {
                 self.terminate_bb(pred, TerminatorKind::Goto(start), sctx)
             }
+
         }
-        RValue::Use(expr.1.convert())
+        RValue::Use(res)
     }
 
     pub fn new_temporary(&mut self, ty: Type) -> Local {

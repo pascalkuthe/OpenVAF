@@ -1016,7 +1016,7 @@ pub enum ParameterConstraint {
     },
 }
 
-pub trait CallTypeConversion<S: CallType, D: CallType> {
+pub trait CallTypeConversion<S: CallType, D: CallType> : Sized{
     fn map_operand(&mut self, op: COperand<S>) -> COperand<D> {
         let contents = match op.contents {
             OperandData::Read(input) => self.map_input(input),
@@ -1029,17 +1029,32 @@ pub trait CallTypeConversion<S: CallType, D: CallType> {
         }
     }
 
-    fn map_input(&mut self, src: S::I) -> COperandData<D>;
+    fn map_input(&mut self, _src: S::I) -> COperandData<D>;
+
     fn map_call_val(
         &mut self,
         call: S,
         args: IndexVec<CallArg, COperand<S>>,
         span: Span,
     ) -> RValue<D>;
+
     fn map_call_stmnt(
         &mut self,
         call: S,
         args: IndexVec<CallArg, COperand<S>>,
         span: Span,
     ) -> StmntKind<D>;
+
+    fn map_stmnt(&mut self, kind: StmntKind<S>) ->StmntKind<D>{
+        match kind {
+            StmntKind::Assignment(dst, val) => {
+                StmntKind::Assignment(dst, val.map_operands(self))
+            }
+            StmntKind::Call(call, args, span) => {
+                self.map_call_stmnt(call, args, span)
+            }
+            StmntKind::NoOp => StmntKind::NoOp,
+            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
+        }
+    }
 }

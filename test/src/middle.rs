@@ -11,6 +11,8 @@ use openvaf_transformations::{
 use rand::{thread_rng, Rng};
 use std::path::PathBuf;
 use tracing::{info, info_span};
+use osdic_hir_lowering::generate_param_init;
+use std::fs::File;
 
 fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
     let tspan = info_span!(target: "test", "HIR_LOWERING", model = model);
@@ -186,6 +188,46 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
                 &cfg,
             )
             .unwrap();
+
+            let (mut cfg, _) = generate_param_init(&mir);
+
+            let malformations = cfg.run_pass(Verify(&mir));
+            malformations.print_to_file(main_file.join(format!("{}.log", model))).unwrap();
+
+            if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                cfg.print(
+                    &mir,
+                    File::create(main_file.join(format!("{}_param_init_invalid.mir", model))).unwrap(),
+                )
+                    .unwrap();
+                unreachable!("Invalid cfg resulted from simplify")
+            }
+
+            cfg.run_pass(Simplify);
+            cfg.run_pass(ConstantPropagation::default());
+            cfg.run_pass(SimplifyBranches);
+            cfg.run_pass(Simplify);
+
+            let malformations = cfg.run_pass(Verify(&mir));
+            malformations.print_to_file(main_file.join(format!("{}_param_init.log", model))).unwrap();
+
+            if !malformations.is_empty() {
+                eprintln!("{}", malformations);
+                cfg.print(
+                    &mir,
+                    File::create(main_file.join(format!("{}_param_init_invalid.mir", model))).unwrap(),
+                )
+                    .unwrap();
+                unreachable!("Invalid cfg resulted from simplify")
+            }
+
+            cfg.print(
+                &mir,
+                File::create(main_file.join(format!("{}_param_init.mir", model))).unwrap(),
+            )
+                .unwrap();
+
         }
 
         Ok(())
