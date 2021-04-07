@@ -8,7 +8,7 @@ use openvaf_codegen_llvm::inkwell::OptimizationLevel;
 use openvaf_codegen_llvm::LlvmCodegen;
 use openvaf_derivatives::generate_derivatives;
 use openvaf_diagnostics::{MultiDiagnostic, StandardPrinter};
-use openvaf_middle::cfg::{ControlFlowGraph, START_BLOCK};
+use openvaf_middle::cfg::START_BLOCK;
 use openvaf_middle::const_fold::ConstantPropagation;
 use openvaf_transformations::{Simplify, SimplifyBranches, Verify};
 use std::borrow::Borrow;

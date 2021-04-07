@@ -1,14 +1,19 @@
 use crate::lim::LimFunction;
+use openvaf_ast_lowering::{lower_ast_userfacing_with_printer, AllowedReferences};
 use openvaf_data_structures::{
     index_vec::{index_vec, IndexVec},
     HashMap,
 };
+use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult};
 use openvaf_hir::{
     BranchId, ExpressionId, Hir, LimFunction as HirLimFunction, NetId, ParameterId, PortId,
     StatementId, SyntaxCtx,
 };
-use openvaf_hir_lowering::{AttributeCtx, Error::WrongFunctionArgCount, ExpressionLowering, HirFold, HirLowering, HirSystemFunctionCall, LocalCtx, lower_hir_userfacing_with_printer};
+use openvaf_hir_lowering::{
+    lower_hir_userfacing_with_printer, AttributeCtx, Error::WrongFunctionArgCount,
+    ExpressionLowering, HirFold, HirLowering, HirSystemFunctionCall, LocalCtx,
+};
 use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, Type, Unknown};
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
@@ -18,6 +23,8 @@ use openvaf_middle::{
     CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
 };
+use openvaf_parser::parse_facing_with_printer;
+use openvaf_preprocessor::preprocess_user_facing_with_printer;
 use openvaf_session::sourcemap::Span;
 use openvaf_session::{
     sourcemap::{string_literals::StringLiteral, FileId},
@@ -26,10 +33,6 @@ use openvaf_session::{
 use osdic_target::sim::Simulator;
 use std::fmt::{Debug, Display, Formatter};
 use std::{fmt, path::PathBuf};
-use openvaf_diagnostics::lints::Linter;
-use openvaf_parser::parse_facing_with_printer;
-use openvaf_preprocessor::preprocess_user_facing_with_printer;
-use openvaf_ast_lowering::{lower_ast_userfacing_with_printer, AllowedReferences};
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum GeneralOsdiCall {
@@ -342,14 +345,14 @@ pub fn run_frontend<P: DiagnosticSlicePrinter>(
     sm: Box<SourceMap>,
     main_file: FileId,
     paths: HashMap<&'static str, PathBuf>,
-    sim: & Simulator,
+    sim: &Simulator,
 ) -> UserResult<Mir<GeneralOsdiCall>, P> {
     let ts = preprocess_user_facing_with_printer(sm, main_file, paths)?;
     let ast = parse_facing_with_printer(ts)?;
     let hir = lower_ast_userfacing_with_printer(ast, |_| AllowedReferences::All)?;
     let diagnostic = Linter::early_user_diagnostics()?;
     eprint!("{}", diagnostic);
-    let mut lowering = OsdiHirLoweringCtx{sim};
+    let mut lowering = OsdiHirLoweringCtx { sim };
     let mir = lower_hir_userfacing_with_printer(hir, &mut lowering)?;
     Ok(mir)
     // if lowering.errors.is_empty() {

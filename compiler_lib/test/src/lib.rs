@@ -419,7 +419,10 @@ impl From<ParameterCallType> for Call {
     }
 }
 impl From<ParameterInput> for Input {
-    fn from(param: ParameterInput) -> Self {
-        Self::Parameter(param.0)
+    fn from(input: ParameterInput) -> Self {
+        match input {
+            ParameterInput::Given(param) => Self::ParamGiven(param),
+            ParameterInput::Value(param) => Self::Parameter(param),
+        }
     }
 }

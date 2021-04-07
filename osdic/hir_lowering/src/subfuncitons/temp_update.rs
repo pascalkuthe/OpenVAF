@@ -1,19 +1,21 @@
-use openvaf_middle::{CallType, Derivative, CallArg, CallTypeConversion, COperandData, InputKind, Mir, COperand, Local, RValue, StmntKind, OperandData};
-use crate::frontend::{GeneralOsdiInput, GeneralOsdiCall};
-use openvaf_middle::const_fold::DiamondLattice;
-use std::fmt::{Formatter, Display, Debug};
-use std::fmt;
+use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::subfuncitons::init::{InitFunctionCallType, InitInput};
+use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_hir::Unknown;
 use openvaf_ir::convert::Convert;
 use openvaf_ir::ids::{ParameterId, PortId};
-use openvaf_hir::Unknown;
 use openvaf_ir::Type;
-use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::{
+    COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Local,
+    Mir, OperandData, RValue, StmntKind,
+};
 use openvaf_session::sourcemap::Span;
-use crate::subfuncitons::init::{InitFunctionCallType, InitInput};
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
 
 #[derive(PartialEq, Eq, Clone)]
-pub enum TempUpdateCallType {
-}
+pub enum TempUpdateCallType {}
 
 impl CallType for TempUpdateCallType {
     type I = TempUpdateInput;
@@ -28,7 +30,7 @@ impl CallType for TempUpdateCallType {
         _mir: &Mir<C>,
         _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
     ) -> Derivative<Self::I> {
-        match self{}
+        match self {}
     }
 }
 
@@ -44,11 +46,9 @@ impl Debug for TempUpdateCallType {
     }
 }
 
-
-
-impl Convert<TempUpdateCallType> for GeneralOsdiCall{
+impl Convert<TempUpdateCallType> for GeneralOsdiCall {
     fn convert(self) -> TempUpdateCallType {
-        match self{
+        match self {
             GeneralOsdiCall::Noise => unreachable!(),
             GeneralOsdiCall::TimeDerivative => unreachable!(),
             GeneralOsdiCall::StopTask(_, _) => unreachable!(),
@@ -56,13 +56,12 @@ impl Convert<TempUpdateCallType> for GeneralOsdiCall{
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum TempUpdateInput {
     Parameter(ParameterId),
     ParamGiven(ParameterId),
     PortConnected(PortId),
-    Temperature
+    Temperature,
 }
 
 impl Display for TempUpdateInput {
@@ -84,9 +83,8 @@ impl InputKind for TempUpdateInput {
     fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
         match self {
             Self::Parameter(param) => mir[*param].ty,
-            Self::ParamGiven(_)
-            | Self::PortConnected(_) => Type::BOOL,
-            Self::Temperature => Type::REAL
+            Self::ParamGiven(_) | Self::PortConnected(_) => Type::BOOL,
+            Self::Temperature => Type::REAL,
         }
     }
 }
@@ -94,8 +92,11 @@ impl InputKind for TempUpdateInput {
 pub struct GeneralToTempUpdate;
 
 impl CallTypeConversion<GeneralOsdiCall, TempUpdateCallType> for GeneralToTempUpdate {
-    fn map_input(&mut self, src: <GeneralOsdiCall as CallType>::I) -> COperandData<TempUpdateCallType> {
-        let input = match src{
+    fn map_input(
+        &mut self,
+        src: <GeneralOsdiCall as CallType>::I,
+    ) -> COperandData<TempUpdateCallType> {
+        let input = match src {
             GeneralOsdiInput::Parameter(param) => TempUpdateInput::Parameter(param),
             GeneralOsdiInput::ParamGiven(param) => TempUpdateInput::ParamGiven(param),
             GeneralOsdiInput::PortConnected(port) => TempUpdateInput::PortConnected(port),
@@ -106,11 +107,21 @@ impl CallTypeConversion<GeneralOsdiCall, TempUpdateCallType> for GeneralToTempUp
         OperandData::Read(input)
     }
 
-    fn map_call_val(&mut self, _call: GeneralOsdiCall, _args: IndexVec<CallArg, COperand<GeneralOsdiCall>>, _span: Span) -> RValue<TempUpdateCallType> {
+    fn map_call_val(
+        &mut self,
+        _call: GeneralOsdiCall,
+        _args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
+        _span: Span,
+    ) -> RValue<TempUpdateCallType> {
         unreachable!()
     }
 
-    fn map_call_stmnt(&mut self, _call: GeneralOsdiCall, _args: IndexVec<CallArg, COperand<S>>, _span: Span) -> StmntKind<TempUpdateCallType> {
+    fn map_call_stmnt(
+        &mut self,
+        _call: GeneralOsdiCall,
+        _args: IndexVec<CallArg, COperand<S>>,
+        _span: Span,
+    ) -> StmntKind<TempUpdateCallType> {
         unreachable!()
     }
 }

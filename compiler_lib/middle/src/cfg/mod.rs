@@ -15,10 +15,15 @@ use crate::cfg::transversal::ReversePostorderIterMut;
 use crate::cfg::transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
 };
-use crate::{COperand, CallType, CallTypeConversion, CallTypeDerivative, Derivative,  InputKind, Local, LocalDeclaration, LocalKind, Mir,  OperandData, ParameterCallType, ParameterInput, RValue, Statement, StmntKind, VariableLocalKind, Spanned};
+use crate::{
+    COperand, CallType, CallTypeConversion, CallTypeDerivative, Derivative, InputKind, Local,
+    LocalDeclaration, LocalKind, Mir, OperandData, ParameterCallType, ParameterInput, RValue,
+    Spanned, Statement, StmntKind, VariableLocalKind,
+};
 use openvaf_data_structures::HashMap;
 use osdi_types::Type;
 
+use crate::cfg::builder::CfgBuilder;
 use crate::util::AtMostTwoIter;
 use openvaf_ir::convert::Convert;
 use osdi_types::ConstVal::Scalar;
@@ -29,7 +34,6 @@ use std::hash::Hash;
 use std::iter::once;
 use std::ops::Index;
 use tracing::Span;
-use crate::cfg::builder::CfgBuilder;
 
 pub mod predecessors;
 pub mod transversal;
@@ -172,7 +176,7 @@ where
 
         // clone is necessary since additional locals may be added (which we dont want to iterate anywau) which would require mutable aliasingg
         let old_locals = self.locals.clone();
-        let mut builder = CfgBuilder::edit::<false, false>(self,START_BLOCK,0,0);
+        let mut builder = CfgBuilder::edit::<false, false>(self, START_BLOCK, 0, 0);
 
         for (local, decl) in old_locals.iter_enumerated() {
             if let LocalKind::Variable(var, kind) = decl.kind {
@@ -181,12 +185,19 @@ where
 
                 match kind {
                     VariableLocalKind::Derivative => {
-                        builder.assign(local,RValue::Use(Spanned{span, contents: OperandData::Constant(Scalar(Real(0.0)))}), sctx);
+                        builder.assign(
+                            local,
+                            RValue::Use(Spanned {
+                                span,
+                                contents: OperandData::Constant(Scalar(Real(0.0))),
+                            }),
+                            sctx,
+                        );
                     }
                     VariableLocalKind::User => {
                         let default = mir.variables[var].default.borrow().clone();
-                        let val = builder.insert_expr( sctx, default);
-                        builder.assign(local,val, sctx);
+                        let val = builder.insert_expr(sctx, default);
+                        builder.assign(local, val, sctx);
                     }
                 }
             }
@@ -194,8 +205,8 @@ where
 
         let start_sctx = terminator.sctx;
         let mut terminator = terminator.kind;
-        for bb in terminator.successors_mut(){
-            if *bb == old_end{
+        for bb in terminator.successors_mut() {
+            if *bb == old_end {
                 *bb = builder.cfg.end()
             }
         }
@@ -388,10 +399,6 @@ impl<C: CallType> ControlFlowGraph<C> {
             predecessor_cache: self.predecessor_cache,
         }
     }
-
-
-
-
 
     pub fn intern_locations(&mut self) -> InternedLocations {
         let locations: IndexVec<_, _> = self.locations().collect();

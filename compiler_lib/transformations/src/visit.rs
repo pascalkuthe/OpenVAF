@@ -1,17 +1,11 @@
-use openvaf_data_structures::BitSet;
-use openvaf_middle::cfg::{
-    CfgPass, ControlFlowGraph, InternedLocations, LocationId, TerminatorKind,
-};
-use openvaf_middle::{
-    impl_pass_span, COperand, COperandData, CallType, OperandData, RValue, StmntKind,
-};
+use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, TerminatorKind};
+use openvaf_middle::{impl_pass_span, COperand, CallType, OperandData, RValue, StmntKind};
 
-pub struct Visit<'a, V> {
+pub struct Visit<V> {
     visitor: V,
-    locations: &'a InternedLocations,
 }
 
-impl<'a, C, V> CfgPass<'_, C> for Visit<'a, V>
+impl<C, V> CfgPass<'_, C> for Visit<V>
 where
     C: CallType,
     V: CfgVisitor<C>,

@@ -126,11 +126,14 @@ impl Display for NoInput {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct ParameterInput(pub ParameterId);
+pub enum ParameterInput {
+    Value(ParameterId),
+    Given(ParameterId),
+}
 
 impl InputKind for ParameterInput {
     fn derivative<C: CallType>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
-        if unknown == Unknown::Parameter(self.0) {
+        if matches!((unknown, self), (Unknown::Parameter(x), Self::Value(y)) if &x == y) {
             Derivative::One
         } else {
             Derivative::Zero
@@ -138,18 +141,24 @@ impl InputKind for ParameterInput {
     }
 
     fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
-        mir[self.0].ty
+        match self {
+            Self::Value(param) => mir[*param].ty,
+            Self::Given(_) => Type::BOOL,
+        }
     }
 }
 
 impl Display for ParameterInput {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(&self.0, f)
+        match self {
+            Self::Value(param) => Debug::fmt(param, f),
+            Self::Given(param) => write!(f, "$param_given({:?})", param),
+        }
     }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct ParameterCallType;
+pub enum ParameterCallType {}
 
 impl CallType for ParameterCallType {
     type I = ParameterInput;
@@ -175,30 +184,30 @@ impl Display for ParameterCallType {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct RealConstCallType;
+pub enum RealConstCallType {}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct RealConstInputType;
+pub enum RealConstInputType {}
 
 impl InputKind for RealConstInputType {
     fn derivative<C: CallType>(&self, _: Unknown, _: &Mir<C>) -> Derivative<Self> {
-        unreachable!()
+        match *self {}
     }
 
     fn ty<C: CallType>(&self, _: &Mir<C>) -> Type {
-        unreachable!()
+        match *self {}
     }
 }
 
 impl Display for RealConstCallType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("ILLEGAL")
+    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
+        match *self {}
     }
 }
 
 impl Display for RealConstInputType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("ILLEGAL")
+    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
+        match *self {}
     }
 }
 
@@ -206,7 +215,7 @@ impl CallType for RealConstCallType {
     type I = RealConstInputType;
 
     fn const_fold(&self, _: &[DiamondLattice]) -> DiamondLattice {
-        unreachable!()
+        match *self {}
     }
 
     fn derivative<C: CallType>(
@@ -215,7 +224,7 @@ impl CallType for RealConstCallType {
         _: &Mir<C>,
         _: impl FnMut(CallArg) -> Derivative<Self::I>,
     ) -> Derivative<Self::I> {
-        unreachable!()
+        match *self {}
     }
 }
 
@@ -237,6 +246,23 @@ impl<C: CallType> Expression<C> {
             ControlFlowGraph::empty(),
             Operand::new(OperandData::Constant(val), span),
         )
+    }
+}
+
+impl<C: CallType> Expression<C> {
+    pub fn map<X: CallType>(self, conversion: &mut impl CallTypeConversion<C, X>) -> Expression<X> {
+        Expression(self.0.map(conversion), conversion.map_operand(self.1))
+    }
+}
+
+impl<A, B> Convert<Expression<B>> for Expression<A>
+where
+    B: CallType,
+    A: Into<B> + CallType,
+    A::I: Into<B::I>,
+{
+    fn convert(self) -> Expression<B> {
+        Expression(self.0.convert(), self.1.convert())
     }
 }
 
@@ -997,7 +1023,10 @@ pub trait CallTypeConversion<S: CallType, D: CallType> {
             OperandData::Constant(val) => OperandData::Constant(val),
             OperandData::Copy(loc) => OperandData::Copy(loc),
         };
-        Spanned{contents, span: op.span}
+        Spanned {
+            contents,
+            span: op.span,
+        }
     }
 
     fn map_input(&mut self, src: S::I) -> COperandData<D>;

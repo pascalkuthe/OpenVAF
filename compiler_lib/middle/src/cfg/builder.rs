@@ -1,9 +1,17 @@
-use crate::cfg::{BasicBlock, BasicBlockData, ControlFlowGraph, Terminator, TerminatorKind};
-use crate::{BranchId, COperand, CallType, DisciplineAccess, Local, LocalDeclaration, LocalKind, OperandData, RValue, Spanned, StatementId, StmntKind, TyRValue, Type, VariableId, VariableLocalKind, SyntaxCtx, Mir, Expression};
+use crate::cfg::{
+    BasicBlock, BasicBlockData, ControlFlowGraph, PhiData, Terminator, TerminatorKind,
+};
+use crate::{
+    BranchId, COperand, CallType, DisciplineAccess, Expression, Local, LocalDeclaration, LocalKind,
+    Mir, OperandData, RValue, Spanned, StatementId, StmntKind, SyntaxCtx, TyRValue, Type,
+    VariableId, VariableLocalKind,
+};
 use openvaf_data_structures::index_vec::{index_vec, IndexVec};
-use openvaf_session::sourcemap::Span;
-use tracing::trace;
+use openvaf_data_structures::HashMap;
 use openvaf_ir::convert::Convert;
+use openvaf_session::sourcemap::Span;
+use std::array;
+use tracing::trace;
 
 pub trait CfgEdit {
     type CallType: CallType;
@@ -34,8 +42,8 @@ pub struct CfgBuilder<C> {
     pub current: BasicBlock,
 }
 
-impl<C> CfgBuilder<C>{
-    pub fn finish(self)->C{
+impl<C> CfgBuilder<C> {
+    pub fn finish(self) -> C {
         self.cfg
     }
 }
@@ -129,22 +137,15 @@ impl<'a, C: CallType> CfgBuilder<&'a mut ControlFlowGraph<C>> {
     }
 }
 
-
-
 impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
-
-
     /// # Note
     /// This funciton is optimized for joining multiple cfgs late in the compilation process.
     /// It therefore doesn't join derivative mappings If you need that do it manually (simply join the hashmaps with the second cfgs locals offsetet).
     /// Furthermore it doesn't invalidate the predecessor cache you need to do that after you are done with modifying the cfg
-    pub fn insert_cfg<X>(
-        &mut self,
-        mut cfg: ControlFlowGraph<X>,
-    ) -> BasicBlock
-        where
-            X: CallType + Into<C>,
-            X::I: Into<C::I>,
+    pub fn insert_cfg<X>(&mut self, mut cfg: ControlFlowGraph<X>) -> BasicBlock
+    where
+        X: CallType + Into<C>,
+        X::I: Into<C::I>,
     {
         let dst = self.cfg.borrow_mut();
         // update blocks to be inserted
@@ -183,27 +184,21 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
         inserted_cfg_start
     }
 
-
     /// See `insert_cfg`
-    pub fn insert_expr<X>(
-        &mut self,
-        sctx: SyntaxCtx,
-        expr: Expression<X>,
-    ) -> RValue<C>
-        where
-            X: CallType + Into<C>,
-            X::I: Into<C::I>,
+    pub fn insert_expr<X>(&mut self, sctx: SyntaxCtx, expr: Expression<X>) -> RValue<C>
+    where
+        X: CallType + Into<C>,
+        X::I: Into<C::I>,
     {
         let cfg = expr.0;
         if !cfg.blocks.is_empty() {
             let pred = self.current;
             let start = self.insert_cfg(cfg);
-            if pred != start{
+            if pred != start {
                 self.terminate_bb(pred, TerminatorKind::Goto(start), sctx)
             }
         }
         RValue::Use(expr.1.convert())
-
     }
 
     pub fn new_temporary(&mut self, ty: Type) -> Local {
@@ -243,7 +238,12 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
         }
     }
 
-    pub fn rvalue_to_operand(&mut self, data: TyRValue<C>, span: Span, sctx: SyntaxCtx) -> COperand<C> {
+    pub fn rvalue_to_operand(
+        &mut self,
+        data: TyRValue<C>,
+        span: Span,
+        sctx: SyntaxCtx,
+    ) -> COperand<C> {
         self.rvalue_to_operand_in_bb(self.current, data, span, sctx)
     }
 
@@ -252,7 +252,7 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
         bb: BasicBlock,
         data: TyRValue<C>,
         span: Span,
-        sctx: SyntaxCtx
+        sctx: SyntaxCtx,
     ) -> COperand<C> {
         if let RValue::Use(op) = data.val {
             op
@@ -264,20 +264,100 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
         }
     }
 
+    pub fn assign_temporary_phi_static_srces<const N: usize>(
+        &mut self,
+        sources: [(BasicBlock, Local); N],
+        sctx: SyntaxCtx,
+        ty: Type,
+    ) -> Local {
+        self.assign_temporary_phi_static_srces_in_bb(self.current, sources, sctx, ty)
+    }
 
+    pub fn assign_temporary_phi_static_srces_in_bb<const N: usize>(
+        &mut self,
+        bb: BasicBlock,
+        sources: [(BasicBlock, Local); N],
+        sctx: SyntaxCtx,
+        ty: Type,
+    ) -> Local {
+        self.assign_temporary_phi_in_bb(bb, array::IntoIter::new(sources).collect(), sctx, ty)
+    }
 
+    pub fn assign_temporary_phi(
+        &mut self,
+        sources: HashMap<BasicBlock, Local>,
+        sctx: SyntaxCtx,
+        ty: Type,
+    ) -> Local {
+        self.assign_temporary_phi_in_bb(self.current, sources, sctx, ty)
+    }
+
+    pub fn assign_temporary_phi_in_bb(
+        &mut self,
+        bb: BasicBlock,
+        sources: HashMap<BasicBlock, Local>,
+        sctx: SyntaxCtx,
+        ty: Type,
+    ) -> Local {
+        let dst = self.new_temporary(ty);
+        self.assign_phi_in_bb(dst, bb, sources, sctx)
+    }
+
+    pub fn assign_phi_static_srces<const N: usize>(
+        &mut self,
+        dst: Local,
+        sources: [(BasicBlock, Local); N],
+        sctx: SyntaxCtx,
+    ) -> Local {
+        self.assign_phi_static_srces_in_bb(dst, self.current, sources, sctx)
+    }
+
+    pub fn assign_phi_static_srces_in_bb<const N: usize>(
+        &mut self,
+        dst: Local,
+        bb: BasicBlock,
+        sources: [(BasicBlock, Local); N],
+        sctx: SyntaxCtx,
+    ) -> Local {
+        self.assign_phi_in_bb(dst, bb, array::IntoIter::new(sources).collect(), sctx)
+    }
+
+    pub fn assign_phi(
+        &mut self,
+        dst: Local,
+        sources: HashMap<BasicBlock, Local>,
+        sctx: SyntaxCtx,
+    ) -> Local {
+        self.assign_phi_in_bb(dst, self.current, sources, sctx)
+    }
+
+    pub fn assign_phi_in_bb(
+        &mut self,
+        dst: Local,
+        bb: BasicBlock,
+        sources: HashMap<BasicBlock, Local>,
+        sctx: SyntaxCtx,
+    ) -> Local {
+        self.cfg.borrow_mut().blocks[bb]
+            .phi_statements
+            .push(PhiData { dst, sources, sctx });
+        dst
+    }
 
     pub fn assign_temporary(&mut self, data: TyRValue<C>, sctx: SyntaxCtx) -> Local {
         self.assign_temporary_in_bb(self.current, data, sctx)
     }
 
-    pub fn assign_temporary_in_bb(&mut self, bb: BasicBlock, data: TyRValue<C>, sctx: SyntaxCtx) -> Local {
+    pub fn assign_temporary_in_bb(
+        &mut self,
+        bb: BasicBlock,
+        data: TyRValue<C>,
+        sctx: SyntaxCtx,
+    ) -> Local {
         let lhs = self.new_temporary(data.ty);
         self.assign_in_bb(bb, lhs, data.val, sctx);
         lhs
     }
-
-
 
     pub fn assign(&mut self, lhs: Local, rhs: RValue<C>, sctx: SyntaxCtx) -> StatementId {
         self.cfg.borrow_mut().blocks[self.current]
@@ -285,7 +365,13 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             .push((StmntKind::Assignment(lhs, rhs), sctx))
     }
 
-    pub fn assign_in_bb(&mut self, bb: BasicBlock, lhs: Local, rhs: RValue<C>, sctx: SyntaxCtx) -> StatementId {
+    pub fn assign_in_bb(
+        &mut self,
+        bb: BasicBlock,
+        lhs: Local,
+        rhs: RValue<C>,
+        sctx: SyntaxCtx,
+    ) -> StatementId {
         self.cfg.borrow_mut().blocks[bb]
             .statements
             .push((StmntKind::Assignment(lhs, rhs), sctx))
@@ -300,10 +386,7 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             self.cfg.borrow_mut()[block]
         );
 
-        self.cfg.borrow_mut()[block].terminator = Some(Terminator {
-            sctx,
-            kind,
-        });
+        self.cfg.borrow_mut()[block].terminator = Some(Terminator { sctx, kind });
     }
 
     pub fn terminate(&mut self, kind: TerminatorKind<C>, sctx: SyntaxCtx) {

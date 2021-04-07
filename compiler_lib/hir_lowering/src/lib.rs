@@ -145,7 +145,7 @@ impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
         span: Span,
     ) -> Option<RValue<Self>> {
         Some(RValue::Use(Operand::new(
-            OperandData::Read(ParameterInput(param)),
+            OperandData::Read(ParameterInput::Value(param)),
             span,
         )))
     }
@@ -169,10 +169,17 @@ impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
 
     fn system_function_call(
         _: &mut LocalCtx<Self, L>,
-        _: &HirSystemFunctionCall,
-        _: Span,
+        call: &HirSystemFunctionCall,
+        span: Span,
     ) -> Option<RValue<Self>> {
-        unimplemented!()
+        if let HirSystemFunctionCall::ParameterGiven(param) = call {
+            Some(RValue::Use(Operand::new(
+                OperandData::Read(ParameterInput::Given(*param)),
+                span,
+            )))
+        } else {
+            unreachable!()
+        }
     }
 
     fn stop_task(
@@ -389,7 +396,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
             unit,
             desc,
             sctx: var.sctx,
-            ty: var.ty
+            ty: var.ty,
         }
     }
 
@@ -529,7 +536,10 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         let mut local_ctx = LocalCtx::new_main(self);
         local_ctx.lower_block(&module.analog);
         local_ctx.terminate_bb(local_ctx.cfg_builder.current, TerminatorKind::End);
-        debug_assert_eq!(local_ctx.cfg_builder.current, local_ctx.cfg_builder.cfg.blocks.last_idx());
+        debug_assert_eq!(
+            local_ctx.cfg_builder.current,
+            local_ctx.cfg_builder.cfg.blocks.last_idx()
+        );
 
         Module {
             ident: module.ident,
@@ -562,7 +572,13 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         let mut lctx = LocalCtx::new_small(self);
         let expr = lctx.lower_assignment_expr(expr, ty)?;
         let operand = lctx.rvalue_to_operand(expr, span);
-        if lctx.cfg_builder.cfg.blocks.iter().all(|x| x.statements.is_empty()) {
+        if lctx
+            .cfg_builder
+            .cfg
+            .blocks
+            .iter()
+            .all(|x| x.statements.is_empty())
+        {
             lctx.cfg_builder.cfg.blocks.clear()
         } else {
             lctx.terminate_bb(lctx.cfg_builder.cfg.blocks.last_idx(), TerminatorKind::End);
