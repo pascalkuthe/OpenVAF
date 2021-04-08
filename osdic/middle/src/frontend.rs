@@ -5,7 +5,7 @@ use openvaf_data_structures::{
     HashMap,
 };
 use openvaf_diagnostics::lints::Linter;
-use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult};
+use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult, StandardPrinter};
 use openvaf_hir::{
     BranchId, ExpressionId,  LimFunction as HirLimFunction, NetId, ParameterId, PortId,
     StatementId, SyntaxCtx,
@@ -23,7 +23,7 @@ use openvaf_middle::{
     CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
 };
-use openvaf_parser::parse_facing_with_printer;
+use openvaf_parser::{parse_facing_with_printer, TokenStream};
 use openvaf_preprocessor::preprocess_user_facing_with_printer;
 use openvaf_session::sourcemap::Span;
 use openvaf_session::{
@@ -341,6 +341,8 @@ impl<'s> HirLowering for OsdiHirLoweringCtx<'s> {
         unimplemented!()
     }
 }
+
+
 pub fn run_frontend<P: DiagnosticSlicePrinter>(
     sm: Box<SourceMap>,
     main_file: FileId,
@@ -348,6 +350,13 @@ pub fn run_frontend<P: DiagnosticSlicePrinter>(
     sim: &Simulator,
 ) -> UserResult<Mir<GeneralOsdiCall>, P> {
     let ts = preprocess_user_facing_with_printer(sm, main_file, paths)?;
+    run_frontend_from_ts(ts, sim)
+}
+
+pub fn run_frontend_from_ts<P: DiagnosticSlicePrinter>(
+    ts: TokenStream,
+    sim: &Simulator,
+) -> UserResult<Mir<GeneralOsdiCall>, P> {
     let ast = parse_facing_with_printer(ts)?;
     let hir = lower_ast_userfacing_with_printer(ast, |_| AllowedReferences::All)?;
     let diagnostic = Linter::early_user_diagnostics()?;

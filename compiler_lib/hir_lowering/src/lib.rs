@@ -45,7 +45,6 @@ use tracing::trace_span;
 use crate::lints::{EmptyBuiltinAttribute, LintLevelOverwrite, UnknownLint};
 pub use cfg_builder::LocalCtx;
 use openvaf_diagnostics::lints::{LintLevel, Linter};
-use openvaf_middle::cfg::TerminatorKind;
 
 mod error;
 mod lints;
@@ -123,6 +122,8 @@ pub trait ExpressionLowering<L: HirLowering>: CallType {
         finish: PrintOnFinish,
         span: Span,
     ) -> Option<StmntKind<Self>>;
+
+    fn collapse_hint(_: &mut LocalCtx<Self, L>, hi: NetId, lo: NetId) -> Option<StmntKind<Self>>;
 }
 
 impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
@@ -190,6 +191,10 @@ impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
     ) -> Option<StmntKind<Self>> {
         unimplemented!()
     }
+
+    fn collapse_hint(_: &mut LocalCtx<Self, L>, _hi: NetId, _lo: NetId) -> Option<StmntKind<Self>> {
+        unimplemented!()
+    }
 }
 
 impl<L: HirLowering> ExpressionLowering<L> for RealConstCallType {
@@ -241,6 +246,10 @@ impl<L: HirLowering> ExpressionLowering<L> for RealConstCallType {
         _: PrintOnFinish,
         _: Span,
     ) -> Option<StmntKind<Self>> {
+        unimplemented!()
+    }
+
+    fn collapse_hint(_: &mut LocalCtx<Self, L>, _hi: NetId, _lo: NetId) -> Option<StmntKind<Self>> {
         unimplemented!()
     }
 }

@@ -1,5 +1,4 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
-use crate::subfuncitons::init::{InitFunctionCallType, InitInput};
 use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_hir::Unknown;
 use openvaf_ir::convert::Convert;
@@ -30,7 +29,7 @@ impl CallType for TempUpdateCallType {
         _mir: &Mir<C>,
         _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
     ) -> Derivative<Self::I> {
-        match self {}
+        match *self {}
     }
 }
 

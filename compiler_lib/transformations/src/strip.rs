@@ -1,9 +1,6 @@
-use crate::CfgVisitor;
 use openvaf_data_structures::BitSet;
-use openvaf_middle::cfg::{
-    CfgPass, ControlFlowGraph, InternedLocations, LocationId, PhiData, TerminatorKind,
-};
-use openvaf_middle::{impl_pass_span, COperand, CallType, Local, OperandData, RValue, StmntKind};
+use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, InternedLocations, LocationId};
+use openvaf_middle::{impl_pass_span, CallType};
 
 pub struct Strip<'a> {
     pub retain: &'a BitSet<LocationId>,
@@ -16,7 +13,7 @@ where
 {
     type Result = ();
 
-    fn run(mut self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
+    fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
         for (bb, data) in cfg.blocks.iter_mut_enumerated() {
             let block_location = &self.locations[bb];
 

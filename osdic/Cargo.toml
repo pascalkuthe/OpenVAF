@@ -3,6 +3,6 @@
 members = [
     "linker",
     "lld",
-    "hir_lowering",
+    "middle",
     "targets",
 ]

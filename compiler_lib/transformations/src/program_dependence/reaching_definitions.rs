@@ -149,7 +149,7 @@ impl<'a> ReachingDefinitionsAnalysis<'a> {
                             &reaching_definitions,
                         )
                     }
-                    StmntKind::NoOp | StmntKind::CollapseHint(_, _) => {}
+                    StmntKind::NoOp => {}
                 }
             }
 

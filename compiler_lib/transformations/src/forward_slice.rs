@@ -1,7 +1,7 @@
 use crate::program_dependence::InvProgramDependenceGraph;
-use openvaf_data_structures::{BitSet, SparseBitSetMatrix, WorkQueue};
+use openvaf_data_structures::{BitSet, WorkQueue};
 use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, InternedLocations, LocationId};
-use openvaf_middle::{impl_pass_span, CallType, Local};
+use openvaf_middle::{impl_pass_span, CallType};
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use tracing::{debug, trace, trace_span};
@@ -13,10 +13,7 @@ pub struct ForwardSlice<'a> {
 }
 
 impl<'a> ForwardSlice<'a> {
-    pub fn new(
-        pdg: &'a InvProgramDependenceGraph,
-        locations: &'a InternedLocations,
-    ) -> Self {
+    pub fn new(pdg: &'a InvProgramDependenceGraph, locations: &'a InternedLocations) -> Self {
         Self {
             tainted_locations: BitSet::new_empty(locations.len_idx()),
             pdg,
@@ -35,7 +32,6 @@ impl<'a, C: CallType> CfgPass<'_, C> for ForwardSlice<'a> {
             locations,
             ..
         } = self;
-
 
         // Init the work que with the tainted locations
         let mut work_queue = WorkQueue {
@@ -75,7 +71,7 @@ impl<'a, C: CallType> CfgPass<'_, C> for ForwardSlice<'a> {
             }
         }
         let mut removed_locations = work_queue.set;
-        
+
         debug!(
             removed_locations = debug(Vec::from_iter(
                 removed_locations.ones().map(|loc| locations[loc])
@@ -83,7 +79,6 @@ impl<'a, C: CallType> CfgPass<'_, C> for ForwardSlice<'a> {
             "Forward slice finished"
         );
 
-        
         removed_locations.toggle_all();
         removed_locations
     }

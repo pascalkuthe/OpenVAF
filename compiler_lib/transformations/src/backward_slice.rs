@@ -105,14 +105,14 @@ impl<'a> BackwardSlice<'a> {
 impl<'a, C: CallType> CfgPass<'_, C> for BackwardSlice<'a> {
     type Result = BitSet<LocationId>;
 
-    fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
+    fn run(self, _cfg: &mut ControlFlowGraph<C>) -> Self::Result {
         let Self {
             mut relevant_locations,
             mut assumed_locations,
             pdg,
             locations,
         } = self;
-        
+
         assumed_locations.union_with(&relevant_locations);
 
         // The relevant stmts are added to the work queue

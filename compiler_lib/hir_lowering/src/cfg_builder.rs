@@ -14,7 +14,7 @@ use openvaf_ir::{DoubleArgMath, PrintOnFinish, SingleArgMath, Spanned};
 use openvaf_middle::cfg::{BasicBlock, ControlFlowGraph, PhiData, TerminatorKind};
 use openvaf_middle::{
     BinOp, COperand, ComparisonOp, Local, Operand, OperandData, RValue, SimpleConstVal,
-    StatementId, StmntKind, TyRValue, Type,
+    StatementId, TyRValue, Type,
 };
 
 use crate::error::Error::{
@@ -42,7 +42,7 @@ pub struct LocalCtx<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> {
 impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
     pub fn handle_stmnt_attributes(&mut self, stmt: StatementId) {
         let sctx = self.fold.hir[stmt].1;
-        let span = trace_span!("attributes", src = debug(stmt), sctx = sctx.index());
+        let span = trace_span!("stmnt attributes", src = debug(stmt), sctx = sctx.index());
         let _enter = span.enter();
 
         if !self.fold.lower_sctx.remove(sctx) {
@@ -237,14 +237,16 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                         == OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0)))
                         && access == DisciplineAccess::Potential
                     {
-                        let branch = &self.fold.mir.branches[branch];
                         // Node Collapse hint
-                        self.cfg_builder.cfg.blocks[self.cfg_builder.current]
-                            .statements
-                            .push((
-                                StmntKind::CollapseHint(branch.hi, branch.lo),
-                                self.fold.sctx,
-                            ));
+
+                        let branch = &self.fold.mir.branches[branch];
+                        let hi = branch.hi;
+                        let lo = branch.lo;
+                        if let Some(stmnt) = C::collapse_hint(self, hi, lo) {
+                            self.cfg_builder.cfg.blocks[self.cfg_builder.current]
+                                .statements
+                                .push((stmnt, self.fold.sctx));
+                        }
                     } else {
                         let lhs = self.branch_local(branch, access);
                         let old = Operand::new(OperandData::Copy(lhs), span);

@@ -1,21 +1,20 @@
-use crate::frontend::GeneralOsdiCall;
-use openvaf_data_structures::index_vec::{index_box, IndexBox, IndexSlice, IndexVec};
+use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use openvaf_data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
 use openvaf_hir::SyntaxCtx;
 use openvaf_ir::ids::{ParameterId, PortId};
-use openvaf_ir::{ParameterRangeConstraintBound, Spanned, Type};
-use openvaf_middle::cfg::builder::{CfgBuilder, CfgEdit};
-use openvaf_middle::cfg::{ControlFlowGraph, PhiData, TerminatorKind};
+use openvaf_ir::{Spanned, Type};
+use openvaf_middle::cfg::builder::CfgBuilder;
+use openvaf_middle::cfg::{ControlFlowGraph, TerminatorKind};
 use openvaf_middle::const_fold::DiamondLattice;
 use openvaf_middle::{
     BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Derivative,
-    Expression, InputKind, Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter,
-    ParameterCallType, ParameterConstraint, ParameterExcludeConstraint, ParameterInput,
-    ParameterRangeConstraint, RValue, StmntKind, TyRValue,
+    Expression, Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
+    ParameterConstraint, ParameterExcludeConstraint, ParameterInput, RValue, StmntKind, TyRValue,
 };
 use openvaf_session::sourcemap::Span;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Deref, Range};
+use std::ops::Deref;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum InitFunctionCallType {
@@ -60,11 +59,11 @@ impl Debug for InitFunctionCallType {
 }
 
 pub struct InitFunction {
-    cfg: ControlFlowGraph<InitFunctionCallType>,
-    param_locals: IndexBox<ParameterId, [Local]>,
+    pub cfg: ControlFlowGraph<InitFunctionCallType>,
+    pub param_locals: IndexBox<ParameterId, [Local]>,
 }
 impl InitFunction {
-    pub fn init<A: CallType>(mir: &Mir<A>) -> Self {
+    pub fn new<A: CallType>(mir: &Mir<A>) -> Self {
         let mut cfg = CfgBuilder::new_small();
 
         // Create locals for the parameters
@@ -346,16 +345,86 @@ impl InitFunction {
             param_locals,
         }
     }
+
+    pub fn insert_model_init(&mut self, src: ControlFlowGraph<GeneralOsdiCall>) {
+        let mut src: ControlFlowGraph<InitFunctionCallType> = src.map(
+            &mut ParamInitializationMapper(&self.param_locals, self.cfg.locals.len()),
+        );
+        debug_assert!(self.cfg.blocks.last().unwrap().statements.is_empty());
+        self.cfg.blocks.pop();
+        let end = self.cfg.end();
+        let mut builder = CfgBuilder::edit::<false, false>(&mut self.cfg, end, 0, 0);
+        let start_block = builder.insert_cfg::<_, false, false>(src);
+        debug_assert_eq!(end + 1, start_block);
+        builder.finish(SyntaxCtx::ROOT);
+    }
 }
 
 struct ParamInitializationMapper<'a>(&'a IndexSlice<ParameterId, [Local]>, usize);
+
+impl<'a> CallTypeConversion<GeneralOsdiCall, InitFunctionCallType>
+    for ParamInitializationMapper<'a>
+{
+    fn map_operand(&mut self, op: COperand<GeneralOsdiCall>) -> COperand<InitFunctionCallType> {
+        let contents = match op.contents {
+            OperandData::Read(input) => {
+                CallTypeConversion::<GeneralOsdiCall, _>::map_input(self, input)
+            }
+            OperandData::Constant(val) => OperandData::Constant(val),
+            OperandData::Copy(loc) => OperandData::Copy(loc + self.1),
+        };
+        Spanned {
+            contents,
+            span: op.span,
+        }
+    }
+
+    fn map_input(&mut self, src: GeneralOsdiInput) -> COperandData<InitFunctionCallType> {
+        match src {
+            GeneralOsdiInput::Parameter(param) => OperandData::Copy(self.0[param]),
+            GeneralOsdiInput::ParamGiven(param) => OperandData::Read(ParameterInput::Given(param)),
+            _ => unreachable!(),
+        }
+    }
+
+    fn map_call_val(
+        &mut self,
+        call: GeneralOsdiCall,
+        args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
+        _span: Span,
+    ) -> RValue<InitFunctionCallType> {
+        unreachable!("{:?} ({:?})", call, args)
+    }
+
+    fn map_call_stmnt(
+        &mut self,
+        call: GeneralOsdiCall,
+        args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
+        _span: Span,
+    ) -> StmntKind<InitFunctionCallType> {
+        unreachable!("{:?} ({:?})", call, args)
+    }
+
+    fn map_stmnt(&mut self, kind: StmntKind<GeneralOsdiCall>) -> StmntKind<InitFunctionCallType> {
+        match kind {
+            StmntKind::Assignment(dst, val) => {
+                StmntKind::Assignment(dst + self.1, val.map_operands(self))
+            }
+            StmntKind::Call(call, args, span) => self.map_call_stmnt(call, args, span),
+            StmntKind::NoOp => StmntKind::NoOp,
+            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
+        }
+    }
+}
 
 impl<'a> CallTypeConversion<ParameterCallType, InitFunctionCallType>
     for ParamInitializationMapper<'a>
 {
     fn map_operand(&mut self, op: COperand<ParameterCallType>) -> COperand<InitFunctionCallType> {
         let contents = match op.contents {
-            OperandData::Read(input) => self.map_input(input),
+            OperandData::Read(input) => {
+                CallTypeConversion::<ParameterCallType, _>::map_input(self, input)
+            }
             OperandData::Constant(val) => OperandData::Constant(val),
             OperandData::Copy(loc) => OperandData::Copy(loc + self.1),
         };

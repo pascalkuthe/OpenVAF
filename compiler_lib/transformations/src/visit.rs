@@ -1,7 +1,7 @@
 use openvaf_middle::cfg::{
     CfgPass, ControlFlowGraph, InternedLocations, LocationId, PhiData, TerminatorKind,
 };
-use openvaf_middle::{impl_pass_span, COperand, CallType, Local, OperandData, RValue, StmntKind};
+use openvaf_middle::{impl_pass_span, COperand, CallType, OperandData, RValue, StmntKind};
 
 pub struct Visit<'a, V> {
     pub visitor: &'a mut V,
@@ -15,7 +15,7 @@ where
 {
     type Result = ();
 
-    fn run(mut self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
+    fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
         for (bb, locations) in cfg.blocks.iter().zip(&self.locations.blocks) {
             let mut loc = locations.stmnt_start;
             for (stmnt, _) in &bb.statements {
@@ -56,20 +56,17 @@ pub trait CfgVisitor<C: CallType> {
         }
     }
 
-
     fn visit_stmnt(&mut self, stmnt: &StmntKind<C>, loc: LocationId, cfg: &ControlFlowGraph<C>) {
         match *stmnt {
-            StmntKind::Assignment(_, ref val) => {
-                self.visit_rvalue(val, loc, cfg)
-            }
+            StmntKind::Assignment(_, ref val) => self.visit_rvalue(val, loc, cfg),
             StmntKind::Call(_, ref args, _) => {
                 for arg in args {
                     self.visit_operand(arg, loc, cfg)
                 }
             }
-            StmntKind::NoOp | StmntKind::CollapseHint(_, _) => {}
+            StmntKind::NoOp => {}
         }
     }
 
-    fn visit_phi(&mut self, phi: &PhiData, loc: LocationId, cfg: &ControlFlowGraph<C>) {}
+    fn visit_phi(&mut self, _phi: &PhiData, _loc: LocationId, _cfg: &ControlFlowGraph<C>) {}
 }

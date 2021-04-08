@@ -55,6 +55,9 @@ mod middle;
 #[cfg(test)]
 mod code_gen;
 
+#[cfg(test)]
+mod osdic_middle;
+
 //#[cfg(test)]
 //mod extractions;
 

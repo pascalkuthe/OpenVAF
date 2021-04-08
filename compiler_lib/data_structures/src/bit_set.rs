@@ -27,12 +27,11 @@ mod sparse;
 use crate::bit_set::sparse::{SparseBitSet, SPARSE_MAX};
 pub use hybrid::HybridBitSet;
 pub use matrix::SparseBitSetMatrix;
-use std::mem::size_of;
 
 //TODO switch to usize/u64
 //BLOCKS upstream
 type Block = u32;
-const BITS: usize = size_of::<Block>() * 8;
+//const BITS: usize = size_of::<Block>() * 8;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BitSet<I: Idx + From<usize>> {
@@ -214,11 +213,9 @@ impl<I: Idx + From<usize>> BitSet<I> {
     pub fn enable_all(&mut self) {
         let len = self.as_slice().len();
 
-        for block in self.as_mut_slice()[..len - 1].iter_mut() {
+        for block in self.as_mut_slice()[..len].iter_mut() {
             *block = Block::MAX
         }
-
-        self.as_mut_slice()[len - 1] = 2u32.pow((self.len() % BITS) as u32) - 1;
     }
 
     /// Toggles (inverts) every bit in the given range.

@@ -234,7 +234,7 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     // Calls can not be verified
                     // Should this be added to the trait (probably not thats small enough of a debug to be not my problem)
                 }
-                StmntKind::NoOp | StmntKind::CollapseHint(_, _) => {}
+                StmntKind::NoOp => {}
             }
         }
 

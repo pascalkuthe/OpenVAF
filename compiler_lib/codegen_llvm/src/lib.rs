@@ -403,7 +403,7 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>>
                 let args: IndexVec<CallArg, _> = args.iter().map(|op| self.operand(op)).collect();
                 C::gen_call(call, self, args.as_slice())
             }
-            StmntKind::NoOp | StmntKind::CollapseHint(_, _) => {}
+            StmntKind::NoOp => {}
         }
     }
 }

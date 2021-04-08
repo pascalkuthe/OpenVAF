@@ -18,7 +18,7 @@ use crate::cfg::transversal::{
 use crate::{
     COperand, CallType, CallTypeConversion, CallTypeDerivative, Derivative, InputKind, Local,
     LocalDeclaration, LocalKind, Mir, OperandData, ParameterCallType, ParameterInput, RValue,
-    Spanned, Statement, StmntKind, VariableLocalKind,
+    Spanned, Statement, VariableLocalKind,
 };
 use openvaf_data_structures::HashMap;
 use osdi_types::Type;
@@ -347,9 +347,7 @@ impl<C: CallType> ControlFlowGraph<C> {
                 let statements = bb
                     .statements
                     .into_iter()
-                    .map(|(kind, sctx)| {
-                        (conversion.map_stmnt(kind), sctx)
-                    })
+                    .map(|(kind, sctx)| (conversion.map_stmnt(kind), sctx))
                     .collect();
 
                 let terminator = bb.terminator.map(|term| {

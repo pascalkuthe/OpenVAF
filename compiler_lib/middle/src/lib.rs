@@ -855,7 +855,6 @@ pub enum StmntKind<C: CallType> {
     /// No Operation (does nothing)
     /// Statements are often overwritten with NoOp instead of being deleted because its cheaper
     NoOp, // TODO REMOVE?
-    CollapseHint(NetId, NetId),
 }
 
 impl<C: CallType> Display for StmntKind<C> {
@@ -869,7 +868,6 @@ impl<C: CallType> Display for StmntKind<C> {
                 ListFormatter(&args.as_slice().raw, "", ", ")
             ),
             StmntKind::NoOp => Ok(()),
-            StmntKind::CollapseHint(hi, lo) => write!(f, "collapse({:?}, {:?})", hi, lo),
         }
     }
 }
@@ -895,7 +893,6 @@ where
                 span,
             ),
             Self::NoOp => StmntKind::NoOp,
-            Self::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
         }
     }
 }
@@ -929,7 +926,7 @@ impl<C: CallType> StmntKind<C> {
                     }
                 }
             }
-            Self::NoOp | Self::CollapseHint(_, _) => {}
+            Self::NoOp => {}
         }
     }
 
@@ -946,7 +943,7 @@ impl<C: CallType> StmntKind<C> {
                     }
                 }
             }
-            Self::NoOp | Self::CollapseHint(_, _) => {}
+            Self::NoOp => {}
         }
     }
 }
@@ -1016,7 +1013,7 @@ pub enum ParameterConstraint {
     },
 }
 
-pub trait CallTypeConversion<S: CallType, D: CallType> : Sized{
+pub trait CallTypeConversion<S: CallType, D: CallType>: Sized {
     fn map_operand(&mut self, op: COperand<S>) -> COperand<D> {
         let contents = match op.contents {
             OperandData::Read(input) => self.map_input(input),
@@ -1045,16 +1042,11 @@ pub trait CallTypeConversion<S: CallType, D: CallType> : Sized{
         span: Span,
     ) -> StmntKind<D>;
 
-    fn map_stmnt(&mut self, kind: StmntKind<S>) ->StmntKind<D>{
+    fn map_stmnt(&mut self, kind: StmntKind<S>) -> StmntKind<D> {
         match kind {
-            StmntKind::Assignment(dst, val) => {
-                StmntKind::Assignment(dst, val.map_operands(self))
-            }
-            StmntKind::Call(call, args, span) => {
-                self.map_call_stmnt(call, args, span)
-            }
+            StmntKind::Assignment(dst, val) => StmntKind::Assignment(dst, val.map_operands(self)),
+            StmntKind::Call(call, args, span) => self.map_call_stmnt(call, args, span),
             StmntKind::NoOp => StmntKind::NoOp,
-            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
         }
     }
 }

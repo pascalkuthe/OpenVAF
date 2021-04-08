@@ -23,16 +23,22 @@ module diode_va(A,C);
 
     real Vd, Vr, Qd;
 
-    (*retrieve*) real Id;
-    (*retrieve*) real Cd;
+    real Id;
+    real vte;
+    real vcrit;
 
     real VT,x,y,vf;
 
     analog begin
         VT = `P_K*$temperature /`P_Q;
-        Vd = V(br_a_ci);
+        vte = VT * N;
+        vcrit = vte * log(vte / (`M_SQRT2 * Is));
+
+        Vd = $limit(V(br_a_ci), "pnjlim", VT, vcrit);
         Vr = V(br_ci_c);
-        Id = Is * (exp(Vd / (N * VT)) - 1);
+
+        Id = Is * (exp(Vd / vte) - 1);
+
         //junction capacitance
         //smoothing of voltage over cap
         vf   = Vj*(1 - pow(3, -1/M));
@@ -40,7 +46,7 @@ module diode_va(A,C);
         y    = sqrt(x*x + 1.92);
         Vd   = vf-VT*(x + y)/(2);
         Qd   = Cj0*Vj * (1-pow(1-Vd/Vj, 1-M))/(1-M);
-        Cd   = ddx(Qd,V(A));
+
         I(br_a_ci) <+ Id + ddt(Qd);
         I(br_ci_c) <+ Vr / Rs;
     end
