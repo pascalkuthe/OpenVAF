@@ -21,7 +21,7 @@ impl CallType for TempUpdateCallType {
     type I = TempUpdateInput;
 
     fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice {
-        match self {}
+        match *self {}
     }
 
     fn derivative<C: CallType>(
@@ -36,7 +36,7 @@ impl CallType for TempUpdateCallType {
 
 impl Display for TempUpdateCallType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {}
+        match *self {}
     }
 }
 
@@ -119,7 +119,7 @@ impl CallTypeConversion<GeneralOsdiCall, TempUpdateCallType> for GeneralToTempUp
     fn map_call_stmnt(
         &mut self,
         _call: GeneralOsdiCall,
-        _args: IndexVec<CallArg, COperand<S>>,
+        _args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
         _span: Span,
     ) -> StmntKind<TempUpdateCallType> {
         unreachable!()

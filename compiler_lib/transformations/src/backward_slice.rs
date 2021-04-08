@@ -103,15 +103,17 @@ impl<'a> BackwardSlice<'a> {
 }
 
 impl<'a, C: CallType> CfgPass<'_, C> for BackwardSlice<'a> {
-    type Result = ();
+    type Result = BitSet<LocationId>;
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
         let Self {
             mut relevant_locations,
-            assumed_locations,
+            mut assumed_locations,
             pdg,
             locations,
         } = self;
+        
+        assumed_locations.union_with(&relevant_locations);
 
         // The relevant stmts are added to the work queue
         let mut work_queue = WorkQueue {
@@ -151,23 +153,7 @@ impl<'a, C: CallType> CfgPass<'_, C> for BackwardSlice<'a> {
             "Backward slice finished"
         );
 
-        for (bb, data) in cfg.blocks.iter_mut_enumerated() {
-            let block_location = &self.locations[bb];
-
-            let mut loc = block_location.phi_start;
-            data.phi_statements.retain(|_| {
-                let res = relevant_locations.contains(loc);
-                loc += 1;
-                res
-            });
-
-            let mut loc = block_location.stmnt_start;
-            data.statements.retain(|_| {
-                let res = relevant_locations.contains(loc);
-                loc += 1;
-                res
-            })
-        }
+        relevant_locations
     }
 
     impl_pass_span!(self; "backward_slice",

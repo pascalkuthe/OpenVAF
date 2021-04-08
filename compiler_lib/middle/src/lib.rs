@@ -388,13 +388,13 @@ pub enum LocalKind {
     Variable(VariableId, VariableLocalKind),
 
     /// There shall only be one local for every combination of DisciplineAccess
-    /// and BranchId. This is automatically enfored during HIR lowering.
-    /// Adding a second local for the same branch/discipline combination will result in UB
+    /// and BranchId. This is automatically enforced during HIR lowering.
+    /// Adding a second local for the same branch/discipline combination will result in UB (in the output binary not the compiler itself
     Branch(DisciplineAccess, BranchId),
 
     /// Temporary values introduced by OpenVAF
-    /// These act like SSA as such it is UB to write to the same local twice
-    /// (will probably cause a pnic)
+    /// These act like SSA as such it is UB (in the output binary not the compiler itself) to write to the same local twice
+    /// (will probably cause a panic a some stage or a sigfault during codegen)
     Temporary,
 }
 

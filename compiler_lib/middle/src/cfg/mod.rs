@@ -59,8 +59,8 @@ pub struct BlockLocations {
 
 #[derive(Debug)]
 pub struct InternedLocations {
-    locations: IndexVec<LocationId, Location>,
-    blocks: IndexVec<BasicBlock, BlockLocations>,
+    pub locations: IndexVec<LocationId, Location>,
+    pub blocks: IndexVec<BasicBlock, BlockLocations>,
 }
 
 impl InternedLocations {

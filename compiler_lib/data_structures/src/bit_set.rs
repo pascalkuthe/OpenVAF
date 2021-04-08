@@ -235,6 +235,13 @@ impl<I: Idx + From<usize>> BitSet<I> {
         self.internal.toggle_range(start..end)
     }
 
+    #[inline]
+    pub fn toggle_all(&mut self) {
+        for block in self.as_mut_slice() {
+            *block = !*block;
+        }
+    }
+
     /// View the bitset as a slice of `u32` blocks
     #[inline]
     #[must_use]

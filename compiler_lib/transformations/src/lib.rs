@@ -18,6 +18,7 @@ mod simplify;
 mod simplify_branches;
 mod verify;
 mod visit;
+mod strip;
 
 pub use backward_slice::BackwardSlice;
 pub use forward_slice::ForwardSlice;
@@ -31,3 +32,5 @@ pub use simplify::Simplify;
 pub use simplify_branches::SimplifyBranches;
 pub use verify::{Malformation, MalformationKind, Verify};
 pub use visit::{CfgVisitor, Visit};
+pub use strip::Strip;
+
