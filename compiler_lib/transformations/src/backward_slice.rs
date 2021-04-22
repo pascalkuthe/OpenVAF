@@ -1,14 +1,14 @@
 use crate::ProgramDependenceGraph;
 use openvaf_data_structures::{BitSet, WorkQueue};
-use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, InternedLocations, LocationId};
+use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::{impl_pass_span, CallType, Local};
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use tracing::{debug, trace, trace_span};
 
 pub struct BackwardSlice<'a> {
-    pub relevant_locations: BitSet<LocationId>,
-    pub assumed_locations: BitSet<LocationId>,
+    pub relevant_locations: BitSet<IntLocation>,
+    pub assumed_locations: BitSet<IntLocation>,
     pub pdg: &'a ProgramDependenceGraph,
     pub locations: &'a InternedLocations,
 }
@@ -45,13 +45,13 @@ impl<'a> BackwardSlice<'a> {
     pub fn requiring_local_in(
         mut self,
         local: Local,
-        reaching_definitions: &BitSet<LocationId>,
+        reaching_definitions: &BitSet<IntLocation>,
     ) -> Self {
         self.require_local_in(local, reaching_definitions);
         self
     }
 
-    pub fn require_local_in(&mut self, local: Local, reaching_definitions: &BitSet<LocationId>) {
+    pub fn require_local_in(&mut self, local: Local, reaching_definitions: &BitSet<IntLocation>) {
         if let Some(assignments) = &self.pdg.data_dependencies.assignments[local] {
             self.relevant_locations.extend(
                 assignments
@@ -64,7 +64,7 @@ impl<'a> BackwardSlice<'a> {
     pub fn requiring_locals_in(
         mut self,
         locals: impl IntoIterator<Item = Local>,
-        reaching_definitions: &BitSet<LocationId>,
+        reaching_definitions: &BitSet<IntLocation>,
     ) -> Self {
         self.require_locals_in(locals, reaching_definitions);
         self
@@ -73,7 +73,7 @@ impl<'a> BackwardSlice<'a> {
     pub fn require_locals_in(
         &mut self,
         locals: impl IntoIterator<Item = Local>,
-        reaching_definitions: &BitSet<LocationId>,
+        reaching_definitions: &BitSet<IntLocation>,
     ) {
         for local in locals {
             self.require_local_in(local, reaching_definitions)
@@ -103,7 +103,7 @@ impl<'a> BackwardSlice<'a> {
 }
 
 impl<'a, C: CallType> CfgPass<'_, C> for BackwardSlice<'a> {
-    type Result = BitSet<LocationId>;
+    type Result = BitSet<IntLocation>;
 
     fn run(self, _cfg: &mut ControlFlowGraph<C>) -> Self::Result {
         let Self {

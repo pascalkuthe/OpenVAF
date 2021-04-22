@@ -15,7 +15,7 @@ pub use crate::program_dependence::reaching_definitions::{
     DefUserGraph, ReachingDefinitionsAnalysis, UseDefGraph,
 };
 use openvaf_data_structures::BitSet;
-use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, InternedLocations, LocationId};
+use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::dfa::DfGraph;
 use openvaf_middle::{impl_pass_span, CallType};
 
@@ -65,7 +65,13 @@ impl<'a, C: CallType> CfgPass<'_, C> for BuildPDG<'a, CalculateDataDependence> {
 }
 
 impl<'a, C: CallType> CfgPass<'_, C>
-    for BuildPDG<'a, (ReachingDefinitionsAnalysis<'a>, DfGraph<BitSet<LocationId>>)>
+    for BuildPDG<
+        'a,
+        (
+            ReachingDefinitionsAnalysis<'a>,
+            DfGraph<BitSet<IntLocation>>,
+        ),
+    >
 {
     type Result = ProgramDependenceGraph;
 
@@ -86,7 +92,10 @@ impl<'a, C: CallType> CfgPass<'_, C>
 pub struct BuildReachingDefinitions<'a>(pub &'a InternedLocations);
 
 impl<'a: 'c, 'c, C: CallType> CfgPass<'c, C> for BuildReachingDefinitions<'a> {
-    type Result = (ReachingDefinitionsAnalysis<'a>, DfGraph<BitSet<LocationId>>);
+    type Result = (
+        ReachingDefinitionsAnalysis<'a>,
+        DfGraph<BitSet<IntLocation>>,
+    );
 
     fn run(self, cfg: &'c mut ControlFlowGraph<C>) -> Self::Result {
         let mut reaching_definitions = ReachingDefinitionsAnalysis::new(&*cfg, self.0);

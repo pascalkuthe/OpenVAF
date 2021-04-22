@@ -9,7 +9,7 @@
 
 use openvaf_data_structures::{BitSet, SparseBitSetMatrix};
 use openvaf_middle::cfg::{
-    BasicBlock, ControlFlowGraph, InternedLocations, LocationId, TerminatorKind,
+    BasicBlock, ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind,
 };
 use openvaf_middle::dfa::{DfGraph, Engine, Forward, GenKillAnalysis, GenKillEngine, GenKillSet};
 use openvaf_middle::{CallType, Local, OperandData, StmntKind};
@@ -17,8 +17,8 @@ use std::mem::take;
 
 #[derive(Debug, Clone)]
 pub struct UseDefGraph {
-    pub use_def_chains: SparseBitSetMatrix<LocationId, LocationId>,
-    pub assignments: SparseBitSetMatrix<Local, LocationId>,
+    pub use_def_chains: SparseBitSetMatrix<IntLocation, IntLocation>,
+    pub assignments: SparseBitSetMatrix<Local, IntLocation>,
 }
 
 impl UseDefGraph {
@@ -38,7 +38,7 @@ impl UseDefGraph {
 
 #[derive(Debug, Clone)]
 pub struct DefUserGraph {
-    pub def_use_chains: SparseBitSetMatrix<LocationId, LocationId>,
+    pub def_use_chains: SparseBitSetMatrix<IntLocation, IntLocation>,
 }
 
 pub struct ReachingDefinitionsAnalysis<'a> {
@@ -76,10 +76,10 @@ impl<'a> ReachingDefinitionsAnalysis<'a> {
 
     fn write_use_def_chain(
         &mut self,
-        location: LocationId,
+        location: IntLocation,
         locals: impl IntoIterator<Item = Local>,
-        tmp: &mut BitSet<LocationId>,
-        reaching: &BitSet<LocationId>,
+        tmp: &mut BitSet<IntLocation>,
+        reaching: &BitSet<IntLocation>,
     ) {
         tmp.clear();
         for local in locals {
@@ -90,7 +90,10 @@ impl<'a> ReachingDefinitionsAnalysis<'a> {
         self.graph.use_def_chains[location] = tmp.to_hybrid();
     }
 
-    pub fn solve<C: CallType>(&mut self, cfg: &ControlFlowGraph<C>) -> DfGraph<BitSet<LocationId>> {
+    pub fn solve<C: CallType>(
+        &mut self,
+        cfg: &ControlFlowGraph<C>,
+    ) -> DfGraph<BitSet<IntLocation>> {
         let mut genkill_engine = GenKillEngine::new(cfg, self);
         let engine = Engine::new(cfg, &mut genkill_engine);
         engine.iterate_to_fixpoint()
@@ -99,7 +102,7 @@ impl<'a> ReachingDefinitionsAnalysis<'a> {
     pub fn to_use_def<C: CallType>(
         mut self,
         cfg: &ControlFlowGraph<C>,
-        mut dfg: DfGraph<BitSet<LocationId>>,
+        mut dfg: DfGraph<BitSet<IntLocation>>,
     ) -> UseDefGraph {
         for (block, data) in cfg.blocks.iter_enumerated() {
             // reusing the in set because we dont need it afterwards anyway
@@ -168,12 +171,12 @@ impl<'a> ReachingDefinitionsAnalysis<'a> {
 }
 
 impl<'lt, C: CallType> GenKillAnalysis<C> for ReachingDefinitionsAnalysis<'lt> {
-    type SetType = LocationId;
+    type SetType = IntLocation;
     type Direction = Forward;
 
     fn transfer_function(
         &mut self,
-        gen_kill_set: &mut GenKillSet<LocationId>,
+        gen_kill_set: &mut GenKillSet<IntLocation>,
         basic_bock: BasicBlock,
         cfg: &ControlFlowGraph<C>,
     ) {

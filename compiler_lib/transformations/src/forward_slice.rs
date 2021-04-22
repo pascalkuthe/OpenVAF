@@ -1,13 +1,13 @@
 use crate::program_dependence::InvProgramDependenceGraph;
 use openvaf_data_structures::{BitSet, WorkQueue};
-use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, InternedLocations, LocationId};
+use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::{impl_pass_span, CallType};
 use std::collections::VecDeque;
 use std::iter::FromIterator;
 use tracing::{debug, trace, trace_span};
 
 pub struct ForwardSlice<'a> {
-    pub tainted_locations: BitSet<LocationId>,
+    pub tainted_locations: BitSet<IntLocation>,
     pub pdg: &'a InvProgramDependenceGraph,
     pub locations: &'a InternedLocations,
 }
@@ -23,7 +23,7 @@ impl<'a> ForwardSlice<'a> {
 }
 
 impl<'a, C: CallType> CfgPass<'_, C> for ForwardSlice<'a> {
-    type Result = BitSet<LocationId>;
+    type Result = BitSet<IntLocation>;
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
         let Self {

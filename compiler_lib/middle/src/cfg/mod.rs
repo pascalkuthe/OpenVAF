@@ -45,21 +45,21 @@ mod print;
 
 // Macros that call functions that produce a cfg with more or less blocks (and therefore a new tag)
 id_type!(BasicBlock(u16));
-id_type!(LocationId(u32));
+id_type!(IntLocation(u32));
 id_type!(Phi(u16));
 
 impl_id_type!(BasicBlock in ControlFlowGraph<C> => blocks as BasicBlockData<C> where <C: CallType>);
 
 #[derive(Debug)]
 pub struct BlockLocations {
-    pub phi_start: LocationId,
-    pub stmnt_start: LocationId,
-    pub terminator: LocationId,
+    pub phi_start: IntLocation,
+    pub stmnt_start: IntLocation,
+    pub terminator: IntLocation,
 }
 
 #[derive(Debug)]
 pub struct InternedLocations {
-    pub locations: IndexVec<LocationId, Location>,
+    pub locations: IndexVec<IntLocation, Location>,
     pub blocks: IndexVec<BasicBlock, BlockLocations>,
 }
 
@@ -67,16 +67,16 @@ impl InternedLocations {
     pub fn len(&self) -> usize {
         self.locations.len()
     }
-    pub fn len_idx(&self) -> LocationId {
+    pub fn len_idx(&self) -> IntLocation {
         self.locations.len_idx()
     }
 }
 
-impl Index<LocationId> for InternedLocations {
+impl Index<IntLocation> for InternedLocations {
     type Output = Location;
 
-    fn index(&self, block: LocationId) -> &Self::Output {
-        &self.locations[block]
+    fn index(&self, interned: IntLocation) -> &Self::Output {
+        &self.locations[interned]
     }
 }
 
@@ -392,7 +392,7 @@ impl<C: CallType> ControlFlowGraph<C> {
         let locations: IndexVec<_, _> = self.locations().collect();
         let mut blocks: IndexVec<BasicBlock, BlockLocations> =
             IndexVec::with_capacity(self.blocks.len());
-        let mut start = LocationId::new(0);
+        let mut start = IntLocation::new(0);
         for (id, location) in locations.iter_enumerated() {
             if location.block != blocks.len_idx() {
                 blocks.push(BlockLocations {

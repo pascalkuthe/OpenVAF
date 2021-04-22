@@ -5,10 +5,10 @@ use openvaf_data_structures::{
     HashMap,
 };
 use openvaf_diagnostics::lints::Linter;
-use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult, StandardPrinter};
+use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, StandardPrinter, UserResult};
 use openvaf_hir::{
-    BranchId, ExpressionId,  LimFunction as HirLimFunction, NetId, ParameterId, PortId,
-    StatementId, SyntaxCtx,
+    BranchId, ExpressionId, LimFunction as HirLimFunction, NetId, ParameterId, PortId, StatementId,
+    SyntaxCtx,
 };
 use openvaf_hir_lowering::{
     lower_hir_userfacing_with_printer, AttributeCtx, Error::WrongFunctionArgCount,
@@ -40,6 +40,7 @@ pub enum GeneralOsdiCall {
     // TODO Noise
     TimeDerivative,
     StopTask(StopTaskKind, PrintOnFinish),
+    NodeCollapse(NetId, NetId),
 }
 
 impl CallType for GeneralOsdiCall {
@@ -314,6 +315,14 @@ impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
             span,
         ))
     }
+
+    fn collapse_hint(
+        _: &mut LocalCtx<'a, 'h, Self, OsdiHirLoweringCtx<'a>>,
+        hi: NetId,
+        lo: NetId,
+    ) -> Option<StmntKind<Self>> {
+        todo!()
+    }
 }
 
 pub struct OsdiHirLoweringCtx<'a> {
@@ -341,7 +350,6 @@ impl<'s> HirLowering for OsdiHirLoweringCtx<'s> {
         unimplemented!()
     }
 }
-
 
 pub fn run_frontend<P: DiagnosticSlicePrinter>(
     sm: Box<SourceMap>,

@@ -1,9 +1,9 @@
 use openvaf_data_structures::BitSet;
-use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, InternedLocations, LocationId};
+use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::{impl_pass_span, CallType};
 
 pub struct Strip<'a> {
-    pub retain: &'a BitSet<LocationId>,
+    pub retain: &'a BitSet<IntLocation>,
     pub locations: &'a InternedLocations,
 }
 

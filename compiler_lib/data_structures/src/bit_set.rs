@@ -27,6 +27,7 @@ mod sparse;
 use crate::bit_set::sparse::{SparseBitSet, SPARSE_MAX};
 pub use hybrid::HybridBitSet;
 pub use matrix::SparseBitSetMatrix;
+use std::mem::size_of;
 
 //TODO switch to usize/u64
 //BLOCKS upstream
@@ -211,11 +212,10 @@ impl<I: Idx + From<usize>> BitSet<I> {
     /// Equivalent to [`insert_range(..)`](crate::bit_set::BitSet::insert_range) but faster
     #[inline]
     pub fn enable_all(&mut self) {
-        let len = self.as_slice().len();
-
-        for block in self.as_mut_slice()[..len].iter_mut() {
+        for block in self.as_mut_slice().iter_mut() {
             *block = Block::MAX
         }
+        self.clear_end()
     }
 
     /// Toggles (inverts) every bit in the given range.
@@ -236,6 +236,16 @@ impl<I: Idx + From<usize>> BitSet<I> {
     pub fn toggle_all(&mut self) {
         for block in self.as_mut_slice() {
             *block = !*block;
+        }
+        self.clear_end()
+    }
+
+    pub fn clear_end(&mut self) {
+        let bits = size_of::<Block>() * 8;
+        let len = self.len();
+
+        if let Some(end) = self.as_mut_slice().last_mut() {
+            *end = (Block::MAX >> 1) >> (bits - len % bits - 1)
         }
     }
 
@@ -279,6 +289,8 @@ impl<I: Idx + From<usize>> BitSet<I> {
     pub fn is_empty(&self) -> bool {
         self.as_slice().iter().all(|block| *block == 0)
     }
+
+    pub fn clear_trailing_ones(&mut self) {}
 
     /// Iterates over all enabled bits.
     ///

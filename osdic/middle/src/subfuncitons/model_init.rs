@@ -1,17 +1,24 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::subfuncitons::FindWrittenVars;
 use openvaf_data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
+use openvaf_data_structures::BitSet;
 use openvaf_hir::SyntaxCtx;
-use openvaf_ir::ids::{ParameterId, PortId};
+use openvaf_ir::ids::{NetId, ParameterId, PortId};
 use openvaf_ir::{Spanned, Type};
 use openvaf_middle::cfg::builder::CfgBuilder;
-use openvaf_middle::cfg::{ControlFlowGraph, TerminatorKind};
-use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind};
+use openvaf_middle::const_fold::{ConstantPropagation, DiamondLattice};
 use openvaf_middle::{
     BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Derivative,
     Expression, Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
-    ParameterConstraint, ParameterExcludeConstraint, ParameterInput, RValue, StmntKind, TyRValue,
+    ParameterConstraint, ParameterExcludeConstraint, ParameterInput, PrintOnFinish, RValue,
+    StmntKind, StopTaskKind, TyRValue, VariableId,
 };
 use openvaf_session::sourcemap::Span;
+use openvaf_transformations::{
+    ForwardSlice, InvProgramDependenceGraph, RemoveDeadLocals, Simplify, SimplifyBranches, Strip,
+    Visit,
+};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
@@ -19,15 +26,16 @@ use std::ops::Deref;
 #[derive(PartialEq, Eq, Clone)]
 pub enum InitFunctionCallType {
     ParamOutOfBounds(ParameterId),
+    StopTask(StopTaskKind, PrintOnFinish),
+    NodeCollapse(NetId, NetId),
+    FF,
 }
 
 impl CallType for InitFunctionCallType {
     type I = ParameterInput;
 
     fn const_fold(&self, _: &[DiamondLattice]) -> DiamondLattice {
-        match self {
-            Self::ParamOutOfBounds(_) => unreachable!(),
-        }
+        unreachable!()
     }
 
     fn derivative<C: CallType>(
@@ -36,9 +44,7 @@ impl CallType for InitFunctionCallType {
         _mir: &Mir<C>,
         _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
     ) -> Derivative<Self::I> {
-        match self {
-            Self::ParamOutOfBounds(_) => unreachable!(),
-        }
+        unreachable!()
     }
 }
 
@@ -47,6 +53,12 @@ impl Display for InitFunctionCallType {
         match self {
             InitFunctionCallType::ParamOutOfBounds(param) => {
                 write!(f, "err_param_out_of_bounds( {:?} )", param)
+            }
+            InitFunctionCallType::StopTask(StopTaskKind::Stop, finish) => {
+                write!(f, "$stop({:?})", finish)
+            }
+            InitFunctionCallType::StopTask(StopTaskKind::Finish, finish) => {
+                write!(f, "$finish({:?})", finish)
             }
         }
     }
@@ -58,12 +70,58 @@ impl Debug for InitFunctionCallType {
     }
 }
 
-pub struct InitFunction {
+pub struct InitModelFunction {
     pub cfg: ControlFlowGraph<InitFunctionCallType>,
     pub param_locals: IndexBox<ParameterId, [Local]>,
+    pub output_vars: BitSet<VariableId>,
 }
-impl InitFunction {
-    pub fn new<A: CallType>(mir: &Mir<A>) -> Self {
+impl InitModelFunction {
+    pub fn new(
+        mir: &Mir<GeneralOsdiCall>,
+        mut cfg: ControlFlowGraph<GeneralOsdiCall>,
+        tainted_locations: BitSet<IntLocation>,
+
+        locations: &InternedLocations,
+        pdg: &InvProgramDependenceGraph,
+        output_stmnts: &BitSet<IntLocation>,
+    ) -> (Self, BitSet<IntLocation>) {
+        let mut init_locations = cfg.run_pass(ForwardSlice {
+            tainted_locations,
+            pdg,
+            locations,
+        });
+        cfg.run_pass(Strip {
+            retain: &init_locations,
+            locations,
+        });
+        let init_output_locations = {
+            init_locations.intersect_with(output_stmnts);
+            init_locations
+        };
+
+        cfg.run_pass(Simplify);
+        cfg.run_pass(SimplifyBranches);
+        cfg.run_pass(RemoveDeadLocals);
+        cfg.run_pass(ConstantPropagation::default());
+
+        cfg.run_pass(Simplify);
+        cfg.run_pass(SimplifyBranches);
+        cfg.run_pass(RemoveDeadLocals);
+
+        let mut res = Self::new_param_init(mir);
+        res.insert_model_init(cfg);
+
+        let mut output_vars = FindWrittenVars(BitSet::new_empty(mir.variables.len_idx()));
+        cfg.run_pass(Visit {
+            visitor: &mut output_vars,
+            locations,
+        });
+        res.output_vars = output_vars.0;
+
+        (res, init_output_locations)
+    }
+
+    pub fn new_param_init<A: CallType>(mir: &Mir<A>) -> Self {
         let mut cfg = CfgBuilder::new_small();
 
         // Create locals for the parameters
@@ -343,10 +401,11 @@ impl InitFunction {
         Self {
             cfg: cfg.finish(SyntaxCtx::ROOT),
             param_locals,
+            output_vars: BitSet::default(),
         }
     }
 
-    pub fn insert_model_init(&mut self, src: ControlFlowGraph<GeneralOsdiCall>) {
+    fn insert_model_init(&mut self, src: ControlFlowGraph<GeneralOsdiCall>) {
         let mut src: ControlFlowGraph<InitFunctionCallType> = src.map(
             &mut ParamInitializationMapper(&self.param_locals, self.cfg.locals.len()),
         );
@@ -400,9 +459,19 @@ impl<'a> CallTypeConversion<GeneralOsdiCall, InitFunctionCallType>
         &mut self,
         call: GeneralOsdiCall,
         args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
-        _span: Span,
+        span: Span,
     ) -> StmntKind<InitFunctionCallType> {
-        unreachable!("{:?} ({:?})", call, args)
+        let res = match call {
+            GeneralOsdiCall::NodeCollapse(_, _) => StmntKind::NoOp,
+            GeneralOsdiCall::StopTask(kind, print) => StmntKind::Call(
+                InitFunctionCallType::StopTask(kind, print),
+                IndexVec::new(),
+                span,
+            ),
+            call => unreachable!("{:?} ({:?})", call, args),
+        };
+        debug_assert_eq!(args.len(), 0);
+        res
     }
 
     fn map_stmnt(&mut self, kind: StmntKind<GeneralOsdiCall>) -> StmntKind<InitFunctionCallType> {
@@ -410,9 +479,10 @@ impl<'a> CallTypeConversion<GeneralOsdiCall, InitFunctionCallType>
             StmntKind::Assignment(dst, val) => {
                 StmntKind::Assignment(dst + self.1, val.map_operands(self))
             }
-            StmntKind::Call(call, args, span) => self.map_call_stmnt(call, args, span),
+            StmntKind::Call(call, args, span) => {
+                self.map_call_stmnt(call, args, span) // dont need to map args since they are all empty
+            }
             StmntKind::NoOp => StmntKind::NoOp,
-            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
         }
     }
 }
@@ -466,7 +536,6 @@ impl<'a> CallTypeConversion<ParameterCallType, InitFunctionCallType>
             }
             StmntKind::Call(call, args, span) => self.map_call_stmnt(call, args, span),
             StmntKind::NoOp => StmntKind::NoOp,
-            StmntKind::CollapseHint(hi, lo) => StmntKind::CollapseHint(hi, lo),
         }
     }
 }

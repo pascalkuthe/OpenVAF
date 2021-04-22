@@ -1,5 +1,5 @@
 use openvaf_middle::cfg::{
-    CfgPass, ControlFlowGraph, InternedLocations, LocationId, PhiData, TerminatorKind,
+    CfgPass, ControlFlowGraph, IntLocation, InternedLocations, PhiData, TerminatorKind,
 };
 use openvaf_middle::{impl_pass_span, COperand, CallType, OperandData, RValue, StmntKind};
 
@@ -39,24 +39,29 @@ pub trait CfgVisitor<C: CallType> {
     fn visit_input(
         &mut self,
         _input: &<C as CallType>::I,
-        _loc: LocationId,
+        _loc: IntLocation,
         _cfg: &ControlFlowGraph<C>,
     ) {
     }
 
-    fn visit_operand(&mut self, operand: &COperand<C>, loc: LocationId, cfg: &ControlFlowGraph<C>) {
+    fn visit_operand(
+        &mut self,
+        operand: &COperand<C>,
+        loc: IntLocation,
+        cfg: &ControlFlowGraph<C>,
+    ) {
         if let OperandData::Read(ref input) = operand.contents {
             self.visit_input(input, loc, cfg)
         }
     }
 
-    fn visit_rvalue(&mut self, rval: &RValue<C>, loc: LocationId, cfg: &ControlFlowGraph<C>) {
+    fn visit_rvalue(&mut self, rval: &RValue<C>, loc: IntLocation, cfg: &ControlFlowGraph<C>) {
         for operand in rval.operands() {
             self.visit_operand(operand, loc, cfg)
         }
     }
 
-    fn visit_stmnt(&mut self, stmnt: &StmntKind<C>, loc: LocationId, cfg: &ControlFlowGraph<C>) {
+    fn visit_stmnt(&mut self, stmnt: &StmntKind<C>, loc: IntLocation, cfg: &ControlFlowGraph<C>) {
         match *stmnt {
             StmntKind::Assignment(_, ref val) => self.visit_rvalue(val, loc, cfg),
             StmntKind::Call(_, ref args, _) => {
@@ -68,5 +73,5 @@ pub trait CfgVisitor<C: CallType> {
         }
     }
 
-    fn visit_phi(&mut self, _phi: &PhiData, _loc: LocationId, _cfg: &ControlFlowGraph<C>) {}
+    fn visit_phi(&mut self, _phi: &PhiData, _loc: IntLocation, _cfg: &ControlFlowGraph<C>) {}
 }
