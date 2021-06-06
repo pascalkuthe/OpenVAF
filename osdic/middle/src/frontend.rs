@@ -5,7 +5,7 @@ use openvaf_data_structures::{
     HashMap,
 };
 use openvaf_diagnostics::lints::Linter;
-use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, StandardPrinter, UserResult};
+use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult};
 use openvaf_hir::{
     BranchId, ExpressionId, LimFunction as HirLimFunction, NetId, ParameterId, PortId, StatementId,
     SyntaxCtx,
@@ -17,12 +17,12 @@ use openvaf_hir_lowering::{
 use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, Type, Unknown};
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::Local;
 use openvaf_middle::{const_fold::DiamondLattice, CallArg};
 use openvaf_middle::{
     CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
 };
+use openvaf_middle::{Local, ParameterInput};
 use openvaf_parser::{parse_facing_with_printer, TokenStream};
 use openvaf_preprocessor::preprocess_user_facing_with_printer;
 use openvaf_session::sourcemap::Span;
@@ -54,6 +54,7 @@ impl CallType for GeneralOsdiCall {
                 .clone()
                 .and_then(|_| DiamondLattice::Val(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
             GeneralOsdiCall::StopTask(_, _) => unreachable!(),
+            GeneralOsdiCall::NodeCollapse(_, _) => unreachable!(),
         }
     }
 
@@ -78,6 +79,7 @@ impl Display for GeneralOsdiCall {
             GeneralOsdiCall::StopTask(StopTaskKind::Finish, finish) => {
                 write!(f, "$finish({:?})", finish)
             }
+            GeneralOsdiCall::NodeCollapse(hi, lo) => write!(f, "$collapse({:?}, {:?})", hi, lo),
         }
     }
 }
@@ -98,8 +100,7 @@ pub enum SimParamKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum GeneralOsdiInput {
-    Parameter(ParameterId),
-    ParamGiven(ParameterId),
+    Parameter(ParameterInput),
     PortConnected(PortId),
     SimParam(StringLiteral, SimParamKind),
     Voltage(NetId, NetId),
@@ -119,7 +120,6 @@ impl Display for GeneralOsdiInput {
         match self {
             Self::Parameter(param) => Debug::fmt(param, f),
             Self::PortConnected(port) => write!(f, "$port_connected({:?})", port),
-            Self::ParamGiven(param) => write!(f, "$param_given({:?})", param),
             Self::SimParam(name, kind) => write!(f, "$simparam({}, {:?})", name, kind),
             Self::Current(branch) => write!(f, "flow({:?})", branch),
             Self::Voltage(hi, lo) => write!(f, "pot({:?}, {:?})", hi, lo),
@@ -140,7 +140,9 @@ impl Display for GeneralOsdiInput {
 impl InputKind for GeneralOsdiInput {
     fn derivative<C: CallType>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
         match (self, unknown) {
-            (Self::Parameter(x), Unknown::Parameter(y)) if *x == y => Derivative::One,
+            (Self::Parameter(ParameterInput::Value(x)), Unknown::Parameter(y)) if *x == y => {
+                Derivative::One
+            }
 
             (Self::Current(x), Unknown::Flow(y)) if *x == y => Derivative::One,
 
@@ -162,7 +164,7 @@ impl InputKind for GeneralOsdiInput {
 
     fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
         match self {
-            Self::Parameter(param) => mir[*param].ty,
+            Self::Parameter(ParameterInput::Value(param)) => mir[*param].ty,
             Self::Voltage(_, _)
             | Self::Current(_)
             | Self::Lim { .. }
@@ -171,7 +173,7 @@ impl InputKind for GeneralOsdiInput {
             | Self::SimParam(_, SimParamKind::RealOptional)
             | Self::SimParam(_, SimParamKind::Real) => Type::REAL,
 
-            Self::ParamGiven(_)
+            Self::Parameter(ParameterInput::Given(_))
             | Self::PortConnected(_)
             | Self::SimParam(_, SimParamKind::RealOptionalGiven) => Type::BOOL,
             Self::SimParam(_, SimParamKind::String) => Type::STRING,
@@ -220,7 +222,7 @@ impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
     ) -> Option<RValue<Self>> {
         Some(RValue::Use(Spanned {
             span,
-            contents: OperandData::Read(GeneralOsdiInput::Parameter(param)),
+            contents: OperandData::Read(GeneralOsdiInput::Parameter(ParameterInput::Value(param))),
         }))
     }
 
@@ -317,7 +319,7 @@ impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
     }
 
     fn collapse_hint(
-        _: &mut LocalCtx<'a, 'h, Self, OsdiHirLoweringCtx<'a>>,
+        _: &mut LocalCtx<Self, OsdiHirLoweringCtx>,
         hi: NetId,
         lo: NetId,
     ) -> Option<StmntKind<Self>> {

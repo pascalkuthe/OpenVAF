@@ -1,25 +1,30 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::subfuncitons::instance_init::InstanceInit;
+use crate::subfuncitons::instance_temp_update::InstanceTempUpdate;
 use crate::subfuncitons::model_init::InitModelFunction;
+use crate::subfuncitons::model_temp_update::ModelTempUpdate;
 use openvaf_data_structures::BitSet;
 use openvaf_hir::VariableId;
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation};
+use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::const_fold::ConstantPropagation;
-use openvaf_middle::{CallType, Local, LocalKind, Mir, StmntKind};
+use openvaf_middle::{CallType, LocalKind, Mir, StmntKind};
 use openvaf_transformations::{
-    BuildPDG, CalculateDataDependence, CfgVisitor, ForwardSlice, RemoveDeadLocals, Simplify,
-    SimplifyBranches, Strip, Visit,
+    BuildPDG, CalculateDataDependence, CfgVisitor, ForwardSlice, InvProgramDependenceGraph,
+    RemoveDeadLocals, Simplify, SimplifyBranches, Strip, Visit,
 };
 
 //mod ac_load;
 pub mod model_init;
 //mod load;
 mod instance_init;
-mod temp_update;
+mod instance_temp_update;
+mod model_temp_update;
 
 pub struct FindTaintedStmnts {
-    instance_init_or_later: BitSet<IntLocation>,
-    temp_update_or_later: BitSet<IntLocation>,
-    load_or_later: BitSet<IntLocation>,
+    model_temp_update_tainted: BitSet<IntLocation>,
+    model_init_tainted: BitSet<IntLocation>,
+    instance_init_tainted: BitSet<IntLocation>,
+    instance_temp_update_tainted: BitSet<IntLocation>,
 }
 
 impl CfgVisitor<GeneralOsdiCall> for FindTaintedStmnts {
@@ -35,19 +40,23 @@ impl CfgVisitor<GeneralOsdiCall> for FindTaintedStmnts {
             | GeneralOsdiInput::Current(_)
             | GeneralOsdiInput::PortFlow(_)
             | GeneralOsdiInput::Lim { .. } => {
-                self.instance_init_or_later.insert(loc);
-                self.temp_update_or_later.insert(loc);
-                self.load_or_later.insert(loc);
+                self.model_init_tainted.insert(loc);
+                self.model_temp_update_tainted.insert(loc);
+                self.instance_temp_update_tainted.insert(loc);
+                self.instance_init_tainted.insert(loc);
             }
 
             GeneralOsdiInput::Temperature => {
-                self.instance_init_or_later.insert(loc);
-                self.temp_update_or_later.insert(loc)
+                self.model_init_tainted.insert(loc);
+                self.instance_init_tainted.insert(loc);
             }
 
-            GeneralOsdiInput::PortConnected(_) => self.instance_init_or_later.insert(loc),
+            GeneralOsdiInput::PortConnected(_) => {
+                self.model_temp_update_tainted.insert(loc);
+                self.model_init_tainted.insert(loc);
+            }
 
-            GeneralOsdiInput::Parameter(_) | GeneralOsdiInput::ParamGiven(_) => {}
+            GeneralOsdiInput::Parameter(_) => {}
         }
     }
 }
@@ -67,9 +76,9 @@ impl<C: CallType> CfgVisitor<C> for FindOutputStmnts {
     }
 }
 
-pub struct FindWrittenVars(BitSet<VariableId>);
+pub struct FindWrittenVars<'a>(&'a mut BitSet<VariableId>);
 
-impl<C: CallType> CfgVisitor<C> for FindWrittenVars {
+impl<'a, C: CallType> CfgVisitor<C> for FindWrittenVars<'a> {
     fn visit_stmnt(&mut self, stmnt: &StmntKind<C>, _loc: IntLocation, cfg: &ControlFlowGraph<C>) {
         if let StmntKind::Assignment(dst, _) = *stmnt {
             if let LocalKind::Variable(var, _) = cfg.locals[dst].kind {
@@ -79,10 +88,15 @@ impl<C: CallType> CfgVisitor<C> for FindWrittenVars {
     }
 }
 
-pub fn divide_analog_block_into_cfgs(
+pub struct DividedAnalogBlock {
+    model_init: InitModelFunction,
+    model_temp_update: ModelTempUpdate,
+}
+
+pub fn divide_analog_block(
     mir: &Mir<GeneralOsdiCall>,
 ) -> (
-    ControlFlowGraph<GeneralOsdiCall>,
+    InitModelFunction,
     ControlFlowGraph<GeneralOsdiCall>,
     ControlFlowGraph<GeneralOsdiCall>,
 ) {
@@ -90,31 +104,23 @@ pub fn divide_analog_block_into_cfgs(
 
     // optimize a few times so we catch most things
 
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
+    optimize_cfg(&mut cfg);
     cfg.run_pass(ConstantPropagation::default());
-
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
-    cfg.run_pass(RemoveDeadLocals);
-
-    cfg.run_pass(ConstantPropagation::default());
-
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
-    cfg.run_pass(RemoveDeadLocals);
+    optimize_cfg(&mut cfg);
 
     // analyse the cfg
 
     let locations = cfg.intern_locations();
 
-    let mut visitor = FindTaintedStmnts {
-        instance_init_or_later: BitSet::new_empty(locations.len_idx()),
-        temp_update_or_later: BitSet::new_empty(locations.len_idx()),
-        load_or_later: BitSet::new_empty(locations.len_idx()),
+    let mut tainted_locations = FindTaintedStmnts {
+        model_temp_update_tainted: BitSet::new_empty(locations.len_idx()),
+        model_init_tainted: BitSet::new_empty(locations.len_idx()),
+        instance_init_tainted: BitSet::new_empty(locations.len_idx()),
+        instance_temp_update_tainted: BitSet::new_empty(locations.len_idx()),
     };
+
     cfg.run_pass(Visit {
-        visitor: &mut visitor,
+        visitor: &mut tainted_locations,
         locations: &locations,
     });
 
@@ -133,67 +139,93 @@ pub fn divide_analog_block_into_cfgs(
 
     // create subslices
 
-    let (model_init, mut model_init_output) = InitModelFunction::new(
+    let (mut model_init, model_init_output) = InitModelFunction::new(
         mir,
-        cfg.clone(),
-        visitor.instance_init_or_later,
+        &cfg,
+        tainted_locations.model_init_tainted,
         &locations,
         &inverse_pdg,
         &output_stmnts,
     );
 
-    let mut temp_update_cfg = cfg.clone();
-    let mut temp_update_locations = temp_update_cfg.run_pass(ForwardSlice {
-        tainted_locations: visitor.load_or_later,
-        pdg: &inverse_pdg,
-        locations: &locations,
-    });
-    temp_update_locations.difference_with(&model_init_output);
-    temp_update_cfg.run_pass(Strip {
-        retain: &temp_update_locations,
-        locations: &locations,
-    });
+    let (model_temp_update, model_temp_update_output) = ModelTempUpdate::new(
+        &cfg,
+        tainted_locations.model_temp_update_tainted,
+        &model_init_output,
+        &locations,
+        &inverse_pdg,
+        &output_stmnts,
+        &mut model_init.model_vars,
+    );
 
-    let mut load_assumed_locations = {
-        temp_update_locations.intersect_with(&output_stmnts);
-        temp_update_locations.union_with(&init_output_locations);
-        temp_update_locations
-    };
+    let (mut instance_init, instance_init_output) = InstanceInit::new(
+        mir,
+        &cfg,
+        tainted_locations.instance_init_tainted,
+        &model_temp_update_output,
+        &locations,
+        &inverse_pdg,
+        &output_stmnts,
+    );
 
-    let load_relevant_locations = {
-        load_assumed_locations.toggle_all();
-        load_assumed_locations
-    };
-
-    let mut load_cfg = cfg.clone();
-    load_cfg.run_pass(Strip {
-        retain: &load_relevant_locations,
-        locations: &locations,
-    });
-    // todo remove noise
-
-    temp_update_cfg.run_pass(Simplify);
-    temp_update_cfg.run_pass(SimplifyBranches);
-    temp_update_cfg.run_pass(ConstantPropagation::default());
-
-    temp_update_cfg.run_pass(Simplify);
-    temp_update_cfg.run_pass(SimplifyBranches);
-    temp_update_cfg.run_pass(RemoveDeadLocals);
-
-    load_cfg.run_pass(Simplify);
-    load_cfg.run_pass(SimplifyBranches);
-    load_cfg.run_pass(ConstantPropagation::default());
-
-    load_cfg.run_pass(Simplify);
-    load_cfg.run_pass(SimplifyBranches);
-    load_cfg.run_pass(RemoveDeadLocals);
-
-    (init_cfg, temp_update_cfg, load_cfg)
+    let (mut instance_init, instance_init_output) = InstanceTempUpdate::new(
+        &cfg,
+        tainted_locations.instance_temp_update_tainted,
+        &model_temp_update_output,
+        &locations,
+        &inverse_pdg,
+        &output_stmnts,
+        &mut instance_init.instance_vars,
+    );
 }
 
-pub fn divide_analog_block(mir: &Mir<GeneralOsdiCall>) -> InitModelFunction {
-    let (init_cfg, _, _) = divide_analog_block_into_cfgs(mir);
-    let mut fun = InitModelFunction::new(mir);
-    fun.insert_model_init(init_cfg);
-    fun
+fn optimize_cfg<C: CallType + 'static>(cfg: &mut ControlFlowGraph<C>) {
+    cfg.run_pass(Simplify);
+    cfg.run_pass(SimplifyBranches);
+    cfg.run_pass(RemoveDeadLocals);
+    cfg.run_pass(ConstantPropagation::default());
+
+    cfg.run_pass(Simplify);
+    cfg.run_pass(SimplifyBranches);
+    cfg.run_pass(RemoveDeadLocals);
+}
+
+fn create_subfunction_cfg(
+    src: &ControlFlowGraph<GeneralOsdiCall>,
+    tainted_locations: BitSet<IntLocation>,
+    assumed_locations: &BitSet<IntLocation>,
+
+    locations: &InternedLocations,
+    pdg: &InvProgramDependenceGraph,
+    output_stmnts: &BitSet<IntLocation>,
+
+    written_vars: &mut BitSet<VariableId>,
+) -> (ControlFlowGraph<GeneralOsdiCall>, BitSet<IntLocation>) {
+    let mut cfg = src.clone();
+    let mut init_locations = cfg.run_pass(ForwardSlice {
+        tainted_locations,
+        pdg,
+        locations,
+    });
+
+    init_locations.difference_with(assumed_locations);
+
+    cfg.run_pass(Strip {
+        retain: &init_locations,
+        locations,
+    });
+
+    let init_output_locations = {
+        init_locations.intersect_with(output_stmnts);
+        init_locations
+    };
+
+    optimize_cfg(&mut cfg);
+
+    cfg.run_pass(Visit {
+        visitor: &mut FindWrittenVars(written_vars),
+        locations,
+    });
+
+    (cfg, init_output_locations)
 }

@@ -16,7 +16,7 @@ use openvaf_hir_lowering::{
     lower_hir_userfacing, AttributeCtx, ExpressionLowering, HirFold, HirLowering,
     HirSystemFunctionCall, LocalCtx,
 };
-use openvaf_ir::ids::{BranchId, ExpressionId, ParameterId, PortId, StatementId, SyntaxCtx};
+use openvaf_ir::ids::{BranchId, ExpressionId, NetId, ParameterId, PortId, StatementId, SyntaxCtx};
 use openvaf_ir::{
     Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, SystemFunctionCall, Unknown,
 };
@@ -359,6 +359,14 @@ impl ExpressionLowering<TestLowering> for Call {
             IndexVec::new(),
             span,
         ))
+    }
+
+    fn collapse_hint(
+        _: &mut LocalCtx<Self, TestLowering>,
+        _hi: NetId,
+        _lo: NetId,
+    ) -> Option<StmntKind<Self>> {
+        Some(StmntKind::NoOp)
     }
 }
 

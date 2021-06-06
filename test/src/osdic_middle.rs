@@ -54,9 +54,9 @@ fn osdic_hir_lowering_test(model: &'static str, sim: &'static str) -> Result<(),
 
             drop(cfg);
 
-            let init = divide_analog_block(&mir);
+            let (model_init, _, _) = divide_analog_block(&mir);
 
-            let mut cfg = init.cfg;
+            let mut cfg = model_init.cfg;
 
             cfg.print(
                 &mir,

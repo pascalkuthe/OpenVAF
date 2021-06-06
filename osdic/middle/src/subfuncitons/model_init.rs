@@ -1,5 +1,5 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
-use crate::subfuncitons::FindWrittenVars;
+use crate::subfuncitons::{optimize_cfg, FindWrittenVars};
 use openvaf_data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
 use openvaf_data_structures::BitSet;
 use openvaf_hir::SyntaxCtx;
@@ -27,8 +27,6 @@ use std::ops::Deref;
 pub enum InitFunctionCallType {
     ParamOutOfBounds(ParameterId),
     StopTask(StopTaskKind, PrintOnFinish),
-    NodeCollapse(NetId, NetId),
-    FF,
 }
 
 impl CallType for InitFunctionCallType {
@@ -51,13 +49,13 @@ impl CallType for InitFunctionCallType {
 impl Display for InitFunctionCallType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            InitFunctionCallType::ParamOutOfBounds(param) => {
+            Self::ParamOutOfBounds(param) => {
                 write!(f, "err_param_out_of_bounds( {:?} )", param)
             }
-            InitFunctionCallType::StopTask(StopTaskKind::Stop, finish) => {
+            Self::StopTask(StopTaskKind::Stop, finish) => {
                 write!(f, "$stop({:?})", finish)
             }
-            InitFunctionCallType::StopTask(StopTaskKind::Finish, finish) => {
+            Self::StopTask(StopTaskKind::Finish, finish) => {
                 write!(f, "$finish({:?})", finish)
             }
         }
@@ -73,18 +71,20 @@ impl Debug for InitFunctionCallType {
 pub struct InitModelFunction {
     pub cfg: ControlFlowGraph<InitFunctionCallType>,
     pub param_locals: IndexBox<ParameterId, [Local]>,
-    pub output_vars: BitSet<VariableId>,
+    /// Variables of the model that are shared between modules
+    pub model_vars: BitSet<VariableId>,
 }
 impl InitModelFunction {
     pub fn new(
         mir: &Mir<GeneralOsdiCall>,
-        mut cfg: ControlFlowGraph<GeneralOsdiCall>,
+        cfg: &ControlFlowGraph<GeneralOsdiCall>,
         tainted_locations: BitSet<IntLocation>,
 
         locations: &InternedLocations,
         pdg: &InvProgramDependenceGraph,
         output_stmnts: &BitSet<IntLocation>,
     ) -> (Self, BitSet<IntLocation>) {
+        let mut cfg = cfg.clone();
         let mut init_locations = cfg.run_pass(ForwardSlice {
             tainted_locations,
             pdg,
@@ -99,24 +99,17 @@ impl InitModelFunction {
             init_locations
         };
 
-        cfg.run_pass(Simplify);
-        cfg.run_pass(SimplifyBranches);
-        cfg.run_pass(RemoveDeadLocals);
-        cfg.run_pass(ConstantPropagation::default());
+        optimize_cfg(&mut cfg);
 
-        cfg.run_pass(Simplify);
-        cfg.run_pass(SimplifyBranches);
-        cfg.run_pass(RemoveDeadLocals);
+        let mut output_vars = BitSet::new_empty(mir.variables.len_idx());
+        cfg.run_pass(Visit {
+            visitor: &mut FindWrittenVars(&mut output_vars),
+            locations,
+        });
 
         let mut res = Self::new_param_init(mir);
         res.insert_model_init(cfg);
-
-        let mut output_vars = FindWrittenVars(BitSet::new_empty(mir.variables.len_idx()));
-        cfg.run_pass(Visit {
-            visitor: &mut output_vars,
-            locations,
-        });
-        res.output_vars = output_vars.0;
+        res.model_vars = output_vars;
 
         (res, init_output_locations)
     }
@@ -401,7 +394,7 @@ impl InitModelFunction {
         Self {
             cfg: cfg.finish(SyntaxCtx::ROOT),
             param_locals,
-            output_vars: BitSet::default(),
+            model_vars: BitSet::default(),
         }
     }
 
@@ -440,8 +433,12 @@ impl<'a> CallTypeConversion<GeneralOsdiCall, InitFunctionCallType>
 
     fn map_input(&mut self, src: GeneralOsdiInput) -> COperandData<InitFunctionCallType> {
         match src {
-            GeneralOsdiInput::Parameter(param) => OperandData::Copy(self.0[param]),
-            GeneralOsdiInput::ParamGiven(param) => OperandData::Read(ParameterInput::Given(param)),
+            GeneralOsdiInput::Parameter(ParameterInput::Value(param)) => {
+                OperandData::Copy(self.0[param])
+            }
+            GeneralOsdiInput::Parameter(ParameterInput::Given(param)) => {
+                OperandData::Read(ParameterInput::Given(param))
+            }
             _ => unreachable!(),
         }
     }
