@@ -244,8 +244,10 @@ impl<I: Idx + From<usize>> BitSet<I> {
         let bits = size_of::<Block>() * 8;
         let len = self.len();
 
-        if let Some(end) = self.as_mut_slice().last_mut() {
-            *end = (Block::MAX >> 1) >> (bits - len % bits - 1)
+        if bits * self.as_slice().len() != len {
+            if let Some(end) = self.as_mut_slice().last_mut() {
+                *end &= 2u32.pow((len % bits) as u32) - 1;
+            }
         }
     }
 
