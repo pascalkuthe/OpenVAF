@@ -161,6 +161,7 @@ impl Type {
     pub const INT: Self = Self::from_raw_unchecked(1);
     pub const BOOL: Self = Self::from_raw_unchecked(2);
     pub const STRING: Self = Self::from_raw_unchecked(3);
+    pub const CMPLX: Self = Self::from_raw_unchecked(4);
 
     pub fn intern(info: TypeInfo) -> Self {
         match info {
@@ -196,6 +197,7 @@ pub enum SimpleType {
     Integer,
     Bool,
     Real,
+    Cmplx,
     String,
 }
 
@@ -206,6 +208,7 @@ impl Display for SimpleType {
             Self::Real => f.write_str("real"),
             Self::String => f.write_str("string"),
             Self::Bool => f.write_str("bool"),
+            Self::Cmplx => f.write_str("cmplx"),
         }
     }
 }
@@ -247,6 +250,11 @@ impl TypeInfo {
         dimensions: Vec::new(),
     };
 
+    pub const CMPLX: Self = Self {
+        element: SimpleType::Cmplx,
+        dimensions: Vec::new(),
+    };
+
     pub fn has_derviative(&self) -> bool {
         self.dimensions.is_empty() && matches!(self.element, SimpleType::Real | SimpleType::Integer)
     }
@@ -260,6 +268,7 @@ impl TypeInfo {
             SimpleType::Integer => size_of::<i64>(),
             SimpleType::Bool => size_of::<u8>(),
             SimpleType::String => size_of::<usize>(),
+            SimpleType::Cmplx => 2 * size_of::<f64>(),
         };
         // Casting is okay here since the base size is really small and will never exceed 32 bit
         self.dim() * (base_size as u32)

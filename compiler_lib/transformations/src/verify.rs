@@ -286,6 +286,8 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     (UnaryOperator::LogicNegate, Type::BOOL) => Type::BOOL,
 
                     (UnaryOperator::ArithmeticNegate, Type::REAL) => Type::REAL,
+                    (UnaryOperator::ArithmeticNegate, Type::CMPLX) => Type::CMPLX,
+
                     (_, _) => {
                         self.errors.push(Malformation {
                             location,
@@ -298,26 +300,36 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
             RValue::BinaryOperation(op, lhs, rhs) => {
                 let lhs_ty = lhs.contents.ty(self.mir, self.cfg);
                 let rhs_ty = rhs.contents.ty(self.mir, self.cfg);
-                if lhs_ty != rhs_ty {
-                    self.errors.push(Malformation {
-                        location,
-                        error: MalformationKind::OperandTypeMissmatch,
-                    });
-                    return;
-                }
 
-                match (op.contents, lhs_ty) {
-                    (_, Type::INT) => Type::INT,
-                    (BinOp::Plus, Type::REAL)
-                    | (BinOp::Minus, Type::REAL)
-                    | (BinOp::Multiply, Type::REAL)
-                    | (BinOp::Divide, Type::REAL)
-                    | (BinOp::Modulus, Type::REAL) => Type::REAL,
+                match (op.contents, lhs_ty, rhs_ty) {
+                    (_, Type::INT, Type::INT) => Type::INT,
 
-                    (BinOp::Xor, Type::BOOL)
-                    | (BinOp::NXor, Type::BOOL)
-                    | (BinOp::Or, Type::BOOL)
-                    | (BinOp::And, Type::BOOL) => Type::BOOL,
+                    (BinOp::Plus, Type::REAL, Type::REAL)
+                    | (BinOp::Minus, Type::REAL, Type::REAL)
+                    | (BinOp::Multiply, Type::REAL, Type::REAL)
+                    | (BinOp::Divide, Type::REAL, Type::REAL)
+                    | (BinOp::Modulus, Type::REAL, Type::REAL) => Type::REAL,
+
+                    (BinOp::Plus, Type::REAL, Type::CMPLX)
+                    | (BinOp::Plus, Type::CMPLX, Type::REAL)
+                    | (BinOp::Plus, Type::CMPLX, Type::CMPLX)
+                    | (BinOp::Minus, Type::REAL, Type::CMPLX)
+                    | (BinOp::Minus, Type::CMPLX, Type::REAL)
+                    | (BinOp::Minus, Type::CMPLX, Type::CMPLX)
+                    | (BinOp::Multiply, Type::REAL, Type::CMPLX)
+                    | (BinOp::Multiply, Type::CMPLX, Type::REAL)
+                    | (BinOp::Multiply, Type::CMPLX, Type::CMPLX)
+                    | (BinOp::Divide, Type::REAL, Type::CMPLX)
+                    | (BinOp::Divide, Type::CMPLX, Type::REAL)
+                    | (BinOp::Divide, Type::CMPLX, Type::CMPLX)
+                    | (BinOp::Modulus, Type::REAL, Type::CMPLX)
+                    | (BinOp::Modulus, Type::CMPLX, Type::REAL)
+                    | (BinOp::Modulus, Type::CMPLX, Type::CMPLX) => Type::CMPLX,
+
+                    (BinOp::Xor, Type::BOOL, Type::BOOL)
+                    | (BinOp::NXor, Type::BOOL, Type::BOOL)
+                    | (BinOp::Or, Type::BOOL, Type::BOOL)
+                    | (BinOp::And, Type::BOOL, Type::BOOL) => Type::BOOL,
 
                     _ => {
                         self.errors.push(Malformation {
@@ -385,9 +397,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     | (ComparisonOp::LessEqual, Type::REAL)
                     | (ComparisonOp::LessThen, Type::REAL)
                     | (ComparisonOp::GreaterEqual, Type::REAL)
-                    | (ComparisonOp::GreaterThen, Type::REAL) => Type::BOOL,
-
-                    (ComparisonOp::Equal, _) | (ComparisonOp::NotEqual, _) => Type::BOOL,
+                    | (ComparisonOp::GreaterThen, Type::REAL)
+                    | (ComparisonOp::Equal, _)
+                    | (ComparisonOp::NotEqual, _) => Type::BOOL,
 
                     (_, _) => {
                         self.errors.push(Malformation {
@@ -428,6 +440,8 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                         | (Type::INT, Type::REAL)
                         | (Type::BOOL, Type::INT)
                         | (Type::BOOL, Type::REAL)
+                        | (Type::REAL, Type::CMPLX)
+                        | (Type::INT, Type::CMPLX)
                 ) {
                     self.errors.push(Malformation {
                         location,
