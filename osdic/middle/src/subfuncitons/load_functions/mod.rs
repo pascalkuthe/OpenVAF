@@ -2,8 +2,9 @@ use crate::frontend::GeneralOsdiCall;
 use crate::subfuncitons::automatic_slicing::{TaintedLocations, WrittenVars};
 use crate::subfuncitons::load_functions::dc_load::{DcLoadFunctionCall, GeneralToDcLoad};
 use openvaf_data_structures::BitSet;
+use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
-use openvaf_middle::{Mir, VariableId};
+use openvaf_middle::{LocalKind, Mir, VariableId};
 use openvaf_transformations::Strip;
 
 mod dc_load;
@@ -58,7 +59,12 @@ impl LoadFunctions {
             locations,
         });
 
-        let ac_load = cfg;
+        let mut ac_load = cfg;
+        for local in &mut ac_load.locals {
+            if matches!(local.kind, LocalKind::Branch(_, _)) {
+                local.ty = Type::CMPLX
+            }
+        }
 
         Self {
             dc_load,

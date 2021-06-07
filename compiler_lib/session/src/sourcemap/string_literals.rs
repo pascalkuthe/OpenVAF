@@ -55,6 +55,8 @@ pub fn unesacpe_string(raw: &str) -> String {
         .replace(r"\\", "\\")
         .replace(r"\t", "\t")
         .replace(r#"\""#, "\"")
+        .replace("\\\n", "\n")
+        .replace("\\\r\n", "\r\n")
 }
 
 impl Display for StringLiteral {

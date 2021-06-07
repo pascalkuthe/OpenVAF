@@ -13,7 +13,7 @@ use inkwell::types::{ArrayType, BasicType, BasicTypeEnum, FloatType, IntType, Po
 use inkwell::values::{ArrayValue, BasicValue, BasicValueEnum, FloatValue, IntValue, PointerValue};
 use inkwell::AddressSpace;
 use openvaf_middle::osdi_types::ConstVal::{Array, Scalar};
-use openvaf_middle::osdi_types::SimpleConstVal::{Bool, Integer, Real, String};
+use openvaf_middle::osdi_types::SimpleConstVal::{Bool, Cmplx, Integer, Real, String};
 use openvaf_middle::{CallType, ConstVal, Local, SimpleType, Type};
 use openvaf_middle::{SimpleConstVal, TypeInfo};
 
@@ -99,6 +99,7 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
             SimpleType::Real => self.real_ty().as_basic_type_enum(),
             SimpleType::String => self.string_ty().as_basic_type_enum(),
             SimpleType::Bool => self.bool_ty().as_basic_type_enum(),
+            SimpleType::Cmplx => self.context.f64_type().array_type(2).as_basic_type_enum(),
         }
     }
 
@@ -212,6 +213,19 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
                                 .collect();
                             array(&data, self.bool_ty(), &info.dimensions)
                         }
+                        SimpleType::Cmplx => {
+                            let data: Vec<_> = data
+                                .iter()
+                                .map(|val| {
+                                    if let SimpleConstVal::Real(val) = val {
+                                        self.real_ty().const_float(*val)
+                                    } else {
+                                        unreachable!("Malformed constant")
+                                    }
+                                })
+                                .collect();
+                            array(&data, self.real_ty(), &info.dimensions)
+                        }
                     }
                 });
 
@@ -232,6 +246,12 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
                 .bool_ty()
                 .const_int(val as u64, false)
                 .as_basic_value_enum(),
+            Cmplx(val) => {
+                let re_ty = self.real_ty();
+                let re = re_ty.const_float(val.re);
+                let im = re_ty.const_float(val.im);
+                re_ty.const_array(&[re, im]).as_basic_value_enum()
+            }
         }
     }
 }

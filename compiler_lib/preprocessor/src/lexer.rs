@@ -103,7 +103,7 @@ pub enum Token {
     Fatal,
 
     //Literals
-    #[regex(r#""([^\n"\\]|\\[\\tn"\n)])*""#)]
+    #[regex(r#""([^\n"\\]|\\[\\tn"\n)]|\\\r\n)*""#)]
     LiteralString,
 
     #[regex(r"[0-9][0-9_]*")]

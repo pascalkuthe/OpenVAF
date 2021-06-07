@@ -32,6 +32,8 @@ pub struct OsdiFunctions {
     pub instance_init: InstanceInitFunction,
     pub instance_temp_update: InstanceTempUpdateFunction,
 
+    pub load: LoadFunctions,
+
     pub model_vars: BitSet<VariableId>,
     pub instance_vars: BitSet<VariableId>,
 }
@@ -99,6 +101,7 @@ impl OsdiFunctions {
             model_temp_update,
             instance_init,
             instance_temp_update,
+            load: load_functions,
             model_vars,
             instance_vars,
         };

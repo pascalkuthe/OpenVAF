@@ -8,6 +8,7 @@
 
 use cfg_if::cfg_if;
 use index_vec::define_index_type;
+use num_complex::Complex64;
 use parking_lot::{const_rwlock, RwLock};
 use std::fmt;
 use std::fmt::Formatter;
@@ -44,6 +45,7 @@ cfg_if! {
 pub enum SimpleConstVal<S> {
     Integer(i64),
     Real(f64),
+    Cmplx(Complex64),
     Bool(bool),
     String(S),
 }
@@ -61,6 +63,7 @@ impl<S: Debug> Debug for SimpleConstVal<S> {
             SimpleConstVal::Real(val) => write!(f, "{}", val),
             SimpleConstVal::Bool(val) => write!(f, "{}", val),
             SimpleConstVal::String(val) => write!(f, "{:?}", val),
+            SimpleConstVal::Cmplx(val) => write!(f, "{}", val),
         }
     }
 }
@@ -72,6 +75,7 @@ impl<S> SimpleConstVal<S> {
             Self::Real(_) => Type::REAL,
             Self::String(_) => Type::STRING,
             Self::Bool(_) => Type::BOOL,
+            Self::Cmplx(_) => Type::CMPLX,
         }
     }
 }
