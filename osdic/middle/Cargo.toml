@@ -30,3 +30,4 @@ openvaf-preprocessor = { version = "0.8.0", path = "../../compiler_lib/preproces
 openvaf-ast-lowering = { version = "0.8.0", path = "../../compiler_lib/ast_lowering"}
 
 tracing = "0.1"
+itertools = "0.10"

@@ -1,10 +1,9 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
-use crate::subfuncitons::create_subfunction_cfg;
+use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_data_structures::BitSet;
 use openvaf_hir::{Unknown, VariableId};
 use openvaf_ir::convert::Convert;
-use openvaf_ir::ids::{ParameterId, PortId};
 use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::const_fold::DiamondLattice;
@@ -17,13 +16,15 @@ use openvaf_transformations::InvProgramDependenceGraph;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
+pub type ModelTempUpdateCfg = ControlFlowGraph<ModelTempUpdateCallType>;
+
 #[derive(PartialEq, Eq, Clone)]
 pub enum ModelTempUpdateCallType {}
 
 impl CallType for ModelTempUpdateCallType {
     type I = ModelTempUpdateInput;
 
-    fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _call: &[DiamondLattice]) -> DiamondLattice {
         match *self {}
     }
 
@@ -38,7 +39,7 @@ impl CallType for ModelTempUpdateCallType {
 }
 
 impl Display for ModelTempUpdateCallType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
         match *self {}
     }
 }
@@ -89,7 +90,7 @@ impl InputKind for ModelTempUpdateInput {
     }
 }
 
-pub struct GeneralToModelTempUpdate;
+struct GeneralToModelTempUpdate;
 
 impl CallTypeConversion<GeneralOsdiCall, ModelTempUpdateCallType> for GeneralToModelTempUpdate {
     fn map_input(
@@ -124,32 +125,33 @@ impl CallTypeConversion<GeneralOsdiCall, ModelTempUpdateCallType> for GeneralToM
     }
 }
 
-pub struct ModelTempUpdate {
+pub struct ModelTempUpdateFunction {
     pub cfg: ControlFlowGraph<ModelTempUpdateCallType>,
+    pub written_vars: BitSet<VariableId>,
 }
 
-impl ModelTempUpdate {
+impl ModelTempUpdateFunction {
     pub fn new(
+        mir: &Mir<GeneralOsdiCall>,
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
-        tainted_locations: BitSet<IntLocation>,
+        tainted_locations: &BitSet<IntLocation>,
         assumed_locations: &BitSet<IntLocation>,
-
         locations: &InternedLocations,
         pdg: &InvProgramDependenceGraph,
-        output_stmnts: &BitSet<IntLocation>,
-        model_vars: &mut BitSet<VariableId>,
+        all_output_stmnts: &BitSet<IntLocation>,
     ) -> (Self, BitSet<IntLocation>) {
-        let (cfg, output_locations) = create_subfunction_cfg(
+        let (cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
+            mir,
             cfg,
             tainted_locations,
-            assumed_locations,
+            Some(assumed_locations),
+            all_output_stmnts,
             locations,
             pdg,
-            output_stmnts,
-            model_vars,
         );
-        let cfg: ControlFlowGraph<ModelTempUpdateCallType> = cfg.map(&mut GeneralToModelTempUpdate);
 
-        (Self { cfg }, output_locations)
+        let cfg = cfg.map(&mut GeneralToModelTempUpdate);
+
+        (Self { cfg, written_vars }, function_output_locations)
     }
 }

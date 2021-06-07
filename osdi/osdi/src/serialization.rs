@@ -6,7 +6,6 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 use crate::OsdiModel;
 use bincode::ErrorKind;
 use once_cell::sync::OnceCell;

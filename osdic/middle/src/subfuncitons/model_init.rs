@@ -1,13 +1,13 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
-use crate::subfuncitons::{optimize_cfg, FindWrittenVars};
+use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
 use openvaf_data_structures::BitSet;
 use openvaf_hir::SyntaxCtx;
-use openvaf_ir::ids::{NetId, ParameterId, PortId};
+use openvaf_ir::ids::ParameterId;
 use openvaf_ir::{Spanned, Type};
 use openvaf_middle::cfg::builder::CfgBuilder;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind};
-use openvaf_middle::const_fold::{ConstantPropagation, DiamondLattice};
+use openvaf_middle::const_fold::DiamondLattice;
 use openvaf_middle::{
     BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Derivative,
     Expression, Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
@@ -15,10 +15,7 @@ use openvaf_middle::{
     StmntKind, StopTaskKind, TyRValue, VariableId,
 };
 use openvaf_session::sourcemap::Span;
-use openvaf_transformations::{
-    ForwardSlice, InvProgramDependenceGraph, RemoveDeadLocals, Simplify, SimplifyBranches, Strip,
-    Visit,
-};
+use openvaf_transformations::InvProgramDependenceGraph;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
@@ -68,50 +65,37 @@ impl Debug for InitFunctionCallType {
     }
 }
 
-pub struct InitModelFunction {
+pub struct ModelInitFunction {
     pub cfg: ControlFlowGraph<InitFunctionCallType>,
     pub param_locals: IndexBox<ParameterId, [Local]>,
-    /// Variables of the model that are shared between modules
-    pub model_vars: BitSet<VariableId>,
+    pub written_vars: BitSet<VariableId>,
 }
-impl InitModelFunction {
+
+impl ModelInitFunction {
     pub fn new(
         mir: &Mir<GeneralOsdiCall>,
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
-        tainted_locations: BitSet<IntLocation>,
-
+        tainted_locations: &BitSet<IntLocation>,
         locations: &InternedLocations,
         pdg: &InvProgramDependenceGraph,
-        output_stmnts: &BitSet<IntLocation>,
+        all_output_locations: &BitSet<IntLocation>,
     ) -> (Self, BitSet<IntLocation>) {
-        let mut cfg = cfg.clone();
-        let mut init_locations = cfg.run_pass(ForwardSlice {
-            tainted_locations,
-            pdg,
-            locations,
-        });
-        cfg.run_pass(Strip {
-            retain: &init_locations,
-            locations,
-        });
-        let init_output_locations = {
-            init_locations.intersect_with(output_stmnts);
-            init_locations
-        };
-
-        optimize_cfg(&mut cfg);
-
-        let mut output_vars = BitSet::new_empty(mir.variables.len_idx());
-        cfg.run_pass(Visit {
-            visitor: &mut FindWrittenVars(&mut output_vars),
-            locations,
-        });
-
         let mut res = Self::new_param_init(mir);
-        res.insert_model_init(cfg);
-        res.model_vars = output_vars;
 
-        (res, init_output_locations)
+        let (model_init_cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
+            mir,
+            cfg,
+            tainted_locations,
+            None,
+            all_output_locations,
+            locations,
+            pdg,
+        );
+
+        res.written_vars = written_vars;
+        res.insert_model_init(model_init_cfg);
+
+        (res, function_output_locations)
     }
 
     pub fn new_param_init<A: CallType>(mir: &Mir<A>) -> Self {
@@ -394,7 +378,7 @@ impl InitModelFunction {
         Self {
             cfg: cfg.finish(SyntaxCtx::ROOT),
             param_locals,
-            model_vars: BitSet::default(),
+            written_vars: BitSet::default(),
         }
     }
 

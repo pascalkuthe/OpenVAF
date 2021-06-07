@@ -6,7 +6,6 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 #[macro_export]
 macro_rules! id_type {
     ($(#[$attr:meta])* $name:ident($type:ident)) => {

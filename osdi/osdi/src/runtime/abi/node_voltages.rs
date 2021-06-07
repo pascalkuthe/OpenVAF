@@ -6,21 +6,19 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 use crate::model_info_store::{NodeId, Voltage};
 use crate::ModelInfoStore;
 use index_vec::{index_box, IndexSlice};
 use std::ops::{Deref, DerefMut};
 
-pub struct NodePotentialOffsets(Box<IndexSlice<NodeId,[usize]>>);
+pub struct NodePotentialOffsets(Box<IndexSlice<NodeId, [usize]>>);
 
 impl NodePotentialOffsets {
-
-    pub fn new(size: usize) -> Self{
+    pub fn new(size: usize) -> Self {
         Self(index_box![0;size])
     }
 
-    pub fn from_info_store(info_store: &ModelInfoStore)  -> Self{
+    pub fn from_info_store(info_store: &ModelInfoStore) -> Self {
         Self::new(info_store.nodes.len())
     }
 
@@ -38,26 +36,22 @@ impl NodePotentialOffsets {
         std::ptr::write(ptr, std::ptr::read(ptr) + val)
     }
 
-
     #[inline]
     pub fn get_voltage(&self, node_potentials: &[f64], voltage: Voltage) -> f64 {
         node_potentials[self[voltage.hi]] - node_potentials[self[voltage.lo]]
     }
-
-
 }
 
-impl Deref for NodePotentialOffsets{
-    type Target = IndexSlice<NodeId,[usize]>;
+impl Deref for NodePotentialOffsets {
+    type Target = IndexSlice<NodeId, [usize]>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for NodePotentialOffsets{
+impl DerefMut for NodePotentialOffsets {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
-

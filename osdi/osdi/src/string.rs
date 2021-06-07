@@ -6,7 +6,6 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 use cfg_if::cfg_if;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ffi::{CStr, CString};

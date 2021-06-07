@@ -181,6 +181,20 @@ impl<I: Idx + From<usize>> BitSet<I> {
         self.internal.count_ones(start..end)
     }
 
+    pub fn has_intersection_with(&self, other: &Self) -> bool {
+        for (block_1, block_2) in self
+            .internal
+            .as_slice()
+            .iter()
+            .zip(other.internal.as_slice())
+        {
+            if (block_1 & block_2) != 0 {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Sets every bit in the given range to the given state (`enabled`)
     ///
     /// Use `..` to set the whole bitset.

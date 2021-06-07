@@ -142,7 +142,10 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
     /// This funciton is optimized for joining multiple cfgs late in the compilation process.
     /// It therefore doesn't join derivative mappings If you need that do it manually (simply join the hashmaps with the second cfgs locals offsetet).
     /// Furthermore it doesn't invalidate the predecessor cache you need to do that after you are done with modifying the cfg
-    pub fn insert_cfg<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(&mut self, mut cfg: ControlFlowGraph<X>) -> BasicBlock
+    pub fn insert_cfg<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(
+        &mut self,
+        mut cfg: ControlFlowGraph<X>,
+    ) -> BasicBlock
     where
         X: CallType + Into<C>,
         X::I: Into<C::I>,
@@ -157,8 +160,8 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             for succ in block.successors_mut() {
                 *succ += block_offset
             }
-            if MAP_LOCALS{
-                block.for_locals_mut(|local|  *local += local_offset)
+            if MAP_LOCALS {
+                block.for_locals_mut(|local| *local += local_offset)
             }
         }
 
@@ -167,7 +170,7 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
 
         let new_end = dst.end() + cfg.blocks.len();
 
-        let (inserted_cfg_start, inserted_cfg_end) = if RETAIN_END{
+        let (inserted_cfg_start, inserted_cfg_end) = if RETAIN_END {
             let inserted_cfg_start = dst.end();
 
             // move the end
@@ -188,10 +191,11 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
                 cfg.blocks.into_iter().map(|block| block.convert()),
             );
             (inserted_cfg_start, new_end - 1)
-        }else{
+        } else {
             let inserted_cfg_start = dst.blocks.len_idx();
             // add the cfg at the end
-            dst.blocks.extend(cfg.blocks.into_iter().map(|block| block.convert()));
+            dst.blocks
+                .extend(cfg.blocks.into_iter().map(|block| block.convert()));
             (inserted_cfg_start, new_end)
         };
 
@@ -202,21 +206,23 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
     }
 
     /// See `insert_cfg`
-    pub fn insert_expr<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(&mut self, sctx: SyntaxCtx, expr: Expression<X>) -> RValue<C>
+    pub fn insert_expr<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(
+        &mut self,
+        sctx: SyntaxCtx,
+        expr: Expression<X>,
+    ) -> RValue<C>
     where
         X: CallType + Into<C>,
         X::I: Into<C::I>,
     {
-
         let mut res = expr.1.convert();
         let cfg = expr.0;
         if !cfg.blocks.is_empty() {
-            if MAP_LOCALS{
-                if let OperandData::Copy(local) = &mut res.contents{
+            if MAP_LOCALS {
+                if let OperandData::Copy(local) = &mut res.contents {
                     *local += self.cfg.borrow_mut().locals.len()
                 } // shift locals
             }
-
 
             let pred = self.current;
             let start = self.insert_cfg::<X, RETAIN_END, MAP_LOCALS>(cfg);
@@ -226,7 +232,6 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             if pred != start {
                 self.terminate_bb(pred, TerminatorKind::Goto(start), sctx)
             }
-
         }
         RValue::Use(res)
     }

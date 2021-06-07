@@ -6,14 +6,13 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 use crate::id_type;
 use crate::string::OsdiStr;
-use crate::types::{Type};
+use crate::types::Type;
 use index_vec::{Idx, IndexSlice, IndexVec};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::ops::{Deref};
 use std::alloc::Layout;
+use std::ops::Deref;
 
 /// Specifies how to write the derivative of the Current between nodes `i` and `j` by the Voltage between nodes `l` and `m` into the Jacobi matrix.
 ///
@@ -88,7 +87,6 @@ pub struct Node {
 
 id_type!(PortId(u16));
 
-
 #[derive(Clone, Debug, Serialize, Deserialize, Copy)]
 pub struct Voltage {
     pub hi: NodeId,
@@ -108,7 +106,7 @@ pub struct Current {
     /// This Vector is intended to be used to generate matrix stamps typcially found in SPICE based simulators
     /// Each elements corresponds to one derivative calculated by OpenVAF (see TODO)
     /// This value shall be added to first JacobianId and subtracted from the second
-  //  pub stamps: Vec<Stamp>,
+    //  pub stamps: Vec<Stamp>,
 
     // Voltage over this Branch
     pub voltage: Voltage,
@@ -131,11 +129,9 @@ pub struct JacobianEntry {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SerializableIdxSlice<I: Idx, T: 'static>(pub &'static IndexSlice<I, [T]>);
 
-
 #[cfg(not(feature = "simulator"))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SerializableIdxSlice<I: Idx, T>(pub Box<IndexSlice<I, [T]>>);
-
 
 impl<I: Idx, T> Deref for SerializableIdxSlice<I, T> {
     type Target = IndexSlice<I, [T]>;
@@ -191,9 +187,8 @@ pub struct Parameter {
 
 id_type!(LimitId(u8));
 
-
-#[derive(Serialize,Deserialize)]
-struct LayoutHelper{
+#[derive(Serialize, Deserialize)]
+struct LayoutHelper {
     size: usize,
     align: usize,
 }
@@ -201,21 +196,29 @@ struct LayoutHelper{
 #[derive(Clone, Debug)]
 pub struct SerializableLayout(pub Layout);
 
-impl Serialize for SerializableLayout{
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error> where
-        S: Serializer {
-        LayoutHelper{
+impl Serialize for SerializableLayout {
+    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    where
+        S: Serializer,
+    {
+        LayoutHelper {
             size: self.0.size(),
-            align: self.0.align()
-        }.serialize(serializer)
+            align: self.0.align(),
+        }
+        .serialize(serializer)
     }
 }
 
-impl<'de> Deserialize<'de> for SerializableLayout{
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error> where
-        D: Deserializer<'de> {
+impl<'de> Deserialize<'de> for SerializableLayout {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
         let helper = LayoutHelper::deserialize(deserializer)?;
-        Ok(Self(Layout::from_size_align(helper.size,helper.align).expect("Deserialized Illegal Layout!")))
+        Ok(Self(
+            Layout::from_size_align(helper.size, helper.align)
+                .expect("Deserialized Illegal Layout!"),
+        ))
     }
 }
 
@@ -230,7 +233,6 @@ pub struct ModelInfoStore {
     pub nodes: SerializableIdxSlice<NodeId, Node>,
     pub ports: SerializableIdxSlice<PortId, NodeId>,
 
-
     pub parameters: SerializableIdxSlice<ParameterId, Parameter>,
 
     pub non_linear_voltages: SerializableIdxSlice<LimitId, Voltage>,
@@ -241,5 +243,4 @@ pub struct ModelInfoStore {
     pub instance_variable_layout: SerializableLayout,
     pub model_variable_layout: SerializableLayout,
     pub modelcard_layout: SerializableLayout,
-
 }

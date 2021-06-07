@@ -6,14 +6,13 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
 use cfg_if::cfg_if;
 use index_vec::define_index_type;
 use parking_lot::{const_rwlock, RwLock};
-use std::fmt::{Display, Debug};
-use std::fmt::Formatter;
-use std::mem::size_of;
 use std::fmt;
+use std::fmt::Formatter;
+use std::fmt::{Debug, Display};
+use std::mem::size_of;
 
 cfg_if! {
     if #[cfg(feature = "serialize")]{
@@ -49,15 +48,15 @@ pub enum SimpleConstVal<S> {
     String(S),
 }
 
-impl<S: Debug> Display for SimpleConstVal<S>{
+impl<S: Debug> Display for SimpleConstVal<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Debug::fmt(self,f)
+        Debug::fmt(self, f)
     }
 }
 
-impl<S: Debug> Debug for SimpleConstVal<S>{
+impl<S: Debug> Debug for SimpleConstVal<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self{
+        match self {
             SimpleConstVal::Integer(val) => write!(f, "{}", val),
             SimpleConstVal::Real(val) => write!(f, "{}", val),
             SimpleConstVal::Bool(val) => write!(f, "{}", val),
@@ -84,20 +83,20 @@ pub enum ConstVal<S: 'static> {
     Array(Box<[SimpleConstVal<S>]>, Type),
 }
 
-impl<S: 'static + Debug> Display for ConstVal<S>{
+impl<S: 'static + Debug> Display for ConstVal<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self{
+        match self {
             ConstVal::Scalar(val) => write!(f, "{}", val),
-            ConstVal::Array(val, _) => write!(f, "{:?}",val)
+            ConstVal::Array(val, _) => write!(f, "{:?}", val),
         }
     }
 }
 
-impl<S: 'static + Debug> Debug for ConstVal<S>{
+impl<S: 'static + Debug> Debug for ConstVal<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self{
+        match self {
             ConstVal::Scalar(val) => write!(f, "{:?}", val),
-            ConstVal::Array(val, _) => write!(f, "{:?}",val)
+            ConstVal::Array(val, _) => write!(f, "{:?}", val),
         }
     }
 }
@@ -256,7 +255,7 @@ impl TypeInfo {
         self.dimensions.iter().product()
     }
     pub fn size(&self) -> u32 {
-        let base_size = match self.element{
+        let base_size = match self.element {
             SimpleType::Real => size_of::<f64>(),
             SimpleType::Integer => size_of::<i64>(),
             SimpleType::Bool => size_of::<u8>(),

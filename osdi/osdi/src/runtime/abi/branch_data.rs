@@ -6,8 +6,7 @@
 //  *  distributed except according to the terms contained in the LICENSE file.
 //  * *******************************************************************************************
 
-
-use crate::model_info_store::{Current, Stamp, LimitId};
+use crate::model_info_store::{Current, LimitId, Stamp};
 use crate::ModelInfoStore;
 use std::ops::{Deref, DerefMut};
 
@@ -15,14 +14,13 @@ use std::ops::{Deref, DerefMut};
 pub struct BranchCurrentsAndConductance(Box<[f64]>);
 
 impl BranchCurrentsAndConductance {
-    pub fn new(size: usize) -> Self{
-        Self(vec![0.0;size].into_boxed_slice())
+    pub fn new(size: usize) -> Self {
+        Self(vec![0.0; size].into_boxed_slice())
     }
 
-    pub fn from_info_store(info_store: &ModelInfoStore)  -> Self{
+    pub fn from_info_store(info_store: &ModelInfoStore) -> Self {
         Self::new(info_store.current_and_conductance_size)
     }
-
 
     #[inline]
     pub fn get_current(&self, branch: &Current) -> f64 {
@@ -51,13 +49,12 @@ impl BranchCurrentsAndConductance {
         branch
             .non_linearties
             .iter()
-            .zip(&self.0[branch.pos+1..])
+            .zip(&self.0[branch.pos + 1..])
             .map(|(stamp, val)| (stamp, *val))
     }
 }
 
-
-impl Deref for BranchCurrentsAndConductance{
+impl Deref for BranchCurrentsAndConductance {
     type Target = [f64];
 
     fn deref(&self) -> &Self::Target {
@@ -65,7 +62,7 @@ impl Deref for BranchCurrentsAndConductance{
     }
 }
 
-impl DerefMut for BranchCurrentsAndConductance{
+impl DerefMut for BranchCurrentsAndConductance {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }

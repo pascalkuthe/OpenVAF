@@ -1,6 +1,6 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
-use crate::subfuncitons::{create_subfunction_cfg, FindWrittenVars};
-use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
+use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
+use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_data_structures::BitSet;
 use openvaf_hir::VariableId;
 use openvaf_ir::ids::NetId;
@@ -12,7 +12,7 @@ use openvaf_middle::{
     Mir, OperandData, ParameterInput, PortId, RValue, StmntKind, Type, Unknown,
 };
 use openvaf_session::sourcemap::Span;
-use openvaf_transformations::{ForwardSlice, InvProgramDependenceGraph, Strip, Visit};
+use openvaf_transformations::InvProgramDependenceGraph;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -97,43 +97,9 @@ impl Display for InstanceInitInput {
     }
 }
 
-pub struct InstanceInit {
-    pub cfg: ControlFlowGraph<InstanceInitFunctionCallType>,
-    /// Variables that are unique to each instance
-    pub instance_vars: BitSet<VariableId>,
-}
+struct GeneralToInstanceInit;
 
-impl InstanceInit {
-    pub fn new(
-        mir: &Mir<GeneralOsdiCall>,
-        src_cfg: &ControlFlowGraph<GeneralOsdiCall>,
-        tainted_locations: BitSet<IntLocation>,
-        assumed_locations: &BitSet<IntLocation>,
-
-        locations: &InternedLocations,
-        pdg: &InvProgramDependenceGraph,
-        output_stmnts: &BitSet<IntLocation>,
-    ) -> (Self, BitSet<IntLocation>) {
-        let mut instance_vars = BitSet::new_empty(mir.variables.len_idx());
-        let (cfg, output_locations) = create_subfunction_cfg(
-            src_cfg,
-            tainted_locations,
-            assumed_locations,
-            locations,
-            pdg,
-            output_stmnts,
-            &mut instance_vars,
-        );
-        let cfg: ControlFlowGraph<InstanceInitFunctionCallType> = cfg.map(&mut InstanceInitMapper);
-
-        let res = Self { cfg, instance_vars };
-        (res, output_locations)
-    }
-}
-
-struct InstanceInitMapper;
-
-impl CallTypeConversion<GeneralOsdiCall, InstanceInitFunctionCallType> for InstanceInitMapper {
+impl CallTypeConversion<GeneralOsdiCall, InstanceInitFunctionCallType> for GeneralToInstanceInit {
     fn map_input(
         &mut self,
         src: <GeneralOsdiCall as CallType>::I,
@@ -175,5 +141,36 @@ impl CallTypeConversion<GeneralOsdiCall, InstanceInitFunctionCallType> for Insta
             ),
             _ => unreachable!(),
         }
+    }
+}
+
+pub struct InstanceInitFunction {
+    pub cfg: ControlFlowGraph<InstanceInitFunctionCallType>,
+    pub written_vars: BitSet<VariableId>,
+}
+
+impl InstanceInitFunction {
+    pub fn new(
+        mir: &Mir<GeneralOsdiCall>,
+        cfg: &ControlFlowGraph<GeneralOsdiCall>,
+        tainted_locations: &BitSet<IntLocation>,
+        assumed_locations: &BitSet<IntLocation>,
+        locations: &InternedLocations,
+        pdg: &InvProgramDependenceGraph,
+        all_output_stmnts: &BitSet<IntLocation>,
+    ) -> (Self, BitSet<IntLocation>) {
+        let (cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
+            mir,
+            cfg,
+            tainted_locations,
+            Some(assumed_locations),
+            all_output_stmnts,
+            locations,
+            pdg,
+        );
+
+        let cfg = cfg.map(&mut GeneralToInstanceInit);
+
+        (Self { cfg, written_vars }, function_output_locations)
     }
 }

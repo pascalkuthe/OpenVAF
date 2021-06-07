@@ -1,10 +1,10 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
-use crate::subfuncitons::create_subfunction_cfg;
+use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_data_structures::BitSet;
 use openvaf_hir::Unknown;
 use openvaf_ir::convert::Convert;
-use openvaf_ir::ids::{ParameterId, PortId, VariableId};
+use openvaf_ir::ids::{PortId, VariableId};
 use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::const_fold::DiamondLattice;
@@ -129,33 +129,33 @@ impl CallTypeConversion<GeneralOsdiCall, InstanceTempUpdateCallType>
     }
 }
 
-pub struct InstanceTempUpdate {
+pub struct InstanceTempUpdateFunction {
     pub cfg: ControlFlowGraph<InstanceTempUpdateCallType>,
+    pub written_vars: BitSet<VariableId>,
 }
 
-impl InstanceTempUpdate {
+impl InstanceTempUpdateFunction {
     pub fn new(
+        mir: &Mir<GeneralOsdiCall>,
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
-        tainted_locations: BitSet<IntLocation>,
+        tainted_locations: &BitSet<IntLocation>,
         assumed_locations: &BitSet<IntLocation>,
-
         locations: &InternedLocations,
         pdg: &InvProgramDependenceGraph,
-        output_stmnts: &BitSet<IntLocation>,
-        model_vars: &mut BitSet<VariableId>,
+        all_output_stmnts: &BitSet<IntLocation>,
     ) -> (Self, BitSet<IntLocation>) {
-        let (cfg, output_locations) = create_subfunction_cfg(
+        let (cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
+            mir,
             cfg,
             tainted_locations,
-            assumed_locations,
+            Some(assumed_locations),
+            all_output_stmnts,
             locations,
             pdg,
-            output_stmnts,
-            model_vars,
         );
-        let cfg: ControlFlowGraph<InstanceTempUpdateCallType> =
-            cfg.map(&mut GeneralToInstanceTempUpdate);
 
-        (Self { cfg }, output_locations)
+        let cfg = cfg.map(&mut GeneralToInstanceTempUpdate);
+
+        (Self { cfg, written_vars }, function_output_locations)
     }
 }
