@@ -23,7 +23,6 @@ openvaf-hir = {version = "0.8.0", path = "../hir"}
 openvaf-middle = {version = "0.8.0", path = "../middle" }
 openvaf-ir = {version = "0.8.0", path = "../ir"}
 openvaf-constants = {version = "0.8.0", path = "../constants"}
-openvaf-derivatives = {version = "0.8.0", path = "../derivatives"}
 
 tracing = "0.1"
 thiserror = "1.0"

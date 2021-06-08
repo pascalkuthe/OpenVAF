@@ -19,6 +19,7 @@ mod simplify_branches;
 mod strip;
 mod verify;
 mod visit;
+// mod copy_propagation;
 
 pub use backward_slice::BackwardSlice;
 pub use forward_slice::ForwardSlice;

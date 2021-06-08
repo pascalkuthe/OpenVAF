@@ -242,7 +242,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                         let branch = &self.fold.mir.branches[branch];
                         let hi = branch.hi;
                         let lo = branch.lo;
-                        if let Some(stmnt) = C::collapse_hint(self, hi, lo) {
+                        if let Some(stmnt) = C::collapse_hint(self, hi, lo, span) {
                             self.cfg_builder.cfg.blocks[self.cfg_builder.current]
                                 .statements
                                 .push((stmnt, self.fold.sctx));

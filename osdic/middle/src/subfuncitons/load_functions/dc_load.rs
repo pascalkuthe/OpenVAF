@@ -1,10 +1,11 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
-use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 use openvaf_ir::{PrintOnFinish, StopTaskKind};
 use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
-    COperand, COperandData, CallArg, CallType, CallTypeConversion, ConstVal, Derivative, Local,
-    Mir, Operand, OperandData, RValue, SimpleConstVal, StmntKind,
+    COperand, COperandData, CallArg, CallType, CallTypeConversion, ConstVal, Operand, OperandData,
+    RValue, SimpleConstVal, StmntKind,
 };
 use openvaf_session::sourcemap::Span;
 use std::fmt;
@@ -24,10 +25,10 @@ impl CallType for DcLoadFunctionCall {
 
     fn derivative<C: CallType>(
         &self,
-        _original: Local,
-        _mir: &Mir<C>,
-        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
+        _args: &IndexSlice<CallArg, [COperand<Self>]>,
+        _ad: &mut RValueAutoDiff<Self, C>,
+        _span: Span,
+    ) -> Option<RValue<Self>> {
         unreachable!()
     }
 }
@@ -69,11 +70,9 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
         span: Span,
     ) -> RValue<DcLoadFunctionCall> {
         match call {
-            GeneralOsdiCall::Noise => RValue::Use(Operand {
-                span,
-                contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0))),
-            }),
-            GeneralOsdiCall::TimeDerivative => RValue::Use(Operand {
+            GeneralOsdiCall::Noise
+            | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(_)
+            | GeneralOsdiCall::TimeDerivative => RValue::Use(Operand {
                 span,
                 contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0))),
             }),
@@ -89,7 +88,8 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
     ) -> StmntKind<DcLoadFunctionCall> {
         match call {
             GeneralOsdiCall::Noise => unreachable!(),
-            GeneralOsdiCall::TimeDerivative => unreachable!(),
+            GeneralOsdiCall::TimeDerivative
+            | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(_) => unreachable!(),
             GeneralOsdiCall::StopTask(kind, print) => {
                 StmntKind::Call(DcLoadFunctionCall::StopTask(kind, print), args, span)
             }

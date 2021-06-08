@@ -8,36 +8,42 @@
  * *****************************************************************************************
 */
 
-use crate::error::Error;
+use crate::cfg::{ControlFlowGraph, PhiData};
+use crate::{
+    COperand, CallType, CallTypeDerivative, Derivative, Local, Mir, Operand, OperandData, RValue,
+    Statement, StmntKind, SyntaxCtx,
+};
 use enum_map::EnumMap;
 use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_diagnostics::MultiDiagnostic;
 use openvaf_ir::ids::StatementId;
-use openvaf_middle::cfg::{ControlFlowGraph, PhiData};
-use openvaf_middle::{
-    COperand, CallType, CallTypeDerivative, Derivative, Local, Mir, Operand, OperandData, RValue,
-    Statement, StmntKind, SyntaxCtx,
-};
 use std::mem::replace;
-pub mod error;
+
+pub use error::Error;
+
+mod error;
 pub mod lints;
 mod rvalue;
 
-pub fn generate_derivatives<C: CallType, MC: CallType>(
-    cfg: &mut ControlFlowGraph<C>,
-    mir: &Mir<MC>,
-    errors: &mut MultiDiagnostic<Error>,
-) {
-    AutoDiff {
-        cfg,
-        mir,
-        errors,
-        forward_stmnts: IndexVec::with_capacity(128),
+pub use rvalue::RValueAutoDiff;
+
+impl<C: CallType> ControlFlowGraph<C> {
+    pub fn generate_derivatives<MC: CallType>(
+        &mut self,
+        mir: &Mir<MC>,
+        errors: &mut MultiDiagnostic<Error>,
+    ) {
+        AutoDiff {
+            cfg: self,
+            mir,
+            errors,
+            forward_stmnts: IndexVec::with_capacity(128),
+        }
+        .run()
     }
-    .run()
 }
 
-struct AutoDiff<'lt, C: CallType, MC: CallType> {
+pub struct AutoDiff<'lt, C: CallType, MC: CallType> {
     cfg: &'lt mut ControlFlowGraph<C>,
     mir: &'lt Mir<MC>,
     errors: &'lt mut MultiDiagnostic<Error>,
@@ -55,7 +61,7 @@ impl<'lt, C: CallType, MC: CallType> AutoDiff<'lt, C, MC> {
 
         if let Some(derivatives) = derivatives {
             if !derivatives.is_empty() {
-                let mut cache = EnumMap::new();
+                let mut cache = EnumMap::default();
                 let new_value = self.cfg.new_temporary(self.cfg.locals[lhs].ty);
                 let new_rhs = RValue::Use(Operand::new(OperandData::Copy(new_value), rhs.span()));
                 self.forward_stmnts

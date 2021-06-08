@@ -123,7 +123,12 @@ pub trait ExpressionLowering<L: HirLowering>: CallType {
         span: Span,
     ) -> Option<StmntKind<Self>>;
 
-    fn collapse_hint(_: &mut LocalCtx<Self, L>, hi: NetId, lo: NetId) -> Option<StmntKind<Self>>;
+    fn collapse_hint(
+        ctx: &mut LocalCtx<Self, L>,
+        hi: NetId,
+        lo: NetId,
+        span: Span,
+    ) -> Option<StmntKind<Self>>;
 }
 
 impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
@@ -192,7 +197,12 @@ impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
         unimplemented!()
     }
 
-    fn collapse_hint(_: &mut LocalCtx<Self, L>, _hi: NetId, _lo: NetId) -> Option<StmntKind<Self>> {
+    fn collapse_hint(
+        _: &mut LocalCtx<Self, L>,
+        _hi: NetId,
+        _lo: NetId,
+        span: Span,
+    ) -> Option<StmntKind<Self>> {
         unimplemented!()
     }
 }
@@ -249,7 +259,12 @@ impl<L: HirLowering> ExpressionLowering<L> for RealConstCallType {
         unimplemented!()
     }
 
-    fn collapse_hint(_: &mut LocalCtx<Self, L>, _hi: NetId, _lo: NetId) -> Option<StmntKind<Self>> {
+    fn collapse_hint(
+        _: &mut LocalCtx<Self, L>,
+        _hi: NetId,
+        _lo: NetId,
+        span: Span,
+    ) -> Option<StmntKind<Self>> {
         unimplemented!()
     }
 }

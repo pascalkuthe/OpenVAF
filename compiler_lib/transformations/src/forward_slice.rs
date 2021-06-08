@@ -1,4 +1,5 @@
 use crate::program_dependence::InvProgramDependenceGraph;
+use crate::ProgramDependenceGraph;
 use openvaf_data_structures::{BitSet, WorkQueue};
 use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::{impl_pass_span, CallType};
@@ -10,6 +11,7 @@ pub struct ForwardSlice<'a> {
     pub tainted_locations: BitSet<IntLocation>,
     pub pdg: &'a InvProgramDependenceGraph,
     pub locations: &'a InternedLocations,
+    pub taint_control_dependencies: bool,
 }
 
 impl<'a> ForwardSlice<'a> {
@@ -18,6 +20,7 @@ impl<'a> ForwardSlice<'a> {
             tainted_locations: BitSet::new_empty(locations.len_idx()),
             pdg,
             locations,
+            taint_control_dependencies: true,
         }
     }
 }
@@ -30,9 +33,28 @@ impl<'a, C: CallType> CfgPass<'_, C> for ForwardSlice<'a> {
             tainted_locations,
             pdg,
             locations,
-            ..
+            taint_control_dependencies,
         } = self;
 
+        if taint_control_dependencies {
+            Self::run_impl::<C, true>(tainted_locations, pdg, locations, cfg)
+        } else {
+            Self::run_impl::<C, false>(tainted_locations, pdg, locations, cfg)
+        }
+    }
+
+    impl_pass_span!(self; "forward_slice",
+        tainted = debug(Vec::from_iter(self.tainted_locations.ones().map(|loc|self.locations[loc]))),
+    );
+}
+
+impl<'a> ForwardSlice<'a> {
+    fn run_impl<C: CallType, const TAINT_CONTROL_DEPENDENCIES: bool>(
+        tainted_locations: BitSet<IntLocation>,
+        pdg: &InvProgramDependenceGraph,
+        locations: &InternedLocations,
+        cfg: &mut ControlFlowGraph<C>,
+    ) -> BitSet<IntLocation> {
         // Init the work que with the tainted locations
         let mut work_queue = WorkQueue {
             deque: VecDeque::from_iter(tainted_locations.ones()),
@@ -53,20 +75,21 @@ impl<'a, C: CallType> CfgPass<'_, C> for ForwardSlice<'a> {
                 }
             }
 
-            if let Some(control_dependencents) =
-                &pdg.control_dependencies[self.locations[loc].block]
-            {
-                for control_dependent_bb in control_dependencents.ones() {
-                    let mut loc = self.locations[control_dependent_bb].stmnt_start;
-                    let tainted_blck_statements = cfg.blocks[control_dependent_bb]
-                        .statements
-                        .indices()
-                        .map(|_| {
-                            let res = loc;
-                            loc += 1;
-                            res
-                        });
-                    work_queue.extend(tainted_blck_statements)
+            if TAINT_CONTROL_DEPENDENCIES {
+                if let Some(control_dependencents) = &pdg.control_dependencies[locations[loc].block]
+                {
+                    for control_dependent_bb in control_dependencents.ones() {
+                        let mut loc = locations[control_dependent_bb].stmnt_start;
+                        let tainted_blck_statements = cfg.blocks[control_dependent_bb]
+                            .statements
+                            .indices()
+                            .map(|_| {
+                                let res = loc;
+                                loc += 1;
+                                res
+                            });
+                        work_queue.extend(tainted_blck_statements)
+                    }
                 }
             }
         }
@@ -82,8 +105,4 @@ impl<'a, C: CallType> CfgPass<'_, C> for ForwardSlice<'a> {
         removed_locations.toggle_all();
         removed_locations
     }
-
-    impl_pass_span!(self; "forward_slice",
-        tainted = debug(Vec::from_iter(self.tainted_locations.ones().map(|loc|self.locations[loc]))),
-    );
 }

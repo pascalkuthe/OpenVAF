@@ -8,9 +8,10 @@ use openvaf_ir::{Spanned, Type};
 use openvaf_middle::cfg::builder::CfgBuilder;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind};
 use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
-    BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Derivative,
-    Expression, Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
+    BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Expression,
+    Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
     ParameterConstraint, ParameterExcludeConstraint, ParameterInput, PrintOnFinish, RValue,
     StmntKind, StopTaskKind, TyRValue, VariableId,
 };
@@ -35,10 +36,10 @@ impl CallType for InitFunctionCallType {
 
     fn derivative<C: CallType>(
         &self,
-        _original: Local,
-        _mir: &Mir<C>,
-        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
+        _args: &IndexSlice<CallArg, [COperand<Self>]>,
+        _ad: &mut RValueAutoDiff<Self, C>,
+        _span: Span,
+    ) -> Option<RValue<Self>> {
         unreachable!()
     }
 }

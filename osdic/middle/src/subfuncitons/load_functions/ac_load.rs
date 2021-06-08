@@ -1,15 +1,17 @@
-use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput, SimParamKind};
 use crate::subfuncitons::load_functions::dc_load::DcLoadFunctionCall;
-use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 use openvaf_hir::{BranchId, NetId, Type, Unknown};
 use openvaf_ir::convert::Convert;
 use openvaf_ir::ids::{ParameterId, PortId};
-use openvaf_ir::{PrintOnFinish, StopTaskKind};
+use openvaf_ir::{PrintOnFinish, Spanned, StopTaskKind};
 use openvaf_middle::cfg::ControlFlowGraph;
 use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
-    COperand, COperandData, CallArg, CallType, CallTypeConversion, ConstVal, Derivative, InputKind,
-    Local, Mir, OperandData, RValue, SimpleConstVal, StmntKind, VariableId,
+    BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ConstVal, Derivative,
+    InputKind, Local, Mir, Operand, OperandData, ParameterInput, RValue, SimpleConstVal, StmntKind,
+    VariableId,
 };
 use openvaf_session::sourcemap::{Span, StringLiteral};
 use osdic_target::sim::LimFunction;
@@ -23,18 +25,18 @@ pub enum AcLoadFunctionCall {
 }
 
 impl CallType for AcLoadFunctionCall {
-    type I = GeneralOsdiInput;
+    type I = AcLoadInput;
 
-    fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _call: &[DiamondLattice]) -> DiamondLattice {
         unreachable!()
     }
 
     fn derivative<C: CallType>(
         &self,
-        _original: Local,
-        _mir: &Mir<C>,
-        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
+        _args: &IndexSlice<CallArg, [COperand<Self>]>,
+        _ad: &mut RValueAutoDiff<Self, C>,
+        _span: Span,
+    ) -> Option<RValue<Self>> {
         unreachable!()
     }
 }
@@ -59,31 +61,117 @@ impl Debug for AcLoadFunctionCall {
     }
 }
 
-pub struct GeneralToDcLoad;
+pub enum OmegaKind {
+    Real,
+    Imaginary,
+}
 
-impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad {
+#[derive(Clone, Debug, PartialEq)]
+pub enum AcLoadInput {
+    Parameter(ParameterInput),
+    Variable(VariableId),
+    PortConnected(PortId),
+    SimParam(StringLiteral, SimParamKind),
+    Voltage(NetId, NetId),
+    Current(BranchId),
+    PortFlow(PortId),
+    Omega(OmegaKind), // Analysis frequency
+    Temperature,
+}
+
+impl Display for AcLoadInput {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parameter(param) => Debug::fmt(param, f),
+            Self::PortConnected(port) => write!(f, "$port_connected({:?})", port),
+            Self::SimParam(name, kind) => write!(f, "$simparam({}, {:?})", name, kind),
+            Self::Current(branch) => write!(f, "flow({:?})", branch),
+            Self::Voltage(hi, lo) => write!(f, "pot({:?}, {:?})", hi, lo),
+            Self::PortFlow(port) => write!(f, "flow({:?})", port),
+            Self::Temperature => f.write_str("$temp"),
+            Self::Variable(var) => write!(f, "{:?}", var),
+            Self::Omega(OmegaKind::Real) => write!(f, "$omega"),
+            Self::Omega(OmegaKind::Imaginary) => write!(f, "1j * $omega"),
+        }
+    }
+}
+
+impl InputKind for AcLoadInput {
+    fn derivative<C: CallType>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
+        unimplemented!()
+    }
+
+    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
+        match self {
+            Self::Parameter(ParameterInput::Value(param)) => mir[*param].ty,
+            Self::Voltage(_, _)
+            | Self::Current(_)
+            | Self::PortFlow(_)
+            | Self::Temperature
+            | Self::SimParam(_, SimParamKind::RealOptional)
+            | Self::SimParam(_, SimParamKind::Real) => Type::REAL,
+
+            Self::Parameter(ParameterInput::Given(_))
+            | Self::PortConnected(_)
+            | Self::SimParam(_, SimParamKind::RealOptionalGiven) => Type::BOOL,
+            Self::SimParam(_, SimParamKind::String) => Type::STRING,
+
+            Self::Variable(var) => mir.variables[*var].ty,
+        }
+    }
+}
+
+pub struct GeneralToAcLoad;
+
+impl CallTypeConversion<GeneralOsdiCall, AcLoadFunctionCall> for GeneralToAcLoad {
     fn map_input(
         &mut self,
         src: <GeneralOsdiCall as CallType>::I,
-    ) -> COperandData<DcLoadFunctionCall> {
-        OperandData::Read(src)
+    ) -> COperandData<AcLoadFunctionCall> {
+        let res = match src {
+            GeneralOsdiInput::Parameter(p) => AcLoadInput::Parameter(p),
+            GeneralOsdiInput::PortConnected(conncted) => AcLoadInput::PortConnected(p),
+            GeneralOsdiInput::SimParam(name, kind) => AcLoadInput::SimParam(name, kind),
+            GeneralOsdiInput::Voltage(hi, lo) => AcLoadInput::Voltage(hi, lo),
+            GeneralOsdiInput::Lim { hi, lo, .. } => AcLoadInput::Voltage(hi, lo),
+            GeneralOsdiInput::Temperature => AcLoadInput::Temperature,
+        };
+        OperandData::Read(res)
     }
 
     fn map_call_val(
         &mut self,
         call: GeneralOsdiCall,
-        _args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
+        args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
         span: Span,
-    ) -> RValue<DcLoadFunctionCall> {
+    ) -> RValue<AcLoadFunctionCall> {
         match call {
             GeneralOsdiCall::Noise => RValue::Use(COperand {
                 span,
                 contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0))),
             }),
-            GeneralOsdiCall::TimeDerivative => RValue::Use(COperand {
-                span,
-                contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0))),
-            }),
+            GeneralOsdiCall::TimeDerivative => {
+                // BLOCK allow generating additional statements here
+                todo!("Time derivatives of something other than charges")
+                // debug_assert_eq!(args.len(),1);
+                // let omega = Operand{ span, contents: OperandData::Read(AcLoadInput::Omega(OmegaKind::Imaginary))};
+                // let admittance = omega * args[0]
+                // RValue::BinaryOperation(Spanned{ span, contents: BinOp::Multiply }, admittance, voltage)
+            }
+            GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(node) => {
+                let omega = Operand {
+                    span,
+                    contents: OperandData::Read(AcLoadInput::Omega(OmegaKind::Imaginary)),
+                };
+                RValue::BinaryOperation(
+                    Spanned {
+                        span,
+                        contents: BinOp::Multiply,
+                    },
+                    omega,
+                )
+            }
+
             GeneralOsdiCall::StopTask(_, _) | GeneralOsdiCall::NodeCollapse(_, _) => unreachable!(),
         }
     }
@@ -93,14 +181,15 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
         call: GeneralOsdiCall,
         args: IndexVec<CallArg, COperand<DcLoadFunctionCall>>,
         span: Span,
-    ) -> StmntKind<DcLoadFunctionCall> {
+    ) -> StmntKind<AcLoadFunctionCall> {
         match call {
-            GeneralOsdiCall::Noise => unreachable!(),
-            GeneralOsdiCall::TimeDerivative => unreachable!(),
-            GeneralOsdiCall::StopTask(kind, print) => {
-                StmntKind::Call(DcLoadFunctionCall::StopTask(kind, print), args, span)
-            }
+            GeneralOsdiCall::StopTask(kind, print) => StmntKind::Call(
+                AcLoadFunctionCall::StopTask(kind, print),
+                IndexVec::new(),
+                span,
+            ),
             GeneralOsdiCall::NodeCollapse(_, _) => StmntKind::NoOp,
+            _ => unreachable!(),
         }
     }
 }

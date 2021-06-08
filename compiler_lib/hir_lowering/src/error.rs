@@ -103,7 +103,7 @@ pub enum Error {
     },
 
     #[error("{0}")]
-    DerivativeError(#[from] openvaf_derivatives::error::Error),
+    DerivativeError(#[from] openvaf_middle::derivatives::Error),
 
     #[error("frontend does currently not support {0}!")]
     Unsupported(Unsupported, Span),

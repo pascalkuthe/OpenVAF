@@ -31,6 +31,44 @@ pub struct TaintedLocations {
 }
 
 impl CfgVisitor<GeneralOsdiCall> for TaintedLocations {
+    fn visit_stmnt(
+        &mut self,
+        stmnt: &StmntKind<GeneralOsdiCall>,
+        loc: IntLocation,
+        cfg: &ControlFlowGraph<GeneralOsdiCall>,
+    ) {
+        match *stmnt {
+            StmntKind::Assignment(dst, ref val) => {
+                if matches!(cfg.locals[dst].kind, LocalKind::Branch(_, _)) {
+                    self.model_init.insert(loc);
+                    self.model_temp_update.insert(loc);
+                    self.instance_temp_update.insert(loc);
+                    self.instance_init.insert(loc);
+                }
+                self.visit_rvalue(val, loc, cfg)
+            }
+            StmntKind::Call(_, ref args, _) => {
+                for arg in args {
+                    self.visit_operand(arg, loc, cfg)
+                }
+            }
+            StmntKind::NoOp => {}
+        }
+    }
+
+    fn visit_phi(
+        &mut self,
+        phi: &PhiData,
+        loc: IntLocation,
+        cfg: &ControlFlowGraph<GeneralOsdiCall>,
+    ) {
+        if matches!(cfg.locals[phi.dst].kind, LocalKind::Branch(_, _)) {
+            self.model_init.insert(loc);
+            self.model_temp_update.insert(loc);
+            self.instance_temp_update.insert(loc);
+            self.instance_init.insert(loc);
+        }
+    }
     fn visit_input(
         &mut self,
         input: &GeneralOsdiInput,
@@ -40,8 +78,6 @@ impl CfgVisitor<GeneralOsdiCall> for TaintedLocations {
         match input {
             GeneralOsdiInput::SimParam(_, _)
             | GeneralOsdiInput::Voltage(_, _)
-            | GeneralOsdiInput::Current(_)
-            | GeneralOsdiInput::PortFlow(_)
             | GeneralOsdiInput::Lim { .. } => {
                 self.model_init.insert(loc);
                 self.model_temp_update.insert(loc);
@@ -265,6 +301,7 @@ pub(super) fn function_cfg_from_full_cfg(
         tainted_locations: tainted_locations.clone(),
         pdg,
         locations,
+        taint_control_dependencies: true,
     });
 
     if let Some(assumed_locations) = assumed_locations {

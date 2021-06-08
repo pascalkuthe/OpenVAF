@@ -8,7 +8,7 @@
  * *****************************************************************************************
  */
 
-use openvaf_data_structures::index_vec::{define_index_type, IndexVec};
+use openvaf_data_structures::index_vec::{define_index_type, IndexSlice, IndexVec};
 pub use openvaf_hir::{Branch, DisciplineAccess, Net};
 
 pub use openvaf_ir::ids::{
@@ -29,6 +29,7 @@ use crate::cfg::ControlFlowGraph;
 
 pub mod cfg;
 pub mod const_fold;
+pub mod derivatives;
 pub mod dfa;
 mod fold;
 mod util;
@@ -46,6 +47,7 @@ use openvaf_hir::Discipline;
 pub type ConstVal = osdi_types::ConstVal<StringLiteral>;
 pub type SimpleConstVal = osdi_types::SimpleConstVal<StringLiteral>;
 
+use crate::derivatives::RValueAutoDiff;
 use openvaf_data_structures::sync::RwLock;
 use openvaf_diagnostics::ListFormatter;
 use openvaf_ir::convert::Convert;
@@ -164,16 +166,16 @@ impl CallType for ParameterCallType {
     type I = ParameterInput;
 
     fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice {
-        unreachable!("Calls in parameters are not allowed! {:?}", call)
+        match *self {}
     }
 
     fn derivative<C: CallType>(
         &self,
-        _org: Local,
-        _mir: &Mir<C>,
-        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
-        unreachable!("Calls in parameters are not allowed!")
+        _args: &IndexSlice<CallArg, [COperand<Self>]>,
+        _ad: &mut RValueAutoDiff<Self, C>,
+        _span: Span,
+    ) -> Option<RValue<Self>> {
+        match *self {}
     }
 }
 
@@ -220,10 +222,10 @@ impl CallType for RealConstCallType {
 
     fn derivative<C: CallType>(
         &self,
-        _org: Local,
-        _: &Mir<C>,
-        _: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
+        _args: &IndexSlice<CallArg, [COperand<Self>]>,
+        _ad: &mut RValueAutoDiff<Self, C>,
+        _span: Span,
+    ) -> Option<RValue<Self>> {
         match *self {}
     }
 }
@@ -469,10 +471,10 @@ pub trait CallType: Debug + Clone + PartialEq + Display {
     fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice;
     fn derivative<C: CallType>(
         &self,
-        original: Local,
-        mir: &Mir<C>,
-        arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I>;
+        args: &IndexSlice<CallArg, [COperand<Self>]>,
+        ad: &mut RValueAutoDiff<Self, C>,
+        span: Span,
+    ) -> Option<RValue<Self>>;
 }
 
 pub type COperand<C> = Operand<<C as CallType>::I>;
@@ -1014,7 +1016,7 @@ pub enum ParameterConstraint {
 }
 
 pub trait CallTypeConversion<S: CallType, D: CallType>: Sized {
-    fn map_operand(&mut self, op: COperand<S>) -> COperand<D> {
+    fn map_operand(&mut self, cfg: &mut ControlFlowGraph, op: COperand<S>) -> COperand<D> {
         let contents = match op.contents {
             OperandData::Read(input) => self.map_input(input),
             OperandData::Constant(val) => OperandData::Constant(val),

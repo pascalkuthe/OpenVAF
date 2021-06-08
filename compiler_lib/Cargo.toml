@@ -8,8 +8,6 @@ members = [
 
     "codegen_llvm",
 
-    "derivatives",
-
     "data_structures",
 
     "diagnostics",

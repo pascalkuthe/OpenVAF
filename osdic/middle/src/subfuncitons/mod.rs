@@ -15,7 +15,6 @@ use crate::subfuncitons::instance_temp_update::InstanceTempUpdateFunction;
 use crate::subfuncitons::load_functions::LoadFunctions;
 use crate::subfuncitons::model_init::ModelInitFunction;
 use crate::subfuncitons::model_temp_update::ModelTempUpdateFunction;
-use itertools::multizip;
 
 //mod ac_load;
 mod automatic_slicing;
@@ -85,6 +84,7 @@ impl OsdiFunctions {
             &init_output_locations,
             &locations,
             &output_locations,
+            &inverse_pdg,
         );
 
         let mut model_vars = model_init.written_vars.clone();

@@ -8,10 +8,19 @@
  * *****************************************************************************************
  */
 
-use crate::error::Error::DerivativeNotDefined;
-use crate::error::UndefinedDerivative;
-use crate::lints::RoundingDerivativeNotFullyDefined;
-use crate::{operand_to_derivative, AutoDiff};
+use super::error::Error::DerivativeNotDefined;
+use super::error::UndefinedDerivative;
+use super::lints::RoundingDerivativeNotFullyDefined;
+use super::{operand_to_derivative, AutoDiff};
+use crate::osdi_types::ConstVal::Scalar;
+use crate::osdi_types::SimpleConstVal::Real;
+use crate::BinOp::{Divide, Minus, Multiply, Plus};
+use crate::ComparisonOp::Equal;
+use crate::OperandData::Constant;
+use crate::{
+    fold_rvalue, BinOp, COperand, CallArg, CallType, CallTypeDerivative, Derivative, Local,
+    Operand, OperandData, RValue, RValueFold, StmntKind, SyntaxCtx, Type,
+};
 use enum_map::{Enum, EnumMap};
 use openvaf_data_structures::index_vec::IndexSlice;
 use openvaf_diagnostics::lints::Linter;
@@ -19,15 +28,6 @@ use openvaf_ir::DoubleArgMath::Pow;
 use openvaf_ir::SingleArgMath::{Cos, CosH, Ln, Sin, SinH, Sqrt};
 use openvaf_ir::UnaryOperator::ArithmeticNegate;
 use openvaf_ir::{SingleArgMath, Spanned, UnaryOperator, Unknown};
-use openvaf_middle::osdi_types::ConstVal::Scalar;
-use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::BinOp::{Divide, Minus, Multiply, Plus};
-use openvaf_middle::ComparisonOp::Equal;
-use openvaf_middle::OperandData::Constant;
-use openvaf_middle::{
-    fold_rvalue, BinOp, COperand, CallArg, CallType, CallTypeDerivative, Derivative, Local,
-    Operand, OperandData, RValue, RValueFold, StmntKind, SyntaxCtx, Type,
-};
 use openvaf_session::sourcemap::span::DUMMY_SP;
 use openvaf_session::sourcemap::Span;
 
@@ -71,12 +71,12 @@ enum OneAndSquareKind {
     SquaredMinusOne,
 }
 
-struct RValueAutoDiff<'lt, 'adlt, C: CallType, MC: CallType> {
+pub struct RValueAutoDiff<'lt, 'adlt, C: CallType, MC: CallType> {
     /// Local that the RValue this is being derived will be saved to
-    original_local: Local,
+    pub original_local: Local,
     origin: SyntaxCtx,
-    ad: &'lt mut AutoDiff<'adlt, C, MC>,
-    unknown: Unknown,
+    pub ad: &'lt mut AutoDiff<'adlt, C, MC>,
+    pub unknown: Unknown,
     outer_derivative_cache: &'lt mut EnumMap<OuterDerivativeCacheSlot, Option<COperand<C>>>,
 }
 
@@ -885,11 +885,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
         args: &IndexSlice<CallArg, [COperand<C>]>,
         span: Span,
     ) -> Self::T {
-        call.derivative(self.original_local, self.ad.mir, |i| {
-            self.derivative(&args[i])
-        })
-        .into_option()
-        .map(|x| RValue::Use(Spanned::new(x, span)))
+        call.derivative(args, self, span)
     }
 
     fn fold_array(&mut self, _args: &[COperand<C>], _span: Span, _ty: Type) -> Self::T {

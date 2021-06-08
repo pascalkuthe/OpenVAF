@@ -1,5 +1,6 @@
 use crate::lim::LimFunction;
 use openvaf_ast_lowering::{lower_ast_userfacing_with_printer, AllowedReferences};
+use openvaf_data_structures::index_vec::IndexSlice;
 use openvaf_data_structures::{
     index_vec::{index_vec, IndexVec},
     HashMap,
@@ -15,9 +16,11 @@ use openvaf_hir_lowering::{
     ExpressionLowering, HirFold, HirLowering, HirSystemFunctionCall, LocalCtx,
 };
 use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, Type, Unknown};
+use openvaf_middle::cfg::ControlFlowGraph;
+use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{const_fold::DiamondLattice, CallArg};
+use openvaf_middle::{const_fold::DiamondLattice, COperand, CallArg};
 use openvaf_middle::{
     CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
@@ -39,6 +42,7 @@ pub enum GeneralOsdiCall {
     Noise,
     // TODO Noise
     TimeDerivative,
+    SymbolicDerivativeOfTimeDerivative(NetId),
     StopTask(StopTaskKind, PrintOnFinish),
     NodeCollapse(NetId, NetId),
 }
@@ -50,21 +54,44 @@ impl CallType for GeneralOsdiCall {
         match self {
             Self::Noise => DiamondLattice::NotAConstant,
             // derivative of constants are always zero no matter the analysis mode (nonsensical code maybe lint this?)
-            Self::TimeDerivative => call[0]
-                .clone()
-                .and_then(|_| DiamondLattice::Val(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
-            GeneralOsdiCall::StopTask(_, _) => unreachable!(),
-            GeneralOsdiCall::NodeCollapse(_, _) => unreachable!(),
+            Self::TimeDerivative | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(_) => call
+                [0]
+            .clone()
+            .and_then(|_| DiamondLattice::Val(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
+            Self::StopTask(_, _) | Self::NodeCollapse(_, _) => unreachable!(),
         }
     }
 
     fn derivative<C: CallType>(
         &self,
-        _original: Local,
-        _mir: &Mir<C>,
-        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
-        unreachable!("Derivative are analysis mode specific!")
+        args: &IndexSlice<CallArg, [COperand<Self>]>,
+        ad: &mut RValueAutoDiff<Self, C>,
+        span: Span,
+    ) -> Option<RValue<Self>> {
+        match self {
+            Self::Noise => None, // TODO correct?
+            // derivative of constants are always zero no matter the analysis mode (nonsensical code maybe lint this?)
+            Self::SymbolicDerivativeOfTimeDerivative(_) => {
+                todo!("Does this even work? Probably not honestly")
+            }
+            Self::TimeDerivative => {
+                if let Unknown::NodePotential(node) = ad.unknown {
+                    ad.derivative(&args[0]).into_option().map(|derivative| {
+                        RValue::Call(
+                            Self::SymbolicDerivativeOfTimeDerivative(node),
+                            index_vec![Spanned {
+                                contents: derivative,
+                                span
+                            }],
+                            span,
+                        )
+                    })
+                } else {
+                    todo!()
+                }
+            }
+            Self::StopTask(_, _) | Self::NodeCollapse(_, _) => unreachable!(),
+        }
     }
 }
 
@@ -80,6 +107,9 @@ impl Display for GeneralOsdiCall {
                 write!(f, "$finish({:?})", finish)
             }
             GeneralOsdiCall::NodeCollapse(hi, lo) => write!(f, "$collapse({:?}, {:?})", hi, lo),
+            GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(node) => {
+                write!(f, "ddx(ddt(X), V({:?})) X=", node)
+            }
         }
     }
 }
@@ -104,8 +134,8 @@ pub enum GeneralOsdiInput {
     PortConnected(PortId),
     SimParam(StringLiteral, SimParamKind),
     Voltage(NetId, NetId),
-    Current(BranchId),
-    PortFlow(PortId),
+    // Current(BranchId), TODO current reads
+    // PortFlow(PortId),
     Lim {
         hi: NetId,
         lo: NetId,
@@ -121,7 +151,7 @@ impl Display for GeneralOsdiInput {
             Self::Parameter(param) => Debug::fmt(param, f),
             Self::PortConnected(port) => write!(f, "$port_connected({:?})", port),
             Self::SimParam(name, kind) => write!(f, "$simparam({}, {:?})", name, kind),
-            Self::Current(branch) => write!(f, "flow({:?})", branch),
+            // Self::Current(branch) => write!(f, "flow({:?})", branch),
             Self::Voltage(hi, lo) => write!(f, "pot({:?}, {:?})", hi, lo),
             Self::Lim { hi, lo, fun, args } => write!(
                 f,
@@ -131,7 +161,7 @@ impl Display for GeneralOsdiInput {
                 fun,
                 ListFormatter(args.as_slice(), ",", ", ")
             ),
-            Self::PortFlow(port) => write!(f, "flow({:?})", port),
+            // Self::PortFlow(port) => write!(f, "flow({:?})", port),
             Self::Temperature => f.write_str("$temp"),
         }
     }
@@ -144,8 +174,7 @@ impl InputKind for GeneralOsdiInput {
                 Derivative::One
             }
 
-            (Self::Current(x), Unknown::Flow(y)) if *x == y => Derivative::One,
-
+            // (Self::Current(x), Unknown::Flow(y)) if *x == y => Derivative::One,
             (Self::Lim { hi, .. }, Unknown::NodePotential(node)) if *hi == node => Derivative::One,
 
             (Self::Lim { lo, .. }, Unknown::NodePotential(node)) if *lo == node => {
@@ -166,9 +195,9 @@ impl InputKind for GeneralOsdiInput {
         match self {
             Self::Parameter(ParameterInput::Value(param)) => mir[*param].ty,
             Self::Voltage(_, _)
-            | Self::Current(_)
+            // | Self::Current(_)
             | Self::Lim { .. }
-            | Self::PortFlow(_)
+            // | Self::PortFlow(_)
             | Self::Temperature
             | Self::SimParam(_, SimParamKind::RealOptional)
             | Self::SimParam(_, SimParamKind::Real) => Type::REAL,
@@ -183,14 +212,15 @@ impl InputKind for GeneralOsdiInput {
 
 impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
     fn port_flow(
-        ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx<'a>>,
-        port: PortId,
-        span: Span,
+        _ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx<'a>>,
+        _port: PortId,
+        _span: Span,
     ) -> Option<RValue<Self>> {
-        Some(RValue::Use(Spanned {
-            span,
-            contents: OperandData::Read(GeneralOsdiInput::PortFlow(port)),
-        }))
+        todo!()
+        // Some(RValue::Use(Spanned {
+        //     span,
+        //     contents: OperandData::Read(GeneralOsdiInput::PortFlow(port)),
+        // }))
     }
 
     fn branch_access(
@@ -207,7 +237,7 @@ impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
                 let branch = &ctx.fold.mir[branch];
                 GeneralOsdiInput::Voltage(branch.hi, branch.lo)
             }
-            DisciplineAccess::Flow => GeneralOsdiInput::Current(branch),
+            DisciplineAccess::Flow => todo!(), //GeneralOsdiInput::Current(branch),
         };
         Some(RValue::Use(Spanned {
             span,
@@ -241,8 +271,8 @@ impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
     fn noise(
         _ctx: &mut LocalCtx<Self, OsdiHirLoweringCtx>,
         _source: NoiseSource<ExpressionId, ()>,
-        name: Option<ExpressionId>,
-        span: Span,
+        _name: Option<ExpressionId>,
+        _span: Span,
     ) -> Option<RValue<Self>> {
         todo!()
     }
@@ -322,8 +352,13 @@ impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
         _: &mut LocalCtx<Self, OsdiHirLoweringCtx>,
         hi: NetId,
         lo: NetId,
+        span: Span,
     ) -> Option<StmntKind<Self>> {
-        todo!()
+        Some(StmntKind::Call(
+            Self::NodeCollapse(hi, lo),
+            IndexVec::new(),
+            span,
+        ))
     }
 }
 

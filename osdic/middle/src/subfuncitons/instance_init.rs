@@ -1,15 +1,16 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
-use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 use openvaf_data_structures::BitSet;
 use openvaf_hir::VariableId;
 use openvaf_ir::ids::NetId;
 use openvaf_ir::{PrintOnFinish, StopTaskKind};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
-    COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Local,
-    Mir, OperandData, ParameterInput, PortId, RValue, StmntKind, Type, Unknown,
+    COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Mir,
+    OperandData, ParameterInput, PortId, RValue, StmntKind, Type, Unknown,
 };
 use openvaf_session::sourcemap::Span;
 use openvaf_transformations::InvProgramDependenceGraph;
@@ -31,10 +32,10 @@ impl CallType for InstanceInitFunctionCallType {
 
     fn derivative<C: CallType>(
         &self,
-        _original: Local,
-        _mir: &Mir<C>,
-        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
+        _args: &IndexSlice<CallArg, [COperand<Self>]>,
+        _ad: &mut RValueAutoDiff<Self, C>,
+        _span: Span,
+    ) -> Option<RValue<Self>> {
         unreachable!()
     }
 }
