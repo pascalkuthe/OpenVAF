@@ -6,7 +6,6 @@ use openvaf_codegen_llvm::inkwell::targets::{
 };
 use openvaf_codegen_llvm::inkwell::OptimizationLevel;
 use openvaf_codegen_llvm::LlvmCodegen;
-use openvaf_derivatives::generate_derivatives;
 use openvaf_diagnostics::{MultiDiagnostic, StandardPrinter};
 use openvaf_middle::cfg::START_BLOCK;
 use openvaf_middle::const_fold::ConstantPropagation;
@@ -31,7 +30,7 @@ fn codegen_test(model: &'static str) -> Result<(), PrettyError> {
             let mut cfg = module.analog_cfg.borrow_mut();
 
             let mut errors = MultiDiagnostic(Vec::new());
-            generate_derivatives(&mut cfg, &mir, &mut errors);
+            cfg.generate_derivatives(&mir, &mut errors);
 
             if !errors.is_empty() {
                 return Err(errors.user_facing::<StandardPrinter>().into());

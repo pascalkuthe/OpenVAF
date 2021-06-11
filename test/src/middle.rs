@@ -1,5 +1,4 @@
 use crate::{middle_test, PrettyError};
-use openvaf_derivatives::generate_derivatives;
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::{MultiDiagnostic, StandardPrinter};
 use openvaf_middle::const_fold::ConstantPropagation;
@@ -48,7 +47,7 @@ fn hir_lowering_test(model: &'static str) -> Result<(), PrettyError> {
             }
 
             let mut errors = MultiDiagnostic(Vec::new());
-            generate_derivatives(&mut cfg, &mir, &mut errors);
+            cfg.generate_derivatives(&mir, &mut errors);
 
             if !errors.is_empty() {
                 return Err(errors.user_facing::<StandardPrinter>().into());

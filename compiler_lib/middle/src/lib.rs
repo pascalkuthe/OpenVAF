@@ -392,7 +392,7 @@ pub enum LocalKind {
     /// There shall only be one local for every combination of DisciplineAccess
     /// and BranchId. This is automatically enforced during HIR lowering.
     /// Adding a second local for the same branch/discipline combination will result in UB (in the output binary not the compiler itself
-    Branch(DisciplineAccess, BranchId),
+    Branch(DisciplineAccess, BranchId, VariableLocalKind),
 
     /// Temporary values introduced by OpenVAF
     /// These act like SSA as such it is UB (in the output binary not the compiler itself) to write to the same local twice
@@ -1016,7 +1016,7 @@ pub enum ParameterConstraint {
 }
 
 pub trait CallTypeConversion<S: CallType, D: CallType>: Sized {
-    fn map_operand(&mut self, cfg: &mut ControlFlowGraph, op: COperand<S>) -> COperand<D> {
+    fn map_operand(&mut self, op: COperand<S>) -> COperand<D> {
         let contents = match op.contents {
             OperandData::Read(input) => self.map_input(input),
             OperandData::Constant(val) => OperandData::Constant(val),

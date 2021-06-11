@@ -16,7 +16,7 @@ use openvaf_middle::{
     StmntKind, StopTaskKind, TyRValue, VariableId,
 };
 use openvaf_session::sourcemap::Span;
-use openvaf_transformations::InvProgramDependenceGraph;
+use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
@@ -78,7 +78,8 @@ impl ModelInitFunction {
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
         tainted_locations: &BitSet<IntLocation>,
         locations: &InternedLocations,
-        pdg: &InvProgramDependenceGraph,
+        pdg: &ProgramDependenceGraph,
+        inv_pdg: &InvProgramDependenceGraph,
         all_output_locations: &BitSet<IntLocation>,
     ) -> (Self, BitSet<IntLocation>) {
         let mut res = Self::new_param_init(mir);
@@ -90,6 +91,7 @@ impl ModelInitFunction {
             None,
             all_output_locations,
             locations,
+            inv_pdg,
             pdg,
         );
 

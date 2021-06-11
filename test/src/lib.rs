@@ -28,11 +28,12 @@ use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::StandardPrinter;
 use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
 use openvaf_middle::{
-    BinOp, CallArg, CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Local, Mir,
-    Operand, OperandData, ParameterCallType, ParameterInput, RValue, StmntKind, Type,
+    BinOp, COperand, CallArg, CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Local,
+    Mir, Operand, OperandData, ParameterCallType, ParameterInput, RValue, StmntKind, Type,
 };
 use openvaf_parser::{parse_user_facing, TokenStream};
 use openvaf_preprocessor::{preprocess_user_facing, std_path};
@@ -229,13 +230,13 @@ impl CallType for Call {
 
     fn derivative<C: CallType>(
         &self,
-        _org: Local,
-        _mir: &Mir<C>,
-        _arg_derivative: impl FnMut(CallArg) -> Derivative<Self::I>,
-    ) -> Derivative<Self::I> {
+        _args: &IndexSlice<CallArg, [COperand<Self>]>,
+        _ad: &mut RValueAutoDiff<Self, C>,
+        _span: Span,
+    ) -> Option<RValue<Self>> {
         match self {
             Self::StopTask(_, _) => unreachable!(),
-            Self::Noise => Derivative::Zero,
+            Self::Noise => None,
         }
     }
 }
@@ -365,6 +366,7 @@ impl ExpressionLowering<TestLowering> for Call {
         _: &mut LocalCtx<Self, TestLowering>,
         _hi: NetId,
         _lo: NetId,
+        _span: Span,
     ) -> Option<StmntKind<Self>> {
         Some(StmntKind::NoOp)
     }

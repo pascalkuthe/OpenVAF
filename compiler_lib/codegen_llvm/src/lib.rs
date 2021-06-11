@@ -214,7 +214,7 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>>
                     )
                 }
 
-                LocalKind::Branch(access, branch) => {
+                LocalKind::Branch(access, branch,_) => {
                     LocalValue::Ptr(alloc_branch(self, access, branch))
                 }
                 LocalKind::Temporary => LocalValue::Undef,

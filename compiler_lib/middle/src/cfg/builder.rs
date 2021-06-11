@@ -110,10 +110,14 @@ impl<'a, C: CallType> CfgBuilder<&'a mut ControlFlowGraph<C>> {
                     LocalKind::Variable(var, VariableLocalKind::User) if INIT_VARS => {
                         vars[var] = Some(local)
                     }
-                    LocalKind::Branch(DisciplineAccess::Potential, branch) if INIT_BRANCHES => {
-                        potentials[branch] = Some(local)
-                    }
-                    LocalKind::Branch(DisciplineAccess::Flow, branch) if INIT_BRANCHES => {
+                    LocalKind::Branch(
+                        DisciplineAccess::Potential,
+                        branch,
+                        VariableLocalKind::User,
+                    ) if INIT_BRANCHES => potentials[branch] = Some(local),
+                    LocalKind::Branch(DisciplineAccess::Flow, branch, VariableLocalKind::User)
+                        if INIT_BRANCHES =>
+                    {
                         flows[branch] = Some(local)
                     }
                     _ => (),
@@ -264,7 +268,7 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             local
         } else {
             let local = self.cfg.borrow_mut().locals.push(LocalDeclaration {
-                kind: LocalKind::Branch(access, branch),
+                kind: LocalKind::Branch(access, branch, VariableLocalKind::User),
                 ty: Type::REAL,
             });
 

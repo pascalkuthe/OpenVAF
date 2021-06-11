@@ -71,7 +71,7 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
     ) -> RValue<DcLoadFunctionCall> {
         match call {
             GeneralOsdiCall::Noise
-            | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(_)
+            | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative
             | GeneralOsdiCall::TimeDerivative => RValue::Use(Operand {
                 span,
                 contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0))),
@@ -89,7 +89,7 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
         match call {
             GeneralOsdiCall::Noise => unreachable!(),
             GeneralOsdiCall::TimeDerivative
-            | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(_) => unreachable!(),
+            | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative => unreachable!(),
             GeneralOsdiCall::StopTask(kind, print) => {
                 StmntKind::Call(DcLoadFunctionCall::StopTask(kind, print), args, span)
             }

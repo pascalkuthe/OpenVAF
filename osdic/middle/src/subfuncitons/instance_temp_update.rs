@@ -13,7 +13,7 @@ use openvaf_middle::{
     OperandData, ParameterInput, RValue, StmntKind,
 };
 use openvaf_session::sourcemap::Span;
-use openvaf_transformations::InvProgramDependenceGraph;
+use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -129,7 +129,8 @@ impl InstanceTempUpdateFunction {
         tainted_locations: &BitSet<IntLocation>,
         assumed_locations: &BitSet<IntLocation>,
         locations: &InternedLocations,
-        pdg: &InvProgramDependenceGraph,
+        pdg: &ProgramDependenceGraph,
+        inv_pdg: &InvProgramDependenceGraph,
         all_output_stmnts: &BitSet<IntLocation>,
     ) -> (Self, BitSet<IntLocation>) {
         let (cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
@@ -139,6 +140,7 @@ impl InstanceTempUpdateFunction {
             Some(assumed_locations),
             all_output_stmnts,
             locations,
+            inv_pdg,
             pdg,
         );
 

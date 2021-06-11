@@ -471,8 +471,8 @@ impl<C: CallType> ControlFlowGraph<C> {
                     LocalKind::Variable(var, _) => {
                         LocalKind::Variable(var, VariableLocalKind::Derivative)
                     }
-                    LocalKind::Branch(_, _) => {
-                        unreachable!("Branch locals may only appear in a write postion")
+                    LocalKind::Branch(kind, branch, _) => {
+                        LocalKind::Branch(kind, branch, VariableLocalKind::Derivative)
                     }
                 };
                 locals.push(LocalDeclaration {

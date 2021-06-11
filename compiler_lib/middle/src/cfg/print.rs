@@ -144,9 +144,16 @@ impl<C: CallType> ControlFlowGraph<C> {
                         mir.variables[var].ident
                     ),
                 ),
-                LocalKind::Branch(access, branch) => (
+                LocalKind::Branch(access, branch, VariableLocalKind::User) => (
                     format!("{0}{0}let mut {1}: real;", INDENT, local),
                     format!("Corresponds to {}({})", access, mir.branches[branch].ident),
+                ),
+                LocalKind::Branch(access, branch, VariableLocalKind::Derivative) => (
+                    format!("{0}{0}let mut {1}: real;", INDENT, local),
+                    format!(
+                        "Corresponds to a derivative of {}({})",
+                        access, mir.branches[branch].ident
+                    ),
                 ),
             };
 

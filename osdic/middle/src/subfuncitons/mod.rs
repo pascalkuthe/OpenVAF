@@ -1,11 +1,11 @@
 use openvaf_data_structures::BitSet;
 use openvaf_hir::VariableId;
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
+use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, Location};
 use openvaf_middle::const_fold::ConstantPropagation;
 use openvaf_middle::{CallType, Mir};
 use openvaf_transformations::{
-    BuildPDG, CalculateDataDependence, InvProgramDependenceGraph, RemoveDeadLocals, Simplify,
-    SimplifyBranches,
+    BackwardSlice, BuildPDG, CalculateDataDependence, InvProgramDependenceGraph,
+    ProgramDependenceGraph, RemoveDeadLocals, Simplify, SimplifyBranches,
 };
 
 use crate::frontend::GeneralOsdiCall;
@@ -15,6 +15,7 @@ use crate::subfuncitons::instance_temp_update::InstanceTempUpdateFunction;
 use crate::subfuncitons::load_functions::LoadFunctions;
 use crate::subfuncitons::model_init::ModelInitFunction;
 use crate::subfuncitons::model_temp_update::ModelTempUpdateFunction;
+use crate::topology::CircuitTopology;
 
 //mod ac_load;
 mod automatic_slicing;
@@ -38,21 +39,23 @@ pub struct OsdiFunctions {
 }
 
 impl OsdiFunctions {
-    pub fn create_from_analog_block_by_automatic_division(mir: &Mir<GeneralOsdiCall>) -> Self {
-        let mut cfg = mir.modules[0].analog_cfg.borrow_mut();
-
+    pub fn create_from_analog_block_by_automatic_division(
+        mir: &Mir<GeneralOsdiCall>,
+        cfg: &mut ControlFlowGraph<GeneralOsdiCall>,
+        topology: &CircuitTopology,
+    ) -> Self {
         // optimize a few times so we catch most things
 
-        optimize_cfg(&mut cfg);
+        optimize_cfg(cfg);
         cfg.run_pass(ConstantPropagation::default());
-        optimize_cfg(&mut cfg);
-
+        cfg.run_pass(SimplifyBranches);
+        cfg.run_pass(RemoveDeadLocals);
         // analyse the cfg
 
         let locations = cfg.intern_locations();
 
-        let mut tainted_locations = TaintedLocations::new(&mut cfg, &locations);
-        let output_locations = OutputLocations::find_in_cfg(&mut cfg, &locations);
+        let mut tainted_locations = TaintedLocations::new(cfg, &locations, topology);
+        let output_locations = OutputLocations::find_in_cfg(cfg, &locations, topology);
 
         let pdg = cfg.run_pass(BuildPDG {
             locations: &locations,
@@ -70,8 +73,9 @@ impl OsdiFunctions {
             init_output_locations,
         ) = Self::init_functions_from_tainted_locs(
             mir,
-            &mut cfg,
+            cfg,
             &locations,
+            &pdg,
             &inverse_pdg,
             &tainted_locations,
             &output_locations,
@@ -79,7 +83,7 @@ impl OsdiFunctions {
 
         let load_functions = LoadFunctions::new(
             mir,
-            &mut cfg,
+            cfg,
             &tainted_locations,
             &init_output_locations,
             &locations,
@@ -109,9 +113,10 @@ impl OsdiFunctions {
         res.remove_instance_vars_from_model_functions(
             &locations,
             &inverse_pdg,
+            &pdg,
             &mut tainted_locations,
             &output_locations,
-            &mut cfg,
+            cfg,
             mir,
         );
 
@@ -131,6 +136,7 @@ impl OsdiFunctions {
         &mut self,
         locations: &InternedLocations,
         inverse_pdg: &InvProgramDependenceGraph,
+        pdg: &ProgramDependenceGraph,
         tainted_locations: &mut TaintedLocations,
         output_locations: &BitSet<IntLocation>,
         cfg: &mut ControlFlowGraph<GeneralOsdiCall>,
@@ -153,6 +159,7 @@ impl OsdiFunctions {
                 mir,
                 cfg,
                 &locations,
+                &pdg,
                 &inverse_pdg,
                 &tainted_locations,
                 &output_locations,
@@ -167,13 +174,11 @@ impl OsdiFunctions {
     }
 }
 
-/// Optimization pass applied to all functions
 fn optimize_cfg<C: CallType + 'static>(cfg: &mut ControlFlowGraph<C>) {
     cfg.run_pass(Simplify);
     cfg.run_pass(SimplifyBranches);
     cfg.run_pass(RemoveDeadLocals);
     cfg.run_pass(ConstantPropagation::default());
-
     cfg.run_pass(Simplify);
     cfg.run_pass(SimplifyBranches);
     cfg.run_pass(RemoveDeadLocals);

@@ -61,6 +61,7 @@ impl Debug for AcLoadFunctionCall {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum OmegaKind {
     Real,
     Imaginary,
@@ -109,7 +110,8 @@ impl InputKind for AcLoadInput {
             | Self::PortFlow(_)
             | Self::Temperature
             | Self::SimParam(_, SimParamKind::RealOptional)
-            | Self::SimParam(_, SimParamKind::Real) => Type::REAL,
+            | Self::SimParam(_, SimParamKind::Real)
+            | Self::Omega(OmegaKind::Real) => Type::REAL,
 
             Self::Parameter(ParameterInput::Given(_))
             | Self::PortConnected(_)
@@ -117,6 +119,7 @@ impl InputKind for AcLoadInput {
             Self::SimParam(_, SimParamKind::String) => Type::STRING,
 
             Self::Variable(var) => mir.variables[*var].ty,
+            Self::Omega(OmegaKind::Imaginary) => Type::CMPLX,
         }
     }
 }
@@ -129,8 +132,8 @@ impl CallTypeConversion<GeneralOsdiCall, AcLoadFunctionCall> for GeneralToAcLoad
         src: <GeneralOsdiCall as CallType>::I,
     ) -> COperandData<AcLoadFunctionCall> {
         let res = match src {
-            GeneralOsdiInput::Parameter(p) => AcLoadInput::Parameter(p),
-            GeneralOsdiInput::PortConnected(conncted) => AcLoadInput::PortConnected(p),
+            GeneralOsdiInput::Parameter(port) => AcLoadInput::Parameter(port),
+            GeneralOsdiInput::PortConnected(conncted) => AcLoadInput::PortConnected(conncted),
             GeneralOsdiInput::SimParam(name, kind) => AcLoadInput::SimParam(name, kind),
             GeneralOsdiInput::Voltage(hi, lo) => AcLoadInput::Voltage(hi, lo),
             GeneralOsdiInput::Lim { hi, lo, .. } => AcLoadInput::Voltage(hi, lo),
@@ -142,11 +145,11 @@ impl CallTypeConversion<GeneralOsdiCall, AcLoadFunctionCall> for GeneralToAcLoad
     fn map_call_val(
         &mut self,
         call: GeneralOsdiCall,
-        args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
+        mut args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
         span: Span,
     ) -> RValue<AcLoadFunctionCall> {
         match call {
-            GeneralOsdiCall::Noise => RValue::Use(COperand {
+            GeneralOsdiCall::Noise => RValue::Use(Operand {
                 span,
                 contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0))),
             }),
@@ -158,18 +161,14 @@ impl CallTypeConversion<GeneralOsdiCall, AcLoadFunctionCall> for GeneralToAcLoad
                 // let admittance = omega * args[0]
                 // RValue::BinaryOperation(Spanned{ span, contents: BinOp::Multiply }, admittance, voltage)
             }
-            GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(node) => {
+            GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative => {
                 let omega = Operand {
                     span,
                     contents: OperandData::Read(AcLoadInput::Omega(OmegaKind::Imaginary)),
                 };
-                RValue::BinaryOperation(
-                    Spanned {
-                        span,
-                        contents: BinOp::Multiply,
-                    },
-                    omega,
-                )
+
+                debug_assert_eq!(args.len(), 1);
+                RValue::Use(omega)
             }
 
             GeneralOsdiCall::StopTask(_, _) | GeneralOsdiCall::NodeCollapse(_, _) => unreachable!(),

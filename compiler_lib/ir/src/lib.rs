@@ -192,6 +192,7 @@ impl Display for UnaryOperator {
 pub enum Unknown {
     Parameter(ParameterId),
     NodePotential(NetId),
+    BranchPotential(NetId, NetId),
     Flow(BranchId),
 }
 

@@ -42,7 +42,7 @@ pub enum GeneralOsdiCall {
     Noise,
     // TODO Noise
     TimeDerivative,
-    SymbolicDerivativeOfTimeDerivative(NetId),
+    SymbolicDerivativeOfTimeDerivative,
     StopTask(StopTaskKind, PrintOnFinish),
     NodeCollapse(NetId, NetId),
 }
@@ -54,10 +54,9 @@ impl CallType for GeneralOsdiCall {
         match self {
             Self::Noise => DiamondLattice::NotAConstant,
             // derivative of constants are always zero no matter the analysis mode (nonsensical code maybe lint this?)
-            Self::TimeDerivative | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(_) => call
-                [0]
-            .clone()
-            .and_then(|_| DiamondLattice::Val(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
+            Self::TimeDerivative | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative => call[0]
+                .clone()
+                .and_then(|_| DiamondLattice::Val(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
             Self::StopTask(_, _) | Self::NodeCollapse(_, _) => unreachable!(),
         }
     }
@@ -71,25 +70,19 @@ impl CallType for GeneralOsdiCall {
         match self {
             Self::Noise => None, // TODO correct?
             // derivative of constants are always zero no matter the analysis mode (nonsensical code maybe lint this?)
-            Self::SymbolicDerivativeOfTimeDerivative(_) => {
+            Self::SymbolicDerivativeOfTimeDerivative => {
                 todo!("Does this even work? Probably not honestly")
             }
-            Self::TimeDerivative => {
-                if let Unknown::NodePotential(node) = ad.unknown {
-                    ad.derivative(&args[0]).into_option().map(|derivative| {
-                        RValue::Call(
-                            Self::SymbolicDerivativeOfTimeDerivative(node),
-                            index_vec![Spanned {
-                                contents: derivative,
-                                span
-                            }],
-                            span,
-                        )
-                    })
-                } else {
-                    todo!()
-                }
-            }
+            Self::TimeDerivative => ad.derivative(&args[0]).into_option().map(|derivative| {
+                RValue::Call(
+                    Self::SymbolicDerivativeOfTimeDerivative,
+                    index_vec![Spanned {
+                        contents: derivative,
+                        span
+                    }],
+                    span,
+                )
+            }),
             Self::StopTask(_, _) | Self::NodeCollapse(_, _) => unreachable!(),
         }
     }
@@ -107,8 +100,8 @@ impl Display for GeneralOsdiCall {
                 write!(f, "$finish({:?})", finish)
             }
             GeneralOsdiCall::NodeCollapse(hi, lo) => write!(f, "$collapse({:?}, {:?})", hi, lo),
-            GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative(node) => {
-                write!(f, "ddx(ddt(X), V({:?})) X=", node)
+            GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative => {
+                write!(f, "ddx_ddt")
             }
         }
     }
@@ -176,6 +169,17 @@ impl InputKind for GeneralOsdiInput {
 
             // (Self::Current(x), Unknown::Flow(y)) if *x == y => Derivative::One,
             (Self::Lim { hi, .. }, Unknown::NodePotential(node)) if *hi == node => Derivative::One,
+
+            (Self::Lim { hi, lo, .. }, Unknown::BranchPotential(hi_demanded, lo_demanded))
+                if (*hi == hi_demanded) & (*lo == lo_demanded) =>
+            {
+                Derivative::One
+            }
+            (Self::Lim { hi, lo, .. }, Unknown::BranchPotential(hi_demanded, lo_demanded))
+                if (*lo == hi_demanded) & (*hi == lo_demanded) =>
+            {
+                Derivative::Operand(OperandData::Constant(Scalar(Real(-1.0))))
+            }
 
             (Self::Lim { lo, .. }, Unknown::NodePotential(node)) if *lo == node => {
                 Derivative::Operand(OperandData::Constant(Scalar(Real(-1.0))))
@@ -408,6 +412,7 @@ pub fn run_frontend_from_ts<P: DiagnosticSlicePrinter>(
     eprint!("{}", diagnostic);
     let mut lowering = OsdiHirLoweringCtx { sim };
     let mir = lower_hir_userfacing_with_printer(hir, &mut lowering)?;
+
     Ok(mir)
     // if lowering.errors.is_empty() {
     //     Ok(mir)

@@ -1,5 +1,4 @@
 use crate::{middle_test, test_session, PrettyError};
-use openvaf_derivatives::generate_derivatives;
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::{MultiDiagnostic, StandardPrinter};
 use openvaf_middle::cfg::ControlFlowGraph;
@@ -9,7 +8,9 @@ use openvaf_transformations::{
     BackwardSlice, BuildPDG, CalculateDataDependence, RemoveDeadLocals, Simplify, SimplifyBranches,
     Verify,
 };
-use osdic_middle::{run_frontend, run_frontend_from_ts, GeneralOsdiCall, OsdiFunctions};
+use osdic_middle::{
+    run_frontend, run_frontend_from_ts, CircuitTopology, GeneralOsdiCall, OsdiFunctions,
+};
 use osdic_target::sim::Simulator;
 use rand::{thread_rng, Rng};
 use std::fs::File;
@@ -33,6 +34,14 @@ fn osdic_hir_lowering_test(model: &'static str, sim: &'static str) -> Result<(),
 
         for (id, module) in mir.modules.iter_enumerated() {
             let mut cfg = module.analog_cfg.borrow_mut();
+            let topology = CircuitTopology::new(&mir, &mut cfg);
+
+            let mut errors = MultiDiagnostic(Vec::new());
+            cfg.generate_derivatives(&mir, &mut errors);
+
+            if !errors.is_empty() {
+                return Err(errors.user_facing::<StandardPrinter>().into());
+            }
 
             mir.print_to_file_with_shared(main_file.join(format!("{}_osdic.mir", model)), id, &cfg)
                 .unwrap();
@@ -53,9 +62,9 @@ fn osdic_hir_lowering_test(model: &'static str, sim: &'static str) -> Result<(),
                 unreachable!("Invalid cfg resulted from simplify")
             }
 
-            drop(cfg);
-
-            let mut functions = OsdiFunctions::create_from_analog_block_by_automatic_division(&mir);
+            let mut functions = OsdiFunctions::create_from_analog_block_by_automatic_division(
+                &mir, &mut cfg, &topology,
+            );
 
             test_cfg(
                 &main_file,

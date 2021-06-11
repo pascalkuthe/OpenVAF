@@ -36,7 +36,6 @@ tracing-subscriber = "0.2"
 
 [dev-dependencies]
 
-openvaf-derivatives = {version = "0.8.0", path = "../compiler_lib/derivatives" }
 paste = "1.0"
 rand = "0.8"
 
