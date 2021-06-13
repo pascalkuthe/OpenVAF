@@ -380,7 +380,7 @@ pub struct LocalDeclaration {
 pub enum VariableLocalKind {
     User,
     #[cfg(not(feature = "arbitrary_order_derivative"))]
-    Derivative(ArrayVec<Unknown, 7>), // Aligment 
+    Derivative(ArrayVec<Unknown, 7>), // Aligment
     #[cfg(feature = "arbitrary_order_derivative")]
     Derivative,
 }
@@ -865,7 +865,7 @@ pub enum StmntKind<C: CallType> {
 
     /// No Operation (does nothing)
     /// Statements are often overwritten with NoOp instead of being deleted because its cheaper
-    NoOp, // TODO REMOVE?
+    NoOp,
 }
 
 impl<C: CallType> Display for StmntKind<C> {

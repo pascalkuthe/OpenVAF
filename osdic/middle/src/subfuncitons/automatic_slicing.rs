@@ -350,7 +350,6 @@ impl<'a> WrittenStorage<'a> {
 /// * `tainted_locations` Instructions that read data that is not available during the function (example: voltages during temperature update)
 /// * `assumed_locations` Instructions whose value is computed in other functions and can be assumed here
 /// * `output_statements` All Instructions that write to a variable (therefore considered the results of functions)
-/// * `written_vars` All variables that are written to inside of this function are added to this set
 ///
 /// # Returns
 ///
@@ -373,19 +372,19 @@ pub(super) fn function_cfg_from_full_cfg(
 ) {
     let mut cfg = full_cfg.clone();
 
-    println!(
-        "{:?}",
-        tainted_locations
-            .ones()
-            .filter_map(
-                |loc| if let LocationKind::Statement(stmnt) = locations[loc].kind {
-                    Some((locations[loc].block, stmnt))
-                } else {
-                    None
-                }
-            )
-            .collect_vec()
-    );
+    // println!(
+    //     "{:?}",
+    //     tainted_locations
+    //         .ones()
+    //         .filter_map(
+    //             |loc| if let LocationKind::Statement(stmnt) = locations[loc].kind {
+    //                 Some((locations[loc].block, stmnt))
+    //             } else {
+    //                 None
+    //             }
+    //         )
+    //         .collect_vec()
+    // );
 
     let mut allowed_locations = cfg.run_pass(ForwardSlice {
         tainted_locations: tainted_locations.clone(),

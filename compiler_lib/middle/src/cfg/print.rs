@@ -165,7 +165,8 @@ impl<C: CallType> ControlFlowGraph<C> {
                 }
 
                 LocalKind::Branch(access, branch, VariableLocalKind::User) => (
-                    format!("{0}{0}let mut {1}: real;", INDENT, local),
+                    decl.ty
+                        .with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
                     format!(
                         "Corresponds to {}({}) {:?}",
                         access, mir.branches[branch].ident, branch
@@ -179,7 +180,8 @@ impl<C: CallType> ControlFlowGraph<C> {
                     };
 
                     (
-                        format!("{0}{0}let mut {1}: real;", INDENT, local),
+                        decl.ty
+                            .with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
                         format!(
                             "Corresponds to a {} {}({}), {:?}",
                             unkowns, access, mir.branches[branch].ident, branch

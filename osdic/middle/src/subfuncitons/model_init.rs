@@ -32,6 +32,8 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 
+use tracing::debug_span;
+
 #[derive(PartialEq, Eq, Clone)]
 pub enum InitFunctionCallType {
     ParamOutOfBounds(ParameterId),
@@ -94,6 +96,9 @@ impl ModelInitFunction {
         all_output_locations: &BitSet<IntLocation>,
         storage: &StorageLocations,
     ) -> (Self, BitSet<IntLocation>) {
+        let _span = debug_span!("Model Init Function Creation");
+        let _enter = _span.enter();
+
         let mut res = Self::new_param_init(mir);
 
         let (model_init_cfg, function_output_locations, written_storage, _read_storage) =

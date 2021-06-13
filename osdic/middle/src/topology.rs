@@ -18,8 +18,10 @@ use openvaf_middle::cfg::ControlFlowGraph;
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
 use openvaf_middle::{Local, LocalKind, Mir, VariableLocalKind};
+use std::fmt::{Display, Formatter, Debug};
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
+use std::fmt;
 
 define_index_type! {
     pub struct Connection = u8;
@@ -78,6 +80,19 @@ pub struct Stamp {
 pub struct MatrixEntryInfo {
     node: NetId,
     derive_by: NetId,
+}
+
+impl Display for MatrixEntryInfo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "dI_{}/dV_{}",self.node,self.derive_by)
+    }
+}
+
+
+impl Debug for MatrixEntryInfo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self,f)
+    }
 }
 
 pub struct CircuitTopology {

@@ -28,6 +28,7 @@ use openvaf_transformations::{
 use std::fs::File;
 pub use subfuncitons::OsdiFunctions;
 pub use topology::CircuitTopology;
+use tracing::info;
 
 mod frontend;
 mod lim;
@@ -49,60 +50,39 @@ pub fn run_middle<P: DiagnosticSlicePrinter>(
     }
     cfg.insert_variable_declarations(&mir);
 
-    // cfg.blocks[START_BLOCK].statements.raw.splice(
-    //     0..0,
-    //     cfg.locals.iter_enumerated().filter_map(|(local, decl)| {
-    //         if matches!(decl.kind, LocalKind::Branch(_, _, _)) {
-    //             Some((
-    //                 StmntKind::Assignment(
-    //                     local,
-    //                     RValue::Use(Spanned {
-    //                         span: DUMMY_SP,
-    //                         contents: OperandData::Constant(Scalar(Real(0.0))),
-    //                     }),
-    //                 ),
-    //                 SyntaxCtx::ROOT,
-    //             ))
-    //         } else {
-    //             None
-    //         }
-    //     }),
-    // );
-
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
-
-    cfg.run_pass(ConstantPropagation::default());
-
-    let mut zero_init = HashMap::new();
-    let output_locals: Vec<_> = cfg
-        .locals
-        .iter_enumerated()
-        .filter_map(|(local, dcl)| {
-            if let LocalKind::Branch(_, _, _) = dcl.kind {
-                zero_init.insert(local, Scalar(Real(0.0)));
-                Some(local)
+    cfg.blocks[START_BLOCK].statements.raw.splice(
+        0..0,
+        cfg.locals.iter_enumerated().filter_map(|(local, decl)| {
+            if matches!(decl.kind, LocalKind::Branch(_, _, _)) {
+                Some((
+                    StmntKind::Assignment(
+                        local,
+                        RValue::Use(Spanned {
+                            span: DUMMY_SP,
+                            contents: OperandData::Constant(Scalar(Real(0.0))),
+                        }),
+                    ),
+                    SyntaxCtx::ROOT,
+                ))
             } else {
                 None
             }
-        })
-        .collect();
-
-    let block_constants = cfg.fold_constants(&NoInputConstResolution::new(), zero_init);
-
-    let constant_at_iteration_end = &block_constants.out_sets[cfg.end()].constants;
-
-    //cfg.write_constants(block_constants.in_sets, &NoInputConstResolution::new());
-
-    let locations = cfg.intern_locations();
-
-    // cfg.run_pass(DeadCodeElimination::with_output_locals(
-    //     &locations,
-    //     output_locals,
-    // ));
+        }),
+    );
 
     cfg.run_pass(Simplify);
     cfg.run_pass(SimplifyBranches);
+
+    let block_constants = cfg.fold_constants(&NoInputConstResolution::new(), HashMap::new());
+
+    let constant_at_iteration_end = &block_constants.out_sets[cfg.end()].constants;
+
+    cfg.write_constants(block_constants.in_sets, &NoInputConstResolution::new());
+
+    let locations = cfg.intern_locations();
+
+    topology.removed_const_zero_derivatives(constant_at_iteration_end);
+
     let local_map = cfg.run_pass(RemoveDeadLocals);
 
     for connection in &mut topology.connections {
@@ -113,13 +93,28 @@ pub fn run_middle<P: DiagnosticSlicePrinter>(
         }
     }
 
-    topology.removed_const_zero_derivatives(constant_at_iteration_end);
     topology.create_matrix_entires(&mir);
 
-    println!(
-        "Derivatives: {:?}",
-        topology.matrix_stamp_locals.ones().collect_vec()
+    info!(
+        derivatives = debug(topology.matrix_stamp_locals.ones().collect_vec()),
+        matrix_entries = debug(&topology.matrix_entries),
+        "Completed analog block analysis!",
     );
+
+    let mut output_locals = topology.matrix_stamp_locals.clone();
+    for (local, decl) in cfg.locals.iter_enumerated() {
+        if matches!(decl.kind, LocalKind::Branch(_, _, VariableLocalKind::User)) {
+            output_locals.insert(local)
+        }
+    }
+
+    cfg.run_pass(DeadCodeElimination::with_output_locals(
+        &locations,
+        output_locals,
+    ));
+
+    cfg.run_pass(Simplify);
+    cfg.run_pass(SimplifyBranches);
 
     let mut storage = StorageLocations::new(&cfg);
 

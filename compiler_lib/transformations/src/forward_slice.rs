@@ -9,8 +9,11 @@
  */
 
 use crate::program_dependence::InvProgramDependenceGraph;
+use itertools::Itertools;
 use openvaf_data_structures::{BitSet, WorkQueue};
-use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, IntLocation, InternedLocations};
+use openvaf_middle::cfg::{
+    CfgPass, ControlFlowGraph, IntLocation, InternedLocations, LocationKind,
+};
 use openvaf_middle::{impl_pass_span, CallType};
 use std::collections::VecDeque;
 use std::iter::FromIterator;
@@ -85,19 +88,29 @@ impl<'a> ForwardSlice<'a> {
             }
 
             if TAINT_CONTROL_DEPENDENCIES {
-                if let Some(control_dependencents) = &pdg.control_dependencies[locations[loc].block]
-                {
-                    for control_dependent_bb in control_dependencents.ones() {
-                        let mut loc = locations[control_dependent_bb].stmnt_start;
-                        let tainted_blck_statements = cfg.blocks[control_dependent_bb]
-                            .statements
-                            .indices()
-                            .map(|_| {
-                                let res = loc;
-                                loc += 1;
-                                res
-                            });
-                        work_queue.extend(tainted_blck_statements)
+                if matches!(locations[loc].kind, LocationKind::Terminator) {
+                    if let Some(control_dependencents) =
+                        &pdg.control_dependencies[locations[loc].block]
+                    {
+                        for control_dependent_bb in control_dependencents.ones() {
+                            let tainted_locations =
+                                (locations[control_dependent_bb].phi_start.raw()
+                                    ..=locations[control_dependent_bb].terminator.raw())
+                                    .map(|loc| IntLocation::from_raw_unchecked(loc));
+
+                            trace!(
+                                locations = debug(
+                                    tainted_locations
+                                        .clone()
+                                        .map(|loc| locations[loc])
+                                        .collect_vec()
+                                ),
+                                src = debug(locations[loc].block),
+                                dst = debug(control_dependent_bb),
+                                "Control dependent",
+                            );
+                            work_queue.extend(tainted_locations)
+                        }
                     }
                 }
             }

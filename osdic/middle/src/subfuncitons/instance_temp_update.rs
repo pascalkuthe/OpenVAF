@@ -27,6 +27,7 @@ use openvaf_session::sourcemap::Span;
 use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
+use tracing::debug_span;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum InstanceTempUpdateCallType {}
@@ -145,6 +146,9 @@ impl InstanceTempUpdateFunction {
         all_output_stmnts: &BitSet<IntLocation>,
         storage: &StorageLocations,
     ) -> (Self, BitSet<IntLocation>) {
+        let _span = debug_span!("Instance Temp Update Function Creation");
+        let _enter = _span.enter();
+
         let (cfg, function_output_locations, written_vars, read_vars) = function_cfg_from_full_cfg(
             cfg,
             tainted_locations,

@@ -16,7 +16,7 @@ use crate::{optimize_cfg, CircuitTopology};
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 use openvaf_data_structures::{BitSet, WorkQueue};
 use openvaf_hir::{BranchId, NetId, Type, Unknown};
-use openvaf_ir::ids::PortId;
+use openvaf_ir::ids::{PortId, SyntaxCtx};
 use openvaf_ir::{PrintOnFinish, Spanned, StopTaskKind};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, LocationKind};
 use openvaf_middle::const_fold::DiamondLattice;
@@ -37,6 +37,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::iter::FromIterator;
 
 use openvaf_data_structures::index_vec::index_vec;
+use openvaf_session::sourcemap::span::DUMMY_SP;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum AcLoadFunctionCall {
@@ -253,88 +254,132 @@ impl LoadFunctions {
         //     set: ac_assumed.clone(),
         // };
 
-        let mut forward_queue = WorkQueue {
-            deque: VecDeque::from_iter(
-                tainted
-                    .by_time_derivative
-                    .ones()
-                    .chain(tainted.by_stamp_write.ones()),
-            ),
+        let mut work_queue = WorkQueue {
+            deque: VecDeque::from_iter(tainted.by_time_derivative.ones()),
             set: ac_assumed.clone(),
         };
 
-        for (local, decl) in ac_load.locals.iter_mut_enumerated() {
-            if topology.matrix_stamp_locals.contains(local) {
-                decl.ty = Type::CMPLX
-            }
+        // Convert all stamps to cmplx
+        for local in topology.matrix_stamp_locals.ones() {
+            ac_load.locals[local].ty = Type::CMPLX
         }
 
-        let mut complex_locals = index_vec![None; cfg.locals.len()];
+        let mut new_locals = index_vec![None; cfg.locals.len()];
 
-        loop {
-            if let Some(forward_loc) = forward_queue.take() {
-                let bb = locations[forward_loc].block;
-                if let LocationKind::Statement(stmnt) = locations[forward_loc].kind {
-                    if let StmntKind::Assignment(ref mut dst, ref mut val) =
-                        ac_load.blocks[bb].statements[stmnt].0
-                    {
-                        if matches!(
-                            val,
-                            SingleArgMath(_, _) | DoubleArgMath(_, _, _) | Comparison(_, _, _, _)
-                        ) {
-                            todo!()
-                        }
+        // Make everything cmplx that is calculated from time derivatives (and is therefore potentially cmplx)
+        while let Some(location) = work_queue.take() {
+            let bb = locations[location].block;
+            if let LocationKind::Statement(stmnt) = locations[location].kind {
+                if let StmntKind::Assignment(ref mut dst, ref mut val) =
+                    ac_load.blocks[bb].statements[stmnt].0
+                {
+                    if matches!(val, SingleArgMath(_, _) | DoubleArgMath(_, _, _)) {
+                        todo!("Complex math")
+                    }
 
-                        debug_assert!(matches!(ac_load.locals[*dst].ty, Type::REAL | Type::CMPLX));
+                    if matches!(val, Comparison(_, _, _, _)) {
+                        todo!("No error that complex comparisons are not defined")
+                    }
 
-                        if matches!(ac_load.locals[*dst].kind, LocalKind::Variable(_, _)) {
-                            let locals = &mut ac_load.locals;
-                            *dst = *complex_locals[*dst].get_or_insert_with(|| {
-                                locals.push(LocalDeclaration {
-                                    kind: locals[*dst].kind.clone(),
-                                    ty: Type::CMPLX,
-                                })
+                    debug_assert!(matches!(ac_load.locals[*dst].ty, Type::REAL | Type::CMPLX));
+
+                    if matches!(ac_load.locals[*dst].kind, LocalKind::Variable(_, _)) {
+                        let locals = &mut ac_load.locals;
+                        *dst = *new_locals[*dst].get_or_insert_with(|| {
+                            locals.push(LocalDeclaration {
+                                kind: locals[*dst].kind.clone(),
+                                ty: Type::CMPLX,
                             })
-                        } else {
-                            // Branch locals are already cmplx
-                            // Temporaries are only written once we can simply change the type :)
-                            ac_load.locals[*dst].ty = Type::CMPLX
-                        }
-
-                        if let RValue::Use(op) = val {
-                            *val = RValue::Cast(op.clone())
-                        }
-
-                        if let Some(ref dependents) =
-                            inv_pdg.data_dependencies.def_use_chains[forward_loc]
-                        {
-                            forward_queue.extend(dependents.ones())
-                        }
+                        })
                     } else {
-                        unreachable!()
+                        // Branch locals are already cmplx
+                        // Temporaries are only written once we can simply change the type :)
+                        ac_load.locals[*dst].ty = Type::CMPLX
+                    }
+
+                    if let RValue::Use(op) = val {
+                        *val = RValue::Cast(op.clone())
+                    }
+
+                    if let Some(ref dependents) = inv_pdg.data_dependencies.def_use_chains[location]
+                    {
+                        work_queue.extend(dependents.ones())
                     }
                 } else {
-                    todo!("Fuck this (for now)")
+                    unreachable!()
                 }
-            }
-
-            if forward_queue.is_empty()
-            /*| rev_queue.is_empty()*/
-            {
-                break;
+            } else {
+                todo!("Nice errors for cmplx number comparisons (maybe even allow to skip SS)");
+                todo!("Can phis with real values acctually occure? Far as I am aware they are only used for logical or/and so they are always integers")
             }
         }
 
-        ac_load.for_locals_mut(|local| {
-            *local = complex_locals[*local].unwrap_or(*local);
-        });
+        // Handle stamps without imaginary component (because analog filter may not appear conditinally we can assume a stamp is either always imaginary or never)
+        work_queue.extend(tainted.by_stamp_write.ones());
+
+        while let Some(location) = work_queue.take() {
+            let bb = locations[location].block;
+            if let LocationKind::Statement(stmnt) = locations[location].kind {
+                if let StmntKind::Assignment(ref mut dst, ref mut val) =
+                    ac_load.blocks[bb].statements[stmnt].0
+                {
+                    let locals = &mut ac_load.locals;
+                    *dst = *new_locals[*dst].get_or_insert_with(|| {
+                        locals.push(LocalDeclaration {
+                            kind: locals[*dst].kind.clone(),
+                            ty: Type::REAL,
+                        })
+                    });
+                }
+            } else {
+                todo!("Nice errors for cmplx number comparisons (maybe even allow to skip SS)");
+                todo!("Can phis with real values acctually occure? Far as I am aware they are only used for logical or/and so they are always integers")
+            }
+        }
+
+        // Update statements that were converted to to use new variables
+        for location in work_queue.set.difference(&ac_assumed) {
+            let bb = locations[location].block;
+            if let LocationKind::Statement(stmnt) = locations[location].kind {
+                if let StmntKind::Assignment(_, ref mut val) =
+                    ac_load.blocks[bb].statements[stmnt].0
+                {
+                    for local in val.locals_mut() {
+                        if let Some(new_val) = new_locals[*local] {
+                            *local = new_val
+                        }
+                    }
+                }
+            } else {
+                todo!("Nice errors for cmplx number comparisons (maybe even allow to skip SS)");
+                todo!("Can phis with real values acctually occure? Far as I am aware they are only used for logical or/and so they are always integers")
+            }
+        }
 
         ac_load.run_pass(Strip {
             retain: &ac_load_locations,
             locations,
         });
 
+        let real_to_cmplx = topology.matrix_stamp_locals.ones().filter_map(|stamp| {
+            new_locals[stamp].map(|real_stamp| {
+                (
+                    StmntKind::Assignment(
+                        stamp,
+                        RValue::Cast(Spanned {
+                            span: DUMMY_SP,
+                            contents: OperandData::Copy(real_stamp),
+                        }),
+                    ),
+                    SyntaxCtx::ROOT,
+                )
+            })
+        });
+        let end = ac_load.end();
+        ac_load.blocks[end].statements.extend(real_to_cmplx);
+
         let mut ac_load = ac_load.map(&mut GeneralToAcLoad);
+
         optimize_cfg(&mut ac_load);
 
         ac_load

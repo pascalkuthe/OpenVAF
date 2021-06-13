@@ -26,6 +26,7 @@ use openvaf_session::sourcemap::Span;
 use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
+use tracing::debug_span;
 
 pub type ModelTempUpdateCfg = ControlFlowGraph<ModelTempUpdateCallType>;
 
@@ -146,6 +147,9 @@ impl ModelTempUpdateFunction {
         all_output_stmnts: &BitSet<IntLocation>,
         storage: &StorageLocations,
     ) -> (Self, BitSet<IntLocation>) {
+        let _span = debug_span!("Model Temp Update Function Creation");
+        let _enter = _span.enter();
+
         let (cfg, function_output_locations, written_storage, read_storage) =
             function_cfg_from_full_cfg(
                 cfg,
