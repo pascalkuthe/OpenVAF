@@ -1,10 +1,22 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::GeneralOsdiCall;
-use openvaf_data_structures::index_vec::{define_index_type, index_vec, IndexVec};
+use openvaf_data_structures::index_vec::{define_index_type, index_vec, IndexSlice, IndexVec};
 use openvaf_data_structures::{BitSet, HashMap, HashSet};
 use openvaf_hir::{BranchId, DisciplineAccess};
 use openvaf_ir::ids::NetId;
-use openvaf_ir::Unknown;
+use openvaf_ir::{ConstVal, Unknown};
 use openvaf_middle::cfg::ControlFlowGraph;
+use openvaf_middle::osdi_types::ConstVal::Scalar;
+use openvaf_middle::osdi_types::SimpleConstVal::Real;
 use openvaf_middle::{Local, LocalKind, Mir, VariableLocalKind};
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
@@ -103,35 +115,74 @@ impl CircuitTopology {
             matrix_stamp_locals: BitSet::new_empty(cfg.locals.len_idx()),
         };
 
-        for connection in &connections {
+        res.connections = connections;
+        res
+    }
+
+    pub fn removed_const_zero_derivatives(
+        &mut self,
+        exit_node_constants: &HashMap<Local, ConstVal>,
+    ) {
+        for connection in self.connections.iter_mut() {
+            for dst in &mut connection.derivatives {
+                if let Some(derivative) = dst {
+                    if matches!(exit_node_constants.get(&derivative), Some(Scalar(Real(val))) if *val == 0.0)
+                    {
+                        *dst = None
+                    } // TODO warn on const non zero derivative close to zero
+                }
+            }
+        }
+    }
+
+    pub fn update_locals(&mut self, local_map: &IndexSlice<Local, Local>) {}
+
+    pub fn create_matrix_entires(&mut self, mir: &Mir<GeneralOsdiCall>) {
+        for connection in &self.connections {
             for (branch, derivative) in connection.derivatives.iter_enumerated() {
                 if let Some(derivative) = derivative {
-                    let hi_by_hi = res.create_matrix_entry(connection.hi, mir[branch].hi);
-                    let lo_by_lo = res.create_matrix_entry(connection.lo, mir[branch].lo);
-                    let hi_by_lo = res.create_matrix_entry(connection.hi, mir[branch].lo);
-                    let lo_by_hi = res.create_matrix_entry(connection.lo, mir[branch].hi);
+                    let hi_by_hi = Self::create_matrix_entry(
+                        &mut self.matrix_entries,
+                        connection.hi,
+                        mir[branch].hi,
+                    );
+                    let lo_by_lo = Self::create_matrix_entry(
+                        &mut self.matrix_entries,
+                        connection.lo,
+                        mir[branch].lo,
+                    );
+                    let hi_by_lo = Self::create_matrix_entry(
+                        &mut self.matrix_entries,
+                        connection.hi,
+                        mir[branch].lo,
+                    );
+                    let lo_by_hi = Self::create_matrix_entry(
+                        &mut self.matrix_entries,
+                        connection.lo,
+                        mir[branch].hi,
+                    );
 
-                    res.matrix_stamp_locals.insert(*derivative);
+                    self.matrix_stamp_locals.insert(*derivative);
 
-                    res.matrix_stamps.push(Stamp {
+                    self.matrix_stamps.push(Stamp {
                         matrix_entry: hi_by_hi,
                         neg: false,
                         val: *derivative,
                     });
 
-                    res.matrix_stamps.push(Stamp {
+                    self.matrix_stamps.push(Stamp {
                         matrix_entry: lo_by_lo,
                         neg: false,
                         val: *derivative,
                     });
 
-                    res.matrix_stamps.push(Stamp {
+                    self.matrix_stamps.push(Stamp {
                         matrix_entry: hi_by_lo,
                         neg: false,
                         val: *derivative,
                     });
 
-                    res.matrix_stamps.push(Stamp {
+                    self.matrix_stamps.push(Stamp {
                         matrix_entry: lo_by_hi,
                         neg: false,
                         val: *derivative,
@@ -139,17 +190,19 @@ impl CircuitTopology {
                 }
             }
         }
-
-        res.connections = connections;
-        res
     }
 
-    fn create_matrix_entry(&mut self, node: NetId, derive_by: NetId) -> MatrixEntry {
-        if let Some(entry) = self.find_matrix_entry(node, derive_by) {
+    fn create_matrix_entry(
+        matrix_entries: &mut IndexVec<MatrixEntry, MatrixEntryInfo>,
+        node: NetId,
+        derive_by: NetId,
+    ) -> MatrixEntry {
+        if let Some(entry) =
+            matrix_entries.position(|x| (x.node == node) & (x.derive_by == derive_by))
+        {
             entry
         } else {
-            self.matrix_entries
-                .push(MatrixEntryInfo { node, derive_by })
+            matrix_entries.push(MatrixEntryInfo { node, derive_by })
         }
     }
 
@@ -158,7 +211,7 @@ impl CircuitTopology {
             .position(|x| (x.node == node) & (x.derive_by == derive_by))
     }
 
-    pub fn is_connected(&self, mut node_a: NetId, mut node_b: NetId) -> bool {
+    pub fn is_connected(&self, node_a: NetId, node_b: NetId) -> bool {
         self.find_connection(node_a, node_b).is_some()
     }
 

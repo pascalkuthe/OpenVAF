@@ -1,17 +1,20 @@
-//  * ******************************************************************************************
-//  * Copyright (c) 2020 Pascal Kuthe. This file is part of the OpenVAF project.
-//  * It is subject to the license terms in the LICENSE file found in the top-level directory
-//  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
-//  *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
-//  *  distributed except according to the terms contained in the LICENSE file.
-//  * *******************************************************************************************
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
 
 use std::fmt::{Display, Formatter};
 
 use crate::Token;
+use itertools::Itertools;
 use lalrpop_util::{ErrorRecovery, ParseError};
 use more_asserts::{assert_le, assert_lt, debug_assert_le, debug_assert_lt};
-use openvaf_diagnostics::{format_list, ListFormatter};
+use openvaf_diagnostics::ListFormatter;
 use openvaf_diagnostics::{AnnotationType, DiagnosticSlice, FooterItem, LibraryDiagnostic, Text};
 use openvaf_session::sourcemap::Span;
 use openvaf_session::symbols::Symbol;
@@ -100,7 +103,7 @@ impl LibraryDiagnostic for Error {
                 label: Text::owned(format!(
                     "{} accepts {} arguments",
                     call,
-                    format_list::<Vec<u8>>((missmatch.at_least..=missmatch.at_most).collect())
+                    ListFormatter::new((missmatch.at_least..=missmatch.at_most).collect_vec())
                 )),
                 annotation_type: AnnotationType::Help,
             }],
@@ -382,5 +385,5 @@ fn human_expected(mut expected: Vec<String>) -> ListFormatter<Vec<String>> {
             _ => {}
         }
     }
-    format_list(expected)
+    ListFormatter::new(expected)
 }

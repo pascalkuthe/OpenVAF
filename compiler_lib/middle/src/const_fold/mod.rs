@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 #![allow(clippy::float_cmp)]
@@ -17,7 +17,7 @@ use openvaf_data_structures::index_vec::IndexSlice;
 use openvaf_session::sourcemap::Span;
 use osdi_types::ConstVal::Scalar;
 use osdi_types::SimpleConstVal::{Bool, Integer, Real};
-use osdi_types::Type;
+use osdi_types::{Complex64, Type};
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display};
@@ -28,8 +28,9 @@ use DiamondLattice::{NotAConstant, Unknown, Val};
 type CallResolverOperand<R> = COperand<<R as CallResolver>::C>;
 
 mod propagation;
-use crate::const_fold::propagation::BasicBlockConstants;
-pub use propagation::ConstantPropagation;
+use crate::osdi_types::SimpleConstVal::Cmplx;
+use itertools::Itertools;
+pub use propagation::{BasicBlockConstants, ConstantPropagation};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DiamondLattice {
@@ -131,15 +132,17 @@ macro_rules! undefined_operation {
 /// but not the other
 pub trait CallResolver: Debug {
     type C: CallType;
-    fn resolve_call(
-        &self,
-        input: &Self::C,
-        args: &IndexSlice<CallArg, [COperand<Self::C>]>,
-    ) -> DiamondLattice;
+
     fn resolve_input(&self, input: &<Self::C as CallType>::I) -> DiamondLattice;
 }
 
 pub struct NoInputConstResolution<C>(PhantomData<fn(&C)>);
+
+impl<C> NoInputConstResolution<C> {
+    pub fn new() -> Self {
+        Self(PhantomData)
+    }
+}
 
 impl<C> Debug for NoInputConstResolution<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -155,13 +158,6 @@ impl<C> Display for NoInputConstResolution<C> {
 
 impl<C: CallType> CallResolver for NoInputConstResolution<C> {
     type C = C;
-    fn resolve_call(
-        &self,
-        _call: &C,
-        _args: &IndexSlice<CallArg, [COperand<C>]>,
-    ) -> DiamondLattice {
-        DiamondLattice::NotAConstant
-    }
 
     fn resolve_input(&self, _input: &<C as CallType>::I) -> DiamondLattice {
         DiamondLattice::NotAConstant
@@ -174,10 +170,13 @@ struct ConstantFold<'lt, R: CallResolver, P: Borrow<BasicBlockConstants>> {
 }
 
 impl<'lt, R: CallResolver, P: BorrowMut<BasicBlockConstants>> ConstantFold<'lt, R, P> {
-    fn resolve_statement(&mut self, dst: Local, rvalue: &RValue<R::C>, ty: Type) -> DiamondLattice {
-        let res = fold_rvalue(self, rvalue, ty);
-        self.locals.borrow_mut().write_lattice(dst, res.clone());
-        res
+    fn resolve_statement(&mut self, dst: Local, rvalue: &RValue<R::C>, ty: Type) {
+        let res = self.resolve_rvalue(rvalue, ty);
+        self.locals.borrow_mut().write_lattice(dst, res);
+    }
+
+    fn resolve_rvalue(&mut self, rvalue: &RValue<R::C>, ty: Type) -> DiamondLattice {
+        fold_rvalue(self, rvalue, ty)
     }
 }
 
@@ -206,6 +205,22 @@ impl<'lt, R: CallResolver, P: Borrow<BasicBlockConstants>> ConstantFold<'lt, R, 
         self.resolve_operand(arg).map(|arg| {
             if let Scalar(Real(val)) = arg {
                 Scalar(Real(eval(val)))
+            } else {
+                undefined_operation!(span; op,arg)
+            }
+        })
+    }
+
+    fn eval_cmplx(
+        &self,
+        arg: &CallResolverOperand<R>,
+        eval: impl FnOnce(Complex64) -> Complex64,
+        op: &'static str,
+        span: Span,
+    ) -> DiamondLattice {
+        self.resolve_operand(arg).map(|arg| {
+            if let Scalar(Cmplx(val)) = arg {
+                Scalar(Cmplx(eval(val)))
             } else {
                 undefined_operation!(span; op,arg)
             }
@@ -292,6 +307,22 @@ impl<'lt, R: CallResolver, P: Borrow<BasicBlockConstants>> ConstantFold<'lt, R, 
         })
     }
 
+    fn eval_bin_cmplx(
+        &self,
+        lhs: &CallResolverOperand<R>,
+        rhs: &CallResolverOperand<R>,
+        eval: impl FnOnce(Complex64, Complex64) -> Complex64,
+        op: &'static str,
+        span: Span,
+    ) -> DiamondLattice {
+        let lhs = self.resolve_operand(lhs);
+        let rhs = self.resolve_operand(rhs);
+        lhs.apply_binary_op(rhs, |lhs, rhs| match (lhs, rhs) {
+            (Scalar(Cmplx(lhs)), Scalar(Cmplx(rhs))) => Scalar(Cmplx(eval(lhs, rhs))),
+            (lhs, rhs) => undefined_operation!(span; op, lhs, rhs),
+        })
+    }
+
     fn eval_bin_int(
         &self,
         lhs: &CallResolverOperand<R>,
@@ -330,6 +361,10 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
 {
     type T = DiamondLattice;
 
+    fn fold_cmplx_arith_negate(&mut self, op: Span, arg: &CallResolverOperand<R>) -> Self::T {
+        self.eval_cmplx(arg, Complex64::neg, "Complex Negate", op)
+    }
+
     fn fold_real_arith_negate(&mut self, op: Span, arg: &CallResolverOperand<R>) -> Self::T {
         self.eval_real(arg, f64::neg, "Real Negate", op)
     }
@@ -346,6 +381,22 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
         self.eval_bool(arg, |arg| !arg, "Integer Negate", op)
     }
 
+    fn fold_cmplx_add(
+        &mut self,
+        op: Span,
+        lhs: &CallResolverOperand<R>,
+        rhs: &CallResolverOperand<R>,
+    ) -> Self::T {
+        let lhs = self.resolve_operand(lhs);
+        let rhs = self.resolve_operand(rhs);
+        lhs.apply_binary_op(rhs, |lhs, rhs| match (lhs, rhs) {
+            (Scalar(Cmplx(lhs)), Scalar(Cmplx(rhs))) => Scalar(Cmplx(lhs + rhs)),
+            (Scalar(Cmplx(lhs)), Scalar(Real(rhs))) => Scalar(Cmplx(lhs + rhs)),
+            (Scalar(Real(lhs)), Scalar(Cmplx(rhs))) => Scalar(Cmplx(lhs + rhs)),
+            (lhs, rhs) => undefined_operation!(op; "Complex Summation", lhs, rhs),
+        })
+    }
+
     fn fold_real_add(
         &mut self,
         op: Span,
@@ -355,6 +406,22 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
         self.eval_bin_real(lhs, rhs, f64::add, "Real Summation", op)
     }
 
+    fn fold_cmplx_sub(
+        &mut self,
+        op: Span,
+        lhs: &CallResolverOperand<R>,
+        rhs: &CallResolverOperand<R>,
+    ) -> Self::T {
+        let lhs = self.resolve_operand(lhs);
+        let rhs = self.resolve_operand(rhs);
+        lhs.apply_binary_op(rhs, |lhs, rhs| match (lhs, rhs) {
+            (Scalar(Cmplx(lhs)), Scalar(Cmplx(rhs))) => Scalar(Cmplx(lhs - rhs)),
+            (Scalar(Cmplx(lhs)), Scalar(Real(rhs))) => Scalar(Cmplx(lhs - rhs)),
+            (Scalar(Real(lhs)), Scalar(Cmplx(rhs))) => Scalar(Cmplx(lhs - rhs)),
+            (lhs, rhs) => undefined_operation!(op; "Complex Subtraction", lhs, rhs),
+        })
+    }
+
     fn fold_real_sub(
         &mut self,
         op: Span,
@@ -362,6 +429,42 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
         rhs: &CallResolverOperand<R>,
     ) -> Self::T {
         self.eval_bin_real(lhs, rhs, f64::sub, "Real Subtraction", op)
+    }
+
+    fn fold_cmplx_mul(
+        &mut self,
+        op: Span,
+        lhs: &CallResolverOperand<R>,
+        rhs: &CallResolverOperand<R>,
+    ) -> Self::T {
+        let lhs = self.resolve_operand(lhs);
+        let rhs = self.resolve_operand(rhs);
+        match (lhs, rhs) {
+            (Val(Scalar(Cmplx(arg1))), Val(Scalar(Cmplx(arg2)))) => Val(Scalar(Cmplx(arg1 * arg2))),
+            (Val(Scalar(Cmplx(arg1))), Val(Scalar(Real(arg2)))) => Val(Scalar(Cmplx(arg1 * arg2))),
+            (Val(Scalar(Real(arg1))), Val(Scalar(Cmplx(arg2)))) => Val(Scalar(Cmplx(arg1 * arg2))),
+
+            (Val(arg1), Val(arg2)) => {
+                undefined_operation!(op; "Complex Multiplication", arg1, arg2)
+            }
+
+            (Val(Scalar(Cmplx(arg))), _) | (_, Val(Scalar(Cmplx(arg))))
+                if arg == Complex64::new(0.0, 0.0) =>
+            {
+                Val(Scalar(Cmplx(Complex64::new(0.0, 0.0))))
+            }
+
+            (Val(Scalar(Real(arg))), _) | (_, Val(Scalar(Real(arg)))) if arg == 0.0 => {
+                Val(Scalar(Cmplx(Complex64::new(0.0, 0.0))))
+            }
+
+            (NotAConstant, _) | (_, NotAConstant) => NotAConstant,
+
+            (lhs, rhs) => {
+                println!("Not a constant {:?} {:?}", lhs, rhs);
+                Unknown
+            }
+        }
     }
 
     fn fold_real_mul(
@@ -384,6 +487,38 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
             (NotAConstant, _) | (_, NotAConstant) => NotAConstant,
 
             _ => Unknown,
+        }
+    }
+
+    fn fold_cmplx_div(
+        &mut self,
+        op: Span,
+        lhs: &CallResolverOperand<R>,
+        rhs: &CallResolverOperand<R>,
+    ) -> Self::T {
+        let lhs = self.resolve_operand(lhs);
+        let rhs = self.resolve_operand(rhs);
+        match (lhs, rhs) {
+            (Val(Scalar(Cmplx(arg1))), Val(Scalar(Cmplx(arg2)))) => Val(Scalar(Cmplx(arg1 / arg2))),
+            (Val(Scalar(Real(arg1))), Val(Scalar(Cmplx(arg2)))) => Val(Scalar(Cmplx(arg1 / arg2))),
+            (Val(Scalar(Cmplx(arg1))), Val(Scalar(Real(arg2)))) => Val(Scalar(Cmplx(arg1 / arg2))),
+
+            (Val(arg1), Val(arg2)) => undefined_operation!(op; "Complex Division", arg1, arg2),
+
+            (Val(Scalar(Cmplx(arg))), _) if arg == Complex64::new(0.0, 0.0) => {
+                Val(Scalar(Cmplx(Complex64::new(0.0, 0.0))))
+            }
+
+            (Val(Scalar(Real(arg))), _) if arg == 0.0 => {
+                Val(Scalar(Cmplx(Complex64::new(0.0, 0.0))))
+            }
+
+            (NotAConstant, _) | (_, NotAConstant) => NotAConstant,
+
+            (lhs, rhs) => {
+                println!("Not a constant {:?} {:?}", lhs, rhs);
+                Unknown
+            }
         }
     }
 
@@ -718,6 +853,10 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
         self.eval_real(arg, f64::sqrt, "SQRT", span)
     }
 
+    fn fold_cmplx_abs(&mut self, span: Span, arg: &CallResolverOperand<R>) -> Self::T {
+        todo!()
+    }
+
     fn fold_real_abs(&mut self, span: Span, arg: &CallResolverOperand<R>) -> Self::T {
         self.eval_real(arg, f64::abs, "Real ABS", span)
     }
@@ -872,6 +1011,11 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
                 (Type::BOOL, Scalar(Real(val))) => Scalar(Bool(val != 0.0)),
                 (Type::INT, Scalar(Real(val))) => Scalar(Integer(val.round() as i64)),
                 (Type::INT, Scalar(Bool(val))) => Scalar(Integer(val as i64)),
+                (Type::CMPLX, Scalar(Real(val))) => Scalar(Cmplx(Complex64::new(val, 0.0))),
+                (Type::CMPLX, Scalar(Integer(val))) => {
+                    Scalar(Cmplx(Complex64::new(val as f64, 0.0)))
+                }
+
                 // TODO array casts?
                 _ => unreachable!("Malformed MIR"),
             }
@@ -902,7 +1046,8 @@ impl<'lt, P: Borrow<BasicBlockConstants>, R: CallResolver> RValueFold<R::C>
         args: &IndexSlice<CallArg, [CallResolverOperand<R>]>,
         span: Span,
     ) -> Self::T {
-        self.resolver.resolve_call(call, args)
+        let args = args.iter().map(|op| self.resolve_operand(op)).collect_vec();
+        call.const_fold(&args)
     }
 
     fn fold_array(&mut self, args: &[CallResolverOperand<R>], _span: Span, ty: Type) -> Self::T {

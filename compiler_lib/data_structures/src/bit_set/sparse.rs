@@ -1,13 +1,12 @@
 /*
-
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the OpenVAF project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
-*/
+ *  *****************************************************************************************
+ */
 
 use crate::BitSet;
 use arrayvec::ArrayVec;
@@ -22,7 +21,7 @@ use std::slice;
 ///
 /// This type is used by `HybridBitSet`; do not use directly.
 #[derive(Clone, Debug)]
-pub struct SparseBitSet<T>(pub(super) ArrayVec<[T; SPARSE_MAX]>);
+pub struct SparseBitSet<T>(pub(super) ArrayVec<T, SPARSE_MAX>);
 
 const fn sparse_max<T>() -> usize {
     let x = (2 * size_of::<FixedBitSet>() - 1) / size_of::<T>();

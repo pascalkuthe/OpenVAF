@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use openvaf_data_structures::BitSet;
@@ -321,10 +321,7 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     | (BinOp::Multiply, Type::CMPLX, Type::CMPLX)
                     | (BinOp::Divide, Type::REAL, Type::CMPLX)
                     | (BinOp::Divide, Type::CMPLX, Type::REAL)
-                    | (BinOp::Divide, Type::CMPLX, Type::CMPLX)
-                    | (BinOp::Modulus, Type::REAL, Type::CMPLX)
-                    | (BinOp::Modulus, Type::CMPLX, Type::REAL)
-                    | (BinOp::Modulus, Type::CMPLX, Type::CMPLX) => Type::CMPLX,
+                    | (BinOp::Divide, Type::CMPLX, Type::CMPLX) => Type::CMPLX,
 
                     (BinOp::Xor, Type::BOOL, Type::BOOL)
                     | (BinOp::NXor, Type::BOOL, Type::BOOL)
@@ -345,6 +342,7 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 let ty = arg.contents.ty(self.mir, self.cfg);
                 match (op.contents, ty) {
                     (SingleArgMath::Abs, Type::INT) => Type::INT,
+                    (_, Type::CMPLX) => Type::CMPLX,
                     (_, Type::REAL) => Type::REAL,
                     (_, _) => {
                         self.errors.push(Malformation {
@@ -368,6 +366,7 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 match (op.contents, arg1_ty) {
                     (DoubleArgMath::Min, Type::INT) | (DoubleArgMath::Max, Type::INT) => Type::INT,
                     (_, Type::REAL) => Type::REAL,
+                    // (DoubleArgMath::Pow|DoubleArgMath::Hypot|DoubleArgMath::ArcTan2, Type::CMPLX) => Type::CMPLX, TODO CMPLX numbers
                     (_, _) => {
                         self.errors.push(Malformation {
                             location,

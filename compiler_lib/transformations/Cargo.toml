@@ -21,6 +21,7 @@ openvaf-middle = {version = "0.8.0", path = "../middle" }
 openvaf-ir = {version = "0.8.0", path = "../ir"}
 
 tracing = "0.1"
+itertools = "0.10"
 
 
 [features]

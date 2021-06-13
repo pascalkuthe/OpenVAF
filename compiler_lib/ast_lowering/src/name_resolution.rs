@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the OpenVAF project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use crate::error::Error::{NotAScope, NotAllowedInFunction, NotFound, NotFoundIn};
@@ -91,11 +91,11 @@ macro_rules! resolve {
             Ok(found) => {
                 use $crate::error::Error::DeclarationTypeMismatch;
                 use $crate::error::MockSymbolDeclaration;
-                use ::openvaf_diagnostics::format_list;
+                use ::openvaf_diagnostics::ListFormatter;
                 $fold.error(DeclarationTypeMismatch {
                         name: $name.name,
                         found: found.mock(),
-                        expected:  format_list(vec![$(MockSymbolDeclaration::$declaration),+]),
+                        expected:  ListFormatter::new(vec![$(MockSymbolDeclaration::$declaration),+]),
                         span: $name.span,
                     });
                 None
@@ -168,11 +168,11 @@ macro_rules! resolve_hierarchical {
             Ok(found) => {
                 use $crate::error::Error::DeclarationTypeMismatch;
                 use $crate::error::MockSymbolDeclaration;
-                use ::openvaf_diagnostics::format_list;
+                use ::openvaf_diagnostics::ListFormatter;
                 $fold.error(DeclarationTypeMismatch {
                         name: $name.names.last().unwrap().name,
                         found: found.mock(),
-                        expected:  format_list(vec![$(MockSymbolDeclaration::$declaration),+]),
+                        expected:  ListFormatter::new(vec![$(MockSymbolDeclaration::$declaration),+]),
                         span: $name.span(),
                     });
                 None

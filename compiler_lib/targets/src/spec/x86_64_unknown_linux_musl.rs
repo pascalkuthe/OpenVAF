@@ -1,11 +1,26 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::spec::{LinkerFlavor, StackProbeType, Target};
 
 pub fn target() -> Target {
     let mut base = super::linux_musl_base::opts();
     base.cpu = "x86-64".to_string();
     base.max_atomic_width = Some(64);
-    base.pre_link_args.entry(LinkerFlavor::Gcc).or_default().push("-m64".to_string());
-    base.stack_probes = StackProbeType::InlineOrCall { min_llvm_version_for_inline: (11, 0, 1) };
+    base.pre_link_args
+        .entry(LinkerFlavor::Gcc)
+        .or_default()
+        .push("-m64".to_string());
+    base.stack_probes = StackProbeType::InlineOrCall {
+        min_llvm_version_for_inline: (11, 0, 1),
+    };
     base.static_position_independent_executables = true;
 
     Target {

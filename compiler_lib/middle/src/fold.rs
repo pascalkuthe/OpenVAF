@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use crate::{
@@ -29,6 +29,9 @@ pub fn fold_rvalue<C: CallType, F: RValueFold<C>>(
             UnaryOperator::ArithmeticNegate if ty == Type::INT => {
                 fold.fold_int_arith_negate(op.span, arg)
             }
+            UnaryOperator::ArithmeticNegate if ty == Type::CMPLX => {
+                fold.fold_cmplx_arith_negate(op.span, arg)
+            }
             UnaryOperator::ArithmeticNegate => unreachable!("Misstyped MIR"),
 
             // always integer (assuming correctly typed MIR)
@@ -37,18 +40,22 @@ pub fn fold_rvalue<C: CallType, F: RValueFold<C>>(
         },
 
         RValue::BinaryOperation(op, ref lhs, ref rhs) => match op.contents {
+            BinOp::Plus if ty == Type::CMPLX => fold.fold_cmplx_add(op.span, lhs, rhs),
             BinOp::Plus if ty == Type::REAL => fold.fold_real_add(op.span, lhs, rhs),
             BinOp::Plus if ty == Type::INT => fold.fold_int_add(op.span, lhs, rhs),
             BinOp::Plus => unreachable!("Misstyped MIR"),
 
+            BinOp::Minus if ty == Type::CMPLX => fold.fold_cmplx_sub(op.span, lhs, rhs),
             BinOp::Minus if ty == Type::REAL => fold.fold_real_sub(op.span, lhs, rhs),
             BinOp::Minus if ty == Type::INT => fold.fold_int_sub(op.span, lhs, rhs),
             BinOp::Minus => unreachable!("Misstyped MIR"),
 
+            BinOp::Multiply if ty == Type::CMPLX => fold.fold_cmplx_mul(op.span, lhs, rhs),
             BinOp::Multiply if ty == Type::REAL => fold.fold_real_mul(op.span, lhs, rhs),
             BinOp::Multiply if ty == Type::INT => fold.fold_int_mul(op.span, lhs, rhs),
             BinOp::Multiply => unreachable!("Misstyped MIR"),
 
+            BinOp::Divide if ty == Type::CMPLX => fold.fold_cmplx_div(op.span, lhs, rhs),
             BinOp::Divide if ty == Type::REAL => fold.fold_real_div(op.span, lhs, rhs),
             BinOp::Divide if ty == Type::INT => fold.fold_int_div(op.span, lhs, rhs),
             BinOp::Divide => unreachable!("Misstyped MIR"),
@@ -75,10 +82,12 @@ pub fn fold_rvalue<C: CallType, F: RValueFold<C>>(
         },
 
         RValue::SingleArgMath(kind, ref arg) => match kind.contents {
+            SingleArgMath::Abs if ty == Type::CMPLX => fold.fold_cmplx_abs(kind.span, arg),
             SingleArgMath::Abs if ty == Type::REAL => fold.fold_real_abs(kind.span, arg),
             SingleArgMath::Abs if ty == Type::INT => fold.fold_int_abs(kind.span, arg),
             SingleArgMath::Abs => unreachable!("Misstyped MIR"),
 
+            // TODO CMPLX numbers
             // always real (assuming correctly typed MIR)
             SingleArgMath::Sqrt => fold.fold_sqrt(kind.span, arg),
             SingleArgMath::Exp(lim) => fold.fold_exp(kind.span, arg, lim),
@@ -151,12 +160,18 @@ pub trait RValueFold<C: CallType> {
 
     // UnaryOperation
 
+    fn fold_cmplx_arith_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T;
     fn fold_real_arith_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T;
     fn fold_bit_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T;
     fn fold_int_arith_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T;
     fn fold_logic_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T;
 
     // BinaryOperation
+
+    fn fold_cmplx_add(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T;
+    fn fold_cmplx_sub(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T;
+    fn fold_cmplx_mul(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T;
+    fn fold_cmplx_div(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T;
 
     fn fold_real_add(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T;
     fn fold_real_sub(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T;
@@ -203,6 +218,7 @@ pub trait RValueFold<C: CallType> {
     fn fold_log(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
     fn fold_sqrt(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
 
+    fn fold_cmplx_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
     fn fold_real_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
     fn fold_int_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
 

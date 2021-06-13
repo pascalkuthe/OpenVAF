@@ -1,16 +1,27 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
+use itertools::Itertools;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::BitSet;
-use openvaf_hir::VariableId;
+use openvaf_data_structures::{BitSet, HashMap};
 use openvaf_ir::ids::NetId;
 use openvaf_ir::{PrintOnFinish, StopTaskKind};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::const_fold::DiamondLattice;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
-    COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Mir,
-    OperandData, ParameterInput, PortId, RValue, StmntKind, Type, Unknown,
+    cfg::LocationKind, COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative,
+    InputKind, Mir, OperandData, ParameterInput, PortId, RValue, StmntKind, Type, Unknown,
 };
 use openvaf_session::sourcemap::Span;
 use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
@@ -147,12 +158,12 @@ impl CallTypeConversion<GeneralOsdiCall, InstanceInitFunctionCallType> for Gener
 
 pub struct InstanceInitFunction {
     pub cfg: ControlFlowGraph<InstanceInitFunctionCallType>,
-    pub written_vars: BitSet<VariableId>,
+    pub written_storage: BitSet<StorageLocation>,
+    pub read_storage: BitSet<StorageLocation>,
 }
 
 impl InstanceInitFunction {
     pub fn new(
-        mir: &Mir<GeneralOsdiCall>,
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
         tainted_locations: &BitSet<IntLocation>,
         assumed_locations: &BitSet<IntLocation>,
@@ -160,9 +171,10 @@ impl InstanceInitFunction {
         pdg: &ProgramDependenceGraph,
         inv_pdg: &InvProgramDependenceGraph,
         all_output_stmnts: &BitSet<IntLocation>,
+        storage: &StorageLocations,
     ) -> (Self, BitSet<IntLocation>) {
-        let (cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
-            mir,
+        println!("istance init");
+        let (cfg, function_output_locations, written_vars, read_vars) = function_cfg_from_full_cfg(
             cfg,
             tainted_locations,
             Some(assumed_locations),
@@ -170,10 +182,18 @@ impl InstanceInitFunction {
             locations,
             inv_pdg,
             pdg,
+            storage,
         );
 
         let cfg = cfg.map(&mut GeneralToInstanceInit);
 
-        (Self { cfg, written_vars }, function_output_locations)
+        (
+            Self {
+                cfg,
+                written_storage: written_vars,
+                read_storage: read_vars,
+            },
+            function_output_locations,
+        )
     }
 }

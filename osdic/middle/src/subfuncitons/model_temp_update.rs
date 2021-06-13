@@ -1,16 +1,26 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::BitSet;
+use openvaf_data_structures::{BitSet, HashMap};
 use openvaf_hir::{Unknown, VariableId};
-use openvaf_ir::convert::Convert;
 use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::const_fold::DiamondLattice;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
     COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Mir,
-    OperandData, ParameterInput, RValue, StmntKind,
+    OperandData, ParameterInput, RValue, StmntKind, VariableLocalKind,
 };
 use openvaf_session::sourcemap::Span;
 use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
@@ -107,22 +117,26 @@ impl CallTypeConversion<GeneralOsdiCall, ModelTempUpdateCallType> for GeneralToM
 
     fn map_call_stmnt(
         &mut self,
-        _call: GeneralOsdiCall,
+        call: GeneralOsdiCall,
         _args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
         _span: Span,
     ) -> StmntKind<ModelTempUpdateCallType> {
-        unreachable!()
+        if matches!(call, GeneralOsdiCall::NodeCollapse(_, _)) {
+            StmntKind::NoOp
+        } else {
+            unreachable!()
+        }
     }
 }
 
 pub struct ModelTempUpdateFunction {
     pub cfg: ControlFlowGraph<ModelTempUpdateCallType>,
-    pub written_vars: BitSet<VariableId>,
+    pub written_storage: BitSet<StorageLocation>,
+    pub read_storage: BitSet<StorageLocation>,
 }
 
 impl ModelTempUpdateFunction {
     pub fn new(
-        mir: &Mir<GeneralOsdiCall>,
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
         tainted_locations: &BitSet<IntLocation>,
         assumed_locations: &BitSet<IntLocation>,
@@ -130,20 +144,29 @@ impl ModelTempUpdateFunction {
         pdg: &ProgramDependenceGraph,
         inv_pdg: &InvProgramDependenceGraph,
         all_output_stmnts: &BitSet<IntLocation>,
+        storage: &StorageLocations,
     ) -> (Self, BitSet<IntLocation>) {
-        let (cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
-            mir,
-            cfg,
-            tainted_locations,
-            Some(assumed_locations),
-            all_output_stmnts,
-            locations,
-            inv_pdg,
-            pdg,
-        );
+        let (cfg, function_output_locations, written_storage, read_storage) =
+            function_cfg_from_full_cfg(
+                cfg,
+                tainted_locations,
+                Some(assumed_locations),
+                all_output_stmnts,
+                locations,
+                inv_pdg,
+                pdg,
+                storage,
+            );
 
         let cfg = cfg.map(&mut GeneralToModelTempUpdate);
 
-        (Self { cfg, written_vars }, function_output_locations)
+        (
+            Self {
+                cfg,
+                written_storage: written_storage,
+                read_storage: read_storage,
+            },
+            function_output_locations,
+        )
     }
 }

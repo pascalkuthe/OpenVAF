@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use super::error::Error::DerivativeNotDefined;
@@ -83,6 +83,10 @@ pub struct RValueAutoDiff<'lt, 'adlt, C: CallType, MC: CallType> {
 impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt, 'adlt, C, MC> {
     type T = Option<RValue<C>>;
 
+    fn fold_cmplx_arith_negate(&mut self, _op: Span, _arg: &COperand<C>) -> Self::T {
+        unimplemented!("Complex derivatives")
+    }
+
     #[inline]
     fn fold_real_arith_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T {
         let arg_derivative = self.derivative(arg).into_option()?;
@@ -112,6 +116,22 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
             .errors
             .add(DerivativeNotDefined(UndefinedDerivative::LogicOp, op));
         None
+    }
+
+    fn fold_cmplx_add(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        unimplemented!("Complex derivatives")
+    }
+
+    fn fold_cmplx_sub(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        unimplemented!("Complex derivatives")
+    }
+
+    fn fold_cmplx_mul(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        unimplemented!("Complex derivatives")
+    }
+
+    fn fold_cmplx_div(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        unimplemented!("Complex derivatives")
     }
 
     #[inline]
@@ -524,6 +544,10 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
             span,
             OuterDerivativeCacheSlot::SINGLE,
         )
+    }
+
+    fn fold_cmplx_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
+        unimplemented!("Complex derivatives")
     }
 
     fn fold_real_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
@@ -1158,7 +1182,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
         self.gen_temporary(rhs, span)
     }
 
-    fn chain_rule(
+    pub fn chain_rule(
         &mut self,
         arg: &COperand<C>,
         generate_outer: impl FnOnce(&mut Self) -> RValue<C>,

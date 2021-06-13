@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the OpenVAF project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use crate::ast::{Ast, DisciplineItem};
@@ -19,7 +19,7 @@ use crate::{Branches, ExpressionFolder, Fold};
 use openvaf_ast as ast;
 use openvaf_ast::NatureAttribute;
 use openvaf_data_structures::HashMap;
-use openvaf_diagnostics::format_list;
+use openvaf_diagnostics::ListFormatter;
 use openvaf_diagnostics::MultiDiagnostic;
 use openvaf_hir::{Discipline, Nature, Net, SyntaxContextData};
 use openvaf_ir::ids::{ExpressionId, NatureId, SyntaxCtx};
@@ -355,7 +355,7 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
 
         if !missing_attributes.is_empty() {
             self.base.error(RequiredBaseNatureAttributesNotDefined(
-                format_list(missing_attributes),
+                ListFormatter::new(missing_attributes),
                 nature.ident,
                 nature_node.span,
             ))

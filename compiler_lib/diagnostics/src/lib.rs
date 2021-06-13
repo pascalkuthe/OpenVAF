@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use annotate_snippets::display_list::{DisplayList, FormatOptions};
@@ -31,47 +31,82 @@ pub mod _macro_reexports {
     pub use paste;
 }
 
-pub fn format_list_with_seperator<C>(list: C, seperator: &'static str) -> ListFormatter<C> {
-    ListFormatter(list, seperator, " or ")
+#[derive(Clone)]
+pub struct ListPrettyPrinter<C> {
+    pub list: C,
+    pub prefix: &'static str,
+    pub postfix: &'static str,
 }
 
-pub fn format_list<C>(list: C) -> ListFormatter<C> {
-    ListFormatter(list, "", " or ")
+impl<X: Display, T: Deref<Target = [X]>> Display for ListPrettyPrinter<T> {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        for x in self.list.iter() {
+            write!(f, "{}{}{}", self.prefix, x, self.postfix)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
-pub struct ListFormatter<C>(pub C, pub &'static str, pub &'static str);
+pub struct ListFormatter<C> {
+    pub list: C,
+    pub seperator: &'static str,
+    pub final_seperator: &'static str,
+}
+
+impl<C> ListFormatter<C> {
+    pub fn new(contents: C) -> Self {
+        Self {
+            list: contents,
+            seperator: ", ",
+            final_seperator: " or ",
+        }
+    }
+
+    pub fn with_seperator(contents: C, seperator: &'static str) -> Self {
+        Self {
+            list: contents,
+            seperator,
+            final_seperator: " or ",
+        }
+    }
+
+    pub fn with_final_seperator(contents: C, final_seperator: &'static str) -> Self {
+        Self {
+            list: contents,
+            seperator: ", ",
+            final_seperator,
+        }
+    }
+}
+
+impl<C> Default for ListFormatter<C> {
+    fn default() -> Self {
+        todo!()
+    }
+}
 
 impl<C: Debug> Debug for ListFormatter<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.0, f)
+        Debug::fmt(&self.list, f)
     }
 }
 
 impl<X: Display, T: Deref<Target = [X]>> Display for ListFormatter<T> {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self.0.deref() {
+        match self.list.deref() {
             [] => f.write_str(" "),
-            [x] => {
-                f.write_str(self.1)?;
-                x.fmt(f)?;
-                f.write_str(self.1)
-            }
+            [x] => x.fmt(f),
             [ref body @ .., second_last, last] => {
                 for x in body {
-                    f.write_str(self.1)?;
                     x.fmt(f)?;
-                    f.write_str(self.1)?;
-                    f.write_str(", ")?;
+                    f.write_str(self.seperator)?;
                 }
-                f.write_str(self.1)?;
                 second_last.fmt(f)?;
-                f.write_str(self.1)?;
-                f.write_str(self.2)?;
-                f.write_str(self.1)?;
-                last.fmt(f)?;
-                f.write_str(self.1)
+                f.write_str(self.final_seperator)?;
+                last.fmt(f)
             }
         }
     }

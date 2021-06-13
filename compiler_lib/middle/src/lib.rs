@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the OpenVAF project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use openvaf_data_structures::index_vec::{define_index_type, IndexSlice, IndexVec};
@@ -48,6 +48,7 @@ pub type ConstVal = osdi_types::ConstVal<StringLiteral>;
 pub type SimpleConstVal = osdi_types::SimpleConstVal<StringLiteral>;
 
 use crate::derivatives::RValueAutoDiff;
+use openvaf_data_structures::arrayvec::ArrayVec;
 use openvaf_data_structures::sync::RwLock;
 use openvaf_diagnostics::ListFormatter;
 use openvaf_ir::convert::Convert;
@@ -165,7 +166,7 @@ pub enum ParameterCallType {}
 impl CallType for ParameterCallType {
     type I = ParameterInput;
 
-    fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _args: &[DiamondLattice]) -> DiamondLattice {
         match *self {}
     }
 
@@ -375,13 +376,16 @@ pub struct LocalDeclaration {
     pub ty: Type,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VariableLocalKind {
     User,
+    #[cfg(not(feature = "arbitrary_order_derivative"))]
+    Derivative(ArrayVec<Unknown, 7>), // Aligment 
+    #[cfg(feature = "arbitrary_order_derivative")]
     Derivative,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocalKind {
     /// A local correspond to a variable
     /// These locals are not ssa and as such are mapped to alloca/pointers
@@ -506,6 +510,7 @@ pub enum RValue<C: CallType> {
     SingleArgMath(Spanned<SingleArgMath>, COperand<C>),
     DoubleArgMath(Spanned<DoubleArgMath>, COperand<C>, COperand<C>),
     Comparison(Spanned<ComparisonOp>, COperand<C>, COperand<C>, Type),
+
     ///
     Select(COperand<C>, COperand<C>, COperand<C>),
     Cast(COperand<C>),
@@ -549,11 +554,15 @@ impl<C: CallType> Display for RValue<C> {
                     f,
                     "{}({})",
                     call,
-                    ListFormatter(operands.raw.as_slice(), "", ", ")
+                    ListFormatter::with_final_seperator(operands.raw.as_slice(), ", ")
                 )
             }
             RValue::Array(vals, _) => {
-                write!(f, "[{}]", ListFormatter(vals.as_slice(), "", ", "))
+                write!(
+                    f,
+                    "[{}]",
+                    ListFormatter::with_final_seperator(vals.as_slice(), ", ")
+                )
             }
         }
     }
@@ -867,7 +876,7 @@ impl<C: CallType> Display for StmntKind<C> {
                 f,
                 "{}({})",
                 call,
-                ListFormatter(&args.as_slice().raw, "", ", ")
+                ListFormatter::with_final_seperator(&args.as_slice().raw, ", ")
             ),
             StmntKind::NoOp => Ok(()),
         }

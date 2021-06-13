@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use core::fmt::Debug;
@@ -15,7 +15,7 @@ use std::fmt::Display;
 use thiserror::Error;
 
 use openvaf_ast::NatureAttribute;
-use openvaf_diagnostics::{format_list, ListFormatter};
+use openvaf_diagnostics::ListFormatter;
 use openvaf_diagnostics::{AnnotationType, DiagnosticSlice, FooterItem, LibraryDiagnostic, Text};
 use openvaf_hir::Hir;
 use openvaf_ir::ids::DisciplineId;
@@ -416,7 +416,7 @@ impl LibraryDiagnostic for Error {
                 id: None,
                 label: Text::owned(format!(
                     "Traceback: {}",
-                    ListFormatter(trace_back.as_slice(), "", ", ")
+                    ListFormatter::with_final_seperator(trace_back.as_slice(), ", ")
                 )),
                 annotation_type: AnnotationType::Info,
             }],
@@ -701,7 +701,7 @@ impl LibraryDiagnostic for Error {
                     AnnotationType::Error,
                     Text::owned(format!(
                         "Expected {}",
-                        format_list(allowed_natures.to_allowed_list())
+                        ListFormatter::new(allowed_natures.to_allowed_list())
                     )),
                     span.data(),
                 )],

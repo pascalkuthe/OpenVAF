@@ -16,10 +16,10 @@ maintenance = { status = "actively-developed" }
 
 
 more-asserts = "0.2"
-arrayvec = "0.5"
+arrayvec = "0.7"
 ahash = "0.7"
 parking_lot = "0.11"
-once_cell = "1.4"
+once_cell = "1.7"
 
 fixedbitset = "0.4"
 index_vec = "0.1"

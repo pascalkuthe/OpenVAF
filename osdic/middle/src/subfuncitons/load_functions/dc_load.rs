@@ -1,5 +1,17 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::lim::LimFunction;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
+use openvaf_ir::ids::NetId;
 use openvaf_ir::{PrintOnFinish, StopTaskKind};
 use openvaf_middle::const_fold::DiamondLattice;
 use openvaf_middle::derivatives::RValueAutoDiff;
@@ -14,13 +26,18 @@ use std::fmt::{Debug, Display, Formatter};
 #[derive(PartialEq, Eq, Clone)]
 pub enum DcLoadFunctionCall {
     StopTask(StopTaskKind, PrintOnFinish),
+    Lim {
+        hi: NetId,
+        lo: NetId,
+        fun: LimFunction,
+    },
 }
 
 impl CallType for DcLoadFunctionCall {
     type I = GeneralOsdiInput;
 
     fn const_fold(&self, _call: &[DiamondLattice]) -> DiamondLattice {
-        unreachable!()
+        DiamondLattice::NotAConstant
     }
 
     fn derivative<C: CallType>(
@@ -36,13 +53,13 @@ impl CallType for DcLoadFunctionCall {
 impl Display for DcLoadFunctionCall {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            // LoadFunctionCall::TimeDerivative => write!(f, "ddt"),
-            DcLoadFunctionCall::StopTask(StopTaskKind::Stop, finish) => {
+            Self::StopTask(StopTaskKind::Stop, finish) => {
                 write!(f, "$stop({:?})", finish)
             }
-            DcLoadFunctionCall::StopTask(StopTaskKind::Finish, finish) => {
+            Self::StopTask(StopTaskKind::Finish, finish) => {
                 write!(f, "$finish({:?})", finish)
             }
+            Self::Lim { hi, lo, fun } => write!(f, "$limit(pot({:?}, {:?}), {} )", hi, lo, fun,),
         }
     }
 }
@@ -66,7 +83,7 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
     fn map_call_val(
         &mut self,
         call: GeneralOsdiCall,
-        _args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
+        args: IndexVec<CallArg, COperand<GeneralOsdiCall>>,
         span: Span,
     ) -> RValue<DcLoadFunctionCall> {
         match call {
@@ -77,6 +94,10 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
                 contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0))),
             }),
             GeneralOsdiCall::StopTask(_, _) | GeneralOsdiCall::NodeCollapse(_, _) => unreachable!(),
+            GeneralOsdiCall::Lim { hi, lo, fun } => {
+                let args = args.into_iter().map(|arg| self.map_operand(arg)).collect();
+                RValue::Call(DcLoadFunctionCall::Lim { hi, lo, fun }, args, span)
+            }
         }
     }
 
@@ -94,6 +115,7 @@ impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad
                 StmntKind::Call(DcLoadFunctionCall::StopTask(kind, print), args, span)
             }
             GeneralOsdiCall::NodeCollapse(_, _) => StmntKind::NoOp,
+            GeneralOsdiCall::Lim { .. } => unreachable!(),
         }
     }
 }

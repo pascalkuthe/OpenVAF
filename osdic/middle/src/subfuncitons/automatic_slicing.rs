@@ -1,23 +1,38 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 //! This module contains most of the analysis functions that are used to automatically
 //! slice the analog block into subfunctions.
 
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::optimize_cfg;
+use crate::storage_locations::{StorageLocation, StorageLocationValue, StorageLocations};
 use crate::subfuncitons::instance_init::InstanceInitFunction;
 use crate::subfuncitons::instance_temp_update::InstanceTempUpdateFunction;
 use crate::subfuncitons::model_init::ModelInitFunction;
 use crate::subfuncitons::model_temp_update::ModelTempUpdateFunction;
-use crate::subfuncitons::{optimize_cfg, OsdiFunctions};
+use crate::subfuncitons::OsdiFunctions;
 use crate::topology::CircuitTopology;
-use openvaf_data_structures::BitSet;
+use itertools::Itertools;
+use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_hir::DisciplineAccess;
 use openvaf_ir::ids::VariableId;
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, PhiData};
+use openvaf_middle::cfg::{
+    ControlFlowGraph, IntLocation, InternedLocations, LocationKind, PhiData, START_BLOCK,
+};
 use openvaf_middle::{
-    const_fold::ConstantPropagation, COperand, CallType, Local, LocalKind, Mir, OperandData,
-    RValue, StmntKind,
+    COperand, CallType, Local, LocalKind, Mir, OperandData, RValue, StmntKind, VariableLocalKind,
 };
 use openvaf_transformations::{
-    BackwardSlice, CfgVisitor, ForwardSlice, InvProgramDependenceGraph, ProgramDependenceGraph,
-    RemoveDeadLocals, Simplify, SimplifyBranches, Strip, Visit,
+    BackwardSlice, CfgVisitor, ForwardSlice, InvProgramDependenceGraph, LiveLocalAnalysis,
+    ProgramDependenceGraph, Strip, Visit,
 };
 
 /// On create the CFG of the full analog block is walked.
@@ -35,6 +50,7 @@ pub struct TaintedLocations {
     pub instance_temp_update: BitSet<IntLocation>,
     pub by_time_derivative: BitSet<IntLocation>,
     pub by_branch_write: BitSet<IntLocation>,
+
     pub by_stamp_write: BitSet<IntLocation>,
     // pub by_noise: BitSet<IntLocation> TODO NOISE
 }
@@ -66,19 +82,43 @@ impl TaintedLocations {
         res
     }
 
-    pub fn taint_instance_variable_access_for_model_function(
+    pub fn taint_variable_access_for_init_functions(
         &mut self,
-        instance_vars: &BitSet<VariableId>,
-        locations: &InternedLocations,
-        cfg: &mut ControlFlowGraph<GeneralOsdiCall>,
+        instance_storage: &BitSet<StorageLocation>,
+        instance_temp_tainted: &BitSet<StorageLocation>,
+        instance_init_tainted: &BitSet<StorageLocation>,
+        model_init_tainted: &BitSet<StorageLocation>,
+        storage: &StorageLocations,
+        pdg: &ProgramDependenceGraph,
     ) {
-        cfg.run_pass(Visit {
-            visitor: &mut TaintInstanceVariableLocations {
-                tainted_locations: self,
-                instance_vars,
-            },
-            locations,
-        })
+        for storage_loc in instance_storage.ones() {
+            let assignments = &pdg.data_dependencies.assignments[storage[storage_loc].local];
+            if let Some(assignments) = assignments {
+                self.model_temp_update.union_with(assignments);
+                self.model_init.union_with(assignments);
+            }
+        }
+
+        for storage_loc in model_init_tainted.ones() {
+            let assignments = &pdg.data_dependencies.assignments[storage[storage_loc].local];
+            if let Some(assignments) = assignments {
+                self.model_init.union_with(assignments);
+            }
+        }
+
+        for storage_loc in instance_init_tainted.ones() {
+            let assignments = &pdg.data_dependencies.assignments[storage[storage_loc].local];
+            if let Some(assignments) = assignments {
+                self.instance_init.union_with(assignments);
+            }
+        }
+
+        for storage_loc in instance_temp_tainted.ones() {
+            let assignments = &pdg.data_dependencies.assignments[storage[storage_loc].local];
+            if let Some(assignments) = assignments {
+                self.instance_temp_update.union_with(assignments);
+            }
+        }
     }
 }
 
@@ -96,25 +136,40 @@ impl<'a> CfgVisitor<GeneralOsdiCall> for TaintedLocationFinder<'a> {
     ) {
         match *stmnt {
             StmntKind::Assignment(dst, ref val) => {
-                if matches!(cfg.locals[dst].kind, LocalKind::Branch(_, _, _)) {
-                    self.dst.by_branch_write.insert(loc);
-                    self.dst.model_init.insert(loc);
-                    self.dst.model_temp_update.insert(loc);
-                    self.dst.instance_temp_update.insert(loc);
-                    self.dst.instance_init.insert(loc);
-                }
-                
-                if self.topology.matrix_stamp_locals.contains(dst){
-                    self.dst.by_stamp_write.insert(loc);
-                    self.dst.model_init.insert(loc);
-                    self.dst.model_temp_update.insert(loc);
-                    self.dst.instance_temp_update.insert(loc);
-                    self.dst.instance_init.insert(loc);
-                }
+                match cfg.locals[dst].kind {
+                    LocalKind::Variable(_, VariableLocalKind::Derivative(_)) => {
+                        // Just doesnt make sense to do this
+                        // Probably doesnt occur in practice of the other algorithems (const prop) do their job
+                        // This is done just to be save!
 
+                        self.dst.model_init.insert(loc);
+                        self.dst.model_temp_update.insert(loc);
+                        self.dst.instance_temp_update.insert(loc);
+                        self.dst.instance_init.insert(loc);
+                    }
+                    LocalKind::Branch(_, _, ref kind) => {
+                        if kind == &VariableLocalKind::User {
+                            self.dst.by_branch_write.insert(loc);
+                        } else if self.topology.matrix_stamp_locals.contains(dst) {
+                            self.dst.by_branch_write.insert(loc);
+                            self.dst.by_stamp_write.insert(loc);
+                        }
+
+                        self.dst.model_init.insert(loc);
+                        self.dst.model_temp_update.insert(loc);
+                        self.dst.instance_temp_update.insert(loc);
+                        self.dst.instance_init.insert(loc);
+                    }
+                    _ => {}
+                }
                 self.visit_rvalue(val, loc, cfg)
             }
-            StmntKind::Call(_, ref args, _) => {
+            StmntKind::Call(ref call, ref args, _) => {
+                if matches!(call, GeneralOsdiCall::NodeCollapse(_, _)) {
+                    self.dst.model_init.insert(loc);
+                    self.dst.model_temp_update.insert(loc);
+                    self.dst.instance_temp_update.insert(loc);
+                }
                 for arg in args {
                     self.visit_operand(arg, loc, cfg)
                 }
@@ -143,9 +198,7 @@ impl<'a> CfgVisitor<GeneralOsdiCall> for TaintedLocationFinder<'a> {
         _cfg: &ControlFlowGraph<GeneralOsdiCall>,
     ) {
         match input {
-            GeneralOsdiInput::SimParam(_, _)
-            | GeneralOsdiInput::Voltage(_, _)
-            | GeneralOsdiInput::Lim { .. } => {
+            GeneralOsdiInput::SimParam(_, _) | GeneralOsdiInput::Voltage(_, _) => {
                 self.dst.model_init.insert(loc);
                 self.dst.model_temp_update.insert(loc);
                 self.dst.instance_temp_update.insert(loc);
@@ -172,8 +225,23 @@ impl<'a> CfgVisitor<GeneralOsdiCall> for TaintedLocationFinder<'a> {
         loc: IntLocation,
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
     ) {
-        if matches!(rval, RValue::Call(GeneralOsdiCall::TimeDerivative, _, _)) {
+        if matches!(
+            rval,
+            RValue::Call(GeneralOsdiCall::TimeDerivative, _, _)
+                | RValue::Call(GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative, _, _)
+        ) {
+            self.dst.model_init.insert(loc);
+            self.dst.model_temp_update.insert(loc);
+            self.dst.instance_temp_update.insert(loc);
+            self.dst.instance_init.insert(loc);
             self.dst.by_time_derivative.insert(loc)
+        }
+
+        if matches!(rval, RValue::Call(GeneralOsdiCall::Lim { .. }, _, _)) {
+            self.dst.model_init.insert(loc);
+            self.dst.model_temp_update.insert(loc);
+            self.dst.instance_temp_update.insert(loc);
+            self.dst.instance_init.insert(loc);
         }
 
         // if matches!(rval, RValue::Call(GeneralOsdiCall::Noise,__)){
@@ -186,60 +254,7 @@ impl<'a> CfgVisitor<GeneralOsdiCall> for TaintedLocationFinder<'a> {
     }
 }
 
-struct TaintInstanceVariableLocations<'a> {
-    tainted_locations: &'a mut TaintedLocations,
-    instance_vars: &'a BitSet<VariableId>,
-}
-
-impl<'a> CfgVisitor<GeneralOsdiCall> for TaintInstanceVariableLocations<'a> {
-    fn visit_operand(
-        &mut self,
-        operand: &COperand<GeneralOsdiCall>,
-        loc: IntLocation,
-        cfg: &ControlFlowGraph<GeneralOsdiCall>,
-    ) {
-        if let OperandData::Copy(local) = operand.contents {
-            self.visit_local(local, loc, cfg)
-        }
-    }
-
-    fn visit_stmnt(
-        &mut self,
-        stmnt: &StmntKind<GeneralOsdiCall>,
-        loc: IntLocation,
-        cfg: &ControlFlowGraph<GeneralOsdiCall>,
-    ) {
-        if let StmntKind::Assignment(local, _) = stmnt {
-            self.visit_local(*local, loc, cfg)
-        }
-    }
-
-    fn visit_phi(
-        &mut self,
-        phi: &PhiData,
-        loc: IntLocation,
-        cfg: &ControlFlowGraph<GeneralOsdiCall>,
-    ) {
-        self.visit_local(phi.dst, loc, cfg)
-    }
-}
-
-impl<'a> TaintInstanceVariableLocations<'a> {
-    pub fn visit_local(
-        &mut self,
-        local: Local,
-        loc: IntLocation,
-        cfg: &ControlFlowGraph<GeneralOsdiCall>,
-    ) {
-        if matches!(cfg.locals[local].kind, LocalKind::Variable(var,_) if self.instance_vars.contains(var))
-        {
-            self.tainted_locations.model_temp_update.insert(loc);
-            self.tainted_locations.model_init.insert(loc);
-        }
-    }
-}
-
-/// CFG visit that finds all Instructons that write to a variable.
+/// CFG visit that finds all Instructions that write to a variable or branch (and both of their derivatives) or are a call stmnt (print, collapse hints).
 /// The instructions regarded as the output of functions are a subset of these statements.
 pub struct OutputLocations<'a> {
     dst: BitSet<IntLocation>,
@@ -251,9 +266,11 @@ impl<'a, C: CallType> CfgVisitor<C> for OutputLocations<'a> {
         match *stmnt {
             // TODO treat derivatives as temproaries?
             StmntKind::Assignment(dst, _)
-                if cfg.locals[dst].kind != LocalKind::Temporary
-                    || self.topology.matrix_stamp_locals.contains(dst) =>
+                if matches!(cfg.locals[dst].kind, LocalKind::Variable(_, _)) =>
             {
+                self.dst.insert(loc)
+            }
+            StmntKind::Assignment(dst, _) if self.topology.matrix_stamp_locals.contains(dst) => {
                 self.dst.insert(loc)
             }
             StmntKind::Call(_, _, _) => self.dst.insert(loc),
@@ -283,32 +300,45 @@ impl<'a> OutputLocations<'a> {
 }
 
 /// CFG visit that finds all variables that are written to in a CFG
-pub struct WrittenVars(BitSet<VariableId>);
+pub struct WrittenStorage<'a> {
+    dst: BitSet<StorageLocation>,
+    storage: &'a StorageLocations,
+}
 
-impl<C: CallType> CfgVisitor<C> for WrittenVars {
+impl<'a, C: CallType> CfgVisitor<C> for WrittenStorage<'a> {
     fn visit_stmnt(&mut self, stmnt: &StmntKind<C>, _loc: IntLocation, cfg: &ControlFlowGraph<C>) {
         if let StmntKind::Assignment(dst, _) = *stmnt {
-            if let LocalKind::Variable(var, _) = cfg.locals[dst].kind {
-                self.0.insert(var)
-            }
+            let written_storage = match cfg.locals[dst].kind {
+                LocalKind::Variable(var, ref kind) => {
+                    self.storage.find_variable_location(var, kind.clone())
+                }
+                LocalKind::Branch(DisciplineAccess::Flow, branch, ref kind) => {
+                    self.storage.find_branch_location(branch, kind.clone())
+                }
+                _ => return,
+            };
+            self.dst.insert(written_storage)
         }
     }
 }
 
-impl WrittenVars {
-    pub fn find_in_cfg(
-        var_cnt: VariableId,
-        cfg: &mut ControlFlowGraph<GeneralOsdiCall>,
+impl<'a> WrittenStorage<'a> {
+    pub fn find_in_cfg<C: CallType>(
+        storage: &'a StorageLocations,
+        cfg: &mut ControlFlowGraph<C>,
         locations: &InternedLocations,
-    ) -> BitSet<VariableId> {
-        let mut res = Self(BitSet::new_empty(var_cnt));
+    ) -> BitSet<StorageLocation> {
+        let mut res = Self {
+            dst: BitSet::new_empty(storage.len_idx()),
+            storage,
+        };
 
         cfg.run_pass(Visit {
             visitor: &mut res,
             locations,
         });
 
-        res.0
+        res.dst
     }
 }
 
@@ -327,7 +357,6 @@ impl WrittenVars {
 /// * ControlFlowGraph of the function
 /// * All instructions which are part of this function and write to a variable. These are to be considered the "output" of this function
 pub(super) fn function_cfg_from_full_cfg(
-    mir: &Mir<GeneralOsdiCall>,
     full_cfg: &ControlFlowGraph<GeneralOsdiCall>,
     tainted_locations: &BitSet<IntLocation>,
     assumed_locations: Option<&BitSet<IntLocation>>,
@@ -335,12 +364,29 @@ pub(super) fn function_cfg_from_full_cfg(
     locations: &InternedLocations,
     inv_pdg: &InvProgramDependenceGraph,
     pdg: &ProgramDependenceGraph,
+    storage: &StorageLocations,
 ) -> (
     ControlFlowGraph<GeneralOsdiCall>,
     BitSet<IntLocation>,
-    BitSet<VariableId>,
+    BitSet<StorageLocation>,
+    BitSet<StorageLocation>,
 ) {
     let mut cfg = full_cfg.clone();
+
+    println!(
+        "{:?}",
+        tainted_locations
+            .ones()
+            .filter_map(
+                |loc| if let LocationKind::Statement(stmnt) = locations[loc].kind {
+                    Some((locations[loc].block, stmnt))
+                } else {
+                    None
+                }
+            )
+            .collect_vec()
+    );
+
     let mut allowed_locations = cfg.run_pass(ForwardSlice {
         tainted_locations: tainted_locations.clone(),
         pdg: inv_pdg,
@@ -348,8 +394,13 @@ pub(super) fn function_cfg_from_full_cfg(
         taint_control_dependencies: true,
     });
 
+    let mut relevant_locations = all_output_locations.clone();
+    if let Some(assumed_locations) = assumed_locations {
+        relevant_locations.difference_with(assumed_locations);
+    }
+
     let relevant_locations = cfg.run_pass(BackwardSlice {
-        relevant_locations: all_output_locations.clone(),
+        relevant_locations,
         assumed_locations: assumed_locations
             .cloned()
             .unwrap_or_else(|| BitSet::new_empty(locations.len_idx())),
@@ -374,9 +425,35 @@ pub(super) fn function_cfg_from_full_cfg(
 
     optimize_cfg(&mut cfg);
 
-    let written_vars = WrittenVars::find_in_cfg(mir.variables.len_idx(), &mut cfg, locations);
+    let written_vars = WrittenStorage::find_in_cfg(storage, &mut cfg, locations);
 
-    (cfg, output_locations, written_vars)
+    let read_vars = ReadVars::find_in_cfg(storage, &mut cfg);
+
+    (cfg, output_locations, written_vars, read_vars)
+}
+
+pub struct ReadVars;
+
+impl ReadVars {
+    pub fn find_in_cfg<C: CallType>(
+        storage: &StorageLocations,
+        cfg: &mut ControlFlowGraph<C>,
+    ) -> BitSet<StorageLocation> {
+        let mut res = BitSet::new_empty(storage.len_idx());
+        for local in cfg.run_pass(LiveLocalAnalysis(None)).out_sets[START_BLOCK].ones() {
+            let written_storage = match cfg.locals[local].kind {
+                LocalKind::Variable(var, ref kind) => {
+                    storage.find_variable_location(var, kind.clone())
+                }
+                LocalKind::Branch(DisciplineAccess::Flow, branch, ref kind) => {
+                    storage.find_branch_location(branch, kind.clone())
+                }
+                _ => continue,
+            };
+            res.insert(written_storage)
+        }
+        res
+    }
 }
 
 impl OsdiFunctions {
@@ -388,6 +465,7 @@ impl OsdiFunctions {
         inverse_pdg: &InvProgramDependenceGraph,
         tainted_locations: &TaintedLocations,
         output_locations: &BitSet<IntLocation>,
+        storage: &StorageLocations,
     ) -> (
         ModelInitFunction,
         ModelTempUpdateFunction,
@@ -403,12 +481,12 @@ impl OsdiFunctions {
             pdg,
             inverse_pdg,
             &output_locations,
+            storage,
         );
 
         let mut assumed_locations = model_init_output;
 
         let (model_temp_update, model_temp_update_output) = ModelTempUpdateFunction::new(
-            mir,
             &cfg,
             &tainted_locations.model_temp_update,
             &assumed_locations,
@@ -416,12 +494,12 @@ impl OsdiFunctions {
             pdg,
             inverse_pdg,
             &output_locations,
+            storage,
         );
 
         assumed_locations.union_with(&model_temp_update_output);
 
         let (instance_init, instance_init_output) = InstanceInitFunction::new(
-            mir,
             &cfg,
             &tainted_locations.instance_init,
             &assumed_locations,
@@ -429,12 +507,12 @@ impl OsdiFunctions {
             pdg,
             inverse_pdg,
             &output_locations,
+            storage,
         );
 
         assumed_locations.union_with(&instance_init_output);
 
         let (instance_temp_update, instance_temp_update_output) = InstanceTempUpdateFunction::new(
-            mir,
             &cfg,
             &tainted_locations.instance_temp_update,
             &assumed_locations,
@@ -442,6 +520,7 @@ impl OsdiFunctions {
             pdg,
             inverse_pdg,
             &output_locations,
+            storage,
         );
         assumed_locations.union_with(&instance_temp_update_output);
 

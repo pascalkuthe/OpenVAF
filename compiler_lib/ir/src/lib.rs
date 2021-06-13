@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the OpenVAF project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 pub use crate::ids::IdRange;
@@ -194,6 +194,17 @@ pub enum Unknown {
     NodePotential(NetId),
     BranchPotential(NetId, NetId),
     Flow(BranchId),
+}
+
+impl Display for Unknown {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Unknown::Parameter(param) => write!(f, "{:?}", param),
+            Unknown::NodePotential(node) => write!(f, "V({:?})", node),
+            Unknown::BranchPotential(hi, lo) => write!(f, "V({:?},{:?})", hi, lo),
+            Unknown::Flow(branch) => write!(f, "I({:?})", branch),
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]

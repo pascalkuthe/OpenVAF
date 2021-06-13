@@ -34,6 +34,10 @@ module diode_va(A,C);
         vte = VT * N;
         vcrit = vte * log(vte / (`M_SQRT2 * Is));
 
+        if (Rs < 1e-3) begin
+            V(br_ci_c) <+ 0;
+        end
+
         Vd = $limit(V(br_a_ci), "pnjlim", VT, vcrit);
         Vr = V(br_ci_c);
 

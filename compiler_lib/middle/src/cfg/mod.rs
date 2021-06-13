@@ -1,10 +1,12 @@
-//  * ******************************************************************************************
-//  * Copyright (c) 2020 Pascal Kuthe. This file is part of the OpenVAF project.
-//  * It is subject to the license terms in the LICENSE file found in the top-level directory
-//  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
-//  *  No part of OpenVAF, including this file, may be copied, modified, propagated, or
-//  *  distributed except according to the terms contained in the LICENSE file.
-//  * *******************************************************************************************
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
 
 use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_ir::ids::{StatementId, SyntaxCtx};
@@ -25,9 +27,11 @@ use osdi_types::Type;
 
 use crate::cfg::builder::CfgBuilder;
 use crate::util::AtMostTwoIter;
+use openvaf_data_structures::arrayvec::ArrayVec;
 use openvaf_ir::convert::Convert;
 use osdi_types::ConstVal::Scalar;
 use osdi_types::SimpleConstVal::Real;
+use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -179,12 +183,12 @@ where
         let mut builder = CfgBuilder::edit::<false, false>(self, START_BLOCK, 0, 0);
 
         for (local, decl) in old_locals.iter_enumerated() {
-            if let LocalKind::Variable(var, kind) = decl.kind {
+            if let LocalKind::Variable(var, ref kind) = decl.kind {
                 let span = mir[mir.variables[var].sctx].span;
                 let sctx = mir.variables[var].sctx;
 
                 match kind {
-                    VariableLocalKind::Derivative => {
+                    VariableLocalKind::Derivative(_) => {
                         builder.assign(
                             local,
                             RValue::Use(Spanned {
@@ -468,11 +472,30 @@ impl<C: CallType> ControlFlowGraph<C> {
             .or_insert_with(|| {
                 let kind = match locals[local].kind {
                     LocalKind::Temporary => LocalKind::Temporary,
-                    LocalKind::Variable(var, _) => {
-                        LocalKind::Variable(var, VariableLocalKind::Derivative)
+                    LocalKind::Variable(var, VariableLocalKind::User) => {
+                        let mut unkowns = ArrayVec::new();
+                        unkowns.push(unknown);
+
+                        LocalKind::Variable(var, VariableLocalKind::Derivative(unkowns))
                     }
-                    LocalKind::Branch(kind, branch, _) => {
-                        LocalKind::Branch(kind, branch, VariableLocalKind::Derivative)
+                    LocalKind::Variable(var, VariableLocalKind::Derivative(ref unkowns)) => {
+                        let mut unkowns = unkowns.clone();
+                        unkowns.push(unknown);
+                        LocalKind::Variable(var, VariableLocalKind::Derivative(unkowns))
+                    }
+                    LocalKind::Branch(access, branch, VariableLocalKind::User) => {
+                        let mut unkowns = ArrayVec::new();
+                        unkowns.push(unknown);
+                        LocalKind::Branch(access, branch, VariableLocalKind::Derivative(unkowns))
+                    }
+                    LocalKind::Branch(
+                        access,
+                        branch,
+                        VariableLocalKind::Derivative(ref unkowns),
+                    ) => {
+                        let mut unkowns = unkowns.clone();
+                        unkowns.push(unknown);
+                        LocalKind::Branch(access, branch, VariableLocalKind::Derivative(unkowns))
                     }
                 };
                 locals.push(LocalDeclaration {

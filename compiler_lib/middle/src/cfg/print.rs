@@ -1,5 +1,16 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::cfg::{BasicBlockData, ControlFlowGraph};
 use crate::{CallType, LocalKind, Mir, ModuleId, VariableLocalKind};
+use openvaf_diagnostics::ListPrettyPrinter;
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -134,27 +145,47 @@ impl<C: CallType> ControlFlowGraph<C> {
                 LocalKind::Variable(var, VariableLocalKind::User) => (
                     decl.ty
                         .with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
-                    format!("Corresponds to {}", mir.variables[var].ident),
+                    format!("Corresponds to {} ({:?})", mir.variables[var].ident, var),
                 ),
-                LocalKind::Variable(var, VariableLocalKind::Derivative) => (
-                    decl.ty
-                        .with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
-                    format!(
-                        "Corresponds to a nth order derivative of {}",
-                        mir.variables[var].ident
-                    ),
-                ),
+                LocalKind::Variable(var, VariableLocalKind::Derivative(ref unkowns)) => {
+                    let mut unkowns = ListPrettyPrinter {
+                        list: unkowns.as_slice(),
+                        prefix: "d/d",
+                        postfix: " ",
+                    };
+
+                    (
+                        decl.ty
+                            .with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
+                        format!(
+                            "Corresponds to {} {} ({:?})",
+                            unkowns, mir.variables[var].ident, var
+                        ),
+                    )
+                }
+
                 LocalKind::Branch(access, branch, VariableLocalKind::User) => (
                     format!("{0}{0}let mut {1}: real;", INDENT, local),
-                    format!("Corresponds to {}({})", access, mir.branches[branch].ident),
-                ),
-                LocalKind::Branch(access, branch, VariableLocalKind::Derivative) => (
-                    format!("{0}{0}let mut {1}: real;", INDENT, local),
                     format!(
-                        "Corresponds to a derivative of {}({})",
-                        access, mir.branches[branch].ident
+                        "Corresponds to {}({}) {:?}",
+                        access, mir.branches[branch].ident, branch
                     ),
                 ),
+                LocalKind::Branch(access, branch, VariableLocalKind::Derivative(ref unkowns)) => {
+                    let mut unkowns = ListPrettyPrinter {
+                        list: unkowns.as_slice(),
+                        prefix: "d/d",
+                        postfix: " ",
+                    };
+
+                    (
+                        format!("{0}{0}let mut {1}: real;", INDENT, local),
+                        format!(
+                            "Corresponds to a {} {}({}), {:?}",
+                            unkowns, access, mir.branches[branch].ident, branch
+                        ),
+                    )
+                }
             };
 
             writeln!(w, "{:A$} // {}", decl, comment, A = ALIGN,)?;

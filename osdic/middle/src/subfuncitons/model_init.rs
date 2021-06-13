@@ -1,7 +1,18 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
-use openvaf_data_structures::BitSet;
+use openvaf_data_structures::{BitSet, HashMap};
 use openvaf_hir::SyntaxCtx;
 use openvaf_ir::ids::ParameterId;
 use openvaf_ir::{Spanned, Type};
@@ -13,7 +24,7 @@ use openvaf_middle::{
     BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Expression,
     Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
     ParameterConstraint, ParameterExcludeConstraint, ParameterInput, PrintOnFinish, RValue,
-    StmntKind, StopTaskKind, TyRValue, VariableId,
+    StmntKind, StopTaskKind, TyRValue, VariableId, VariableLocalKind,
 };
 use openvaf_session::sourcemap::Span;
 use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
@@ -69,7 +80,7 @@ impl Debug for InitFunctionCallType {
 pub struct ModelInitFunction {
     pub cfg: ControlFlowGraph<InitFunctionCallType>,
     pub param_locals: IndexBox<ParameterId, [Local]>,
-    pub written_vars: BitSet<VariableId>,
+    pub written_storage: BitSet<StorageLocation>,
 }
 
 impl ModelInitFunction {
@@ -81,21 +92,24 @@ impl ModelInitFunction {
         pdg: &ProgramDependenceGraph,
         inv_pdg: &InvProgramDependenceGraph,
         all_output_locations: &BitSet<IntLocation>,
+        storage: &StorageLocations,
     ) -> (Self, BitSet<IntLocation>) {
         let mut res = Self::new_param_init(mir);
 
-        let (model_init_cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
-            mir,
-            cfg,
-            tainted_locations,
-            None,
-            all_output_locations,
-            locations,
-            inv_pdg,
-            pdg,
-        );
+        let (model_init_cfg, function_output_locations, written_storage, _read_storage) =
+            function_cfg_from_full_cfg(
+                cfg,
+                tainted_locations,
+                None,
+                all_output_locations,
+                locations,
+                inv_pdg,
+                pdg,
+                storage,
+            );
 
-        res.written_vars = written_vars;
+        debug_assert!(_read_storage.is_empty());
+        res.written_storage = written_storage;
         res.insert_model_init(model_init_cfg);
 
         (res, function_output_locations)
@@ -180,7 +194,7 @@ impl ModelInitFunction {
                 sctx,
             );
 
-            let mut create_comparison =
+            let create_comparison =
                 |cfg: &mut CfgBuilder<ControlFlowGraph<_>>, expr: &Expression<_>, comparison| {
                     let expr = expr.clone().map(&mut ParamInitializationMapper(
                         &param_locals,
@@ -381,14 +395,15 @@ impl ModelInitFunction {
         Self {
             cfg: cfg.finish(SyntaxCtx::ROOT),
             param_locals,
-            written_vars: BitSet::default(),
+            written_storage: BitSet::default(),
         }
     }
 
     fn insert_model_init(&mut self, src: ControlFlowGraph<GeneralOsdiCall>) {
-        let mut src: ControlFlowGraph<InitFunctionCallType> = src.map(
-            &mut ParamInitializationMapper(&self.param_locals, self.cfg.locals.len()),
-        );
+        let src: ControlFlowGraph<InitFunctionCallType> = src.map(&mut ParamInitializationMapper(
+            &self.param_locals,
+            self.cfg.locals.len(),
+        ));
         debug_assert!(self.cfg.blocks.last().unwrap().statements.is_empty());
         self.cfg.blocks.pop();
         let end = self.cfg.end();

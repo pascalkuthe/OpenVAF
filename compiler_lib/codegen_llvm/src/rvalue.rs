@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use crate::intrinsics::Intrinsic;
@@ -20,6 +20,10 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
     for CfgCodegen<'lt, 'a, 'c, C::CodeGenData, A, C>
 {
     type T = BasicValueEnum<'c>;
+
+    fn fold_cmplx_arith_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T {
+        todo!()
+    }
 
     fn fold_real_arith_negate(&mut self, _: Span, arg: &COperand<C>) -> Self::T {
         let arg = self.operand(arg);
@@ -51,6 +55,22 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
             .builder
             .build_not(arg.into_int_value(), "inverse")
             .as_basic_value_enum()
+    }
+
+    fn fold_cmplx_add(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        todo!()
+    }
+
+    fn fold_cmplx_sub(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        todo!()
+    }
+
+    fn fold_cmplx_mul(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        todo!()
+    }
+
+    fn fold_cmplx_div(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+        todo!()
     }
 
     fn fold_real_add(&mut self, _: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
@@ -445,6 +465,10 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
     fn fold_sqrt(&mut self, _: Span, arg: &COperand<C>) -> Self::T {
         let arg = self.operand(arg);
         self.ctx.build_intrinsic_call(Intrinsic::Sqrt, &[arg])
+    }
+
+    fn fold_cmplx_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
+        todo!()
     }
 
     fn fold_real_abs(&mut self, _: Span, arg: &COperand<C>) -> Self::T {

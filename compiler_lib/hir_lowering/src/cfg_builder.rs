@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use openvaf_hir::{CaseItem, Cases, ConstVal, DisciplineAccess, Expression, ForLoop};
@@ -889,9 +889,8 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                 } else {
                     self.fold.errors.add(MultiTypeMissmatch {
                         span,
-                        types: ListFormatter(
+                        types: ListFormatter::with_final_seperator(
                             rvalues.iter().map(|(x, _)| TyPrinter(x.ty)).collect(),
-                            "'",
                             " and ",
                         ),
                         type_spans: rvalues.iter().map(|(_, span)| *span).collect(),
@@ -1223,7 +1222,10 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             (x, y) => {
                 self.fold.errors.add(MultiTypeMissmatch {
                     span,
-                    types: ListFormatter(vec![TyPrinter(x), TyPrinter(y)], "'", " and "),
+                    types: ListFormatter::with_final_seperator(
+                        vec![TyPrinter(x), TyPrinter(y)],
+                        " and ",
+                    ),
                     type_spans: vec![self.expr_span(lhs_expr), self.expr_span(rhs_expr)],
                 });
                 return None;
@@ -1272,7 +1274,10 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             (x, y) => {
                 self.fold.errors.add(MultiTypeMissmatch {
                     span,
-                    types: ListFormatter(vec![TyPrinter(x), TyPrinter(y)], "'", " and "),
+                    types: ListFormatter::with_final_seperator(
+                        vec![TyPrinter(x), TyPrinter(y)],
+                        " and ",
+                    ),
                     type_spans: vec![self.expr_span(lhs_expr), self.expr_span(rhs_expr)],
                 });
                 return None;
@@ -1310,7 +1315,10 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             (x, y) => {
                 self.fold.errors.add(MultiTypeMissmatch {
                     span,
-                    types: ListFormatter(vec![TyPrinter(x), TyPrinter(y)], "'", " and "),
+                    types: ListFormatter::with_final_seperator(
+                        vec![TyPrinter(x), TyPrinter(y)],
+                        " and ",
+                    ),
                     type_spans: vec![self.expr_span(lhs_expr), rhs_span],
                 });
                 return None;

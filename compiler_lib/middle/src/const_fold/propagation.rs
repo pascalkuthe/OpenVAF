@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use openvaf_data_structures::index_vec::IndexVec;
@@ -22,7 +22,7 @@ use osdi_types::ConstVal::Scalar;
 use osdi_types::SimpleConstVal::Integer;
 use osdi_types::Type;
 use std::marker::PhantomData;
-use tracing::trace_span;
+use tracing::{trace, trace_span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BasicBlockConstants {
@@ -35,6 +35,16 @@ impl BasicBlockConstants {
     pub fn meet(&mut self, other: &Self) {
         self.not_a_constant.union_with(&other.not_a_constant);
         let not_a_constant = &mut self.not_a_constant;
+
+        // X = X ^ Unkown
+        for (local, val) in &other.constants {
+            self.constants.entry(*local).or_insert_with(|| val.clone());
+        }
+
+        // NAC= X ^ NAC
+        // NAC= X ^ Y
+        // X = X ^ X
+
         self.constants.retain(|local, val| {
             let other = other.constants.get(local);
             match other {
@@ -42,7 +52,7 @@ impl BasicBlockConstants {
                     not_a_constant.insert(*local);
                     false
                 }
-                Some(_) | None => true,
+                Some(_) | None => !not_a_constant.contains(*local),
             }
         });
     }
@@ -67,6 +77,7 @@ impl BasicBlockConstants {
 pub struct ConditionalConstantPropagation<'lt, R: CallResolver> {
     pub cfg: &'lt ControlFlowGraph<R::C>,
     pub resolver: &'lt R,
+    pub initial_conditions: HashMap<Local, ConstVal>,
 }
 
 impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt, R> {
@@ -142,8 +153,15 @@ impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt
                 }
             }
 
+            trace!("JOIN {} -> {}", src_bb, dst_bb);
+
+            trace!("OUTPUT: {:?}", graph.out_sets[src_bb]);
+
+            trace!("BEFORE: {:?}", graph.in_sets[dst_bb]);
+
             graph.in_sets[dst_bb].unreachable = false;
             graph.in_sets[dst_bb].meet(&graph.out_sets[src_bb]);
+            trace!("AFTER: {:?}", graph.in_sets[dst_bb]);
         }
     }
 
@@ -156,7 +174,12 @@ impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt
     }
 
     fn setup_entry(&mut self, block: BasicBlock, graph: &mut DfGraph<Self::Set>) {
-        graph.in_sets[block].unreachable = false
+        graph.in_sets[block].unreachable = false;
+        graph.in_sets[block].constants = self.initial_conditions.clone();
+        graph.in_sets[block].not_a_constant.enable_all();
+        for local in self.initial_conditions.keys() {
+            graph.in_sets[block].not_a_constant.remove(*local);
+        }
     }
 }
 
@@ -190,6 +213,7 @@ impl<C: CallType> ControlFlowGraph<C> {
     pub fn fold_constants<R: CallResolver<C = C>>(
         &self,
         resolver: &R,
+        initial_conditions: HashMap<Local, ConstVal>,
     ) -> DfGraph<BasicBlockConstants> {
         let span = trace_span!("fold_constants");
         let _enter = span.enter();
@@ -199,6 +223,7 @@ impl<C: CallType> ControlFlowGraph<C> {
             &mut ConditionalConstantPropagation {
                 cfg: self,
                 resolver,
+                initial_conditions,
             },
         )
         .iterate_to_fixpoint()
@@ -228,6 +253,7 @@ impl<C: CallType> ControlFlowGraph<C> {
                         lattice.meet_constant(&constant)
                     }
                 }
+
                 local_constants.write_lattice(phi.dst, lattice);
             }
 
@@ -238,22 +264,24 @@ impl<C: CallType> ControlFlowGraph<C> {
 
             for (stmt, _) in &mut self.blocks[bb].statements {
                 if let StmntKind::Assignment(dst, ref mut rval) = *stmt {
-                    if let DiamondLattice::Val(val) =
-                        fold.resolve_statement(dst, rval, self.locals[dst].ty)
-                    {
+                    let lattice = fold.resolve_rvalue(rval, self.locals[dst].ty);
+                    if let DiamondLattice::Val(val) = &lattice {
                         // In most cases the statement is not required anymore (allowing this to be turned into a noop)
                         // but phis make that impossible
                         *rval = RValue::Use(Operand {
                             span: rval.span(),
-                            contents: OperandData::Constant(val),
-                        })
+                            contents: OperandData::Constant(val.clone()),
+                        });
                     } else {
                         for operand in rval.operands_mut() {
+                            let op = fold.resolve_operand(operand);
                             if let DiamondLattice::Val(c) = fold.resolve_operand(operand) {
                                 operand.contents = OperandData::Constant(c)
                             }
                         }
                     }
+
+                    fold.locals.write_lattice(dst, lattice);
                 }
             }
 
@@ -262,7 +290,7 @@ impl<C: CallType> ControlFlowGraph<C> {
             } = self[bb].terminator_mut().kind
             {
                 if let DiamondLattice::Val(cond) = fold_rvalue(&mut fold, condition, Type::INT) {
-                    // Branches are collapse in simplify cfg pass
+                    // Branches are collapsed in simplify cfg pass
                     *condition =
                         RValue::Use(Operand::new(OperandData::Constant(cond), condition.span()))
                 } else {
@@ -279,40 +307,65 @@ impl<C: CallType> ControlFlowGraph<C> {
 
 impl<C: CallType> Expression<C> {
     pub fn const_eval(&self) -> Option<ConstVal> {
-        self.const_eval_with_inputs(&NoInputConstResolution(PhantomData))
+        self.const_eval_with_inputs(&NoInputConstResolution(PhantomData), HashMap::new())
     }
 
-    pub fn const_eval_with_inputs<R: CallResolver<C = C>>(&self, inputs: &R) -> Option<ConstVal> {
+    pub fn const_eval_with_inputs<R: CallResolver<C = C>>(
+        &self,
+        inputs: &R,
+        initial_conditions: HashMap<Local, ConstVal>,
+    ) -> Option<ConstVal> {
         match self.1.contents {
             OperandData::Constant(ref val) => Some(val.clone()),
-            OperandData::Copy(local) => self.0.fold_constants(inputs).out_sets[self.0.end()]
-                .constants
-                .remove(&local),
+            OperandData::Copy(local) => self.0.fold_constants(inputs, initial_conditions).out_sets
+                [self.0.end()]
+            .constants
+            .remove(&local),
             OperandData::Read(ref input) => inputs.resolve_input(input).into(),
         }
     }
 }
 
-pub struct ConstantPropagation<'a, R>(&'a R);
+pub struct ConstantPropagation<'a, R> {
+    resolver: &'a R,
+    initial_conditions: HashMap<Local, ConstVal>,
+}
 
 impl<'a, C: CallType, R: CallResolver<C = C>> CfgPass<'_, C> for ConstantPropagation<'a, R> {
     type Result = ();
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
-        let local_constants = cfg.fold_constants(self.0).in_sets;
-        cfg.write_constants(local_constants, self.0)
+        let local_constants = cfg
+            .fold_constants(self.resolver, self.initial_conditions)
+            .in_sets;
+        cfg.write_constants(local_constants, self.resolver)
     }
 
-    impl_pass_span!(self; "constant_propagation", input_resolver = debug(self.0));
+    impl_pass_span!(self; "constant_propagation", input_resolver = debug(self.resolver));
 }
 impl<C: CallType> Default for ConstantPropagation<'static, NoInputConstResolution<C>> {
     fn default() -> Self {
-        Self(&NoInputConstResolution(PhantomData))
+        Self {
+            resolver: &NoInputConstResolution(PhantomData),
+            initial_conditions: HashMap::new(),
+        }
     }
 }
 
 impl<'a, R: CallResolver> ConstantPropagation<'a, R> {
-    pub fn with_resolver(r: &'a R) -> Self {
-        Self(r)
+    pub fn with_resolver(resolver: &'a R) -> Self {
+        Self {
+            resolver,
+            initial_conditions: HashMap::new(),
+        }
+    }
+}
+
+impl<C: CallType> ConstantPropagation<'static, NoInputConstResolution<C>> {
+    pub fn with_initial_conditions(initial_conditions: HashMap<Local, ConstVal>) -> Self {
+        Self {
+            resolver: &NoInputConstResolution(PhantomData),
+            initial_conditions,
+        }
     }
 }

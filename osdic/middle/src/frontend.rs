@@ -1,3 +1,13 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::lim::LimFunction;
 use openvaf_ast_lowering::{lower_ast_userfacing_with_printer, AllowedReferences};
 use openvaf_data_structures::index_vec::IndexSlice;
@@ -6,7 +16,7 @@ use openvaf_data_structures::{
     HashMap,
 };
 use openvaf_diagnostics::lints::Linter;
-use openvaf_diagnostics::{DiagnosticSlicePrinter, ListFormatter, UserResult};
+use openvaf_diagnostics::{DiagnosticSlicePrinter, UserResult};
 use openvaf_hir::{
     BranchId, ExpressionId, LimFunction as HirLimFunction, NetId, ParameterId, PortId, StatementId,
     SyntaxCtx,
@@ -16,7 +26,6 @@ use openvaf_hir_lowering::{
     ExpressionLowering, HirFold, HirLowering, HirSystemFunctionCall, LocalCtx,
 };
 use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, Type, Unknown};
-use openvaf_middle::cfg::ControlFlowGraph;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
@@ -25,7 +34,7 @@ use openvaf_middle::{
     CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
 };
-use openvaf_middle::{Local, ParameterInput};
+use openvaf_middle::{ParameterCallType, ParameterInput};
 use openvaf_parser::{parse_facing_with_printer, TokenStream};
 use openvaf_preprocessor::preprocess_user_facing_with_printer;
 use openvaf_session::sourcemap::Span;
@@ -45,6 +54,11 @@ pub enum GeneralOsdiCall {
     SymbolicDerivativeOfTimeDerivative,
     StopTask(StopTaskKind, PrintOnFinish),
     NodeCollapse(NetId, NetId),
+    Lim {
+        hi: NetId,
+        lo: NetId,
+        fun: LimFunction,
+    },
 }
 
 impl CallType for GeneralOsdiCall {
@@ -58,6 +72,7 @@ impl CallType for GeneralOsdiCall {
                 .clone()
                 .and_then(|_| DiamondLattice::Val(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
             Self::StopTask(_, _) | Self::NodeCollapse(_, _) => unreachable!(),
+            GeneralOsdiCall::Lim { .. } => DiamondLattice::NotAConstant,
         }
     }
 
@@ -67,13 +82,43 @@ impl CallType for GeneralOsdiCall {
         ad: &mut RValueAutoDiff<Self, C>,
         span: Span,
     ) -> Option<RValue<Self>> {
-        match self {
-            Self::Noise => None, // TODO correct?
+        match (self, ad.unknown) {
+            (Self::Lim { hi, .. }, Unknown::NodePotential(node)) if *hi == node => {
+                Some(RValue::Use(Spanned {
+                    contents: OperandData::Constant(Scalar(Real(-1.0))),
+                    span,
+                }))
+            }
+
+            (Self::Lim { hi, lo, .. }, Unknown::BranchPotential(hi_demanded, lo_demanded))
+                if (*hi == hi_demanded) & (*lo == lo_demanded) =>
+            {
+                Some(RValue::Use(Spanned {
+                    contents: OperandData::Constant(Scalar(Real(1.0))),
+                    span,
+                }))
+            }
+            (Self::Lim { hi, lo, .. }, Unknown::BranchPotential(hi_demanded, lo_demanded))
+                if (*lo == hi_demanded) & (*hi == lo_demanded) =>
+            {
+                Some(RValue::Use(Spanned {
+                    contents: OperandData::Constant(Scalar(Real(-1.0))),
+                    span,
+                }))
+            }
+
+            (Self::Lim { lo, .. }, Unknown::NodePotential(node)) if *lo == node => {
+                Some(RValue::Use(Spanned {
+                    contents: OperandData::Constant(Scalar(Real(-1.0))),
+                    span,
+                }))
+            }
+
             // derivative of constants are always zero no matter the analysis mode (nonsensical code maybe lint this?)
-            Self::SymbolicDerivativeOfTimeDerivative => {
+            (Self::SymbolicDerivativeOfTimeDerivative, _) => {
                 todo!("Does this even work? Probably not honestly")
             }
-            Self::TimeDerivative => ad.derivative(&args[0]).into_option().map(|derivative| {
+            (Self::TimeDerivative, _) => ad.derivative(&args[0]).into_option().map(|derivative| {
                 RValue::Call(
                     Self::SymbolicDerivativeOfTimeDerivative,
                     index_vec![Spanned {
@@ -83,7 +128,8 @@ impl CallType for GeneralOsdiCall {
                     span,
                 )
             }),
-            Self::StopTask(_, _) | Self::NodeCollapse(_, _) => unreachable!(),
+            (Self::StopTask(_, _), _) | (Self::NodeCollapse(_, _), _) => unreachable!(),
+            (Self::Lim { .. }, _) | (Self::Noise, _) => None, // TODO Noise analysis?
         }
     }
 }
@@ -91,18 +137,19 @@ impl CallType for GeneralOsdiCall {
 impl Display for GeneralOsdiCall {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            GeneralOsdiCall::Noise => write!(f, "$noise"),
-            GeneralOsdiCall::TimeDerivative => write!(f, "ddt"),
-            GeneralOsdiCall::StopTask(StopTaskKind::Stop, finish) => {
+            Self::Noise => write!(f, "$noise"),
+            Self::TimeDerivative => write!(f, "ddt"),
+            Self::StopTask(StopTaskKind::Stop, finish) => {
                 write!(f, "$stop({:?})", finish)
             }
-            GeneralOsdiCall::StopTask(StopTaskKind::Finish, finish) => {
+            Self::StopTask(StopTaskKind::Finish, finish) => {
                 write!(f, "$finish({:?})", finish)
             }
-            GeneralOsdiCall::NodeCollapse(hi, lo) => write!(f, "$collapse({:?}, {:?})", hi, lo),
-            GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative => {
+            Self::NodeCollapse(hi, lo) => write!(f, "$collapse({:?}, {:?})", hi, lo),
+            Self::SymbolicDerivativeOfTimeDerivative => {
                 write!(f, "ddx_ddt")
             }
+            Self::Lim { hi, lo, fun } => write!(f, "$limit(pot({:?}, {:?}), {} )", hi, lo, fun,),
         }
     }
 }
@@ -129,12 +176,6 @@ pub enum GeneralOsdiInput {
     Voltage(NetId, NetId),
     // Current(BranchId), TODO current reads
     // PortFlow(PortId),
-    Lim {
-        hi: NetId,
-        lo: NetId,
-        fun: LimFunction,
-        args: Vec<Local>,
-    },
     Temperature,
 }
 
@@ -146,14 +187,7 @@ impl Display for GeneralOsdiInput {
             Self::SimParam(name, kind) => write!(f, "$simparam({}, {:?})", name, kind),
             // Self::Current(branch) => write!(f, "flow({:?})", branch),
             Self::Voltage(hi, lo) => write!(f, "pot({:?}, {:?})", hi, lo),
-            Self::Lim { hi, lo, fun, args } => write!(
-                f,
-                "$limit(pot({:?}, {:?}), {}, {} )",
-                hi,
-                lo,
-                fun,
-                ListFormatter(args.as_slice(), ",", ", ")
-            ),
+
             // Self::PortFlow(port) => write!(f, "flow({:?})", port),
             Self::Temperature => f.write_str("$temp"),
         }
@@ -168,26 +202,21 @@ impl InputKind for GeneralOsdiInput {
             }
 
             // (Self::Current(x), Unknown::Flow(y)) if *x == y => Derivative::One,
-            (Self::Lim { hi, .. }, Unknown::NodePotential(node)) if *hi == node => Derivative::One,
+            (Self::Voltage(hi, _), Unknown::NodePotential(node)) if *hi == node => Derivative::One,
 
-            (Self::Lim { hi, lo, .. }, Unknown::BranchPotential(hi_demanded, lo_demanded))
+            (Self::Voltage(lo, _), Unknown::NodePotential(node)) if *lo == node => {
+                Derivative::Operand(OperandData::Constant(Scalar(Real(-1.0))))
+            }
+
+            (Self::Voltage(hi, lo), Unknown::BranchPotential(hi_demanded, lo_demanded))
                 if (*hi == hi_demanded) & (*lo == lo_demanded) =>
             {
                 Derivative::One
             }
-            (Self::Lim { hi, lo, .. }, Unknown::BranchPotential(hi_demanded, lo_demanded))
-                if (*lo == hi_demanded) & (*hi == lo_demanded) =>
+
+            (Self::Voltage(hi, lo), Unknown::BranchPotential(hi_demanded, lo_demanded))
+                if (*hi == lo_demanded) & (*lo == hi_demanded) =>
             {
-                Derivative::Operand(OperandData::Constant(Scalar(Real(-1.0))))
-            }
-
-            (Self::Lim { lo, .. }, Unknown::NodePotential(node)) if *lo == node => {
-                Derivative::Operand(OperandData::Constant(Scalar(Real(-1.0))))
-            }
-
-            (Self::Voltage(hi, _), Unknown::NodePotential(node)) if *hi == node => Derivative::One,
-
-            (Self::Voltage(lo, _), Unknown::NodePotential(node)) if *lo == node => {
                 Derivative::Operand(OperandData::Constant(Scalar(Real(-1.0))))
             }
 
@@ -200,7 +229,6 @@ impl InputKind for GeneralOsdiInput {
             Self::Parameter(ParameterInput::Value(param)) => mir[*param].ty,
             Self::Voltage(_, _)
             // | Self::Current(_)
-            | Self::Lim { .. }
             // | Self::PortFlow(_)
             | Self::Temperature
             | Self::SimParam(_, SimParamKind::RealOptional)
@@ -318,16 +346,18 @@ impl<'a> ExpressionLowering<OsdiHirLoweringCtx<'a>> for GeneralOsdiCall {
                     .zip(args.iter())
                     .filter_map(|((_name, ty), val)| {
                         ctx.lower_assignment_expr(*val, *ty)
-                            .map(|val| ctx.assign_temporary(val))
+                            .map(|val| ctx.rvalue_to_operand(val, span))
                     })
                     .collect();
                 let branch = &ctx.fold.mir.branches[branch];
-                GeneralOsdiInput::Lim {
+
+                let call = GeneralOsdiCall::Lim {
                     hi: branch.hi,
                     lo: branch.lo,
                     fun: LimFunction::Native(fun),
-                    args,
-                }
+                };
+
+                return Some(RValue::Call(call, args, span));
             }
 
             _ => todo!(),
@@ -419,4 +449,16 @@ pub fn run_frontend_from_ts<P: DiagnosticSlicePrinter>(
     // } else {
     //     Err(lowering.errors.user_facing())
     // }
+}
+
+impl From<ParameterCallType> for GeneralOsdiCall {
+    fn from(src: ParameterCallType) -> Self {
+        match src {}
+    }
+}
+
+impl From<ParameterInput> for GeneralOsdiInput {
+    fn from(src: ParameterInput) -> Self {
+        Self::Parameter(src)
+    }
 }

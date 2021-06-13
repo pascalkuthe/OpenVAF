@@ -1,11 +1,11 @@
 /*
- * ******************************************************************************************
- * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
- * It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
  *  No part of frontend, including this file, may be copied, modified, propagated, or
  *  distributed except according to the terms contained in the LICENSE file.
- * *****************************************************************************************
+ *  *****************************************************************************************
  */
 
 use core::fmt::Formatter;
@@ -293,14 +293,14 @@ impl LibraryDiagnostic for Error {
                 types,
                 type_spans,
             } => {
-                let mut messages = Vec::with_capacity(types.1.len() + 1);
+                let mut messages = Vec::with_capacity(types.list.len() + 1);
                 messages[0] = (
                     AnnotationType::Error,
                     Text::const_str("Types mismatched"),
                     span.data(),
                 );
 
-                for (ty, span) in types.0.iter().zip(type_spans) {
+                for (ty, span) in types.list.iter().zip(type_spans) {
                     messages.push((
                         AnnotationType::Info,
                         Text::owned(format!("This has type '{}'", ty)),

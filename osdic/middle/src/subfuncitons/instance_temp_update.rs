@@ -1,7 +1,18 @@
+/*
+ *  ******************************************************************************************
+ *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
+ *  It is subject to the license terms in the LICENSE file found in the top-level directory
+ *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
+ *  No part of frontend, including this file, may be copied, modified, propagated, or
+ *  distributed except according to the terms contained in the LICENSE file.
+ *  *****************************************************************************************
+ */
+
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
+use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::BitSet;
+use openvaf_data_structures::{BitSet, HashMap};
 use openvaf_hir::Unknown;
 use openvaf_ir::ids::{PortId, VariableId};
 use openvaf_ir::Type;
@@ -10,7 +21,7 @@ use openvaf_middle::const_fold::DiamondLattice;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
     COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Mir,
-    OperandData, ParameterInput, RValue, StmntKind,
+    OperandData, ParameterInput, RValue, StmntKind, VariableLocalKind,
 };
 use openvaf_session::sourcemap::Span;
 use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
@@ -119,12 +130,12 @@ impl CallTypeConversion<GeneralOsdiCall, InstanceTempUpdateCallType>
 
 pub struct InstanceTempUpdateFunction {
     pub cfg: ControlFlowGraph<InstanceTempUpdateCallType>,
-    pub written_vars: BitSet<VariableId>,
+    pub written_storage: BitSet<StorageLocation>,
+    pub read_storage: BitSet<StorageLocation>,
 }
 
 impl InstanceTempUpdateFunction {
     pub fn new(
-        mir: &Mir<GeneralOsdiCall>,
         cfg: &ControlFlowGraph<GeneralOsdiCall>,
         tainted_locations: &BitSet<IntLocation>,
         assumed_locations: &BitSet<IntLocation>,
@@ -132,9 +143,9 @@ impl InstanceTempUpdateFunction {
         pdg: &ProgramDependenceGraph,
         inv_pdg: &InvProgramDependenceGraph,
         all_output_stmnts: &BitSet<IntLocation>,
+        storage: &StorageLocations,
     ) -> (Self, BitSet<IntLocation>) {
-        let (cfg, function_output_locations, written_vars) = function_cfg_from_full_cfg(
-            mir,
+        let (cfg, function_output_locations, written_vars, read_vars) = function_cfg_from_full_cfg(
             cfg,
             tainted_locations,
             Some(assumed_locations),
@@ -142,10 +153,18 @@ impl InstanceTempUpdateFunction {
             locations,
             inv_pdg,
             pdg,
+            storage,
         );
 
         let cfg = cfg.map(&mut GeneralToInstanceTempUpdate);
 
-        (Self { cfg, written_vars }, function_output_locations)
+        (
+            Self {
+                cfg,
+                written_storage: written_vars,
+                read_storage: read_vars,
+            },
+            function_output_locations,
+        )
     }
 }
