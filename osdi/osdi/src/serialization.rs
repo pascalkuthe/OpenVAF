@@ -8,14 +8,11 @@
  *  *****************************************************************************************
  */
 
-use crate::OsdiModel;
+use crate::ModelInfoStore;
 use bincode::ErrorKind;
 use once_cell::sync::OnceCell;
 use semver::Version;
 use std::io::Write;
-
-use std::fs::File;
-use std::path::Path;
 
 static VERSION: OnceCell<Version> = OnceCell::new();
 
@@ -34,28 +31,19 @@ pub fn is_compatible(serialized_version: &Version) -> bool {
     })
 }
 
-impl OsdiModel {
-    pub fn save<W: Write>(&self, mut writer: W) -> Result<(), Box<ErrorKind>> {
-        with_semantic_version(|version| bincode::serialize_into(&mut writer, version))?;
-        bincode::serialize_into(writer, &self.info_store)
+impl ModelInfoStore {
+    pub fn to_bytes<W: Write>(&self) -> Result<Vec<u8>, Box<ErrorKind>> {
+        let mut res = Vec::new();
+        with_semantic_version(|version| bincode::serialize_into(&mut res, version))?;
+        bincode::serialize_into(&mut res, &self)?;
+        Ok(res)
     }
 
     #[cfg(feature = "simulator")]
-    pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<ErrorKind>> {
-        use crate::runtime::OsdiModelRuntime;
-
-        let file = File::open(path.as_ref().join(".mis"))?;
-        let version: Version = bincode::deserialize_from(&file)?;
+    pub fn load(mut bytes: &[u8]) -> Result<Self, Box<ErrorKind>> {
+        let version: Version = bincode::deserialize_from(&mut bytes)?;
         if is_compatible(&version) {
-            let info_store = bincode::deserialize_from(&file)?;
-            let runtime = OsdiModelRuntime::init(path).unwrap();
-
-            let res = Self {
-                info_store,
-                runtime,
-            };
-
-            Ok(res)
+            bincode::deserialize_from(&mut bytes)
         } else {
             let err = with_semantic_version(|osdi_version| {
                 Box::new(ErrorKind::Custom(format!(

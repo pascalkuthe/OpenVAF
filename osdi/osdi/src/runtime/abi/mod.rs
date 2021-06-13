@@ -8,22 +8,17 @@
  *  *****************************************************************************************
  */
 
-use std::ptr;
-
-mod branch_data;
-mod modelcard;
-mod node_voltages;
-mod variables;
-
-pub use branch_data::BranchCurrentsAndConductance;
-pub use modelcard::ModelCard;
-pub use node_voltages::NodePotentialOffsets;
-use osdi_types::Type;
 use std::convert::TryInto;
 use std::ffi::CStr;
 use std::mem::size_of;
 use std::os::raw::c_char;
-pub use variables::InternalData;
+use std::ptr;
+
+use osdi_types::Type;
+
+mod model_data;
+
+pub use model_data::ModelData;
 
 /// Allows writing rust data types into select
 pub trait OSDIAbi: Sized + Copy {

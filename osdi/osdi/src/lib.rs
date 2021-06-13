@@ -21,7 +21,6 @@ mod serialization;
 
 pub use crate::model_info_store::ModelInfoStore;
 use bitflags::bitflags;
-use cfg_if::cfg_if;
 
 bitflags! {
     pub struct ReturnFlags: u64{
@@ -37,21 +36,8 @@ bitflags! {
     }
 }
 
-cfg_if! {
-    if #[cfg(feature="simulator")]{
-        pub mod runtime;
-        use crate::runtime::{OsdiModelRuntime};
+#[cfg(feature = "simulator")]
+pub mod runtime;
 
-        pub struct OsdiModel{
-            pub info_store: ModelInfoStore,
-            pub runtime: OsdiModelRuntime,
-        }
-
-    }else{
-
-        pub struct OsdiModel{
-            pub info_store: ModelInfoStore,
-        }
-
-    }
-}
+#[cfg(feature = "simulator")]
+pub use runtime::{abi, OsdiModel};

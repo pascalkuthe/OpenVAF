@@ -9,13 +9,14 @@
  */
 
 use cfg_if::cfg_if;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::ffi::{CStr, CString};
-use std::ops::Deref;
-use std::os::raw::c_char;
+use serde::{Deserialize, Deserializer, Serialize};
 
 cfg_if! {
     if #[cfg(all(feature="simulator",feature="cstr"))]{
+        use std::ffi::{CStr, CString};
+        use std::ops::Deref;
+        use std::os::raw::c_char;
+        use serde::Serializer;
 
         #[derive(Clone, Copy, Debug)]
         pub struct OsdiStr(&'static CStr);

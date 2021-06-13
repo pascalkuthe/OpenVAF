@@ -8,15 +8,12 @@
  *  *****************************************************************************************
  */
 
-use crate::model_info_store::{Parameter, ParameterId};
+use crate::model_info_store::{OpaqueData, ParameterId};
 
-use super::OSDIAbi;
 use crate::ModelInfoStore;
-use osdi_types::Type;
 
-use std::alloc::{alloc, dealloc, Layout};
-use std::ptr::NonNull;
-use thiserror::Error;
+use crate::runtime::abi::OSDIAbi;
+use std::mem::size_of;
 
 type BLOCK = u64;
 const PARAM_GIVEN_BLOCK_SIZE_U16: u16 = 64;
@@ -26,46 +23,54 @@ const fn mask(param: u16) -> BLOCK {
     1 << (param % PARAM_GIVEN_BLOCK_SIZE_U16)
 }
 
-pub struct ModelCard {
-    data: NonNull<u8>,
-    data_layout: Layout,
-    given: Box<[u64]>,
-}
+pub struct ModelData(OpaqueData);
 
-impl ModelCard {
-    pub fn new(param_count: usize, data_layout: Layout) -> Self {
-        // Upwards rounding integer division
-        let given_size =
-            (param_count + PARAM_GIVEN_BLOCK_SIZE_USIZE - 1) / PARAM_GIVEN_BLOCK_SIZE_USIZE;
+impl ModelData {
+    pub unsafe fn new(info_store: &ModelInfoStore) -> Self {
+        // Rust allocator always produces valid allocations and the same layout is used so this is perfectly save
+        let data = info_store.model_data.alloc();
+        Self(data)
+    }
 
-        // Rust allocator always procudes valid allocations u8 is always properly aligned
-        let data = unsafe { alloc(data_layout) };
+    pub unsafe fn from_data(raw: OpaqueData) -> Self {
+        Self(raw)
+    }
 
-        Self {
-            data: NonNull::new(data).expect("Allocation failed"),
-            data_layout,
-            given: vec![0; given_size].into_boxed_slice(),
+    pub fn is_parameter_set(&self, param: ParameterId, info_store: &ModelInfoStore) -> bool {
+        let block: BLOCK = unsafe {
+            self.read(
+                info_store.param_given_offset
+                    + (param.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE) * size_of::<BLOCK>(),
+            )
+        };
+        block & mask(param.raw()) != 0
+    }
+
+    unsafe fn read<T: Copy>(&self, offset: usize) -> T {
+        (self.0.access().as_ptr().add(offset) as *mut T).read()
+    }
+
+    pub fn mark_parameter_as_set(
+        &self,
+        param: ParameterId,
+        info_store: &ModelInfoStore,
+        set: bool,
+    ) {
+        let block: &mut BLOCK = unsafe {
+            self.get_mut(
+                info_store.param_given_offset
+                    + (param.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE) * size_of::<BLOCK>(),
+            )
+        };
+        if set {
+            *block |= mask(param.raw());
+        } else {
+            *block &= !mask(param.raw());
         }
     }
 
-    pub fn from_info_store(info_store: &ModelInfoStore) -> Self {
-        Self::new(info_store.parameters.len(), info_store.modelcard_layout.0)
-    }
-
-    pub fn data(&self) -> *const u8 {
-        self.data.as_ptr()
-    }
-
-    pub fn data_mut(&mut self) -> *mut u8 {
-        self.data.as_ptr()
-    }
-
-    pub fn paras_given(&self) -> &[u64] {
-        &self.given
-    }
-
-    pub fn is_parameter_set(&self, param: ParameterId) -> bool {
-        (self.given[param.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE] & mask(param.raw())) != 0
+    unsafe fn get_mut<T>(&self, offset: usize) -> &mut T {
+        &mut *(self.0.access().as_ptr().add(offset) as *mut T)
     }
 
     /// Directly writes data into the modelcard
@@ -74,8 +79,19 @@ impl ModelCard {
     /// # Safety
     /// param must belong to the same layout that this ModelCard was created with
     /// and the type of T must match that of the parameter
-    pub unsafe fn write_unchecked<T: OSDIAbi>(&mut self, param: &Parameter, val: T) {
-        val.write(self.data.as_ptr().add(param.mc_offset))
+    #[inline]
+    pub unsafe fn write_unchecked<T: OSDIAbi>(
+        &mut self,
+        param: ParameterId,
+        info_store: &ModelInfoStore,
+        val: T,
+    ) {
+        val.write(
+            self.0
+                .access()
+                .as_ptr()
+                .add(info_store.parameters[param].model_data_offset),
+        )
     }
 
     /// Sets a parameter and marks its values as given
@@ -84,9 +100,21 @@ impl ModelCard {
     /// # Safety
     /// param must belong to the same layout that this ModelCard was created with
     /// and the type of T must match that of the parameter
-    pub unsafe fn set_unchecked<T: OSDIAbi>(&mut self, param: &Parameter, val: T) {
-        self.given[param.id.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE] |= mask(param.id.raw());
-        self.write_unchecked(param, val)
+
+    #[inline]
+    pub unsafe fn set_unchecked<T: OSDIAbi>(
+        &mut self,
+        param: ParameterId,
+        info_store: &ModelInfoStore,
+        val: T,
+    ) {
+        self.mark_parameter_as_set(param, info_store, true);
+        val.write(
+            self.0
+                .access()
+                .as_ptr()
+                .add(info_store.parameters[param].model_data_offset),
+        )
     }
 
     // /// # Safety
@@ -123,10 +151,4 @@ impl ModelCard {
     //         Ok(())
     //     }
     // }
-}
-
-impl Drop for ModelCard {
-    fn drop(&mut self) {
-        unsafe { dealloc(self.data.as_ptr(), self.data_layout) }
-    }
 }

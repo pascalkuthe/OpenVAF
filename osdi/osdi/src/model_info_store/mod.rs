@@ -13,61 +13,10 @@ use crate::string::OsdiStr;
 use crate::types::Type;
 use index_vec::{Idx, IndexSlice, IndexVec};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::alloc::Layout;
+use std::alloc;
+use std::alloc::{alloc_zeroed, dealloc};
 use std::ops::Deref;
-
-/// Specifies how to write the derivative of the Current between nodes `i` and `j` by the Voltage between nodes `l` and `m` into the Jacobi matrix.
-///
-/// ```math
-///     \frac{dI_{i,j}}{dV_{l,m}}
-/// ```
-///
-/// # Explanation
-///
-/// The value of a Jacobi entry is defined by the following equation
-///
-/// ``` math
-///     J_{o,p} = \Sum_q  \frac{dI_{o,q}}{dV_{p}} = \Sum_q \Sum_r \frac{dI_{o,q}}{dV_{p,r}}
-/// ```
-///
-/// Furthermore the symmetries shown below can be used to trivially show that a singular derivative affects **4** Jacobi entries:
-///
-/// ```math
-///     J_{i,l}, J_{i,m}, J_{j,l}, J_{j,m}
-/// ```
-///
-/// ```math
-///     \frac{dI_{o,q}}{dV_{p,r}} = -\frac{dI_{o,q}}{dV_{r,p}}
-/// ```
-///
-/// ```math
-///     \frac{dI_{o,q}}{dV_{p,r}} = -\frac{dI_{q,o}}{dV_{p,r}}
-/// ```
-///
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Stamp {
-    /// The Jacobi entry `J_{i,l}`
-    /// Derivative should be added with **positive** sign
-    pub high_by_high: JacobianId,
-    /// The Jacobi entry `J_{i,m}`
-    /// Derivative should be added with **negative** sign
-    pub high_by_lo: JacobianId,
-
-    /// The Jacobi entry `J_{j,l}`
-    /// Derivative should be added with **positive** sign
-    pub lo_by_lo: JacobianId,
-    /// The Jacobi entry `J_{j,m}`
-    /// Derivative should be added with **negative** sign
-    pub lo_by_high: JacobianId,
-
-    /// The voltage by which this branch was derived.
-    /// Necessary for calulating the rhs in SPICE simulators
-    ///
-    /// ```math
-    ///     V_{l,m}
-    /// ```
-    pub voltage: Voltage,
-}
+use std::ptr::NonNull;
 
 id_type!(NodeId(u16));
 
@@ -76,13 +25,12 @@ pub struct Node {
     pub name: OsdiStr,
     pub ground: bool,
 
-    /// A list of all Jacobian Elements `jacobian[self,x] != 0`
-    /// The Jacobian in this context refers to the (sparse) jacobian of the Kirchoff Laws used in circuit simulation
-    ///
-    /// An entry `x` here can be interpreted as the potential of Node `x`
-    /// can directly influence the value of a branch that is connected to this
+    // A list of all Jacobian Elements `jacobian[self,x] != 0`
+    // The Jacobian in this context refers to the (sparse) jacobian of the Kirchoff Laws used in circuit simulation
+    //
+    // An entry `x` here can be interpreted as the potential of Node `x`
+    // can directly influence the value of a branch that is connected to this
     // pub jacobian_entries: Vec<JacobianId>,
-
     /// The terminal that this port belogs to
     pub port: Option<PortId>,
 }
@@ -93,30 +41,7 @@ id_type!(PortId(u16));
 pub struct Voltage {
     pub hi: NodeId,
     pub lo: NodeId,
-    pub lim: Option<LimitId>,
-}
-
-id_type!(CurrentId(u16));
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Current {
-    pub name: OsdiStr,
-
-    /// A list of all Jacobian Elements `jacobian[hi,x]/jacobian[lo,x]`
-    /// The Jacobian in this context refers to the (sparse) jacobian of the Kirchoff Laws used in circuit simulation
-    ///
-    /// This Vector is intended to be used to generate matrix stamps typcially found in SPICE based simulators
-    /// Each elements corresponds to one derivative calculated by OpenVAF (see TODO)
-    /// This value shall be added to first JacobianId and subtracted from the second
-    //  pub stamps: Vec<Stamp>,
-
-    // Voltage over this Branch
-    pub voltage: Voltage,
-
-    /// A list of all non linearaties that can affect this branch
-    pub non_linearties: Box<[LimitId]>,
-
-    pub pos: usize,
+    //pub lim: Option<LimitId>,
 }
 
 id_type!(JacobianId(u16));
@@ -183,44 +108,57 @@ pub struct UserInfo {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Parameter {
     pub info: UserInfo,
-    pub mc_offset: usize,
+    pub model_data_offset: usize,
     pub id: ParameterId,
 }
 
-id_type!(LimitId(u8));
-
-#[derive(Serialize, Deserialize)]
-struct LayoutHelper {
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct Layout {
     size: usize,
     align: usize,
 }
 
-#[derive(Clone, Debug)]
-pub struct SerializableLayout(pub Layout);
-
-impl Serialize for SerializableLayout {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
-    where
-        S: Serializer,
-    {
-        LayoutHelper {
-            size: self.0.size(),
-            align: self.0.align(),
-        }
-        .serialize(serializer)
+impl Layout {
+    pub fn alloc_layout(&self) -> alloc::Layout {
+        std::alloc::Layout::from_size_align(self.size, self.align).unwrap()
+    }
+    pub fn alloc(&self) -> OpaqueData {
+        OpaqueData::new(self.alloc_layout())
     }
 }
 
-impl<'de> Deserialize<'de> for SerializableLayout {
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let helper = LayoutHelper::deserialize(deserializer)?;
-        Ok(Self(
-            Layout::from_size_align(helper.size, helper.align)
-                .expect("Deserialized Illegal Layout!"),
-        ))
+pub struct OpaqueData {
+    data: NonNull<u8>,
+    layout: alloc::Layout,
+}
+
+impl OpaqueData {
+    // # Safety
+    // This is unsafe because the caller could dealloc the data
+    // It is quite clear that the Data is owned by this struct
+    pub unsafe fn access(&self) -> NonNull<u8> {
+        self.data
+    }
+
+    pub unsafe fn frow_raw(data: NonNull<u8>, layout: alloc::Layout) -> Self {
+        Self { data, layout }
+    }
+
+    pub fn new(layout: alloc::Layout) -> Self {
+        let data = if layout.size() == 0 {
+            NonNull::dangling() //  zero sized types do not allocate
+        } else {
+            let raw = unsafe { alloc_zeroed(layout) };
+            NonNull::new(raw).unwrap()
+        };
+
+        Self { data, layout }
+    }
+}
+
+impl Drop for OpaqueData {
+    fn drop(&mut self) {
+        unsafe { dealloc(self.data.as_ptr(), self.layout) }
     }
 }
 
@@ -228,21 +166,11 @@ impl<'de> Deserialize<'de> for SerializableLayout {
 pub struct ModelInfoStore {
     pub name: OsdiStr,
     pub description: OsdiStr,
-
-    pub branches: SerializableIdxSlice<CurrentId, Current>,
     pub jacobian: SerializableIdxSlice<JacobianId, JacobianEntry>,
-
-    pub nodes: SerializableIdxSlice<NodeId, Node>,
     pub ports: SerializableIdxSlice<PortId, NodeId>,
-
     pub parameters: SerializableIdxSlice<ParameterId, Parameter>,
-
-    pub non_linear_voltages: SerializableIdxSlice<LimitId, Voltage>,
-    pub ddt_count: usize,
-
-    pub current_and_conductance_size: usize,
-
-    pub instance_variable_layout: SerializableLayout,
-    pub model_variable_layout: SerializableLayout,
-    pub modelcard_layout: SerializableLayout,
+    pub state_vec: Layout,
+    pub model_data: Layout,
+    pub param_given_offset: usize,
+    pub instance_data: Layout,
 }
