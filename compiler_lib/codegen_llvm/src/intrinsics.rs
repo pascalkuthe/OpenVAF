@@ -9,7 +9,7 @@
  */
 
 use crate::LlvmCodegen;
-use enum_map::{Enum, EnumMap};
+use enum_map::{enum_map, Enum, EnumMap};
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::FunctionType;
@@ -24,13 +24,13 @@ pub fn intrinsic_prototypes<'c>(
     ctx: &'c Context,
     msvc: bool,
 ) -> IntrinsicPrototypes<'c> {
-    EnumMap::from(|intrinsic: Intrinsic| {
-        module.add_function(
+    enum_map! {
+        intrinsic => module.add_function(
             intrinsic.name(msvc),
             intrinsic.fn_type(ctx),
             Some(Linkage::External),
         )
-    })
+    }
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Enum)]

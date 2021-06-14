@@ -208,6 +208,7 @@ macro_rules! middle_tests {
 
 middle_tests!(HICUML2);
 //middle_tests!(HICUML0);
+middle_tests!(BSIM6);
 middle_tests!(BSIMSOI);
 middle_tests!(BSIMBULK);
 middle_tests!(BSIMCMG);

@@ -283,6 +283,7 @@ pub enum Statement {
     DisplayTask(DisplayTaskKind, Vec<ExpressionId>),
     StopTask(StopTaskKind, Option<ExpressionId>),
     Error,
+    NoOp,
 }
 
 #[derive(Clone, Debug)]

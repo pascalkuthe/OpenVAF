@@ -274,7 +274,6 @@ impl<C: CallType> ControlFlowGraph<C> {
                         });
                     } else {
                         for operand in rval.operands_mut() {
-                            let op = fold.resolve_operand(operand);
                             if let DiamondLattice::Val(c) = fold.resolve_operand(operand) {
                                 operand.contents = OperandData::Constant(c)
                             }

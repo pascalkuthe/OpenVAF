@@ -530,7 +530,16 @@ raw_stmt<I>: ast::Statement = {
 
     "for" RecoverError BLOCK => ast::Statement::Error,
 
-    RecoverError ";" => ast::Statement::Error,
+    <err: !> ";" => {
+        if matches!(err.error,::lalrpop_util::ParseError::UnrecognizedToken{token: (_,Token::Semicolon,_), expected: _}) && err.dropped_tokens.is_empty() {
+            ast::Statement::NoOp
+        }else{
+            errors.add(err);
+            ast::Statement::Error
+        }
+
+    },
+
 
     "case" RecoverError case_item* SkipExtraTokens "endcase" => ast::Statement::Error,
 

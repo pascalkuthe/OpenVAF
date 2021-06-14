@@ -461,6 +461,9 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
             }
 
             ast::Statement::Error => unreachable!(),
+            ast::Statement::NoOp => {
+                return; //Nothin to do
+            }
         };
 
         let sctx = self.base.exit_sctxt();
