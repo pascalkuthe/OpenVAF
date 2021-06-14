@@ -21,12 +21,12 @@ openvaf-ir = {version = "0.8.0", path = "../ir"}
 openvaf-session = {version = "0.8.0", path = "../session"}
 openvaf-diagnostics = {version = "0.8.0", path = "../diagnostics" }
 osdi-types = {version = "0.1", path="../../osdi/osdi_types"}
-log = "0.4"
-tracing = "0.1"
-rustc-ap-graphviz = {version = "662.0.0", optional = true}
+log = "0.4.14"
+tracing = "0.1.26"
+rustc-ap-graphviz = { version = "662.0.0", optional = true }
 enum-map = "1.1.1"
-thiserror = "1.0"
-itertools = "0.10"
+thiserror = "1.0.25"
+itertools = "0.10.1"
 
 [features]
 

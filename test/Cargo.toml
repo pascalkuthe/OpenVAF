@@ -28,7 +28,7 @@ openvaf-transformations = {version = "0.8.0", path = "../compiler_lib/transforma
 openvaf-codegen-llvm = {version = "0.8.0", path = "../compiler_lib/codegen_llvm" }
 tracing = {version = "0.1", features = ["max_level_trace"]}
 
-osdic-middle = { version = "0.8.0", path = "../osdic/middle" }
+osdic-middle = { version = "0.1.0", path = "../osdic/middle" }
 osdic-target = {version = "0.1.0", path="../osdic/targets"}
 
 tracing-tree = "0.1"

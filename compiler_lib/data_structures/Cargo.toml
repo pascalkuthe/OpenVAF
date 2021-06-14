@@ -15,16 +15,16 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 
 
-more-asserts = "0.2"
-arrayvec = "0.7"
-ahash = "0.7"
-parking_lot = "0.11"
-once_cell = "1.7"
+more-asserts = "0.2.1"
+arrayvec = "0.7.1"
+ahash = "0.7.4"
+parking_lot = "0.11.1"
+once_cell = "1.8.0"
 
-fixedbitset = "0.4"
-index_vec = "0.1"
+fixedbitset = "0.4.0"
+index_vec = "0.1.2"
 
-cfg-if = "1.0"
+cfg-if = "1.0.0"
 
 
 [features]

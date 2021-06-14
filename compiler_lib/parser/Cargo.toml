@@ -19,12 +19,12 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 
 # Parsing
-lalrpop-util = "0.19"
+lalrpop-util = "0.19.6"
 
 # Error reporting
-tracing = "0.1"
-thiserror = "1.0"
-more-asserts = "0.2"
+tracing = "0.1.26"
+thiserror = "1.0.25"
+more-asserts = "0.2.1"
 
 openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
 
@@ -32,7 +32,7 @@ openvaf-diagnostics = {version = "0.8.0", path = "../diagnostics"}
 openvaf-ast = {version = "0.8.0", path = "../ast"}
 openvaf-ir = {version = "0.8.0", path = "../ir"}
 openvaf-session = {version = "0.8.0", path = "../session"}
-itertools = "0.10"
+itertools = "0.10.1"
 
 [build-dependencies]
-lalrpop = "0.19.0"
+lalrpop = "0.19.6"

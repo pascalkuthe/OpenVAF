@@ -76,6 +76,7 @@
                 (rustChannel.rust.override { extensions = [ "rust-src" ]; })
                 crate2nix
                 cargo-outdated
+                cargo-edit
                 tokei
               ];
             }

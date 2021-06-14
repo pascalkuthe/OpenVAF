@@ -15,7 +15,7 @@ maintenance = { status = "actively-developed" }
 
 
 [dependencies]
-more-asserts = "0.2"
+more-asserts = "0.2.1"
 
 openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
 openvaf-ir = {version = "0.8.0", path = "../ir"}

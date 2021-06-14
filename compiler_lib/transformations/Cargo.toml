@@ -20,8 +20,8 @@ openvaf-diagnostics = {version = "0.8.0", path = "../diagnostics"}
 openvaf-middle = {version = "0.8.0", path = "../middle" }
 openvaf-ir = {version = "0.8.0", path = "../ir"}
 
-tracing = "0.1"
-itertools = "0.10"
+tracing = "0.1.26"
+itertools = "0.10.1"
 
 
 [features]
