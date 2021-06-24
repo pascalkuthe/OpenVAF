@@ -34,8 +34,8 @@
       rustOverlay = final: prev:
         let
           rustChannel = prev.rustChannelOf {
-            channel = "beta";
-            sha256 = "sha256-GnlDd27tE5AcuNph68YHL9aMLl2n8eWbtrodoiE4++E";
+            channel = "stable";
+            sha256 = "sha256-SlEH+9Fxj8zEE7wdVtREMrPX0MbmbktXrvhsJDbvm9w=";
           };
         in
           {
@@ -77,6 +77,7 @@
                 crate2nix
                 cargo-outdated
                 cargo-edit
+                cargo-flamegraph
                 tokei
               ];
             }

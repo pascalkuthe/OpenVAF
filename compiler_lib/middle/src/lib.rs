@@ -34,7 +34,6 @@ pub mod dfa;
 mod fold;
 mod util;
 
-use crate::const_fold::DiamondLattice;
 pub use fold::{fold_rvalue, RValueFold};
 use openvaf_data_structures::HashMap;
 pub use osdi_types::{SimpleType, Type, TypeInfo};
@@ -48,6 +47,7 @@ pub type ConstVal = osdi_types::ConstVal<StringLiteral>;
 pub type SimpleConstVal = osdi_types::SimpleConstVal<StringLiteral>;
 
 use crate::derivatives::RValueAutoDiff;
+use crate::dfa::lattice::FlatSet;
 use openvaf_data_structures::arrayvec::ArrayVec;
 use openvaf_data_structures::sync::RwLock;
 use openvaf_diagnostics::ListFormatter;
@@ -166,7 +166,7 @@ pub enum ParameterCallType {}
 impl CallType for ParameterCallType {
     type I = ParameterInput;
 
-    fn const_fold(&self, _args: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _args: &[FlatSet<ConstVal>]) -> FlatSet<ConstVal> {
         match *self {}
     }
 
@@ -217,7 +217,7 @@ impl Display for RealConstInputType {
 impl CallType for RealConstCallType {
     type I = RealConstInputType;
 
-    fn const_fold(&self, _: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _: &[FlatSet<ConstVal>]) -> FlatSet<ConstVal> {
         match *self {}
     }
 
@@ -472,7 +472,7 @@ define_index_type! {
 pub trait CallType: Debug + Clone + PartialEq + Display {
     type I: InputKind;
 
-    fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice;
+    fn const_fold(&self, call: &[FlatSet<ConstVal>]) -> FlatSet<ConstVal>;
     fn derivative<C: CallType>(
         &self,
         args: &IndexSlice<CallArg, [COperand<Self>]>,
@@ -910,7 +910,8 @@ where
 
 impl<C: CallType> StmntKind<C> {
     pub fn locals(&self) -> impl Iterator<Item = Local> {
-        // This is mostly three adress code
+        // All stmnts excepot array construction and calls have 3 or less operands
+        // Even calls have 3 or less arguments in practice in 90% of cases
         let mut buff = Vec::with_capacity(3);
         self.for_locals(|local| buff.push(local));
         buff.into_iter()

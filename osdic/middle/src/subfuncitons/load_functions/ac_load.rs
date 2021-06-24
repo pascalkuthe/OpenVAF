@@ -19,7 +19,7 @@ use openvaf_hir::{BranchId, NetId, Type, Unknown};
 use openvaf_ir::ids::{PortId, SyntaxCtx};
 use openvaf_ir::{PrintOnFinish, Spanned, StopTaskKind};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, LocationKind};
-use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::RValue::{Comparison, DoubleArgMath, SingleArgMath};
 use openvaf_middle::{
@@ -47,7 +47,7 @@ pub enum AcLoadFunctionCall {
 impl CallType for AcLoadFunctionCall {
     type I = AcLoadInput;
 
-    fn const_fold(&self, _call: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _call: &[FlatSet]) -> FlatSet {
         unreachable!()
     }
 
@@ -238,7 +238,7 @@ impl LoadFunctions {
         ac_assumed.difference_with(&tainted.by_time_derivative);
         ac_assumed.difference_with(&tainted.by_stamp_write);
 
-        let ac_load_locations = ac_load.run_pass(BackwardSlice {
+        let ac_load_locations = ac_load.modify(BackwardSlice {
             relevant_locations: tainted.by_stamp_write.clone(),
             assumed_locations: ac_assumed,
             pdg,
@@ -356,7 +356,7 @@ impl LoadFunctions {
             }
         }
 
-        ac_load.run_pass(Strip {
+        ac_load.modify(Strip {
             retain: &ac_load_locations,
             locations,
         });

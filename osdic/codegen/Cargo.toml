@@ -20,10 +20,10 @@ openvaf-session = { version = "0.8.0", path = "../../compiler_lib/session" }
 openvaf-diagnostics = { version = "0.8.0", path = "../../compiler_lib/diagnostics" }
 openvaf-middle = { version = "0.8.0", path = "../../compiler_lib/middle" }
 openvaf-codegen-llvm = { version = "0.8.0", path = "../../compiler_lib/codegen_llvm" }
+openvaf-linker = { version = "0.8.0", path = "../../compiler_lib/linker" }
 
 
 osdic-target = { version = "0.1.0", path = "../targets" }
-osdic-linker = { version = "0.1.0", path = "../linker" }
 osdic-middle = { version = "0.1.0", path = "../middle"}
 
 anyhow = "1.0"

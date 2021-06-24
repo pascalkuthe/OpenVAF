@@ -1,0 +1,5 @@
+module test (output a,input b);
+    branch (a,b) ab1,ab2;
+    branch (<a>) pa;
+    branch (<b>) pb;
+endmodule

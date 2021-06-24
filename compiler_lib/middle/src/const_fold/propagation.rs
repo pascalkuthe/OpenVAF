@@ -8,177 +8,191 @@
  *  *****************************************************************************************
  */
 
-use openvaf_data_structures::index_vec::IndexVec;
-
-use crate::cfg::{BasicBlock, CfgPass, ControlFlowGraph, TerminatorKind};
-use crate::const_fold::{CallResolver, ConstantFold, DiamondLattice, NoInputConstResolution};
-use crate::dfa::{Analysis, DfGraph, Engine, Forward};
-use crate::impl_pass_span;
-use crate::{
-    fold_rvalue, CallType, ConstVal, Expression, Local, Operand, OperandData, RValue, StmntKind,
+use crate::cfg::{
+    BasicBlock, ControlFlowGraph, ModificationPass, Phi, PhiData, Terminator, TerminatorKind,
 };
-use openvaf_data_structures::{BitSet, HashMap};
+use crate::const_fold::{CallResolver, ConstantFold, NoInputConstResolution};
+use crate::dfa::lattice::{FlatSet, JoinSemiLattice, SparseFlatSetMap};
+use crate::dfa::visitor::ResultsVisitorMut;
+use crate::dfa::{direciton, Analysis, AnalysisDomain, SplitEdgeEffects};
+use crate::osdi_types::SimpleConstVal::Bool;
+use crate::{
+    dfa, CallType, ConstVal, Expression, InputKind, Local, LocalKind, Operand, OperandData, RValue,
+    StmntKind,
+};
+use crate::{impl_pass_span, StatementId, SyntaxCtx};
+use openvaf_data_structures::bit_set::HybridBitSet;
+use openvaf_data_structures::HashMap;
 use osdi_types::ConstVal::Scalar;
-use osdi_types::SimpleConstVal::Integer;
 use osdi_types::Type;
+use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use tracing::{trace, trace_span};
+use tracing::trace_span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BasicBlockConstants {
-    pub unreachable: bool,
-    pub constants: HashMap<Local, ConstVal>,
-    pub not_a_constant: BitSet<Local>,
+    pub reachable: bool,
+    pub constants: SparseFlatSetMap<Local, ConstVal>,
+    temporaries_changed: bool,
+}
+
+impl JoinSemiLattice for BasicBlockConstants {
+    fn join(&mut self, other: &Self) -> bool {
+        debug_assert!(other.reachable);
+        self.temporaries_changed.join(&other.temporaries_changed)
+            | self.reachable.join(&true)
+            | self.constants.join(&other.constants)
+    }
 }
 
 impl BasicBlockConstants {
-    pub fn meet(&mut self, other: &Self) {
-        self.not_a_constant.union_with(&other.not_a_constant);
-        let not_a_constant = &mut self.not_a_constant;
+    pub fn get_folded_val(&self, local: Local) -> Option<ConstVal> {
+        self.constants.element_sets.get(&local).cloned()
+    }
+}
 
-        // X = X ^ Unkown
-        for (local, val) in &other.constants {
-            self.constants.entry(*local).or_insert_with(|| val.clone());
-        }
+pub use __sealed::ConditionalConstantPropagation;
 
-        // NAC= X ^ NAC
-        // NAC= X ^ Y
-        // X = X ^ X
+mod __sealed {
+    use super::*;
 
-        self.constants.retain(|local, val| {
-            let other = other.constants.get(local);
-            match other {
-                Some(other) if other != val => {
-                    not_a_constant.insert(*local);
-                    false
-                }
-                Some(_) | None => !not_a_constant.contains(*local),
-            }
-        });
+    pub struct ConditionalConstantPropagation<'lt, R: CallResolver> {
+        pub resolver: &'lt R,
+        pub global_vars: HybridBitSet<Local>,
+        constant_temporaries: UnsafeCell<HashMap<Local, ConstVal>>,
     }
 
-    pub fn write_lattice(&mut self, local: Local, lattice: DiamondLattice) {
-        match lattice {
-            DiamondLattice::NotAConstant => {
-                self.constants.remove(&local);
+    impl<'lt, R: CallResolver> ConditionalConstantPropagation<'lt, R> {
+        pub fn new(resolver: &'lt R, global_vars: HybridBitSet<Local>) -> Self {
+            Self {
+                resolver,
+                global_vars,
+                constant_temporaries: UnsafeCell::new(HashMap::with_capacity(32)),
             }
-            DiamondLattice::Val(val) => {
-                self.constants.insert(local, val);
-                self.not_a_constant.remove(local);
-            }
-            DiamondLattice::Unknown => {
-                self.constants.remove(&local);
-                self.not_a_constant.remove(local);
+        }
+
+        pub(super) fn get_tmporary_constant(&self, local: Local) -> Option<ConstVal> {
+            // Access to const_temporaries is save here since the reference immediately and constant_temporaries is sealed within this module so no other references can exist
+            unsafe { &mut *self.constant_temporaries.get() }
+                .get(&local)
+                .cloned()
+        }
+
+        pub(super) fn write_constant_to_local(
+            &self,
+            cfg: &ControlFlowGraph<R::C>,
+            state: &mut BasicBlockConstants,
+            dst: Local,
+            val: FlatSet<ConstVal>,
+        ) {
+            if LocalKind::Temporary == cfg.locals[dst].kind {
+                if let FlatSet::Elem(val) = val {
+                    // Constant temporaries changed if the temporary was previously unkown
+                    // Access to const_temporaries is save here since the reference is dropped immediately and constant_temporaries is sealed within this module so no other references can exist
+                    state.temporaries_changed = unsafe { &mut *self.constant_temporaries.get() }
+                        .insert(dst, val)
+                        .is_none();
+                }
+            } else {
+                state.constants.set_flat_set(dst, val)
             }
         }
     }
 }
 
-pub struct ConditionalConstantPropagation<'lt, R: CallResolver> {
-    pub cfg: &'lt ControlFlowGraph<R::C>,
-    pub resolver: &'lt R,
-    pub initial_conditions: HashMap<Local, ConstVal>,
+impl<'lt, R: CallResolver> AnalysisDomain<R::C> for ConditionalConstantPropagation<'lt, R> {
+    type Domain = BasicBlockConstants;
+    type Direction = direciton::Forward;
+    const NAME: &'static str = "Copy Propagation";
+
+    fn bottom_value(&self, cfg: &ControlFlowGraph<<R as CallResolver>::C>) -> Self::Domain {
+        BasicBlockConstants {
+            reachable: false,
+            temporaries_changed: false,
+            constants: SparseFlatSetMap::new_empty(cfg.locals.len()),
+        }
+    }
+
+    fn initialize_start_block(
+        &self,
+        _cfg: &ControlFlowGraph<<R as CallResolver>::C>,
+        state: &mut Self::Domain,
+    ) {
+        state.reachable = true;
+        state.constants.top_sets.union(&self.global_vars);
+    }
 }
 
 impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt, R> {
-    type Set = BasicBlockConstants;
-    type Direction = Forward;
+    fn init_block(&mut self, _cfg: &ControlFlowGraph<R::C>, state: &mut Self::Domain) -> bool {
+        state.temporaries_changed = false;
+        state.reachable
+    }
 
-    fn transfer_function(
-        &mut self,
-        in_set: &Self::Set,
-        out_set: &mut Self::Set,
-        basic_bock: BasicBlock,
+    fn apply_phi_effect(
+        &self,
         cfg: &ControlFlowGraph<R::C>,
+        state: &mut Self::Domain,
+        phi: &PhiData,
+        _bb: BasicBlock,
+        _idx: Phi,
     ) {
-        if in_set.unreachable {
-            out_set.unreachable = true
-        } else {
-            out_set.not_a_constant.clear();
-            out_set.not_a_constant.union_with(&in_set.not_a_constant);
-            out_set.constants.clear();
-            out_set.constants.extend(
-                in_set
-                    .constants
-                    .iter()
-                    .map(|(local, val)| (*local, val.clone())),
-            );
-
-            for phi in &self.cfg[basic_bock].phi_statements {
-                let mut lattice = DiamondLattice::Unknown;
-                for (_, src) in phi.sources.iter() {
-                    if out_set.not_a_constant.contains(*src) {
-                        lattice = DiamondLattice::NotAConstant;
-                    } else if let Some(constant) = in_set.constants.get(src) {
-                        lattice.meet_constant(&constant)
-                    }
+        let flat_set = phi
+            .sources
+            .iter()
+            .fold(FlatSet::Bottom, |mut dst, (_, local)| {
+                if let Some(val) = self.get_tmporary_constant(*local) {
+                    dst.join_elem(&val);
+                } else {
+                    state.constants.join_into(*local, &mut dst);
                 }
-                out_set.write_lattice(phi.dst, lattice);
-            }
+                dst
+            });
 
-            out_set.unreachable = false;
+        self.write_constant_to_local(cfg, state, phi.dst, flat_set)
+    }
 
-            let mut fold = ConstantFold {
-                locals: out_set,
+    fn apply_statement_effect(
+        &self,
+        cfg: &ControlFlowGraph<R::C>,
+        state: &mut Self::Domain,
+        statement: &(StmntKind<<R as CallResolver>::C>, SyntaxCtx),
+        _idx: StatementId,
+        _bb: BasicBlock,
+    ) {
+        if let StmntKind::Assignment(dst, ref val) = statement.0 {
+            let val = ConstantFold {
+                locals: &state.constants,
                 resolver: self.resolver,
-            };
-
-            for stmt in &cfg[basic_bock].statements {
-                if let StmntKind::Assignment(dst, ref val) = stmt.0 {
-                    fold.resolve_statement(dst, val, self.cfg.locals[dst].ty);
-                }
+                resolve_special_locals: |temporary| self.get_tmporary_constant(temporary),
             }
+            .resolve_rvalue(val, cfg.locals[dst].ty);
+            self.write_constant_to_local(cfg, state, dst, val)
         }
     }
 
-    fn join(&mut self, src_bb: BasicBlock, dst_bb: BasicBlock, graph: &mut DfGraph<Self::Set>) {
-        if !graph.out_sets[src_bb].unreachable {
-            // try to constant fold terminator and mark as unreachable
-            if let TerminatorKind::Split {
-                ref condition,
-                false_block,
-                ..
-            } = self.cfg[src_bb].terminator().kind
-            {
-                let mut fold = ConstantFold {
-                    locals: &graph.out_sets[src_bb],
-                    resolver: self.resolver,
-                };
-
-                if let DiamondLattice::Val(val) = fold_rvalue(&mut fold, condition, Type::INT) {
-                    if (val == Scalar(Integer(0))) != (dst_bb == false_block) {
-                        // unreachable don't propagate constants
-                        return;
-                    }
+    fn apply_split_edge_effects(
+        &self,
+        _cfg: &ControlFlowGraph<R::C>,
+        _block: BasicBlock,
+        discr: &RValue<R::C>,
+        state: &Self::Domain,
+        edge_effects: &mut impl SplitEdgeEffects<Self::Domain>,
+    ) {
+        let mut fold = ConstantFold {
+            locals: &state.constants,
+            resolver: self.resolver,
+            resolve_special_locals: |temporary| self.get_tmporary_constant(temporary),
+        };
+        if let FlatSet::Elem(Scalar(Bool(const_discriminant))) =
+            fold.resolve_rvalue(discr, Type::BOOL)
+        {
+            // dont propagate reachable into the edge that can not be reached from this block
+            edge_effects.apply(|dst, _, switch_edge| {
+                if switch_edge != const_discriminant {
+                    dst.reachable = false
                 }
-            }
-
-            trace!("JOIN {} -> {}", src_bb, dst_bb);
-
-            trace!("OUTPUT: {:?}", graph.out_sets[src_bb]);
-
-            trace!("BEFORE: {:?}", graph.in_sets[dst_bb]);
-
-            graph.in_sets[dst_bb].unreachable = false;
-            graph.in_sets[dst_bb].meet(&graph.out_sets[src_bb]);
-            trace!("AFTER: {:?}", graph.in_sets[dst_bb]);
-        }
-    }
-
-    fn new_set(&self) -> Self::Set {
-        BasicBlockConstants {
-            unreachable: true,
-            constants: HashMap::new(),
-            not_a_constant: BitSet::new_empty(self.cfg.locals.len_idx()),
-        }
-    }
-
-    fn setup_entry(&mut self, block: BasicBlock, graph: &mut DfGraph<Self::Set>) {
-        graph.in_sets[block].unreachable = false;
-        graph.in_sets[block].constants = self.initial_conditions.clone();
-        graph.in_sets[block].not_a_constant.enable_all();
-        for local in self.initial_conditions.keys() {
-            graph.in_sets[block].not_a_constant.remove(*local);
+            })
         }
     }
 }
@@ -198,128 +212,59 @@ impl<C: CallType> ControlFlowGraph<C> {
     ///
     /// # Note
     ///
-    /// Call very cautiously this is the single most expensive operation in the compiler
-    /// (this can dwarf lexing + preprocessing + parsing + ast_lowering)
+    /// Call very cautiously this is the single most expensive operation in the compiler. Preferably this should be done only after simpler more efficent optimizations have been performed.
     ///
     /// # Returns
     ///
-    /// The `in_sets` of the returned Graph specify all constants known at the beginning of the block.
-    /// Furthermore, it specifies whether there is any program path that allows this block to be reached.
-    /// The `out_sets` contain similar information however they described the end of the basic block instead
-    /// which tends to be less useful.
+    /// [`Results`](create::dfa::Results) of condtional const propagation: The constants at the beginning of each block and whether a block is rechable.
+    /// See documentation of [`Results`](create::dfa::Results) on how to browse these results.
     ///
-    /// The most common use case is to pass the `in_set` to [`write_constants`] together with **the same** ìnputs`
+    /// However he most common use case is to pass the result to [`write_constants`] which writes the constants back into the CFG
     ///
-    pub fn fold_constants<R: CallResolver<C = C>>(
+    pub fn conditional_constant_propagation<'a, R: CallResolver<C = C>>(
         &self,
-        resolver: &R,
-        initial_conditions: HashMap<Local, ConstVal>,
-    ) -> DfGraph<BasicBlockConstants> {
+        resolver: &'a R,
+        global_vars: HybridBitSet<Local>,
+    ) -> dfa::Results<C, ConditionalConstantPropagation<'a, R>> {
         let span = trace_span!("fold_constants");
         let _enter = span.enter();
 
-        Engine::new(
-            self,
-            &mut ConditionalConstantPropagation {
-                cfg: self,
-                resolver,
-                initial_conditions,
-            },
-        )
-        .iterate_to_fixpoint()
+        ConditionalConstantPropagation::new(resolver, global_vars)
+            .into_engine(self)
+            .iterate_to_fixpoint()
     }
 
-    /// Replaces [values](`crate::RValue`) with their constant values obtained from `block_constants` and `inputs` ( See [`fold_constants`]).
-    /// This function also removes branches which are known to only have one possible path after const propagation
     pub fn write_constants<R: CallResolver<C = C>>(
         &mut self,
-        block_constants: IndexVec<BasicBlock, BasicBlockConstants>,
-        inputs: &R,
+        const_prop_result: &dfa::Results<C, ConditionalConstantPropagation<R>>,
     ) {
-        let span = trace_span!("write_constants");
-        let _enter = span.enter();
-
-        for (bb, mut local_constants) in block_constants.into_iter_enumerated() {
-            if local_constants.unreachable {
-                continue;
-            }
-
-            for phi in &self[bb].phi_statements {
-                let mut lattice = DiamondLattice::Unknown;
-                for (_, src) in phi.sources.iter() {
-                    if local_constants.not_a_constant.contains(*src) {
-                        lattice = DiamondLattice::NotAConstant;
-                    } else if let Some(constant) = local_constants.constants.get(src) {
-                        lattice.meet_constant(&constant)
-                    }
-                }
-
-                local_constants.write_lattice(phi.dst, lattice);
-            }
-
-            let mut fold = ConstantFold {
-                locals: &mut local_constants,
-                resolver: inputs,
-            };
-
-            for (stmt, _) in &mut self.blocks[bb].statements {
-                if let StmntKind::Assignment(dst, ref mut rval) = *stmt {
-                    let lattice = fold.resolve_rvalue(rval, self.locals[dst].ty);
-                    if let DiamondLattice::Val(val) = &lattice {
-                        // In most cases the statement is not required anymore (allowing this to be turned into a noop)
-                        // but phis make that impossible
-                        *rval = RValue::Use(Operand {
-                            span: rval.span(),
-                            contents: OperandData::Constant(val.clone()),
-                        });
-                    } else {
-                        for operand in rval.operands_mut() {
-                            if let DiamondLattice::Val(c) = fold.resolve_operand(operand) {
-                                operand.contents = OperandData::Constant(c)
-                            }
-                        }
-                    }
-
-                    fold.locals.write_lattice(dst, lattice);
-                }
-            }
-
-            if let TerminatorKind::Split {
-                ref mut condition, ..
-            } = self[bb].terminator_mut().kind
-            {
-                if let DiamondLattice::Val(cond) = fold_rvalue(&mut fold, condition, Type::INT) {
-                    // Branches are collapsed in simplify cfg pass
-                    *condition =
-                        RValue::Use(Operand::new(OperandData::Constant(cond), condition.span()))
-                } else {
-                    for operand in condition.operands_mut() {
-                        if let DiamondLattice::Val(c) = fold.resolve_operand(operand) {
-                            operand.contents = OperandData::Constant(c)
-                        }
-                    }
-                }
-            }
-        }
+        const_prop_result.visit_with_mut(self, &mut ConstWriter(&const_prop_result.analysis))
     }
 }
 
 impl<C: CallType> Expression<C> {
     pub fn const_eval(&self) -> Option<ConstVal> {
-        self.const_eval_with_inputs(&NoInputConstResolution(PhantomData), HashMap::new())
+        self.const_eval_with_inputs(
+            &NoInputConstResolution(PhantomData),
+            HybridBitSet::new_empty(),
+        )
     }
 
     pub fn const_eval_with_inputs<R: CallResolver<C = C>>(
         &self,
         inputs: &R,
-        initial_conditions: HashMap<Local, ConstVal>,
+        global_vars: HybridBitSet<Local>,
     ) -> Option<ConstVal> {
         match self.1.contents {
             OperandData::Constant(ref val) => Some(val.clone()),
-            OperandData::Copy(local) => self.0.fold_constants(inputs, initial_conditions).out_sets
-                [self.0.end()]
-            .constants
-            .remove(&local),
+            OperandData::Copy(local) => {
+                let mut res = self
+                    .0
+                    .conditional_constant_propagation(inputs, global_vars)
+                    .into_results_cursor(&self.0);
+                res.seek_to_exit_block_end(&self.0);
+                res.get().get_folded_val(local)
+            }
             OperandData::Read(ref input) => inputs.resolve_input(input).into(),
         }
     }
@@ -327,26 +272,25 @@ impl<C: CallType> Expression<C> {
 
 pub struct ConstantPropagation<'a, R> {
     resolver: &'a R,
-    initial_conditions: HashMap<Local, ConstVal>,
+    global_vars: HybridBitSet<Local>,
 }
 
-impl<'a, C: CallType, R: CallResolver<C = C>> CfgPass<'_, C> for ConstantPropagation<'a, R> {
+impl<'a, C: CallType, R: CallResolver<C = C>> ModificationPass<'_, C>
+    for ConstantPropagation<'a, R>
+{
     type Result = ();
+    impl_pass_span!(self; "constant_propagation", input_resolver = debug(self.resolver));
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
-        let local_constants = cfg
-            .fold_constants(self.resolver, self.initial_conditions)
-            .in_sets;
-        cfg.write_constants(local_constants, self.resolver)
+        let res = cfg.conditional_constant_propagation(self.resolver, self.global_vars);
+        cfg.write_constants(&res)
     }
-
-    impl_pass_span!(self; "constant_propagation", input_resolver = debug(self.resolver));
 }
 impl<C: CallType> Default for ConstantPropagation<'static, NoInputConstResolution<C>> {
     fn default() -> Self {
         Self {
             resolver: &NoInputConstResolution(PhantomData),
-            initial_conditions: HashMap::new(),
+            global_vars: HybridBitSet::new_empty(),
         }
     }
 }
@@ -355,16 +299,96 @@ impl<'a, R: CallResolver> ConstantPropagation<'a, R> {
     pub fn with_resolver(resolver: &'a R) -> Self {
         Self {
             resolver,
-            initial_conditions: HashMap::new(),
+            global_vars: HybridBitSet::new_empty(),
         }
     }
 }
 
 impl<C: CallType> ConstantPropagation<'static, NoInputConstResolution<C>> {
-    pub fn with_initial_conditions(initial_conditions: HashMap<Local, ConstVal>) -> Self {
+    pub fn with_initial_conditions(global_vars: HybridBitSet<Local>) -> Self {
         Self {
             resolver: &NoInputConstResolution(PhantomData),
-            initial_conditions,
+            global_vars,
+        }
+    }
+}
+
+struct ConstWriter<'a, 'b, R: CallResolver>(&'a ConditionalConstantPropagation<'b, R>);
+
+impl<'a, 'b, R: CallResolver> ResultsVisitorMut<R::C> for ConstWriter<'a, 'b, R> {
+    type FlowState = BasicBlockConstants;
+
+    fn visit_statement_after_effect(
+        &mut self,
+        state: &Self::FlowState,
+        stmnt: &mut (StmntKind<R::C>, SyntaxCtx),
+        _block: BasicBlock,
+        _id: StatementId,
+    ) {
+        match stmnt.0 {
+            StmntKind::Assignment(dst, ref mut rval) => {
+                let val = self
+                    .0
+                    .get_tmporary_constant(dst)
+                    .or_else(|| state.get_folded_val(dst));
+
+                write_consts_to_rval(state, val, rval)
+            }
+            StmntKind::Call(_, ref mut args, _) => write_consts_to_operands(state, args),
+            StmntKind::NoOp => {}
+        }
+    }
+
+    #[inline(always)]
+    fn visit_terminator_before_effect(
+        &self,
+        state: &Self::FlowState,
+        term: &mut Terminator<R::C>,
+        _block: BasicBlock,
+    ) {
+        if let TerminatorKind::Split {
+            ref mut condition, ..
+        } = term.kind
+        {
+            let mut fold = ConstantFold {
+                locals: &state.constants,
+                resolver: self.0.resolver,
+                resolve_special_locals: |temporary| self.0.get_tmporary_constant(temporary),
+            };
+            let val = fold.resolve_rvalue(condition, Type::BOOL).into_option();
+            write_consts_to_rval(state, val, condition);
+        }
+    }
+}
+
+fn write_consts_to_rval<C: CallType>(
+    state: &BasicBlockConstants,
+    folded_val: Option<ConstVal>,
+    dst: &mut RValue<C>,
+) {
+    if let Some(folded_val) = folded_val {
+        *dst = RValue::Use(Operand {
+            span: dst.span(),
+            contents: OperandData::Constant(folded_val),
+        });
+    } else {
+        write_consts_to_rval_operands(state, dst)
+    }
+}
+
+fn write_consts_to_rval_operands<C: CallType>(state: &BasicBlockConstants, dst: &mut RValue<C>) {
+    write_consts_to_operands(state, dst.operands_mut())
+}
+
+fn write_consts_to_operands<'c, I: InputKind + 'c>(
+    state: &BasicBlockConstants,
+    operands: impl IntoIterator<Item = &'c mut Operand<I>>,
+) {
+    for operand in operands {
+        if let OperandData::Copy(local) = operand.contents {
+            if let Some(folded_val) = state.get_folded_val(local) {
+                operand.contents = OperandData::Constant(folded_val.clone())
+            }
         }
     }
 }

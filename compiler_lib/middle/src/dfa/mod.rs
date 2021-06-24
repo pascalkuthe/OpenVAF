@@ -10,328 +10,505 @@
 
 //! This module impliments a general data flow framework that allows to easily implement multiple data flow analysis
 
-use crate::cfg::{BasicBlock, ControlFlowGraph, START_BLOCK};
-use crate::CallType;
-use openvaf_data_structures::index_vec::{index_vec, Idx, IndexVec};
-use openvaf_data_structures::{BitSet, BitSetOperations, WorkQueue};
-use std::mem::swap;
-use tracing::trace_span;
+use crate::cfg::{BasicBlock, ControlFlowGraph, Location, LocationKind, Phi, PhiData, Terminator};
+use crate::dfa::direciton::Direction;
+use crate::dfa::engine::Engine;
+use crate::dfa::lattice::JoinSemiLattice;
+use crate::{CallType, RValue, Statement, StatementId};
+use openvaf_data_structures::{
+    bit_set::{BitSet, FullBitSetOperations, HybridBitSet},
+    index_vec::Idx,
+};
 
-/// This trait forms the core of the Data flow framework
-/// Every Data flow analysis needs to implement this trait
-pub trait Analysis<C: CallType>: Sized {
-    /// The kind of set to use for this data flow analysis (for example a BitSet)
-    type Set: Clone + PartialEq;
+// mod cursors;
 
-    /// The direction in which this data flow analysis should be solved (eg. Backward/Postorder or Forward/Reverse Postorder)
+use std::borrow::BorrowMut;
+use std::cmp::Ordering;
+
+pub use cursors::{GenKillResultsCursor, GenKillResultsRefCursor, ResultsCursor, ResultsRefCursor};
+pub use engine::{GenKillResults, Results};
+pub use visitor::{ResultsVisitable, ResultsVisitor, ResultsVisitorMut};
+
+mod cursors;
+pub mod direciton;
+mod engine;
+pub mod lattice;
+pub mod visitor;
+
+/// Define the domain of a dataflow problem.
+///
+/// This trait specifies the lattice on which this analysis operates (the domain) as well as its
+/// initial value at the entry point of each basic block.
+pub trait AnalysisDomain<C: CallType> {
+    /// The type that holds the dataflow state at any given point in the program.
+    type Domain: Clone + JoinSemiLattice;
+
+    /// The direction of this analysis. Either `Forward` or `Backward`.
     type Direction: Direction;
 
-    /// The transfer function of the data flow analysis
-    /// This should be a pure function from `in_set` to `out_set` (the cfg and basic block can however be used)
+    /// A descriptive name for this analysis. Used only for debugging.
     ///
-    /// This function is called during every iteration in the solver.
-    /// Nontrivial implementations will therefore have notable performance costs.
-    ///
-    /// Many pratical data flow analysis can be realized as a (gen kill)[GenKillAnalysis] analysis instead
-    ///
-    fn transfer_function(
-        &mut self,
-        in_set: &Self::Set,
-        out_set: &mut Self::Set,
-        basic_bock: BasicBlock,
-        cfg: &ControlFlowGraph<C>,
-    );
+    /// This name should be brief and contain no spaces, periods or other characters that are not
+    /// suitable as part of a filename.
+    const NAME: &'static str;
 
-    /// The join function of the data flow analysis
-    /// This should be a pure function of `src` and `dst`
+    /// The initial value of the dataflow state upon entry to each basic block.
+    fn bottom_value(&self, cfg: &ControlFlowGraph<C>) -> Self::Domain;
+
+    /// Mutates the initial value of the dataflow state upon entry to the `START_BLOCK`.
     ///
-    /// Generally a set union is appropriate here but sometimes intersection might be required
-
-    fn join(&mut self, src: BasicBlock, dst: BasicBlock, graph: &mut DfGraph<Self::Set>);
-
-    /// Create a new empty set
-    /// This shall be a pure function in the sense that it should not make a difference whether
-    /// the resulting set is cloned or this function is called again
-    fn new_set(&self) -> Self::Set;
-    fn setup_entry(&mut self, block: BasicBlock, graph: &mut DfGraph<Self::Set>);
+    /// For backward analyses, initial state besides the bottom value is not yet supported. Trying
+    /// to mutate the initial state will result in a panic.
+    fn initialize_start_block(&self, cfg: &ControlFlowGraph<C>, state: &mut Self::Domain);
 }
 
-/// The dirction in which a data flow analysis should be performed
-pub trait Direction {
-    /// The work queue with which the engine starts the solution process
-    /// This should be **all** relevant blocks in correct order
-    fn inital_work_queue<C: CallType>(cfg: &ControlFlowGraph<C>) -> WorkQueue<BasicBlock>;
-
-    /// Propagate the outset of `bb` to the insets of dependent nodes using `apply(dependent_block)`
-    fn propagate_result<C: CallType>(
-        bb: BasicBlock,
-        cfg: &ControlFlowGraph<C>,
-        apply: impl FnMut(BasicBlock),
-    );
-
-    fn setup_entry<C: CallType>(cfg: &ControlFlowGraph<C>, apply: impl FnMut(BasicBlock));
-}
-
-/// [Reverse postorder](crate::cfg::transversal::ReversePostorder) DFA [direction](Direction)
-pub struct Forward;
-
-impl<'lt> Direction for Forward {
-    fn inital_work_queue<C: CallType>(cfg: &ControlFlowGraph<C>) -> WorkQueue<BasicBlock> {
-        let mut res = WorkQueue::with_none(cfg.blocks.len_idx());
-        for id in cfg.reverse_postorder() {
-            res.insert(id);
-        }
-        res
-    }
-
-    fn propagate_result<C: CallType>(
-        bb: BasicBlock,
-        cfg: &ControlFlowGraph<C>,
-        mut apply: impl FnMut(BasicBlock),
-    ) {
-        for bb in cfg.successors(bb) {
-            apply(bb)
-        }
-    }
-
-    fn setup_entry<C: CallType>(_: &ControlFlowGraph<C>, mut apply: impl FnMut(BasicBlock)) {
-        apply(START_BLOCK)
-    }
-}
-
-/// [Postorder](crate::cfg::transversal::Postorder) DFA [direction](Direction)
-pub struct Backward;
-
-impl<'lt> Direction for Backward {
-    fn inital_work_queue<C: CallType>(cfg: &ControlFlowGraph<C>) -> WorkQueue<BasicBlock> {
-        let mut res = WorkQueue::with_none(cfg.blocks.len_idx());
-        for (id, _) in cfg.postorder_iter() {
-            res.insert(id);
-        }
-        res
-    }
-
-    fn propagate_result<C: CallType>(
-        bb: BasicBlock,
-        cfg: &ControlFlowGraph<C>,
-        mut apply: impl FnMut(BasicBlock),
-    ) {
-        for &bb in cfg.predecessors(bb) {
-            apply(bb)
-        }
-    }
-
-    fn setup_entry<C: CallType>(cfg: &ControlFlowGraph<C>, mut apply: impl FnMut(BasicBlock)) {
-        apply(cfg.end())
-    }
-}
-
-/// Gen kill analysis is a special form of data flow analysis
-/// that is often used in practice
+/// Define the domain of a dataflow problem.
 ///
-/// Gen kill analysis have seperable transfer functions
-/// That is their transfer function can be reduced to a gen and kill set.
-/// These sets are always added and removed from the inset to produce the outset
-///
-/// The join function of `GenKillAnalysis` is currently always set union in this implimentation
-///
-pub trait GenKillAnalysis<C: CallType>: Sized {
-    /// The typed used for the bitset
-    type SetType: Idx + From<usize>;
+/// This trait specifies the lattice on which this analysis operates (the domain) as well as its
+/// initial value at the entry point of each basic block.
+pub trait GenKillAnalysisDomain<C: CallType> {
+    /// The type that holds the dataflow state at any given point in the program.
+    type Domain: Clone + JoinSemiLattice + GenKill<Self::Idx> + BorrowMut<BitSet<Self::Idx>>;
 
-    /// See [`Analysis::Direction`]
+    type Idx: Idx;
+
+    /// The direction of this analysis. Either `Forward` or `Backward`.
     type Direction: Direction;
 
-    /// The transfer function is called **once before** the analysis begins
-    /// to generate the `gen_kill_set`.
-    fn transfer_function(
-        &mut self,
-        gen_kill_set: &mut GenKillSet<Self::SetType>,
-        basic_bock: BasicBlock,
-        cfg: &ControlFlowGraph<C>,
-    );
+    /// A descriptive name for this analysis. Used only for debugging.
+    ///
+    /// This name should be brief and contain no spaces, periods or other characters that are not
+    /// suitable as part of a filename.
+    const NAME: &'static str;
 
-    /// The largest idx that a set may contain
-    fn max_idx(&self) -> Self::SetType;
+    /// The initial value of the dataflow state upon entry to each basic block.
+    fn bottom_value(&self, cfg: &ControlFlowGraph<C>) -> Self::Domain;
 
-    fn setup_entry(&mut self, block: BasicBlock, graph: &mut DfGraph<BitSet<Self::SetType>>);
+    /// Mutates the initial value of the dataflow state upon entry to the `START_BLOCK`.
+    ///
+    /// For backward analyses, initial state besides the bottom value is not yet supported. Trying
+    /// to mutate the initial state will result in a panic.
+    fn initialize_start_block(&self, cfg: &ControlFlowGraph<C>, state: &mut Self::Domain);
+
+    fn domain_size(&self, cfg: &ControlFlowGraph<C>) -> usize;
 }
 
-/// A `GenKillEngine` is a wrapper around an `GenKillAnalysis`
-/// which impliments [`Analysis`] and can be solved using the DFA engine
-pub struct GenKillEngine<'lt, C: CallType, A: GenKillAnalysis<C>> {
-    analysis: &'lt mut A,
-    pub transfer_functions: IndexVec<BasicBlock, GenKillSet<A::SetType>>,
-}
+/// A dataflow problem with an arbitrarily complex transfer function.
+///
+/// # Convergence
+///
+/// When implementing this trait directly (not via [`GenKillAnalysis`]), it's possible to choose a
+/// transfer function such that the analysis does not reach fixpoint. To guarantee convergence,
+/// your transfer functions must maintain the following invariant:
+///
+/// > If the dataflow state **before** some point in the program changes to be greater
+/// than the prior state **before** that point, the dataflow state **after** that point must
+/// also change to be greater than the prior state **after** that point.
+///
+/// This invariant guarantees that the dataflow state at a given point in the program increases
+/// monotonically until fixpoint is reached. Note that this monotonicity requirement only applies
+/// to the same point in the program at different points in time. The dataflow state at a given
+/// point in the program may or may not be greater than the state at any preceding point.
+pub trait Analysis<C: CallType>: AnalysisDomain<C> {
+    /// Init the state of block before the other functions are called.
+    /// This function should only called during the analysis itself.
+    /// NOT DURING RECONSTRUCTION/VISITS
+    /// # Returns
+    ///
+    /// Whether a block is reachable/should be considered for this analysis
+    #[inline(always)]
+    fn init_block(&mut self, _cfg: &ControlFlowGraph<C>, _state: &mut Self::Domain) -> bool {
+        true
+    }
 
-impl<'lt, C: CallType, A: GenKillAnalysis<C>> GenKillEngine<'lt, C, A> {
-    pub fn new(cfg: &ControlFlowGraph<C>, analysis: &'lt mut A) -> Self {
-        let gen_kill_set = GenKillSet::new(analysis.max_idx());
-        let transfer_functions = cfg
-            .blocks
-            .indices()
-            .map(|bb| {
-                let mut transfer_function = gen_kill_set.clone();
-                analysis.transfer_function(&mut transfer_function, bb, cfg);
-                transfer_function
-            })
-            .collect();
+    /// Updates the current dataflow state with the effect of evaluating a phi.
+    fn apply_phi_effect(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _state: &mut Self::Domain,
+        _phi: &PhiData,
+        _bb: BasicBlock,
+        _idx: Phi,
+    ) {
+    }
 
-        Self {
-            analysis,
-            transfer_functions,
-        }
+    /// Updates the current dataflow state with the effect of evaluating a statement.
+    fn apply_statement_effect(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _state: &mut Self::Domain,
+        _statement: &Statement<C>,
+        _idx: StatementId,
+        _bb: BasicBlock,
+    ) {
+    }
+
+    /// Updates the current dataflow state with the effect of evaluating a terminator.
+    fn apply_terminator_effect(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _state: &mut Self::Domain,
+        _terminator: &Terminator<C>,
+        _bb: BasicBlock,
+    ) {
+    }
+
+    /// Updates the current dataflow state with the effect of taking a particular branch in a
+    /// `Split` terminator.
+    ///
+    /// Unlike the other edge-specific effects, which are allowed to mutate `Self::Domain`
+    /// directly, overriders of this method should simply determine whether join should be performed along this edge
+    ///
+    /// FIXME: This class of effects is not supported for backward dataflow analyses.
+    fn apply_split_edge_effects(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _block: BasicBlock,
+        _discr: &RValue<C>,
+        _state: &Self::Domain,
+        _edge_effects: &mut impl SplitEdgeEffects<Self::Domain>,
+    ) {
+    }
+
+    /* Extension methods */
+
+    /// Creates an `Engine` to find the fixpoint for this dataflow problem.
+    ///
+    /// You shouldn't need to override this outside this module, since the combination of the
+    /// default impl and the one for all `A: GenKillAnalysis` will do the right thing.
+    /// Its purpose is to enable method chaining like so:
+    ///
+    /// ```ignore (cross-crate-imports)
+    /// let results = MyAnalysis::new(tcx, body)
+    ///     .into_engine(tcx, body, def_id)
+    ///     .iterate_to_fixpoint()
+    ///     .into_results_cursor(body);
+    /// ```
+    fn into_engine(self, cfg: &ControlFlowGraph<C>) -> Engine<C, Self>
+    where
+        Self: Sized,
+    {
+        Engine::new_generic(cfg, self)
     }
 }
 
-impl<'lt, C: CallType, A: GenKillAnalysis<C>> Analysis<C> for GenKillEngine<'lt, C, A> {
-    type Set = BitSet<A::SetType>;
+/// A gen/kill dataflow problem.
+///
+/// Each method in this trait has a corresponding one in `Analysis`. However, these methods only
+/// allow modification of the dataflow state via "gen" and "kill" operations. By defining transfer
+/// functions for each statement in this way, the transfer function for an entire basic block can
+/// be computed efficiently.
+///
+/// `Analysis` is automatically implemented for all implementers of `GenKillAnalysis`.
+pub trait GenKillAnalysis<C: CallType>: GenKillAnalysisDomain<C> {
+    /// Updates the current dataflow state with the effect of evaluating a phi.
+    fn phi_effect(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _trans: &mut impl GenKill<Self::Idx>,
+        _phi: &PhiData,
+        _bb: BasicBlock,
+        _idx: Phi,
+    ) {
+    }
+
+    /// Updates the current dataflow state with the effect of evaluating a statement.
+    fn statement_effect(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _trans: &mut impl GenKill<Self::Idx>,
+        _statement: &Statement<C>,
+        _idx: StatementId,
+        _bb: BasicBlock,
+    ) {
+    }
+
+    /// Updates the current dataflow state with the effect of evaluating a terminator.
+    fn terminator_effect(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _trans: &mut impl GenKill<Self::Idx>,
+        _terminator: &Terminator<C>,
+        _bb: BasicBlock,
+    ) {
+    }
+
+    /* Extension methods */
+    fn into_engine(self, cfg: &ControlFlowGraph<C>) -> Engine<C, GenKillAnalysisImpl<Self>>
+    where
+        Self: Sized,
+    {
+        Engine::new_gen_kill(cfg, self)
+    }
+}
+
+pub struct GenKillAnalysisImpl<A>(A);
+
+impl<A, C> AnalysisDomain<C> for GenKillAnalysisImpl<A>
+where
+    C: CallType,
+    A: GenKillAnalysisDomain<C>,
+{
+    type Domain = A::Domain;
     type Direction = A::Direction;
+    const NAME: &'static str = A::NAME;
 
-    fn transfer_function(
-        &mut self,
-        in_set: &Self::Set,
-        out_set: &mut Self::Set,
-        basic_bock: BasicBlock,
-        _: &ControlFlowGraph<C>,
+    #[inline(always)]
+    fn bottom_value(&self, cfg: &ControlFlowGraph<C>) -> Self::Domain {
+        self.0.bottom_value(cfg)
+    }
+
+    #[inline(always)]
+    fn initialize_start_block(&self, cfg: &ControlFlowGraph<C>, state: &mut Self::Domain) {
+        self.0.initialize_start_block(cfg, state)
+    }
+}
+
+impl<A, C> Analysis<C> for GenKillAnalysisImpl<A>
+where
+    C: CallType,
+    A: GenKillAnalysis<C>,
+{
+    #[inline(always)]
+    /// Updates the current dataflow state with the effect of evaluating a phi.
+    fn apply_phi_effect(
+        &self,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut Self::Domain,
+        phi: &PhiData,
+        bb: BasicBlock,
+        idx: Phi,
     ) {
-        out_set.clear();
-        out_set.union_with(in_set);
-        out_set.difference_with(&self.transfer_functions[basic_bock].kill);
-        out_set.union_with(&self.transfer_functions[basic_bock].gen);
+        self.0.phi_effect(cfg, state, phi, bb, idx)
     }
 
-    fn join(&mut self, src: BasicBlock, dst: BasicBlock, graph: &mut DfGraph<Self::Set>) {
-        graph.in_sets[dst].union_with(&graph.out_sets[src])
+    #[inline(always)]
+    /// Updates the current dataflow state with the effect of evaluating a statement.
+    fn apply_statement_effect(
+        &self,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut Self::Domain,
+        statement: &Statement<C>,
+        idx: StatementId,
+        bb: BasicBlock,
+    ) {
+        self.0.statement_effect(cfg, state, statement, idx, bb)
     }
 
-    fn new_set(&self) -> Self::Set {
-        BitSet::new_empty(self.analysis.max_idx())
+    #[inline(always)]
+    /// Updates the current dataflow state with the effect of evaluating a terminator.
+    fn apply_terminator_effect(
+        &self,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut Self::Domain,
+        terminator: &Terminator<C>,
+        bb: BasicBlock,
+    ) {
+        self.0.terminator_effect(cfg, state, terminator, bb)
     }
 
-    fn setup_entry(&mut self, block: BasicBlock, graph: &mut DfGraph<Self::Set>) {
-        self.analysis.setup_entry(block, graph)
+    #[inline(always)]
+    /* Extension methods */
+    fn into_engine(self, cfg: &ControlFlowGraph<C>) -> Engine<C, Self>
+    where
+        Self: Sized,
+    {
+        Engine::new_gen_kill(cfg, self.0)
     }
 }
 
+/// The legal operations for a transfer function in a gen/kill problem.
+///
+/// This abstraction exists because there are two different contexts in which we call the methods in
+/// `GenKillAnalysis`. Sometimes we need to store a single transfer function that can be efficiently
+/// applied multiple times, such as when computing the cumulative transfer function for each block.
+/// These cases require a `GenKillSet`, which in turn requires two `BitSet`s of storage. Oftentimes,
+/// however, we only need to apply an effect once. In *these* cases, it is more efficient to pass the
+/// `BitSet` representing the state vector directly into the `*_effect` methods as opposed to
+/// building up a `GenKillSet` and then throwing it away.
+pub trait GenKill<T: Idx> {
+    /// Inserts `elem` into the state vector.
+    fn gen(&mut self, elem: T);
+
+    /// Removes `elem` from the state vector.
+    fn kill(&mut self, elem: T);
+
+    /// Calls `gen` for each element in `elems`.
+    fn gen_all(&mut self, elems: impl IntoIterator<Item = T>) {
+        for elem in elems {
+            self.gen(elem);
+        }
+    }
+
+    /// Calls `kill` for each element in `elems`.
+    fn kill_all(&mut self, elems: impl IntoIterator<Item = T>) {
+        for elem in elems {
+            self.kill(elem);
+        }
+    }
+
+    /// Calls `gen` for each element in `elems`.
+    fn gen_set(&mut self, elems: &impl FullBitSetOperations<T>);
+
+    /// Calls `kill` for each element in `elems`.
+    fn kill_set(&mut self, elems: &impl FullBitSetOperations<T>);
+}
+
+/// Stores a transfer function for a gen/kill problem.
+///
+/// Calling `gen`/`kill` on a `GenKillSet` will "build up" a transfer function so that it can be
+/// applied multiple times efficiently. When there are multiple calls to `gen` and/or `kill` for
+/// the same element, the most recent one takes precedence.
 #[derive(Clone)]
-pub struct GenKillSet<I: Idx + From<usize>> {
-    pub gen: BitSet<I>,
-    pub kill: BitSet<I>,
+pub struct GenKillSet<T> {
+    gen: HybridBitSet<T>,
+    kill: HybridBitSet<T>,
+    domain_size: usize,
 }
 
-impl<I: Idx + From<usize>> GenKillSet<I> {
-    #[inline]
-    pub fn new(max_idx: I) -> Self {
-        let gen = BitSet::new_empty(max_idx);
-        Self {
-            kill: gen.clone(),
-            gen,
+impl<T: Idx> GenKillSet<T> {
+    /// Creates a new transfer function that will leave the dataflow state unchanged.
+    pub fn identity(domain_size: usize) -> Self {
+        GenKillSet {
+            gen: HybridBitSet::new_empty(),
+            kill: HybridBitSet::new_empty(),
+            domain_size,
         }
     }
 
-    #[inline]
-    pub fn gen(&mut self, x: I) {
-        self.gen.insert(x);
-        self.kill.set(x, false);
-    }
-
-    #[inline]
-    pub fn kill(&mut self, x: I) {
-        self.kill.insert(x);
-        self.gen.set(x, false);
-    }
-    
-
-    #[inline]
-    pub fn kill_all<T>(&mut self, kill: &T)
-    where
-        T: BitSetOperations<I>,
-    {
-        self.kill.union_with(kill);
-        self.gen.difference_with(kill);
-    }
-
-    #[inline]
-    pub fn gen_all<T>(&mut self, gen: &T)
-    where
-        T: BitSetOperations<I>,
-    {
-        self.gen.union_with(gen);
-        self.kill.difference_with(gen);
+    pub fn apply(&self, state: &mut BitSet<T>) {
+        state.union(&self.gen);
+        state.subtract(&self.kill);
     }
 }
 
-/// A worklist based DFA solver
-pub struct Engine<'lt, C: CallType, A: Analysis<C>> {
-    pub analysis: &'lt mut A,
-    pub dfg: DfGraph<A::Set>,
-    pub cfg: &'lt ControlFlowGraph<C>,
-}
-
-impl<'lt, A: Analysis<C>, C: CallType> Engine<'lt, C, A> {
-    pub fn new(cfg: &'lt ControlFlowGraph<C>, analysis: &'lt mut A) -> Self {
-        Self {
-            dfg: DfGraph::new(analysis.new_set(), cfg),
-            analysis,
-            cfg,
-        }
+impl<T: Idx> GenKill<T> for GenKillSet<T> {
+    fn gen(&mut self, elem: T) {
+        self.gen.insert(elem, self.domain_size);
+        self.kill.remove(elem);
     }
 
-    /// Runs the `analysis` until a fix point is reached
-    ///
-    /// A fixepoint is reachched when no more elements are in the worklist
-    /// The [worklist](openvaf_data_structures::WorkQueue) is initialized using [`Direction:inital_work_queue`](crate::dfa_framework::Direction::inital_work_queue)
-    /// Basic blocks are then removed, their transfer function is executed and they are propagated to any dependent blocks where their outset is joined into their inset.
-    /// If the destination insets changed the elements are added back to the worklist
-    ///
-    #[must_use]
-    pub fn iterate_to_fixpoint(mut self) -> DfGraph<A::Set> {
-        let mut worklist =
-            <<A as Analysis<C>>::Direction as Direction>::inital_work_queue(self.cfg);
+    fn kill(&mut self, elem: T) {
+        self.kill.insert(elem, self.domain_size);
+        self.gen.remove(elem);
+    }
 
-        <<A as Analysis<C>>::Direction as Direction>::setup_entry(self.cfg, |entry| {
-            self.analysis.setup_entry(entry, &mut self.dfg)
-        });
+    fn gen_set(&mut self, elems: &impl FullBitSetOperations<T>) {
+        self.kill.subtract(elems);
+        self.gen.union(elems, self.domain_size);
+    }
 
-        let mut temporary_set = self.analysis.new_set();
+    fn kill_set(&mut self, elems: &impl FullBitSetOperations<T>) {
+        self.kill.union(elems, self.domain_size);
+        self.gen.subtract(elems);
+    }
+}
 
-        while let Some(bb) = worklist.pop() {
-            let span = trace_span!(target: "DataFlowEngine", "Iteration", block = bb.index());
-            let _enter = span.enter();
+impl<T: Idx> GenKill<T> for BitSet<T> {
+    fn gen(&mut self, elem: T) {
+        self.insert(elem);
+    }
 
-            self.analysis.transfer_function(
-                &self.dfg.in_sets[bb],
-                &mut temporary_set,
-                bb,
-                self.cfg,
-            );
+    fn kill(&mut self, elem: T) {
+        self.remove(elem);
+    }
 
-            if temporary_set != self.dfg.out_sets[bb] {
-                swap(&mut temporary_set, &mut self.dfg.out_sets[bb]);
+    fn gen_set(&mut self, elems: &impl FullBitSetOperations<T>) {
+        self.union(elems);
+    }
 
-                A::Direction::propagate_result(bb, self.cfg, |dst| {
-                    worklist.insert(dst);
-                    self.analysis.join(bb, dst, &mut self.dfg)
-                });
+    fn kill_set(&mut self, elems: &impl FullBitSetOperations<T>) {
+        self.subtract(elems);
+    }
+}
+
+impl<T: Idx> GenKill<T> for lattice::Dual<BitSet<T>> {
+    fn gen(&mut self, elem: T) {
+        self.0.insert(elem);
+    }
+
+    fn kill(&mut self, elem: T) {
+        self.0.remove(elem);
+    }
+
+    fn gen_set(&mut self, elems: &impl FullBitSetOperations<T>) {
+        self.0.union(elems);
+    }
+
+    fn kill_set(&mut self, elems: &impl FullBitSetOperations<T>) {
+        self.0.subtract(elems);
+    }
+}
+
+//NOTE: DO NOT CHANGE VARIANT ORDER. The derived `Ord` impls rely on the current order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Effect {
+    Before,
+    After,
+}
+
+impl Effect {
+    pub const fn at_index(self, idx: usize) -> EffectIndex {
+        EffectIndex { effect: self, idx }
+    }
+
+    pub fn at_location<C: CallType>(self, loc: Location, cfg: &ControlFlowGraph<C>) -> EffectIndex {
+        let idx = match loc.kind {
+            LocationKind::Phi(x) => x.index(),
+            LocationKind::Statement(x) => x.index() + cfg.blocks[loc.block].phi_statements.len(),
+            LocationKind::Terminator => {
+                cfg.blocks[loc.block].phi_statements.len() + cfg.blocks[loc.block].statements.len()
             }
-        }
-        self.dfg
+        };
+        self.at_index(idx)
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct DfGraph<Set> {
-    pub in_sets: IndexVec<BasicBlock, Set>,
-    pub out_sets: IndexVec<BasicBlock, Set>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EffectIndex {
+    idx: usize,
+    effect: Effect,
 }
 
-impl<Set: Clone> DfGraph<Set> {
-    pub fn new<C: CallType>(empty_set: Set, cfg: &ControlFlowGraph<C>) -> Self {
-        let in_sets = index_vec![empty_set;cfg.blocks.len()];
-        Self {
-            out_sets: in_sets.clone(),
-            in_sets,
+impl EffectIndex {
+    fn next_in_forward_order(self) -> Self {
+        match self.effect {
+            Effect::Before => Effect::After.at_index(self.idx),
+            Effect::After => Effect::Before.at_index(self.idx + 1),
         }
     }
+
+    fn next_in_backward_order(self) -> Self {
+        match self.effect {
+            Effect::Before => Effect::After.at_index(self.idx),
+            Effect::After => Effect::Before.at_index(self.idx - 1),
+        }
+    }
+
+    /// Returns `true` if the effect at `self` should be applied earlier than the effect at `other`
+    /// in forward order.
+    fn precedes_in_forward_order(self, other: Self) -> bool {
+        let ord = self
+            .idx
+            .cmp(&other.idx)
+            .then_with(|| self.effect.cmp(&other.effect));
+        ord == Ordering::Less
+    }
+
+    /// Returns `true` if the effect at `self` should be applied earlier than the effect at `other`
+    /// in backward order.
+    fn precedes_in_backward_order(self, other: Self) -> bool {
+        let ord = other
+            .idx
+            .cmp(&self.idx)
+            .then_with(|| self.effect.cmp(&other.effect));
+        ord == Ordering::Less
+    }
+}
+
+/// A type that records the edge-specific effects for a `SwitchInt` terminator.
+pub trait SplitEdgeEffects<D> {
+    /// Calls `apply_edge_effect` for each outgoing edge from a `SwitchInt` terminator and
+    /// records the results.
+    fn apply(&mut self, apply_edge_effect: impl FnMut(&mut D, BasicBlock, bool));
 }

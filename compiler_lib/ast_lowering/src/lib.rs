@@ -57,7 +57,7 @@ use crate::expression::ConstantExpressionFolder;
 use crate::name_resolution::Resolver;
 use openvaf_ast as ast;
 use openvaf_ast::{Ast, HierarchicalId};
-use openvaf_data_structures::BitSet;
+use openvaf_data_structures::bit_set::BitSet;
 use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use openvaf_hir::{Hir, SyntaxContextData};
 use openvaf_ir::ids::{AttributeId, SyntaxCtx};
@@ -97,7 +97,7 @@ pub struct Fold<'lt, F: Fn(Symbol) -> AllowedReferences> {
 
 impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
     pub fn new(ast: &'lt mut Ast, allowed_attribute_references: F) -> Self {
-        let folded_attribute = BitSet::new_empty(ast.attributes.len_idx());
+        let folded_attribute = BitSet::new_empty(ast.attributes.len());
         let mut res = Self {
             hir: Hir::init(ast),
             ast: &*ast,
@@ -163,7 +163,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
 
     pub fn fold_attributes(&mut self, attributes: Attributes) {
         for attribute in attributes {
-            if self.folded_attribute.put(attribute) {
+            if !self.folded_attribute.insert(attribute) {
                 //attribute has already been folded
                 continue;
             }

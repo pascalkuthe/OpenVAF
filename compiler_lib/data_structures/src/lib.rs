@@ -8,16 +8,15 @@
  *  *****************************************************************************************
  */
 
-mod bit_set;
+pub mod bit_set;
 pub mod sync;
 mod work_queue;
 pub use arrayvec;
-pub use bit_set::BitSet;
-pub use bit_set::BitSetOperations;
-pub use bit_set::HybridBitSet;
-pub use bit_set::SparseBitSetMatrix;
-pub use index_vec;
+
 pub use work_queue::WorkQueue;
+
+pub mod index_vec;
+pub mod iter;
 
 pub type HashMap<K, V> = ahash::AHashMap<K, V>;
 pub type HashSet<T> = ahash::AHashSet<T>;

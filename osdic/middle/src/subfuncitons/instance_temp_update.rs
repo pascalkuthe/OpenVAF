@@ -17,7 +17,7 @@ use openvaf_hir::Unknown;
 use openvaf_ir::ids::{PortId, VariableId};
 use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
-use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
     COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Mir,
@@ -35,7 +35,7 @@ pub enum InstanceTempUpdateCallType {}
 impl CallType for InstanceTempUpdateCallType {
     type I = InstanceTempUpdateInput;
 
-    fn const_fold(&self, _call: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _call: &[FlatSet]) -> FlatSet {
         match *self {}
     }
     fn derivative<C: CallType>(

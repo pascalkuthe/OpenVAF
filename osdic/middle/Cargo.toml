@@ -22,7 +22,7 @@ osdic-target = { version = "0.1.0", path = "../targets" }
 
 openvaf-middle = { version = "0.8.0", path = "../../compiler_lib/middle" }
 openvaf-ir = { version = "0.8.0", path = "../../compiler_lib/ir" }
-openvaf-transformations = { version = "0.8.0", path = "../../compiler_lib/transformations" }
+openvaf-pass = { version = "0.8.0", path = "../../compiler_lib/pass" }
 openvaf-hir-lowering = { version = "0.8.0", path = "../../compiler_lib/hir_lowering" }
 openvaf-hir = { version = "0.8.0", path = "../../compiler_lib/hir" }
 openvaf-parser = { version = "0.8.0", path = "../../compiler_lib/parser" }

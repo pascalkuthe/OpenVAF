@@ -70,10 +70,11 @@ pub fn run_middle<P: DiagnosticSlicePrinter>(
         }),
     );
 
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
+    cfg.modify(Simplify);
+    cfg.modify(SimplifyBranches);
 
-    let block_constants = cfg.fold_constants(&NoInputConstResolution::new(), HashMap::new());
+    let block_constants =
+        cfg.conditional_constant_propagation(&NoInputConstResolution::new(), HashMap::new());
 
     let constant_at_iteration_end = &block_constants.out_sets[cfg.end()].constants;
 
@@ -83,7 +84,7 @@ pub fn run_middle<P: DiagnosticSlicePrinter>(
 
     topology.removed_const_zero_derivatives(constant_at_iteration_end);
 
-    let local_map = cfg.run_pass(RemoveDeadLocals);
+    let local_map = cfg.modify(RemoveDeadLocals);
 
     for connection in &mut topology.connections {
         for local in &mut connection.derivatives {
@@ -108,13 +109,13 @@ pub fn run_middle<P: DiagnosticSlicePrinter>(
         }
     }
 
-    cfg.run_pass(DeadCodeElimination::with_output_locals(
+    cfg.modify(DeadCodeElimination::with_output_locals(
         &locations,
         output_locals,
     ));
 
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
+    cfg.modify(Simplify);
+    cfg.modify(SimplifyBranches);
 
     let mut storage = StorageLocations::new(&cfg);
 
@@ -129,11 +130,11 @@ pub fn run_middle<P: DiagnosticSlicePrinter>(
 
 //mod sim_spec;
 pub fn optimize_cfg<C: CallType + 'static>(cfg: &mut ControlFlowGraph<C>) {
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
-    cfg.run_pass(RemoveDeadLocals);
-    cfg.run_pass(ConstantPropagation::default());
-    cfg.run_pass(Simplify);
-    cfg.run_pass(SimplifyBranches);
-    cfg.run_pass(RemoveDeadLocals);
+    cfg.modify(Simplify);
+    cfg.modify(SimplifyBranches);
+    cfg.modify(RemoveDeadLocals);
+    cfg.modify(ConstantPropagation::default());
+    cfg.modify(Simplify);
+    cfg.modify(SimplifyBranches);
+    cfg.modify(RemoveDeadLocals);
 }

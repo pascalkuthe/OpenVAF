@@ -1,8 +1,6 @@
 [workspace]
 
 members = [
-    "linker",
-    "lld",
     "middle",
     "targets",
     "codegen"

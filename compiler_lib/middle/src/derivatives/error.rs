@@ -16,8 +16,6 @@ use openvaf_diagnostics::{AnnotationType, DiagnosticSlice, LibraryDiagnostic, Te
 
 use openvaf_session::sourcemap::Span;
 
-pub type Result<T = ()> = std::result::Result<T, Error>;
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum UndefinedDerivative {
     Modulus,

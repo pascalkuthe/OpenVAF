@@ -8,7 +8,7 @@
  *  *****************************************************************************************
  */
 
-use crate::BitSet;
+use crate::bit_set::BitSet;
 use core::fmt::Formatter;
 use index_vec::Idx;
 use std::collections::VecDeque;
@@ -29,30 +29,30 @@ pub struct WorkQueue<T: Idx + From<usize>> {
 impl<T: Idx + From<usize>> WorkQueue<T> {
     /// Creates a new work queue with all the elements from (0..len).
     #[inline]
-    pub fn with_all(len_idx: T) -> Self {
+    pub fn with_all(size: usize) -> Self {
         WorkQueue {
-            deque: (0..len_idx.index()).map(T::from_usize).collect(),
-            set: BitSet::new_filled(len_idx),
+            deque: (0..size).map(T::from_usize).collect(),
+            set: BitSet::new_filled(size),
         }
     }
 
     /// Creates a new work queue that starts empty, where elements range from (0..len).
     #[inline]
-    pub fn with_none(len_idx: T) -> Self {
+    pub fn with_none(size: usize) -> Self {
         WorkQueue {
-            deque: VecDeque::with_capacity(len_idx.index()),
-            set: BitSet::new_empty(len_idx),
+            deque: VecDeque::with_capacity(size),
+            set: BitSet::new_empty(size),
         }
     }
 
-    /// Attempt to enqueue `element` in the work queue. Returns false if it was already present.
+    /// Attempt to enqueue `element` in the work queue. Returns whether the workque has changed
     #[inline]
     pub fn insert(&mut self, element: T) -> bool {
-        if self.set.put(element) {
-            false
-        } else {
+        if self.set.insert(element) {
             self.deque.push_back(element);
             true
+        } else {
+            false
         }
     }
 
@@ -60,7 +60,7 @@ impl<T: Idx + From<usize>> WorkQueue<T> {
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
         if let Some(element) = self.deque.pop_front() {
-            self.set.set(element, false);
+            self.set.remove(element);
             Some(element)
         } else {
             None
@@ -96,7 +96,7 @@ impl<T: Idx + From<usize>> WorkQueue<T> {
 impl<T: Idx + From<usize>> Extend<T> for WorkQueue<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         let set = &mut self.set;
-        let iter = iter.into_iter().filter(|x| !set.put(*x));
+        let iter = iter.into_iter().filter(|x| set.insert(*x));
         self.deque.extend(iter)
     }
 }
@@ -104,7 +104,7 @@ impl<T: Idx + From<usize>> Extend<T> for WorkQueue<T> {
 impl<I: Idx + From<usize>> From<BitSet<I>> for WorkQueue<I> {
     fn from(set: BitSet<I>) -> Self {
         Self {
-            deque: VecDeque::from_iter(set.ones()),
+            deque: VecDeque::from_iter(set.iter()),
             set,
         }
     }
