@@ -38,7 +38,6 @@ pub struct BasicBlockConstants {
 
 impl JoinSemiLattice for BasicBlockConstants {
     fn join(&mut self, other: &Self) -> bool {
-        debug_assert!(other.reachable);
         self.temporaries_changed.join(&other.temporaries_changed)
             | self.reachable.join(&true)
             | self.constants.join(&other.constants)
