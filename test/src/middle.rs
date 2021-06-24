@@ -14,7 +14,10 @@ use eyre::WrapErr;
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::{ExpansionPrinter, MultiDiagnostic};
 use openvaf_middle::const_fold::ConstantPropagation;
-use openvaf_pass::{RemoveDeadLocals, Simplify, SimplifyBranches, Verify};
+use openvaf_pass::{
+    FindAssignments, ReachingDefinitionsAnalysis, RemoveDeadLocals, Simplify, SimplifyBranches,
+    Verify,
+};
 
 test! {
     stage: "Model Compilation",
@@ -137,6 +140,15 @@ fn run(sess: &TestSession) -> Result<()> {
                 malformations
             )
         }
+
+        let locations = cfg.intern_locations();
+        let reaching_defintions = cfg.analyse(ReachingDefinitionsAnalysis {
+            assignments: FindAssignments(&locations),
+            locations: &locations,
+        });
+        let mut cursor = reaching_defintions.as_results_cursor(&cfg);
+        cursor.seek_to_exit_block_end(&cfg);
+        assert!(!cursor.get().is_empty());
 
         let warnings = Linter::late_user_diagnostics::<ExpansionPrinter>()?;
         if !warnings.0.is_empty() {

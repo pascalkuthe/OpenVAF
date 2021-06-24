@@ -460,8 +460,13 @@ impl Direction for Forward {
         };
 
         let end = if to.effect == Effect::After {
-            // normalize the to bound so that the end of the range is exclusive (as ranges usually are)
-            to.idx + 1
+            if to.idx == terminator_index {
+                // the terminator is already past the end of the statements. No need to increment here. Terminator is checked seperately later
+                to.idx
+            } else {
+                // normalize the to bound so that the end of the range is exclusive (as ranges usually are)
+                to.idx
+            }
         } else {
             to.idx
         };
