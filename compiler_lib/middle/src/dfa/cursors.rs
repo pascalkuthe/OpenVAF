@@ -85,6 +85,10 @@ where
         &self.state
     }
 
+    pub fn finish(self) -> A::Domain {
+        self.state
+    }
+
     /// Resets the cursor to hold the entry set for the given basic block.
     ///
     /// For forward dataflow analyses, this is the dataflow state prior to the first statement.
