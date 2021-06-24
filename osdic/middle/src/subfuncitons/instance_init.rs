@@ -17,7 +17,7 @@ use openvaf_data_structures::{BitSet, HashMap};
 use openvaf_ir::ids::NetId;
 use openvaf_ir::{PrintOnFinish, StopTaskKind};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
-use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
     cfg::LocationKind, COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative,
@@ -38,7 +38,7 @@ pub enum InstanceInitFunctionCallType {
 impl CallType for InstanceInitFunctionCallType {
     type I = InstanceInitInput;
 
-    fn const_fold(&self, _: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _: &[FlatSet]) -> FlatSet {
         unreachable!()
     }
 

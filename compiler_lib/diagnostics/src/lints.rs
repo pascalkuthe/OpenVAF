@@ -98,7 +98,6 @@ macro_rules! declare_plugin_lint {
         #[allow(non_upper_case_globals)]
         pub static $name: $crate::_macro_reexports::once_cell::sync::Lazy<$crate::lints::Lint> =
             $crate::_macro_reexports::once_cell::sync::Lazy::new(|| {
-                println!(concat!(env!("CARGO_PKG_NAME"), "::", stringify!($name)));
                 $crate::lints::Lint::from_name(concat!(
                     env!("CARGO_PKG_NAME"),
                     "::",

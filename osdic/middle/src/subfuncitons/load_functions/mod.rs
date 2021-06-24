@@ -57,14 +57,14 @@ impl LoadFunctions {
         dc_load_output.difference_with(assumed_locations);
         dc_load_output.union_with(&tainted.by_branch_write);
 
-        let mut dc_load_locations = dc_load.run_pass(BackwardSlice {
+        let mut dc_load_locations = dc_load.modify(BackwardSlice {
             relevant_locations: dc_load_output,
             assumed_locations: assumed_locations.clone(),
             pdg,
             locations,
         });
 
-        dc_load.run_pass(Strip {
+        dc_load.modify(Strip {
             retain: &dc_load_locations,
             locations,
         });

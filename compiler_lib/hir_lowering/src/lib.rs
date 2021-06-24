@@ -26,7 +26,7 @@ use openvaf_session::symbols::keywords;
 
 use crate::error::Error::{ExpectedLintName, TypeMissmatch};
 use openvaf_data_structures::index_vec::IndexVec;
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::HashMap;
 
 use openvaf_ir::ids::{
     BranchId, DisciplineId, ModuleId, NatureId, NetId, ParameterId, PortId, StatementId, SyntaxCtx,
@@ -44,6 +44,7 @@ use tracing::trace_span;
 
 use crate::lints::{EmptyBuiltinAttribute, LintLevelOverwrite, UnknownLint};
 pub use cfg_builder::LocalCtx;
+use openvaf_data_structures::bit_set::BitSet;
 use openvaf_diagnostics::lints::{LintLevel, Linter};
 
 mod error;
@@ -201,7 +202,7 @@ impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
         _: &mut LocalCtx<Self, L>,
         _hi: NetId,
         _lo: NetId,
-        span: Span,
+        _span: Span,
     ) -> Option<StmntKind<Self>> {
         unimplemented!()
     }
@@ -263,7 +264,7 @@ impl<L: HirLowering> ExpressionLowering<L> for RealConstCallType {
         _: &mut LocalCtx<Self, L>,
         _hi: NetId,
         _lo: NetId,
-        span: Span,
+        _span: Span,
     ) -> Option<StmntKind<Self>> {
         unimplemented!()
     }
@@ -727,7 +728,7 @@ pub fn lower_hir<L: HirLowering>(
         mir: dst,
         errors: MultiDiagnostic(Vec::with_capacity(64)),
         sctx: SyntaxCtx::ROOT,
-        lower_sctx: BitSet::new_filled(src.syntax_ctx.len_idx()),
+        lower_sctx: BitSet::new_filled(src.syntax_ctx.len()),
     };
 
     // These were just copied from the HIR
@@ -783,7 +784,7 @@ pub fn lower_hir<L: HirLowering>(
     // These will belong to objects that were dropped during ast_lowering or hir_lowering (most notably blocks and functions)
     // and as such have no associated mir object (AttributeCtxt)
 
-    let ones: Vec<_> = fold.lower_sctx.ones().collect();
+    let ones: Vec<_> = fold.lower_sctx.iter().collect();
     for sctx in ones {
         fold.handle_attributes(sctx, AttributeCtx::Syntactic)
     }

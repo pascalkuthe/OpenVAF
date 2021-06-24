@@ -26,12 +26,12 @@ use openvaf_data_structures::HashMap;
 use osdi_types::Type;
 
 use crate::cfg::builder::CfgBuilder;
+use crate::cfg::graph_cyclical_cache::GraphIsCyclicCache;
 use crate::util::AtMostTwoIter;
 use openvaf_data_structures::arrayvec::ArrayVec;
 use openvaf_ir::convert::Convert;
 use osdi_types::ConstVal::Scalar;
 use osdi_types::SimpleConstVal::Real;
-use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -43,6 +43,7 @@ pub mod predecessors;
 pub mod transversal;
 
 pub mod builder;
+mod graph_cyclical_cache;
 #[cfg(feature = "graphviz")]
 mod graphviz;
 mod print;
@@ -110,8 +111,9 @@ impl Display for Location {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(PartialOrd, Ord, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum LocationKind {
+    // DO NOT CHANGE THE ORDER OF THE ENUM DISCRIMINANTS. IT IS RELIED UPON BY THE PartialOrd/Ord derivce!
     Phi(Phi),
     Statement(StatementId),
     Terminator,
@@ -137,14 +139,21 @@ pub struct ControlFlowGraph<C: CallType> {
     pub blocks: IndexVec<BasicBlock, BasicBlockData<C>>,
     pub derivatives: HashMap<Local, HashMap<Unknown, Local>>,
     pub predecessor_cache: PredecessorCache,
+    pub is_cyclic: GraphIsCyclicCache,
 }
 
-pub trait CfgPass<'a, C: CallType> {
+pub trait ModificationPass<'a, C: CallType> {
     type Result: 'a;
     const NAME: &'static str;
-
-    fn run(self, cfg: &'a mut ControlFlowGraph<C>) -> Self::Result;
     fn span(&self) -> Span;
+    fn run(self, cfg: &'a mut ControlFlowGraph<C>) -> Self::Result;
+}
+
+pub trait AnalysisPass<'a, C: CallType> {
+    type Result: 'a;
+    const NAME: &'static str;
+    fn span(&self) -> Span;
+    fn run(self, cfg: &'a ControlFlowGraph<C>) -> Self::Result;
 }
 
 #[macro_export]
@@ -217,6 +226,7 @@ where
 
         builder.terminate(terminator, start_sctx);
         self.predecessor_cache.invalidate();
+        self.is_cyclic.invalidate();
     }
 }
 
@@ -227,6 +237,7 @@ impl<C: CallType> ControlFlowGraph<C> {
             blocks: IndexVec::new(),
             derivatives: HashMap::new(),
             predecessor_cache: PredecessorCache::new(),
+            is_cyclic: GraphIsCyclicCache::new(),
         }
     }
     pub fn new() -> Self {
@@ -235,12 +246,24 @@ impl<C: CallType> ControlFlowGraph<C> {
             blocks: IndexVec::with_capacity(4),
             derivatives: HashMap::new(),
             predecessor_cache: PredecessorCache::new(),
+            is_cyclic: GraphIsCyclicCache::new(),
         }
     }
 
-    pub fn run_pass<'a, T>(&'a mut self, t: T) -> <T as CfgPass<'a, C>>::Result
+    pub fn modify<'a, T>(&'a mut self, t: T) -> <T as ModificationPass<'a, C>>::Result
     where
-        T: CfgPass<'a, C>,
+        T: ModificationPass<'a, C>,
+    {
+        let span = t.span();
+        let _enter = span.enter();
+        let x = t.run(self);
+        drop(_enter);
+        x
+    }
+
+    pub fn analyse<'a, T>(&'a self, t: T) -> <T as AnalysisPass<'a, C>>::Result
+    where
+        T: AnalysisPass<'a, C>,
     {
         let span = t.span();
         let _enter = span.enter();
@@ -389,6 +412,7 @@ impl<C: CallType> ControlFlowGraph<C> {
             blocks,
             derivatives: self.derivatives,
             predecessor_cache: self.predecessor_cache,
+            is_cyclic: self.is_cyclic,
         }
     }
 
@@ -422,6 +446,10 @@ impl<C: CallType> ControlFlowGraph<C> {
     }
 
     // Relations
+
+    pub fn is_cyclic(&self) -> bool {
+        self.is_cyclic.is_cyclic(self)
+    }
 
     pub fn predecessors(&self, bb: BasicBlock) -> &[BasicBlock] {
         &self.predecessor_cache.compute(&self.blocks)[bb]
@@ -520,6 +548,7 @@ where
             blocks: self.blocks.into_iter().map(|bb| bb.convert()).collect(),
             derivatives: self.derivatives,
             predecessor_cache: self.predecessor_cache,
+            is_cyclic: self.is_cyclic,
         }
     }
 }
@@ -585,11 +614,13 @@ impl<C: CallType> BasicBlockData<C> {
     }
 
     #[must_use]
+    #[inline(always)]
     pub fn terminator(&self) -> &Terminator<C> {
         self.terminator.as_ref().unwrap()
     }
 
     #[must_use]
+    #[inline(always)]
     pub fn terminator_mut(&mut self) -> &mut Terminator<C> {
         self.terminator.as_mut().unwrap()
     }

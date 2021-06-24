@@ -29,7 +29,7 @@ use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, T
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{const_fold::DiamondLattice, COperand, CallArg};
+use openvaf_middle::{const_fold::FlatSet, COperand, CallArg};
 use openvaf_middle::{
     CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
@@ -64,15 +64,15 @@ pub enum GeneralOsdiCall {
 impl CallType for GeneralOsdiCall {
     type I = GeneralOsdiInput;
 
-    fn const_fold(&self, call: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, call: &[FlatSet]) -> FlatSet {
         match self {
-            Self::Noise => DiamondLattice::NotAConstant,
+            Self::Noise => FlatSet::Top,
             // derivative of constants are always zero no matter the analysis mode (nonsensical code maybe lint this?)
             Self::TimeDerivative | GeneralOsdiCall::SymbolicDerivativeOfTimeDerivative => call[0]
                 .clone()
-                .and_then(|_| DiamondLattice::Val(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
+                .and_then(|_| FlatSet::Elem(ConstVal::Scalar(SimpleConstVal::Real(0.0)))),
             Self::StopTask(_, _) | Self::NodeCollapse(_, _) => unreachable!(),
-            GeneralOsdiCall::Lim { .. } => DiamondLattice::NotAConstant,
+            GeneralOsdiCall::Lim { .. } => FlatSet::Top,
         }
     }
 

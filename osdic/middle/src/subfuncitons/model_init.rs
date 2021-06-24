@@ -18,7 +18,7 @@ use openvaf_ir::ids::ParameterId;
 use openvaf_ir::{Spanned, Type};
 use openvaf_middle::cfg::builder::CfgBuilder;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind};
-use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
     BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Expression,
@@ -43,7 +43,7 @@ pub enum InitFunctionCallType {
 impl CallType for InitFunctionCallType {
     type I = ParameterInput;
 
-    fn const_fold(&self, _: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _: &[FlatSet]) -> FlatSet {
         unreachable!()
     }
 

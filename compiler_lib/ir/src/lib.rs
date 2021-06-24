@@ -181,8 +181,8 @@ pub enum UnaryOperator {
 impl Display for UnaryOperator {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            UnaryOperator::BitNegate => f.write_str("!"),
-            UnaryOperator::LogicNegate => f.write_str("^"),
+            UnaryOperator::BitNegate => f.write_str("^"),
+            UnaryOperator::LogicNegate => f.write_str("!"),
             UnaryOperator::ArithmeticNegate => f.write_str("-"),
         }
     }

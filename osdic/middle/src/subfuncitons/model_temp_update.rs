@@ -16,7 +16,7 @@ use openvaf_data_structures::{BitSet, HashMap};
 use openvaf_hir::{Unknown, VariableId};
 use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
-use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
     COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Mir,
@@ -36,7 +36,7 @@ pub enum ModelTempUpdateCallType {}
 impl CallType for ModelTempUpdateCallType {
     type I = ModelTempUpdateInput;
 
-    fn const_fold(&self, _call: &[DiamondLattice]) -> DiamondLattice {
+    fn const_fold(&self, _call: &[FlatSet]) -> FlatSet {
         match *self {}
     }
 

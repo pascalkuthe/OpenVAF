@@ -71,7 +71,7 @@ impl TaintedLocations {
             by_stamp_write: BitSet::new_empty(locations.len_idx()),
         };
 
-        cfg.run_pass(Visit {
+        cfg.modify(Visit {
             visitor: &mut TaintedLocationFinder {
                 dst: &mut res,
                 topology,
@@ -290,7 +290,7 @@ impl<'a> OutputLocations<'a> {
             topology,
         };
 
-        cfg.run_pass(Visit {
+        cfg.modify(Visit {
             visitor: &mut find_output_stmnnts,
             locations: &locations,
         });
@@ -333,7 +333,7 @@ impl<'a> WrittenStorage<'a> {
             storage,
         };
 
-        cfg.run_pass(Visit {
+        cfg.modify(Visit {
             visitor: &mut res,
             locations,
         });
@@ -386,7 +386,7 @@ pub(super) fn function_cfg_from_full_cfg(
     //         .collect_vec()
     // );
 
-    let mut allowed_locations = cfg.run_pass(ForwardSlice {
+    let mut allowed_locations = cfg.modify(ForwardSlice {
         tainted_locations: tainted_locations.clone(),
         pdg: inv_pdg,
         locations,
@@ -398,7 +398,7 @@ pub(super) fn function_cfg_from_full_cfg(
         relevant_locations.difference_with(assumed_locations);
     }
 
-    let relevant_locations = cfg.run_pass(BackwardSlice {
+    let relevant_locations = cfg.modify(BackwardSlice {
         relevant_locations,
         assumed_locations: assumed_locations
             .cloned()
@@ -412,7 +412,7 @@ pub(super) fn function_cfg_from_full_cfg(
         allowed_locations
     };
 
-    cfg.run_pass(Strip {
+    cfg.modify(Strip {
         retain: &retained_locations,
         locations,
     });
@@ -439,7 +439,7 @@ impl ReadVars {
         cfg: &mut ControlFlowGraph<C>,
     ) -> BitSet<StorageLocation> {
         let mut res = BitSet::new_empty(storage.len_idx());
-        for local in cfg.run_pass(LiveLocalAnalysis(None)).out_sets[START_BLOCK].ones() {
+        for local in cfg.modify(LiveLocalAnalysis(None)).out_sets[START_BLOCK].ones() {
             let written_storage = match cfg.locals[local].kind {
                 LocalKind::Variable(var, ref kind) => {
                     storage.find_variable_location(var, kind.clone())

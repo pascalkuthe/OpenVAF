@@ -12,7 +12,6 @@ use crate::cfg::{BasicBlockData, ControlFlowGraph};
 use crate::{CallType, LocalKind, Mir, ModuleId, VariableLocalKind};
 use openvaf_diagnostics::ListPrettyPrinter;
 use std::io;
-use std::io::Write;
 use std::path::Path;
 
 const INDENT: &str = "    ";
@@ -114,10 +113,8 @@ impl<C: CallType> Mir<C> {
     }
 
     pub fn print_to_file(&self, path: impl AsRef<Path>) -> io::Result<()> {
-        let mut file = std::fs::File::create(path.as_ref())?;
-        self.print_header(&mut file)?;
-        writeln!(file, "")?;
-        self.print_modules(&mut file)
+        let file = std::fs::File::create(path.as_ref())?;
+        self.print(file)
     }
 
     pub fn print_to_file_with_shared(
@@ -126,10 +123,25 @@ impl<C: CallType> Mir<C> {
         id: ModuleId,
         cfg: &ControlFlowGraph<C>,
     ) -> io::Result<()> {
-        let mut file = std::fs::File::create(path.as_ref())?;
-        self.print_header(&mut file)?;
-        writeln!(file, "")?;
-        self.print_modules_with_shared(&mut file, id, cfg)
+        let file = std::fs::File::create(path.as_ref())?;
+        self.print_with_shared(file, id, cfg)
+    }
+
+    pub fn print(&self, mut dst: impl io::Write) -> io::Result<()> {
+        self.print_header(&mut dst)?;
+        writeln!(dst, "")?;
+        self.print_modules(&mut dst)
+    }
+
+    pub fn print_with_shared(
+        &self,
+        mut dst: impl io::Write,
+        id: ModuleId,
+        cfg: &ControlFlowGraph<C>,
+    ) -> io::Result<()> {
+        self.print_header(&mut dst)?;
+        writeln!(dst, "")?;
+        self.print_modules_with_shared(&mut dst, id, cfg)
     }
 }
 impl<C: CallType> ControlFlowGraph<C> {
@@ -148,7 +160,7 @@ impl<C: CallType> ControlFlowGraph<C> {
                     format!("Corresponds to {} ({:?})", mir.variables[var].ident, var),
                 ),
                 LocalKind::Variable(var, VariableLocalKind::Derivative(ref unkowns)) => {
-                    let mut unkowns = ListPrettyPrinter {
+                    let unkowns = ListPrettyPrinter {
                         list: unkowns.as_slice(),
                         prefix: "d/d",
                         postfix: " ",
@@ -173,7 +185,7 @@ impl<C: CallType> ControlFlowGraph<C> {
                     ),
                 ),
                 LocalKind::Branch(access, branch, VariableLocalKind::Derivative(ref unkowns)) => {
-                    let mut unkowns = ListPrettyPrinter {
+                    let unkowns = ListPrettyPrinter {
                         list: unkowns.as_slice(),
                         prefix: "d/d",
                         postfix: " ",

@@ -66,7 +66,7 @@ impl OsdiFunctions {
         let mut tainted_locations = TaintedLocations::new(cfg, &locations, topology);
         let output_locations = OutputLocations::find_in_cfg(cfg, &locations, &topology);
 
-        let pdg = cfg.run_pass(BuildPDG {
+        let pdg = cfg.modify(BuildPDG {
             locations: &locations,
             data_dependence: CalculateDataDependence,
         });

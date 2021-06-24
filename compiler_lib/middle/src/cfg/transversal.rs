@@ -10,7 +10,7 @@
 
 use crate::cfg::{BasicBlock, BasicBlockData, ControlFlowGraph, Successors, START_BLOCK};
 use crate::CallType;
-use openvaf_data_structures::BitSet;
+use openvaf_data_structures::bit_set::BitSet;
 use std::mem::transmute;
 
 /// Postorder traversal of a graph.
@@ -41,7 +41,7 @@ pub struct Postorder {
 impl<'lt> Postorder {
     pub fn new<C: CallType>(cfg: &ControlFlowGraph<C>, root: BasicBlock) -> Postorder {
         let mut po = Postorder {
-            visited: BitSet::new_empty(cfg.blocks.len_idx()),
+            visited: BitSet::new_empty(cfg.blocks.len()),
             visit_stack: Vec::new(),
             root_is_start_block: root == START_BLOCK,
         };
@@ -106,7 +106,7 @@ impl<'lt> Postorder {
             .last_mut()
             .and_then(|(_, iter)| iter.next())
         {
-            if !self.visited.put(bb) {
+            if self.visited.insert(bb) {
                 self.visit_stack.push((bb, cfg.successors(bb)));
             }
         }
@@ -141,7 +141,7 @@ impl<'lt, C: CallType> Iterator for PostorderIter<'lt, C> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         // All the blocks, minus the number of blocks we've visited.
-        let upper = self.cfg.blocks.len() - self.base.visited.ones().count();
+        let upper = self.cfg.blocks.len() - self.base.visited.count();
 
         let lower = if self.base.root_is_start_block {
             // We will visit all remaining blocks exactly once.
@@ -191,7 +191,7 @@ impl<'lt, C: CallType> Iterator for PostorderIterMut<'lt, C> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         // All the blocks, minus the number of blocks we've visited.
-        let upper = self.cfg.blocks.len() - self.base.visited.ones().count();
+        let upper = self.cfg.blocks.len() - self.base.visited.count();
 
         let lower = if self.base.root_is_start_block {
             // We will visit all remaining blocks exactly once.

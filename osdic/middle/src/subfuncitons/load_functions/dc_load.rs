@@ -13,7 +13,7 @@ use crate::lim::LimFunction;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 use openvaf_ir::ids::NetId;
 use openvaf_ir::{PrintOnFinish, StopTaskKind};
-use openvaf_middle::const_fold::DiamondLattice;
+use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
     COperand, COperandData, CallArg, CallType, CallTypeConversion, ConstVal, Operand, OperandData,
@@ -36,8 +36,8 @@ pub enum DcLoadFunctionCall {
 impl CallType for DcLoadFunctionCall {
     type I = GeneralOsdiInput;
 
-    fn const_fold(&self, _call: &[DiamondLattice]) -> DiamondLattice {
-        DiamondLattice::NotAConstant
+    fn const_fold(&self, _call: &[FlatSet]) -> FlatSet {
+        FlatSet::Top
     }
 
     fn derivative<C: CallType>(

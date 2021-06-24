@@ -8,12 +8,40 @@
  *  *****************************************************************************************
  */
 
-use crate::bit_set::sparse::{SparseBitSet, SPARSE_MAX};
-use crate::bit_set::{BitSetOperations, Ones};
-use crate::BitSet;
-use index_vec::Idx;
+/*
+    Adapted from https://github.com/rust-lang/rust  under MIT-License
+
+    LICENSE BELOW ONLY APPLIES TO THIS INDIVIDUAL FILE!
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+    ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+    TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+    PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+    SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+    OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+    IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+*/
+
+use crate::bit_set::sparse::SPARSE_MAX;
+use crate::bit_set::{
+    BitIter, BitSet, SparseBitSet, SubtractFromBitSet, SubtractFromHybridBitSet, UnionIntoBitSet,
+    UnionIntoHybridBitSet,
+};
+use crate::index_vec::Idx;
 use std::cmp::Ordering;
-use std::slice;
+use std::{fmt, slice};
 
 /// A fixed-size bitset type with a hybrid representation: sparse when there
 /// are up to a `SPARSE_MAX` elements in the set, but dense when there are more
@@ -28,112 +56,208 @@ use std::slice;
 /// All operations that involve an element will panic if the element is equal
 /// to or greater than the domain size. All operations that involve two bitsets
 /// will panic if the bitsets have differing domain sizes.
-#[derive(Clone, Debug)]
-pub enum HybridBitSet<T: Idx + From<usize>> {
+#[derive(Clone, PartialEq, Eq)]
+pub enum HybridBitSet<T> {
     Sparse(SparseBitSet<T>),
     Dense(BitSet<T>),
 }
 
-impl<T: Idx + From<usize>> HybridBitSet<T> {
-    pub fn new_empty() -> Self {
-        Self::Sparse(SparseBitSet::new_empty())
+impl<T: Idx> Default for HybridBitSet<T> {
+    fn default() -> Self {
+        Self::new_empty()
     }
+}
 
-    fn len_idx(&self) -> T {
+impl<T: Idx> fmt::Debug for HybridBitSet<T> {
+    fn fmt(&self, w: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Sparse(sparse) => sparse.len_idx(),
-            Self::Dense(dense) => dense.len_idx(),
+            Self::Sparse(b) => b.fmt(w),
+            Self::Dense(b) => b.fmt(w),
         }
     }
+}
+
+impl<T> HybridBitSet<T> {
+    pub const fn new_empty() -> Self {
+        HybridBitSet::Sparse(SparseBitSet::new_empty())
+    }
+}
+
+impl<T: Idx> HybridBitSet<T> {
+    // pub fn domain_size(&self) -> usize {
+    //     match self {
+    //         ybridBitSet::Sparse(sparse) => sparse.domain_size,
+    //         ybridBitSet::Dense(dense) => dense.domain_size,
+    //     }
+    // }
 
     pub fn clear(&mut self) {
-        match self {
-            Self::Sparse(x) => *x = SparseBitSet::new_empty(),
-            Self::Dense(x) => x.clear(),
-        }
+        *self = HybridBitSet::new_empty();
     }
 
     pub fn contains(&self, elem: T) -> bool {
         match self {
-            Self::Sparse(sparse) => sparse.contains(elem),
-            Self::Dense(dense) => dense.contains(elem),
+            HybridBitSet::Sparse(sparse) => sparse.contains(elem),
+            HybridBitSet::Dense(dense) => dense.contains(elem),
+        }
+    }
+
+    pub fn superset(&self, other: &HybridBitSet<T>) -> bool {
+        match (self, other) {
+            (HybridBitSet::Dense(self_dense), HybridBitSet::Dense(other_dense)) => {
+                self_dense.superset(other_dense)
+            }
+            _ => other.iter().all(|elem| self.contains(elem)),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         match self {
-            Self::Sparse(sparse) => sparse.is_empty(),
-            Self::Dense(dense) => dense.is_empty(),
+            HybridBitSet::Sparse(sparse) => sparse.is_empty(),
+            HybridBitSet::Dense(dense) => dense.is_empty(),
         }
     }
 
-    pub fn put(&mut self, elem: T, domain_size: T) -> bool {
+    pub fn insert(&mut self, elem: T, domain_size: usize) -> bool {
+        // No need to check `elem` against `self.domain_size` here because all
+        // the match cases check it, one way or another.
         match self {
-            Self::Sparse(sparse) if sparse.len() < SPARSE_MAX => {
+            HybridBitSet::Sparse(sparse) if sparse.len() < SPARSE_MAX => {
                 // The set is sparse and has space for `elem`.
-                sparse.put(elem)
+                sparse.insert(elem)
             }
-            Self::Sparse(sparse) if sparse.contains(elem) => {
+            HybridBitSet::Sparse(sparse) if sparse.contains(elem) => {
                 // The set is sparse and does not have space for `elem`, but
                 // that doesn't matter because `elem` is already present.
-                true
+                false
             }
-            Self::Sparse(sparse) => {
+            HybridBitSet::Sparse(sparse) => {
                 // The set is sparse and full. Convert to a dense set.
                 let mut dense = sparse.to_dense(domain_size);
-                let old = dense.put(elem);
-                debug_assert!(!old);
+                let changed = dense.insert(elem);
+                assert!(changed);
                 *self = HybridBitSet::Dense(dense);
-                old
+                changed
             }
-            Self::Dense(dense) => dense.put(elem),
+            HybridBitSet::Dense(dense) => dense.insert(elem),
         }
     }
 
-    pub fn insert(&mut self, elem: T, domain_size: T) {
-        self.put(elem, domain_size);
-    }
-
-    pub fn enable_all(&mut self) {
-        let domain_size = self.len_idx();
+    pub fn insert_all(&mut self, domain_size: usize) {
         match self {
-            Self::Sparse(_) => {
+            HybridBitSet::Sparse(_) => {
                 *self = HybridBitSet::Dense(BitSet::new_filled(domain_size));
             }
-            Self::Dense(dense) => dense.enable_all(),
+            HybridBitSet::Dense(dense) => dense.insert_all(),
         }
     }
 
     pub fn remove(&mut self, elem: T) -> bool {
         // Note: we currently don't bother going from Dense back to Sparse.
         match self {
-            Self::Sparse(sparse) => sparse.remove(elem),
-            Self::Dense(dense) => dense.remove(elem),
+            HybridBitSet::Sparse(sparse) => sparse.remove(elem),
+            HybridBitSet::Dense(dense) => dense.remove(elem),
         }
     }
 
-    pub fn difference_with(&mut self, other: &Self) {
-        // Note: we currently don't bother going from Dense back to Sparse.
-        match self {
-            Self::Sparse(sparse) => {
-                match other {
-                    Self::Dense(dense) => {
-                        // There are two approaches to this:
-                        // * iterate sparse and remove all elements that are contained in dense
-                        // * iterate dense and remove all elements that are contained in sparse
-                        // since sparse is generally smaller and bitset lookups are fairly quick the first option should be faster
+    /// Sets `self = self | other` and returns `true` if `self` changed
+    /// (i.e., if new bits were added).
+    pub fn union(&mut self, other: &impl UnionIntoHybridBitSet<T>, domain_size: usize) -> bool {
+        other.union_into(self, domain_size)
+    }
 
-                        sparse.0.retain(|&mut x| !dense.contains(x))
+    /// Sets `self = self - other` and returns `true` if `self` changed.
+    /// (i.e., if any bits were removed).
+    pub fn subtract(&mut self, other: &impl SubtractFromHybridBitSet<T>) -> bool {
+        other.subtract_from(self)
+    }
+
+    /// Converts to a dense set, consuming itself in the process.
+    pub fn to_dense(self, domain_size: usize) -> BitSet<T> {
+        match self {
+            HybridBitSet::Sparse(sparse) => sparse.to_dense(domain_size),
+            HybridBitSet::Dense(dense) => dense,
+        }
+    }
+
+    pub fn iter(&self) -> HybridIter<'_, T> {
+        match self {
+            HybridBitSet::Sparse(sparse) => HybridIter::Sparse(sparse.iter()),
+            HybridBitSet::Dense(dense) => HybridIter::Dense(dense.iter()),
+        }
+    }
+}
+
+impl<T: Idx> UnionIntoHybridBitSet<T> for HybridBitSet<T> {
+    fn union_into(&self, other: &mut HybridBitSet<T>, domain_size: usize) -> bool {
+        match other {
+            HybridBitSet::Sparse(other_sparse) => {
+                match self {
+                    HybridBitSet::Sparse(self_sparse) => {
+                        // Both sets are sparse. Add the elements in
+                        // `other_sparse` to `self` one at a time. This
+                        // may or may not cause `self` to be densified.
+                        let mut changed = false;
+                        for elem in self_sparse.iter() {
+                            changed |= other.insert(*elem, domain_size);
+                        }
+                        changed
+                    }
+                    HybridBitSet::Dense(other_dense) => {
+                        // `self` is sparse and `other` is dense. To
+                        // merge them, we have two available strategies:
+                        // * Densify `self` then merge other
+                        // * Clone other then integrate bits from `self`
+                        // The second strategy requires dedicated method
+                        // since the usual `union` returns the wrong
+                        // result. In the dedicated case the computation
+                        // is slightly faster if the bits of the sparse
+                        // bitset map to only few words of the dense
+                        // representation, i.e. indices are near each
+                        // other.
+                        //
+                        // Benchmarking seems to suggest that the second
+                        // option is worth it.
+                        let mut new_dense = other_dense.clone();
+                        let changed = new_dense.reverse_union_sparse(other_sparse);
+                        *other = HybridBitSet::Dense(new_dense);
+                        changed
+                    }
+                }
+            }
+
+            HybridBitSet::Dense(other_dense) => other_dense.union(self),
+        }
+    }
+}
+
+impl<T: Idx> SubtractFromHybridBitSet<T> for HybridBitSet<T> {
+    fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
+        // Note: we currently don't bother going from Dense back to Sparse.
+        match other {
+            Self::Sparse(sparse) => {
+                let mut changed = false;
+                match self {
+                    Self::Dense(dense) => {
+                        sparse.elems.retain(|&mut x| {
+                            if dense.contains(x) {
+                                changed = true;
+                                false
+                            } else {
+                                true
+                            }
+                        });
                     }
                     Self::Sparse(other) => {
                         // On(n+m) difference algorithm possible because sparse sets are always sorted and have unique members
                         // really fast (in practice 5-20% total execution time for real world models)
                         let mut pos = 0;
-                        sparse.0.retain(|x| {
+                        sparse.elems.retain(|x| {
                             while pos < other.len() {
-                                match other.0[pos].cmp(x) {
+                                match other.elems[pos].cmp(x) {
                                     Ordering::Equal => {
                                         pos += 1;
+                                        changed = true;
                                         return false;
                                     }
                                     Ordering::Less => pos += 1,
@@ -144,154 +268,93 @@ impl<T: Idx + From<usize>> HybridBitSet<T> {
                         });
                     }
                 }
+                changed
             }
-            Self::Dense(dense) => dense.difference_with(other),
-        }
-    }
-
-    /// Converts to a dense set, consuming itself in the process.
-    pub fn into_dense(self, domain_size: T) -> BitSet<T> {
-        match self {
-            Self::Sparse(sparse) => sparse.to_dense(domain_size),
-            Self::Dense(dense) => dense,
-        }
-    }
-
-    pub fn intersection<'lt>(
-        &'lt self,
-        other: &'lt Self,
-    ) -> Intersection<'lt, T, HybridIter<'lt, T>> {
-        Intersection {
-            src: self.ones(),
-            other,
-        }
-    }
-
-    pub fn ones(&self) -> HybridIter<T> {
-        match self {
-            Self::Sparse(sparse) => HybridIter::Sparse(sparse.ones()),
-            Self::Dense(dense) => HybridIter::Dense(dense.ones()),
-        }
-    }
-
-    pub fn union_with(&mut self, other: &Self, domain_size: T) {
-        match self {
-            Self::Sparse(self_sparse) => {
-                match other {
-                    Self::Sparse(other_sparse) => {
-                        for elem in other_sparse.ones() {
-                            self.insert(*elem, domain_size);
-                        }
-                    }
-                    Self::Dense(other_dense) => {
-                        // `self` is sparse and `other` is dense. To
-                        // merge them, we have two available strategies:
-                        // * Densify `self` then merge other
-                        // * Clone other then insert bits from `self`
-                        //
-                        // Benchmarking seems to suggest that the second
-                        // option is faster
-                        let mut new_dense = other_dense.clone();
-                        for elem in self_sparse.ones() {
-                            new_dense.insert(*elem);
-                        }
-                        *self = Self::Dense(new_dense);
-                    }
-                }
-            }
-
-            Self::Dense(self_dense) => self_dense.union_with(other),
+            Self::Dense(dense) => dense.subtract(self),
         }
     }
 }
 
-impl<T: Idx + From<usize>> BitSetOperations<T> for HybridBitSet<T> {
-    fn union_into(&self, dst: &mut BitSet<T>) {
+impl<T: Idx> UnionIntoBitSet<T> for HybridBitSet<T> {
+    fn union_into(&self, other: &mut BitSet<T>) -> bool {
         match self {
-            HybridBitSet::Dense(src) => src.union_into(dst),
-            HybridBitSet::Sparse(src) => {
-                for x in src.ones().copied() {
-                    dst.insert(x)
-                }
-            }
-        }
-    }
-
-    fn intersect_into(&self, dst: &mut BitSet<T>) {
-        match self {
-            HybridBitSet::Dense(src) => src.intersect_into(dst),
-            HybridBitSet::Sparse(src) => src.clone().to_dense(dst.len_idx()).intersect_into(dst),
-        }
-    }
-
-    fn difference_into(&self, dst: &mut BitSet<T>) {
-        match self {
-            HybridBitSet::Dense(src) => src.difference_into(dst),
-            HybridBitSet::Sparse(src) => {
-                for x in src.ones().copied() {
-                    dst.set(x, false)
-                }
-            }
-        }
-    }
-
-    fn symmetric_difference_into(&self, dst: &mut BitSet<T>) {
-        match self {
-            HybridBitSet::Dense(src) => src.symmetric_difference_into(dst),
-            HybridBitSet::Sparse(src) => src
-                .clone()
-                .to_dense(dst.len_idx())
-                .symmetric_difference_into(dst),
+            HybridBitSet::Sparse(sparse) => sparse.union_into(other),
+            HybridBitSet::Dense(dense) => other.union(dense),
         }
     }
 }
 
-pub enum HybridIter<'a, T: Idx + From<usize>> {
+impl<T: Idx> SubtractFromBitSet<T> for HybridBitSet<T> {
+    fn subtract_from(&self, other: &mut BitSet<T>) -> bool {
+        match self {
+            HybridBitSet::Sparse(sparse) => sparse.subtract_from(other),
+            HybridBitSet::Dense(dense) => other.subtract(dense),
+        }
+    }
+}
+
+impl<T: Idx> UnionIntoHybridBitSet<T> for BitSet<T> {
+    fn union_into(&self, other: &mut HybridBitSet<T>, domain_size: usize) -> bool {
+        debug_assert_eq!(self.domain_size, domain_size);
+        match other {
+            HybridBitSet::Sparse(sparse) => {
+                let mut changed = false;
+
+                sparse.elems.retain(|&mut x| {
+                    if self.contains(x) {
+                        changed = true;
+                        false
+                    } else {
+                        true
+                    }
+                });
+                changed
+            }
+            HybridBitSet::Dense(other_dense) => other_dense.union(self),
+        }
+    }
+}
+
+impl<T: Idx> SubtractFromHybridBitSet<T> for BitSet<T> {
+    fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
+        match other {
+            HybridBitSet::Sparse(sparse) => {
+                // `self` is sparse and `other` is dense. To
+                // merge them, we have two available strategies:
+                // * Densify `self` then merge other
+                // * Clone other then integrate bits from `self`
+                // The second strategy requires dedicated method
+                // since the usual `union` returns the wrong
+                // result. In the dedicated case the computation
+                // is slightly faster if the bits of the sparse
+                // bitset map to only few words of the dense
+                // representation, i.e. indices are near each
+                // other.
+                //
+                // Benchmarking seems to suggest that the second
+                // option is worth it.
+                let mut new_dense = self.clone();
+                let changed = new_dense.reverse_union_sparse(sparse);
+                *other = HybridBitSet::Dense(new_dense);
+                changed
+            }
+            HybridBitSet::Dense(other_dense) => other_dense.subtract(self),
+        }
+    }
+}
+
+pub enum HybridIter<'a, T: Idx> {
     Sparse(slice::Iter<'a, T>),
-    Dense(Ones<'a, T>),
+    Dense(BitIter<'a, T>),
 }
 
-impl<'a, T: Idx + From<usize>> Iterator for HybridIter<'a, T> {
+impl<'a, T: Idx> Iterator for HybridIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
         match self {
             HybridIter::Sparse(sparse) => sparse.next().copied(),
             HybridIter::Dense(dense) => dense.next(),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            HybridIter::Sparse(sparse) => sparse.size_hint(),
-            HybridIter::Dense(dense) => dense.size_hint(),
-        }
-    }
-}
-
-pub struct Intersection<'lt, T: Idx + From<usize>, I: Iterator<Item = T> + 'lt> {
-    src: I,
-    other: &'lt HybridBitSet<T>,
-}
-
-impl<'lt, T: Idx + From<usize>, I: Iterator<Item = T> + 'lt> Iterator for Intersection<'lt, T, I> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(i) = self.src.next() {
-            if self.other.contains(i) {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        if let Some(src_upper) = self.src.size_hint().1 {
-            (0, Some(src_upper.max(self.other.len_idx().index())))
-        } else {
-            // it is assumed that src is an iterator over a set so x may not contain repretions
-            (0, Some(self.other.len_idx().index()))
         }
     }
 }

@@ -118,19 +118,19 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
         None
     }
 
-    fn fold_cmplx_add(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_add(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         unimplemented!("Complex derivatives")
     }
 
-    fn fold_cmplx_sub(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_sub(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         unimplemented!("Complex derivatives")
     }
 
-    fn fold_cmplx_mul(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_mul(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         unimplemented!("Complex derivatives")
     }
 
-    fn fold_cmplx_div(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_div(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         unimplemented!("Complex derivatives")
     }
 
@@ -546,7 +546,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
         )
     }
 
-    fn fold_cmplx_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
+    fn fold_cmplx_abs(&mut self, _span: Span, _arg: &COperand<C>) -> Self::T {
         unimplemented!("Complex derivatives")
     }
 
