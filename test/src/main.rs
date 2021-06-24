@@ -20,7 +20,7 @@ pub fn main() {
         models: None,
         capture: false,
         src_dirs: Path::new("test").to_path_buf(),
-        print_verbose_info: false,
+        print_verbose_info: true,
     }) {
         let err = err.section("The OpenVAF test suite crashed! This does not imply a test failure but rather a bug within the testsuite itself!");
         println!("{:?}", err)
