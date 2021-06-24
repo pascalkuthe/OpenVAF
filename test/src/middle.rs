@@ -138,7 +138,10 @@ fn run(sess: &TestSession) -> Result<()> {
             )
         }
 
-        println!("{}", Linter::late_user_diagnostics::<ExpansionPrinter>()?);
+        let warnings = Linter::late_user_diagnostics::<ExpansionPrinter>()?;
+        if !warnings.0.is_empty() {
+            sess.println(warnings.to_string());
+        }
     }
 
     Ok(())

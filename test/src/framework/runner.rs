@@ -26,7 +26,7 @@ use std::fmt::{Display, Formatter};
 use std::fs::{create_dir_all, File};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration as StdDuration, Instant};
 use std::{fmt, panic, thread};
@@ -150,6 +150,7 @@ impl Test {
                         models,
                         test: self,
                         test_case,
+                        pb: pb.clone(),
                     };
                     (self.run)(&session)
                 })
@@ -259,8 +260,11 @@ const TEST_CASE_SEPARATOR: &'static str = " -- ";
 const TEST_CASE_SEPARATOR_DUMMY: &'static str = "    ";
 
 pub fn run_tests(config: &Config) -> Result<()> {
-    std::fs::remove_dir_all("test_results")
-        .wrap_err("Failed to remove previous test_results directory")?;
+    let output_dir = Path::new("test_results");
+    if output_dir.exists() {
+        std::fs::remove_dir_all(output_dir)
+            .wrap_err("Failed to remove previous test_results directory")?;
+    }
 
     let base = format!(
         " {} {} ",

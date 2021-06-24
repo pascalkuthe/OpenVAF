@@ -12,6 +12,7 @@ use crate::framework::models::Model;
 use crate::framework::{Config, Test, TestCase};
 use color_eyre::eyre::WrapErr;
 use eyre::Result;
+use indicatif::ProgressBar;
 use openvaf_ast::Ast;
 use openvaf_ast_lowering::{lower_ast_userfacing, AllowedReferences};
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
@@ -48,6 +49,7 @@ pub struct TestSession<'a> {
     pub models: &'a [Model],
     pub test: &'static Test,
     pub test_case: Option<TestCase>,
+    pub(super) pb: ProgressBar,
 }
 
 impl<'a> TestSession<'a> {
@@ -90,9 +92,15 @@ impl<'a> TestSession<'a> {
     pub fn compile_to_mir(&self, file: impl AsRef<Path>) -> Result<Mir<Call>> {
         let ast = self.run_parser(file)?;
         let warnings = Linter::early_user_diagnostics::<ExpansionPrinter>()?;
-        print!("{}", warnings);
+        if !warnings.0.is_empty() {
+            self.println(warnings.to_string());
+        }
         let hir = lower_ast_userfacing(ast, |_| AllowedReferences::None)?;
         Ok(lower_hir_userfacing(hir, &mut TestLowering)?)
+    }
+
+    pub fn println(&self, msg: impl AsRef<str>) {
+        self.pb.println(msg)
     }
 }
 

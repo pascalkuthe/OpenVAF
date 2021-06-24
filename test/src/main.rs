@@ -23,6 +23,6 @@ pub fn main() {
         print_verbose_info: false,
     }) {
         let err = err.section("The OpenVAF test suite crashed! This does not imply a test failure but rather a bug within the testsuite itself!");
-        println!("{}", err)
+        println!("{:?}", err)
     }
 }
