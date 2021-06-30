@@ -13,7 +13,6 @@ use core::fmt::Formatter;
 use index_vec::Idx;
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::iter::FromIterator;
 
 /// A work queue is a handy data structure for tracking work left to
 /// do. (For example, basic blocks left to process.) It is basically a
@@ -78,11 +77,7 @@ impl<T: Idx + From<usize>> WorkQueue<T> {
     /// [pop]: crate::work_queue::WorkQueue
     #[inline]
     pub fn take(&mut self) -> Option<T> {
-        if let Some(element) = self.deque.pop_front() {
-            Some(element)
-        } else {
-            None
-        }
+        self.deque.pop_front()
     }
 
     /// Returns `true` if nothing is enqueued.
@@ -104,7 +99,7 @@ impl<T: Idx + From<usize>> Extend<T> for WorkQueue<T> {
 impl<I: Idx + From<usize>> From<BitSet<I>> for WorkQueue<I> {
     fn from(set: BitSet<I>) -> Self {
         Self {
-            deque: VecDeque::from_iter(set.iter()),
+            deque: set.iter().collect(),
             set,
         }
     }

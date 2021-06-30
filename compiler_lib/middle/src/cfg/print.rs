@@ -29,14 +29,14 @@ impl<C: CallType> Mir<C> {
             writeln!(w, "{}{:?} = {:?}", INDENT, net, info)?;
         }
 
-        writeln!(w, "")?;
+        writeln!(w)?;
 
         writeln!(w, "BRANCHES")?;
         for (branch, info) in self.branches.iter_enumerated() {
             writeln!(w, "{}{:?} = {:?}", INDENT, branch, info)?;
         }
 
-        writeln!(w, "")?;
+        writeln!(w)?;
 
         writeln!(w, "PARMETERS")?;
         for (param, info) in self.parameters.iter_enumerated() {
@@ -68,7 +68,7 @@ impl<C: CallType> Mir<C> {
                 )?;
             }
 
-            writeln!(w, "")?;
+            writeln!(w)?;
 
             module.analog_cfg.borrow().print(self, &mut w)?;
         }
@@ -100,7 +100,7 @@ impl<C: CallType> Mir<C> {
                 )?;
             }
 
-            writeln!(w, "")?;
+            writeln!(w)?;
 
             if module == id {
                 cfg.print(self, &mut w)?;
@@ -129,7 +129,7 @@ impl<C: CallType> Mir<C> {
 
     pub fn print(&self, mut dst: impl io::Write) -> io::Result<()> {
         self.print_header(&mut dst)?;
-        writeln!(dst, "")?;
+        writeln!(dst)?;
         self.print_modules(&mut dst)
     }
 
@@ -140,7 +140,7 @@ impl<C: CallType> Mir<C> {
         cfg: &ControlFlowGraph<C>,
     ) -> io::Result<()> {
         self.print_header(&mut dst)?;
-        writeln!(dst, "")?;
+        writeln!(dst)?;
         self.print_modules_with_shared(&mut dst, id, cfg)
     }
 }
@@ -204,12 +204,12 @@ impl<C: CallType> ControlFlowGraph<C> {
 
             writeln!(w, "{:A$} // {}", decl, comment, A = ALIGN,)?;
         }
-        writeln!(w, "")?;
+        writeln!(w)?;
 
         for (bb, body) in self.blocks.iter_enumerated() {
             writeln!(w, "{}{:?}:", INDENT, bb)?;
             body.print(&mut w)?;
-            writeln!(w, "")?;
+            writeln!(w)?;
         }
         Ok(())
     }
@@ -230,7 +230,7 @@ impl<C: CallType> BasicBlockData<C> {
         match &self.terminator {
             Some(term) if term.kind.is_loop_head() => {
                 let content = format!("{0}{0}{1};", INDENT, term.kind);
-                writeln!(w, "{:A$} // {}", content, "loop condition", A = ALIGN,)
+                writeln!(w, "{:A$} // loop condition", content, A = ALIGN,)
             }
             Some(term) => writeln!(w, "{0}{0}{1};", INDENT, term.kind),
 

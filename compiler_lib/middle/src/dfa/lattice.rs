@@ -271,7 +271,7 @@ impl<K: Hash + Eq + Idx, V: PartialEq + Clone> JoinSemiLattice for SparseFlatSet
 
         // Merge elements
         for (key, val) in &other.element_sets {
-            self.element_sets.entry(key.clone()).or_insert_with(|| {
+            self.element_sets.entry(*key).or_insert_with(|| {
                 changed = true;
                 val.clone()
             });

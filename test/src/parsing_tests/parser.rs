@@ -40,24 +40,24 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let mut ports = second_module.body_ports.clone().map(|id| ast[id]);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, false);
+    assert!(port.output);
+    assert!(!port.input);
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "a");
     assert_eq!(port.discipline, None);
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, true);
+    assert!(!port.output);
+    assert!(port.input);
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "b");
     assert_eq!(port.discipline, None);
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, true);
+    assert!(port.output);
+    assert!(port.input);
 
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "c");
@@ -65,8 +65,8 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     assert_eq!(port.net_type, NetType::WIRE);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, true);
+    assert!(port.output);
+    assert!(port.input);
 
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "d");
@@ -74,8 +74,8 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, false);
+    assert!(port.output);
+    assert!(!port.input);
 
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "e");
@@ -83,8 +83,8 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, false);
+    assert!(port.output);
+    assert!(!port.input);
 
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "f");
@@ -92,8 +92,8 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, true);
+    assert!(port.output);
+    assert!(port.input);
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "g");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
@@ -109,24 +109,24 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     };
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, false);
+    assert!(port.output);
+    assert!(!port.input);
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "a");
     assert_eq!(port.discipline, None);
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, true);
+    assert!(!port.output);
+    assert!(port.input);
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "b");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, true);
+    assert!(port.output);
+    assert!(port.input);
 
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "c");
@@ -142,13 +142,13 @@ pub fn check_branch(ast: Ast) -> Result<()> {
 
     let port = ports[0];
     assert_eq!(ast[port.net].contents.ident.as_str(), "a");
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, false);
+    assert!(port.output);
+    assert!(!port.input);
 
     let port = ports[1];
     assert_eq!(ast[port.net].contents.ident.as_str(), "b");
-    assert_eq!(port.output, false);
-    assert_eq!(port.input, true);
+    assert!(!port.output);
+    assert!(port.input);
     let symbol_table = &module.symbol_table;
     assert_branch_decl(symbol_table, &ast, "ab1", "a", "b");
     assert_branch_decl(symbol_table, &ast, "ab2", "a", "b");
@@ -249,16 +249,16 @@ pub fn check_statements(ast: Ast) -> Result<()> {
 
     let mut ports = ast[module.body_ports.clone()].iter();
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, true);
+    assert!(port.output);
+    assert!(port.input);
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "A");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
     assert_eq!(port.net_type, NetType::UNDECLARED);
 
     let port = ports.next().unwrap();
-    assert_eq!(port.output, true);
-    assert_eq!(port.input, true);
+    assert!(port.output);
+    assert!(port.input);
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "B");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");

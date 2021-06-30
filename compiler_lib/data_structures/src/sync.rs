@@ -218,6 +218,7 @@ cfg_if! {
             }
 
             #[inline(always)]
+            #[allow(clippy::result_unit_err)]
             pub fn try_write(&self) -> Result<WriteGuard<'_, T>, ()> {
                 self.0.try_borrow_mut().map_err(|_| ())
             }

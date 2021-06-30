@@ -11,6 +11,7 @@
 pub use backward_slice::BackwardSlice;
 pub use forward_slice::ForwardSlice;
 pub use live_variables::{DeadCodeElimination, DeadCodeScan, LiveLocalAnalysis};
+pub use post_dominance::BuildPostDominators;
 pub use reaching_definitions::{FindAssignments, ReachingDefinitionsAnalysis};
 pub use remove_dead_locals::RemoveDeadLocals;
 pub use simplify::Simplify;
@@ -18,7 +19,6 @@ pub use simplify_branches::SimplifyBranches;
 pub use strip::Strip;
 pub use verify::Verify;
 pub use visit::Visit;
-pub use post_dominance::{BuildPostDominators};
 
 //mod copy_propagation;
 mod backward_slice;

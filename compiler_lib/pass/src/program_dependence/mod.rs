@@ -64,6 +64,7 @@ where
     A: ToOwned<Owned = SparseBitMatrix<Local, IntLocation>>
         + Borrow<SparseBitMatrix<Local, IntLocation>>,
 {
+    #[allow(clippy::redundant_clone)]
     pub fn into_owned(self) -> ProgramDependenceGraph<SparseBitMatrix<Local, IntLocation>> {
         ProgramDependenceGraph {
             data_dependencies: self.data_dependencies,
@@ -84,6 +85,7 @@ where
     A: ToOwned<Owned = SparseBitMatrix<Local, IntLocation>>
         + Borrow<SparseBitMatrix<Local, IntLocation>>,
 {
+    #[allow(clippy::redundant_clone)]
     pub fn into_owned(self) -> InvProgramDependenceGraph<SparseBitMatrix<Local, IntLocation>> {
         InvProgramDependenceGraph {
             data_dependencies: self.data_dependencies,

@@ -24,15 +24,16 @@ use bitflags::bitflags;
 
 bitflags! {
     pub struct ReturnFlags: u64{
-        const FINISH_ON_SUCCESS = 0000_0001;
-        const ABORT = 0000_0010;
+        const EMPTY = 0;
+        const FINISH_ON_SUCCESS = 1;
+        const ABORT = 2;
     }
 }
 
 bitflags! {
     pub struct LoadFlags: u32{
-        const EMPTY = 0000_0000;
-        const AC = 0000_0001;
+        const EMPTY = 0;
+        const AC = 1;
     }
 }
 

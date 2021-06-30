@@ -228,7 +228,7 @@ fn run(sess: &TestSession) -> Result<()> {
                 if assignments.is_empty() {
                     bail!("No assignments were found for '{}'", name)
                 }
-                let mut out_set = assignments.clone().to_dense(locations.len());
+                let mut out_set = assignments.clone().into_dense(locations.len());
                 out_set.intersect(&exit_block_definitions);
                 out_set
             } else {

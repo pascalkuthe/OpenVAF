@@ -465,7 +465,7 @@ impl Direction for Forward {
                 to.idx
             } else {
                 // normalize the to bound so that the end of the range is exclusive (as ranges usually are)
-                to.idx
+                to.idx + 1
             }
         } else {
             to.idx

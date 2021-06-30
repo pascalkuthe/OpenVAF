@@ -112,3 +112,6 @@ test/integration/VBIC_4T_IT_XF_HO/VBIC_4T_IT_XF_HO_vbic_cfg.yaml
 test/integration/VBIC_4T_IT_XF_HO/VBIC_4T_IT_XF_HO.log
 test/integration/VBIC_4T_IT_XF_HO/VBIC_4T_IT_XF_HO.mir
 nohup.out
+
+test_results
+test/test_results

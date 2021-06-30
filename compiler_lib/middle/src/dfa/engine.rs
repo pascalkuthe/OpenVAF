@@ -120,6 +120,7 @@ where
     // gen/kill problems on cyclic CFGs. This is not ideal, but it doesn't seem to degrade
     // performance in practice. I've tried a few ways to avoid this, but they have downsides. See
     // the message for the commit that added this FIXME for more information.
+    #[allow(clippy::type_complexity)]
     apply_trans_for_block: Option<Box<dyn Fn(BasicBlock, &mut A::Domain)>>,
 }
 
@@ -178,6 +179,7 @@ where
         Self::new(cfg, analysis, None)
     }
 
+    #[allow(clippy::type_complexity)]
     fn new(
         cfg: &'a ControlFlowGraph<C>,
         analysis: A,
@@ -192,9 +194,9 @@ where
         }
 
         Engine {
-            analysis,
             cfg,
             entry_sets,
+            analysis,
             apply_trans_for_block,
         }
     }
@@ -265,17 +267,15 @@ where
             );
         }
 
-        let results = Results {
+        Results {
             analysis,
             entry_sets,
-        };
+        }
 
         // let res = write_graphviz_results(tcx, &body, &results, pass_name);
         // if let Err(e) = res {
         //     error!("Failed to write graphviz dataflow results: {}", e);
         // }
-
-        results
     }
 }
 

@@ -12,7 +12,7 @@ use core::fmt;
 use more_asserts::assert_le;
 use std::clone::Clone;
 use std::hash::{Hash, Hasher};
-use std::iter::{FromIterator, Iterator};
+use std::iter::Iterator;
 
 use bumpalo::Bump;
 
@@ -158,7 +158,7 @@ pub struct Interner {
 impl Interner {
     fn prefill(init: &[&'static str]) -> Self {
         Self {
-            strings: IndexVec::from_iter(init.iter().copied()),
+            strings: init.iter().copied().collect(),
             names: init.iter().copied().zip((0..).map(Symbol::new)).collect(),
             arena: Bump::with_capacity(2048),
         }

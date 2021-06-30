@@ -32,6 +32,7 @@ use crate::osdi_types::SimpleConstVal::Cmplx;
 use itertools::Itertools;
 pub use propagation::ConstantPropagation;
 
+#[allow(clippy::from_over_into)]
 impl<T: PartialEq> Into<Option<T>> for FlatSet<T> {
     fn into(self) -> Option<T> {
         self.into_option()
@@ -68,6 +69,12 @@ impl<C> NoInputConstResolution<C> {
     }
 }
 
+impl<C> Default for NoInputConstResolution<C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<C> Debug for NoInputConstResolution<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("NoInputConstResolution")
@@ -100,13 +107,11 @@ impl<'lt, R: CallResolver, F: Fn(Local) -> Option<ConstVal>> ConstantFold<'lt, R
         fold_rvalue(self, rvalue, ty)
     }
 
-    fn resolve_operand<'a>(&self, op: &CallResolverOperand<R>) -> FlatSet<ConstVal> {
+    fn resolve_operand(&self, op: &CallResolverOperand<R>) -> FlatSet<ConstVal> {
         match op.contents {
             OperandData::Constant(ref val) => FlatSet::Elem(val.clone()),
-            OperandData::Copy(local) => (self.resolve_special_locals)(local).map_or_else(
-                || self.locals.get_cloned_flat_set(local),
-                |val| FlatSet::Elem(val),
-            ),
+            OperandData::Copy(local) => (self.resolve_special_locals)(local)
+                .map_or_else(|| self.locals.get_cloned_flat_set(local), FlatSet::Elem),
 
             OperandData::Read(ref input) => self.resolver.resolve_input(input),
         }

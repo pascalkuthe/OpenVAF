@@ -12,7 +12,7 @@ mod parser;
 mod preprocessor;
 use std::path::{Path, PathBuf};
 
-pub const FRONTEND_TEST: &'static str = "Parsing";
+pub const FRONTEND_TEST: &str = "Parsing";
 
 pub fn parsing_tests_src(name: &'static str) -> PathBuf {
     let mut res = Path::new("parsing").join(name);

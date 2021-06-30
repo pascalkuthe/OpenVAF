@@ -69,7 +69,7 @@ pub struct OsdiModel {
 
 impl OsdiModel {
     pub fn init(path: impl AsRef<Path>) -> Result<Self, libloading::Error> {
-        let lib = Library::new(path.as_ref())?;
+        let lib = unsafe{Library::new(path.as_ref())?};
         let lib: &'static Library = Box::leak(Box::new(lib));
         let model_init = unsafe { lib.get(b"model_init\0")? };
         let model_temp_update = unsafe { lib.get(b"model_temp_update\0")? };

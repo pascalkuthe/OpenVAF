@@ -27,7 +27,8 @@ use std::fs::{create_dir_all, File};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration as StdDuration, Instant};
 use std::{fmt, panic, thread};
 use tracing_subscriber::layer::SubscriberExt;
@@ -255,11 +256,11 @@ impl Display for TestSummary {
     }
 }
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const TEST_CASE_SEPARATOR: &'static str = " -- ";
-const TEST_CASE_SEPARATOR_DUMMY: &'static str = "    ";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const TEST_CASE_SEPARATOR: &str = " -- ";
+const TEST_CASE_SEPARATOR_DUMMY: &str = "    ";
 
-pub fn run_tests(config: &Config) -> Result<()> {
+pub fn run_tests(config: &Config) -> Result<bool> {
     let output_dir = Path::new("test_results");
     if output_dir.exists() {
         std::fs::remove_dir_all(output_dir)
@@ -309,12 +310,12 @@ pub fn run_tests(config: &Config) -> Result<()> {
     let mut fail = 0;
     let mut pass = 0;
 
-    let update_flag = Arc::new(Mutex::new(true));
+    let update_flag = Arc::new(AtomicBool::new(true));
     {
         let pb = pb.clone();
         let update_flag = update_flag.clone();
         thread::spawn(move || {
-            while *update_flag.lock().unwrap() {
+            while update_flag.load(Ordering::Relaxed) {
                 pb.tick();
                 thread::sleep(StdDuration::from_millis(100))
             }
@@ -419,7 +420,7 @@ pub fn run_tests(config: &Config) -> Result<()> {
         }
     }
 
-    *update_flag.lock().unwrap() = false;
+    update_flag.store(false, Ordering::Relaxed);
 
     pb.finish();
     pb.finish_and_clear();
@@ -436,5 +437,6 @@ pub fn run_tests(config: &Config) -> Result<()> {
         skipped,
         Style::new().dim().italic().apply_to("skipped"),
     );
-    Ok(())
+
+    Ok(fail == 0)
 }

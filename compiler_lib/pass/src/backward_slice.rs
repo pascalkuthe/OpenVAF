@@ -10,12 +10,11 @@
 
 use crate::program_dependence::ProgramDependenceGraph;
 use openvaf_data_structures::bit_set::{BitSet, SparseBitMatrix};
+use openvaf_data_structures::iter::Itertools;
 use openvaf_data_structures::WorkQueue;
 use openvaf_middle::cfg::{AnalysisPass, ControlFlowGraph, IntLocation, InternedLocations};
 use openvaf_middle::{impl_pass_span, CallType, Local};
 use std::borrow::Borrow;
-use std::collections::VecDeque;
-use std::iter::FromIterator;
 use tracing::{debug, trace, trace_span};
 
 pub struct BackwardSlice<'a, A>
@@ -142,7 +141,7 @@ where
         // The relevant stmts are added to the work queue
         let mut work_queue = WorkQueue {
             // Add all relevant stmts to the work queue
-            deque: VecDeque::from_iter(relevant_locations.iter()),
+            deque: relevant_locations.iter().collect(),
             // The assumed locations are marked as visited so they wont be inserted into the work queue
             set: assumed_locations,
         };
@@ -172,9 +171,12 @@ where
         }
 
         debug!(
-            relevant_locations = debug(Vec::from_iter(
-                relevant_locations.iter().map(|loc| locations[loc])
-            )),
+            relevant_locations = debug(
+                relevant_locations
+                    .iter()
+                    .map(|loc| locations[loc])
+                    .collect_vec()
+            ),
             "Backward slice finished"
         );
 
@@ -182,7 +184,7 @@ where
     }
 
     impl_pass_span!(self; "backward_slice",
-        relevant = debug(Vec::from_iter(self.relevant_locations.iter().map(|loc|self.locations[loc]))),
-        assumed = debug(Vec::from_iter(self.assumed_locations.iter().map(|loc|self.locations[loc]))),
+        relevant = debug(self.relevant_locations.iter().map(|loc|self.locations[loc]).collect_vec()),
+        assumed = debug(self.assumed_locations.iter().map(|loc|self.locations[loc]).collect_vec()),
     );
 }

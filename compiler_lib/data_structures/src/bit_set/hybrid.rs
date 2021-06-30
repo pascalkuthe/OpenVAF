@@ -172,7 +172,7 @@ impl<T: Idx> HybridBitSet<T> {
     }
 
     /// Converts to a dense set, consuming itself in the process.
-    pub fn to_dense(self, domain_size: usize) -> BitSet<T> {
+    pub fn into_dense(self, domain_size: usize) -> BitSet<T> {
         match self {
             HybridBitSet::Sparse(sparse) => sparse.to_dense(domain_size),
             HybridBitSet::Dense(dense) => dense,

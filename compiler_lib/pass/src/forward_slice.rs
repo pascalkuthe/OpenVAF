@@ -17,8 +17,6 @@ use openvaf_middle::cfg::{
 };
 use openvaf_middle::{impl_pass_span, CallType, Local};
 use std::borrow::Borrow;
-use std::collections::VecDeque;
-use std::iter::FromIterator;
 use tracing::{debug, trace, trace_span};
 
 pub struct ForwardSlice<'a, A>
@@ -81,7 +79,7 @@ where
     ) -> BitSet<IntLocation> {
         // Init the work que with the tainted locations
         let mut work_queue = WorkQueue {
-            deque: VecDeque::from_iter(tainted_locations.iter()),
+            deque: tainted_locations.iter().collect(),
             set: tainted_locations,
         };
 
@@ -99,30 +97,28 @@ where
                 }
             }
 
-            if TAINT_CONTROL_DEPENDENCIES {
-                if matches!(locations[loc].kind, LocationKind::Terminator) {
-                    if let Some(control_dependencents) =
-                        pdg.get_control_dependencies(locations[loc].block)
-                    {
-                        for control_dependent_bb in control_dependencents.iter() {
-                            let tainted_locations =
-                                (locations[control_dependent_bb].phi_start.raw()
-                                    ..=locations[control_dependent_bb].terminator.raw())
-                                    .map(|loc| IntLocation::from_raw_unchecked(loc));
+            if TAINT_CONTROL_DEPENDENCIES && matches!(locations[loc].kind, LocationKind::Terminator)
+            {
+                if let Some(control_dependencents) =
+                    pdg.get_control_dependencies(locations[loc].block)
+                {
+                    for control_dependent_bb in control_dependencents.iter() {
+                        let tainted_locations = (locations[control_dependent_bb].phi_start.raw()
+                            ..=locations[control_dependent_bb].terminator.raw())
+                            .map(IntLocation::from_raw_unchecked);
 
-                            trace!(
-                                locations = debug(
-                                    tainted_locations
-                                        .clone()
-                                        .map(|loc| locations[loc])
-                                        .collect_vec()
-                                ),
-                                src = debug(locations[loc].block),
-                                dst = debug(control_dependent_bb),
-                                "Control dependent",
-                            );
-                            work_queue.extend(tainted_locations)
-                        }
+                        trace!(
+                            locations = debug(
+                                tainted_locations
+                                    .clone()
+                                    .map(|loc| locations[loc])
+                                    .collect_vec()
+                            ),
+                            src = debug(locations[loc].block),
+                            dst = debug(control_dependent_bb),
+                            "Control dependent",
+                        );
+                        work_queue.extend(tainted_locations)
                     }
                 }
             }
@@ -130,9 +126,12 @@ where
         let mut removed_locations = work_queue.set;
 
         debug!(
-            removed_locations = debug(Vec::from_iter(
-                removed_locations.iter().map(|loc| locations[loc])
-            )),
+            removed_locations = debug(
+                removed_locations
+                    .iter()
+                    .map(|loc| locations[loc])
+                    .collect_vec()
+            ),
             "Forward slice finished"
         );
 

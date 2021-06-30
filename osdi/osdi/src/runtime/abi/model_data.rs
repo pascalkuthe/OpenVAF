@@ -15,11 +15,11 @@ use crate::ModelInfoStore;
 use crate::runtime::abi::OSDIAbi;
 use std::mem::size_of;
 
-type BLOCK = u64;
+type Block = u64;
 const PARAM_GIVEN_BLOCK_SIZE_U16: u16 = 64;
 const PARAM_GIVEN_BLOCK_SIZE_USIZE: usize = PARAM_GIVEN_BLOCK_SIZE_U16 as usize;
 
-const fn mask(param: u16) -> BLOCK {
+const fn mask(param: u16) -> Block {
     1 << (param % PARAM_GIVEN_BLOCK_SIZE_U16)
 }
 
@@ -37,10 +37,10 @@ impl ModelData {
     }
 
     pub fn is_parameter_set(&self, param: ParameterId, info_store: &ModelInfoStore) -> bool {
-        let block: BLOCK = unsafe {
+        let block: Block = unsafe {
             self.read(
                 info_store.param_given_offset
-                    + (param.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE) * size_of::<BLOCK>(),
+                    + (param.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE) * size_of::<Block>(),
             )
         };
         block & mask(param.raw()) != 0
@@ -56,10 +56,10 @@ impl ModelData {
         info_store: &ModelInfoStore,
         set: bool,
     ) {
-        let block: &mut BLOCK = unsafe {
+        let block: &mut Block = unsafe {
             self.get_mut(
                 info_store.param_given_offset
-                    + (param.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE) * size_of::<BLOCK>(),
+                    + (param.index() / PARAM_GIVEN_BLOCK_SIZE_USIZE) * size_of::<Block>(),
             )
         };
         if set {

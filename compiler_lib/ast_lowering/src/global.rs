@@ -217,53 +217,48 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
         let mut attributes: HashMap<NatureAttribute, Spanned<ExpressionId>> =
             HashMap::with_capacity(nature.attributes.len() + 2);
 
-        for attr in &nature.attributes {
-            if let Some(attr) = attr {
-                match attr.contents.0 {
-                    NatureAttribute::Abstol => {
-                        if let Some(parent) = nature.parent {
-                            self.base.error(IllegalNatureAttributeOverwrite {
-                                kind: IllegalNatureAttributeOverwriteKind::Abstol,
-                                nature: nature.ident,
-                                parent,
-                                overwrite: attr.span,
-                            });
-                            continue;
-                        }
+        for attr in nature.attributes.iter().flatten() {
+            match attr.contents.0 {
+                NatureAttribute::Abstol => {
+                    if let Some(parent) = nature.parent {
+                        self.base.error(IllegalNatureAttributeOverwrite {
+                            kind: IllegalNatureAttributeOverwriteKind::Abstol,
+                            nature: nature.ident,
+                            parent,
+                            overwrite: attr.span,
+                        });
+                        continue;
                     }
-                    NatureAttribute::Access => {
-                        if let Some(parent) = nature.parent {
-                            self.base.error(IllegalNatureAttributeOverwrite {
-                                kind: IllegalNatureAttributeOverwriteKind::Access,
-                                nature: nature.ident,
-                                parent,
-                                overwrite: attr.span,
-                            });
-                            continue;
-                        }
-                    }
-                    _ => (),
-                };
-
-                if let Some(old) = attributes.insert(
-                    attr.contents.0,
-                    Spanned {
-                        span: attr.span,
-                        contents: attr.contents.1,
-                    },
-                ) {
-                    self.base.error(AttributeAlreadyDefined {
-                        attribute_kind: AttributeKind::NatureAttribute(
-                            attr.contents.0,
-                            nature.ident,
-                        ),
-                        old: old.span,
-                        new: attr.span,
-                    })
                 }
+                NatureAttribute::Access => {
+                    if let Some(parent) = nature.parent {
+                        self.base.error(IllegalNatureAttributeOverwrite {
+                            kind: IllegalNatureAttributeOverwriteKind::Access,
+                            nature: nature.ident,
+                            parent,
+                            overwrite: attr.span,
+                        });
+                        continue;
+                    }
+                }
+                _ => (),
+            };
+
+            if let Some(old) = attributes.insert(
+                attr.contents.0,
+                Spanned {
+                    span: attr.span,
+                    contents: attr.contents.1,
+                },
+            ) {
+                self.base.error(AttributeAlreadyDefined {
+                    attribute_kind: AttributeKind::NatureAttribute(attr.contents.0, nature.ident),
+                    old: old.span,
+                    new: attr.span,
+                })
             }
         }
-        // TODO cache already processed natures to avoid repeated errors for circular inhertiance and potentiall improve performance
+        // TODO cache already processed natures to avoid repeated errors for circular inheritance and potentially improve performance
         // Probably not worth it because NOBODY uses this (doubt anyone outside of the committee even knowns this exists) and its pretty decent already
 
         // Inheritance is really rare and its not useful to make very nested inheritance
@@ -287,13 +282,11 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
                 processed_natures.push(nature.ident)
             }
 
-            for attr in &nature.attributes {
-                if let Some(attr) = attr {
-                    attributes.entry(attr.contents.0).or_insert(Spanned {
-                        span: attr.span,
-                        contents: attr.contents.1,
-                    });
-                }
+            for attr in nature.attributes.iter().flatten() {
+                attributes.entry(attr.contents.0).or_insert(Spanned {
+                    span: attr.span,
+                    contents: attr.contents.1,
+                });
             }
             parent = nature.parent;
         }

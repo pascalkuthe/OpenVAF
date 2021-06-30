@@ -38,7 +38,6 @@ pub use fold::{fold_rvalue, RValueFold};
 use openvaf_data_structures::HashMap;
 pub use osdi_types::{SimpleType, Type, TypeInfo};
 use std::fmt::{Debug, Display, Formatter};
-use std::iter::FromIterator;
 
 use openvaf_diagnostics::lints::{Lint, LintLevel};
 use openvaf_hir::Discipline;
@@ -49,6 +48,7 @@ pub type SimpleConstVal = osdi_types::SimpleConstVal<StringLiteral>;
 use crate::derivatives::RValueAutoDiff;
 use crate::dfa::lattice::FlatSet;
 use openvaf_data_structures::arrayvec::ArrayVec;
+use openvaf_data_structures::iter::Itertools;
 use openvaf_data_structures::sync::RwLock;
 use openvaf_diagnostics::ListFormatter;
 use openvaf_ir::convert::Convert;
@@ -490,6 +490,7 @@ pub struct TyRValue<C: CallType> {
     pub ty: Type,
 }
 
+#[allow(clippy::from_over_into)]
 impl<C: CallType> Into<Type> for TyRValue<C> {
     fn into(self) -> Type {
         self.ty
@@ -612,20 +613,21 @@ where
 
 impl<C: CallType> RValue<C> {
     pub fn operands(&self) -> impl Iterator<Item = &COperand<C>> {
-        match self {
+        let res = match self {
             Self::UnaryOperation(_, op)
             | Self::SingleArgMath(_, op)
             | Self::Cast(op)
-            | Self::Use(op) => vec![op].into_iter(),
+            | Self::Use(op) => vec![op],
 
             Self::BinaryOperation(_, op1, op2)
             | Self::Comparison(_, op1, op2, _)
-            | Self::DoubleArgMath(_, op1, op2) => vec![op1, op2].into_iter(),
+            | Self::DoubleArgMath(_, op1, op2) => vec![op1, op2],
 
-            Self::Select(op1, op2, op3) => vec![op1, op2, op3].into_iter(),
-            Self::Call(_x, args, _) => Vec::from_iter(args.iter()).into_iter(),
-            Self::Array(args, _) => Vec::from_iter(args.iter()).into_iter(),
-        }
+            Self::Select(op1, op2, op3) => vec![op1, op2, op3],
+            Self::Call(_x, args, _) => args.iter().collect_vec(),
+            Self::Array(args, _) => args.iter().into_iter().collect_vec(),
+        };
+        res.into_iter()
     }
 
     pub fn locals(&self) -> impl Iterator<Item = Local> + '_ {
@@ -752,16 +754,17 @@ impl<C: CallType> RValue<C> {
             Self::UnaryOperation(_, op)
             | Self::SingleArgMath(_, op)
             | Self::Cast(op)
-            | Self::Use(op) => vec![op].into_iter(),
+            | Self::Use(op) => vec![op],
 
             Self::BinaryOperation(_, op1, op2)
             | Self::Comparison(_, op1, op2, _)
-            | Self::DoubleArgMath(_, op1, op2) => vec![op1, op2].into_iter(),
+            | Self::DoubleArgMath(_, op1, op2) => vec![op1, op2],
 
-            Self::Select(op1, op2, op3) => vec![op1, op2, op3].into_iter(),
-            Self::Call(_x, args, _) => Vec::from_iter(args.iter_mut()).into_iter(),
-            Self::Array(args, _) => Vec::from_iter(args.iter_mut()).into_iter(),
+            Self::Select(op1, op2, op3) => vec![op1, op2, op3],
+            Self::Call(_x, args, _) => args.iter_mut().collect_vec(),
+            Self::Array(args, _) => args.iter_mut().collect_vec(),
         }
+        .into_iter()
     }
 
     pub fn for_locals_mut(&mut self, mut f: impl FnMut(&mut Local)) {

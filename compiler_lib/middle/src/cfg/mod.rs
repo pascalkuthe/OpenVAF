@@ -96,6 +96,10 @@ impl InternedLocations {
     pub fn len(&self) -> usize {
         self.locations.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.locations.is_empty()
+    }
     pub fn len_idx(&self) -> IntLocation {
         self.locations.len_idx()
     }

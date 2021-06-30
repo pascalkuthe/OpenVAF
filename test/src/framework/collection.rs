@@ -40,8 +40,7 @@ impl<'a> TestInitInfo<'a> {
                 name: x.0,
                 model: Some(*x),
             })
-            .collect_vec()
-            .into()
+            .collect()
     }
 
     pub fn singular_test_case(_: &TestInitInfo) -> Box<[TestCase]> {
@@ -57,17 +56,17 @@ impl<'a> TestInitInfo<'a> {
 
         if let Some(ref tests) = config.tests {
             if !tests.iter().any(|x| x == test.name) {
-                return CollectedTest::new_ignored(tests_cases);
+                return CollectedTest::new_ignored(&tests_cases);
             }
         }
 
         if let Some(ref models) = config.models {
             if let Some(model) = test.model {
                 if !models.iter().any(|x| x == model.0) {
-                    return CollectedTest::new_ignored(tests_cases);
+                    return CollectedTest::new_ignored(&tests_cases);
                 }
             } else if tests_cases.is_empty() {
-                return CollectedTest::new_ignored(tests_cases);
+                return CollectedTest::new_ignored(&tests_cases);
             }
         }
 
@@ -87,11 +86,7 @@ impl<'a> TestInitInfo<'a> {
 
         if let Some(ref allowed_cases) = config.test_cases {
             for (test_case, run) in &mut test_cases {
-                *run = *run
-                    && allowed_cases
-                        .iter()
-                        .find(|x| &*x == &test_case.name)
-                        .is_some()
+                *run = *run && allowed_cases.iter().any(|x| *x == test_case.name)
             }
         }
 
@@ -107,7 +102,7 @@ struct CollectedTest {
 }
 
 impl CollectedTest {
-    fn new_ignored(cases: Box<[TestCase]>) -> Self {
+    fn new_ignored(cases: &[TestCase]) -> Self {
         let cases = cases
             .iter()
             .map(|x| (*x, false))
@@ -156,6 +151,7 @@ pub struct TestsToRun {
     pub max_test_len: usize,
     pub max_testcase_len: usize,
     pub test_cnt: usize,
+    #[allow(clippy::type_complexity)]
     pub tests: Vec<(&'static Test, Option<Box<[(TestCase, bool)]>>)>,
 }
 

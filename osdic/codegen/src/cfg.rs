@@ -8,12 +8,12 @@
  *  *****************************************************************************************
  */
 
+use anyhow::Result;
 use openvaf_codegen_llvm::inkwell::passes::PassManagerBuilder;
 use openvaf_codegen_llvm::inkwell::targets::{
     CodeModel, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
 };
 use openvaf_codegen_llvm::inkwell::OptimizationLevel;
-use anyhow::Result;
 use target_lexicon::Triple;
 
 pub(super) struct CodeGenCfg {
@@ -25,7 +25,12 @@ pub(super) struct CodeGenCfg {
 }
 
 impl CodeGenCfg {
-    pub fn new(cpu: String, triple: Option<Triple>, debug: bool, target_features: Option<Vec<String>>) -> Result<Self> {
+    pub fn new(
+        cpu: String,
+        triple: Option<Triple>,
+        debug: bool,
+        target_features: Option<Vec<String>>,
+    ) -> Result<Self> {
         Target::initialize_all(&InitializationConfig::default());
         let opt_lvl = if args.debug {
             OptimizationLevel::None

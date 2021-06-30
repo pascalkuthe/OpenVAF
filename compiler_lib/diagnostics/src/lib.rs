@@ -219,8 +219,8 @@ impl<Printer: DiagnosticSlicePrinter> Error for UserMultiDiagnostic<Printer> {}
 pub trait LibraryDiagnostic: Display + Error {
     #[inline(always)]
     fn user_facing<Printer: DiagnosticSlicePrinter>(&self) -> Option<UserDiagnostic<Printer>> {
-        if let Some(annotation_type) = self.annotation_type() {
-            Some(UserDiagnostic {
+        self.annotation_type()
+            .map(|annotation_type| UserDiagnostic {
                 id: self.id(),
                 title: self.title(),
                 annotation_type,
@@ -228,9 +228,6 @@ pub trait LibraryDiagnostic: Display + Error {
                 footer: self.footer(),
                 printer: Printer::default(),
             })
-        } else {
-            None
-        }
     }
 
     #[inline(always)]

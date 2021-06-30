@@ -53,7 +53,7 @@ pub fn find_models(config: &Config) -> Result<Box<[Model]>> {
             Ok(x) => {
                 let path = x.path();
                 if path.is_dir() {
-                    Some(Model::new(path).into())
+                    Some(Model::new(path))
                 } else {
                     None
                 }

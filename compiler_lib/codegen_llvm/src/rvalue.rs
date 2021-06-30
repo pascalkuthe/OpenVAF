@@ -21,7 +21,7 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
 {
     type T = BasicValueEnum<'c>;
 
-    fn fold_cmplx_arith_negate(&mut self, op: Span, arg: &COperand<C>) -> Self::T {
+    fn fold_cmplx_arith_negate(&mut self, _op: Span, _arg: &COperand<C>) -> Self::T {
         todo!()
     }
 
@@ -57,19 +57,19 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
             .as_basic_value_enum()
     }
 
-    fn fold_cmplx_add(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_add(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         todo!()
     }
 
-    fn fold_cmplx_sub(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_sub(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         todo!()
     }
 
-    fn fold_cmplx_mul(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_mul(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         todo!()
     }
 
-    fn fold_cmplx_div(&mut self, op: Span, lhs: &COperand<C>, rhs: &COperand<C>) -> Self::T {
+    fn fold_cmplx_div(&mut self, _op: Span, _lhs: &COperand<C>, _rhs: &COperand<C>) -> Self::T {
         todo!()
     }
 
@@ -467,7 +467,7 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
         self.ctx.build_intrinsic_call(Intrinsic::Sqrt, &[arg])
     }
 
-    fn fold_cmplx_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
+    fn fold_cmplx_abs(&mut self, _span: Span, _arg: &COperand<C>) -> Self::T {
         todo!()
     }
 

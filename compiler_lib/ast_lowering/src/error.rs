@@ -80,8 +80,8 @@ impl AllowedNatures {
         }
     }
 
-    fn to_allowed_list(&self) -> Vec<Symbol> {
-        match *self {
+    fn to_allowed_list(self) -> Vec<Symbol> {
+        match self {
             Self::None | Self::PortPotential => vec![],
             Self::Potential(_, pot) => vec![keywords::potential, pot],
             Self::Flow(_, flow) => vec![keywords::flow, flow],
@@ -835,7 +835,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::owned(format!("Expected at least 2 arguments")),
+                    Text::borrowed("Expected at least 2 arguments"),
                     span.data(),
                 )],
                 fold: false,
@@ -845,7 +845,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::owned(format!("Expected function identifier or string literal")),
+                    Text::borrowed("Expected function identifier or string literal"),
                     span.data(),
                 )],
                 fold: false,
@@ -855,7 +855,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::owned(format!("expected a branch access such as V(b,e)")),
+                    Text::borrowed("expected a branch access such as V(b,e)"),
                     span.data(),
                 )],
                 fold: false,

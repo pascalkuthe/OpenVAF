@@ -1,5 +1,5 @@
 default:
-  image: 'rust:latest'
+  image: $CI_REGISTRY_IMAGE
   cache: &global_cache
     key: ${CI_COMMIT_REF_SLUG}
 
@@ -33,41 +33,39 @@ variables:
 #    - cargo --version
 #    - cargo update
 #    - cargo build --verbose
-#
-#test:
-#  stage: test
-#  script:
-#    - cd crates
-#    - rustc --version
-#    - cargo --version
-#    - cargo test --verbose
 
 
-test_fmt:
+test:
+  stage: test
+  script:
+    - cd test
+    - cargo run -- --src-dirs ../test
+
+
+test_clippy:
   stage: test
 
   before_script:
     - rustup component add rustfmt
 
   script:
-    - cd crates
-    - cargo fmt -- --check
+    - echo "Checking OpenVAF"
+    - cd compiler_lib
+    - cargo clippy -- -D warnings
+#    - echo "Checking OSDI" OSDI is not ready yet
+#    - cd ../osdi
+#    - cargo clippy -- -D warnings
+#    - echo "Checking OSDIC"
+#    - cd ../osdic
+    - cargo clippy -- -D warnings
+    - echo "Checking TEST"
+    - cd ../test
+    - cargo clippy -- -D warnings
 
   cache:
     <<: *global_cache
     policy: pull
 
-
-
-#test_clippy:
-#  stage: test
-#
-#  before_script:
-#    - rustup component add clippy
-#
-#  script:
-#    - cd crates
-#    - cargo clippy -- -D warnings
 
 
 book:
