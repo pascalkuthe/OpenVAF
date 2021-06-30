@@ -30,13 +30,27 @@ module diode_va(A,C);
     real VT,x,y,vf;
 
     analog begin
-        VT = `P_K*$temperature /`P_Q;
-        vte = VT * N;
-        vcrit = vte * log(vte / (`M_SQRT2 * Is));
+
 
         if (Rs < 1e-3) begin
             V(br_ci_c) <+ 0;
+
+            VT = `P_K*$temperature /`P_Q;
+            if (Rs < 1e-3) begin
+                    vcrit = vte * log(vte / (`M_SQRT2 * Is));
+            end
         end
+
+
+        if (Rs > 1e-3) begin
+            VT = `P_K*$temperature /`P_Q;
+            if (Rs < 1e-3) begin
+                    vcrit = vte * log(vte / (`M_SQRT2 * Is));
+            end
+        end
+
+        vte = VT * N;
+        vcrit = vte * log(vte / (`M_SQRT2 * Is));
 
         Vd = $limit(V(br_a_ci), "pnjlim", VT, vcrit);
         Vr = V(br_ci_c);

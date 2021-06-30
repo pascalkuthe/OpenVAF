@@ -41,6 +41,7 @@ use crate::bit_set::{
 use crate::index_vec::{Idx, IndexSliceExntesions, IndexVec, IndexVecExtensions};
 use crate::iter;
 use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
 /// A fixed-size 2D bit matrix type with a dense representation.
@@ -260,7 +261,7 @@ impl<R: Idx, C: Idx> fmt::Debug for BitMatrix<R, C> {
 ///
 /// `R` and `C` are index types used to identify rows and columns respectively;
 /// typically newtyped `usize` wrappers, but they can also just be `usize`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SparseBitMatrix<R, C>
 where
     R: Idx,
@@ -269,6 +270,21 @@ where
     num_columns: usize,
     num_rows: usize,
     rows: IndexVec<R, HybridBitSet<C>>,
+}
+
+impl<R, C> Debug for SparseBitMatrix<R, C>
+where
+    R: Idx,
+    C: Idx,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for (row, columns) in self.rows.iter_enumerated() {
+            if !columns.is_empty() {
+                writeln!(f, "{:?}: {:?}", row, columns)?
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<R: Idx, C: Idx> SparseBitMatrix<R, C> {

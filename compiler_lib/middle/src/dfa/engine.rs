@@ -22,6 +22,10 @@ use crate::dfa::GenKillAnalysisImpl;
 use crate::CallType;
 use openvaf_data_structures::index_vec::{index_vec, Idx, IndexVec};
 use openvaf_data_structures::{iter, WorkQueue};
+use std::fmt;
+use std::fmt::{Debug, Formatter};
+use tracing::debug;
+
 pub type GenKillResults<C, A> = Results<C, GenKillAnalysisImpl<A>>;
 
 /// A dataflow analysis that has converged to fixpoint.
@@ -89,6 +93,17 @@ where
     }
 }
 
+impl<C, A> Debug for Results<C, A>
+where
+    A: Analysis<C>,
+    C: CallType,
+    A::Domain: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&self.entry_sets, f)
+    }
+}
+
 /// A solver for dataflow problems.
 pub struct Engine<'a, C, A>
 where
@@ -121,8 +136,11 @@ where
         //
         // In this case, there's no need to compute the block transfer functions ahead of time.
         if !cfg.is_cyclic() {
+            debug!("Non Cyclical CFG! Gen Kill Transfer Functions are not cached");
             return Self::new(cfg, GenKillAnalysisImpl(analysis), None);
         }
+
+        debug!("Cyclical CFG! Caching gen kill sets");
 
         // Otherwise, compute and store the cumulative transfer function for each block.
 
@@ -148,7 +166,7 @@ where
 impl<'a, C, A, D> Engine<'a, C, A>
 where
     A: Analysis<C, Domain = D>,
-    D: Clone + JoinSemiLattice,
+    D: Clone + JoinSemiLattice + Debug,
     C: CallType,
 {
     /// Creates a new `Engine` to solve a dataflow problem with an arbitrary transfer

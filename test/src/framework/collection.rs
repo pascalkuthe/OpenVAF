@@ -55,7 +55,7 @@ impl<'a> TestInitInfo<'a> {
 
         let Self { config, test, .. } = self;
 
-        if let Some(ref tests) = config.test {
+        if let Some(ref tests) = config.tests {
             if !tests.iter().any(|x| x == test.name) {
                 return CollectedTest::new_ignored(tests_cases);
             }
@@ -66,7 +66,7 @@ impl<'a> TestInitInfo<'a> {
                 if !models.iter().any(|x| x == model.0) {
                     return CollectedTest::new_ignored(tests_cases);
                 }
-            } else {
+            } else if tests_cases.is_empty() {
                 return CollectedTest::new_ignored(tests_cases);
             }
         }
@@ -95,7 +95,7 @@ impl<'a> TestInitInfo<'a> {
             }
         }
 
-        CollectedTest::new(test_cases.into_boxed_slice())
+        CollectedTest::new(test_cases.into_boxed_slice(), config.test_cases.is_some())
     }
 }
 
@@ -121,11 +121,11 @@ impl CollectedTest {
         }
     }
 
-    fn new(cases: Box<[(TestCase, bool)]>) -> Self {
+    fn new(cases: Box<[(TestCase, bool)]>, cases_filtered: bool) -> Self {
         if cases.len() == 0 {
             Self {
                 cases,
-                ignored: false,
+                ignored: cases_filtered,
                 cases_to_run: 1,
                 longest_case_name_len: 0,
             }

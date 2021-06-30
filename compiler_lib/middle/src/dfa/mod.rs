@@ -27,6 +27,7 @@ use std::cmp::Ordering;
 
 pub use cursors::{GenKillResultsCursor, GenKillResultsRefCursor, ResultsCursor, ResultsRefCursor};
 pub use engine::{GenKillResults, Results};
+use std::fmt::Debug;
 pub use visitor::{ResultsVisitable, ResultsVisitor, ResultsVisitorMut};
 
 mod cursors;
@@ -41,7 +42,7 @@ pub mod visitor;
 /// initial value at the entry point of each basic block.
 pub trait AnalysisDomain<C: CallType> {
     /// The type that holds the dataflow state at any given point in the program.
-    type Domain: Clone + JoinSemiLattice;
+    type Domain: Clone + JoinSemiLattice + Debug;
 
     /// The direction of this analysis. Either `Forward` or `Backward`.
     type Direction: Direction;
@@ -68,7 +69,7 @@ pub trait AnalysisDomain<C: CallType> {
 /// initial value at the entry point of each basic block.
 pub trait GenKillAnalysisDomain<C: CallType> {
     /// The type that holds the dataflow state at any given point in the program.
-    type Domain: Clone + JoinSemiLattice + GenKill<Self::Idx> + BorrowMut<BitSet<Self::Idx>>;
+    type Domain: Clone + JoinSemiLattice + GenKill<Self::Idx> + BorrowMut<BitSet<Self::Idx>> + Debug;
 
     type Idx: Idx;
 
@@ -326,7 +327,7 @@ where
 /// however, we only need to apply an effect once. In *these* cases, it is more efficient to pass the
 /// `BitSet` representing the state vector directly into the `*_effect` methods as opposed to
 /// building up a `GenKillSet` and then throwing it away.
-pub trait GenKill<T: Idx> {
+pub trait GenKill<T: Idx>: Debug {
     /// Inserts `elem` into the state vector.
     fn gen(&mut self, elem: T);
 
@@ -359,8 +360,8 @@ pub trait GenKill<T: Idx> {
 /// Calling `gen`/`kill` on a `GenKillSet` will "build up" a transfer function so that it can be
 /// applied multiple times efficiently. When there are multiple calls to `gen` and/or `kill` for
 /// the same element, the most recent one takes precedence.
-#[derive(Clone)]
-pub struct GenKillSet<T> {
+#[derive(Clone, Debug)]
+pub struct GenKillSet<T: Idx> {
     gen: HybridBitSet<T>,
     kill: HybridBitSet<T>,
     domain_size: usize,
