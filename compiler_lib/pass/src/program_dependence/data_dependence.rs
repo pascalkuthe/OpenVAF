@@ -18,12 +18,20 @@ use openvaf_middle::cfg::{
 use openvaf_middle::dfa::ResultsVisitor;
 use openvaf_middle::{dfa, impl_pass_span, CallType, Local, StmntKind};
 use std::borrow::Borrow;
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DefUserGraph(pub SparseBitMatrix<IntLocation, IntLocation>);
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct UseDefGraph(pub SparseBitMatrix<IntLocation, IntLocation>);
+
+impl Debug for UseDefGraph {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Debug::fmt(&self.0, f)
+    }
+}
 
 impl UseDefGraph {
     pub fn inverse(&self) -> DefUserGraph {
@@ -130,6 +138,7 @@ impl<'a> UseDefBuilder<'a> {
     ) {
         self.tmp.clear();
         for local in locals {
+            //panic!("{}: {:?} from {:?}", location, local, reaching_definitions);
             if let Some(row) = self.assignments.row(local) {
                 self.tmp.union(row);
             }
@@ -143,7 +152,7 @@ impl<'a, C: CallType> ResultsVisitor<C> for UseDefBuilder<'a> {
     type FlowState = BitSet<IntLocation>;
 
     #[inline]
-    fn visit_phi_after_effect(
+    fn visit_phi_before_effect(
         &mut self,
         state: &Self::FlowState,
         phi: &PhiData,
@@ -158,7 +167,7 @@ impl<'a, C: CallType> ResultsVisitor<C> for UseDefBuilder<'a> {
     }
 
     #[inline]
-    fn visit_statement_after_effect(
+    fn visit_statement_before_effect(
         &mut self,
         state: &Self::FlowState,
         stmnt: &(StmntKind<C>, SyntaxCtx),
@@ -167,13 +176,13 @@ impl<'a, C: CallType> ResultsVisitor<C> for UseDefBuilder<'a> {
     ) {
         self.visit_rhs(
             self.locations[block].phi_start + id.index(),
-            stmnt.0.locals(),
+            stmnt.0.read_locals(),
             state,
         )
     }
 
     #[inline]
-    fn visit_terminator_after_effect(
+    fn visit_terminator_before_effect(
         &mut self,
         state: &Self::FlowState,
         term: &Terminator<C>,

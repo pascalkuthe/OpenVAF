@@ -40,7 +40,6 @@ use crate::bit_set::{
     UnionIntoHybridBitSet,
 };
 use crate::index_vec::Idx;
-use std::cmp::Ordering;
 use std::{fmt, slice};
 
 /// A fixed-size bitset type with a hybrid representation: sparse when there
@@ -237,37 +236,15 @@ impl<T: Idx> SubtractFromHybridBitSet<T> for HybridBitSet<T> {
         match other {
             Self::Sparse(sparse) => {
                 let mut changed = false;
-                match self {
-                    Self::Dense(dense) => {
-                        sparse.elems.retain(|&mut x| {
-                            if dense.contains(x) {
-                                changed = true;
-                                false
-                            } else {
-                                true
-                            }
-                        });
+                // todo smarter algorithem for sparse case? -- Probably not worth it due to all the extra branches require to make this actually work
+                sparse.elems.retain(|&mut x| {
+                    if self.contains(x) {
+                        changed = true;
+                        false
+                    } else {
+                        true
                     }
-                    Self::Sparse(other) => {
-                        // On(n+m) difference algorithm possible because sparse sets are always sorted and have unique members
-                        // really fast (in practice 5-20% total execution time for real world models)
-                        let mut pos = 0;
-                        sparse.elems.retain(|x| {
-                            while pos < other.len() {
-                                match other.elems[pos].cmp(x) {
-                                    Ordering::Equal => {
-                                        pos += 1;
-                                        changed = true;
-                                        return false;
-                                    }
-                                    Ordering::Less => pos += 1,
-                                    Ordering::Greater => return true,
-                                }
-                            }
-                            false
-                        });
-                    }
-                }
+                });
                 changed
             }
             Self::Dense(dense) => dense.subtract(self),
@@ -298,27 +275,6 @@ impl<T: Idx> UnionIntoHybridBitSet<T> for BitSet<T> {
         debug_assert_eq!(self.domain_size, domain_size);
         match other {
             HybridBitSet::Sparse(sparse) => {
-                let mut changed = false;
-
-                sparse.elems.retain(|&mut x| {
-                    if self.contains(x) {
-                        changed = true;
-                        false
-                    } else {
-                        true
-                    }
-                });
-                changed
-            }
-            HybridBitSet::Dense(other_dense) => other_dense.union(self),
-        }
-    }
-}
-
-impl<T: Idx> SubtractFromHybridBitSet<T> for BitSet<T> {
-    fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
-        match other {
-            HybridBitSet::Sparse(sparse) => {
                 // `self` is sparse and `other` is dense. To
                 // merge them, we have two available strategies:
                 // * Densify `self` then merge other
@@ -336,6 +292,27 @@ impl<T: Idx> SubtractFromHybridBitSet<T> for BitSet<T> {
                 let mut new_dense = self.clone();
                 let changed = new_dense.reverse_union_sparse(sparse);
                 *other = HybridBitSet::Dense(new_dense);
+                changed
+            }
+            HybridBitSet::Dense(other_dense) => other_dense.union(self),
+        }
+    }
+}
+
+impl<T: Idx> SubtractFromHybridBitSet<T> for BitSet<T> {
+    fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
+        match other {
+            HybridBitSet::Sparse(sparse) => {
+                let mut changed = false;
+
+                sparse.elems.retain(|&mut x| {
+                    if self.contains(x) {
+                        changed = true;
+                        false
+                    } else {
+                        true
+                    }
+                });
                 changed
             }
             HybridBitSet::Dense(other_dense) => other_dense.subtract(self),

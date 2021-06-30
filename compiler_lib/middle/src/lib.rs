@@ -909,6 +909,50 @@ where
 }
 
 impl<C: CallType> StmntKind<C> {
+    pub fn read_locals(&self) -> impl Iterator<Item = Local> {
+        // All stmnts excepot array construction and calls have 3 or less operands
+        // Even calls have 3 or less arguments in practice in 90% of cases
+        let mut buff = Vec::with_capacity(3);
+        self.for_read_locals(|local| buff.push(local));
+        buff.into_iter()
+    }
+
+    pub fn read_locals_mut(&mut self) -> impl Iterator<Item = &mut Local> {
+        // This is mostly three adress code
+        let mut buff = Vec::with_capacity(3);
+        // This is save since each local is an individual location in memory the interface of the for_locals funciton just doesn't capture that
+        self.for_read_locals_mut(|local| buff.push(local as *mut Local));
+        buff.into_iter().map(|local_ptr| unsafe { &mut *local_ptr })
+    }
+
+    pub fn for_read_locals(&self, mut f: impl FnMut(Local)) {
+        match *self {
+            Self::Assignment(_, ref val) => val.for_locals(f),
+            Self::Call(_, ref args, _) => {
+                for arg in args {
+                    if let OperandData::Copy(local) = arg.contents {
+                        f(local)
+                    }
+                }
+            }
+            Self::NoOp => {}
+        }
+    }
+
+    pub fn for_read_locals_mut(&mut self, mut f: impl FnMut(&mut Local)) {
+        match self {
+            Self::Assignment(_, val) => val.for_locals_mut(f),
+            Self::Call(_, args, _) => {
+                for arg in args {
+                    if let OperandData::Copy(local) = &mut arg.contents {
+                        f(local)
+                    }
+                }
+            }
+            Self::NoOp => {}
+        }
+    }
+
     pub fn locals(&self) -> impl Iterator<Item = Local> {
         // All stmnts excepot array construction and calls have 3 or less operands
         // Even calls have 3 or less arguments in practice in 90% of cases

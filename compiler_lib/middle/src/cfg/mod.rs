@@ -62,10 +62,34 @@ pub struct BlockLocations {
     pub terminator: IntLocation,
 }
 
+impl Display for BlockLocations {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.phi_start != self.stmnt_start {
+            write!(f, "Phis from {} to {};", self.phi_start, self.stmnt_start)?
+        }
+
+        if self.stmnt_start != self.terminator {
+            write!(f, "Stmts from {} to {};", self.stmnt_start, self.terminator)?
+        }
+
+        write!(f, "Terminator at {}", self.terminator)
+    }
+}
+
 #[derive(Debug)]
 pub struct InternedLocations {
     pub locations: IndexVec<IntLocation, Location>,
     pub blocks: IndexVec<BasicBlock, BlockLocations>,
+}
+
+impl Display for InternedLocations {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for (bb, locations) in self.blocks.iter_enumerated() {
+            writeln!(f, "BB {}: {}", bb, locations)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl InternedLocations {

@@ -50,10 +50,10 @@ fn run(sess: &TestSession) -> Result<()> {
         let mut errors = MultiDiagnostic(Vec::new());
         cfg.generate_derivatives(&mir, &mut errors);
 
-        if sess.config.print_verbose_info {
-            mir.print_to_file_with_shared(sess.log_file("before_optimization.mir")?, id, &cfg)
-                .wrap_err("Failed to print MIR")?;
-        }
+        // if sess.config.print_verbose_info {
+        //     mir.print_to_file_with_shared(sess.log_file("before_optimization.mir")?, id, &cfg)
+        //         .wrap_err("Failed to print MIR")?;
+        // }
 
         if !errors.is_empty() {
             return Err(errors.user_facing::<ExpansionPrinter>().into());
@@ -100,10 +100,10 @@ fn run(sess: &TestSession) -> Result<()> {
             )
         }
 
-        if sess.config.print_verbose_info {
-            mir.print_to_file_with_shared(sess.log_file("before_const_prop.mir")?, id, &cfg)
-                .wrap_err("Failed to print MIR")?;
-        }
+        // if sess.config.print_verbose_info {
+        //     mir.print_to_file_with_shared(sess.log_file("before_const_prop.mir")?, id, &cfg)
+        //         .wrap_err("Failed to print MIR")?;
+        // }
 
         cfg.modify(ConstantPropagation::default());
 
@@ -159,10 +159,22 @@ fn run(sess: &TestSession) -> Result<()> {
             assignments: &assignments,
             locations: &locations,
         });
+
         let mut cursor = reaching_definitions.as_results_cursor(&cfg);
         cursor.seek_to_exit_block_end(&cfg);
         let exit_block_definitions = cursor.finish();
         assert!(!exit_block_definitions.is_empty());
+
+        // let mut outset_dump_file = File::create(sess.log_file("out_set")?)?;
+        // let mut reaching_defs_dump_file = File::create(sess.log_file("reaching_definitions")?)?;
+        // let mut locations_dump_file = File::create(sess.log_file("locations")?)?;
+        //
+        // {
+        //     use std::io::Write;
+        //     write!(&mut reaching_defs_dump_file, "{:#?}", reaching_definitions)?;
+        //     write!(&mut locations_dump_file, "{}", locations)?;
+        //     write!(&mut outset_dump_file, "{:#?}", &exit_block_definitions)?;
+        // }
 
         let use_def_graph = cfg.analyse(BuildUseDefGraph {
             locations: &locations,
@@ -176,6 +188,13 @@ fn run(sess: &TestSession) -> Result<()> {
             assignments,
             control_dependence: BuildControlDependenceGraph::default(),
         });
+
+        // let mut udg_file = File::create(sess.log_file("use_def_graph")?)?;
+        //
+        // {
+        //     use std::io::Write;
+        //     write!(&mut udg_file, "{:?}", &pdg.data_dependencies)?;
+        // }
 
         let warnings = Linter::late_user_diagnostics::<ExpansionPrinter>()?;
         if !warnings.0.is_empty() {
@@ -223,6 +242,8 @@ fn run(sess: &TestSession) -> Result<()> {
                 )
             }
 
+            let mut cfg = cfg.clone();
+
             let retain = cfg.analyse(
                 BackwardSlice::new(&pdg, &locations)
                     .requiring_locals_in(iter::once(local), &exit_block_definitions),
@@ -236,8 +257,10 @@ fn run(sess: &TestSession) -> Result<()> {
             cfg.modify(SimplifyBranches);
             cfg.modify(Simplify);
             let new_locals = cfg.modify(RemoveDeadLocals);
-            if new_locals[local] < cfg.locals.len_idx() {
-                bail!("'{}' was removed by optimizations/backwarsd slice despite being present in the out set!", name)
+            if new_locals[local] >= cfg.locals.len_idx() {
+                mir.print_to_file_with_shared(sess.log_file("after_slice_fail.mir")?, id, &cfg)
+                    .wrap_err("Failed to print MIR")?;
+                bail!("'{}' was removed by optimizations/backward slice despite being present in the out set!", name)
             }
         }
     }

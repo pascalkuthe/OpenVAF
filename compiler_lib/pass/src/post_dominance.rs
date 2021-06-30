@@ -14,7 +14,7 @@ use openvaf_middle::cfg::{AnalysisPass, BasicBlock, ControlFlowGraph};
 use openvaf_middle::{impl_pass_span, CallType};
 use std::cmp::Ordering;
 use std::ops::Index;
-use tracing::{debug, debug_span, trace, trace_span};
+use tracing::{debug, debug_span};
 
 pub struct PostDominators(pub IndexVec<BasicBlock, BasicBlock>);
 
@@ -65,8 +65,8 @@ impl<C: CallType> AnalysisPass<'_, C> for BuildPostDominators {
             iter.next();
 
             for (pid, (bid, bb)) in iter {
-                let span = trace_span!("iterating", block = bid.index());
-                let _enter = span.enter();
+                //let span = trace_span!("iterating", block = bid.index());
+                //let _enter = span.enter();
 
                 debug_assert!(*bid != cfg.end());
 
@@ -81,11 +81,6 @@ impl<C: CallType> AnalysisPass<'_, C> for BuildPostDominators {
                             intersect(&ipdom, new_idom_idx, predecessor_idx)
                         });
                     if new_idom_idx != ipdom[pid] {
-                        trace!(
-                            block = bid.index(),
-                            ipdom = post_order[new_idom_idx].0.index(),
-                            "changed ipdom"
-                        );
                         ipdom[pid] = new_idom_idx;
                         changed = true;
                     }
@@ -104,11 +99,6 @@ impl<C: CallType> AnalysisPass<'_, C> for BuildPostDominators {
 
         for (pid, &dominator_pid) in ipdom.iter_enumerated() {
             if dominator_pid != undefined {
-                trace!(
-                    ipdom = post_order[dominator_pid].0.index(),
-                    block = post_order[pid].0.index(),
-                    "result"
-                );
                 res[post_order[pid].0] = post_order[dominator_pid].0;
             }
         }
@@ -128,10 +118,5 @@ fn intersect(
             Ordering::Less => finger2 = post_dominators[finger2],
             Ordering::Equal => return finger1,
         }
-        trace!(
-            finger1 = finger1.index(),
-            finger2 = finger2.index(),
-            "intersecting",
-        );
     }
 }

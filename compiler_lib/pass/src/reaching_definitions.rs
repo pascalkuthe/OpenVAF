@@ -116,9 +116,9 @@ where
         pos: IntLocation,
     ) {
         if let Some(assignments) = self.assignments.borrow().row(dst) {
-            state.kill_set(assignments)
+            state.kill_set(assignments);
         }
-        state.gen(pos)
+        state.gen(pos);
     }
 }
 
