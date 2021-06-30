@@ -8,7 +8,6 @@ default:
       - crates/target/
 
 stages:
-  - build
   - test
   - doc
   - deploy_doc
@@ -39,7 +38,7 @@ test:
   stage: test
   script:
     - cd test
-    - cargo run -- --src-dirs ../test
+    - scl enable llvm-toolset-7.0 devtoolset-9 "cargo run -- --src-dirs ../test"
 
 
 test_clippy:
@@ -51,17 +50,39 @@ test_clippy:
   script:
     - echo "Checking OpenVAF"
     - cd compiler_lib
-    - cargo clippy -- -D warnings
+    -  scl enable llvm-toolset-7.0 devtoolset-9 "cargo clippy -- -D warnings"
 #    - echo "Checking OSDI" OSDI is not ready yet
 #    - cd ../osdi
-#    - cargo clippy -- -D warnings
+#    -  scl enable llvm-toolset-7.0 devtoolset-9 "cargo clippy -- -D warnings"
 #    - echo "Checking OSDIC"
 #    - cd ../osdic
-    - cargo clippy -- -D warnings
-    - echo "Checking TEST"
+#    -  scl enable llvm-toolset-7.0 devtoolset-9 "cargo clippy -- -D warnings"
+    - echo "Checking Test suite"
     - cd ../test
-    - cargo clippy -- -D warnings
+    -  scl enable llvm-toolset-7.0 devtoolset-9 "cargo clippy -- -D warnings"
+  cache:
+    <<: *global_cache
+    policy: pull
 
+test_fmt:
+  stage: test
+
+  before_script:
+    - rustup component add rustfmt
+
+  script:
+    - echo "Checking OpenVAF"
+    - cd compiler_lib
+    - cargo fmt --check
+    #    - echo "Checking OSDI" OSDI is not ready yet
+    #    - cd ../osdi
+    #    - cargo clippy -- -D warnings
+    #    - echo "Checking OSDIC"
+    #    - cd ../osdic
+#    - cargo  fmt --check
+    - echo "Checking Test suite"
+    - cd ../test
+    - cargo  fmt --check
   cache:
     <<: *global_cache
     policy: pull
