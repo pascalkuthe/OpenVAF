@@ -8,20 +8,14 @@
  *  *****************************************************************************************
  */
 
+use clap::Clap;
 use color_eyre::Section;
 use openvaf_test::framework::{run_tests, Config};
 use std::path::Path;
 
 pub fn main() {
     color_eyre::install().expect("Failed to install error and panic handeling hook");
-    if let Err(err) = run_tests(&Config {
-        test: None,
-        test_cases: None,
-        models: None,
-        capture: false,
-        src_dirs: Path::new("test").to_path_buf(),
-        print_verbose_info: true,
-    }) {
+    if let Err(err) = run_tests(&Config::parse()) {
         let err = err.section("The OpenVAF test suite crashed! This does not imply a test failure but rather a bug within the testsuite itself!");
         println!("{:?}", err)
     }

@@ -148,7 +148,7 @@ fn run(sess: &TestSession) -> Result<()> {
             )
         }
 
-        if sess.config.print_verbose_info {
+        if sess.config.print_mir {
             mir.print_to_file_with_shared(sess.log_file("after_optimizations.mir")?, id, &cfg)
                 .wrap_err("Failed to print MIR")?;
         }
