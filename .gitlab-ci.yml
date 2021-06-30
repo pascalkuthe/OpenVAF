@@ -73,16 +73,10 @@ test_fmt:
   script:
     - echo "Checking OpenVAF"
     - cd compiler_lib
-    - cargo fmt --check
-    #    - echo "Checking OSDI" OSDI is not ready yet
-    #    - cd ../osdi
-    #    - cargo clippy -- -D warnings
-    #    - echo "Checking OSDIC"
-    #    - cd ../osdic
-#    - cargo  fmt --check
+    - cargo fmt -- --check
     - echo "Checking Test suite"
     - cd ../test
-    - cargo  fmt --check
+    - cargo  fmt -- --check
   cache:
     <<: *global_cache
     policy: pull

@@ -27,7 +27,7 @@ RUN source scl_source enable devtoolset-9;\
     source scl_source enable llvm-toolset-7.0;\
     mkdir llvmbuild;\
     cd llvmbuild;\
-    cmake3 -GNinja -DLLVM_PARALLEL_LINK_JOBS=1 -DCMAKE_BUILD_TYPE=RELEASE -DLLVM_ENABLE_PROJECTS=polly -DLLVM_ENABLE_LLD=ON /llvm-project/llvm;\
+    cmake3 -GNinja -DLLVM_PARALLEL_LINK_JOBS=1 -DCMAKE_BUILD_TYPE=RELEASE -DLLVM_ENABLE_PROJECTS='polly,lld' -DLLVM_ENABLE_LLD=ON /llvm-project/llvm;\
     cmake3 --build . --parallel 16;\
     cmake3 --build . --target install --parallel 16;\
     rm -rf /llvm-project;
