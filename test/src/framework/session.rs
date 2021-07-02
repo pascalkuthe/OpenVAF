@@ -15,6 +15,8 @@ use eyre::Result;
 use indicatif::ProgressBar;
 use openvaf_ast::Ast;
 use openvaf_ast_lowering::{lower_ast_userfacing, AllowedReferences};
+use openvaf_codegen_llvm::inkwell::values::{BasicValue, BasicValueEnum};
+use openvaf_codegen_llvm::{CallTypeCodeGen, CfgCodegen, Intrinsic};
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::ExpansionPrinter;
@@ -33,11 +35,11 @@ use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
 use openvaf_middle::{
     BinOp, COperand, CallArg, CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir,
-    Operand, OperandData, RValue, StmntKind,
+    Operand, OperandData, ParameterCallType, ParameterInput, RValue, StmntKind,
 };
 use openvaf_parser::{parse, TokenStream};
 use openvaf_preprocessor::{preprocess_user_facing, std_path};
-use openvaf_session::sourcemap::Span;
+use openvaf_session::sourcemap::{Span, StringLiteral};
 use openvaf_session::SourceMap;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
@@ -340,5 +342,74 @@ impl ExpressionLowering<TestLowering> for Call {
         _span: Span,
     ) -> Option<StmntKind<Self>> {
         Some(StmntKind::NoOp)
+    }
+}
+
+impl<'lt, 'c> CallTypeCodeGen<'lt, 'c> for Call {
+    type CodeGenData = ();
+
+    fn read_input<'a, A: CallType>(
+        cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
+        input: &Self::I,
+    ) -> BasicValueEnum<'c> {
+        match input {
+            Input::Parameter(id) => match cg.ctx.mir.parameters[*id].ty {
+                Type::REAL => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
+                Type::INT => cg.ctx.integer_ty().const_int(0, true).as_basic_value_enum(),
+                Type::STRING => cg
+                    .ctx
+                    .str_literal(StringLiteral::DUMMY)
+                    .as_basic_value_enum(),
+                _ => todo!("Arrays"),
+            },
+            Input::PortConnected(_) => cg.ctx.bool_ty().const_int(1, false).as_basic_value_enum(),
+            Input::ParamGiven(_) => cg.ctx.bool_ty().const_int(1, false).as_basic_value_enum(),
+            Input::SimParam => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
+            Input::SimParamStr => cg
+                .ctx
+                .str_literal(StringLiteral::DUMMY)
+                .as_basic_value_enum(),
+            Input::BranchAccess(_, _) => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
+            Input::PortFlow(_) => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
+            Input::Temperature => cg.ctx.real_ty().const_float(300.0).as_basic_value_enum(),
+        }
+    }
+
+    fn gen_call_rvalue<'a, A: CallType>(
+        &self,
+        cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
+        _args: &IndexSlice<CallArg, [BasicValueEnum<'c>]>,
+    ) -> BasicValueEnum<'c> {
+        cg.ctx.real_ty().const_float(0.0).as_basic_value_enum()
+    }
+
+    fn gen_call<'a, A: CallType>(
+        &self,
+        _cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
+        _args: &IndexSlice<CallArg, [BasicValueEnum<'c>]>,
+    ) {
+        debug!("ignoring stop call")
+    }
+
+    fn gen_limexp<'a, A: CallType>(
+        cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
+        arg: BasicValueEnum<'c>,
+    ) -> BasicValueEnum<'c> {
+        cg.ctx.build_intrinsic_call(Intrinsic::Exp, &[arg])
+    }
+}
+
+impl From<ParameterCallType> for Call {
+    fn from(_: ParameterCallType) -> Self {
+        unreachable!()
+    }
+}
+
+impl From<ParameterInput> for Input {
+    fn from(input: ParameterInput) -> Self {
+        match input {
+            ParameterInput::Given(param) => Self::ParamGiven(param),
+            ParameterInput::Value(param) => Self::Parameter(param),
+        }
     }
 }
