@@ -10,5 +10,6 @@
 
 #[macro_use]
 pub mod framework;
+mod code_gen;
 mod middle;
 mod parsing_tests;
