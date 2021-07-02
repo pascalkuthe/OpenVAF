@@ -12,7 +12,9 @@ use crate::program_dependence::ProgramDependenceGraph;
 use openvaf_data_structures::bit_set::{BitSet, SparseBitMatrix};
 use openvaf_data_structures::iter::Itertools;
 use openvaf_data_structures::WorkQueue;
-use openvaf_middle::cfg::{AnalysisPass, ControlFlowGraph, IntLocation, InternedLocations};
+use openvaf_middle::cfg::{
+    AnalysisPass, ControlFlowGraph, IntLocation, InternedLocations, LocationKind,
+};
 use openvaf_middle::{impl_pass_span, CallType, Local};
 use std::borrow::Borrow;
 use tracing::{debug, trace, trace_span};
@@ -153,6 +155,7 @@ where
 
             if let Some(data_dependencies) = &pdg.get_data_dependencies(loc) {
                 for data_dependency in data_dependencies.iter() {
+                    debug_assert_ne!(locations[data_dependency].kind, LocationKind::Terminator);
                     trace!(
                         location = debug(&locations[data_dependency]),
                         "Data dependency",

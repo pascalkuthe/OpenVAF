@@ -24,6 +24,7 @@ use openvaf_pass::{
     BackwardSlice, FindAssignments, ReachingDefinitionsAnalysis, RemoveDeadLocals, Simplify,
     SimplifyBranches, Strip, Verify,
 };
+use std::fs::File;
 use std::ops::Deref;
 
 test! {
@@ -40,12 +41,6 @@ fn run(sess: &TestSession) -> Result<()> {
 
     for (id, module) in mir.modules.iter_enumerated() {
         let mut cfg = module.analog_cfg.borrow_mut();
-
-        let malformations = cfg.analyse(Verify(&mir));
-
-        if !malformations.is_empty() {
-            bail!("Invalid CFG produced by HIR lowering:\n{}", malformations)
-        }
 
         let mut errors = MultiDiagnostic(Vec::new());
         cfg.generate_derivatives(&mir, &mut errors);
@@ -242,24 +237,55 @@ fn run(sess: &TestSession) -> Result<()> {
                 )
             }
 
-            let mut cfg = cfg.clone();
+            let mut sliced_cfg = cfg.clone();
 
-            let retain = cfg.analyse(
+            let retain = sliced_cfg.analyse(
                 BackwardSlice::new(&pdg, &locations)
                     .requiring_locals_in(iter::once(local), &exit_block_definitions),
             );
-            cfg.modify(Strip {
+            sliced_cfg.modify(Strip {
                 retain: &retain,
                 locations: &locations,
             });
-            cfg.modify(Simplify);
-            cfg.modify(ConstantPropagation::default());
-            cfg.modify(SimplifyBranches);
-            cfg.modify(Simplify);
-            let new_locals = cfg.modify(RemoveDeadLocals);
-            if new_locals[local] >= cfg.locals.len_idx() {
-                mir.print_to_file_with_shared(sess.log_file("after_slice_fail.mir")?, id, &cfg)
+
+            sliced_cfg.modify(Simplify);
+            sliced_cfg.modify(SimplifyBranches);
+            sliced_cfg.modify(Simplify);
+
+            let malformations = sliced_cfg.analyse(Verify(&mir));
+            if !malformations.is_empty() {
+                use std::io::Write;
+                write!(
+                    File::create(sess.log_file("retained_locations")?)?,
+                    " {:#?}",
+                    retain
+                )?;
+                write!(File::create(sess.log_file("locations")?)?, " {}", locations)?;
+
+                mir.print_to_file_with_shared(
+                    sess.log_file(&format!("{}_invalid.mir", name))?,
+                    id,
+                    &sliced_cfg,
+                )
+                .wrap_err("Failed to print MIR")?;
+
+                mir.print_to_file_with_shared(sess.log_file("after_optimization.mir")?, id, &cfg)
                     .wrap_err("Failed to print MIR")?;
+                bail!(
+                    "Invalid CFG produced for backward slice of {}:\n{}",
+                    name,
+                    malformations
+                )
+            }
+
+            let new_locals = sliced_cfg.modify(RemoveDeadLocals);
+            if new_locals[local] >= sliced_cfg.locals.len_idx() {
+                mir.print_to_file_with_shared(
+                    sess.log_file("after_slice_fail.mir")?,
+                    id,
+                    &sliced_cfg,
+                )
+                .wrap_err("Failed to print MIR")?;
                 bail!("'{}' was removed by optimizations/backward slice despite being present in the out set!", name)
             }
         }

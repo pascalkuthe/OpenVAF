@@ -15,7 +15,8 @@ use openvaf_middle::cfg::{
     TerminatorKind,
 };
 use openvaf_middle::{
-    impl_pass_span, BinOp, CallType, ComparisonOp, Local, LocalKind, Mir, RValue, StmntKind, Type,
+    impl_pass_span, BinOp, COperand, CallType, ComparisonOp, Local, LocalKind, Mir, OperandData,
+    RValue, StmntKind, Type,
 };
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
@@ -32,6 +33,7 @@ pub enum MalformationKind {
     PhiTakingNonPredecessor(BasicBlock),
     PhiMissingPredecessor(BasicBlock),
     UnknownLocal { local: Local, last_local: Local },
+    ReadWithoutWrite(Local),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -107,6 +109,9 @@ impl Display for Malformation {
                 last_local,
                 A = ALIGN
             ),
+            MalformationKind::ReadWithoutWrite(local) => {
+                write!(f, "Local {:?} is never written to but read!", local)
+            }
         }
     }
 }
@@ -160,6 +165,7 @@ impl<'a, A: CallType, C: CallType> AnalysisPass<'_, C> for Verify<'a, A> {
             mir: self.0,
             errors: Vec::new(),
             written_locals: BitSet::new_empty(cfg.locals.len()),
+            read_locals: BitSet::new_empty(cfg.locals.len()),
             terminators_valid: true,
         };
         for (block, block_data) in cfg.blocks.iter_enumerated() {
@@ -170,6 +176,18 @@ impl<'a, A: CallType, C: CallType> AnalysisPass<'_, C> for Verify<'a, A> {
                 verify.verify_phis(block, block_data);
             }
         }
+        verify.read_locals.subtract(&verify.written_locals);
+
+        verify
+            .errors
+            .extend(verify.read_locals.iter().map(|local| Malformation {
+                location: Location {
+                    block: BasicBlock::from_raw_unchecked(0),
+                    kind: LocationKind::Terminator,
+                }, /* Location currently not tracked*/
+                error: MalformationKind::ReadWithoutWrite(local),
+            }));
+
         Malformations(verify.errors)
     }
 
@@ -181,6 +199,7 @@ struct VerifyImpl<'a, C: CallType, A: CallType> {
     mir: &'a Mir<A>,
     errors: Vec<Malformation>,
     written_locals: BitSet<Local>,
+    read_locals: BitSet<Local>,
     terminators_valid: bool,
 }
 
@@ -210,6 +229,7 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                         error: MalformationKind::OperandTypeMissmatch,
                     });
                 }
+                self.read_locals.insert(*local);
             }
 
             for predecessor in predecessor {
@@ -222,6 +242,12 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
             }
 
             self.verify_local_write(phi.dst, location)
+        }
+    }
+
+    fn verify_operand(&mut self, op: &COperand<C>) {
+        if let OperandData::Copy(local) = op.contents {
+            self.read_locals.insert(local);
         }
     }
 
@@ -286,6 +312,7 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
     pub fn verify_rvalue(&mut self, val: &RValue<C>, dst_ty: Type, location: Location) {
         let ty = match val {
             RValue::UnaryOperation(op, arg) => {
+                self.verify_operand(arg);
                 match (op.contents, arg.contents.ty(self.mir, self.cfg)) {
                     (UnaryOperator::BitNegate, Type::INT)
                     | (UnaryOperator::ArithmeticNegate, Type::INT) => Type::INT,
@@ -305,6 +332,8 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 }
             }
             RValue::BinaryOperation(op, lhs, rhs) => {
+                self.verify_operand(lhs);
+                self.verify_operand(rhs);
                 let lhs_ty = lhs.contents.ty(self.mir, self.cfg);
                 let rhs_ty = rhs.contents.ty(self.mir, self.cfg);
 
@@ -346,6 +375,8 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
             }
 
             RValue::SingleArgMath(op, arg) => {
+                self.verify_operand(arg);
+
                 let ty = arg.contents.ty(self.mir, self.cfg);
                 match (op.contents, ty) {
                     (SingleArgMath::Abs, Type::INT) => Type::INT,
@@ -361,6 +392,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 }
             }
             RValue::DoubleArgMath(op, arg1, arg2) => {
+                self.verify_operand(arg1);
+                self.verify_operand(arg2);
+
                 let arg1_ty = arg1.contents.ty(self.mir, self.cfg);
                 let arg2_ty = arg2.contents.ty(self.mir, self.cfg);
                 if arg1_ty != arg2_ty {
@@ -385,6 +419,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
             }
 
             RValue::Comparison(op, lhs, rhs, ty) => {
+                self.verify_operand(lhs);
+                self.verify_operand(rhs);
+
                 let lhs_ty = lhs.contents.ty(self.mir, self.cfg);
                 let rhs_ty = rhs.contents.ty(self.mir, self.cfg);
                 if lhs_ty != rhs_ty || *ty != lhs_ty {
@@ -418,6 +455,10 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
             }
 
             RValue::Select(cond, true_val, false_val) => {
+                self.verify_operand(cond);
+                self.verify_operand(true_val);
+                self.verify_operand(false_val);
+
                 if cond.contents.ty(self.mir, self.cfg) != Type::BOOL {
                     self.errors.push(Malformation {
                         location,
@@ -457,14 +498,23 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 return;
             }
 
-            RValue::Use(op) => op.contents.ty(self.mir, self.cfg),
+            RValue::Use(op) => {
+                self.verify_operand(op);
+                op.contents.ty(self.mir, self.cfg)
+            }
 
-            RValue::Call(_, _, _) => {
+            RValue::Call(_, args, _) => {
+                for arg in args {
+                    self.verify_operand(arg);
+                }
                 // assume calls are always correct?
                 return;
             }
 
             RValue::Array(arr, _) => {
+                for elem in arr {
+                    self.verify_operand(elem);
+                }
                 let mut iter = arr.iter();
                 let ty = iter
                     .next()
