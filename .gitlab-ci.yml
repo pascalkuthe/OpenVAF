@@ -5,7 +5,9 @@ default:
 
     paths:
       - .cargo/
-      - crates/target/
+      - compiler_lib/target/
+      - test/target/
+
 
 stages:
   - test
@@ -23,15 +25,6 @@ workflow:
 variables:
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
-
-#build:
-#  stage: build
-#  script:
-#    - cd crates
-#    - rustc --version
-#    - cargo --version
-#    - cargo update
-#    - cargo build --verbose
 
 
 test:
@@ -107,7 +100,7 @@ rustdoc:
   image: "rustlang/rust:nightly"
   stage: doc
   script:
-    - cd crates
+    - cd compiler_lib
     - cargo doc --workspace --document-private-items
     - cp -R target/doc ../dev_doc
     - cargo doc --workspace
