@@ -175,7 +175,7 @@ impl<'a, C: CallType> ResultsVisitor<C> for UseDefBuilder<'a> {
         id: StatementId,
     ) {
         self.visit_rhs(
-            self.locations[block].phi_start + id.index(),
+            self.locations[block].stmnt_start + id.index(),
             stmnt.0.read_locals(),
             state,
         )
