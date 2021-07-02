@@ -35,7 +35,7 @@ pub fn intrinsic_prototypes<'c>(
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Enum)]
 pub enum Intrinsic {
-    IntToFloatConversion,
+    FloatToIntConversion,
     Cos,
     Sin,
     Tan,
@@ -70,7 +70,7 @@ impl Intrinsic {
     pub fn name(self, msvc: bool) -> &'static str {
         match self {
             // Real llvm intrinsics
-            Self::IntToFloatConversion => "llvm.llround.i64.f64",
+            Self::FloatToIntConversion => "llvm.llround.i64.f64",
 
             Self::Cos => "llvm.cos.f64",
             Self::Sin => "llvm.sin.f64",
@@ -85,10 +85,10 @@ impl Intrinsic {
 
             Self::FloatAbs => "llvm.fabs.f64",
             Self::IntAbs => "llvm.abs.i64",
-            Self::FloatMin => "llvm.fmin.f64",
-            Self::IntMin => "llvm.smin.i64",
-            Self::FloatMax => "llvm.maximum.f64",
-            Self::IntMax => "llvm.minimum.i64",
+            Self::FloatMin => "llvm.minnum.f64",
+            Self::IntMin => "llvm.minnum.i64",
+            Self::FloatMax => "llvm.maxnum.f64",
+            Self::IntMax => "llvm.maxnum.i64",
 
             //system libc calls
             Self::Tan => "tan",
@@ -112,7 +112,7 @@ impl Intrinsic {
 
     pub fn fn_type(self, ctx: &Context) -> FunctionType<'_> {
         match self {
-            Self::IntToFloatConversion => ctx.i64_type().fn_type(&[ctx.f64_type().into()], false),
+            Self::FloatToIntConversion => ctx.i64_type().fn_type(&[ctx.f64_type().into()], false),
 
             Self::Cos
             | Self::Sin
@@ -138,7 +138,9 @@ impl Intrinsic {
                 .f64_type()
                 .fn_type(&[ctx.f64_type().into(), ctx.f64_type().into()], false),
 
-            Self::IntAbs => ctx.i64_type().fn_type(&[ctx.i64_type().into()], false),
+            Self::IntAbs => ctx
+                .i64_type()
+                .fn_type(&[ctx.i64_type().into(), ctx.bool_type().into()], false),
 
             Self::IntMin | Self::IntMax => ctx
                 .i64_type()

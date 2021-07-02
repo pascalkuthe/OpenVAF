@@ -478,7 +478,10 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
 
     fn fold_int_abs(&mut self, _: Span, arg: &COperand<C>) -> Self::T {
         let arg = self.operand(arg);
-        self.ctx.build_intrinsic_call(Intrinsic::IntAbs, &[arg])
+        self.ctx.build_intrinsic_call(
+            Intrinsic::IntAbs,
+            &[arg, self.ctx.bool_ty().const_zero().into()],
+        )
     }
 
     fn fold_ceil(&mut self, _: Span, arg: &COperand<C>) -> Self::T {
@@ -606,7 +609,7 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
         match (dst_ty, src_ty) {
             (Type::INT, Type::REAL) => self
                 .ctx
-                .build_intrinsic_call(Intrinsic::IntToFloatConversion, &[src]),
+                .build_intrinsic_call(Intrinsic::FloatToIntConversion, &[src]),
 
             (Type::INT, Type::BOOL) => self
                 .ctx
