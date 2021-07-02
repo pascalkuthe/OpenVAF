@@ -386,7 +386,7 @@ pub enum Error {
     #[error("{0} is now allowed inside analog functions!")]
     NotAllowedInFunction(NotAllowedInFunction, Span),
 
-    #[error("Partial derivatives may only be calculated over node potentials or branch flows")]
+    #[error("Partial derivatives may only be calculated over potentials between two nodes, branch flows or temperatures")]
     DerivativeNotAllowed(Span),
 
     #[error("Contribution can only be made to branch probes (for example 'I(net1,net2)', 'potential(net)' or 'flow(branch)')")]

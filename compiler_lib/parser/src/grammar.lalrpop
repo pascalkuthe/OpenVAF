@@ -347,7 +347,7 @@ Primary: ast::Primary = {
 
     "ddx" <l: @L> <args: FunctionArgs> <r: @R> => {
         let (expr,derive_by) = extract_double_arg(l, args, r, "ddx", errors, ast);
-        ast::Primary::DerivativeByBranch(expr, derive_by)
+        ast::Primary::PartialDerivative(expr, derive_by)
     },
 }
 

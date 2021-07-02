@@ -148,6 +148,8 @@ lints! {
     pub const unkown_lint = LintData{default_lvl: Deny, documentation_id: None};
     pub const lint_level_owerwrite = LintData{default_lvl: Warn, documentation_id: None};
 
+    pub const non_standard_code = LintData{default_lvl: Warn, documentation_id: None};
+
 
 }
 

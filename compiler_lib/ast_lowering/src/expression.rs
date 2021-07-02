@@ -14,7 +14,9 @@ use crate::error::Error::{
     DerivativeNotAllowed, NotAllowedInConstantContext, PortFlowCanNotBeANonLinearity,
 };
 use crate::error::{Error, NonConstantExpression};
+use crate::lints::{NonStandardCode, NonStandardCodeType};
 use crate::{Fold, VerilogContext};
+use openvaf_diagnostics::lints::Linter;
 use openvaf_hir::{DisciplineAccess, LimFunction};
 use openvaf_hir::{Expression, Primary};
 use openvaf_ir::ids::ExpressionId;
@@ -188,7 +190,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
             }
 
             ast::Expression::Primary(ast::Primary::PortFlowProbe(_, _))
-            | ast::Expression::Primary(ast::Primary::DerivativeByBranch(_, _))
+            | ast::Expression::Primary(ast::Primary::PartialDerivative(_, _))
             | ast::Expression::Primary(ast::Primary::DerivativeByTime(_))
             | ast::Expression::Primary(ast::Primary::Noise(_, _)) => {
                 self.error(NotAllowedInConstantContext(
@@ -275,10 +277,7 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> ExpressionFolder<F> for StatementEx
                 })
             }
 
-            ast::Expression::Primary(ast::Primary::DerivativeByBranch(
-                expr_to_derive,
-                branch_access,
-            )) => {
+            ast::Expression::Primary(ast::Primary::PartialDerivative(expr_to_derive, unkown)) => {
                 if self.state.contains(VerilogContext::FUNCTION) {
                     base.error(NotAllowedInConstantContext(
                         NonConstantExpression::AnalogFilter,
@@ -288,70 +287,80 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> ExpressionFolder<F> for StatementEx
                 }
                 let expr_to_derive = self.fold(expr_to_derive, base);
 
-                let unknown = if let ast::Expression::Primary(ast::Primary::FunctionCall(
-                    access_ident,
-                    args,
-                )) = &base.ast[branch_access].contents
-                {
-                    let access = NatureAccess::resolve_from_ident(*access_ident, base);
-                    self.branch_resolver
-                        .handle_branch_probe_args(
-                            *access_ident,
-                            &args,
-                            |_, base, net, _span| {
-                                let discipline = base.hir[net].discipline;
-                                let access = BranchResolver::resolve_discipline_access(
-                                    base, access?, discipline,
-                                )?;
-                                match access {
-                                    DisciplineAccess::Flow => {
-                                        base.error(DerivativeNotAllowed(expression.span));
-                                        None
+                let unknown = match &base.ast[unkown].contents {
+                    ast::Expression::Primary(ast::Primary::SystemFunctionCall(
+                        SystemFunctionCall::Temperature,
+                    )) => {
+                        Linter::dispatch_early(Box::new(NonStandardCode {
+                            span: base.ast[unkown].span,
+                            kind: NonStandardCodeType::DerivativeByTemperatureDerivatives,
+                        }));
+                        Unknown::Temperature
+                    }
+
+                    ast::Expression::Primary(ast::Primary::FunctionCall(access_ident, args)) => {
+                        let access = NatureAccess::resolve_from_ident(*access_ident, base);
+                        self.branch_resolver
+                            .handle_branch_probe_args(
+                                *access_ident,
+                                &args,
+                                |_, base, net, _span| {
+                                    let discipline = base.hir[net].discipline;
+                                    let access = BranchResolver::resolve_discipline_access(
+                                        base, access?, discipline,
+                                    )?;
+                                    match access {
+                                        DisciplineAccess::Flow => {
+                                            base.error(DerivativeNotAllowed(expression.span));
+                                            None
+                                        }
+                                        DisciplineAccess::Potential => {
+                                            Some(Unknown::NodePotential(net))
+                                        }
                                     }
-                                    DisciplineAccess::Potential => {
-                                        Some(Unknown::NodePotential(net))
+                                },
+                                |resolver, base, hi, lo, span| {
+                                    BranchResolver::check_branch(hi, lo, span, base);
+                                    let discipline = base.hir[hi].discipline;
+                                    let access = BranchResolver::resolve_discipline_access(
+                                        base, access?, discipline,
+                                    )?;
+                                    match access {
+                                        DisciplineAccess::Flow => Some(Unknown::Flow(
+                                            resolver.unnamed_branch(span, hi, lo, base),
+                                        )),
+                                        DisciplineAccess::Potential => {
+                                            Linter::dispatch_early(Box::new(NonStandardCode{ span, kind: NonStandardCodeType::DerivativeByVoltageDifference }));
+                                            Some(Unknown::BranchPotential(hi, lo))
+                                        }
                                     }
-                                }
-                            },
-                            |resolver, base, hi, lo, span| {
-                                BranchResolver::check_branch(hi, lo, span, base);
-                                let discipline = base.hir[hi].discipline;
-                                let access = BranchResolver::resolve_discipline_access(
-                                    base, access?, discipline,
-                                )?;
-                                match access {
-                                    DisciplineAccess::Flow => Some(Unknown::Flow(
-                                        resolver.unnamed_branch(span, hi, lo, base),
-                                    )),
-                                    DisciplineAccess::Potential => {
-                                        base.error(DerivativeNotAllowed(expression.span));
-                                        None
+                                },
+                                |_, base, branch, span| {
+                                    let discipline = base.hir[base.hir[branch].hi].discipline;
+                                    let access = BranchResolver::resolve_discipline_access(
+                                        base, access?, discipline,
+                                    )?;
+                                    match access {
+                                        DisciplineAccess::Flow => Some(Unknown::Flow(branch)),
+                                        DisciplineAccess::Potential => {
+                                            base.error(DerivativeNotAllowed(span));
+                                            None
+                                        }
                                     }
-                                }
-                            },
-                            |_, base, branch, span| {
-                                let discipline = base.hir[base.hir[branch].hi].discipline;
-                                let access = BranchResolver::resolve_discipline_access(
-                                    base, access?, discipline,
-                                )?;
-                                match access {
-                                    DisciplineAccess::Flow => Some(Unknown::Flow(branch)),
-                                    DisciplineAccess::Potential => {
-                                        base.error(DerivativeNotAllowed(span));
-                                        None
-                                    }
-                                }
-                            },
-                            |_, base, _port, span| {
-                                base.error(DerivativeNotAllowed(span));
-                                None
-                            },
-                            base,
-                        )
-                        .flatten()?
-                } else {
-                    base.error(DerivativeNotAllowed(expression.span));
-                    return None;
+                                },
+                                |_, base, _port, span| {
+                                    base.error(DerivativeNotAllowed(span));
+                                    None
+                                },
+                                base,
+                            )
+                            .flatten()?
+                    }
+
+                    _ => {
+                        base.error(DerivativeNotAllowed(expression.span));
+                        return None;
+                    }
                 };
 
                 base.hir.expressions.push(Spanned {

@@ -194,6 +194,7 @@ pub enum Unknown {
     NodePotential(NetId),
     BranchPotential(NetId, NetId),
     Flow(BranchId),
+    Temperature,
 }
 
 impl Display for Unknown {
@@ -203,6 +204,7 @@ impl Display for Unknown {
             Unknown::NodePotential(node) => write!(f, "V({:?})", node),
             Unknown::BranchPotential(hi, lo) => write!(f, "V({:?},{:?})", hi, lo),
             Unknown::Flow(branch) => write!(f, "I({:?})", branch),
+            Unknown::Temperature => write!(f, "$temperature"),
         }
     }
 }

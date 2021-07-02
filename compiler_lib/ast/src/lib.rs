@@ -353,7 +353,7 @@ pub enum Primary {
 
     Noise(NoiseSource, Option<ExpressionId>),
 
-    DerivativeByBranch(ExpressionId, ExpressionId),
+    PartialDerivative(ExpressionId, ExpressionId),
     DerivativeByTime(ExpressionId),
 }
 
