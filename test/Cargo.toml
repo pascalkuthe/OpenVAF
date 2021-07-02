@@ -57,6 +57,7 @@ opt-level = 3
 [profile.release]
 incremental = false
 debug = true
+debug-assertions = true
 
 
 [features]
