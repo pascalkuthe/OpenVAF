@@ -9,41 +9,21 @@
     flake = false;
   };
 
-  inputs.mozilla = {
+  inputs.rust = {
     type = "github";
-    owner = "mozilla";
-    repo = "nixpkgs-mozilla";
-    flake = false;
-  };
-
-  inputs.crate2nixGit = {
-    type = "github";
-    owner = "kolloch";
-    repo = "crate2nix";
-    flake = false;
+    owner = "oxalica";
+    repo = "rust-overlay";
   };
 
 
-  outputs = { self, nixpkgs, gitignore, mozilla, crate2nixGit, ... }:
+
+  outputs = { self, nixpkgs, gitignore, rust,  ... }:
     let
 
       nameValuePair = name: value: { inherit name value; };
       genAttrs = names: f: builtins.listToAttrs (map (n: nameValuePair n (f n)) names);
       allSystems = [ "x86_64-linux" "aarch64-linux" "i686-linux" "x86_64-darwin" ];
 
-      rustOverlay = final: prev:
-        let
-          rustChannel = prev.rustChannelOf {
-            channel = "stable";
-            sha256 = "sha256-SlEH+9Fxj8zEE7wdVtREMrPX0MbmbktXrvhsJDbvm9w=";
-          };
-        in
-          {
-            inherit rustChannel;
-            rustc = rustChannel.rust;
-            cargo = rustChannel.rust;
-            crate2nix = final.callPackage import crate2nixGit { pkgs = final; };
-          };
 
       forSystems = systems: f: genAttrs systems (
         system: f rec {
@@ -51,8 +31,7 @@
           pkgs = import nixpkgs {
             inherit system;
             overlays = [
-              (import "${mozilla}/rust-overlay.nix")
-              rustOverlay
+              rust.overlay
             ];
           };
           dep = import nix/dependencies.nix { inherit pkgs; lib=nixpkgs.lib; };
@@ -73,11 +52,12 @@
 
 
               nativeBuildInputs = with pkgs; dep.nativeBuildInputs ++ [
-                (rustChannel.rust.override { extensions = [ "rust-src" ]; })
+                rust-bin.stable.latest.default
                 crate2nix
                 cargo-outdated
                 cargo-edit
                 cargo-flamegraph
+                # callPackage import crate2nixGit { pkgs = final; } {}
                 tokei
               ];
             }
