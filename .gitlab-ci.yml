@@ -70,7 +70,7 @@ test_fmt:
 
 
 
-pages
+pages:
   image:
     name: "peaceiris/mdbook:latest"
     entrypoint: [""]
