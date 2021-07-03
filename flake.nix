@@ -57,7 +57,6 @@
                 cargo-outdated
                 cargo-edit
                 cargo-flamegraph
-                # callPackage import crate2nixGit { pkgs = final; } {}
                 tokei
               ];
             }

@@ -15,7 +15,7 @@ extern crate regex;
 extern crate semver;
 
 use regex::Regex;
-use semver::Version;
+use semver::{BuildMetadata, Prerelease, Version};
 use std::env;
 use std::ffi::OsStr;
 use std::io::{self, ErrorKind};
@@ -144,8 +144,8 @@ fn is_blacklisted_llvm(llvm_version: &Version) -> Option<&'static str> {
             major,
             minor,
             patch,
-            pre: vec![],
-            build: vec![],
+            pre: Prerelease::EMPTY,
+            build: BuildMetadata::EMPTY,
         };
 
         if &bad_version == llvm_version {
