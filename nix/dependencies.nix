@@ -1,9 +1,9 @@
-{ pkgs }:
+{ pkgs, lib }:
 
 with pkgs;
 {
   buildInputs = let
-    mkStatic = stdenv.lib.flip stdenv.lib.overrideDerivation (
+    mkStatic = lib.flip lib.overrideDerivation (
       o: {
         dontDisableStatic = true;
         configureFlags = stdenv.lib.toList (o.configureFlags or []) ++ [ "--enable-static" ];

@@ -55,7 +55,7 @@
               rustOverlay
             ];
           };
-          dep = import nix/dependencies.nix { inherit pkgs; };
+          dep = import nix/dependencies.nix { inherit pkgs; lib=nixpkgs.lib; };
         }
       );
 
