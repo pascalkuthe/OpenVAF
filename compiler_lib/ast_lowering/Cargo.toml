@@ -15,7 +15,7 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 bitflags = "1.2.1"
 tracing = "0.1.26"
-thiserror = "1.0.25"
+thiserror = "1.0.26"
 
 openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
 

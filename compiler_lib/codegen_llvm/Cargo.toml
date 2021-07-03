@@ -19,5 +19,5 @@ openvaf-session = {version = "0.8.0", path = "../session"}
 openvaf-data-structures = {version = "0.8.0", path = "../data_structures"}
 
 enum-map = "1.1.1"
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm11-0"] }
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm12-0"] }
 tracing = "0.1.26"

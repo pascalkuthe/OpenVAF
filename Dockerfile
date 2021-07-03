@@ -15,7 +15,7 @@ RUN rustup --version; \
 
 
 RUN yum install git -y;\
-    git clone --depth 1 --recursive --branch llvmorg-12.0.0 https://github.com/llvm/llvm-project;
+    git clone --depth 1 --single-branch --branch llvmorg-12.0.0 https://github.com/llvm/llvm-project;
 
 RUN yum install centos-release-scl epel-release -y;\
     yum install -y  scl-utils scl-utils-build;\

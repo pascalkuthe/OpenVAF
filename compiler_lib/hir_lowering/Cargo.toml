@@ -25,4 +25,4 @@ openvaf-ir = {version = "0.8.0", path = "../ir"}
 openvaf-constants = {version = "0.8.0", path = "../constants"}
 
 tracing = "0.1.26"
-thiserror = "1.0.25"
+thiserror = "1.0.26"

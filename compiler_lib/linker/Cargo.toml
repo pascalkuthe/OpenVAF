@@ -16,6 +16,6 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 
 openvaf-targets = {version = "0.8.0", path = "../targets" }
-tracing = "0.1"
+tracing = "0.1.26"
 openvaf_lld = {version = "110.0.0", path= "../lld" }
-thiserror = "1.0"
+thiserror = "1.0.26"

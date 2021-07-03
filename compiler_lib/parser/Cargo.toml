@@ -23,7 +23,7 @@ lalrpop-util = "0.19.6"
 
 # Error reporting
 tracing = "0.1.26"
-thiserror = "1.0.25"
+thiserror = "1.0.26"
 more-asserts = "0.2.1"
 
 openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
