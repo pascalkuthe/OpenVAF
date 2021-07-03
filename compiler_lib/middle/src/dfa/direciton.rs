@@ -429,11 +429,11 @@ impl Direction for Forward {
         A: Analysis<C>,
     {
         analysis.init_block(cfg, state);
-        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
+        for (statement_index, phi) in block_data.phi_statements.iter_enumerated() {
             analysis.apply_phi_effect(cfg, state, phi, block, statement_index);
         }
 
-        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
+        for (statement_index, stmnt) in block_data.statements.iter_enumerated() {
             analysis.apply_statement_effect(cfg, state, stmnt, statement_index, block);
         }
 
@@ -451,11 +451,11 @@ impl Direction for Forward {
         C: CallType,
         A: GenKillAnalysis<C>,
     {
-        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
+        for (statement_index, phi) in block_data.phi_statements.iter_enumerated() {
             analysis.phi_effect(cfg, state, phi, block, statement_index);
         }
 
-        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
+        for (statement_index, stmnt) in block_data.statements.iter_enumerated() {
             analysis.statement_effect(cfg, state, stmnt, statement_index, block);
         }
 
