@@ -22,7 +22,6 @@ use crate::{
 };
 use crate::{impl_pass_span, StatementId, SyntaxCtx};
 use openvaf_data_structures::bit_set::HybridBitSet;
-use openvaf_data_structures::HashMap;
 use osdi_types::ConstVal::Scalar;
 use osdi_types::Type;
 use std::cell::UnsafeCell;
@@ -71,32 +70,44 @@ mod __sealed {
     pub struct ConditionalConstantPropagationImpl<'lt, R: CallResolver> {
         pub resolver: &'lt R,
         pub global_vars: HybridBitSet<Local>,
-        constant_temporaries: UnsafeCell<HashMap<Local, ConstVal>>,
+        constant_temporaries: UnsafeCell<SparseFlatSetMap<Local, ConstVal>>,
     }
 
     impl<'lt, R: CallResolver> ConditionalConstantPropagationImpl<'lt, R> {
-        pub fn new(resolver: &'lt R, global_vars: HybridBitSet<Local>) -> Self {
+        pub fn new(resolver: &'lt R, global_vars: HybridBitSet<Local>, local_cnt: usize) -> Self {
             Self {
                 resolver,
                 global_vars,
-                constant_temporaries: UnsafeCell::new(HashMap::with_capacity(32)),
+                constant_temporaries: UnsafeCell::new(SparseFlatSetMap::new_empty(local_cnt)),
             }
         }
 
-        pub(super) fn get_temporary_constant(&self, local: Local) -> Option<ConstVal> {
+        pub(super) fn get_temporary_constant(&self, local: Local) -> FlatSet<ConstVal> {
+            // Access to const_temporaries is save here since the reference immediately and constant_temporaries is sealed within this module so no other references can exist
+            unsafe { &mut *self.constant_temporaries.get() }.get_cloned_flat_set(local)
+        }
+
+        pub(super) fn get_folded_temporary(&self, local: Local) -> Option<ConstVal> {
             // Access to const_temporaries is save here since the reference immediately and constant_temporaries is sealed within this module so no other references can exist
             unsafe { &mut *self.constant_temporaries.get() }
+                .element_sets
                 .get(&local)
                 .cloned()
         }
 
-        pub(super) fn extend_with_temporary_constants(&self, dst: &mut HashMap<Local, ConstVal>) {
+        pub(super) fn extend_with_temporary_constants(
+            &self,
+            dst: &mut SparseFlatSetMap<Local, ConstVal>,
+        ) {
             // Access to const_temporaries is save here since the reference immediately and constant_temporaries is sealed within this module so no other references can exist
-            dst.extend(
+            dst.element_sets.extend(
                 unsafe { &*self.constant_temporaries.get() }
+                    .element_sets
                     .iter()
                     .map(|(k, v)| (*k, v.clone())),
-            )
+            );
+            dst.top_sets
+                .union(&unsafe { &*self.constant_temporaries.get() }.top_sets);
         }
 
         pub(super) fn write_constant_to_local(
@@ -107,15 +118,12 @@ mod __sealed {
             val: FlatSet<ConstVal>,
         ) {
             if LocalKind::Temporary == cfg.locals[dst].kind {
-                if let FlatSet::Elem(val) = val {
-                    // Constant temporaries changed if the temporary was previously unkown
-                    // Access to const_temporaries is save here since the reference is dropped immediately and constant_temporaries is sealed within this module so no other references can exist
-                    state.temporaries_changed = unsafe { &mut *self.constant_temporaries.get() }
-                        .insert(dst, val)
-                        .is_none();
-                }
+                // Constant temporaries changed if the temporary was previously unkown
+                // Access to const_temporaries is save here since the reference is dropped immediately and constant_temporaries is sealed within this module so no other references can exist
+                state.temporaries_changed =
+                    unsafe { &mut *self.constant_temporaries.get() }.set_flat_set(dst, val)
             } else {
-                state.constants.set_flat_set(dst, val)
+                state.constants.set_flat_set(dst, val);
             }
         }
     }
@@ -165,8 +173,7 @@ impl<'lt, R: CallResolver> AnalysisDomain<R::C> for ConditionalConstantPropagati
 impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstPropagation<'lt, R> {
     fn init_block(&self, _cfg: &ControlFlowGraph<R::C>, state: &mut Self::Domain) {
         state.temporaries_changed = false;
-        self.0
-            .extend_with_temporary_constants(&mut state.constants.element_sets);
+        self.0.extend_with_temporary_constants(&mut state.constants);
     }
 
     fn apply_phi_effect(
@@ -210,11 +217,10 @@ impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagationImpl
             .sources
             .iter()
             .fold(FlatSet::Bottom, |mut dst, (_, local)| {
-                if let Some(val) = self.get_temporary_constant(*local) {
-                    dst.join_elem(&val);
-                } else {
-                    state.constants.join_into(*local, &mut dst);
-                }
+                match self.get_temporary_constant(*local) {
+                    FlatSet::Bottom => state.constants.join_into(*local, &mut dst),
+                    res => dst.join(&res),
+                };
                 dst
             });
 
@@ -309,7 +315,7 @@ impl<C: CallType> ControlFlowGraph<C> {
         let span = trace_span!("fold_constants");
         let _enter = span.enter();
 
-        let res = ConditionalConstantPropagationImpl::new(resolver, global_vars)
+        let res = ConditionalConstantPropagationImpl::new(resolver, global_vars, self.locals.len())
             .into_engine(self)
             .iterate_to_fixpoint();
 
@@ -414,7 +420,7 @@ impl<'a, 'b, R: CallResolver> ResultsVisitorMut<R::C> for ConstWriter<'a, 'b, R>
             StmntKind::Assignment(dst, ref mut rval) => {
                 let val = self
                     .0
-                    .get_temporary_constant(dst)
+                    .get_folded_temporary(dst)
                     .or_else(|| state.get_folded_val(dst));
 
                 write_consts_to_rval(state, val, rval)

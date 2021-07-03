@@ -215,19 +215,19 @@ impl<K: Hash + Eq + Idx, V: PartialEq + Clone> SparseFlatSetMap<K, V> {
         }
     }
 
-    pub fn set_flat_set(&mut self, key: K, val: FlatSet<V>) {
+    pub fn set_flat_set(&mut self, key: K, val: FlatSet<V>) -> bool {
         match val {
             FlatSet::Top => {
-                self.element_sets.remove(&key);
-                self.top_sets.insert(key);
+                let changed = self.element_sets.remove(&key).is_some();
+                changed | self.top_sets.insert(key)
             }
             FlatSet::Elem(val) => {
-                self.element_sets.insert(key, val);
-                self.top_sets.remove(key);
+                let changed = self.element_sets.insert(key, val).is_some();
+                changed | self.top_sets.remove(key)
             }
             FlatSet::Bottom => {
-                self.element_sets.remove(&key);
-                self.top_sets.remove(key);
+                let changed = self.element_sets.remove(&key).is_some();
+                changed | self.top_sets.remove(key)
             }
         }
     }
@@ -348,7 +348,7 @@ pub enum FlatSet<T: PartialEq> {
     Top,
 }
 
-impl<T: Clone + Eq> JoinSemiLattice for FlatSet<T> {
+impl<T: Clone + PartialEq> JoinSemiLattice for FlatSet<T> {
     fn join(&mut self, other: &Self) -> bool {
         let result = match (&*self, other) {
             (Self::Top, _) | (_, Self::Bottom) => return false,
@@ -418,6 +418,13 @@ impl<T: PartialEq> FlatSet<T> {
             (Self::Elem(arg1), Self::Elem(arg2)) => FlatSet::Elem(f(arg1, arg2)),
             (Self::Top, _) | (_, Self::Top) => FlatSet::Top,
             _ => FlatSet::Bottom,
+        }
+    }
+
+    pub fn map_bottom(self, f: impl FnOnce() -> Self) -> Self {
+        match self {
+            Self::Bottom => f(),
+            res => res,
         }
     }
 }

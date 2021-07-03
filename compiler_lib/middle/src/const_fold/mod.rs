@@ -96,13 +96,13 @@ impl<C: CallType> CallResolver for NoInputConstResolution<C> {
 }
 
 pub type LocalConsts = SparseFlatSetMap<Local, ConstVal>;
-struct ConstantFold<'lt, R: CallResolver, F: Fn(Local) -> Option<ConstVal>> {
+struct ConstantFold<'lt, R: CallResolver, F: Fn(Local) -> FlatSet<ConstVal>> {
     locals: &'lt LocalConsts,
     resolver: &'lt R,
     resolve_special_locals: F,
 }
 
-impl<'lt, R: CallResolver, F: Fn(Local) -> Option<ConstVal>> ConstantFold<'lt, R, F> {
+impl<'lt, R: CallResolver, F: Fn(Local) -> FlatSet<ConstVal>> ConstantFold<'lt, R, F> {
     fn resolve_rvalue(&mut self, rvalue: &RValue<R::C>, ty: Type) -> FlatSet<ConstVal> {
         fold_rvalue(self, rvalue, ty)
     }
@@ -111,7 +111,7 @@ impl<'lt, R: CallResolver, F: Fn(Local) -> Option<ConstVal>> ConstantFold<'lt, R
         match op.contents {
             OperandData::Constant(ref val) => FlatSet::Elem(val.clone()),
             OperandData::Copy(local) => (self.resolve_special_locals)(local)
-                .map_or_else(|| self.locals.get_cloned_flat_set(local), FlatSet::Elem),
+                .map_bottom(|| self.locals.get_cloned_flat_set(local)),
 
             OperandData::Read(ref input) => self.resolver.resolve_input(input),
         }
@@ -253,7 +253,7 @@ impl<'lt, R: CallResolver, F: Fn(Local) -> Option<ConstVal>> ConstantFold<'lt, R
     }
 }
 
-impl<'lt, R: CallResolver, F: Fn(Local) -> Option<ConstVal>> RValueFold<R::C>
+impl<'lt, R: CallResolver, F: Fn(Local) -> FlatSet<ConstVal>> RValueFold<R::C>
     for ConstantFold<'lt, R, F>
 {
     type T = FlatSet<ConstVal>;
