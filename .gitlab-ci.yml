@@ -12,7 +12,7 @@ default:
 stages:
   - test
   - doc
-  - deploy_doc
+#  - deploy_doc
 
 
 workflow:
@@ -70,12 +70,13 @@ test_fmt:
 
 
 
-book:
+pages
   image:
     name: "peaceiris/mdbook:latest"
     entrypoint: [""]
 
   stage: doc
+
   script:
     - mdbook build book -d ../public
 
@@ -85,49 +86,49 @@ book:
 
   cache: {}
 
-rustdoc:
-  variables:
-    CARGO_HOME: $CI_PROJECT_DIR/.cargo
-    APT_CACHE_DIR: $CI_PROJECT_DIR/apt
-    RUSTDOCFLAGS: --enable-index-page -Zunstable-options
+#rustdoc:
+#  variables:
+#    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+#    APT_CACHE_DIR: $CI_PROJECT_DIR/apt
+#    RUSTDOCFLAGS: --enable-index-page -Zunstable-options
+#
+#  stage: doc
+#  script:
+#    - cd compiler_lib
+#    - cargo doc --workspace --document-private-items
+#    - cp -R target/doc ../dev_doc
+#    - cargo doc --workspace
+#    - cp -R target/doc ../api_doc
+#
+#  artifacts:
+#    paths:
+#      - dev_doc
+#      - api_doc
+#
+#  cache:
+#    <<: *global_cache
+#    key: documentation
 
-  stage: doc
-  script:
-    - cd compiler_lib
-    - cargo doc --workspace --document-private-items
-    - cp -R target/doc ../dev_doc
-    - cargo doc --workspace
-    - cp -R target/doc ../api_doc
+#pages:
+#  image: "alpine"
 
-  artifacts:
-    paths:
-      - dev_doc
-      - api_doc
+#  stage: deploy_doc
 
-  cache:
-    <<: *global_cache
-    key: documentation
+#  dependencies:
+#    - rustdoc
+#    - book
 
-pages:
-  image: "alpine"
+#  script: []
+#    - mv dev_doc public/dev_doc
+#    - mv api_doc public/api_doc
 
-  stage: deploy_doc
-
-  dependencies:
-    - rustdoc
-    - book
-
-  script:
-    - mv dev_doc public/dev_doc
-    - mv api_doc public/api_doc
-
-  artifacts:
-    paths:
-      - public
-
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-  cache: {}
+#  artifacts:
+#    paths:
+#      - public
+#
+#  rules:
+#    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+#
+#  cache: {}
 
 
