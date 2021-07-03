@@ -69,7 +69,7 @@
             pkgs.mkShell {
               name = "openvaf";
 
-              inherit buildInputs LLVM_SYS_110_PREFIX LLD_LIB_DIR LIBCLANG_PATH;
+              inherit buildInputs LLVM_SYS_120_PREFIX LLD_LIB_DIR LIBCLANG_PATH;
 
 
               nativeBuildInputs = with pkgs; dep.nativeBuildInputs ++ [

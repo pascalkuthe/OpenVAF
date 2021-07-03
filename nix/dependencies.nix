@@ -22,7 +22,7 @@ with pkgs;
     llvmPackages_latest.lld.dev
   ];
 
-  LLVM_SYS_110_PREFIX = "${llvmPackages_latest.llvm}";
+  LLVM_SYS_120_PREFIX = "${llvmPackages_latest.llvm}";
   LIBCLANG_PATH = "${llvmPackages_latest.libclang}/lib";
   LLD_LIB_DIR = "${llvmPackages_latest.lld.dev}/lib";
 }
