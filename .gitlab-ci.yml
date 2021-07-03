@@ -37,9 +37,6 @@ test:
 test_clippy:
   stage: test
 
-  before_script:
-    - rustup component add rustfmt
-
   script:
     - echo "Checking OpenVAF"
     - cd compiler_lib
@@ -59,9 +56,6 @@ test_clippy:
 
 test_fmt:
   stage: test
-
-  before_script:
-    - rustup component add rustfmt
 
   script:
     - echo "Checking OpenVAF"
@@ -97,7 +91,6 @@ rustdoc:
     APT_CACHE_DIR: $CI_PROJECT_DIR/apt
     RUSTDOCFLAGS: --enable-index-page -Zunstable-options
 
-  image: "rustlang/rust:nightly"
   stage: doc
   script:
     - cd compiler_lib
