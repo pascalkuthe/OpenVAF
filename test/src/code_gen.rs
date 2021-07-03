@@ -101,6 +101,11 @@ fn run(sess: &TestSession) -> Result<()> {
         codegen_ctx.builder.build_return(None);
 
         codegen_ctx.module.verify().unwrap();
+
+        codegen_ctx
+            .module
+            .print_to_file(sess.log_file("final.ll")?)
+            .unwrap();
     }
 
     Ok(())

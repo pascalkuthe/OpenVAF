@@ -222,7 +222,12 @@ pub trait ResultsVisitable<C: CallType> {
     /// before it can be observed by a `ResultsVisitor`.
     fn new_flow_state(&self, cfg: &ControlFlowGraph<C>) -> Self::FlowState;
 
-    fn reset_to_block_entry(&self, state: &mut Self::FlowState, block: BasicBlock);
+    fn reset_to_block_entry(
+        &self,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut Self::FlowState,
+        block: BasicBlock,
+    );
 
     fn reconstruct_phi_effect(
         &self,
@@ -263,8 +268,14 @@ where
         self.analysis.bottom_value(cfg)
     }
 
-    fn reset_to_block_entry(&self, state: &mut Self::FlowState, block: BasicBlock) {
+    fn reset_to_block_entry(
+        &self,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut Self::FlowState,
+        block: BasicBlock,
+    ) {
         state.clone_from(&self.entry_set_for_block(block));
+        self.analysis.init_block(cfg, state)
     }
 
     fn reconstruct_phi_effect(

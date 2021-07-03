@@ -35,7 +35,7 @@ where
     C: CallType,
 {
     pub analysis: A,
-    pub(super) entry_sets: IndexVec<BasicBlock, A::Domain>,
+    pub(crate) entry_sets: IndexVec<BasicBlock, A::Domain>,
 }
 
 impl<A, C> Results<C, A>
@@ -241,16 +241,13 @@ where
             // Apply the block transfer function, using the cached one if it exists.
             match &apply_trans_for_block {
                 Some(apply) => apply(bb, &mut state),
-                None if analysis.init_block(cfg, &mut state) => {
-                    A::Direction::apply_effects_in_block(
-                        &mut analysis,
-                        cfg,
-                        &mut state,
-                        bb,
-                        bb_data,
-                    )
-                }
-                None => (),
+                None => A::Direction::apply_effects_in_block(
+                    &mut analysis,
+                    cfg,
+                    &mut state,
+                    bb,
+                    bb_data,
+                ),
             }
 
             A::Direction::join_state_into_successors_of(

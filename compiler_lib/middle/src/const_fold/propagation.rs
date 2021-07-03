@@ -14,7 +14,7 @@ use crate::cfg::{
 use crate::const_fold::{CallResolver, ConstantFold, NoInputConstResolution};
 use crate::dfa::lattice::{FlatSet, JoinSemiLattice, SparseFlatSetMap};
 use crate::dfa::visitor::ResultsVisitorMut;
-use crate::dfa::{direciton, Analysis, AnalysisDomain, SplitEdgeEffects};
+use crate::dfa::{direciton, Analysis, AnalysisDomain, Results, SplitEdgeEffects};
 use crate::osdi_types::SimpleConstVal::Bool;
 use crate::{
     dfa, CallType, ConstVal, Expression, InputKind, Local, LocalKind, Operand, OperandData, RValue,
@@ -38,6 +38,7 @@ pub struct BasicBlockConstants {
 
 impl JoinSemiLattice for BasicBlockConstants {
     fn join(&mut self, other: &Self) -> bool {
+        debug_assert!(other.reachable);
         self.temporaries_changed.join(&other.temporaries_changed)
             | self.reachable.join(&true)
             | self.constants.join(&other.constants)
@@ -50,18 +51,30 @@ impl BasicBlockConstants {
     }
 }
 
-pub use __sealed::ConditionalConstantPropagation;
+pub struct ConditionalConstPropagation<'lt, R: CallResolver>(
+    ConditionalConstantPropagationImpl<'lt, R>,
+);
+
+impl<'lt, R: CallResolver> From<ConditionalConstantPropagationImpl<'lt, R>>
+    for ConditionalConstPropagation<'lt, R>
+{
+    fn from(inner: ConditionalConstantPropagationImpl<'lt, R>) -> Self {
+        Self(inner)
+    }
+}
+
+use __sealed::ConditionalConstantPropagationImpl;
 
 mod __sealed {
     use super::*;
 
-    pub struct ConditionalConstantPropagation<'lt, R: CallResolver> {
+    pub struct ConditionalConstantPropagationImpl<'lt, R: CallResolver> {
         pub resolver: &'lt R,
         pub global_vars: HybridBitSet<Local>,
         constant_temporaries: UnsafeCell<HashMap<Local, ConstVal>>,
     }
 
-    impl<'lt, R: CallResolver> ConditionalConstantPropagation<'lt, R> {
+    impl<'lt, R: CallResolver> ConditionalConstantPropagationImpl<'lt, R> {
         pub fn new(resolver: &'lt R, global_vars: HybridBitSet<Local>) -> Self {
             Self {
                 resolver,
@@ -70,11 +83,20 @@ mod __sealed {
             }
         }
 
-        pub(super) fn get_tmporary_constant(&self, local: Local) -> Option<ConstVal> {
+        pub(super) fn get_temporary_constant(&self, local: Local) -> Option<ConstVal> {
             // Access to const_temporaries is save here since the reference immediately and constant_temporaries is sealed within this module so no other references can exist
             unsafe { &mut *self.constant_temporaries.get() }
                 .get(&local)
                 .cloned()
+        }
+
+        pub(super) fn extend_with_temporary_constants(&self, dst: &mut HashMap<Local, ConstVal>) {
+            // Access to const_temporaries is save here since the reference immediately and constant_temporaries is sealed within this module so no other references can exist
+            dst.extend(
+                unsafe { &*self.constant_temporaries.get() }
+                    .iter()
+                    .map(|(k, v)| (*k, v.clone())),
+            )
         }
 
         pub(super) fn write_constant_to_local(
@@ -99,10 +121,28 @@ mod __sealed {
     }
 }
 
-impl<'lt, R: CallResolver> AnalysisDomain<R::C> for ConditionalConstantPropagation<'lt, R> {
+impl<'lt, R: CallResolver> AnalysisDomain<R::C> for ConditionalConstPropagation<'lt, R> {
     type Domain = BasicBlockConstants;
     type Direction = direciton::Forward;
-    const NAME: &'static str = "Copy Propagation";
+    const NAME: &'static str = "Const Propagation";
+
+    fn bottom_value(&self, cfg: &ControlFlowGraph<<R as CallResolver>::C>) -> Self::Domain {
+        self.0.bottom_value(cfg)
+    }
+
+    fn initialize_start_block(
+        &self,
+        cfg: &ControlFlowGraph<<R as CallResolver>::C>,
+        state: &mut Self::Domain,
+    ) {
+        self.0.initialize_start_block(cfg, state)
+    }
+}
+
+impl<'lt, R: CallResolver> AnalysisDomain<R::C> for ConditionalConstantPropagationImpl<'lt, R> {
+    type Domain = BasicBlockConstants;
+    type Direction = direciton::Forward;
+    const NAME: &'static str = "Const Propagation";
 
     fn bottom_value(&self, cfg: &ControlFlowGraph<<R as CallResolver>::C>) -> Self::Domain {
         BasicBlockConstants {
@@ -122,10 +162,40 @@ impl<'lt, R: CallResolver> AnalysisDomain<R::C> for ConditionalConstantPropagati
     }
 }
 
-impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt, R> {
-    fn init_block(&mut self, _cfg: &ControlFlowGraph<R::C>, state: &mut Self::Domain) -> bool {
+impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstPropagation<'lt, R> {
+    fn init_block(&self, _cfg: &ControlFlowGraph<R::C>, state: &mut Self::Domain) {
         state.temporaries_changed = false;
-        state.reachable
+        self.0
+            .extend_with_temporary_constants(&mut state.constants.element_sets);
+    }
+
+    fn apply_phi_effect(
+        &self,
+        cfg: &ControlFlowGraph<R::C>,
+        state: &mut Self::Domain,
+        phi: &PhiData,
+        bb: BasicBlock,
+        idx: Phi,
+    ) {
+        self.0.apply_phi_effect(cfg, state, phi, bb, idx)
+    }
+
+    fn apply_statement_effect(
+        &self,
+        cfg: &ControlFlowGraph<R::C>,
+        state: &mut Self::Domain,
+        statement: &(StmntKind<<R as CallResolver>::C>, SyntaxCtx),
+        idx: StatementId,
+        bb: BasicBlock,
+    ) {
+        self.0
+            .apply_statement_effect(cfg, state, statement, idx, bb)
+    }
+}
+
+impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagationImpl<'lt, R> {
+    fn init_block(&self, _cfg: &ControlFlowGraph<R::C>, state: &mut Self::Domain) {
+        state.temporaries_changed = false;
     }
 
     fn apply_phi_effect(
@@ -140,7 +210,7 @@ impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt
             .sources
             .iter()
             .fold(FlatSet::Bottom, |mut dst, (_, local)| {
-                if let Some(val) = self.get_tmporary_constant(*local) {
+                if let Some(val) = self.get_temporary_constant(*local) {
                     dst.join_elem(&val);
                 } else {
                     state.constants.join_into(*local, &mut dst);
@@ -163,11 +233,21 @@ impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt
             let val = ConstantFold {
                 locals: &state.constants,
                 resolver: self.resolver,
-                resolve_special_locals: |temporary| self.get_tmporary_constant(temporary),
+                resolve_special_locals: |temporary| self.get_temporary_constant(temporary),
             }
             .resolve_rvalue(val, cfg.locals[dst].ty);
             self.write_constant_to_local(cfg, state, dst, val)
         }
+    }
+
+    #[inline(always)]
+    fn apply_edge_effects(
+        &self,
+        _cfg: &ControlFlowGraph<R::C>,
+        _block: BasicBlock,
+        state: &Self::Domain,
+    ) -> bool {
+        state.reachable
     }
 
     fn apply_split_edge_effects(
@@ -178,20 +258,21 @@ impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagation<'lt
         state: &Self::Domain,
         edge_effects: &mut impl SplitEdgeEffects<Self::Domain>,
     ) {
-        let mut fold = ConstantFold {
-            locals: &state.constants,
-            resolver: self.resolver,
-            resolve_special_locals: |temporary| self.get_tmporary_constant(temporary),
-        };
-        if let FlatSet::Elem(Scalar(Bool(const_discriminant))) =
-            fold.resolve_rvalue(discr, Type::BOOL)
-        {
-            // dont propagate reachable into the edge that can not be reached from this block
-            edge_effects.apply(|dst, _, switch_edge| {
-                if switch_edge != const_discriminant {
-                    dst.reachable = false
-                }
-            })
+        // only propagate along reachable paths
+        if !state.reachable {
+            edge_effects.apply(|_, _, _| false)
+        } else {
+            let mut fold = ConstantFold {
+                locals: &state.constants,
+                resolver: self.resolver,
+                resolve_special_locals: |temporary| self.get_temporary_constant(temporary),
+            };
+            if let FlatSet::Elem(Scalar(Bool(const_discriminant))) =
+                fold.resolve_rvalue(discr, Type::BOOL)
+            {
+                // dont propagate reachable into the edge that can not be reached from this block
+                edge_effects.apply(|_, _, switch_edge| switch_edge == const_discriminant)
+            }
         }
     }
 }
@@ -224,20 +305,25 @@ impl<C: CallType> ControlFlowGraph<C> {
         &self,
         resolver: &'a R,
         global_vars: HybridBitSet<Local>,
-    ) -> dfa::Results<C, ConditionalConstantPropagation<'a, R>> {
+    ) -> dfa::Results<C, ConditionalConstPropagation<'a, R>> {
         let span = trace_span!("fold_constants");
         let _enter = span.enter();
 
-        ConditionalConstantPropagation::new(resolver, global_vars)
+        let res = ConditionalConstantPropagationImpl::new(resolver, global_vars)
             .into_engine(self)
-            .iterate_to_fixpoint()
+            .iterate_to_fixpoint();
+
+        Results {
+            analysis: res.analysis.into(),
+            entry_sets: res.entry_sets,
+        }
     }
 
     pub fn write_constants<R: CallResolver<C = C>>(
         &mut self,
-        const_prop_result: &dfa::Results<C, ConditionalConstantPropagation<R>>,
+        const_prop_result: &dfa::Results<C, ConditionalConstPropagation<R>>,
     ) {
-        const_prop_result.visit_with_mut(self, &mut ConstWriter(&const_prop_result.analysis))
+        const_prop_result.visit_with_mut(self, &mut ConstWriter(&const_prop_result.analysis.0))
     }
 }
 
@@ -312,7 +398,7 @@ impl<C: CallType> ConstantPropagation<'static, NoInputConstResolution<C>> {
     }
 }
 
-struct ConstWriter<'a, 'b, R: CallResolver>(&'a ConditionalConstantPropagation<'b, R>);
+struct ConstWriter<'a, 'b, R: CallResolver>(&'a ConditionalConstantPropagationImpl<'b, R>);
 
 impl<'a, 'b, R: CallResolver> ResultsVisitorMut<R::C> for ConstWriter<'a, 'b, R> {
     type FlowState = BasicBlockConstants;
@@ -328,7 +414,7 @@ impl<'a, 'b, R: CallResolver> ResultsVisitorMut<R::C> for ConstWriter<'a, 'b, R>
             StmntKind::Assignment(dst, ref mut rval) => {
                 let val = self
                     .0
-                    .get_tmporary_constant(dst)
+                    .get_temporary_constant(dst)
                     .or_else(|| state.get_folded_val(dst));
 
                 write_consts_to_rval(state, val, rval)
@@ -352,7 +438,7 @@ impl<'a, 'b, R: CallResolver> ResultsVisitorMut<R::C> for ConstWriter<'a, 'b, R>
             let mut fold = ConstantFold {
                 locals: &state.constants,
                 resolver: self.0.resolver,
-                resolve_special_locals: |temporary| self.0.get_tmporary_constant(temporary),
+                resolve_special_locals: |temporary| self.0.get_temporary_constant(temporary),
             };
             let val = fold.resolve_rvalue(condition, Type::BOOL).into_option();
             write_consts_to_rval(state, val, condition);

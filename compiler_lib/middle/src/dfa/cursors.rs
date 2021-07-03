@@ -94,9 +94,13 @@ where
     /// For forward dataflow analyses, this is the dataflow state prior to the first statement.
     ///
     /// For backward dataflow analyses, this is the dataflow state after the terminator.
-    pub(super) fn seek_to_block_entry(&mut self, block: BasicBlock) {
+    pub(super) fn seek_to_block_entry(&mut self, block: BasicBlock, cfg: &ControlFlowGraph<C>) {
         self.state
             .clone_from(&self.results.borrow().entry_set_for_block(block));
+        self.results
+            .borrow()
+            .analysis
+            .init_block(cfg, &mut self.state);
         self.pos = CursorPosition::block_entry(block);
         self.state_needs_reset = false;
     }
@@ -109,7 +113,7 @@ where
     /// predecessors (ignoring edge-specific effects).
     pub fn seek_to_block_start(&mut self, block: BasicBlock, cfg: &ControlFlowGraph<C>) {
         if A::Direction::IS_FORWARD {
-            self.seek_to_block_entry(block)
+            self.seek_to_block_entry(block, cfg)
         } else {
             self.seek(Effect::After.at_index(0), block, cfg)
         }
@@ -131,7 +135,7 @@ where
                 cfg,
             )
         } else {
-            self.seek_to_block_entry(block)
+            self.seek_to_block_entry(block, cfg)
         }
     }
 
@@ -158,7 +162,7 @@ where
         //   - We are in a different block than the target.
         //   - We are in the same block but have advanced past the target effect.
         if self.state_needs_reset || self.pos.block != block {
-            self.seek_to_block_entry(block);
+            self.seek_to_block_entry(block, cfg);
         } else if let Some(curr_effect) = self.pos.curr_effect_index {
             let mut ord = curr_effect.idx.cmp(&target.idx);
             if !A::Direction::IS_FORWARD {
@@ -167,7 +171,7 @@ where
 
             match ord.then_with(|| curr_effect.effect.cmp(&target.effect)) {
                 Ordering::Equal => return,
-                Ordering::Greater => self.seek_to_block_entry(block),
+                Ordering::Greater => self.seek_to_block_entry(block, cfg),
                 Ordering::Less => {}
             }
         }

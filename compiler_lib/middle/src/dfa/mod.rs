@@ -111,18 +111,12 @@ pub trait GenKillAnalysisDomain<C: CallType> {
 /// to the same point in the program at different points in time. The dataflow state at a given
 /// point in the program may or may not be greater than the state at any preceding point.
 pub trait Analysis<C: CallType>: AnalysisDomain<C> {
-    /// Init the state of block before the other functions are called.
-    /// This function should only called during the analysis itself.
-    /// NOT DURING RECONSTRUCTION/VISITS
-    /// # Returns
-    ///
-    /// Whether a block is reachable/should be considered for this analysis
+    /// Init the state of block before the other analysis functions are called.
     #[inline(always)]
-    fn init_block(&mut self, _cfg: &ControlFlowGraph<C>, _state: &mut Self::Domain) -> bool {
-        true
-    }
+    fn init_block(&self, _cfg: &ControlFlowGraph<C>, _state: &mut Self::Domain) {}
 
     /// Updates the current dataflow state with the effect of evaluating a phi.
+    #[inline(always)]
     fn apply_phi_effect(
         &self,
         _cfg: &ControlFlowGraph<C>,
@@ -134,6 +128,7 @@ pub trait Analysis<C: CallType>: AnalysisDomain<C> {
     }
 
     /// Updates the current dataflow state with the effect of evaluating a statement.
+    #[inline(always)]
     fn apply_statement_effect(
         &self,
         _cfg: &ControlFlowGraph<C>,
@@ -145,6 +140,7 @@ pub trait Analysis<C: CallType>: AnalysisDomain<C> {
     }
 
     /// Updates the current dataflow state with the effect of evaluating a terminator.
+    #[inline(always)]
     fn apply_terminator_effect(
         &self,
         _cfg: &ControlFlowGraph<C>,
@@ -161,6 +157,24 @@ pub trait Analysis<C: CallType>: AnalysisDomain<C> {
     /// directly, overriders of this method should simply determine whether join should be performed along this edge
     ///
     /// FIXME: This class of effects is not supported for backward dataflow analyses.
+    #[inline(always)]
+    fn apply_edge_effects(
+        &self,
+        _cfg: &ControlFlowGraph<C>,
+        _block: BasicBlock,
+        _state: &Self::Domain,
+    ) -> bool {
+        true
+    }
+
+    /// Updates the current dataflow state with the effect of taking a particular branch in a
+    /// `Split` terminator.
+    ///
+    /// Unlike the other edge-specific effects, which are allowed to mutate `Self::Domain`
+    /// directly, overriders of this method should simply determine whether join should be performed along this edge
+    ///
+    /// FIXME: This class of effects is not supported for backward dataflow analyses.
+    #[inline(always)]
     fn apply_split_edge_effects(
         &self,
         _cfg: &ControlFlowGraph<C>,
@@ -511,5 +525,5 @@ impl EffectIndex {
 pub trait SplitEdgeEffects<D> {
     /// Calls `apply_edge_effect` for each outgoing edge from a `SwitchInt` terminator and
     /// records the results.
-    fn apply(&mut self, apply_edge_effect: impl FnMut(&mut D, BasicBlock, bool));
+    fn apply(&mut self, apply_edge_effect: impl FnMut(&mut D, BasicBlock, bool) -> bool);
 }

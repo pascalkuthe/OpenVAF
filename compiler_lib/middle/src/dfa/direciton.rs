@@ -91,50 +91,6 @@ pub struct Backward;
 impl Direction for Backward {
     const IS_FORWARD: bool = false;
 
-    fn apply_effects_in_block<A, C>(
-        analysis: &mut A,
-        cfg: &ControlFlowGraph<C>,
-        state: &mut A::Domain,
-        block: BasicBlock,
-        block_data: &BasicBlockData<C>,
-    ) where
-        C: CallType,
-        A: Analysis<C>,
-    {
-        let terminator = block_data.terminator();
-        analysis.apply_terminator_effect(cfg, state, terminator, block);
-
-        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
-            analysis.apply_statement_effect(cfg, state, stmnt, statement_index, block);
-        }
-
-        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
-            analysis.apply_phi_effect(cfg, state, phi, block, statement_index);
-        }
-    }
-
-    fn gen_kill_effects_in_block<A, C>(
-        analysis: &mut A,
-        cfg: &ControlFlowGraph<C>,
-        state: &mut GenKillSet<A::Idx>,
-        block: BasicBlock,
-        block_data: &BasicBlockData<C>,
-    ) where
-        C: CallType,
-        A: GenKillAnalysis<C>,
-    {
-        let terminator = block_data.terminator();
-        analysis.terminator_effect(cfg, state, terminator, block);
-
-        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
-            analysis.statement_effect(cfg, state, stmnt, statement_index, block);
-        }
-
-        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
-            analysis.phi_effect(cfg, state, phi, block, statement_index);
-        }
-    }
-
     fn apply_effects_in_range<A, C>(
         analysis: &A,
         cfg: &ControlFlowGraph<C>,
@@ -202,6 +158,51 @@ impl Direction for Backward {
         }
     }
 
+    fn apply_effects_in_block<A, C>(
+        analysis: &mut A,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut A::Domain,
+        block: BasicBlock,
+        block_data: &BasicBlockData<C>,
+    ) where
+        C: CallType,
+        A: Analysis<C>,
+    {
+        analysis.init_block(cfg, state);
+        let terminator = block_data.terminator();
+        analysis.apply_terminator_effect(cfg, state, terminator, block);
+
+        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
+            analysis.apply_statement_effect(cfg, state, stmnt, statement_index, block);
+        }
+
+        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
+            analysis.apply_phi_effect(cfg, state, phi, block, statement_index);
+        }
+    }
+
+    fn gen_kill_effects_in_block<A, C>(
+        analysis: &mut A,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut GenKillSet<A::Idx>,
+        block: BasicBlock,
+        block_data: &BasicBlockData<C>,
+    ) where
+        C: CallType,
+        A: GenKillAnalysis<C>,
+    {
+        let terminator = block_data.terminator();
+        analysis.terminator_effect(cfg, state, terminator, block);
+
+        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
+            analysis.statement_effect(cfg, state, stmnt, statement_index, block);
+        }
+
+        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
+            analysis.phi_effect(cfg, state, phi, block, statement_index);
+        }
+    }
+
     fn visit_results_in_block<C, F, R>(
         state: &mut F,
         cfg: &ControlFlowGraph<C>,
@@ -215,7 +216,7 @@ impl Direction for Backward {
     {
         assert!(block < cfg.blocks.len_idx());
 
-        results.reset_to_block_entry(state, block);
+        results.reset_to_block_entry(cfg, state, block);
         vis.visit_block_end(state, block_data, block);
 
         vis.visit_terminator_before_effect(state, block_data.terminator(), block);
@@ -249,7 +250,7 @@ impl Direction for Backward {
     {
         assert!(block < cfg.blocks.len_idx());
 
-        results.reset_to_block_entry(state, block);
+        results.reset_to_block_entry(cfg, state, block);
         vis.visit_block_end(state, &mut cfg.blocks[block], block);
 
         vis.visit_terminator_before_effect(state, cfg.blocks[block].terminator_mut(), block);
@@ -355,85 +356,6 @@ pub struct Forward;
 impl Direction for Forward {
     const IS_FORWARD: bool = true;
 
-    fn apply_effects_in_block<A, C>(
-        analysis: &mut A,
-        cfg: &ControlFlowGraph<C>,
-        state: &mut A::Domain,
-        block: BasicBlock,
-        block_data: &BasicBlockData<C>,
-    ) where
-        C: CallType,
-        A: Analysis<C>,
-    {
-        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
-            analysis.apply_phi_effect(cfg, state, phi, block, statement_index);
-        }
-
-        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
-            analysis.apply_statement_effect(cfg, state, stmnt, statement_index, block);
-        }
-
-        let terminator = block_data.terminator();
-        analysis.apply_terminator_effect(cfg, state, terminator, block);
-    }
-
-    fn gen_kill_effects_in_block<A, C>(
-        analysis: &mut A,
-        cfg: &ControlFlowGraph<C>,
-        state: &mut GenKillSet<A::Idx>,
-        block: BasicBlock,
-        block_data: &BasicBlockData<C>,
-    ) where
-        C: CallType,
-        A: GenKillAnalysis<C>,
-    {
-        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
-            analysis.phi_effect(cfg, state, phi, block, statement_index);
-        }
-
-        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
-            analysis.statement_effect(cfg, state, stmnt, statement_index, block);
-        }
-
-        let terminator = block_data.terminator();
-        analysis.terminator_effect(cfg, state, terminator, block);
-    }
-
-    fn visit_results_in_block<C, F, R>(
-        state: &mut F,
-        cfg: &ControlFlowGraph<C>,
-        block: BasicBlock,
-        block_data: &BasicBlockData<C>,
-        results: &R,
-        vis: &mut impl ResultsVisitor<C, FlowState = F>,
-    ) where
-        R: ResultsVisitable<C, FlowState = F>,
-        C: CallType,
-    {
-        assert!(block < cfg.blocks.len_idx());
-
-        results.reset_to_block_entry(state, block);
-        vis.visit_block_start(state, block_data, block);
-
-        for (id, stmnt) in cfg.blocks[block].statements.iter_enumerated() {
-            vis.visit_statement_before_effect(state, stmnt, block, id);
-            results.reconstruct_statement_effect(cfg, state, stmnt, block, id);
-            vis.visit_statement_after_effect(state, stmnt, block, id);
-        }
-
-        for (phi, phi_data) in cfg.blocks[block].phi_statements.iter_enumerated() {
-            vis.visit_phi_before_effect(state, phi_data, block, phi);
-            results.reconstruct_phi_effect(cfg, state, phi_data, block, phi);
-            vis.visit_phi_after_effect(state, phi_data, block, phi);
-        }
-
-        vis.visit_terminator_before_effect(state, block_data.terminator(), block);
-        results.reconstruct_terminator_effect(cfg, state, block_data.terminator(), block);
-        vis.visit_terminator_after_effect(state, block_data.terminator(), block);
-
-        vis.visit_block_end(state, block_data, block);
-    }
-
     fn apply_effects_in_range<A, C>(
         analysis: &A,
         cfg: &ControlFlowGraph<C>,
@@ -496,6 +418,87 @@ impl Direction for Forward {
         }
     }
 
+    fn apply_effects_in_block<A, C>(
+        analysis: &mut A,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut A::Domain,
+        block: BasicBlock,
+        block_data: &BasicBlockData<C>,
+    ) where
+        C: CallType,
+        A: Analysis<C>,
+    {
+        analysis.init_block(cfg, state);
+        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
+            analysis.apply_phi_effect(cfg, state, phi, block, statement_index);
+        }
+
+        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
+            analysis.apply_statement_effect(cfg, state, stmnt, statement_index, block);
+        }
+
+        let terminator = block_data.terminator();
+        analysis.apply_terminator_effect(cfg, state, terminator, block);
+    }
+
+    fn gen_kill_effects_in_block<A, C>(
+        analysis: &mut A,
+        cfg: &ControlFlowGraph<C>,
+        state: &mut GenKillSet<A::Idx>,
+        block: BasicBlock,
+        block_data: &BasicBlockData<C>,
+    ) where
+        C: CallType,
+        A: GenKillAnalysis<C>,
+    {
+        for (statement_index, phi) in block_data.phi_statements.iter_enumerated().rev() {
+            analysis.phi_effect(cfg, state, phi, block, statement_index);
+        }
+
+        for (statement_index, stmnt) in block_data.statements.iter_enumerated().rev() {
+            analysis.statement_effect(cfg, state, stmnt, statement_index, block);
+        }
+
+        let terminator = block_data.terminator();
+        analysis.terminator_effect(cfg, state, terminator, block);
+    }
+
+    fn visit_results_in_block<C, F, R>(
+        state: &mut F,
+        cfg: &ControlFlowGraph<C>,
+        block: BasicBlock,
+        block_data: &BasicBlockData<C>,
+        results: &R,
+        vis: &mut impl ResultsVisitor<C, FlowState = F>,
+    ) where
+        R: ResultsVisitable<C, FlowState = F>,
+        C: CallType,
+    {
+        assert!(block < cfg.blocks.len_idx());
+
+        results.reset_to_block_entry(cfg, state, block);
+
+        vis.visit_block_start(state, block_data, block);
+
+        for (id, stmnt) in cfg.blocks[block].statements.iter_enumerated() {
+            vis.visit_statement_before_effect(state, stmnt, block, id);
+            results.reconstruct_statement_effect(cfg, state, stmnt, block, id);
+            vis.visit_statement_after_effect(state, stmnt, block, id);
+        }
+
+        for (phi, phi_data) in cfg.blocks[block].phi_statements.iter_enumerated() {
+            vis.visit_phi_before_effect(state, phi_data, block, phi);
+            results.reconstruct_phi_effect(cfg, state, phi_data, block, phi);
+            vis.visit_phi_after_effect(state, phi_data, block, phi);
+        }
+
+        vis.visit_terminator_before_effect(state, block_data.terminator(), block);
+        results.reconstruct_terminator_effect(cfg, state, block_data.terminator(), block);
+        vis.visit_terminator_after_effect(state, block_data.terminator(), block);
+
+        vis.visit_block_end(state, block_data, block);
+    }
+
     fn visit_results_in_block_mut<C, F, R>(
         state: &mut F,
         cfg: &mut ControlFlowGraph<C>,
@@ -508,7 +511,7 @@ impl Direction for Forward {
     {
         assert!(block < cfg.blocks.len_idx());
 
-        results.reset_to_block_entry(state, block);
+        results.reset_to_block_entry(cfg, state, block);
         vis.visit_block_start(state, &mut cfg.blocks[block], block);
 
         for stmnt in cfg.blocks[block].statements.indices() {
@@ -603,7 +606,11 @@ impl Direction for Forward {
         A: Analysis<C>,
     {
         match block.1.terminator().kind {
-            TerminatorKind::Goto(succ) => propagate(succ, exit_state),
+            TerminatorKind::Goto(succ) => {
+                if analysis.apply_edge_effects(cfg, block.0, exit_state) {
+                    propagate(succ, exit_state)
+                }
+            }
             TerminatorKind::Split {
                 ref condition,
                 true_block,
@@ -657,16 +664,18 @@ where
     D: Clone,
     F: FnMut(BasicBlock, &D),
 {
-    fn apply(&mut self, mut apply_edge_effect: impl FnMut(&mut D, BasicBlock, bool)) {
+    fn apply(&mut self, mut apply_edge_effect: impl FnMut(&mut D, BasicBlock, bool) -> bool) {
         assert!(!self.effects_applied);
 
         let mut tmp = self.exit_state.clone();
-        apply_edge_effect(&mut tmp, self.true_block, true);
-        (self.propagate)(self.true_block, &tmp);
+        if apply_edge_effect(&mut tmp, self.true_block, true) {
+            (self.propagate)(self.true_block, &tmp);
+        }
 
         tmp.clone_from(&self.exit_state);
-        apply_edge_effect(&mut tmp, self.false_block, false);
-        (self.propagate)(self.false_block, &tmp);
+        if apply_edge_effect(&mut tmp, self.false_block, false) {
+            (self.propagate)(self.false_block, &tmp);
+        }
 
         self.effects_applied = true;
     }
