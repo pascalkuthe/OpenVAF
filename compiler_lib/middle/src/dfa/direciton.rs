@@ -480,16 +480,16 @@ impl Direction for Forward {
 
         vis.visit_block_start(state, block_data, block);
 
-        for (id, stmnt) in cfg.blocks[block].statements.iter_enumerated() {
-            vis.visit_statement_before_effect(state, stmnt, block, id);
-            results.reconstruct_statement_effect(cfg, state, stmnt, block, id);
-            vis.visit_statement_after_effect(state, stmnt, block, id);
-        }
-
         for (phi, phi_data) in cfg.blocks[block].phi_statements.iter_enumerated() {
             vis.visit_phi_before_effect(state, phi_data, block, phi);
             results.reconstruct_phi_effect(cfg, state, phi_data, block, phi);
             vis.visit_phi_after_effect(state, phi_data, block, phi);
+        }
+
+        for (id, stmnt) in cfg.blocks[block].statements.iter_enumerated() {
+            vis.visit_statement_before_effect(state, stmnt, block, id);
+            results.reconstruct_statement_effect(cfg, state, stmnt, block, id);
+            vis.visit_statement_after_effect(state, stmnt, block, id);
         }
 
         vis.visit_terminator_before_effect(state, block_data.terminator(), block);
@@ -513,43 +513,6 @@ impl Direction for Forward {
 
         results.reset_to_block_entry(cfg, state, block);
         vis.visit_block_start(state, &mut cfg.blocks[block], block);
-
-        for stmnt in cfg.blocks[block].statements.indices() {
-            vis.visit_statement_before_effect(
-                state,
-                unsafe {
-                    cfg.blocks[block]
-                        .statements
-                        .raw
-                        .get_unchecked_mut(stmnt.index())
-                },
-                block,
-                stmnt,
-            );
-            results.reconstruct_statement_effect(
-                cfg,
-                state,
-                unsafe {
-                    cfg.blocks[block]
-                        .statements
-                        .raw
-                        .get_unchecked(stmnt.index())
-                },
-                block,
-                stmnt,
-            );
-            vis.visit_statement_after_effect(
-                state,
-                unsafe {
-                    cfg.blocks[block]
-                        .statements
-                        .raw
-                        .get_unchecked_mut(stmnt.index())
-                },
-                block,
-                stmnt,
-            );
-        }
 
         for phi in cfg.blocks[block].phi_statements.indices() {
             vis.visit_phi_before_effect(
@@ -585,6 +548,43 @@ impl Direction for Forward {
                 },
                 block,
                 phi,
+            );
+        }
+
+        for stmnt in cfg.blocks[block].statements.indices() {
+            vis.visit_statement_before_effect(
+                state,
+                unsafe {
+                    cfg.blocks[block]
+                        .statements
+                        .raw
+                        .get_unchecked_mut(stmnt.index())
+                },
+                block,
+                stmnt,
+            );
+            results.reconstruct_statement_effect(
+                cfg,
+                state,
+                unsafe {
+                    cfg.blocks[block]
+                        .statements
+                        .raw
+                        .get_unchecked(stmnt.index())
+                },
+                block,
+                stmnt,
+            );
+            vis.visit_statement_after_effect(
+                state,
+                unsafe {
+                    cfg.blocks[block]
+                        .statements
+                        .raw
+                        .get_unchecked_mut(stmnt.index())
+                },
+                block,
+                stmnt,
             );
         }
 

@@ -198,7 +198,7 @@ fn run(sess: &TestSession) -> Result<()> {
 
         let vars_to_check = match sess.test_case.unwrap().model.unwrap().0 {
             "DIODE" => vec!["Id", "Qd", "VT", "vcrit"],
-            "HICUML2" => vec!["itf", "ibhrec", "ick", "cjei0_t", "Cjep"],
+            "HICUML2" => vec!["itf", "ibhrec", "ick", "cjei0_t", "Cjep", "ibet"],
             "BSIM6" => vec!["Ibd", "ids", "Qs", "Qd"],
             _ => return Ok(()), // Only check seleted variable to ensure that we dont accidently use an unused variable
         };
@@ -248,8 +248,15 @@ fn run(sess: &TestSession) -> Result<()> {
                 locations: &locations,
             });
 
-            sliced_cfg.modify(Simplify);
-            sliced_cfg.modify(SimplifyBranches);
+            if sess.config.print_mir {
+                mir.print_to_file_with_shared(
+                    sess.log_file(&format!("{}_before_simplfy.mir", name))?,
+                    id,
+                    &sliced_cfg,
+                )
+                .wrap_err("Failed to print MIR")?;
+            }
+
             sliced_cfg.modify(Simplify);
 
             let malformations = sliced_cfg.analyse(Verify(&mir));
