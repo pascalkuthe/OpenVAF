@@ -236,15 +236,15 @@ impl Display for AttributeKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DisciplineDomain(discipline) => {
-                f.write_fmt(format_args!("The potential nature of {}", discipline))
+                f.write_fmt(format_args!("the potential nature of {}", discipline))
             }
 
             Self::DisciplinePotential(discipline) => {
-                f.write_fmt(format_args!("The flow nature of {}", discipline))
+                f.write_fmt(format_args!("the flow nature of {}", discipline))
             }
 
             Self::DisciplineFlow(discipline) => {
-                f.write_fmt(format_args!("The domain of {}", discipline))
+                f.write_fmt(format_args!("the domain of {}", discipline))
             }
 
             Self::NatureAttribute(NatureAttribute::Abstol, nature) => {
@@ -287,7 +287,7 @@ impl Display for IllegalNatureAttributeOverwriteKind {
 
 #[derive(Error, Clone, Debug)]
 pub enum Error {
-    #[error("Overwriting {kind} in derived nature '{nature}' is forbidden! ")]
+    #[error("overwriting {kind} in derived nature '{nature}' is forbidden! ")]
     IllegalNatureAttributeOverwrite {
         kind: IllegalNatureAttributeOverwriteKind,
         nature: Ident,
@@ -295,14 +295,14 @@ pub enum Error {
         overwrite: Span,
     },
 
-    #[error("The nature {name} is derived from {parent} which is itself derived from {name}")]
+    #[error("the nature {name} is derived from {parent} which is itself derived from {name}")]
     CircularAttributeInheritance {
         name: Ident,
         parent: Ident,
         trace_back: Vec<Ident>,
     },
 
-    #[error("Disciplines in the discrete Domain may not define flow/potential natures")]
+    #[error("disciplines in the discrete Domain may not define flow/potential natures")]
     DiscreteDisciplineHasNatures {
         span: Span,
         discrete_declaration: Span,
@@ -317,25 +317,25 @@ pub enum Error {
         new: Span,
     },
 
-    #[error("Module ports declared in Module body when already declared in Module Head")]
+    #[error("module ports declared in Module body when already declared in module head")]
     PortRedeclaration {
         module_head: Span,
         body_declaration: Span,
     },
 
-    #[error("{port} has to be listed in the Module head!")]
+    #[error("the port '{port}' has to be listed in the module head!")]
     PortNotPreDeclaredInModuleHead { port_list: Span, port: Ident },
 
-    #[error("Port {0} was pre declared in module head but not defined in the module body")]
+    #[error("port {0} was pre declared in module head but not defined in the module body")]
     PortPreDeclaredNotDefined(Ident),
 
-    #[error("Nature {1} is missing the required attributes {0}")]
+    #[error("nature {1} is missing the required attributes {0}")]
     RequiredBaseNatureAttributesNotDefined(ListFormatter<Vec<Symbol>>, Ident, Span),
 
-    #[error("Case statements may only have one default case")]
+    #[error("Ccse statements may only have one default case")]
     MultipleDefaultDeclarations { old: Span, new: Span },
 
-    #[error("Function argument {0} is missing separate type declaration")]
+    #[error("finction argument {0} is missing separate type declaration")]
     FunctionArgTypeDeclarationMissing(Ident),
 
     #[error("'{0}' was not found in the current scope!")]
@@ -354,7 +354,7 @@ pub enum Error {
         span: Span,
     },
 
-    #[error("Expected {expected} but found {found} {name}")]
+    #[error("expected {expected} but found {found} {name}")]
     DeclarationTypeMismatch {
         expected: ListFormatter<Vec<MockSymbolDeclaration>>,
         found: MockSymbolDeclaration,
@@ -362,22 +362,22 @@ pub enum Error {
         span: Span,
     },
 
-    #[error("Branch probe functions expect at most 2 Arguments")]
+    #[error("branch probe functions expect at most 2 arguments")]
     TooManyBranchAccessArgs { nature: Symbol, span: Span },
 
-    #[error("Branch probe functions expect at least 1 Argument")]
+    #[error("branch probe functions expect at least 1 argument")]
     EmptyBranchAccess { nature: Symbol, span: Span },
 
     #[error("{0} only accepts identifiers!")]
     ExpectedIdentifier(&'static str, Span),
 
-    #[error("This branch can not be accessed by {nature}. {allowed_natures}")]
+    #[error("this branch can not be accessed by {nature}. {allowed_natures}")]
     NatureNotPotentialOrFlow {
         nature: Ident,
         allowed_natures: AllowedNatures,
     },
 
-    #[error("The disciplines of {0} and {1} are incompatible")]
+    #[error("the disciplines of {0} and {1} are incompatible")]
     DisciplineMismatch(NetInfo, NetInfo, Span),
 
     #[error("{0} are not allowed in this expressions!")]
@@ -386,25 +386,25 @@ pub enum Error {
     #[error("{0} is now allowed inside analog functions!")]
     NotAllowedInFunction(NotAllowedInFunction, Span),
 
-    #[error("Partial derivatives may only be calculated over potentials between two nodes, branch flows or temperatures")]
+    #[error("partial derivatives may only be calculated over potentials between two nodes, branch flows or temperatures")]
     DerivativeNotAllowed(Span),
 
-    #[error("Contribution can only be made to branch probes (for example 'I(net1,net2)', 'potential(net)' or 'flow(branch)')")]
+    #[error("contribution can only be made to branch probes (for example 'I(net1,net2)', 'potential(net)' or 'flow(branch)')")]
     ContributeToNonBranchProbe(Span),
 
-    #[error("Port branches ( like (<PORT>) ) can only be read but not contributed to")]
+    #[error("port branches ( like (<PORT>) ) can only be read but not contributed to")]
     ContributeToBranchPortProbe(Span),
 
     #[error("$limit function calls must have at least 2 arguments found 0")]
     EmptyLimit(Span),
 
-    #[error("OpenVAF does not support $limit calls without an explicitly specifier function")]
+    #[error("$limit calls without an explicitly specifier function are not supported")]
     LimRequiresFunction(Span),
 
-    #[error("Limit functions me be a function Identifier or a string literal")]
+    #[error("limit functions me be a function Identifier or a string literal")]
     IllegalLimitFn(Span),
 
-    #[error("Port flow (like I(< PORT >) ) can not be used in a $lim function")]
+    #[error("port flow (like I(< PORT >) ) can not be used in a $lim function")]
     PortFlowCanNotBeANonLinearity(Span),
 }
 
@@ -528,7 +528,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: module_head.data(),
                     messages: vec![(
                         AnnotationType::Help,
-                        Text::const_str("Ports already declared here"),
+                        Text::const_str("ports already declared here"),
                         module_head.data(),
                     )],
                     fold: false,
@@ -537,7 +537,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: body_declaration.data(),
                     messages: vec![(
                         AnnotationType::Error,
-                        Text::const_str("Ports may not be declared here"),
+                        Text::const_str("ports may not be declared here"),
                         body_declaration.data(),
                     )],
                     fold: false,
@@ -549,7 +549,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: port.span.data(),
                     messages: vec![(
                         AnnotationType::Error,
-                        Text::const_str("Not declared in module head"),
+                        Text::const_str("not declared in module head"),
                         port.span.data(),
                     )],
                     fold: false,
@@ -569,7 +569,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: port.span.data(),
                 messages: vec![(
                     AnnotationType::Info,
-                    Text::const_str("Port is not defined in module body"),
+                    Text::const_str("port is not defined in module body"),
                     port.span.data(),
                 )],
                 fold: true,
@@ -591,7 +591,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Not allowed inside a function"),
+                    Text::const_str("not allowed inside a function"),
                     span.data(),
                 )],
                 fold: false,
@@ -601,7 +601,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Missing seperate type declaration"),
+                    Text::const_str("missing seperate type declaration"),
                     span.data(),
                 )],
                 fold: false,
@@ -611,7 +611,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Not found in this scope"),
+                    Text::const_str("not found in this scope"),
                     span.data(),
                 )],
                 fold: false,
@@ -621,7 +621,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::owned(format!("Not found in {}", scope)),
+                    Text::owned(format!("not found in {}", scope)),
                     span.data(),
                 )],
                 fold: false,
@@ -636,7 +636,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: span.data(),
                     messages: vec![(
                         AnnotationType::Error,
-                        Text::const_str("Expected a scope"),
+                        Text::const_str("expected a scope"),
                         span.data(),
                     )],
                     fold: false,
@@ -656,7 +656,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::owned(format!("Expected {}", expected)),
+                    Text::owned(format!("expected {}", expected)),
                     span.data(),
                 )],
                 fold: false,
@@ -666,7 +666,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Too many arguments"),
+                    Text::const_str("too many arguments"),
                     span.data(),
                 )],
                 fold: false,
@@ -676,7 +676,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Expected at least 1 Argument!"),
+                    Text::const_str("expected at least 1 Argument!"),
                     span.data(),
                 )],
                 fold: false,
@@ -686,7 +686,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Unexpected token!"),
+                    Text::const_str("unexpected token!"),
                     span.data(),
                 )],
                 fold: false,
@@ -713,7 +713,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: span.data(),
                     messages: vec![(
                         AnnotationType::Error,
-                        Text::const_str("Disciplines mismatch"),
+                        Text::const_str("disciplines mismatch"),
                         span.data(),
                     )],
                     fold: false,
@@ -722,7 +722,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: net1.declaration.data(),
                     messages: vec![(
                         AnnotationType::Info,
-                        Text::owned(format!("{} was declared here", net1.name)),
+                        Text::owned(format!("'{}' was declared here", net1.name)),
                         net1.declaration.data(),
                     )],
                     fold: false,
@@ -731,7 +731,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: net2.declaration.data(),
                     messages: vec![(
                         AnnotationType::Info,
-                        Text::owned(format!("{} was declared here", net2.name)),
+                        Text::owned(format!("'{}' was declared here", net2.name)),
                         net2.declaration.data(),
                     )],
                     fold: false,
@@ -742,7 +742,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Not allowed in constant expressions"),
+                    Text::const_str("not allowed in constant expressions"),
                     span.data(),
                 )],
                 fold: false,
@@ -752,7 +752,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("Expected node potential or branch flow"),
+                    Text::const_str("expected node potential or branch flow"),
                     span.data(),
                 )],
                 fold: false,
@@ -762,7 +762,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: ident.span.data(),
                 messages: vec![(
                     AnnotationType::Help,
-                    Text::const_str("Add discipline (such as 'electrical'"),
+                    Text::const_str("add discipline (such as 'electrical'"),
                     ident.span.data(),
                 )],
                 fold: false,
@@ -773,7 +773,7 @@ impl LibraryDiagnostic for Error {
                     slice_span: span.data(),
                     messages: vec![(
                         AnnotationType::Error,
-                        Text::const_str("Can only contribute to branches"),
+                        Text::const_str("can only contribute to branches"),
                         span.data(),
                     )],
                     fold: false,
@@ -785,12 +785,12 @@ impl LibraryDiagnostic for Error {
                 messages: vec![
                     (
                         AnnotationType::Info,
-                        Text::const_str("Default case declared here"),
+                        Text::const_str("default case declared here"),
                         new.data(),
                     ),
                     (
                         AnnotationType::Error,
-                        Text::const_str("Second default case is forbidden"),
+                        Text::const_str("second default case is forbidden"),
                         old.data(),
                     ),
                 ],
@@ -801,7 +801,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: name.span.data().extend(parent.span.data()),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::borrowed("Circular derived nature"),
+                    Text::const_str("circular derived nature"),
                     parent.span.data(),
                 )],
                 fold: false,
@@ -818,7 +818,7 @@ impl LibraryDiagnostic for Error {
                     (
                         AnnotationType::Error,
                         Text::owned(format!(
-                            "Overwriting {} in derived natures is forbidden",
+                            "overwriting {} in derived natures is forbidden",
                             kind
                         )),
                         overwrite.data(),
@@ -835,7 +835,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::borrowed("Expected at least 2 arguments"),
+                    Text::const_str("expected at least 2 arguments"),
                     span.data(),
                 )],
                 fold: false,
@@ -845,7 +845,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::borrowed("Expected function identifier or string literal"),
+                    Text::const_str("expected function identifier or string literal"),
                     span.data(),
                 )],
                 fold: false,
@@ -855,7 +855,7 @@ impl LibraryDiagnostic for Error {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::borrowed("expected a branch access such as V(b,e)"),
+                    Text::const_str("expected a branch access such as V(b,e)"),
                     span.data(),
                 )],
                 fold: false,
