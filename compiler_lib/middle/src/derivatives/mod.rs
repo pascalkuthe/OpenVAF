@@ -10,8 +10,8 @@
 
 use crate::cfg::{ControlFlowGraph, PhiData};
 use crate::{
-    COperand, CallType, CallTypeDerivative, Derivative, Local, Mir, Operand, OperandData, RValue,
-    Statement, StmntKind, SyntaxCtx,
+    COperand, CallTypeDerivative, CfgFunctions, Derivative, Local, Mir, Operand, OperandData,
+    RValue, Statement, StmntKind, SyntaxCtx,
 };
 use enum_map::EnumMap;
 use openvaf_data_structures::index_vec::IndexVec;
@@ -25,10 +25,11 @@ mod error;
 pub mod lints;
 mod rvalue;
 
-pub use rvalue::RValueAutoDiff;
 
-impl<C: CallType> ControlFlowGraph<C> {
-    pub fn generate_derivatives<MC: CallType>(
+pub use rvalue::{RValueAutoDiff, OuterDerivativeCacheSlot};
+
+impl<C: CfgFunctions> ControlFlowGraph<C> {
+    pub fn generate_derivatives<MC: CfgFunctions>(
         &mut self,
         mir: &Mir<MC>,
         errors: &mut MultiDiagnostic<Error>,
@@ -43,14 +44,14 @@ impl<C: CallType> ControlFlowGraph<C> {
     }
 }
 
-pub struct AutoDiff<'lt, C: CallType, MC: CallType> {
+pub struct AutoDiff<'lt, C: CfgFunctions, MC: CfgFunctions> {
     cfg: &'lt mut ControlFlowGraph<C>,
-    mir: &'lt Mir<MC>,
+    pub mir: &'lt Mir<MC>,
     errors: &'lt mut MultiDiagnostic<Error>,
     forward_stmnts: IndexVec<StatementId, Statement<C>>,
 }
 
-impl<'lt, C: CallType, MC: CallType> AutoDiff<'lt, C, MC> {
+impl<'lt, C: CfgFunctions, MC: CfgFunctions> AutoDiff<'lt, C, MC> {
     fn append_assignment_and_derivatives(
         &mut self,
         lhs: Local,
@@ -137,6 +138,6 @@ impl<'lt, C: CallType, MC: CallType> AutoDiff<'lt, C, MC> {
     }
 }
 
-fn operand_to_derivative<C: CallType>(operand: COperand<C>) -> CallTypeDerivative<C> {
+fn operand_to_derivative<C: CfgFunctions>(operand: COperand<C>) -> CallTypeDerivative<C> {
     Derivative::Operand(operand.contents)
 }

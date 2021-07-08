@@ -14,13 +14,13 @@ use openvaf_middle::cfg::{
     BasicBlock, BasicBlockData, ControlFlowGraph, ModificationPass, Terminator, TerminatorKind,
     START_BLOCK,
 };
-use openvaf_middle::{impl_pass_span, CallType, Operand, OperandData, RValue, StmntKind};
+use openvaf_middle::{impl_pass_span, CfgFunctions, Operand, OperandData, RValue, StmntKind};
 use openvaf_session::sourcemap::span::DUMMY_SP;
 use tracing::{debug, trace_span};
 
 pub struct Simplify;
 
-impl<C: CallType> ModificationPass<'_, C> for Simplify {
+impl<C: CfgFunctions> ModificationPass<'_, C> for Simplify {
     type Result = ();
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) {
@@ -35,12 +35,12 @@ impl<C: CallType> ModificationPass<'_, C> for Simplify {
     impl_pass_span!("simplify");
 }
 
-struct SimplifyTerminators<'a, C: CallType> {
+struct SimplifyTerminators<'a, C: CfgFunctions> {
     cfg: &'a mut ControlFlowGraph<C>,
     pred_count: IndexVec<BasicBlock, u16>,
 }
 
-impl<'a, C: CallType> SimplifyTerminators<'a, C> {
+impl<'a, C: CfgFunctions> SimplifyTerminators<'a, C> {
     fn new(cfg: &'a mut ControlFlowGraph<C>) -> Self {
         let mut pred_count = index_vec![0; cfg.blocks.len()];
         pred_count[START_BLOCK] = 1u16;
@@ -279,7 +279,7 @@ impl<'a, C: CallType> SimplifyTerminators<'a, C> {
     }
 }
 
-pub fn strip_nops<C: CallType>(cfg: &mut ControlFlowGraph<C>) {
+pub fn strip_nops<C: CfgFunctions>(cfg: &mut ControlFlowGraph<C>) {
     for block in &mut cfg.blocks {
         block
             .statements
@@ -287,7 +287,7 @@ pub fn strip_nops<C: CallType>(cfg: &mut ControlFlowGraph<C>) {
     }
 }
 
-pub fn remove_dead_blocks<C: CallType>(cfg: &mut ControlFlowGraph<C>) {
+pub fn remove_dead_blocks<C: CfgFunctions>(cfg: &mut ControlFlowGraph<C>) {
     let seen: BitSet<_> = {
         let mut seen = BitSet::new_empty(cfg.blocks.len());
         seen.extend(cfg.postorder_iter().map(|(id, _)| id));

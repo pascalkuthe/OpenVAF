@@ -12,14 +12,14 @@ use std::fs::File;
 
 use itertools::Itertools;
 
-use openvaf_data_structures::{index_vec::define_index_type, BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, index_vec::define_index_type, HashMap};
 use openvaf_hir::{BranchId, VariableId};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, Location};
 use openvaf_middle::{LocalKind, Mir, VariableLocalKind};
-use openvaf_session::symbols::SymbolStr;
-use openvaf_transformations::{
-    BuildPDG, CalculateDataDependence, InvProgramDependenceGraph, ProgramDependenceGraph,
+use openvaf_pass::program_dependence::{
+    BuildPDG, InvProgramDependenceGraph, ProgramDependenceGraph,
 };
+use openvaf_session::symbols::SymbolStr;
 
 use crate::frontend::GeneralOsdiCall;
 use crate::storage_locations::{StorageLocation, StorageLocations};

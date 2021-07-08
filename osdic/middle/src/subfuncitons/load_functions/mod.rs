@@ -14,7 +14,7 @@ use crate::subfuncitons::automatic_slicing::{ReadVars, TaintedLocations, Written
 use crate::subfuncitons::load_functions::ac_load::AcLoadFunctionCall;
 use crate::subfuncitons::load_functions::dc_load::{DcLoadFunctionCall, GeneralToDcLoad};
 use crate::{optimize_cfg, CircuitTopology};
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, HashMap};
 use openvaf_hir::SyntaxCtx;
 use openvaf_ir::Spanned;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, START_BLOCK};
@@ -23,10 +23,11 @@ use openvaf_middle::osdi_types::SimpleConstVal::Real;
 use openvaf_middle::{
     ConstVal, LocalKind, Mir, OperandData, RValue, StmntKind, VariableId, VariableLocalKind,
 };
-use openvaf_session::sourcemap::span::DUMMY_SP;
-use openvaf_transformations::{
-    BackwardSlice, InvProgramDependenceGraph, ProgramDependenceGraph, Strip,
+use openvaf_pass::{
+    program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph},
+    BackwardSlice, Strip,
 };
+use openvaf_session::sourcemap::span::DUMMY_SP;
 
 mod ac_load;
 mod dc_load;

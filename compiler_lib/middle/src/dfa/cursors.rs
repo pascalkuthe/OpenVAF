@@ -16,7 +16,7 @@ use std::cmp::Ordering;
 use super::{Analysis, Direction, Effect, EffectIndex, Results};
 use crate::cfg::{BasicBlock, ControlFlowGraph, Location, LocationKind, START_BLOCK};
 use crate::dfa::GenKillAnalysisImpl;
-use crate::CallType;
+use crate::CfgFunctions;
 
 /// A `ResultsCursor` that borrows the underlying `Results`.
 pub type ResultsRefCursor<'a, C, A> = ResultsCursor<C, A, &'a Results<C, A>>;
@@ -35,7 +35,7 @@ pub type GenKillResultsRefCursor<'a, C, A> =
 ///
 /// A `ResultsCursor` can either own (the default) or borrow the dataflow results it inspects. The
 /// type of ownership is determined by `R` (see `ResultsRefCursor` above).
-pub struct ResultsCursor<C: CallType, A, R = Results<C, A>>
+pub struct ResultsCursor<C: CfgFunctions, A, R = Results<C, A>>
 where
     A: Analysis<C>,
 {
@@ -50,7 +50,7 @@ where
     state_needs_reset: bool,
 }
 
-impl<C: CallType, A, R> ResultsCursor<C, A, R>
+impl<C: CfgFunctions, A, R> ResultsCursor<C, A, R>
 where
     A: Analysis<C>,
     R: Borrow<Results<C, A>>,

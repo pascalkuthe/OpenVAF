@@ -17,8 +17,8 @@ use crate::dfa::visitor::ResultsVisitorMut;
 use crate::dfa::{direciton, Analysis, AnalysisDomain, Results, SplitEdgeEffects};
 use crate::osdi_types::SimpleConstVal::Bool;
 use crate::{
-    dfa, CallType, ConstVal, Expression, InputKind, Local, LocalKind, Operand, OperandData, RValue,
-    StmntKind,
+    dfa, CfgFunctions, CfgInputs, ConstVal, Expression, Local, LocalKind, Operand, OperandData,
+    RValue, StmntKind,
 };
 use crate::{impl_pass_span, StatementId, SyntaxCtx};
 use openvaf_data_structures::bit_set::HybridBitSet;
@@ -283,7 +283,7 @@ impl<'lt, R: CallResolver> Analysis<R::C> for ConditionalConstantPropagationImpl
     }
 }
 
-impl<C: CallType> ControlFlowGraph<C> {
+impl<C: CfgFunctions> ControlFlowGraph<C> {
     /// This function runs a conditional constant folding algorithm.
     /// The resulting data flow graph is returned without modifying the CFG itself.
     /// This function is rarely used on its own. Use [`propagate_constants`]/[`propagate_constants_with_inputs`] instead
@@ -333,7 +333,7 @@ impl<C: CallType> ControlFlowGraph<C> {
     }
 }
 
-impl<C: CallType> Expression<C> {
+impl<C: CfgFunctions> Expression<C> {
     pub fn const_eval(&self) -> Option<ConstVal> {
         self.const_eval_with_inputs(
             &NoInputConstResolution(PhantomData),
@@ -366,7 +366,7 @@ pub struct ConstantPropagation<'a, R> {
     global_vars: HybridBitSet<Local>,
 }
 
-impl<'a, C: CallType, R: CallResolver<C = C>> ModificationPass<'_, C>
+impl<'a, C: CfgFunctions, R: CallResolver<C = C>> ModificationPass<'_, C>
     for ConstantPropagation<'a, R>
 {
     type Result = ();
@@ -377,7 +377,7 @@ impl<'a, C: CallType, R: CallResolver<C = C>> ModificationPass<'_, C>
         cfg.write_constants(&res)
     }
 }
-impl<C: CallType> Default for ConstantPropagation<'static, NoInputConstResolution<C>> {
+impl<C: CfgFunctions> Default for ConstantPropagation<'static, NoInputConstResolution<C>> {
     fn default() -> Self {
         Self {
             resolver: &NoInputConstResolution(PhantomData),
@@ -395,7 +395,7 @@ impl<'a, R: CallResolver> ConstantPropagation<'a, R> {
     }
 }
 
-impl<C: CallType> ConstantPropagation<'static, NoInputConstResolution<C>> {
+impl<C: CfgFunctions> ConstantPropagation<'static, NoInputConstResolution<C>> {
     pub fn with_initial_conditions(global_vars: HybridBitSet<Local>) -> Self {
         Self {
             resolver: &NoInputConstResolution(PhantomData),
@@ -452,7 +452,7 @@ impl<'a, 'b, R: CallResolver> ResultsVisitorMut<R::C> for ConstWriter<'a, 'b, R>
     }
 }
 
-fn write_consts_to_rval<C: CallType>(
+fn write_consts_to_rval<C: CfgFunctions>(
     state: &BasicBlockConstants,
     folded_val: Option<ConstVal>,
     dst: &mut RValue<C>,
@@ -467,11 +467,14 @@ fn write_consts_to_rval<C: CallType>(
     }
 }
 
-fn write_consts_to_rval_operands<C: CallType>(state: &BasicBlockConstants, dst: &mut RValue<C>) {
+fn write_consts_to_rval_operands<C: CfgFunctions>(
+    state: &BasicBlockConstants,
+    dst: &mut RValue<C>,
+) {
     write_consts_to_operands(state, dst.operands_mut())
 }
 
-fn write_consts_to_operands<'c, I: InputKind + 'c>(
+fn write_consts_to_operands<'c, I: CfgInputs + 'c>(
     state: &BasicBlockConstants,
     operands: impl IntoIterator<Item = &'c mut Operand<I>>,
 ) {

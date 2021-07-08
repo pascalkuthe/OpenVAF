@@ -13,12 +13,12 @@ use openvaf_diagnostics::lints::Linter;
 use openvaf_middle::cfg::{ControlFlowGraph, ModificationPass, TerminatorKind};
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Bool;
-use openvaf_middle::{impl_pass_span, CallType, Operand, OperandData, RValue};
+use openvaf_middle::{impl_pass_span, CfgFunctions, Operand, OperandData, RValue};
 use tracing::error;
 
 pub struct SimplifyBranches;
 
-impl<C: CallType> ModificationPass<'_, C> for SimplifyBranches {
+impl<C: CfgFunctions> ModificationPass<'_, C> for SimplifyBranches {
     type Result = ();
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) {

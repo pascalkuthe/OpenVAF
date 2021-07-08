@@ -19,7 +19,7 @@ use crate::dfa::visitor::{
     visit_results, visit_results_mut, ResultsVisitable, ResultsVisitor, ResultsVisitorMut,
 };
 use crate::dfa::GenKillAnalysisImpl;
-use crate::CallType;
+use crate::CfgFunctions;
 use openvaf_data_structures::index_vec::{index_vec, Idx, IndexVec};
 use openvaf_data_structures::{iter, WorkQueue};
 use std::fmt;
@@ -32,7 +32,7 @@ pub type GenKillResults<C, A> = Results<C, GenKillAnalysisImpl<A>>;
 pub struct Results<C, A>
 where
     A: Analysis<C>,
-    C: CallType,
+    C: CfgFunctions,
 {
     pub analysis: A,
     pub(crate) entry_sets: IndexVec<BasicBlock, A::Domain>,
@@ -41,7 +41,7 @@ where
 impl<A, C> Results<C, A>
 where
     A: Analysis<C>,
-    C: CallType,
+    C: CfgFunctions,
 {
     /// Creates a `ResultsCursor` that can inspect these `Results`.
     pub fn into_results_cursor(self, cfg: &ControlFlowGraph<C>) -> ResultsCursor<C, A> {
@@ -96,7 +96,7 @@ where
 impl<C, A> Debug for Results<C, A>
 where
     A: Analysis<C>,
-    C: CallType,
+    C: CfgFunctions,
     A::Domain: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -108,7 +108,7 @@ where
 pub struct Engine<'a, C, A>
 where
     A: Analysis<C>,
-    C: CallType,
+    C: CfgFunctions,
 {
     cfg: &'a ControlFlowGraph<C>,
     entry_sets: IndexVec<BasicBlock, A::Domain>,
@@ -127,7 +127,7 @@ where
 impl<'a, C, A, T> Engine<'a, C, GenKillAnalysisImpl<A>>
 where
     A: GenKillAnalysis<C, Idx = T>,
-    C: CallType,
+    C: CfgFunctions,
     T: Idx,
 {
     /// Creates a new `Engine` to solve a gen-kill dataflow problem.
@@ -168,7 +168,7 @@ impl<'a, C, A, D> Engine<'a, C, A>
 where
     A: Analysis<C, Domain = D>,
     D: Clone + JoinSemiLattice + Debug,
-    C: CallType,
+    C: CfgFunctions,
 {
     /// Creates a new `Engine` to solve a dataflow problem with an arbitrary transfer
     /// function.

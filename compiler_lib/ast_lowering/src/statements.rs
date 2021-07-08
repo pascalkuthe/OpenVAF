@@ -8,49 +8,58 @@
  *  *****************************************************************************************
  */
 
+use crate::allowed_operations::VerilogAState;
 use crate::ast;
 use crate::ast::{OrderedParameterConstraint, PortList};
-use crate::branches::resolver::{BranchProbeKind, BranchResolver, NatureAccess};
+use crate::branches::resolver::{BranchResolver, NatureAccess};
 use crate::error::Error::{
     ContributeToBranchPortProbe, ContributeToNonBranchProbe, FunctionArgTypeDeclarationMissing,
     MultipleDefaultDeclarations, PortNotPreDeclaredInModuleHead, PortPreDeclaredNotDefined,
     PortRedeclaration,
 };
-use crate::error::{Error, NotAllowedInFunction};
-use crate::expression::{AllowedReferences, ConstantExpressionFolder, StatementExpressionFolder};
-use crate::lints::IgnoredDisplayTask;
-use crate::{ExpressionFolder, Fold, VerilogContext};
+use crate::error::{Error, MockSymbolDeclaration};
+use crate::expression::{ExpressionFolder, FunctionFoldResult};
+use crate::Fold;
 use openvaf_ast::symbol_table::SymbolDeclaration;
 use openvaf_ast::UnorderedParameterConstraint;
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_hir::{Block, CaseItem, Cases, ForLoop, Parameter, Variable};
-use openvaf_hir::{DisciplineAccess, Function, FunctionArg};
+use openvaf_hir::lowering::lints::UselessFunctionCall;
+use openvaf_hir::{
+    AllowedOperation, AllowedOperations, Block, BranchKind, CaseItem, Cases, Expression, ForLoop,
+    Parameter, Variable,
+};
+use openvaf_hir::{FunctionArg, UserFunction};
 use openvaf_hir::{Hir, ParameterConstraint};
 use openvaf_hir::{Module, Statement};
 use openvaf_ir::ids::IdRange;
 use openvaf_ir::ids::{
     BlockId, BranchId, ExpressionId, FunctionId, ParameterId, StatementId, VariableId,
 };
-use openvaf_ir::{Attributes, ParameterExcludeConstraint, Spanned};
+use openvaf_ir::{
+    Attributes, ConstVal, DisciplineAccess, ParameterExcludeConstraint, SimpleConstVal, Spanned,
+};
 use openvaf_ir::{ParameterRangeConstraint, ParameterRangeConstraintBound};
+use openvaf_session::sourcemap::Span;
 use openvaf_session::symbols::Symbol;
 use std::ops::Range;
 use tracing::trace_span;
 
 /// The last fold folds all statements in textual order
-pub struct Statements<'lt, F: Fn(Symbol) -> AllowedReferences> {
+pub struct Statements<'lt, F: Fn(Symbol) -> AllowedOperations> {
     pub(super) branch_resolver: BranchResolver,
-    pub(super) state: VerilogContext,
+    pub(super) state: VerilogAState,
     pub(super) base: Fold<'lt, F>,
 }
 
-impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
+impl<'lt, F: Fn(Symbol) -> AllowedOperations> Statements<'lt, F> {
     pub fn fold(mut self) -> Result<Hir, MultiDiagnostic<Error>> {
         let span = trace_span!("statements fold");
         let _enter = span.enter();
         for module in &self.base.ast.modules {
             self.base.enter_sctxt(module.span, module.attributes);
+            self.base
+                .check_ident(module.contents.ident, MockSymbolDeclaration::Module);
 
             self.base
                 .resolver
@@ -71,7 +80,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                     }
 
                     SymbolDeclaration::Net(id) => {
-                        let sctx = self.base.hir[id].sctx;
+                        let sctx = self.base.hir[self.base.resolver.net_map[id]].sctx;
                         self.base.hir[sctx].parent = Some(self.base.sctx);
                         self.base.fold_attributes(self.base.hir[sctx].attributes)
                     }
@@ -83,14 +92,14 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                     SymbolDeclaration::Block(_) => (), // Will visited or will be visited later
 
                     SymbolDeclaration::Port(id) => {
-                        let sctx = self.base.hir[self.base.hir[id].net].sctx;
+                        let sctx = self.base.hir[self.base.hir[id].node].sctx;
                         self.base.hir[sctx].parent = Some(self.base.sctx);
                         self.base.fold_attributes(self.base.hir[sctx].attributes);
 
                         // LLVM should pull the match out of the loop
                         match ports {
                             PortList::Expected(ref mut idents) => {
-                                let ident = self.base.hir[self.base.hir[id].net].ident;
+                                let ident = self.base.hir[self.base.hir[id].node].ident;
                                 if let Some(i) = idents.iter().position(|&e| e == ident) {
                                     idents.remove(i);
                                 } else {
@@ -104,7 +113,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                                 if module.contents.body_ports.contains(declarations) =>
                             {
                                 let span =
-                                    self.base.hir[self.base.hir[self.base.hir[id].net].sctx].span;
+                                    self.base.hir[self.base.hir[self.base.hir[id].node].sctx].span;
                                 self.base.error(PortRedeclaration {
                                     module_head: module.contents.ports.span,
                                     body_declaration: span,
@@ -118,7 +127,6 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                     SymbolDeclaration::Function(function) => self.fold_function(function),
 
                     SymbolDeclaration::Parameter(param) => {
-                        self.state.insert(VerilogContext::CONSTANT);
                         let span = trace_span!(
                             "parameter",
                             id = param.index(),
@@ -127,11 +135,9 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                         let enter = span.enter();
                         self.fold_parameter(param);
                         drop(enter);
-                        self.state.remove(VerilogContext::CONSTANT);
                     }
 
                     SymbolDeclaration::Variable(variable) => {
-                        self.state.insert(VerilogContext::CONSTANT);
                         let span = trace_span!(
                             "variable",
                             id = variable.index(),
@@ -140,7 +146,6 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                         let enter = span.enter();
                         self.fold_variable(variable);
                         drop(enter);
-                        self.state.remove(VerilogContext::CONSTANT);
                     }
                 }
             }
@@ -184,6 +189,10 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
             .enter_sctxt(self.base.ast[id].span, self.base.ast[id].attributes);
 
         let function = &self.base.ast[id].contents;
+
+        self.base
+            .check_ident(function.ident, MockSymbolDeclaration::Function);
+
         let args = function
             .args
             .iter()
@@ -204,7 +213,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
             })
             .collect();
 
-        self.state.insert(VerilogContext::FUNCTION);
+        let old_state = self.state.enter_function_decl();
         self.base.resolver.enter_function(&function.declarations);
 
         for declaration in function.declarations.values().copied() {
@@ -227,7 +236,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
 
         let mut body = Block::with_capacity(128);
         self.fold_statement(function.body, &mut body);
-        self.base.hir[id] = Function {
+        self.base.hir[id] = UserFunction {
             ident: function.ident,
             args,
             return_variable: function.return_variable,
@@ -235,7 +244,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
             sctx: self.base.exit_sctxt(),
         };
         self.base.resolver.exit_function();
-        self.state.remove(VerilogContext::FUNCTION);
+        self.state = old_state;
     }
 
     /// Folds a statement. `StatementIds` are not stable because the amount of statements may change during this fold
@@ -252,15 +261,15 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
         let stmnt = match self.base.ast[id].contents {
             ast::Statement::Block(id) => {
                 if let Some(scope) = &self.base.ast[id].scope {
-                    if self.state.contains(VerilogContext::FUNCTION) {
-                        self.base.error(Error::NotAllowedInFunction(
-                            NotAllowedInFunction::NamedBlocks,
-                            scope.ident.span,
-                        ));
-                    }
+                    self.state.test_allowed(
+                        &mut self.base,
+                        AllowedOperation::NamedBlocks,
+                        scope.ident.span,
+                    );
+                    self.base
+                        .check_ident(scope.ident, MockSymbolDeclaration::Block);
 
                     self.base.resolver.enter_scope(&scope.symbols);
-                    self.state.insert(VerilogContext::CONSTANT);
 
                     for decl in scope.symbols.values().copied() {
                         match decl {
@@ -278,7 +287,6 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                         }
                     }
 
-                    self.state.remove(VerilogContext::CONSTANT);
                     self.fold_block(id, dst);
                     self.base.resolver.exit_scope();
                 } else {
@@ -385,33 +393,45 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
             }
 
             ast::Statement::Contribute(access, value) => {
-                if self.state.contains(VerilogContext::FUNCTION) {
-                    self.base.error(Error::NotAllowedInFunction(
-                        NotAllowedInFunction::Contribute,
-                        self.base.hir[access].span.extend(self.base.ast[value].span),
-                    ));
-                }
+                self.state
+                    .test_allowed(&mut self.base, AllowedOperation::Contribute, span);
 
                 if let Some((discipline_access, branch, value)) =
-                    self.fold_contribute(access, value)
+                    self.fold_contribute(access, value, span)
                 {
                     Statement::Contribute(discipline_access, branch, value)
                 } else {
                     return;
                 }
             }
+            ast::Statement::FunctionCall(call, ref args) => {
+                let fun = ExpressionFolder {
+                    state: self.state,
+                    branch_resolver: Some(&mut self.branch_resolver),
+                    base: &mut self.base,
+                }
+                .fold_function(span, call, args);
 
-            ast::Statement::DisplayTask(_task_kind, ref _args) => {
-                Linter::dispatch_early(Box::new(IgnoredDisplayTask { span }));
-                return;
-            }
+                match fun {
+                    Some(FunctionFoldResult::Function(fun, args, span)) => {
+                        Statement::FunctionCall(fun, args, span)
+                    }
 
-            ast::Statement::StopTask(kind, finish_number) => {
-                let finish_number = finish_number.and_then(|expr| {
-                    ConstantExpressionFolder(AllowedReferences::None).fold(expr, &mut self.base)
-                });
-
-                Statement::StopTask(kind, finish_number)
+                    Some(FunctionFoldResult::BranchAccess(_)) => {
+                        Linter::dispatch_late(
+                            Box::new(UselessFunctionCall {
+                                span,
+                                name: call.name,
+                                decl: None,
+                            }),
+                            self.base.sctx,
+                        );
+                        return;
+                    }
+                    None => {
+                        return;
+                    }
+                }
             }
 
             ast::Statement::Case(cond, ref cases) => {
@@ -462,7 +482,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
 
             ast::Statement::Error => unreachable!(),
             ast::Statement::NoOp => {
-                return; //Nothin to do
+                return; //Nothing to do
             }
         };
 
@@ -475,22 +495,36 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
         &mut self,
         access_expr: ExpressionId,
         value: ExpressionId,
+        span: Span,
     ) -> Option<(DisciplineAccess, BranchId, ExpressionId)> {
         let value = self.fold_expression(value);
         match self.base.ast[access_expr].contents {
             ast::Expression::Primary(ast::Primary::FunctionCall(ident, ref args)) => {
                 let access = NatureAccess::resolve_from_ident(ident, &mut self.base)?;
-                let kind =
+                let (access, branch) =
                     self.branch_resolver
                         .resolve_branch_probe_call(access, args, &mut self.base)?;
-                match kind {
-                    BranchProbeKind::Port(_) => {
-                        self.base
-                            .error(ContributeToBranchPortProbe(self.base.ast[access_expr].span));
-                        None
-                    }
-                    BranchProbeKind::Branch(access, branch) => Some((access, branch, value?)),
+                if self.base.hir[branch].kind == BranchKind::PortBranch {
+                    self.base
+                        .error(ContributeToBranchPortProbe(self.base.ast[access_expr].span));
                 }
+                let value = value?;
+
+                match access {
+                    DisciplineAccess::Flow => {
+                        self.base.hir[branch].current_contributions.push(span)
+                    }
+                    DisciplineAccess::Potential => {
+                        // Collapse hints are always allowed
+                        if self.base.hir[value].contents
+                            != Expression::Constant(ConstVal::Scalar(SimpleConstVal::Real(0.0)))
+                        {
+                            self.base.hir[branch].voltage_access.push(span)
+                        }
+                    }
+                }
+
+                Some((access, branch, value))
             }
 
             ast::Expression::Primary(ast::Primary::PortFlowProbe(_ident, ref _port)) => {
@@ -529,12 +563,27 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
     }
 
     /// Just a utility method that makes folding expressions a little more ergonomic
+    fn fold_const_expression(&mut self, expr: ExpressionId) -> Option<ExpressionId> {
+        self.fold_expression_with(expr, VerilogAState::new_runtime_const())
+    }
+
+    /// Just a utility method that makes folding expressions a little more ergonomic
     fn fold_expression(&mut self, expr: ExpressionId) -> Option<ExpressionId> {
-        StatementExpressionFolder {
-            state: self.state,
-            branch_resolver: &mut self.branch_resolver,
+        self.fold_expression_with(expr, self.state)
+    }
+
+    /// Just a utility method that makes folding expressions a little more ergonomic
+    fn fold_expression_with(
+        &mut self,
+        expr: ExpressionId,
+        state: VerilogAState,
+    ) -> Option<ExpressionId> {
+        ExpressionFolder {
+            state,
+            branch_resolver: Some(&mut self.branch_resolver),
+            base: &mut self.base,
         }
-        .fold(expr, &mut self.base)
+        .fold(expr)
     }
 
     fn fold_block(&mut self, block: BlockId, dst: &mut Block) {
@@ -548,11 +597,13 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
     fn fold_variable(&mut self, id: VariableId) {
         let var = &self.base.ast[id];
         self.base.enter_sctxt(var.span, var.attributes);
+        self.base
+            .check_ident(var.contents.ident, MockSymbolDeclaration::Variable);
 
         let default = self.base.ast[id]
             .contents
             .default
-            .and_then(|expr| self.fold_expression(expr));
+            .and_then(|expr| self.fold_const_expression(expr));
 
         self.base.hir[id] = Variable {
             ident: var.contents.ident,
@@ -566,10 +617,13 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
     fn fold_parameter(&mut self, id: ParameterId) {
         self.base
             .enter_sctxt(self.base.ast[id].span, self.base.ast[id].attributes);
+        let param = &self.base.ast[id].contents;
+        self.base
+            .check_ident(param.ident, MockSymbolDeclaration::Parameter);
 
-        let default = self.fold_expression(self.base.ast[id].contents.default);
+        let default = self.fold_const_expression(param.default);
 
-        let param_type = match self.base.ast[id].contents.param_constraints {
+        let param_type = match param.param_constraints {
             ast::ParameterConstraints::Ordered(ref constraints) => {
                 let (from_constraints, exlude_constraints) =
                     self.fold_ordered_parameter_constraints(constraints);
@@ -584,11 +638,11 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
         };
 
         self.base.hir[id] = Parameter {
-            ident: self.base.ast[id].contents.ident,
+            ident: param.ident,
             constraints: param_type,
             // dummy default value in case of error
             default: default.unwrap_or(ExpressionId::from_raw_unchecked(u32::MAX)),
-            ty: self.base.ast[id].contents.ty,
+            ty: param.ty,
             sctx: self.base.exit_sctxt(),
         };
     }
@@ -612,7 +666,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
                 }
 
                 OrderedParameterConstraint::Exclude(ParameterExcludeConstraint::Value(val)) => {
-                    if let Some(val) = self.fold_expression(*val) {
+                    if let Some(val) = self.fold_const_expression(*val) {
                         excluded.push(ParameterExcludeConstraint::Value(val))
                     }
                 }
@@ -630,8 +684,8 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
         &mut self,
         range: &ParameterRangeConstraint<ExpressionId>,
     ) -> Option<Range<ParameterRangeConstraintBound<ExpressionId>>> {
-        let start = self.fold_expression(range.start.bound);
-        let end = self.fold_expression(range.end.bound);
+        let start = self.fold_const_expression(range.start.bound);
+        let end = self.fold_const_expression(range.end.bound);
         let start = ParameterRangeConstraintBound {
             bound: start?,
             inclusive: range.start.inclusive,
@@ -673,11 +727,11 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Statements<'lt, F> {
     ) {
         if let ast::Expression::Array(values) = &self.base.ast[expr].contents {
             for expr in values {
-                if let Some(expr) = self.fold_expression(*expr) {
+                if let Some(expr) = self.fold_const_expression(*expr) {
                     dst.push(expr)
                 }
             }
-        } else if let Some(expr) = self.fold_expression(expr) {
+        } else if let Some(expr) = self.fold_const_expression(expr) {
             dst.push(expr)
         }
     }

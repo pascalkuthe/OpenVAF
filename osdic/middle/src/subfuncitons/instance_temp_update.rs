@@ -12,19 +12,19 @@ use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
 use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, HashMap};
 use openvaf_hir::Unknown;
 use openvaf_ir::ids::{PortId, VariableId};
 use openvaf_ir::Type;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
-use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
+use openvaf_middle::dfa::lattice::FlatSet;
 use openvaf_middle::{
-    COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative, InputKind, Mir,
+    COperand, COperandData, CallArg, CfgConversion, CfgFunctions, CfgInputs, Derivative, Mir,
     OperandData, ParameterInput, RValue, StmntKind, VariableLocalKind,
 };
+use openvaf_pass::program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use openvaf_session::sourcemap::Span;
-use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use tracing::debug_span;
@@ -32,13 +32,13 @@ use tracing::debug_span;
 #[derive(PartialEq, Eq, Clone)]
 pub enum InstanceTempUpdateCallType {}
 
-impl CallType for InstanceTempUpdateCallType {
+impl CfgFunctions for InstanceTempUpdateCallType {
     type I = InstanceTempUpdateInput;
 
     fn const_fold(&self, _call: &[FlatSet]) -> FlatSet {
         match *self {}
     }
-    fn derivative<C: CallType>(
+    fn derivative<C: CfgFunctions>(
         &self,
         _args: &IndexSlice<CallArg, [COperand<Self>]>,
         _ad: &mut RValueAutoDiff<Self, C>,
@@ -77,12 +77,12 @@ impl Display for InstanceTempUpdateInput {
     }
 }
 
-impl InputKind for InstanceTempUpdateInput {
-    fn derivative<C: CallType>(&self, _unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
+impl CfgInputs for InstanceTempUpdateInput {
+    fn derivative<C: CfgFunctions>(&self, _unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
         unreachable!() // No derivatives allows in the init function since that would require values that depend uponm voltages
     }
 
-    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
+    fn ty<C: CfgFunctions>(&self, mir: &Mir<C>) -> Type {
         match self {
             Self::Parameter(ParameterInput::Value(param)) => mir[*param].ty,
             Self::Parameter(ParameterInput::Given(_)) | Self::PortConnected(_) => Type::BOOL,
@@ -93,12 +93,10 @@ impl InputKind for InstanceTempUpdateInput {
 
 pub struct GeneralToInstanceTempUpdate;
 
-impl CallTypeConversion<GeneralOsdiCall, InstanceTempUpdateCallType>
-    for GeneralToInstanceTempUpdate
-{
+impl CfgConversion<GeneralOsdiCall, InstanceTempUpdateCallType> for GeneralToInstanceTempUpdate {
     fn map_input(
         &mut self,
-        src: <GeneralOsdiCall as CallType>::I,
+        src: <GeneralOsdiCall as CfgFunctions>::I,
     ) -> COperandData<InstanceTempUpdateCallType> {
         let input = match src {
             GeneralOsdiInput::Parameter(x) => InstanceTempUpdateInput::Parameter(x),

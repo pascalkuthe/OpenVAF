@@ -11,7 +11,7 @@
 //! Lazily compute the reverse control-flow graph for the MIR.
 
 use crate::cfg::{BasicBlock, BasicBlockData};
-use crate::CallType;
+use crate::CfgFunctions;
 use openvaf_data_structures::index_vec::{index_vec, IndexVec};
 use openvaf_data_structures::sync::OnceCell;
 
@@ -42,7 +42,7 @@ impl PredecessorCache {
 
     /// Returns the the predecessor graph for this CFG.
     #[inline]
-    pub(super) fn compute<C: CallType>(
+    pub(super) fn compute<C: CfgFunctions>(
         &self,
         basic_blocks: &IndexVec<BasicBlock, BasicBlockData<C>>,
     ) -> &Predecessors {

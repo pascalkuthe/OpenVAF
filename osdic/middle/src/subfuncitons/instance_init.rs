@@ -13,18 +13,18 @@ use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use itertools::Itertools;
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, HashMap};
 use openvaf_ir::ids::NetId;
 use openvaf_ir::{PrintOnFinish, StopTaskKind};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
-use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
+use openvaf_middle::dfa::lattice::FlatSet;
 use openvaf_middle::{
-    cfg::LocationKind, COperand, COperandData, CallArg, CallType, CallTypeConversion, Derivative,
-    InputKind, Mir, OperandData, ParameterInput, PortId, RValue, StmntKind, Type, Unknown,
+    cfg::LocationKind, COperand, COperandData, CallArg, CfgConversion, CfgFunctions, CfgInputs,
+    Derivative, Mir, OperandData, ParameterInput, PortId, RValue, StmntKind, Type, Unknown,
 };
+use openvaf_pass::program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use openvaf_session::sourcemap::Span;
-use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use tracing::debug_span;
@@ -35,14 +35,14 @@ pub enum InstanceInitFunctionCallType {
     StopTask(StopTaskKind, PrintOnFinish),
 }
 
-impl CallType for InstanceInitFunctionCallType {
+impl CfgFunctions for InstanceInitFunctionCallType {
     type I = InstanceInitInput;
 
     fn const_fold(&self, _: &[FlatSet]) -> FlatSet {
         unreachable!()
     }
 
-    fn derivative<C: CallType>(
+    fn derivative<C: CfgFunctions>(
         &self,
         _args: &IndexSlice<CallArg, [COperand<Self>]>,
         _ad: &mut RValueAutoDiff<Self, C>,
@@ -78,8 +78,8 @@ pub enum InstanceInitInput {
     PortConnected(PortId),
 }
 
-impl InputKind for InstanceInitInput {
-    fn derivative<C: CallType>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
+impl CfgInputs for InstanceInitInput {
+    fn derivative<C: CfgFunctions>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
         if let Self::Parameter(input) = self {
             if matches!((unknown, input), (Unknown::Parameter(x), ParameterInput::Value(y)) if &x == y)
             {
@@ -92,7 +92,7 @@ impl InputKind for InstanceInitInput {
         }
     }
 
-    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
+    fn ty<C: CfgFunctions>(&self, mir: &Mir<C>) -> Type {
         if let Self::Parameter(input) = self {
             input.ty(mir)
         } else {
@@ -112,10 +112,10 @@ impl Display for InstanceInitInput {
 
 struct GeneralToInstanceInit;
 
-impl CallTypeConversion<GeneralOsdiCall, InstanceInitFunctionCallType> for GeneralToInstanceInit {
+impl CfgConversion<GeneralOsdiCall, InstanceInitFunctionCallType> for GeneralToInstanceInit {
     fn map_input(
         &mut self,
-        src: <GeneralOsdiCall as CallType>::I,
+        src: <GeneralOsdiCall as CfgFunctions>::I,
     ) -> COperandData<InstanceInitFunctionCallType> {
         match src {
             GeneralOsdiInput::Parameter(x) => OperandData::Read(InstanceInitInput::Parameter(x)),

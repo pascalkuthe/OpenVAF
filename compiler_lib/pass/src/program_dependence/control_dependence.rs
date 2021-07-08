@@ -12,7 +12,7 @@ use crate::post_dominance::PostDominators;
 use crate::BuildPostDominators;
 use openvaf_data_structures::bit_set::SparseBitMatrix;
 use openvaf_middle::cfg::{AnalysisPass, BasicBlock, ControlFlowGraph, TerminatorKind};
-use openvaf_middle::{impl_pass_span, CallType};
+use openvaf_middle::{impl_pass_span, CfgFunctions};
 use std::borrow::Borrow;
 
 pub struct ControlDependenceGraph(pub SparseBitMatrix<BasicBlock, BasicBlock>);
@@ -40,7 +40,7 @@ impl Default for BuildControlDependenceGraph<BuildPostDominators> {
     }
 }
 
-impl<C: CallType> AnalysisPass<'_, C> for BuildControlDependenceGraph<BuildPostDominators> {
+impl<C: CfgFunctions> AnalysisPass<'_, C> for BuildControlDependenceGraph<BuildPostDominators> {
     type Result = ControlDependenceGraph;
     impl_pass_span!("Build ControlDependence");
     fn run(self, cfg: &ControlFlowGraph<C>) -> Self::Result {
@@ -49,7 +49,7 @@ impl<C: CallType> AnalysisPass<'_, C> for BuildControlDependenceGraph<BuildPostD
     }
 }
 
-impl<C: CallType, I: Borrow<PostDominators>> AnalysisPass<'_, C>
+impl<C: CfgFunctions, I: Borrow<PostDominators>> AnalysisPass<'_, C>
     for BuildControlDependenceGraph<I>
 {
     type Result = ControlDependenceGraph;

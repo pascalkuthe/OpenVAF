@@ -8,29 +8,6 @@
  *  *****************************************************************************************
  */
 
-use crate::Spanned;
-
-impl<A, B> Convert<Spanned<B>> for Spanned<A>
-where
-    A: Convert<B>,
-{
-    fn convert(self) -> Spanned<B> {
-        Spanned {
-            span: self.span,
-            contents: self.contents.convert(),
-        }
-    }
-}
-
-pub trait Convert<X> {
-    fn convert(self) -> X;
-}
-
-impl<A, B> Convert<Option<B>> for Option<A>
-where
-    A: Convert<B>,
-{
-    fn convert(self) -> Option<B> {
-        self.map(|x| x.convert())
-    }
-}
+use openvaf_session::symbols::{kw, sysfun, Symbol};
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};

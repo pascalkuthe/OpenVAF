@@ -14,23 +14,24 @@ use crate::subfuncitons::load_functions::dc_load::DcLoadFunctionCall;
 use crate::subfuncitons::load_functions::LoadFunctions;
 use crate::{optimize_cfg, CircuitTopology};
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::{BitSet, WorkQueue};
+use openvaf_data_structures::{bit_set::BitSet, WorkQueue};
 use openvaf_hir::{BranchId, NetId, Type, Unknown};
 use openvaf_ir::ids::{PortId, SyntaxCtx};
 use openvaf_ir::{PrintOnFinish, Spanned, StopTaskKind};
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, LocationKind};
-use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
+use openvaf_middle::dfa::lattice::FlatSet;
 use openvaf_middle::RValue::{Comparison, DoubleArgMath, SingleArgMath};
 use openvaf_middle::{
-    BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ConstVal, Derivative,
-    InputKind, LocalDeclaration, LocalKind, Mir, Operand, OperandData, ParameterInput, RValue,
+    BinOp, COperand, COperandData, CallArg, CfgConversion, CfgFunctions, CfgInputs, ConstVal,
+    Derivative, LocalDeclaration, LocalKind, Mir, Operand, OperandData, ParameterInput, RValue,
     SimpleConstVal, StmntKind,
 };
-use openvaf_session::sourcemap::{Span, StringLiteral};
-use openvaf_transformations::{
-    BackwardSlice, InvProgramDependenceGraph, ProgramDependenceGraph, Strip,
+use openvaf_pass::{
+    program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph},
+    BackwardSlice, Strip,
 };
+use openvaf_session::sourcemap::{Span, StringLiteral};
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
@@ -44,14 +45,14 @@ pub enum AcLoadFunctionCall {
     StopTask(StopTaskKind, PrintOnFinish),
 }
 
-impl CallType for AcLoadFunctionCall {
+impl CfgFunctions for AcLoadFunctionCall {
     type I = AcLoadInput;
 
     fn const_fold(&self, _call: &[FlatSet]) -> FlatSet {
         unreachable!()
     }
 
-    fn derivative<C: CallType>(
+    fn derivative<C: CfgFunctions>(
         &self,
         _args: &IndexSlice<CallArg, [COperand<Self>]>,
         _ad: &mut RValueAutoDiff<Self, C>,
@@ -115,12 +116,12 @@ impl Display for AcLoadInput {
     }
 }
 
-impl InputKind for AcLoadInput {
-    fn derivative<C: CallType>(&self, _unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
+impl CfgInputs for AcLoadInput {
+    fn derivative<C: CfgFunctions>(&self, _unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
         unimplemented!()
     }
 
-    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
+    fn ty<C: CfgFunctions>(&self, mir: &Mir<C>) -> Type {
         match self {
             Self::Parameter(ParameterInput::Value(param)) => mir[*param].ty,
             Self::Voltage(_, _)
@@ -143,10 +144,10 @@ impl InputKind for AcLoadInput {
 
 pub struct GeneralToAcLoad;
 
-impl CallTypeConversion<GeneralOsdiCall, AcLoadFunctionCall> for GeneralToAcLoad {
+impl CfgConversion<GeneralOsdiCall, AcLoadFunctionCall> for GeneralToAcLoad {
     fn map_input(
         &mut self,
-        src: <GeneralOsdiCall as CallType>::I,
+        src: <GeneralOsdiCall as CfgFunctions>::I,
     ) -> COperandData<AcLoadFunctionCall> {
         let res = match src {
             GeneralOsdiInput::Parameter(port) => AcLoadInput::Parameter(port),

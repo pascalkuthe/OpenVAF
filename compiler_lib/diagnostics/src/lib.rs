@@ -31,6 +31,8 @@ pub mod _macro_reexports {
     pub use paste;
 }
 
+pub const HINT_UNSUPPORTED: &str = "this is allowed by VerilogAMS language spec but was purposefully excluded from the supported language subset\nmore details can be found in the OpenVAF documentation";
+
 #[derive(Clone)]
 pub struct ListPrettyPrinter<C> {
     pub list: C,
@@ -78,12 +80,6 @@ impl<C> ListFormatter<C> {
             seperator: ", ",
             final_seperator,
         }
-    }
-}
-
-impl<C> Default for ListFormatter<C> {
-    fn default() -> Self {
-        todo!()
     }
 }
 

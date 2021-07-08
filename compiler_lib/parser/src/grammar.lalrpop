@@ -1,5 +1,5 @@
 //  * ******************************************************************************************
-//  * Copyright (c) 2020 Pascal Kuthe. This file is part of the frontend project.
+//  * Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
 //  * It is subject to the license terms in the LICENSE file found in the top-level directory
 //  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
 //  *  No part of frontend, including this file, may be copied, modified, propagated, or
@@ -11,18 +11,18 @@ use std::convert::identity;
 use std::vec::Vec;
 
 use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_data_structures::HashMap;
-use openvaf_ir::{Attribute, Attributes, DisplayTaskKind, Node, Spanned, Type};
+use openvaf_data_structures::{HashMap, index_vec::IndexVec};
+use openvaf_ir::{Attribute, Attributes, AttrSpanned, Spanned, Type};
 use openvaf_ast as ast;
 use openvaf_ast::{Ast, BinaryOperator, Block, Branch, PortBranch, Expression, HierarchicalId, FunctionArg};
 use openvaf_ir::ids::{AttributeId, BranchId, PortBranchId, IdRange, StatementId, ExpressionId, PortId, ParameterId, VariableId};
 use openvaf_diagnostics::lints::Linter;
-use crate::{extract_double_arg, extract_single_arg, extract_single_or_double_arg, SymbolTableBuilder, Token};
-use crate::error::{ArgumentCountMissmatch, Error, ErrorRecoveryExpecting, ModuleEndErrorRecovery};
-use crate::lints::AtrributeOverwritten;
+use crate::{SymbolTableBuilder, Token};
+use crate::error::{Error, ErrorRecoveryExpecting, ModuleEndErrorRecovery};
+use crate::lints::{AtrributeOverwritten,EventIgnored};
 use openvaf_session::sourcemap::Span;
 use openvaf_session::sourcemap::StringLiteral;
-use openvaf_session::symbols::{Ident, keywords, Symbol};
+use openvaf_session::symbols::{Ident, kw, Symbol};
 use crate::{insert_params, insert_vars};
 
 grammar<'lt>(
@@ -57,9 +57,9 @@ either<true_rule,false_rule>: bool = {
 
 // Create a spanned version of data that can span multiple tokens
 #[inline]
-Node<Rule>: ast::Node<Rule> =
+AttrSpanned<Rule>: ast::AttrSpanned<Rule> =
     <l: @L> <attributes: ATTR> <contents: Rule> <r: @R> =>{
-        Node{
+        AttrSpanned{
             attributes,
             contents,
             span: l.extend(r),
@@ -120,11 +120,12 @@ ListAtLeastOne<T>: Vec<T> =
 
 
 // Basic rules
-IDENT: Ident = <span: @L> <name: Name> => Ident::new(name,span);
+IDENT: Ident = <span: @L> <name: "an identifier"> => Ident::new(name,span);
+SYS_FUN_IDENT: Ident = <span: @L> <name: "a system function identifier"> => Ident::new(name,span);
 
 IDENT_POT_FLOW: Ident = {
-    <@L> "potential" => Ident::new(keywords::potential,<>),
-    <@L> "flow" => Ident::new(keywords::flow,<>),
+    <@L> "potential" => Ident::new(kw::potential,<>),
+    <@L> "flow" => Ident::new(kw::flow,<>),
     <IDENT>
 }
 
@@ -139,13 +140,8 @@ FunctionArgs: Vec<ExpressionId> = "(" <List<EXPR>> ")";
 
 
 
-Attribute: Attribute = <ident: ATTR_IDENT> <value: ("=" <EXPR>)?> => Attribute{ident, value};
+Attribute: Attribute = <ident: IDENT> <value: ("=" <EXPR>)?> => Attribute{ident, value};
 
-
-ATTR_IDENT: Ident= {
-    <@L> "units" => Ident::new(keywords::units,<>),
-    <IDENT>
-}
 
 #[inline]
 ATTR: Attributes =
@@ -312,153 +308,26 @@ UnaryOp: ast::UnaryOperator = {
 Primary: ast::Primary = {
 
     //Literals
-    <StringLiteral> => <>.into(),
-    <RealLiteral> => <>.into(),
-    <IntLiteral> => <>.into(),
+    <"a string literal"> => <>.into(),
+    <"a real number"> => <>.into(),
+    <"an integer"> => <>.into(),
 
     // Reference
     <HIDENT> => <>.into(),
 
     // System funcion call
-    <SystemFunctionCall> => <>.into(),
-
-    <ident: IDENT_POT_FLOW> <args: FunctionArgs> => ast::Primary::FunctionCall(ident, args),
+    <ident: SYS_FUN_IDENT> <args: FunctionArgs> => ast::Primary::FunctionCall(ident, args.into()),
+    <ident: SYS_FUN_IDENT> => ast::Primary::FunctionCall(ident, IndexVec::new()),
+    <ident: IDENT_POT_FLOW> <args: FunctionArgs> => ast::Primary::FunctionCall(ident, args.into()),
 
     // TODO better errors
     <nature: IDENT_POT_FLOW> "(" "<" <port: HIDENT> ">" ")" => ast::Primary::PortFlowProbe(nature,port),
-
-
-    <Noise> => ast::Primary::Noise(<>.0,<>.1),
-
-    <call: SingleArgMath> <l: @L> <args: FunctionArgs> <r: @R> => {
-        let arg = extract_single_arg(l, args, r, call.name(), errors, ast);
-        ast::Primary::SingleArgMath(call, arg)
-    },
-
-    <call: DoubleArgMath> <l: @L> <args: FunctionArgs> <r: @R> => {
-        let (arg1, arg2) = extract_double_arg(l, args, r, call.name(), errors, ast);
-        ast::Primary::DoubleArgMath(call, arg1, arg2)
-    },
-
-    "ddt" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let expr = extract_single_arg(l, args, r, "ddt", errors, ast);
-        ast::Primary::DerivativeByTime(expr)
-    },
-
-    "ddx" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let (expr,derive_by) = extract_double_arg(l, args, r, "ddx", errors, ast);
-        ast::Primary::PartialDerivative(expr, derive_by)
-    },
-}
-
-
-SingleArgMath: ast::SingleArgMath = {
-    "sqrt" => ast::SingleArgMath::Sqrt,
-
-    "exp" => ast::SingleArgMath::Exp(false),
-    "limexp" => ast::SingleArgMath::Exp(true),
-    "ln" => ast::SingleArgMath::Ln,
-    "log" => ast::SingleArgMath::Log,
-
-    "avs" => ast::SingleArgMath::Abs,
-    "floor" => ast::SingleArgMath::Floor,
-    "ceil" => ast::SingleArgMath::Ceil,
-
-    "sin" => ast::SingleArgMath::Sin,
-    "cos" => ast::SingleArgMath::Cos,
-    "tan" => ast::SingleArgMath::Tan,
-
-    "asin" => ast::SingleArgMath::ArcSin,
-    "acos" => ast::SingleArgMath::ArcCos,
-    "atan" => ast::SingleArgMath::ArcTan,
-
-    "sinh" => ast::SingleArgMath::SinH,
-    "cosh" => ast::SingleArgMath::CosH,
-    "tanh" => ast::SingleArgMath::TanH,
-
-    "asinh" => ast::SingleArgMath::ArcSinH,
-    "acosh" => ast::SingleArgMath::ArcCosH,
-    "atanh" => ast::SingleArgMath::ArcTanH,
-}
-
-DoubleArgMath: ast::DoubleArgMath = {
-
-    "pow" => ast::DoubleArgMath::Pow,
-    "hypot" => ast::DoubleArgMath::Hypot,
-    "atan2" => ast::DoubleArgMath::ArcTan2,
-    "min" => ast::DoubleArgMath::Min,
-    "max" => ast::DoubleArgMath::Max,
-}
-
-
-Noise: (ast::NoiseSource, Option<ExpressionId>) = {
-
-    "white_noise" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let (pwr, name) = extract_single_or_double_arg(l,args,r,"white_noise", errors, ast);
-        (ast::NoiseSource::White(pwr),name)
-    },
-
-    "flicker_noise" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let (pwr, exp, name) = match args.as_slice(){
-            [pwr, exp] => (*pwr,*exp, None),
-            [pwr, exp, name] => (*pwr,*exp,Some(*name)),
-            args => {
-                let span = l.extend(r);
-
-                let missmatch = ArgumentCountMissmatch{
-                    found: args.len() as u8,
-                    at_most: 3,
-                    at_least: 2,
-                };
-                errors.add(Error::ArgumentCountMissmatch(missmatch,"flicker_noise",span));
-
-                let err_expr = ast.expressions.push(Spanned::new(ast::Expression::Error,span));
-                (err_expr,err_expr,None)
-            }
-        };
-        (ast::NoiseSource::Flicker(pwr, exp), name)
-    },
-}
-
-
-SystemFunctionCall: ast::SystemFunctionCall = {
-
-    "$temperature" => ast::SystemFunctionCall::Temperature,
-
-    "$vt" <l: @L> < args: FunctionArgs? > <r: @R>  => {
-        let temp = args.map(|args|extract_single_arg(l, args, r, "$vt", errors, ast));
-        ast::SystemFunctionCall::Vt(temp)
-    },
-
-    "$simparam" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let (name, default) = extract_single_or_double_arg(l,args,r,"$simparam", errors, ast);
-        ast::SystemFunctionCall::Simparam(name, default)
-    },
-
-    "$simparam$str" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let name = extract_single_arg(l, args, r, "$simparam$str", errors, ast);
-        ast::SystemFunctionCall::SimparamStr(name)
-    },
-
-    "$port_connected" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let port = extract_single_arg(l,args,r,"$port_connected", errors, ast);
-        ast::SystemFunctionCall::PortConnected(port)
-    },
-
-    "$param_given" <l: @L> <args: FunctionArgs> <r: @R> => {
-        let param = extract_single_arg(l, args, r,"$param_given", errors, ast);
-        ast::SystemFunctionCall::ParameterGiven(param)
-    },
-
-    "$limit" <args: FunctionArgs> => {
-        ast::SystemFunctionCall::Lim{args, access: (), fun: ()}
-    },
 }
 
 
 // Statements
 STMT = REST_STMT<"I">;
-REST_STMT<I>: StatementId = <Node<raw_stmt<I>>> => ast.statements.push(<>);
+REST_STMT<I>: StatementId = <AttrSpanned<raw_stmt<I>>> => ast.statements.push(<>);
 
 #[inline]
 ASSIGNMENT: (HierarchicalId, ExpressionId) = <(<HIDENT> "=" <EXPR>)>;
@@ -473,6 +342,10 @@ raw_stmt<I>: ast::Statement = {
         ast::Statement::Assignment( res.0, res.1)
     },
 
+    <ident: SYS_FUN_IDENT> <args: FunctionArgs> ";" => ast::Statement::FunctionCall(ident, args.into()),
+    <ident: IDENT_POT_FLOW> <args: FunctionArgs> ";" => ast::Statement::FunctionCall(ident, args.into()),
+    <ident: SYS_FUN_IDENT> ";" => ast::Statement::FunctionCall(ident, IndexVec::new()),
+
     // we accept all expressions here because it allows for significantly improved errors
     // distinguishing branch probes from function calls needs to be done for expressions anyway so we just relegate that completly to HIR lowering
     <expr: EXPR> "<+" <val: EXPR> <r: @R> <err: !?> ";" => {
@@ -480,21 +353,6 @@ raw_stmt<I>: ast::Statement = {
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
         ast::Statement::Contribute(expr,val)
-    },
-
-    <kind: display_task> <args: FunctionArgs> <r: @R> <err: !?> ";" => {
-        if let Some(err) = err{
-            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
-        }
-        ast::Statement::DisplayTask(kind, args)
-    },
-
-    <kind: StopTaskKind> <args: (@L FunctionArgs @R)?> <r: @R> <err: !?> ";" => {
-        if let Some(err) = err{
-            errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
-        }
-        let expr = args.map(|(l,args,r)| extract_single_arg(l, args, r, kind.name(), errors, ast));
-        ast::Statement::StopTask(kind, expr)
     },
 
     //control flow
@@ -546,6 +404,11 @@ raw_stmt<I>: ast::Statement = {
 }
 
 #[inline]
+EVENT: () = "@" "(" <IDENT> ")" => {
+    Linter::dispatch_early(Box::new(EventIgnored(<>)));
+};
+
+#[inline]
 BLOCK: ast::Statement = "begin" <scope: block_scope?> <statements: STMT*> <err: !?> <r: @R> "end" => {
     if let Some(err) = err{
         errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
@@ -559,10 +422,7 @@ BLOCK: ast::Statement = "begin" <scope: block_scope?> <statements: STMT*> <err: 
     ast::Statement::Block(id)
 };
 
-StopTaskKind: ast::StopTaskKind = {
-    "$finish" => ast::StopTaskKind::Finish,
-    "$stop" => ast::StopTaskKind::Stop,
-}
+
 
 
 #[inline]
@@ -585,15 +445,6 @@ case_item: ast::CaseItem = {
 
 };
 
-display_task: DisplayTaskKind = {
-    "$strobe"  => DisplayTaskKind::Convergence(true),
-    "$display"  => DisplayTaskKind::Convergence(true),
-    "$write"   => DisplayTaskKind::Convergence(false),
-    "$warn"    => DisplayTaskKind::Warn,
-    "$info"    => DisplayTaskKind::Info,
-    "$error"   => DisplayTaskKind::Error,
-    "$debug"   => DisplayTaskKind::Debug,
-}
 
 
 // Items
@@ -602,7 +453,7 @@ display_task: DisplayTaskKind = {
 
 #[inline]
 PARAM_DECL: () = {
-    <res: Node< ("parameter" REAL_TYPE <ListAtLeastOne<NumericalParameter>> )>> <r: @R> <err: !?> ";" => {
+    <res: AttrSpanned< ("parameter" REAL_TYPE <ListAtLeastOne<NumericalParameter>> )>> <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
@@ -610,14 +461,14 @@ PARAM_DECL: () = {
     },
 
 
-    <res: Node< ("parameter" INT_TYPE <ListAtLeastOne<NumericalParameter>> ) >> <r: @R> <err: !?> ";" => {
+    <res: AttrSpanned< ("parameter" INT_TYPE <ListAtLeastOne<NumericalParameter>> ) >> <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
         insert_params(ast, errors, scopes, res,ast::ParameterConstraints::Ordered, Type::INT)
     },
 
-    <res: Node< ("parameter" "string" <ListAtLeastOne<StringParameter>> )>> <r: @R> <err: !?> ";" => {
+    <res: AttrSpanned< ("parameter" "string" <ListAtLeastOne<StringParameter>> )>> <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
@@ -675,7 +526,7 @@ TYPE: Type = {
 
 #[inline]
 VAR_DECL: () =
-    <res: Node< (<TYPE> <ListAtLeastOne<var_declaration>>) >>  <r: @R> <err: !?> ";" => {
+    <res: AttrSpanned< (<TYPE> <ListAtLeastOne<var_declaration>>) >>  <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
@@ -692,21 +543,21 @@ var_declaration = (<IDENT> <("=" <EXPR>)?>);
 
 #[inline]
 PORT_DECL: () = {
-    <res: Node<(<DIRECTION> <IDENT?> <net_type?>  <ListAtLeastOne<IDENT>>)>> => {
+    <res: AttrSpanned<(<DIRECTION> <IDENT?> <net_type?>  <ListAtLeastOne<IDENT>>)>> => {
         for ident in res.contents.3{
 
             let net = ast::Net{
                 ident,
                 discipline: res.contents.1,
-                net_type: res.contents.2.unwrap_or(ast::NetType::UNDECLARED),
+                net_type: res.contents.2,
             };
 
-            let node = Node{
+            let net = AttrSpanned{
                 contents: net,
                 attributes: res.attributes,
                 span: res.span
             };
-            let id = ast.nets.push(node);
+            let id = ast.nets.push(net);
 
             let port = ast::Port{
                 input: (res.contents.0).0,
@@ -734,7 +585,7 @@ DIRECTION: (bool,bool) = {
 
 
 NET_DECL: () =
-    <res: Node<raw_net>> <r: @R> <err: !?> ";" => {
+    <res: AttrSpanned<raw_net>> <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
@@ -744,41 +595,26 @@ NET_DECL: () =
                 discipline: res.contents.1,
                 net_type: res.contents.0,
             };
-            let node = Node{
+            let net = AttrSpanned{
                 contents: net,
                 attributes: res.attributes,
                 span: res.span
             };
-            scopes.insert_net(ast,errors, node);
+            scopes.insert_net(ast,errors, net);
         }
     };
 
 
 
-raw_net: (ast::NetType, Option<Ident>, Vec<Ident>) = {
-    <(net_type  IDENT? ListAtLeastOne<IDENT>)>,
-    <discipline: IDENT> <names: ListAtLeastOne<IDENT>> => (ast::NetType::UNDECLARED, Some(discipline), names),
+raw_net: (Option<Ident>, Option<Ident>, Vec<Ident>) = {
+    <net_type: net_type> <discipline: IDENT?> <names: ListAtLeastOne<IDENT>> => (Some(net_type), discipline, names),
+    <discipline: IDENT> <names: ListAtLeastOne<IDENT>> => (None, Some(discipline), names),
 }
 
-net_type: ast::NetType = {
-    "wreal" => ast::NetType::WREAL,
-    "supply0" => ast::NetType::SUPPLY0,
-    "supply1" => ast::NetType::SUPPLY1,
-    "tri" => ast::NetType::TRI,
-    "triand" => ast::NetType::TRIAND,
-    "trior" => ast::NetType::TRIOR,
-    "tri0" => ast::NetType::TRI0,
-    "tri1" => ast::NetType::TRI1,
-    "wire" => ast::NetType::WIRE,
-    "uwire" => ast::NetType::UWIRE,
-    "wand" => ast::NetType::WAND,
-    "wor" => ast::NetType::WOR,
-    "ground" => ast::NetType::GROUND,
-}
-
+net_type: Ident = <span: @L> <name: "net type"> => Ident::new(name,span);
 
 BRANCH_DECL: () = {
-    <res: Node<("branch" "(" <HIDENT> <("," <HIDENT>)?> ")" <ListAtLeastOne<IDENT>>)>> <r: @R> <err: !?> ";" => {
+    <res: AttrSpanned<("branch" "(" <HIDENT> <("," <HIDENT>)?> ")" <ListAtLeastOne<IDENT>>)>> <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
@@ -789,18 +625,18 @@ BRANCH_DECL: () = {
                 lo_net: res.contents.1.clone(),
             };
 
-            let node = Node{
+            let branch = AttrSpanned{
                 attributes: res.attributes,
                 span: res.span,
                 contents: branch,
             };
 
-            let id = ast.branches.push(node);
+            let id = ast.branches.push(branch);
             scopes.insert(ast, errors, id);
         }
     },
 
-    <res: Node<("branch" "(" "<" <HIDENT> ">" ")" <ListAtLeastOne<IDENT>>)>> <r: @R> <err: !?> ";" => {
+    <res: AttrSpanned<("branch" "(" "<" <HIDENT> ">" ")" <ListAtLeastOne<IDENT>>)>> <r: @R> <err: !?> ";" => {
         if let Some(err) = err{
             errors.add(ErrorRecoveryExpecting(err,r,Token::Semicolon));
         }
@@ -810,19 +646,19 @@ BRANCH_DECL: () = {
                 port: res.contents.0.clone()
             };
 
-            let node = Node{
+            let port_branch = AttrSpanned{
                 attributes: res.attributes,
                 span: res.span,
                 contents: port_branch
             };
 
-            let id = ast.port_branches.push(node);
+            let id = ast.port_branches.push(port_branch);
             scopes.insert(ast, errors, id);
         }
     }
 }
 
-FUNC_DECL: () = <Node<raw_function>> => {
+FUNC_DECL: () = <AttrSpanned<raw_function>> => {
     let id = ast.functions.push(<>);
     scopes.insert(ast,errors, id);
 };
@@ -864,7 +700,7 @@ function_item_decl: Vec<FunctionArg> = {
         }).collect()
 }
 
-MODULE: () = <Node<raw_module>> => {
+MODULE: () = <AttrSpanned<raw_module>> => {
     let id = ast.modules.push(<>);
     scopes.insert(ast,errors, id);
 };
@@ -928,7 +764,7 @@ module_ports: ast::PortList = {
     port_list_start "(" <ListAtLeastOne<IDENT>> ")" => <>.into()
 };
 
-DISCIPLINE: () = <Node<raw_discipline>> => {
+DISCIPLINE: () = <AttrSpanned<raw_discipline>> => {
     let id = ast.disciplines.push(<>);
     scopes.insert(ast,errors,id);
 };
@@ -948,7 +784,7 @@ discipline_item: ast::DisciplineItem = {
     RecoverError =>  ast::DisciplineItem::Error,
 };
 
-NATURE: () = <Node<raw_nature>> => {
+NATURE: () = <AttrSpanned<raw_nature>> => {
     let id = ast.natures.push(<>);
     scopes.insert(ast,errors,id);
 };
@@ -959,19 +795,10 @@ raw_nature: ast::Nature =
     "endnature" =>
     ast::Nature{ident, parent, attributes};
 
-nature_attribute: Option<Spanned<(ast::NatureAttribute,ExpressionId)>> = {
-    < MultiSp<(<nature_attribute_ident> "=" <EXPR> ";")> > => Some(<>),
+nature_attribute: Option<Spanned<(Ident,ExpressionId)>> = {
+    < MultiSp<(<IDENT> "=" <EXPR> ";")> > => Some(<>),
     RecoverError => None,
 };
-
-nature_attribute_ident: ast::NatureAttribute = {
-    "access" => ast::NatureAttribute::Access,
-    "abstol" => ast::NatureAttribute::Abstol,
-    "ddt_nature" => ast::NatureAttribute::DerivativeNature,
-    "idt_nature" => ast::NatureAttribute::AntiDerivativeNature,
-    "units" => ast::NatureAttribute::Units,
-    <IDENT> => ast::NatureAttribute::User(<>),
-}
 
 
 pub Top: () = root_item*;
@@ -989,28 +816,13 @@ extern {
     type Error = ();
 
     enum Token {
-        Name => Token::Ident(<Symbol>),
-        StringLiteral =>  Token::LiteralString(<StringLiteral>),
-        RealLiteral =>  Token::RealLiteral(<f64>),
-        IntLiteral =>  Token::IntLiteral(<u32>),
+        "an identifier" => Token::Ident(<Symbol>),
+        "a system function identifier" => Token::SystemFunctionIdent(<Symbol>),
+        "a string literal" =>  Token::LiteralString(<StringLiteral>),
+        "a real number" =>  Token::RealLiteral(<f64>),
+        "an integer" =>  Token::IntLiteral(<u32>),
 
-        "$temperature" =>  Token::Temperature,
-        "$vt" =>  Token::Vt,
-        "$simparam" => Token::SimParam,
-        "$simparam$str" => Token::SimParamStr,
-        "$port_connected" => Token::PortConnected,
-        "$param_given" => Token::ParamGiven,
-        "$limit" => Token::Limit,
-        "$display" => Token::Display,
-        "$strobe" => Token::Strobe,
-        "$write" => Token::Write,
-        "$debug" => Token::Debug,
-        "$finish" => Token::Finish,
-        "$stop" => Token::Stop,
-        "$info" => Token::Info,
-        "$warn" => Token::Warn,
-        "$error" => Token::Error,
-        "$fatal" => Token::Fatal,
+        "net type" => Token::NetType(<Symbol>),
 
         "." => Token::Accessor,
         ";" => Token::Semicolon,
@@ -1102,20 +914,6 @@ extern {
         "realtime" => Token::Realtime,
         "integer" => Token::Integer,
         "real" => Token::Real,
-        "reg" => Token::Reg,
-        "wreal" => Token::Wreal,
-        "supply0" => Token::Supply0,
-        "supply1" => Token::Supply1,
-        "tri" => Token::Tri,
-        "triand" => Token::TriAnd,
-        "trior" => Token::TriOr,
-        "tri0" => Token::Tri0,
-        "tri1" => Token::Tri1,
-        "wire" => Token::Wire,
-        "uwire" => Token::Uwire,
-        "wand" => Token::Wand,
-        "wor" => Token::Wor,
-        "ground" => Token::Ground,
 
         "potential" => Token::Potential,
         "flow" => Token::Flow,
@@ -1123,53 +921,12 @@ extern {
         "discrete" => Token::Discrete,
         "continuous" => Token::Continuous,
 
-        "ddt" => Token::TimeDerivative,
-        "ddx" => Token::PartialDerivative,
-        "idt" => Token::TimeIntegral,
-        "idtmod" => Token::TimeIntegralMod,
-        "limexp" => Token::LimExp,
-        "white_noise" => Token::WhiteNoise,
-        "flicker_noise" => Token::FlickerNoise,
-
-        "pow" => Token::Pow,
-        "sqrt" => Token::Sqrt,
-
-        "hypot" => Token::Hypot,
-        "exp" => Token::Exp,
-        "ln" => Token::Ln,
-        "log" => Token::Log,
-        "min" => Token::Min,
-        "max" => Token::Max,
-        "avs" => Token::Abs,
-        "floor" => Token::Floor,
-        "ceil" => Token::Ceil,
-
-        "sin" => Token::Sin,
-        "cos" => Token::Cos,
-        "tan" => Token::Tan,
-
-        "asin" => Token::ArcSin,
-        "acos" => Token::ArcCos,
-        "atan" => Token::ArcTan,
-        "atan2" => Token::ArcTan2,
-
-        "sinh" => Token::SinH,
-        "cosh" => Token::CosH,
-        "tanh" => Token::TanH,
-
-        "asinh" => Token::ArcSinH,
-        "acosh" => Token::ArcCosH,
-        "atanh" => Token::ArcTanH,
 
         "from" => Token::From,
         "exclude" => Token::Exclude,
         "inf" => Token::Infinity,
         "-inf" => Token::MinusInfinity,
+        "@" => Token::EventStart,
 
-        "abstol" => Token::Abstol,
-        "access" => Token::Access,
-        "ddt_nature" => Token::TimeDerivativeNature,
-        "idt_nature" => Token::TimeIntegralNature,
-        "units" => Token::Units,
     }
 }

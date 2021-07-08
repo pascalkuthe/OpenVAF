@@ -8,8 +8,7 @@
  *  *****************************************************************************************
  */
 
-use openvaf_ast::NetType::{UNDECLARED, WIRE};
-use openvaf_ast::{NetType, PortList};
+use openvaf_ast::PortList;
 
 use super::parsing_tests_src;
 use crate::framework::TestSession;
@@ -18,7 +17,7 @@ use openvaf_ast::symbol_table::{SymbolDeclaration, SymbolTable};
 use openvaf_ast::Ast;
 use openvaf_ir::IdRange;
 use openvaf_middle::Type;
-use openvaf_session::symbols::Symbol;
+use openvaf_session::symbols::{kw, Symbol};
 
 pub fn run(sess: &TestSession) -> Result<()> {
     let case = sess.test_case.unwrap().name;
@@ -45,7 +44,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "a");
     assert_eq!(port.discipline, None);
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(!port.output);
@@ -53,7 +52,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "b");
     assert_eq!(port.discipline, None);
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(port.output);
@@ -62,7 +61,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "c");
     assert_eq!(port.discipline, None);
-    assert_eq!(port.net_type, NetType::WIRE);
+    assert_eq!(port.net_type.map(|x| x.name), Some(kw::wire));
 
     let port = ports.next().unwrap();
     assert!(port.output);
@@ -71,7 +70,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "d");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(port.output);
@@ -80,7 +79,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "e");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(port.output);
@@ -89,7 +88,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "f");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(port.output);
@@ -97,7 +96,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "g");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
-    assert_eq!(port.net_type, NetType::WIRE);
+    assert_eq!(port.net_type.map(|x| x.name), Some(kw::wire));
 
     let third_module = &modules[2].contents;
     assert_eq!(third_module.ident.as_str(), "test3");
@@ -114,7 +113,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "a");
     assert_eq!(port.discipline, None);
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(!port.output);
@@ -122,7 +121,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "b");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(port.output);
@@ -131,7 +130,7 @@ pub fn check_module_header(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "c");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
-    assert_eq!(port.net_type, NetType::TRI);
+    assert_eq!(port.net_type.map(|x| x.name), Some(kw::tri));
     Ok(())
 }
 
@@ -194,7 +193,7 @@ fn assert_net_decl(
     symbol_table: &SymbolTable,
     ast: &Ast,
     name: &str,
-    net_type: NetType,
+    net_type: Option<Symbol>,
     discipline: Option<&str>,
 ) {
     if let Some(SymbolDeclaration::Net(netid)) = symbol_table.get(&Symbol::intern(name)) {
@@ -205,7 +204,7 @@ fn assert_net_decl(
                 .as_deref(),
             discipline
         );
-        assert_eq!(net.net_type, net_type);
+        assert_eq!(net.net_type.map(|x| x.name), net_type);
     } else {
         panic!("Net {} not found", name)
     }
@@ -237,10 +236,10 @@ pub fn check_net_declaration(ast: Ast) -> Result<()> {
     let module = &ast.modules[0].contents;
     let symbol_table = &module.symbol_table;
     assert_eq!(module.ident.as_str(), "test");
-    assert_net_decl(symbol_table, &ast, "x", WIRE, None);
-    assert_net_decl(symbol_table, &ast, "y", WIRE, None);
-    assert_net_decl(symbol_table, &ast, "z", UNDECLARED, Some("electrical"));
-    assert_net_decl(symbol_table, &ast, "l", WIRE, Some("electrical"));
+    assert_net_decl(symbol_table, &ast, "x", Some(kw::wire), None);
+    assert_net_decl(symbol_table, &ast, "y", Some(kw::wire), None);
+    assert_net_decl(symbol_table, &ast, "z", None, Some("electrical"));
+    assert_net_decl(symbol_table, &ast, "l", Some(kw::wire), Some("electrical"));
     Ok(())
 }
 
@@ -254,7 +253,7 @@ pub fn check_statements(ast: Ast) -> Result<()> {
     let port = ast[port.net].contents;
     assert_eq!(port.ident.as_str(), "A");
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
-    assert_eq!(port.net_type, NetType::UNDECLARED);
+    assert_eq!(port.net_type, None);
 
     let port = ports.next().unwrap();
     assert!(port.output);
@@ -264,8 +263,8 @@ pub fn check_statements(ast: Ast) -> Result<()> {
     assert_eq!(port.discipline.unwrap().as_str(), "electrical");
 
     let symbol_table = &module.symbol_table;
-    assert_net_decl(symbol_table, &ast, "x", UNDECLARED, Some("electrical"));
-    assert_net_decl(symbol_table, &ast, "y", UNDECLARED, Some("electrical"));
+    assert_net_decl(symbol_table, &ast, "x", None, Some("electrical"));
+    assert_net_decl(symbol_table, &ast, "y", None, Some("electrical"));
     assert_branch_decl(symbol_table, &ast, "ax", "A", "x");
     assert_branch_decl(symbol_table, &ast, "ay", "A", "y");
     assert_branch_decl(symbol_table, &ast, "xb", "x", "B");

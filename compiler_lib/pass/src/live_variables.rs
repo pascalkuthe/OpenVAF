@@ -18,13 +18,13 @@ use openvaf_middle::dfa::{self, GenKill, GenKillAnalysis, GenKillAnalysisDomain,
 use openvaf_data_structures::bit_set::{BitSet, HybridBitSet};
 use openvaf_ir::ids::{StatementId, SyntaxCtx};
 use openvaf_middle::dfa::direciton::Backward;
-use openvaf_middle::{impl_pass_span, CallType, Local, StmntKind};
+use openvaf_middle::{impl_pass_span, CfgFunctions, Local, StmntKind};
 use std::borrow::Borrow;
 
 #[derive(Default)]
 pub struct LiveLocalAnalysis(pub HybridBitSet<Local>);
 
-impl<'a, C: CallType + 'a> AnalysisPass<'a, C> for LiveLocalAnalysis {
+impl<'a, C: CfgFunctions + 'a> AnalysisPass<'a, C> for LiveLocalAnalysis {
     type Result = dfa::GenKillResults<C, Self>;
     impl_pass_span!("live_variable_analysis");
 
@@ -33,7 +33,7 @@ impl<'a, C: CallType + 'a> AnalysisPass<'a, C> for LiveLocalAnalysis {
     }
 }
 
-impl<C: CallType> GenKillAnalysisDomain<C> for LiveLocalAnalysis {
+impl<C: CfgFunctions> GenKillAnalysisDomain<C> for LiveLocalAnalysis {
     type Domain = BitSet<Local>;
     type Idx = Local;
     type Direction = Backward;
@@ -52,7 +52,7 @@ impl<C: CallType> GenKillAnalysisDomain<C> for LiveLocalAnalysis {
     }
 }
 
-impl<C: CallType> GenKillAnalysis<C> for LiveLocalAnalysis {
+impl<C: CfgFunctions> GenKillAnalysis<C> for LiveLocalAnalysis {
     fn phi_effect(
         &self,
         _cfg: &ControlFlowGraph<C>,
@@ -101,7 +101,7 @@ pub struct DeadCodeScan<'a, L> {
 
 impl<'a, C, L> AnalysisPass<'_, C> for DeadCodeScan<'a, L>
 where
-    C: CallType,
+    C: CfgFunctions,
     L: Borrow<dfa::GenKillResults<C, LiveLocalAnalysis>>,
 {
     type Result = BitSet<IntLocation>;
@@ -120,7 +120,7 @@ where
     impl_pass_span!("dead_code_scan");
 }
 
-impl<'a, C: CallType> AnalysisPass<'_, C> for DeadCodeScan<'a, LiveLocalAnalysis> {
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C> for DeadCodeScan<'a, LiveLocalAnalysis> {
     type Result = BitSet<IntLocation>;
 
     fn run(self, cfg: &ControlFlowGraph<C>) -> Self::Result {
@@ -172,7 +172,7 @@ impl<'a> LiveCodeFinder<'a> {
     }
 }
 
-impl<'a, C: CallType> ResultsVisitor<C> for LiveCodeFinder<'a> {
+impl<'a, C: CfgFunctions> ResultsVisitor<C> for LiveCodeFinder<'a> {
     type FlowState = BitSet<Local>;
 
     #[inline]
@@ -210,7 +210,7 @@ pub struct DeadCodeElimination<'a, L> {
 
 impl<'a, C, L> ModificationPass<'_, C> for DeadCodeElimination<'a, L>
 where
-    C: CallType,
+    C: CfgFunctions,
     L: Borrow<dfa::GenKillResults<C, LiveLocalAnalysis>>,
 {
     type Result = ();
@@ -235,7 +235,7 @@ where
     impl_pass_span!("dead_code_elimination");
 }
 
-impl<'a, C: CallType> ModificationPass<'_, C> for DeadCodeElimination<'a, LiveLocalAnalysis> {
+impl<'a, C: CfgFunctions> ModificationPass<'_, C> for DeadCodeElimination<'a, LiveLocalAnalysis> {
     type Result = ();
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {

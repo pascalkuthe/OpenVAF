@@ -12,28 +12,24 @@ use crate::error::Error::{
     DisciplineMismatch, EmptyBranchAccess, NatureNotPotentialOrFlow, TooManyBranchAccessArgs,
 };
 use crate::error::{AllowedNatures, NetInfo};
-use crate::expression::AllowedReferences;
 use crate::name_resolution::NatureAccessId;
 use crate::Fold;
 use openvaf_ast as ast;
 use openvaf_ast::Ast;
 use openvaf_ast::HierarchicalId;
-use openvaf_ast::NetType::GROUND;
-use openvaf_data_structures::index_vec::IndexVec;
-use openvaf_data_structures::HashMap;
-use openvaf_hir::{Branch, Net};
-use openvaf_hir::{DisciplineAccess, SyntaxContextData};
-use openvaf_ir::ids::{
-    BranchId, DisciplineId, ExpressionId, NetId, PortBranchId, PortId, SyntaxCtx,
+use openvaf_data_structures::{
+    index_vec::{index_vec, IndexSlice, IndexVec},
+    HashMap,
 };
-use openvaf_ir::{Attributes, Spanned};
+use openvaf_hir::Branch;
+use openvaf_hir::{AllowedOperations, Node};
+use openvaf_hir::{BranchKind, SyntaxContextData};
+use openvaf_ir::ids::{
+    BranchId, CallArg, DisciplineId, ExpressionId, NodeId, PortBranchId, PortId,
+};
+use openvaf_ir::{Attributes, DisciplineAccess, Spanned};
 use openvaf_session::sourcemap::Span;
-use openvaf_session::symbols::{keywords, Ident, Symbol};
-
-pub enum BranchProbeKind {
-    Port(PortId),
-    Branch(DisciplineAccess, BranchId),
-}
+use openvaf_session::symbols::{kw, Ident, Symbol};
 
 #[derive(Copy, Clone, Debug)]
 pub enum NatureAccess {
@@ -45,11 +41,11 @@ pub enum NatureAccess {
 impl NatureAccess {
     pub fn resolve_from_ident<F>(ident: Ident, fold: &mut Fold<F>) -> Option<Self>
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         Some(match ident.name {
-            keywords::potential => NatureAccess::Pot(ident.span),
-            keywords::flow => NatureAccess::Flow(ident.span),
+            kw::potential => NatureAccess::Pot(ident.span),
+            kw::flow => NatureAccess::Flow(ident.span),
             _ => {
                 let id = resolve!(fold; ident as NatureAccess(id) => id)?;
                 Self::Named(id)
@@ -58,11 +54,11 @@ impl NatureAccess {
     }
     fn into_ident<F>(self, fold: &Fold<F>) -> Ident
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         match self {
-            Self::Flow(span) => Ident::new(keywords::flow, span),
-            Self::Pot(span) => Ident::new(keywords::potential, span),
+            Self::Flow(span) => Ident::new(kw::flow, span),
+            Self::Pot(span) => Ident::new(kw::potential, span),
             Self::Named(id) => fold.resolver.get_nature_access_ident(id),
         }
     }
@@ -70,9 +66,9 @@ impl NatureAccess {
 
 /// Handles branch resolution which is more complicated because unnamed branches exist and discipline comparability has to be enforced
 pub struct BranchResolver {
-    unnamed_branches: HashMap<(NetId, NetId), BranchId>,
-    implicit_grounds: HashMap<DisciplineId, NetId>,
-    pub(super) port_branches: IndexVec<PortBranchId, PortId>,
+    unnamed_branches: HashMap<(NodeId, NodeId), BranchId>,
+    pub(super) port_branche_probes: IndexVec<PortBranchId, PortId>,
+    port_branches: IndexVec<PortId, Option<BranchId>>,
 }
 
 impl BranchResolver {
@@ -80,8 +76,8 @@ impl BranchResolver {
     pub(super) fn new(ast: &Ast) -> Self {
         Self {
             unnamed_branches: HashMap::with_capacity(32),
-            implicit_grounds: HashMap::with_capacity(ast.disciplines.len()),
-            port_branches: IndexVec::with_capacity(ast.port_branches.len()),
+            port_branche_probes: IndexVec::with_capacity(ast.port_branches.len()),
+            port_branches: index_vec![None;ast.ports.len()],
         }
     }
 
@@ -92,7 +88,7 @@ impl BranchResolver {
         discipline: DisciplineId,
     ) -> Option<DisciplineAccess>
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         match access {
             NatureAccess::Named(id)
@@ -130,13 +126,13 @@ impl BranchResolver {
     }
 
     /// Resolves a DisciplineAccess (for example `V(b)` or `V(x,y)`)    
-    pub fn check_port_discipline_access<F>(
+    pub fn resolve_port_access<F: Fn(Symbol) -> AllowedOperations>(
+        &mut self,
         fold: &mut Fold<F>,
         access: NatureAccess,
         discipline: DisciplineId,
-    ) where
-        F: Fn(Symbol) -> AllowedReferences,
-    {
+        port: PortId,
+    ) -> BranchId {
         match access {
             NatureAccess::Named(id)
                 if fold
@@ -153,61 +149,74 @@ impl BranchResolver {
                 });
             }
         }
-    }
 
-    /// Returns the implicit ground net for `discipline`. Creates one if none is known yet
-    pub fn implicit_ground_net<F>(&mut self, discipline: DisciplineId, fold: &mut Fold<F>) -> NetId
-    where
-        F: Fn(Symbol) -> AllowedReferences,
-    {
-        *self.implicit_grounds.entry(discipline).or_insert_with(|| {
-            let sctx = fold.hir.syntax_ctx.push(SyntaxContextData {
-                span: fold.ast[discipline].span,
-                attributes: Attributes::EMPTY,
-                parent: Some(SyntaxCtx::ROOT),
-            });
-
-            fold.hir.nets.push(Net {
-                ident: Ident::from_str("implicit_ground"),
-                discipline,
-                net_type: GROUND,
-                sctx,
-            })
-        })
+        match self.port_branches[port] {
+            None => {
+                let port_info = fold.hir[fold.hir[port].node];
+                let probe_node = fold.hir.nodes.push(Node {
+                    ident: Ident::from_str_and_span(
+                        &format!("{}'", port_info.ident),
+                        port_info.ident.span,
+                    ),
+                    discipline: port_info.discipline,
+                    sctx: port_info.sctx,
+                });
+                fold.hir.branches.push(Branch {
+                    ident: Ident::from_str_and_span(
+                        &format!("port_flow(<{}>)", port_info.ident),
+                        port_info.ident.span,
+                    ),
+                    hi: probe_node,
+                    lo: fold.hir[port].node,
+                    sctx: port_info.sctx,
+                    kind: BranchKind::PortBranch,
+                    current_contributions: vec![],
+                    voltage_contributions: vec![],
+                    current_acccess: vec![],
+                    voltage_access: vec![],
+                })
+            }
+            Some(branch) => branch,
+        }
     }
 
     /// Creates an unnamed branch from `net` to the implict ground node
     pub fn unnamed_branch_to_ground<F>(
         &mut self,
         span: Span,
-        net: NetId,
+        net: NodeId,
         fold: &mut Fold<F>,
     ) -> BranchId
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
-        let ground = self.implicit_ground_net(fold.hir[net].discipline, fold);
-        self.unnamed_branch(span, net, ground, fold)
+        self.unnamed_branch(span, net, NodeId::from_raw_unchecked(0), fold, true)
     }
 
     /// Returns the `BranchId` for the unnamed `branch`. If the branch does not yet exist it is created
     ///
     /// # Note
     ///
-    /// This should only be called with `hi`/`lo` that have been [checked](crate::branches::resolver::BranchResolver::unnamed_branch)
+    /// This should only be called with `hi`/`lo` that have been [checked](crate::branches::resolver::BranchResolver::check_branch)
     pub fn unnamed_branch<F>(
         &mut self,
         span: Span,
-        hi: NetId,
-        lo: NetId,
+        hi: NodeId,
+        lo: NodeId,
         fold: &mut Fold<F>,
+        to_gnd: bool,
     ) -> BranchId
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         *self.unnamed_branches.entry((hi, lo)).or_insert_with(|| {
             let name = format!("( {} , {} )", fold.hir[hi].ident, fold.hir[lo].ident);
             let ident = Ident::from_str_and_span(&name, span);
+            let kind = if to_gnd {
+                BranchKind::UnnamedToGnd
+            } else {
+                BranchKind::Unnamed
+            };
 
             let declaration = Branch {
                 ident,
@@ -216,8 +225,14 @@ impl BranchResolver {
                 sctx: fold.hir.syntax_ctx.push(SyntaxContextData {
                     span,
                     attributes: Attributes::EMPTY,
-                    parent: None,
+                    parent: Some(fold.sctx),
                 }),
+
+                kind,
+                current_contributions: vec![],
+                voltage_contributions: vec![],
+                current_acccess: vec![],
+                voltage_access: vec![],
             };
 
             fold.hir.branches.push(declaration)
@@ -231,69 +246,74 @@ impl BranchResolver {
     ///
     /// OpenVAF does currently not implement "proper" discipline comparability check as defined in the standard
     /// Instead if simply checks that the disciplines are equal because this feature is not used in compact models in practice
-    pub fn check_branch<F>(net1: NetId, net2: NetId, span: Span, fold: &mut Fold<F>)
+    pub fn check_branch<F>(
+        net1: NodeId,
+        net2: NodeId,
+        span: Span,
+        fold: &mut Fold<F>,
+    ) -> Option<DisciplineId>
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         let net1 = &fold.hir[net1];
         let net2 = &fold.hir[net2];
-        if net1.discipline != net2.discipline {
-            let discipline1 = fold.hir[net1.discipline].ident.name;
+        let discipline1 = net1.discipline?;
+        let discipline2 = net2.discipline?;
 
-            let discipline2 = fold.hir[net2.discipline].ident.name;
-
-            let err = DisciplineMismatch(
+        if discipline1 == discipline2 {
+            Some(discipline1)
+        } else {
+            fold.errors.add(DisciplineMismatch(
                 NetInfo {
-                    discipline: discipline1,
+                    discipline: fold.hir[discipline1].ident.name,
                     name: net1.ident.name,
                     declaration: fold.hir[net1.sctx].span,
                 },
                 NetInfo {
-                    discipline: discipline2,
+                    discipline: fold.hir[discipline2].ident.name,
                     name: net2.ident.name,
                     declaration: fold.hir[net2.sctx].span,
                 },
                 span,
-            );
+            ));
 
-            fold.errors.add(err);
+            None
         }
     }
 
     pub fn resolve_branch_probe_call<F>(
         &mut self,
         nature: NatureAccess,
-        arguments: &[ExpressionId],
+        arguments: &IndexSlice<CallArg, [ExpressionId]>,
         fold: &mut Fold<F>,
-    ) -> Option<BranchProbeKind>
+    ) -> Option<(DisciplineAccess, BranchId)>
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         self.handle_branch_probe_args(
             nature.into_ident(&fold),
             arguments,
             |resolver, fold, net, span| {
                 let branch = resolver.unnamed_branch_to_ground(span, net, fold);
-                let discipline = fold.hir[net].discipline;
-                let access = Self::resolve_discipline_access(fold, nature, discipline)?;
-                Some(BranchProbeKind::Branch(access, branch))
+                let access =
+                    Self::resolve_discipline_access(fold, nature, fold.hir[net].discipline?)?;
+                Some((access, branch))
             },
             |resolver, fold, hi, lo, span| {
-                Self::check_branch(hi, lo, span, fold);
-                let branch = resolver.unnamed_branch(span, hi, lo, fold);
-                let discipline = fold.hir[hi].discipline;
+                let discipline = Self::check_branch(hi, lo, span, fold)?;
+                let branch = resolver.unnamed_branch(span, hi, lo, fold, false);
                 let access = Self::resolve_discipline_access(fold, nature, discipline)?;
-                Some(BranchProbeKind::Branch(access, branch))
+                Some((access, branch))
             },
             |_, fold, branch, _| {
-                let discipline = fold.hir[fold.hir[branch].hi].discipline;
+                let discipline = fold.hir[fold.hir[branch].hi].discipline?; // Branches are checked previously .No need to recheck here
                 let access = Self::resolve_discipline_access(fold, nature, discipline)?;
-                Some(BranchProbeKind::Branch(access, branch))
+                Some((access, branch))
             },
-            |_, fold, port, _span| {
-                let discipline = fold.hir[fold.hir[port].net].discipline;
-                Self::check_port_discipline_access(fold, nature, discipline);
-                Some(BranchProbeKind::Port(port))
+            |resolver, fold, port, _span| {
+                let discipline = fold.hir[fold.hir[port].node].discipline?;
+                let branch = resolver.resolve_port_access(fold, nature, discipline, port);
+                Some((DisciplineAccess::Flow, branch))
             },
             fold,
         )
@@ -309,28 +329,28 @@ impl BranchResolver {
     pub fn handle_branch_probe_args<'a, F, T>(
         &mut self,
         nature_ident: Ident,
-        arguments: &[ExpressionId],
-        handle_node: impl FnOnce(&mut Self, &mut Fold<'a, F>, NetId, Span) -> T,
-        handle_unnamed_branch: impl FnOnce(&mut Self, &mut Fold<'a, F>, NetId, NetId, Span) -> T,
+        arguments: &IndexSlice<CallArg, [ExpressionId]>,
+        handle_node: impl FnOnce(&mut Self, &mut Fold<'a, F>, NodeId, Span) -> T,
+        handle_unnamed_branch: impl FnOnce(&mut Self, &mut Fold<'a, F>, NodeId, NodeId, Span) -> T,
         handle_branch: impl FnOnce(&mut Self, &mut Fold<'a, F>, BranchId, Span) -> T,
         handle_port: impl FnOnce(&mut Self, &mut Fold<'a, F>, PortId, Span) -> T,
         fold: &mut Fold<'a, F>,
     ) -> Option<T>
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
-        match arguments {
+        match arguments.as_raw_slice() {
             [branch] => {
                 let expr = &fold.ast[*branch];
                 let ident = Self::reinterpret_expression_as_identifier(expr, fold)?;
 
                 resolve_hierarchical!( fold;
                     ident as
-                        Net(id)    => handle_node(self, fold, id, expr.span),
-                        Port(id)   => handle_node(self, fold, fold.hir[id].net, expr.span),
+                        Node(_,id)    => handle_node(self, fold, id, expr.span),
+                        Port(id)   => handle_node(self, fold, fold.hir[id].node, expr.span),
                         Branch(id) => handle_branch(self, fold, id, expr.span),
                         PortBranch(id) => {
-                            handle_port(self, fold, self.port_branches[id],expr.span)
+                            handle_port(self, fold, self.port_branche_probes[id],expr.span)
                         }
                 )
             }
@@ -345,16 +365,16 @@ impl BranchResolver {
                 let net1 = Self::reinterpret_expression_as_identifier(net1, fold)?;
                 let net1 = resolve_hierarchical!(fold;
                     net1 as
-                        Net(id) => id,
-                        Port(id)   => fold.hir[id].net
+                        Node(_,id) => id,
+                        Port(id)   => fold.hir[id].node
 
                 );
 
                 let net2 = Self::reinterpret_expression_as_identifier(net2, fold)?;
                 let net2 = resolve_hierarchical!(fold;
                     net2 as
-                        Net(id) => id,
-                        Port(id)   => fold.hir[id].net
+                        Node(_,id) => id,
+                        Port(id)   => fold.hir[id].node
                 );
 
                 if let (Some(net1), Some(net2)) = (net1, net2) {
@@ -395,7 +415,7 @@ impl BranchResolver {
         base: &mut Fold<'a, F>,
     ) -> Option<&'a HierarchicalId>
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         base.reinterpret_expression_as_hierarchical_identifier(
             "Branch probe function calls",
@@ -416,20 +436,20 @@ impl BranchResolver {
         fold: &mut Fold<'a, F>,
         hi_ident: &'a HierarchicalId,
         lo_ident: Option<&'a HierarchicalId>,
-    ) -> Option<(NetId, NetId)>
+    ) -> Option<(NodeId, NodeId)>
     where
-        F: Fn(Symbol) -> AllowedReferences,
+        F: Fn(Symbol) -> AllowedOperations,
     {
         let hi = resolve_hierarchical!(fold; hi_ident as
-            Net(id) => id,
-            Port(id) => fold.hir[id].net
+            Node(_,id) => id,
+            Port(id) => fold.hir[id].node
         );
 
         let (lo, span) = if let Some(lo_ident) = lo_ident {
             let span = hi_ident.span().extend(lo_ident.span());
             let lo = resolve_hierarchical!(fold; lo_ident as
-                Net(id) => id,
-                Port(id) => fold.hir[id].net
+                Node(_,id) => id,
+                Port(id) => fold.hir[id].node
             );
             (lo, span)
         } else {
@@ -442,7 +462,7 @@ impl BranchResolver {
             Self::check_branch(hi, lo, span, fold);
             lo
         } else {
-            self.implicit_ground_net(fold.hir[hi].discipline, fold)
+            NodeId::from_raw_unchecked(0)
         };
 
         Some((hi, lo))

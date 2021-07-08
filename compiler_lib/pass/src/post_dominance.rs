@@ -8,17 +8,23 @@
  *  *****************************************************************************************
  */
 
-use openvaf_data_structures::index_vec::{index_vec, IndexVec};
-use openvaf_ir::id_type;
+use openvaf_data_structures::index_vec::{define_index_type, index_vec, IndexVec};
 use openvaf_middle::cfg::{AnalysisPass, BasicBlock, ControlFlowGraph};
-use openvaf_middle::{impl_pass_span, CallType};
+use openvaf_middle::{impl_pass_span, CfgFunctions};
 use std::cmp::Ordering;
 use std::ops::Index;
 use tracing::{debug, debug_span};
 
 pub struct PostDominators(pub IndexVec<BasicBlock, BasicBlock>);
 
-id_type!(PostorderId(u16));
+define_index_type! {
+    pub struct PostorderId = u16;
+
+    DISPLAY_FORMAT = "postorder{}";
+    DEBUG_FORMAT = "postorder{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
 
 impl Index<BasicBlock> for PostDominators {
     type Output = BasicBlock;
@@ -30,7 +36,7 @@ impl Index<BasicBlock> for PostDominators {
 
 pub struct BuildPostDominators;
 
-impl<C: CallType> AnalysisPass<'_, C> for BuildPostDominators {
+impl<C: CfgFunctions> AnalysisPass<'_, C> for BuildPostDominators {
     type Result = PostDominators;
 
     impl_pass_span!("Build Post Dominators");

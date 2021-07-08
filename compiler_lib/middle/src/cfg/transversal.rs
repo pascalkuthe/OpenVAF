@@ -9,7 +9,7 @@
  */
 
 use crate::cfg::{BasicBlock, BasicBlockData, ControlFlowGraph, Successors, START_BLOCK};
-use crate::CallType;
+use crate::CfgFunctions;
 use openvaf_data_structures::bit_set::BitSet;
 use std::mem::transmute;
 
@@ -39,7 +39,7 @@ pub struct Postorder {
 }
 
 impl<'lt> Postorder {
-    pub fn new<C: CallType>(cfg: &ControlFlowGraph<C>, root: BasicBlock) -> Postorder {
+    pub fn new<C: CfgFunctions>(cfg: &ControlFlowGraph<C>, root: BasicBlock) -> Postorder {
         let mut po = Postorder {
             visited: BitSet::new_empty(cfg.blocks.len()),
             visit_stack: Vec::new(),
@@ -53,7 +53,7 @@ impl<'lt> Postorder {
         po
     }
 
-    fn traverse_successor<C: CallType>(&mut self, cfg: &ControlFlowGraph<C>) {
+    fn traverse_successor<C: CfgFunctions>(&mut self, cfg: &ControlFlowGraph<C>) {
         // This is quite a complex loop due to 1. the borrow checker not liking it much
         // and 2. what exactly is going on is not clear
         //
@@ -113,12 +113,12 @@ impl<'lt> Postorder {
     }
 }
 
-pub struct PostorderIter<'lt, C: CallType> {
+pub struct PostorderIter<'lt, C: CfgFunctions> {
     pub base: Postorder,
     pub cfg: &'lt ControlFlowGraph<C>,
 }
 
-impl<'lt, C: CallType> PostorderIter<'lt, C> {
+impl<'lt, C: CfgFunctions> PostorderIter<'lt, C> {
     pub fn new(cfg: &'lt ControlFlowGraph<C>, root: BasicBlock) -> Self {
         Self {
             base: Postorder::new(cfg, root),
@@ -127,7 +127,7 @@ impl<'lt, C: CallType> PostorderIter<'lt, C> {
     }
 }
 
-impl<'lt, C: CallType> Iterator for PostorderIter<'lt, C> {
+impl<'lt, C: CfgFunctions> Iterator for PostorderIter<'lt, C> {
     type Item = (BasicBlock, &'lt BasicBlockData<C>);
 
     fn next(&mut self) -> Option<(BasicBlock, &'lt BasicBlockData<C>)> {
@@ -154,12 +154,12 @@ impl<'lt, C: CallType> Iterator for PostorderIter<'lt, C> {
     }
 }
 
-pub struct PostorderIterMut<'lt, C: CallType> {
+pub struct PostorderIterMut<'lt, C: CfgFunctions> {
     base: Postorder,
     cfg: &'lt mut ControlFlowGraph<C>,
 }
 
-impl<'lt, C: CallType> PostorderIterMut<'lt, C> {
+impl<'lt, C: CfgFunctions> PostorderIterMut<'lt, C> {
     pub fn new(cfg: &'lt mut ControlFlowGraph<C>, root: BasicBlock) -> Self {
         Self {
             base: Postorder::new(cfg, root),
@@ -168,7 +168,7 @@ impl<'lt, C: CallType> PostorderIterMut<'lt, C> {
     }
 }
 
-impl<'lt, C: CallType> Iterator for PostorderIterMut<'lt, C> {
+impl<'lt, C: CfgFunctions> Iterator for PostorderIterMut<'lt, C> {
     type Item = (BasicBlock, &'lt mut BasicBlockData<C>);
 
     fn next(&mut self) -> Option<(BasicBlock, &'lt mut BasicBlockData<C>)> {
@@ -236,7 +236,7 @@ pub struct ReversePostorder {
 }
 
 impl ReversePostorder {
-    pub fn new<C: CallType>(cfg: &ControlFlowGraph<C>, root: BasicBlock) -> Self {
+    pub fn new<C: CfgFunctions>(cfg: &ControlFlowGraph<C>, root: BasicBlock) -> Self {
         let blocks: Vec<_> = PostorderIter::new(cfg, root).map(|(bb, _)| bb).collect();
 
         let len = blocks.len();
@@ -272,12 +272,12 @@ impl ExactSizeIterator for ReversePostorder {
     }
 }
 
-pub struct ReversePostorderIter<'lt, C: CallType> {
+pub struct ReversePostorderIter<'lt, C: CfgFunctions> {
     cfg: &'lt ControlFlowGraph<C>,
     base: ReversePostorder,
 }
 
-impl<'lt, C: CallType> ReversePostorderIter<'lt, C> {
+impl<'lt, C: CfgFunctions> ReversePostorderIter<'lt, C> {
     pub fn new(cfg: &'lt ControlFlowGraph<C>, root: BasicBlock) -> Self {
         Self {
             base: ReversePostorder::new(cfg, root),
@@ -286,13 +286,13 @@ impl<'lt, C: CallType> ReversePostorderIter<'lt, C> {
     }
 }
 
-impl<'lt, C: CallType> ExactSizeIterator for ReversePostorderIter<'lt, C> {
+impl<'lt, C: CfgFunctions> ExactSizeIterator for ReversePostorderIter<'lt, C> {
     fn len(&self) -> usize {
         self.base.len()
     }
 }
 
-impl<'lt, C: CallType> Iterator for ReversePostorderIter<'lt, C> {
+impl<'lt, C: CfgFunctions> Iterator for ReversePostorderIter<'lt, C> {
     type Item = (BasicBlock, &'lt BasicBlockData<C>);
 
     fn next(&mut self) -> Option<(BasicBlock, &'lt BasicBlockData<C>)> {
@@ -304,12 +304,12 @@ impl<'lt, C: CallType> Iterator for ReversePostorderIter<'lt, C> {
     }
 }
 
-pub struct ReversePostorderIterMut<'lt, C: CallType> {
+pub struct ReversePostorderIterMut<'lt, C: CfgFunctions> {
     cfg: &'lt mut ControlFlowGraph<C>,
     base: ReversePostorder,
 }
 
-impl<'lt, C: CallType> ReversePostorderIterMut<'lt, C> {
+impl<'lt, C: CfgFunctions> ReversePostorderIterMut<'lt, C> {
     pub fn new(cfg: &'lt mut ControlFlowGraph<C>, root: BasicBlock) -> Self {
         Self {
             base: ReversePostorder::new(cfg, root),
@@ -318,7 +318,7 @@ impl<'lt, C: CallType> ReversePostorderIterMut<'lt, C> {
     }
 }
 
-impl<'lt, C: CallType> Iterator for ReversePostorderIterMut<'lt, C> {
+impl<'lt, C: CfgFunctions> Iterator for ReversePostorderIterMut<'lt, C> {
     type Item = (BasicBlock, &'lt mut BasicBlockData<C>);
 
     fn next(&mut self) -> Option<(BasicBlock, &'lt mut BasicBlockData<C>)> {
@@ -339,7 +339,7 @@ impl<'lt, C: CallType> Iterator for ReversePostorderIterMut<'lt, C> {
     }
 }
 
-impl<'lt, C: CallType> ExactSizeIterator for ReversePostorderIterMut<'lt, C> {
+impl<'lt, C: CfgFunctions> ExactSizeIterator for ReversePostorderIterMut<'lt, C> {
     fn len(&self) -> usize {
         self.base.len()
     }

@@ -11,11 +11,11 @@
 use openvaf_data_structures::bit_set::BitSet;
 use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_middle::cfg::{ControlFlowGraph, ModificationPass};
-use openvaf_middle::{impl_pass_span, CallType, Local};
+use openvaf_middle::{impl_pass_span, CfgFunctions, Local};
 
 pub struct RemoveDeadLocals;
 
-impl<C: CallType> ModificationPass<'_, C> for RemoveDeadLocals {
+impl<C: CfgFunctions> ModificationPass<'_, C> for RemoveDeadLocals {
     type Result = IndexVec<Local, Local>;
 
     fn run(self, cfg: &mut ControlFlowGraph<C>) -> IndexVec<Local, Local> {
@@ -40,7 +40,7 @@ impl<C: CallType> ModificationPass<'_, C> for RemoveDeadLocals {
 }
 
 /// Removes all locals in `dead_locals` from `cfg.locals`
-fn delete_dead_local_declarations<C: CallType>(
+fn delete_dead_local_declarations<C: CfgFunctions>(
     cfg: &mut ControlFlowGraph<C>,
     alive_locals: BitSet<Local>,
 ) -> IndexVec<Local, Local> {

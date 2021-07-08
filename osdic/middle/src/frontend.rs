@@ -29,9 +29,9 @@ use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, T
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{const_fold::FlatSet, COperand, CallArg};
+use openvaf_middle::{dfa::lattice::FlatSet, COperand, CallArg};
 use openvaf_middle::{
-    CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir, OperandData, RValue,
+    CfgFunctions, CfgInputs, ConstVal, Derivative, DisciplineAccess, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
 };
 use openvaf_middle::{ParameterCallType, ParameterInput};
@@ -61,7 +61,7 @@ pub enum GeneralOsdiCall {
     },
 }
 
-impl CallType for GeneralOsdiCall {
+impl CfgFunctions for GeneralOsdiCall {
     type I = GeneralOsdiInput;
 
     fn const_fold(&self, call: &[FlatSet]) -> FlatSet {
@@ -76,7 +76,7 @@ impl CallType for GeneralOsdiCall {
         }
     }
 
-    fn derivative<C: CallType>(
+    fn derivative<C: CfgFunctions>(
         &self,
         args: &IndexSlice<CallArg, [COperand<Self>]>,
         ad: &mut RValueAutoDiff<Self, C>,
@@ -194,8 +194,8 @@ impl Display for GeneralOsdiInput {
     }
 }
 
-impl InputKind for GeneralOsdiInput {
-    fn derivative<C: CallType>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
+impl CfgInputs for GeneralOsdiInput {
+    fn derivative<C: CfgFunctions>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
         match (self, unknown) {
             (Self::Parameter(ParameterInput::Value(x)), Unknown::Parameter(y)) if *x == y => {
                 Derivative::One
@@ -224,7 +224,7 @@ impl InputKind for GeneralOsdiInput {
         }
     }
 
-    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
+    fn ty<C: CfgFunctions>(&self, mir: &Mir<C>) -> Type {
         match self {
             Self::Parameter(ParameterInput::Value(param)) => mir[*param].ty,
             Self::Voltage(_, _)

@@ -12,22 +12,22 @@ use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
 use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
 use openvaf_data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, HashMap};
 use openvaf_hir::SyntaxCtx;
 use openvaf_ir::ids::ParameterId;
 use openvaf_ir::{Spanned, Type};
 use openvaf_middle::cfg::builder::CfgBuilder;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind};
-use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
+use openvaf_middle::dfa::lattice::FlatSet;
 use openvaf_middle::{
-    BinOp, COperand, COperandData, CallArg, CallType, CallTypeConversion, ComparisonOp, Expression,
+    BinOp, COperand, COperandData, CallArg, CfgConversion, CfgFunctions, ComparisonOp, Expression,
     Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
     ParameterConstraint, ParameterExcludeConstraint, ParameterInput, PrintOnFinish, RValue,
     StmntKind, StopTaskKind, TyRValue, VariableId, VariableLocalKind,
 };
+use openvaf_pass::program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use openvaf_session::sourcemap::Span;
-use openvaf_transformations::{InvProgramDependenceGraph, ProgramDependenceGraph};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
@@ -40,14 +40,14 @@ pub enum InitFunctionCallType {
     StopTask(StopTaskKind, PrintOnFinish),
 }
 
-impl CallType for InitFunctionCallType {
+impl CfgFunctions for InitFunctionCallType {
     type I = ParameterInput;
 
     fn const_fold(&self, _: &[FlatSet]) -> FlatSet {
         unreachable!()
     }
 
-    fn derivative<C: CallType>(
+    fn derivative<C: CfgFunctions>(
         &self,
         _args: &IndexSlice<CallArg, [COperand<Self>]>,
         _ad: &mut RValueAutoDiff<Self, C>,
@@ -120,7 +120,7 @@ impl ModelInitFunction {
         (res, function_output_locations)
     }
 
-    pub fn new_param_init<A: CallType>(mir: &Mir<A>) -> Self {
+    pub fn new_param_init<A: CfgFunctions>(mir: &Mir<A>) -> Self {
         let mut cfg = CfgBuilder::new_small();
 
         // Create locals for the parameters
@@ -421,14 +421,10 @@ impl ModelInitFunction {
 
 struct ParamInitializationMapper<'a>(&'a IndexSlice<ParameterId, [Local]>, usize);
 
-impl<'a> CallTypeConversion<GeneralOsdiCall, InitFunctionCallType>
-    for ParamInitializationMapper<'a>
-{
+impl<'a> CfgConversion<GeneralOsdiCall, InitFunctionCallType> for ParamInitializationMapper<'a> {
     fn map_operand(&mut self, op: COperand<GeneralOsdiCall>) -> COperand<InitFunctionCallType> {
         let contents = match op.contents {
-            OperandData::Read(input) => {
-                CallTypeConversion::<GeneralOsdiCall, _>::map_input(self, input)
-            }
+            OperandData::Read(input) => CfgConversion::<GeneralOsdiCall, _>::map_input(self, input),
             OperandData::Constant(val) => OperandData::Constant(val),
             OperandData::Copy(loc) => OperandData::Copy(loc + self.1),
         };
@@ -491,13 +487,11 @@ impl<'a> CallTypeConversion<GeneralOsdiCall, InitFunctionCallType>
     }
 }
 
-impl<'a> CallTypeConversion<ParameterCallType, InitFunctionCallType>
-    for ParamInitializationMapper<'a>
-{
+impl<'a> CfgConversion<ParameterCallType, InitFunctionCallType> for ParamInitializationMapper<'a> {
     fn map_operand(&mut self, op: COperand<ParameterCallType>) -> COperand<InitFunctionCallType> {
         let contents = match op.contents {
             OperandData::Read(input) => {
-                CallTypeConversion::<ParameterCallType, _>::map_input(self, input)
+                CfgConversion::<ParameterCallType, _>::map_input(self, input)
             }
             OperandData::Constant(val) => OperandData::Constant(val),
             OperandData::Copy(loc) => OperandData::Copy(loc + self.1),

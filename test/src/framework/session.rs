@@ -14,35 +14,33 @@ use color_eyre::eyre::WrapErr;
 use eyre::Result;
 use indicatif::ProgressBar;
 use openvaf_ast::Ast;
-use openvaf_ast_lowering::{lower_ast_userfacing, AllowedReferences};
+use openvaf_ast_lowering::lower_ast_userfacing;
 use openvaf_codegen_llvm::inkwell::values::{BasicValue, BasicValueEnum};
 use openvaf_codegen_llvm::{CallTypeCodeGen, CfgCodegen, Intrinsic};
-use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
+use openvaf_data_structures::index_vec::IndexSlice;
 use openvaf_diagnostics::lints::Linter;
 use openvaf_diagnostics::ExpansionPrinter;
-use openvaf_hir_lowering::{
-    lower_hir_userfacing, AttributeCtx, ExpressionLowering, HirFold, HirLowering,
-    HirSystemFunctionCall, LocalCtx,
+
+use derive_more::{Display, From, TryInto};
+use openvaf_hir::lowering::{lower_hir_userfacing, AttributeCtx, HirFold, HirLowering, LocalCtx};
+use openvaf_hir::AllowedOperations;
+use openvaf_ir::ids::{CallArg, StatementId, SyntaxCtx};
+use openvaf_ir::{Attribute, Print, StopTask, Type};
+use openvaf_macros::CfgFunctions;
+use openvaf_middle::functions::{
+    AcStimulus, Analysis, CfgFunction, CfgFunctionEnum, CurrentLim, DefaultFunctions,
+    Discontinuity, NodeCollapse, NoiseCall, TimeDerivative, VoltageLim,
 };
-use openvaf_ir::ids::{BranchId, ExpressionId, NetId, ParameterId, PortId, StatementId, SyntaxCtx};
-use openvaf_ir::{
-    Attribute, NoiseSource, PrintOnFinish, SimpleConstVal, Spanned, StopTaskKind,
-    SystemFunctionCall, Type, Unknown,
-};
-use openvaf_middle::derivatives::RValueAutoDiff;
-use openvaf_middle::dfa::lattice::FlatSet;
-use openvaf_middle::osdi_types::ConstVal::Scalar;
-use openvaf_middle::osdi_types::SimpleConstVal::Real;
+use openvaf_middle::inputs::{DefaultInputs, ParameterInput, SimParamKind};
 use openvaf_middle::{
-    BinOp, COperand, CallArg, CallType, ConstVal, Derivative, DisciplineAccess, InputKind, Mir,
-    Operand, OperandData, ParameterCallType, ParameterInput, RValue, StmntKind,
+    derivatives::RValueAutoDiff, dfa::lattice::FlatSet, COperand, CfgFunctions, ConstVal, Mir,
+    RValue,
 };
 use openvaf_parser::{parse, TokenStream};
 use openvaf_preprocessor::{preprocess_user_facing, std_path};
 use openvaf_session::sourcemap::{Span, StringLiteral};
 use openvaf_session::SourceMap;
-use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -91,13 +89,13 @@ impl<'a> TestSession<'a> {
         Ok(parse(ts).map_err(|error| error.user_facing::<ExpansionPrinter>())?)
     }
 
-    pub fn compile_to_mir(&self, file: impl AsRef<Path>) -> Result<Mir<Call>> {
+    pub fn compile_to_mir(&self, file: impl AsRef<Path>) -> Result<Mir> {
         let ast = self.run_parser(file)?;
         let warnings = Linter::early_user_diagnostics::<ExpansionPrinter>()?;
         if !warnings.0.is_empty() {
             self.println(warnings.to_string());
         }
-        let hir = lower_ast_userfacing(ast, |_| AllowedReferences::None)?;
+        let hir = lower_ast_userfacing(ast, |_| AllowedOperations::empty())?;
         Ok(lower_hir_userfacing(hir, &mut TestLowering)?)
     }
 
@@ -109,14 +107,12 @@ impl<'a> TestSession<'a> {
 struct TestLowering;
 
 impl HirLowering for TestLowering {
-    type AnalogBlockExprLower = Call;
-
     fn handle_attribute(_: &mut HirFold<Self>, _: &Attribute, _: AttributeCtx, _: SyntaxCtx) {
         // attribute can be ignored
     }
 
-    fn handle_statement_attribute<'a, 'h, C: ExpressionLowering<Self>>(
-        _: &mut LocalCtx<'a, 'h, C, Self>,
+    fn handle_statement_attribute<'a, 'h>(
+        _: &mut LocalCtx<'a, 'h, Self>,
         _: &Attribute,
         _: StatementId,
         _: SyntaxCtx,
@@ -125,265 +121,84 @@ impl HirLowering for TestLowering {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Input {
-    Parameter(ParameterId),
-    PortConnected(PortId),
-    ParamGiven(ParameterId),
-    SimParam,
-    SimParamStr,
-    BranchAccess(DisciplineAccess, BranchId),
-    PortFlow(PortId),
-    Temperature,
+#[derive(Clone, Debug, Display, From, TryInto, CfgFunctions)]
+#[cfg_inputs(DefaultInputs)]
+pub enum TestFunctions {
+    Noise(NoiseCall),
+    TimeDerivative(TimeDerivative),
+    StopTask(StopTask),
+    Print(Print),
+    NodeCollapse(NodeCollapse),
+    VoltageLim(VoltageLim),
+    CurrentLim(CurrentLim),
+    AcStimulus(AcStimulus),
+    Analysis(Analysis),
+    Discontinuity(Discontinuity),
 }
 
-impl InputKind for Input {
-    fn derivative<C: CallType>(&self, unknown: Unknown, mir: &Mir<C>) -> Derivative<Self> {
-        match (self, unknown) {
-            (Self::Parameter(x), Unknown::Parameter(y)) if *x == y => Derivative::One,
-            (Self::BranchAccess(DisciplineAccess::Flow, x), Unknown::Flow(y)) if *x == y => {
-                Derivative::One
-            }
-            (
-                Self::BranchAccess(DisciplineAccess::Potential, branch),
-                Unknown::NodePotential(node),
-            ) => {
-                if mir[*branch].hi == node {
-                    Derivative::One
-                } else if mir[*branch].lo == node {
-                    Derivative::Operand(OperandData::Constant(Scalar(Real(-1.0))))
-                } else {
-                    Derivative::Zero
-                }
-            }
-
-            _ => Derivative::Zero,
-        }
-    }
-
-    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
-        match self {
-            Self::Parameter(param) => mir[*param].ty,
-            Self::BranchAccess(_, _) | Self::PortFlow(_) | Self::Temperature | Self::SimParam => {
-                Type::REAL
-            }
-            Self::PortConnected(_) | Self::ParamGiven(_) => Type::BOOL,
-            Self::SimParamStr => Type::STRING,
-        }
-    }
-}
-
-impl Display for Input {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Parameter(param) => Debug::fmt(param, f),
-            Self::PortConnected(port) => write!(f, "$port_connected({:?})", port),
-            Self::ParamGiven(param) => write!(f, "$param_given({:?})", param),
-            Self::SimParam => f.write_str("$simparam (ignored)"),
-            Self::SimParamStr => f.write_str("$simparam str (ignored)"),
-            Self::BranchAccess(access, branch) => write!(f, "{}({:?})", access, branch),
-            Self::PortFlow(port) => write!(f, "flow({:?})", port),
-            Self::Temperature => f.write_str("$temp"),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Call {
-    StopTask(StopTaskKind, PrintOnFinish),
-    Noise,
-}
-
-impl CallType for Call {
-    type I = Input;
-
-    fn const_fold(&self, _call: &[FlatSet<ConstVal>]) -> FlatSet<ConstVal> {
-        FlatSet::Top
-    }
-
-    fn derivative<C: CallType>(
-        &self,
-        _args: &IndexSlice<CallArg, [COperand<Self>]>,
-        _ad: &mut RValueAutoDiff<Self, C>,
-        _span: Span,
-    ) -> Option<RValue<Self>> {
-        match self {
-            Self::StopTask(_, _) => unreachable!(),
-            Self::Noise => None,
-        }
-    }
-}
-
-impl Display for Call {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::StopTask(kind, print_mode) => write!(f, "{}({:?})", kind, print_mode),
-            Self::Noise => f.write_str("noise (ignored)"),
-        }
-    }
-}
-
-pub const KB: f64 = 1.3806488e-23;
-pub const Q: f64 = 1.602176565e-19;
-
-impl ExpressionLowering<TestLowering> for Call {
-    fn port_flow(
-        _ctx: &mut LocalCtx<Self, TestLowering>,
-        port: PortId,
-        span: Span,
-    ) -> Option<RValue<Self>> {
-        Some(RValue::Use(Operand::new(
-            OperandData::Read(Input::PortFlow(port)),
-            span,
-        )))
-    }
-
-    fn branch_access(
-        _ctx: &mut LocalCtx<Self, TestLowering>,
-        access: DisciplineAccess,
-        branch: BranchId,
-        span: Span,
-    ) -> Option<RValue<Self>> {
-        Some(RValue::Use(Operand::new(
-            OperandData::Read(Input::BranchAccess(access, branch)),
-            span,
-        )))
-    }
-
-    fn parameter_ref(
-        _ctx: &mut LocalCtx<Self, TestLowering>,
-        param: ParameterId,
-        span: Span,
-    ) -> Option<RValue<Self>> {
-        Some(RValue::Use(Operand::new(
-            OperandData::Read(Input::Parameter(param)),
-            span,
-        )))
-    }
-
-    fn time_derivative(
-        _ctx: &mut LocalCtx<Self, TestLowering>,
-        _: ExpressionId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        debug!("Hello time derivative we are ignoring you");
-        None
-    }
-
-    fn noise(
-        _ctx: &mut LocalCtx<Self, TestLowering>,
-        _source: NoiseSource<ExpressionId, ()>,
-        _name: Option<ExpressionId>,
-        span: Span,
-    ) -> Option<RValue<Self>> {
-        Some(RValue::Call(Self::Noise, IndexVec::new(), span))
-    }
-
-    fn system_function_call(
-        _ctx: &mut LocalCtx<Self, TestLowering>,
-        call: &HirSystemFunctionCall,
-        span: Span,
-    ) -> Option<RValue<Self>> {
-        let res = match *call {
-            SystemFunctionCall::Temperature => {
-                RValue::Use(Operand::new(OperandData::Read(Input::Temperature), span))
-            }
-            SystemFunctionCall::PortConnected(port) => RValue::Use(Operand::new(
-                OperandData::Read(Input::PortConnected(port)),
-                span,
-            )),
-            SystemFunctionCall::ParameterGiven(_param) => RValue::Use(Operand::new(
-                OperandData::Constant(Scalar(SimpleConstVal::Bool(true))),
-                span,
-            )),
-            SystemFunctionCall::Simparam(_, _) => {
-                RValue::Use(Operand::new(OperandData::Read(Input::SimParam), span))
-            }
-            SystemFunctionCall::SimparamStr(_) => {
-                RValue::Use(Operand::new(OperandData::Read(Input::SimParam), span))
-            }
-            SystemFunctionCall::Vt(temp) => {
-                let temp = match temp {
-                    Some(temp) => _ctx.fold_real(temp)?,
-                    None => Operand::new(OperandData::Read(Input::Temperature), span),
-                };
-
-                RValue::BinaryOperation(
-                    Spanned::new(BinOp::Multiply, span),
-                    Operand::new(OperandData::Constant(ConstVal::Scalar(Real(KB / Q))), span),
-                    temp,
-                )
-            }
-            SystemFunctionCall::Lim { access, .. } => RValue::Use(Spanned {
-                span,
-                contents: OperandData::Read(Input::BranchAccess(access.0, access.1)),
-            }),
-        };
-        Some(res)
-    }
-
-    fn stop_task(
-        _ctx: &mut LocalCtx<Self, TestLowering>,
-        kind: StopTaskKind,
-        finish: PrintOnFinish,
-        span: Span,
-    ) -> Option<StmntKind<Self>> {
-        Some(StmntKind::Call(
-            Self::StopTask(kind, finish),
-            IndexVec::new(),
-            span,
-        ))
-    }
-
-    fn collapse_hint(
-        _: &mut LocalCtx<Self, TestLowering>,
-        _hi: NetId,
-        _lo: NetId,
-        _span: Span,
-    ) -> Option<StmntKind<Self>> {
-        Some(StmntKind::NoOp)
-    }
-}
-
-impl<'lt, 'c> CallTypeCodeGen<'lt, 'c> for Call {
+impl<'lt, 'c> CallTypeCodeGen<'lt, 'c> for TestFunctions {
     type CodeGenData = ();
 
-    fn read_input<'a, A: CallType>(
+    fn read_input<'a, A: CfgFunctions>(
         cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
         input: &Self::I,
     ) -> BasicValueEnum<'c> {
         match input {
-            Input::Parameter(id) => match cg.ctx.mir.parameters[*id].ty {
-                Type::REAL => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
-                Type::INT => cg.ctx.integer_ty().const_int(0, true).as_basic_value_enum(),
-                Type::STRING => cg
+            DefaultInputs::Parameter(ParameterInput::Value(id)) => {
+                match cg.ctx.mir.parameters[*id].ty {
+                    Type::REAL => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
+                    Type::INT => cg.ctx.integer_ty().const_int(0, true).as_basic_value_enum(),
+                    Type::STRING => cg
+                        .ctx
+                        .str_literal(StringLiteral::DUMMY)
+                        .as_basic_value_enum(),
+                    _ => todo!("Arrays"),
+                }
+            }
+            DefaultInputs::Parameter(ParameterInput::Given(_)) => {
+                cg.ctx.bool_ty().const_int(1, false).as_basic_value_enum()
+            }
+            DefaultInputs::PortConnected(_) => {
+                cg.ctx.bool_ty().const_int(1, false).as_basic_value_enum()
+            }
+            DefaultInputs::SimParam(param) => match param.kind {
+                SimParamKind::Real => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
+                SimParamKind::RealOptional => {
+                    cg.ctx.real_ty().const_float(0.0).as_basic_value_enum()
+                }
+                SimParamKind::RealOptionalGiven => {
+                    cg.ctx.bool_ty().const_zero().as_basic_value_enum()
+                }
+                SimParamKind::String => cg
                     .ctx
                     .str_literal(StringLiteral::DUMMY)
                     .as_basic_value_enum(),
-                _ => todo!("Arrays"),
             },
-            Input::PortConnected(_) => cg.ctx.bool_ty().const_int(1, false).as_basic_value_enum(),
-            Input::ParamGiven(_) => cg.ctx.bool_ty().const_int(1, false).as_basic_value_enum(),
-            Input::SimParam => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
-            Input::SimParamStr => cg
-                .ctx
-                .str_literal(StringLiteral::DUMMY)
-                .as_basic_value_enum(),
-            Input::BranchAccess(_, _) => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
-            Input::PortFlow(_) => cg.ctx.real_ty().const_float(0.0).as_basic_value_enum(),
-            Input::Temperature => cg.ctx.real_ty().const_float(300.0).as_basic_value_enum(),
+
+            DefaultInputs::Voltage(_)
+            | DefaultInputs::CurrentProbe(_)
+            | DefaultInputs::PartialTimeDerivative(_) => {
+                cg.ctx.real_ty().const_float(0.0).as_basic_value_enum()
+            }
+            DefaultInputs::Temperature(_) => {
+                cg.ctx.real_ty().const_float(300.0).as_basic_value_enum()
+            }
         }
     }
 
-    fn gen_call_rvalue<'a, A: CallType>(
+    fn gen_call_rvalue<'a, A: CfgFunctions>(
         &self,
         cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
         _args: &IndexSlice<CallArg, [BasicValueEnum<'c>]>,
     ) -> BasicValueEnum<'c> {
-        cg.ctx.real_ty().const_float(0.0).as_basic_value_enum()
+        if matches!(self, Self::Analysis(_)) {
+            cg.ctx.bool_ty().const_zero().as_basic_value_enum()
+        } else {
+            cg.ctx.real_ty().const_float(0.0).as_basic_value_enum()
+        }
     }
 
-    fn gen_call<'a, A: CallType>(
+    fn gen_call<'a, A: CfgFunctions>(
         &self,
         _cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
         _args: &IndexSlice<CallArg, [BasicValueEnum<'c>]>,
@@ -391,7 +206,7 @@ impl<'lt, 'c> CallTypeCodeGen<'lt, 'c> for Call {
         debug!("ignoring stop call")
     }
 
-    fn gen_limexp<'a, A: CallType>(
+    fn gen_limexp<'a, A: CfgFunctions>(
         cg: &mut CfgCodegen<'lt, 'a, 'c, (), A, Self>,
         arg: BasicValueEnum<'c>,
     ) -> BasicValueEnum<'c> {
@@ -399,17 +214,19 @@ impl<'lt, 'c> CallTypeCodeGen<'lt, 'c> for Call {
     }
 }
 
-impl From<ParameterCallType> for Call {
-    fn from(_: ParameterCallType) -> Self {
-        unreachable!()
-    }
-}
-
-impl From<ParameterInput> for Input {
-    fn from(input: ParameterInput) -> Self {
-        match input {
-            ParameterInput::Given(param) => Self::ParamGiven(param),
-            ParameterInput::Value(param) => Self::Parameter(param),
+impl From<DefaultFunctions> for TestFunctions {
+    fn from(fun: DefaultFunctions) -> Self {
+        match fun {
+            DefaultFunctions::Noise(x) => x.into(),
+            DefaultFunctions::TimeDerivative(x) => x.into(),
+            DefaultFunctions::StopTask(x) => x.into(),
+            DefaultFunctions::Print(x) => x.into(),
+            DefaultFunctions::NodeCollapse(x) => x.into(),
+            DefaultFunctions::VoltageLim(x) => x.into(),
+            DefaultFunctions::CurrentLim(x) => x.into(),
+            DefaultFunctions::AcStimulus(x) => x.into(),
+            DefaultFunctions::Analysis(x) => x.into(),
+            DefaultFunctions::Discontinuity(x) => x.into(),
         }
     }
 }

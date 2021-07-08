@@ -10,7 +10,7 @@
 
 use crate::GeneralOsdiCall;
 use openvaf_data_structures::index_vec::{define_index_type, index_vec, IndexSlice, IndexVec};
-use openvaf_data_structures::{BitSet, HashMap, HashSet};
+use openvaf_data_structures::{bit_set::BitSet, HashMap, HashSet};
 use openvaf_hir::{BranchId, DisciplineAccess};
 use openvaf_ir::ids::NetId;
 use openvaf_ir::{ConstVal, Unknown};

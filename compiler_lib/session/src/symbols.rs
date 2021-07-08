@@ -43,14 +43,14 @@ impl Ident {
     }
 
     pub const DUMMY: Self = Self {
-        name: keywords::EMPTY,
+        name: sym::EMPTY,
         span: DUMMY_SP,
     };
 
     #[must_use]
     pub const fn spanned_empty(span: Span) -> Self {
         Self {
-            name: keywords::EMPTY,
+            name: sym::EMPTY,
             span,
         }
     }
@@ -74,6 +74,21 @@ impl Ident {
             Symbol::intern(self.as_str().trim_start_matches('\'')),
             self.span,
         )
+    }
+
+    #[must_use]
+    pub fn is_reserved(self) -> bool {
+        self.name.is_reserved()
+    }
+
+    #[must_use]
+    pub fn is_valid_system_function_call(self) -> bool {
+        self.name.is_system_function_call()
+    }
+
+    #[must_use]
+    pub fn is_system_function_call(self) -> bool {
+        self.name.is_system_function_call()
     }
 
     #[must_use]
@@ -111,7 +126,7 @@ define_index_type! {
             /// (including hashing, equality, and ordering) operate on that index.
             pub struct Symbol = u32;
 
-            DEBUG_FORMAT = "<Symbol {}>";
+            DEBUG_FORMAT = "sym{}";
 
             IMPL_RAW_CONVERSIONS = true;
 
@@ -138,6 +153,24 @@ impl Symbol {
     /// # Safety
     pub fn as_str(self) -> SymbolStr {
         with_interner(|interner| SymbolStr::new(interner.get(self)))
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_reserved(self) -> bool {
+        (kw::START..kw::END).contains(&self.raw())
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_valid_system_function_call(self) -> bool {
+        (sysfun::START..sysfun::END).contains(&self.raw())
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn is_system_function_call(self) -> bool {
+        self.with(|contents| contents.starts_with('$'))
     }
 }
 
@@ -185,26 +218,6 @@ impl Interner {
     pub fn get(&self, symbol: Symbol) -> &str {
         self.strings[symbol]
     }
-}
-
-symbols! {
-    EMPTY: " ",
-    OpenVAF,
-    temperature,
-    flow,
-    potential,
-    abstol,
-    access,
-    units,
-    idt_nature,
-    ddt_nature,
-    desc,
-    domain,
-    openvaf_allow,
-    openvaf_warn,
-    openvaf_deny,
-    openvaf_forbid,
-
 }
 
 session_data!(static interner_lock: Lock<Interner> = Lock::new(Interner::fresh()));
@@ -272,4 +285,371 @@ impl Display for SymbolStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(self.deref(), f)
     }
+}
+
+pub mod kw {
+    pub use super::kw_generated::*;
+}
+
+pub mod sym {
+    pub use super::sym_generated::*;
+}
+
+pub mod sysfun {
+    pub use super::sysfun_generated::*;
+}
+
+symbols! {
+    Keywords{
+        above,
+        abs,
+        absdelay,
+        absdelta,
+        abstol,
+        access,
+        acos,
+        acosh,
+        ac_stim,
+        aliasparam,
+        always,
+        analog,
+        analysis,
+        and,
+        asin,
+        asinh,
+        assert,
+        assign,
+        atan,
+        atan2,
+        atanh,
+        automatic,
+        begin,
+        branch,
+        buf,
+        bufif0,
+        bufif1,
+        case,
+        casex,
+        casez,
+        ceil,
+        cell,
+        cmos,
+        config,
+        connect,
+        connectmodule,
+        connectrules,
+        continuous,
+        cos,
+        cosh,
+        cross,
+        ddt,
+        ddt_nature,
+        ddx,
+        deassign,
+        default,
+
+        defparam,
+        design,
+        disable,
+        discipline,
+        discrete,
+        domain,
+        driver_update,
+        edge,
+        // else, Already removed by the lexer and not allowed by the rust macros
+        end,
+        endcase,
+        endconfig,
+        endconnectrules,
+        enddiscipline,
+        endfunction,
+        endgenerate,
+        endmodule,
+        endnature,
+        endparamset,
+        endprimitive,
+        endspecify,
+        endtable,
+        endtask,
+        event,
+        exclude,
+        exp,
+        final_step,
+        flicker_noise,
+        floor,
+        flow,
+        // for, Already removed by the lexer and not allowed by the rust macros
+        force,
+        forever,
+        fork,
+        from,
+        function,
+        generate,
+        genvar,
+        ground,
+        highz0,
+        highz1,
+        hypot,
+        idt,
+        idtmod,
+        idt_nature,
+        // if, Already removed by the lexer and not allowed by the rust macros
+
+        ifnone,
+        incdir,
+        include,
+        inf,
+        initial,
+        initial_step,
+        inout,
+        input,
+        instance,
+        integer,
+        join,
+        laplace_nd,
+        laplace_np,
+        laplace_zd,
+        laplace_zp,
+        large,
+        last_crossing,
+        liblist,
+        library,
+        limexp,
+        ln,
+        localparam,
+        log,
+        macromodule,
+        max,
+        medium,
+        merged,
+        min,
+        module,
+        nand,
+        nature,
+        negedge,
+        net_resolution,
+        nmos,
+        noise_table,
+        noise_table_log,
+        nor,
+        noshowcancelled,
+        not,
+        notif0,
+        notif1,
+        or,
+        output,
+        parameter,
+        paramset,
+        pmos,
+
+
+        posedge,
+        potential,
+        pow,
+        primitive,
+        pull0,
+        pull1,
+        pulldown,
+        pullup,
+        pulsestyle_onevent,
+        pulsestyle_ondetect,
+        rcmos,
+        real,
+        realtime,
+        reg,
+        release,
+        repeat,
+        resolveto,
+        rnmos,
+        rpmos,
+        rtran,
+        rtranif0,
+        rtranif1,
+        scalared,
+        sin,
+        sinh,
+        showcancelled,
+        signed,
+
+        slew,
+        small,
+        specify,
+        specparam,
+        split,
+        sqrt,
+        string,
+        strong0,
+        strong1,
+        supply0,
+        supply1,
+        table,
+        tan,
+        tanh,
+        task,
+        time,
+        timer,
+        tran,
+        tranif0,
+        tranif1,
+        transition,
+        tri,
+        tri0,
+        tri1,
+        triand,
+        trior,
+        trireg,
+
+        units,
+        unsigned,
+        // use, Already removed by the lexer and not allowed by the rust macros
+        uwire,
+        vectored,
+        wait,
+        wand,
+        weak0,
+        weak1,
+        // while, Already removed by the lexer and not allowed by the rust macros
+        white_noise,
+        wire,
+        wor,
+        wreal,
+        xnor,
+        xor,
+        zi_nd,
+        zi_np,
+        zi_zd,
+        zi_zp,
+    }
+
+    Symbols{
+        EMPTY: " ",
+        OpenVAF,
+
+        openvaf_allow,
+        openvaf_warn,
+        openvaf_deny,
+        openvaf_forbid,
+
+        desc,
+        op,
+
+        ac,
+        dc,
+        noise
+    }
+
+    SystemFunctions{
+        display,
+        strobe,
+        write,
+        monitor,
+        monitoron,
+        monitoroff,
+        debug,
+
+        fclose,
+        fopen,
+        fdisplay,
+        fwrite,
+        fstrobe,
+        fmonitor,
+        fgets,
+        fscanf,
+        swrite,
+        sformat,
+        sscanf,
+        rewind,
+        fseek,
+        ftell,
+        fflush,
+        ferror,
+        feof,
+        fdebug,
+
+        finish,
+        stop,
+        fatal,
+
+        warning,
+        error,
+        info,
+        abstime,
+
+        bitstoreal,
+        realtobits,
+
+        test_plusargs: "test$plusargs",
+        value_plusargs: "value$plusargs",
+
+        dist_chi_square,
+        dist_exponential,
+        dist_poisson,
+        dist_uniform,
+        dist_erlang,
+        dist_normal,
+        dist_t,
+        rando,
+        arandom,
+        rdist_chi_square,
+        rdist_exponential,
+        rdist_poisson,
+        rdist_uniform,
+        rdist_erlang,
+        rdist_normal,
+        rdist_t,
+
+        clog2,
+        ln,
+        log10,
+        exp,
+        sqrt,
+        pow,
+        floor,
+        ceil,
+        sin,
+        cos,
+        tan,
+        asin,
+        acos,
+        atan,
+        atan2,
+        hypot,
+        sinh,
+        cosh,
+        tanh,
+
+        asinh,
+        acosh,
+        atanh,
+
+        temperature,
+        vt,
+        simparam,
+        simparam_str: "sympara$str",
+
+        simprobe,
+
+        discontinuity,
+        limit,
+        bound_step,
+
+        mfactor,
+        xposition,
+        yposition,
+        angle,
+
+        hflip,
+        vflip,
+
+        param_given,
+        port_connected,
+
+        analog_node_alias,
+        analog_port_alias,
+
+        table_model,
+
+    }
+
+
 }

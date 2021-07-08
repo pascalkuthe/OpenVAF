@@ -9,14 +9,14 @@
  */
 
 use openvaf_data_structures::bit_set::BitSet;
-use openvaf_ir::{DoubleArgMath, SingleArgMath, UnaryOperator};
+use openvaf_ir::{Math1, Math2, UnaryOperator};
 use openvaf_middle::cfg::{
     AnalysisPass, BasicBlock, BasicBlockData, ControlFlowGraph, Location, LocationKind,
     TerminatorKind,
 };
 use openvaf_middle::{
-    impl_pass_span, BinOp, COperand, CallType, ComparisonOp, Local, LocalKind, Mir, OperandData,
-    RValue, StmntKind, Type,
+    impl_pass_span, BinOp, COperand, CfgFunctions, ComparisonOp, Local, LocalKind, Mir,
+    OperandData, RValue, StmntKind, Type,
 };
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
@@ -154,9 +154,9 @@ impl Display for Malformations {
     }
 }
 
-pub struct Verify<'a, A: CallType>(pub &'a Mir<A>);
+pub struct Verify<'a, A: CfgFunctions>(pub &'a Mir<A>);
 
-impl<'a, A: CallType, C: CallType> AnalysisPass<'_, C> for Verify<'a, A> {
+impl<'a, A: CfgFunctions, C: CfgFunctions> AnalysisPass<'_, C> for Verify<'a, A> {
     type Result = Malformations;
 
     fn run(self, cfg: &ControlFlowGraph<C>) -> Self::Result {
@@ -194,7 +194,7 @@ impl<'a, A: CallType, C: CallType> AnalysisPass<'_, C> for Verify<'a, A> {
     impl_pass_span!("verify");
 }
 
-struct VerifyImpl<'a, C: CallType, A: CallType> {
+struct VerifyImpl<'a, C: CfgFunctions, A: CfgFunctions> {
     cfg: &'a ControlFlowGraph<C>,
     mir: &'a Mir<A>,
     errors: Vec<Malformation>,
@@ -203,7 +203,7 @@ struct VerifyImpl<'a, C: CallType, A: CallType> {
     terminators_valid: bool,
 }
 
-impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
+impl<'a, C: CfgFunctions, A: CfgFunctions> VerifyImpl<'a, C, A> {
     fn verify_phis(&mut self, block: BasicBlock, block_data: &BasicBlockData<C>) {
         let predecessor = self.cfg.predecessors(block);
 
@@ -374,12 +374,12 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                 }
             }
 
-            RValue::SingleArgMath(op, arg) => {
+            RValue::Math1(op, arg) => {
                 self.verify_operand(arg);
 
                 let ty = arg.contents.ty(self.mir, self.cfg);
                 match (op.contents, ty) {
-                    (SingleArgMath::Abs, Type::INT) => Type::INT,
+                    (Math1::Abs, Type::INT) => Type::INT,
                     (_, Type::CMPLX) => Type::CMPLX,
                     (_, Type::REAL) => Type::REAL,
                     (_, _) => {
@@ -391,7 +391,7 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     }
                 }
             }
-            RValue::DoubleArgMath(op, arg1, arg2) => {
+            RValue::Math2(op, arg1, arg2) => {
                 self.verify_operand(arg1);
                 self.verify_operand(arg2);
 
@@ -405,9 +405,9 @@ impl<'a, C: CallType, A: CallType> VerifyImpl<'a, C, A> {
                     return;
                 }
                 match (op.contents, arg1_ty) {
-                    (DoubleArgMath::Min, Type::INT) | (DoubleArgMath::Max, Type::INT) => Type::INT,
+                    (Math2::Min, Type::INT) | (Math2::Max, Type::INT) => Type::INT,
                     (_, Type::REAL) => Type::REAL,
-                    // (DoubleArgMath::Pow|DoubleArgMath::Hypot|DoubleArgMath::ArcTan2, Type::CMPLX) => Type::CMPLX, TODO CMPLX numbers
+                    // (Math2::Pow|Math2::Hypot|Math2::ArcTan2, Type::CMPLX) => Type::CMPLX, TODO CMPLX numbers
                     (_, _) => {
                         self.errors.push(Malformation {
                             location,

@@ -11,7 +11,7 @@
 use crate::storage_locations::StorageLocations;
 pub use frontend::{run_frontend, run_frontend_from_ts, GeneralOsdiCall};
 use itertools::Itertools;
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, HashMap};
 use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 use openvaf_ir::ids::SyntaxCtx;
 use openvaf_ir::Spanned;
@@ -19,12 +19,14 @@ use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, STAR
 use openvaf_middle::const_fold::{ConstantPropagation, NoInputConstResolution};
 use openvaf_middle::osdi_types::ConstVal::Scalar;
 use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{CallType, LocalKind, Mir, OperandData, RValue, StmntKind, VariableLocalKind};
-use openvaf_session::sourcemap::span::DUMMY_SP;
-use openvaf_transformations::{
-    BackwardSlice, CfgVisitor, DeadCodeElimination, LiveLocalAnalysis, RemoveDeadLocals, Simplify,
-    SimplifyBranches, Visit,
+use openvaf_middle::{
+    CfgFunctions, LocalKind, Mir, OperandData, RValue, StmntKind, VariableLocalKind,
 };
+use openvaf_pass::{
+    visit::CfgVisitor, BackwardSlice, DeadCodeElimination, LiveLocalAnalysis, RemoveDeadLocals,
+    Simplify, SimplifyBranches, Visit,
+};
+use openvaf_session::sourcemap::span::DUMMY_SP;
 use std::fs::File;
 pub use subfuncitons::OsdiFunctions;
 pub use topology::CircuitTopology;
@@ -129,7 +131,7 @@ pub fn run_middle<P: DiagnosticSlicePrinter>(
 }
 
 //mod sim_spec;
-pub fn optimize_cfg<C: CallType + 'static>(cfg: &mut ControlFlowGraph<C>) {
+pub fn optimize_cfg<C: CfgFunctions + 'static>(cfg: &mut ControlFlowGraph<C>) {
     cfg.modify(Simplify);
     cfg.modify(SimplifyBranches);
     cfg.modify(RemoveDeadLocals);

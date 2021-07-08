@@ -14,7 +14,7 @@ use openvaf_data_structures::bit_set::{HybridBitSet, SparseBitMatrix};
 use openvaf_middle::cfg::{
     AnalysisPass, BasicBlock, ControlFlowGraph, IntLocation, InternedLocations,
 };
-use openvaf_middle::{impl_pass_span, CallType, Local};
+use openvaf_middle::{impl_pass_span, CfgFunctions, Local};
 
 use crate::post_dominance::PostDominators;
 use crate::program_dependence::control_dependence::BuildControlDependenceGraph;
@@ -114,7 +114,7 @@ pub struct BuildPDG<'a, D, A, C> {
     pub control_dependence: C,
 }
 
-impl<'a, C: CallType> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C>
     for BuildPDG<'a, CalculateUseDefGraph, FindAssignments<'a>, ControlDependenceGraph>
 {
     type Result = ProgramDependenceGraph<SparseBitMatrix<Local, IntLocation>>;
@@ -133,7 +133,7 @@ impl<'a, C: CallType> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C>
     for BuildPDG<
         'a,
         CalculateUseDefGraph,
@@ -161,7 +161,7 @@ impl<'a, C: CallType> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C>
     for BuildPDG<'a, UseDefGraph, SparseBitMatrix<Local, IntLocation>, ControlDependenceGraph>
 {
     type Result = ProgramDependenceGraph<SparseBitMatrix<Local, IntLocation>>;
@@ -177,7 +177,7 @@ impl<'a, C: CallType> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C>
     for BuildPDG<
         'a,
         CalculateUseDefGraph,
@@ -201,7 +201,7 @@ impl<'a, C: CallType> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C>
     for BuildPDG<
         'a,
         CalculateUseDefGraph,
@@ -229,7 +229,7 @@ impl<'a, C: CallType> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C>
     for BuildPDG<
         'a,
         UseDefGraph,
@@ -252,7 +252,7 @@ impl<'a, C: CallType> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
     for BuildPDG<'a, CalculateUseDefGraph, FindAssignments<'a>, BuildControlDependenceGraph<PD>>
 {
     type Result = ProgramDependenceGraph<SparseBitMatrix<Local, IntLocation>>;
@@ -271,7 +271,7 @@ impl<'a, C: CallType, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
     for BuildPDG<
         'a,
         CalculateUseDefGraph,
@@ -299,7 +299,7 @@ impl<'a, C: CallType, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
     impl_pass_span!("Build PDG");
 }
 
-impl<'a, C: CallType, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
+impl<'a, C: CfgFunctions, PD: Borrow<PostDominators>> AnalysisPass<'_, C>
     for BuildPDG<
         'a,
         UseDefGraph,

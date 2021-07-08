@@ -12,11 +12,10 @@ use lalrpop_util::lalrpop_mod;
 
 use declarations::SymbolTableBuilder;
 
-use crate::error::{ArgumentCountMissmatch, Error};
-use openvaf_ast::{Ast, Expression, Parameter, ParameterConstraints, Type, Variable};
+use crate::error::Error;
+use openvaf_ast::{Ast, Parameter, ParameterConstraints, Type, Variable};
 use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
-use openvaf_ir::{Node, Spanned};
-use openvaf_session::sourcemap::Span;
+use openvaf_ir::AttrSpanned;
 use openvaf_session::symbols::Ident;
 
 pub use crate::tokenstream::{Token, TokenStream};
@@ -31,79 +30,6 @@ lalrpop_mod!(
     #[allow(clippy::all)]
     pub grammar
 );
-
-fn extract_single_arg(
-    l: Span,
-    args: Vec<ExpressionId>,
-    r: Span,
-    call: &'static str,
-    errors: &mut MultiDiagnostic<Error>,
-    ast: &mut Ast,
-) -> ExpressionId {
-    if let [arg] = args.as_slice() {
-        *arg
-    } else {
-        let span = l.extend(r);
-
-        let missmatch = ArgumentCountMissmatch {
-            found: args.len() as u8,
-            at_most: 1,
-            at_least: 1,
-        };
-        errors.add(Error::ArgumentCountMissmatch(missmatch, call, span));
-        ast.expressions.push(Spanned::new(Expression::Error, span))
-    }
-}
-
-fn extract_double_arg(
-    l: Span,
-    args: Vec<ExpressionId>,
-    r: Span,
-    call: &'static str,
-    errors: &mut MultiDiagnostic<Error>,
-    ast: &mut Ast,
-) -> (ExpressionId, ExpressionId) {
-    if let [arg1, arg2] = args.as_slice() {
-        (*arg1, *arg2)
-    } else {
-        let span = l.extend(r);
-
-        let missmatch = ArgumentCountMissmatch {
-            found: args.len() as u8,
-            at_most: 1,
-            at_least: 1,
-        };
-        errors.add(Error::ArgumentCountMissmatch(missmatch, call, span));
-        let err_expr = ast.expressions.push(Spanned::new(Expression::Error, span));
-        (err_expr, err_expr)
-    }
-}
-
-fn extract_single_or_double_arg(
-    l: Span,
-    args: Vec<ExpressionId>,
-    r: Span,
-    call: &'static str,
-    errors: &mut MultiDiagnostic<Error>,
-    ast: &mut Ast,
-) -> (ExpressionId, Option<ExpressionId>) {
-    match args.as_slice() {
-        [arg] => (*arg, None),
-        [arg, name] => (*arg, Some(*name)),
-        args => {
-            let span = l.extend(r);
-
-            let missmatch = ArgumentCountMissmatch {
-                found: args.len() as u8,
-                at_most: 2,
-                at_least: 1,
-            };
-            errors.add(Error::ArgumentCountMissmatch(missmatch, call, span));
-            let err = ast.expressions.push(Spanned::new(Expression::Error, span));
-            (err, None)
-        }
-    }
-}
 
 pub fn parse(ts: TokenStream) -> std::result::Result<Ast, MultiDiagnostic<Error>> {
     let spanned_iter = ts.into_iter().map(|(token, span)| Ok((span, token, span)));
@@ -138,7 +64,7 @@ fn insert_params<R>(
     ast: &mut Ast,
     errors: &mut MultiDiagnostic<Error>,
     symbols: &mut SymbolTableBuilder,
-    node: Node<Vec<(Ident, ExpressionId, Vec<R>)>>,
+    node: AttrSpanned<Vec<(Ident, ExpressionId, Vec<R>)>>,
     mut constraint: impl FnMut(Vec<R>) -> ParameterConstraints,
     ty: Type,
 ) {
@@ -150,7 +76,7 @@ fn insert_params<R>(
             ty,
         };
 
-        let node = Node {
+        let node = AttrSpanned {
             contents: param,
             span: node.span,
             attributes: node.attributes,
@@ -166,7 +92,7 @@ fn insert_vars(
     ast: &mut Ast,
     errors: &mut MultiDiagnostic<Error>,
     symbols: &mut SymbolTableBuilder,
-    node: Node<(Type, Vec<(Ident, Option<ExpressionId>)>)>,
+    node: AttrSpanned<(Type, Vec<(Ident, Option<ExpressionId>)>)>,
 ) {
     for (ident, default) in node.contents.1 {
         let var = Variable {
@@ -175,7 +101,7 @@ fn insert_vars(
             ty: node.contents.0,
         };
 
-        let node = Node {
+        let node = AttrSpanned {
             contents: var,
             span: node.span,
             attributes: node.attributes,

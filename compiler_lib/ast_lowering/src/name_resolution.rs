@@ -8,8 +8,7 @@
  *  *****************************************************************************************
  */
 
-use crate::error::Error::{NotAScope, NotAllowedInFunction, NotFound, NotFoundIn};
-use crate::error::NotAllowedInFunction::NonLocalAccess;
+use crate::error::Error::{NonLocalAccess, NotAScope, NotFound, NotFoundIn};
 use crate::error::{MockSymbolDeclaration, Result};
 #[doc(inline)]
 pub use crate::resolve;
@@ -17,11 +16,10 @@ pub use crate::resolve;
 pub use crate::resolve_hierarchical;
 use openvaf_ast::symbol_table::{SymbolDeclaration, SymbolTable};
 use openvaf_ast::{Ast, HierarchicalId};
-use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_data_structures::index_vec::{define_index_type, IndexBox, IndexVec};
 use openvaf_data_structures::HashMap;
-use openvaf_ir::id_type;
 use openvaf_ir::ids::{
-    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, ParameterId,
+    BlockId, BranchId, DisciplineId, FunctionId, ModuleId, NatureId, NetId, NodeId, ParameterId,
     PortBranchId, PortId, VariableId,
 };
 use openvaf_session::symbols::Ident;
@@ -144,7 +142,7 @@ macro_rules! resolve {
 /// # let ident = &HierarchicalId::from(hid);
 ///
 /// resolve_hierarchical!(fold; ident as
-///            Net(id) => {
+///            Node(id) => {
 ///                 print!("Resolved net")
 ///            },
 ///            Port(id) => {
@@ -155,12 +153,11 @@ macro_rules! resolve {
 /// println!("Not found or not a port/net")
 /// # });
 /// ```
-
 #[macro_export]
 macro_rules! resolve_hierarchical {
-    ($fold:expr; $name:ident as $($declaration:ident($id:ident) => $block:expr),+ ) => {
+    ($fold:expr; $name:ident as $($declaration:ident($($id:pat),*) => $block:expr),+ ) => {
         match $fold.resolver.resolve_hierarchical($name) {
-            $(Ok($crate::name_resolution::SymbolReference::$declaration($id)) => {Some($block)}),+
+            $(Ok($crate::name_resolution::SymbolReference::$declaration($($id),*)) => {Some($block)}),+
             Err(error) => {
                 $fold.error(error);
                 None
@@ -188,7 +185,7 @@ pub enum SymbolReference {
     Variable(VariableId),
     Branch(BranchId),
     PortBranch(PortBranchId),
-    Net(NetId),
+    Node(NetId, NodeId),
     Port(PortId),
     Function(FunctionId),
     Discipline(DisciplineId),
@@ -197,10 +194,19 @@ pub enum SymbolReference {
     NatureAccess(NatureAccessId),
 }
 
-id_type!(NatureAccessId(u16));
+define_index_type! {
+            pub struct NatureAccessId = u16;
 
-impl From<SymbolDeclaration> for SymbolReference {
-    fn from(declaration: SymbolDeclaration) -> Self {
+            DISPLAY_FORMAT = "nature_access{}";
+            DEBUG_FORMAT = "nature_access{}";
+
+            IMPL_RAW_CONVERSIONS = true;
+            // Checks are done when literals are added
+            DISABLE_MAX_INDEX_CHECK = ! cfg!(debug_assertions);
+}
+
+impl SymbolReference {
+    fn from_decl(declaration: SymbolDeclaration, resolver: &Resolver) -> Self {
         match declaration {
             SymbolDeclaration::Discipline(id) => Self::Discipline(id),
             SymbolDeclaration::Module(id) => Self::Module(id),
@@ -208,7 +214,7 @@ impl From<SymbolDeclaration> for SymbolReference {
             SymbolDeclaration::Variable(id) => Self::Variable(id),
             SymbolDeclaration::Branch(id) => Self::Branch(id),
             SymbolDeclaration::PortBranch(id) => Self::PortBranch(id),
-            SymbolDeclaration::Net(id) => Self::Net(id),
+            SymbolDeclaration::Net(id) => Self::Node(id, resolver.net_map[id]),
             SymbolDeclaration::Port(id) => Self::Port(id),
             SymbolDeclaration::Function(id) => Self::Function(id),
             SymbolDeclaration::Nature(id) => Self::Nature(id),
@@ -224,7 +230,7 @@ impl SymbolReference {
             Self::Module(_) => MockSymbolDeclaration::Module,
             Self::Block(_) => MockSymbolDeclaration::Block,
             Self::Variable(_) => MockSymbolDeclaration::Variable,
-            Self::Net(_) => MockSymbolDeclaration::Net,
+            Self::Node(_, _) => MockSymbolDeclaration::Node,
             Self::Branch(_) => MockSymbolDeclaration::Branch,
             Self::PortBranch(_) => MockSymbolDeclaration::PortBranch,
             Self::Port(_) => MockSymbolDeclaration::Port,
@@ -242,7 +248,7 @@ impl SymbolReference {
             Self::Module(id) => resolver.ast[id].contents.ident,
             Self::Block(id) => resolver.ast[id].scope.as_ref().unwrap().ident,
             Self::Variable(id) => resolver.ast[id].contents.ident,
-            Self::Net(id) => resolver.ast[id].contents.ident,
+            Self::Node(id, _) => resolver.ast[id].contents.ident,
             Self::Branch(id) => resolver.ast[id].contents.ident,
             Self::PortBranch(id) => resolver.ast[id].contents.ident,
             Self::Port(id) => resolver.ast[resolver.ast[id].net].contents.ident,
@@ -261,6 +267,7 @@ pub struct Resolver<'lt> {
     nature_access_symbol_table: HashMap<Ident, NatureAccessId>,
     natures_access: IndexVec<NatureAccessId, (Ident, Vec<NatureId>)>,
     pub scope_stack: Vec<&'lt SymbolTable>,
+    pub net_map: IndexBox<NetId, [NodeId]>,
     ast: &'lt Ast,
     inside_function: bool,
 }
@@ -273,6 +280,11 @@ impl<'lt> Resolver<'lt> {
             nature_access_symbol_table: HashMap::with_capacity(ast.natures.len()),
             scope_stack: Vec::with_capacity(8),
             ast,
+            net_map: ast
+                .nets
+                .indices()
+                .map(|id| NodeId::from_raw_unchecked(id.raw()))
+                .collect(),
             inside_function: false,
         }
     }
@@ -316,19 +328,23 @@ impl<'lt> Resolver<'lt> {
     /// If it can't find ident in the global (first) Scope it returns an NotFound Error
     pub fn resolve(&self, ident: &Ident) -> Result<SymbolReference> {
         for (depth, scope) in self.scope_stack.iter().rev().enumerate() {
-            if let Some(&res) = scope.get(&ident.name) {
+            if let Some(&decl) = scope.get(&ident.name) {
+                let reference = SymbolReference::from_decl(decl, self);
                 if self.inside_function
                     && depth > 0
                     && !matches!(
-                        res,
+                        decl,
                         SymbolDeclaration::Parameter(_)
                             | SymbolDeclaration::Module(_)
                             | SymbolDeclaration::Function(_)
                     )
                 {
-                    return Err(NotAllowedInFunction(NonLocalAccess, ident.span));
+                    return Err(NonLocalAccess {
+                        ident: *ident,
+                        kind: reference.mock(),
+                    });
                 }
-                return Ok(res.into());
+                return Ok(reference);
             }
         }
 
@@ -358,10 +374,6 @@ impl<'lt> Resolver<'lt> {
             let symbol_table = match current_ref {
                 SymbolReference::Module(module) => &self.ast[module].contents.symbol_table,
 
-                SymbolReference::Block(_) if self.inside_function => {
-                    return Err(NotAllowedInFunction(NonLocalAccess, current_span))
-                }
-
                 SymbolReference::Block(block_id) => {
                     &self.ast[block_id]
                         .scope
@@ -380,7 +392,7 @@ impl<'lt> Resolver<'lt> {
             };
 
             if let Some(&found) = symbol_table.get(&ident.name) {
-                current_ref = found.into();
+                current_ref = SymbolReference::from_decl(found, self);
                 current_span = found.span(self.ast);
                 if self.inside_function
                     && !matches!(
@@ -388,7 +400,10 @@ impl<'lt> Resolver<'lt> {
                         SymbolDeclaration::Parameter(_) | SymbolDeclaration::Module(_)
                     )
                 {
-                    return Err(NotAllowedInFunction(NonLocalAccess, ident.span));
+                    return Err(NonLocalAccess {
+                        ident: *ident,
+                        kind: SymbolReference::from_decl(found, self).mock(),
+                    });
                 }
             } else {
                 return Err(NotFoundIn(*ident, current_ref.ident(self).name));

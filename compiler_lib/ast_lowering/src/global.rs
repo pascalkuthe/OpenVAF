@@ -8,31 +8,34 @@
  *  *****************************************************************************************
  */
 
+use crate::allowed_operations::VerilogAState;
 use crate::ast::{Ast, DisciplineItem};
 use crate::error::Error::{
     AttributeAlreadyDefined, CircularAttributeInheritance, DiscreteDisciplineHasNatures,
     IllegalNatureAttributeOverwrite, NetWithoutDiscipline, RequiredBaseNatureAttributesNotDefined,
+    UnsupportedNetType,
 };
-use crate::error::{AttributeKind, Error, IllegalNatureAttributeOverwriteKind};
-use crate::expression::{AllowedReferences, ConstantExpressionFolder};
-use crate::{Branches, ExpressionFolder, Fold};
+use crate::error::{
+    AttributeKind, Error, IllegalNatureAttributeOverwriteKind, MockSymbolDeclaration,
+};
+use crate::expression::ExpressionFolder;
+use crate::{Branches, Fold};
 use openvaf_ast as ast;
-use openvaf_ast::NatureAttribute;
 use openvaf_data_structures::HashMap;
 use openvaf_diagnostics::ListFormatter;
 use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_hir::{Discipline, Nature, Net, SyntaxContextData};
-use openvaf_ir::ids::{ExpressionId, NatureId, SyntaxCtx};
-use openvaf_ir::{Node, Spanned};
-use openvaf_session::symbols::{keywords, Ident, Symbol};
+use openvaf_hir::{AllowedOperations, Discipline, Nature, NetId, Node, Port};
+use openvaf_ir::ids::{ExpressionId, NatureId, NodeId};
+use openvaf_ir::{AttrSpanned, Spanned};
+use openvaf_session::symbols::{kw, Ident, Symbol};
 use tracing::{debug, trace_span};
 
 /// This is the first fold. All Items that are defined globally or do not reference other items (nets & ports) are folded here
-pub struct Global<'a, F: Fn(Symbol) -> AllowedReferences> {
+pub struct Global<'a, F: Fn(Symbol) -> AllowedOperations> {
     pub(super) base: Fold<'a, F>,
 }
 
-impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
+impl<'a, F: Fn(Symbol) -> AllowedOperations> Global<'a, F> {
     pub fn new(ast: &'a mut Ast, allowed_attribute_references: F) -> Self {
         Self {
             base: Fold::new(ast, allowed_attribute_references),
@@ -66,15 +69,24 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
             })
             .collect();
 
-        self.base.hir.nets = self
+        let mut node_id = NodeId::new(1); // net 0 is always gnd
+        self.base.hir.nodes.reserve(self.base.ast.nets.len());
+        for (id, net) in self.base.ast.nets.iter_enumerated() {
+            let span = trace_span!("net", name = display(net.contents.ident));
+            let _enter = span.enter();
+            let node = self.fold_net(id, &mut node_id, net);
+            self.base.hir.nodes.push(node);
+        }
+
+        self.base.hir.ports = self
             .base
             .ast
-            .nets
+            .ports
             .iter()
-            .filter_map(|net| {
-                let span = trace_span!("net", name = display(net.contents.ident));
-                let _enter = span.enter();
-                self.fold_net(net)
+            .map(|port| Port {
+                input: port.input,
+                output: port.output,
+                node: self.base.resolver.net_map[port.net],
             })
             .collect();
 
@@ -85,9 +97,11 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
         }
     }
 
-    fn fold_discipline(&mut self, discipline: &Node<ast::Discipline>) -> Discipline {
+    fn fold_discipline(&mut self, discipline: &AttrSpanned<ast::Discipline>) -> Discipline {
         self.base
             .enter_sctxt(discipline.span, discipline.attributes);
+        self.base
+            .check_ident(discipline.contents.ident, MockSymbolDeclaration::Discipline);
 
         let mut pot_nature: Option<Spanned<Ident>> = None;
         let mut flow_nature: Option<Spanned<Ident>> = None;
@@ -204,22 +218,25 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
         }
     }
 
-    fn fold_nature(&mut self, id: NatureId, nature_node: &Node<ast::Nature>) -> Option<Nature> {
+    fn fold_nature(
+        &mut self,
+        id: NatureId,
+        nature_node: &AttrSpanned<ast::Nature>,
+    ) -> Option<Nature> {
+        self.base
+            .enter_sctxt(nature_node.span, nature_node.attributes);
         self.base.fold_attributes(nature_node.attributes);
 
-        let sctx = self.base.hir.syntax_ctx.push(SyntaxContextData {
-            span: nature_node.span,
-            attributes: nature_node.attributes,
-            parent: Some(SyntaxCtx::ROOT),
-        });
-
         let nature = &nature_node.contents;
-        let mut attributes: HashMap<NatureAttribute, Spanned<ExpressionId>> =
+        self.base
+            .check_ident(nature.ident, MockSymbolDeclaration::Nature);
+
+        let mut attributes: HashMap<Symbol, Spanned<ExpressionId>> =
             HashMap::with_capacity(nature.attributes.len() + 2);
 
         for attr in nature.attributes.iter().flatten() {
-            match attr.contents.0 {
-                NatureAttribute::Abstol => {
+            match attr.contents.0.name {
+                kw::abstol => {
                     if let Some(parent) = nature.parent {
                         self.base.error(IllegalNatureAttributeOverwrite {
                             kind: IllegalNatureAttributeOverwriteKind::Abstol,
@@ -230,7 +247,7 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
                         continue;
                     }
                 }
-                NatureAttribute::Access => {
+                kw::access => {
                     if let Some(parent) = nature.parent {
                         self.base.error(IllegalNatureAttributeOverwrite {
                             kind: IllegalNatureAttributeOverwriteKind::Access,
@@ -245,7 +262,7 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
             };
 
             if let Some(old) = attributes.insert(
-                attr.contents.0,
+                attr.contents.0.name,
                 Spanned {
                     span: attr.span,
                     contents: attr.contents.1,
@@ -283,7 +300,7 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
             }
 
             for attr in nature.attributes.iter().flatten() {
-                attributes.entry(attr.contents.0).or_insert(Spanned {
+                attributes.entry(attr.contents.0.name).or_insert(Spanned {
                     span: attr.span,
                     contents: attr.contents.1,
                 });
@@ -292,7 +309,7 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
         }
 
         let idt_nature = attributes
-            .get(&NatureAttribute::AntiDerivativeNature)
+            .get(&kw::idt_nature)
             .and_then(|expr| {
                 self.base.reinterpret_expression_as_identifier(
                     "idt_nature",
@@ -303,7 +320,7 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
             .unwrap_or(id);
 
         let ddt_nature = attributes
-            .get(&NatureAttribute::DerivativeNature)
+            .get(&kw::ddt_nature)
             .and_then(|expr| {
                 self.base.reinterpret_expression_as_identifier(
                     "ddt_nature",
@@ -315,33 +332,33 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
 
         let mut missing_attributes = Vec::new();
 
-        let abstol = if let Some(expr) = attributes.get(&NatureAttribute::Abstol) {
+        let abstol = if let Some(expr) = attributes.get(&kw::abstol) {
             self.fold_constant_expr(expr.contents)
         } else {
             // Errors only for base natures
             if nature.parent.is_none() {
-                missing_attributes.push(keywords::abstol);
+                missing_attributes.push(kw::abstol);
             }
             None
         };
 
-        let units = if let Some(expr) = attributes.get(&NatureAttribute::Units) {
+        let units = if let Some(expr) = attributes.get(&kw::units) {
             self.fold_constant_expr(expr.contents)
         } else {
             // Errors only for base natures
             if nature.parent.is_none() {
-                missing_attributes.push(keywords::units);
+                missing_attributes.push(kw::units);
             }
             None
         };
 
-        let access = if let Some(expr) = attributes.get(&NatureAttribute::Access) {
+        let access = if let Some(expr) = attributes.get(&kw::access) {
             self.base
                 .reinterpret_expression_as_identifier("access", &self.base.ast[expr.contents])
         } else {
             // Errors only for base natures
             if nature.parent.is_none() {
-                missing_attributes.push(keywords::access);
+                missing_attributes.push(kw::access);
             }
             None
         };
@@ -365,34 +382,55 @@ impl<'a, F: Fn(Symbol) -> AllowedReferences> Global<'a, F> {
             access,
             idt_nature,
             ddt_nature,
-            sctx,
+            sctx: self.base.exit_sctxt(),
         })
     }
 
-    /// Only the discpline is resolved here the rest is just a copy
-    fn fold_net(&mut self, net: &Node<ast::Net>) -> Option<Net> {
-        let sctx = self.base.hir.syntax_ctx.push(SyntaxContextData {
-            span: net.span,
-            attributes: net.attributes,
-            parent: None,
-        });
+    fn fold_net(&mut self, id: NetId, node_id: &mut NodeId, net: &AttrSpanned<ast::Net>) -> Node {
+        self.base.enter_sctxt(net.span, net.attributes);
+        self.base
+            .check_ident(net.contents.ident, MockSymbolDeclaration::Node);
 
         let discipline = if let Some(ident) = &net.contents.discipline {
-            resolve!(self.base; ident as Discipline(id) => id)?
+            resolve!(self.base; ident as Discipline(id) => id)
         } else {
             self.base.error(NetWithoutDiscipline(net.contents.ident));
-            return None;
+            None
         };
 
-        Some(Net {
+        let new_id = match net.contents.net_type {
+            None => {
+                let id = *node_id;
+                *node_id += 1;
+                id
+            }
+            Some(x) if x.name == kw::ground => NodeId::from_raw_unchecked(0),
+            Some(net_type) => {
+                self.base.error(UnsupportedNetType {
+                    net: net.contents.ident,
+                    net_type,
+                });
+                let id = *node_id;
+                *node_id += 1;
+                id
+            }
+        };
+
+        self.base.resolver.net_map[id] = new_id;
+
+        Node {
             ident: net.contents.ident,
             discipline,
-            net_type: net.contents.net_type,
-            sctx,
-        })
+            sctx: self.base.exit_sctxt(),
+        }
     }
 
     pub fn fold_constant_expr(&mut self, expr: ExpressionId) -> Option<ExpressionId> {
-        ConstantExpressionFolder(AllowedReferences::None).fold(expr, &mut self.base)
+        ExpressionFolder {
+            state: VerilogAState::new_compiletime_const(),
+            branch_resolver: None,
+            base: &mut self.base,
+        }
+        .fold(expr)
     }
 }

@@ -63,44 +63,8 @@ pub enum Token {
     SimpleIdentifier(FollowedByBracket),
     #[regex(r"\\[[:print:]&&\S]+\s")]
     EscapedIdentifier,
-
-    // TODO custom system calls
-    //#[regex(r"\$[a-zA-Z0-9_\$][a-zA-Z0-9_\$]*")]
-    //SystemCall,
-    #[token("$temperature")]
-    Temperature,
-    #[token("$vt")]
-    Vt,
-    #[token("$simparam")]
-    SimParam,
-    #[token("$simparam$str")]
-    SimParamStr,
-    #[token("$port_connected")]
-    PortConnected,
-    #[token("$param_given")]
-    ParamGiven,
-    #[token("$limit")]
-    Limit,
-    #[token("$display")]
-    Display,
-    #[token("$strobe")]
-    Strobe,
-    #[token("$write")]
-    Write,
-    #[token("$debug")]
-    Debug,
-    #[token("$finish")]
-    Finish,
-    #[token("$stop")]
-    Stop,
-    #[token("$info")]
-    Info,
-    #[token("$warn")]
-    Warn,
-    #[token("$error")]
-    Error,
-    #[token("$fatal")]
-    Fatal,
+    #[regex(r"\$[a-zA-Z_][[:word:]\$]*")]
+    SystemCall,
 
     //Literals
     #[regex(r#""([^\n"\\]|\\[\\tn"\n)]|\\\r\n)*""#)]
@@ -290,34 +254,22 @@ pub enum Token {
     Integer,
     #[token("real")]
     Real,
+
     #[token("reg")]
-    Reg,
     #[token("wreal")]
-    Wreal,
     #[token("supply0")]
-    Supply0,
     #[token("supply1")]
-    Supply1,
     #[token("tri")]
-    Tri,
     #[token("triand")]
-    TriAnd,
     #[token("trior")]
-    TriOr,
     #[token("tri0")]
-    Tri0,
     #[token("tri1")]
-    Tri1,
     #[token("wire")]
-    Wire,
     #[token("uwire")]
-    Uwire,
     #[token("wand")]
-    Wand,
     #[token("wor")]
-    Wor,
     #[token("ground")]
-    Ground,
+    NetType,
 
     #[token("potential")]
     Potential,
@@ -330,101 +282,6 @@ pub enum Token {
     #[token("continuous")]
     Continuous,
 
-    #[token("ddt")]
-    TimeDerivative,
-    #[token("ddx")]
-    PartialDerivative,
-    #[token("idt")]
-    TimeIntegral,
-    #[token("idtmod")]
-    TimeIntegralMod,
-
-    #[token("limexp")]
-    #[token("$limexp")]
-    LimExp,
-    #[token("white_noise")]
-    WhiteNoise,
-    #[token("flicker_noise")]
-    FlickerNoise,
-
-    #[token("$pow")]
-    #[token("pow")]
-    Pow,
-    #[token("$sqrt")]
-    #[token("sqrt")]
-    Sqrt,
-
-    #[token("$hypot")]
-    #[token("hypot")]
-    Hypot,
-    #[token("$exp")]
-    #[token("exp")]
-    Exp,
-    #[token("$ln")]
-    #[token("ln")]
-    Ln,
-    #[token("$log10")]
-    #[token("log")]
-    Log,
-    #[token("$min")]
-    #[token("min")]
-    Min,
-    #[token("$max")]
-    #[token("max")]
-    Max,
-    #[token("$abs")]
-    #[token("abs")]
-    Abs,
-    #[token("$floor")]
-    #[token("floor")]
-    Floor,
-    #[token("$ceil")]
-    #[token("ceil")]
-    Ceil,
-
-    #[token("$sin")]
-    #[token("sin")]
-    Sin,
-    #[token("$cos")]
-    #[token("cos")]
-    Cos,
-    #[token("tan")]
-    #[token("$tan")]
-    Tan,
-
-    #[token("$asin")]
-    #[token("asin")]
-    ArcSin,
-    #[token("$acos")]
-    #[token("acos")]
-    ArcCos,
-    #[token("atan")]
-    #[token("$atan")]
-    ArcTan,
-    #[token("atan2")]
-    #[token("$atan2")]
-    ArcTan2,
-
-    #[token("sinh")]
-    #[token("$sinh")]
-    SinH,
-    #[token("cosh")]
-    #[token("$cosh")]
-    CosH,
-    #[token("tanh")]
-    #[token("$tanh")]
-    TanH,
-
-    #[token("asinh")]
-    #[token("$asinh")]
-    ArcSinH,
-    #[token("acosh")]
-    #[token("$acosh")]
-    ArcCosH,
-    #[token("atanh")]
-    #[token("$atanh")]
-    ArcTanH,
-
     #[token("from")]
     From,
     #[token("exclude")]
@@ -434,16 +291,8 @@ pub enum Token {
     #[token("-inf")]
     MinusInfinity,
 
-    #[token("abstol")]
-    Abstol,
-    #[token("access")]
-    Access,
-    #[token("ddt_nature")]
-    TimeDerivativeNature,
-    #[token("idt_nature")]
-    TimeIntegralNature,
-    #[token("units")]
-    Units,
+    #[token("@")]
+    EventStart,
 }
 
 #[inline]
@@ -751,6 +600,14 @@ mod test {
             Some(Token::MacroCall(FollowedByBracket(false)))
         )
     }
+
+    #[test]
+    pub fn syscall() {
+        let test = "$temperature";
+
+        let mut lexer = TestLexer::new(test);
+        assert_eq!(lexer.next(), Some(Token::SystemCall))
+    }
     #[test]
     pub fn real_number() {
         let mut lexer = TestLexer::new(
@@ -871,88 +728,24 @@ impl Display for Token {
             Self::Realtime => f.write_str("realtime"),
             Self::Integer => f.write_str("integer"),
             Self::Real => f.write_str("real"),
-            Self::Reg => f.write_str("reg"),
-            Self::Wreal => f.write_str("wreal"),
-            Self::Supply0 => f.write_str("supply0"),
-            Self::Supply1 => f.write_str("supply1"),
-            Self::Tri => f.write_str("tri"),
-            Self::TriAnd => f.write_str("triand"),
-            Self::TriOr => f.write_str("trior"),
-            Self::Tri0 => f.write_str("tri0"),
-            Self::Tri1 => f.write_str("tri1"),
-            Self::Wire => f.write_str("wire"),
-            Self::Uwire => f.write_str("uwire"),
-            Self::Wand => f.write_str("wand"),
-            Self::Wor => f.write_str("wor"),
-            Self::Ground => f.write_str("ground"),
             Self::Potential => f.write_str("potential"),
             Self::Flow => f.write_str("flow"),
             Self::Domain => f.write_str("domain"),
             Self::Discrete => f.write_str("discrete"),
             Self::Continuous => f.write_str("continuous"),
-            Self::TimeDerivative => f.write_str("ddt"),
-            Self::PartialDerivative => f.write_str("ddx"),
-            Self::TimeIntegral => f.write_str("idt"),
-            Self::TimeIntegralMod => f.write_str("idtmod"),
-            Self::LimExp => f.write_str("limexp"),
-            Self::WhiteNoise => f.write_str("whitenoise"),
-            Self::FlickerNoise => f.write_str("flickernoise"),
-            Self::Pow => f.write_str("pow"),
-            Self::Sqrt => f.write_str("sqrt"),
-            Self::Hypot => f.write_str("hypot"),
-            Self::Exp => f.write_str("exp"),
-            Self::Ln => f.write_str("ln"),
-            Self::Log => f.write_str("log"),
-            Self::Min => f.write_str("min"),
-            Self::Max => f.write_str("max"),
-            Self::Abs => f.write_str("abs"),
-            Self::Floor => f.write_str("floor"),
-            Self::Ceil => f.write_str("ceil"),
-            Self::Sin => f.write_str("sin"),
-            Self::Cos => f.write_str("cos"),
-            Self::Tan => f.write_str("tan"),
-            Self::ArcSin => f.write_str("asin"),
-            Self::ArcCos => f.write_str("acos"),
-            Self::ArcTan => f.write_str("atan"),
-            Self::ArcTan2 => f.write_str("atan2"),
-            Self::SinH => f.write_str("sinh"),
-            Self::CosH => f.write_str("cosh"),
-            Self::TanH => f.write_str("tanh"),
-            Self::ArcSinH => f.write_str("asinh"),
-            Self::ArcCosH => f.write_str("acosh"),
-            Self::ArcTanH => f.write_str("atanh"),
             Self::From => f.write_str("from"),
             Self::Exclude => f.write_str("exclude"),
             Self::Infinity => f.write_str("inf"),
             Self::MinusInfinity => f.write_str("-inf"),
-            Self::Abstol => f.write_str("abstol"),
-            Self::Access => f.write_str("access"),
-            Self::TimeDerivativeNature => f.write_str("ddt_nature"),
-            Self::TimeIntegralNature => f.write_str("idt_nature"),
-            Self::Units => f.write_str("units"),
-            Self::Temperature => f.write_str("$temperature"),
-            Self::Vt => f.write_str("$vt"),
-            Self::SimParam => f.write_str("$simparam"),
-            Self::SimParamStr => f.write_str("$simparam$str"),
-            Self::PortConnected => f.write_str("$port_connected"),
-            Self::ParamGiven => f.write_str("$param_given"),
-            Self::Limit => f.write_str("$limit"),
-            Self::Display => f.write_str("$display"),
-            Self::Strobe => f.write_str("$strobe"),
-            Self::Write => f.write_str("$write"),
-            Self::Debug => f.write_str("$debug"),
             Self::Function => f.write_str("function"),
             Self::EndFunction => f.write_str("endfunction"),
-            Self::Finish => f.write_str("$finish"),
-            Self::Stop => f.write_str("$stop"),
-            Self::Info => f.write_str("$info"),
-            Self::Warn => f.write_str("$warn"),
-            Self::Error => f.write_str("$error"),
-            Self::Fatal => f.write_str("$fatal"),
             Self::Default => f.write_str("default"),
             Self::ConcatStart => f.write_str("{"),
             Self::ConcatEnd => f.write_str("}"),
             Self::ArrStart => f.write_str("'"),
+            Self::EventStart => f.write_str("@"),
+            Self::SystemCall => f.write_str("system_function_call"),
+            Self::NetType => f.write_str("net_type"),
         }
     }
 }

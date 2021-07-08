@@ -9,7 +9,7 @@
  */
 
 use crate::cfg::{BasicBlockData, ControlFlowGraph};
-use crate::{CallType, LocalKind, Mir, ModuleId, VariableLocalKind};
+use crate::{CfgFunctions, LocalKind, Mir, ModuleId, VariableLocalKind};
 use openvaf_diagnostics::ListPrettyPrinter;
 use std::io;
 use std::path::Path;
@@ -18,14 +18,14 @@ const INDENT: &str = "    ";
 /// Alignment for lining up comments following MIR statements
 const ALIGN: usize = 120;
 
-impl<C: CallType> Mir<C> {
+impl<C: CfgFunctions> Mir<C> {
     pub fn print_header<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         writeln!(
             w,
             "OpenVAF MIR print; Intended for human consumption only (no parsing)"
         )?;
         writeln!(w, "NETS")?;
-        for (net, info) in self.nets.iter_enumerated() {
+        for (net, info) in self.nodes.iter_enumerated() {
             writeln!(w, "{}{:?} = {:?}", INDENT, net, info)?;
         }
 
@@ -64,7 +64,7 @@ impl<C: CallType> Mir<C> {
                 writeln!(
                     w,
                     "{0}{0}port {1}: {2} = {3:?};",
-                    INDENT, port, directions, self.ports[port].net
+                    INDENT, port, directions, self.ports[port].node
                 )?;
             }
 
@@ -76,11 +76,11 @@ impl<C: CallType> Mir<C> {
         Ok(())
     }
 
-    pub fn print_modules_with_shared<W: io::Write>(
+    pub fn print_modules_with_shared<W: io::Write, X: CfgFunctions>(
         &self,
         mut w: W,
         id: ModuleId,
-        cfg: &ControlFlowGraph<C>,
+        cfg: &ControlFlowGraph<X>,
     ) -> io::Result<()> {
         for (module, info) in self.modules.iter_enumerated() {
             writeln!(w, "Module {} ", info.ident)?;
@@ -96,7 +96,7 @@ impl<C: CallType> Mir<C> {
                 writeln!(
                     w,
                     "{0}{0}port {1}: {2} = {3:?};",
-                    INDENT, port, directions, self.ports[port].net
+                    INDENT, port, directions, self.ports[port].node
                 )?;
             }
 
@@ -117,11 +117,11 @@ impl<C: CallType> Mir<C> {
         self.print(file)
     }
 
-    pub fn print_to_file_with_shared(
+    pub fn print_to_file_with_shared<X: CfgFunctions>(
         &self,
         path: impl AsRef<Path>,
         id: ModuleId,
-        cfg: &ControlFlowGraph<C>,
+        cfg: &ControlFlowGraph<X>,
     ) -> io::Result<()> {
         let file = std::fs::File::create(path.as_ref())?;
         self.print_with_shared(file, id, cfg)
@@ -133,19 +133,19 @@ impl<C: CallType> Mir<C> {
         self.print_modules(&mut dst)
     }
 
-    pub fn print_with_shared(
+    pub fn print_with_shared<X: CfgFunctions>(
         &self,
         mut dst: impl io::Write,
         id: ModuleId,
-        cfg: &ControlFlowGraph<C>,
+        cfg: &ControlFlowGraph<X>,
     ) -> io::Result<()> {
         self.print_header(&mut dst)?;
         writeln!(dst)?;
         self.print_modules_with_shared(&mut dst, id, cfg)
     }
 }
-impl<C: CallType> ControlFlowGraph<C> {
-    pub fn print<A: CallType, W: io::Write>(&self, mir: &Mir<A>, mut w: W) -> io::Result<()> {
+impl<C: CfgFunctions> ControlFlowGraph<C> {
+    pub fn print<A: CfgFunctions, W: io::Write>(&self, mir: &Mir<A>, mut w: W) -> io::Result<()> {
         writeln!(w, "LOCALS")?;
         for (local, decl) in self.locals.iter_enumerated() {
             let (decl, comment) = match decl.kind {
@@ -215,7 +215,7 @@ impl<C: CallType> ControlFlowGraph<C> {
     }
 }
 
-impl<C: CallType> BasicBlockData<C> {
+impl<C: CfgFunctions> BasicBlockData<C> {
     pub fn print<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         //writeln!(w, "{}{:?}: {{", INDENT, block, )?;
         for (phi, info) in self.phi_statements.iter_enumerated() {

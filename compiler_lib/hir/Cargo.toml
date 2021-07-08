@@ -14,8 +14,20 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
-
-openvaf-ir = {version = "0.8.0", path = "../ir"}
 openvaf-ast = {version = "0.8.0", path = "../ast"}
+openvaf-constants = {version = "0.8.0", path = "../constants" }
+openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
+openvaf-diagnostics = {version="0.8.0", path="../diagnostics"}
+openvaf-ir = {version = "0.8.0", path = "../ir"}
+
+openvaf-middle = {version="0.8.0", path="../middle"}
 openvaf-session = {version = "0.8.0", path = "../session"}
+
+
+match_any = "1.0.1"
+
+tracing = "0.1.26"
+thiserror = "1.0.26"
+enum_dispatch = "0.3.7"
+derive_more = "0.99.16"
+enumset = "1.0.7"

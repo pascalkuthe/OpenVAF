@@ -14,7 +14,7 @@ use crate::storage_locations::StorageLocationValue::{
 use crate::GeneralOsdiCall;
 use openvaf_data_structures::arrayvec::ArrayVec;
 use openvaf_data_structures::index_vec::{define_index_type, IndexVec};
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, HashMap};
 use openvaf_diagnostics::ListPrettyPrinter;
 use openvaf_hir::{Unknown, VariableId};
 use openvaf_ir::ids::BranchId;

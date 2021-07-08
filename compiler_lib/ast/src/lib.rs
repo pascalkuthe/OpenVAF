@@ -14,17 +14,14 @@ use core::fmt::Debug;
 use openvaf_data_structures::index_vec::IndexVec;
 
 use openvaf_ir::ids::{
-    AttributeId, BlockId, BranchId, DisciplineId, ExpressionId, FunctionId, IdRange, ModuleId,
-    NatureId, NetId, ParameterId, PortBranchId, PortId, StatementId, VariableId,
+    AttributeId, BlockId, BranchId, CallArg, DisciplineId, ExpressionId, FunctionId, IdRange,
+    ModuleId, NatureId, NetId, ParameterId, PortBranchId, PortId, StatementId, VariableId,
 };
 
 pub use openvaf_ir::{
-    impl_id_type, Attribute, ConstVal, DisplayTaskKind, DoubleArgMath, Node,
-    ParameterExcludeConstraint, ParameterRangeConstraint, ParameterRangeConstraintBound, Port,
-    SingleArgMath, Spanned, StopTaskKind, Type, UnaryOperator,
+    impl_id_type, AttrSpanned, Attribute, ConstVal, ParameterExcludeConstraint,
+    ParameterRangeConstraint, ParameterRangeConstraintBound, Spanned, Type, UnaryOperator,
 };
-
-pub type SystemFunctionCall = openvaf_ir::SystemFunctionCall<ExpressionId, ExpressionId, (), ()>;
 
 use openvaf_ir::SimpleConstVal;
 use openvaf_session::sourcemap::Span;
@@ -34,26 +31,24 @@ use std::ops::Range;
 
 pub mod symbol_table;
 
-/// An Ast representing a parsed Verilog-AMS project (root file);
-/// It provides stable indices for every Node because the entire Tree is immutable once created;
 #[derive(Default, Debug, Clone)]
 pub struct Ast {
     //Declarations
-    pub branches: IndexVec<BranchId, Node<Branch>>,
-    pub port_branches: IndexVec<PortBranchId, Node<PortBranch>>,
-    pub nets: IndexVec<NetId, Node<Net>>,
+    pub branches: IndexVec<BranchId, AttrSpanned<Branch>>,
+    pub port_branches: IndexVec<PortBranchId, AttrSpanned<PortBranch>>,
+    pub nets: IndexVec<NetId, AttrSpanned<Net>>,
     pub ports: IndexVec<PortId, Port>,
-    pub variables: IndexVec<VariableId, Node<Variable>>,
-    pub parameters: IndexVec<ParameterId, Node<Parameter>>,
-    pub modules: IndexVec<ModuleId, Node<Module>>,
-    pub functions: IndexVec<FunctionId, Node<Function>>,
-    pub disciplines: IndexVec<DisciplineId, Node<Discipline>>,
-    pub natures: IndexVec<NatureId, Node<Nature>>,
+    pub variables: IndexVec<VariableId, AttrSpanned<Variable>>,
+    pub parameters: IndexVec<ParameterId, AttrSpanned<Parameter>>,
+    pub modules: IndexVec<ModuleId, AttrSpanned<Module>>,
+    pub functions: IndexVec<FunctionId, AttrSpanned<Function>>,
+    pub disciplines: IndexVec<DisciplineId, AttrSpanned<Discipline>>,
+    pub natures: IndexVec<NatureId, AttrSpanned<Nature>>,
     //Ast Items
     pub expressions: IndexVec<ExpressionId, Spanned<Expression>>,
     pub blocks: IndexVec<BlockId, Block>,
     pub attributes: IndexVec<AttributeId, Attribute>,
-    pub statements: IndexVec<StatementId, Node<Statement>>,
+    pub statements: IndexVec<StatementId, AttrSpanned<Statement>>,
     pub top_symbols: SymbolTable,
 }
 
@@ -82,49 +77,39 @@ impl Ast {
     }
 }
 
-impl_id_type!(BranchId in Ast => branches as Node<Branch>);
+impl_id_type!(BranchId in Ast => branches as AttrSpanned<Branch>);
 
-impl_id_type!(PortBranchId in Ast => port_branches as Node<PortBranch>);
+impl_id_type!(PortBranchId in Ast => port_branches as AttrSpanned<PortBranch>);
 
-impl_id_type!(NetId in Ast => nets as Node<Net>);
+impl_id_type!(NetId in Ast => nets as AttrSpanned<Net>);
 
 impl_id_type!(PortId in Ast => ports as Port);
 
-impl_id_type!(ParameterId in Ast => parameters as Node<Parameter>);
+impl_id_type!(ParameterId in Ast => parameters as AttrSpanned<Parameter>);
 
-impl_id_type!(VariableId in Ast => variables as Node<Variable>);
+impl_id_type!(VariableId in Ast => variables as AttrSpanned<Variable>);
 
-impl_id_type!(ModuleId in Ast => modules as Node<Module>);
+impl_id_type!(ModuleId in Ast => modules as AttrSpanned<Module>);
 
-impl_id_type!(FunctionId in Ast => functions as Node<Function>);
+impl_id_type!(FunctionId in Ast => functions as AttrSpanned<Function>);
 
-impl_id_type!(DisciplineId in Ast => disciplines as Node<Discipline>);
+impl_id_type!(DisciplineId in Ast => disciplines as AttrSpanned<Discipline>);
 
 impl_id_type!(ExpressionId in Ast => expressions as Spanned<Expression>);
 
 impl_id_type!(AttributeId in Ast => attributes as Attribute);
 
-impl_id_type!(StatementId in Ast => statements as Node<Statement>);
+impl_id_type!(StatementId in Ast => statements as AttrSpanned<Statement>);
 
 impl_id_type!(BlockId in Ast => blocks as Block);
 
-impl_id_type!(NatureId in Ast => natures as Node<Nature>);
+impl_id_type!(NatureId in Ast => natures as AttrSpanned<Nature>);
 
 #[derive(Clone, Debug)]
 pub struct Nature {
     pub ident: Ident,
     pub parent: Option<Ident>,
-    pub attributes: Vec<Option<Spanned<(NatureAttribute, ExpressionId)>>>,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum NatureAttribute {
-    Access,
-    Abstol,
-    DerivativeNature,
-    AntiDerivativeNature,
-    Units,
-    User(Ident),
+    pub attributes: Vec<Option<Spanned<(Ident, ExpressionId)>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -231,7 +216,7 @@ pub struct FunctionArg {
 pub struct Net {
     pub ident: Ident,
     pub discipline: Option<Ident>,
-    pub net_type: NetType,
+    pub net_type: Option<Ident>,
 }
 
 impl Default for Net {
@@ -239,7 +224,7 @@ impl Default for Net {
         Self {
             ident: Ident::DUMMY,
             discipline: None,
-            net_type: NetType::UNDECLARED,
+            net_type: None,
         }
     }
 }
@@ -249,25 +234,6 @@ pub struct Variable {
     pub ident: Ident,
     pub ty: Type,
     pub default: Option<ExpressionId>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NetType {
-    UNDECLARED,
-    REG,
-    WREAL,
-    SUPPLY0,
-    SUPPLY1,
-    TRI,
-    TRIAND,
-    TRIOR,
-    TRI0,
-    TRI1,
-    WIRE,
-    UWIRE,
-    WAND,
-    WOR,
-    GROUND,
 }
 
 #[derive(Clone, Debug)]
@@ -280,8 +246,7 @@ pub enum Statement {
     Assignment(HierarchicalId, ExpressionId),
     While(ExpressionId, StatementId),
     For(ForLoop),
-    DisplayTask(DisplayTaskKind, Vec<ExpressionId>),
-    StopTask(StopTaskKind, Option<ExpressionId>),
+    FunctionCall(Ident, IndexVec<CallArg, ExpressionId>),
     Error,
     NoOp,
 }
@@ -335,26 +300,12 @@ pub enum Expression {
     Error,
 }
 
-pub type NoiseSource = openvaf_ir::NoiseSource<ExpressionId, ()>;
-
 #[derive(Clone, Debug)]
 pub enum Primary {
     Constant(ConstVal),
-
     Reference(HierarchicalId),
-
-    SystemFunctionCall(SystemFunctionCall),
-    FunctionCall(Ident, Vec<ExpressionId>),
-
+    FunctionCall(Ident, IndexVec<CallArg, ExpressionId>),
     PortFlowProbe(Ident, HierarchicalId),
-    SingleArgMath(SingleArgMath, ExpressionId),
-
-    DoubleArgMath(DoubleArgMath, ExpressionId, ExpressionId),
-
-    Noise(NoiseSource, Option<ExpressionId>),
-
-    PartialDerivative(ExpressionId, ExpressionId),
-    DerivativeByTime(ExpressionId),
 }
 
 impl From<i64> for Primary {
@@ -384,12 +335,6 @@ impl From<StringLiteral> for Primary {
 impl From<HierarchicalId> for Primary {
     fn from(ident: HierarchicalId) -> Self {
         Self::Reference(ident)
-    }
-}
-
-impl From<SystemFunctionCall> for Primary {
-    fn from(call: SystemFunctionCall) -> Self {
-        Self::SystemFunctionCall(call)
     }
 }
 
@@ -438,4 +383,11 @@ impl From<Vec<Ident>> for HierarchicalId {
     fn from(raw: Vec<Ident>) -> Self {
         Self { names: raw }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Port {
+    pub input: bool,
+    pub output: bool,
+    pub net: NetId,
 }

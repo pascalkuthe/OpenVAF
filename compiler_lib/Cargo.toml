@@ -13,7 +13,6 @@ members = [
     "diagnostics",
 
     "hir",
-    "hir_lowering",
     "ir",
     "middle",
 

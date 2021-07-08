@@ -14,16 +14,17 @@ use std::fmt::Display;
 
 use thiserror::Error;
 
-use openvaf_ast::NatureAttribute;
-use openvaf_diagnostics::ListFormatter;
 use openvaf_diagnostics::{AnnotationType, DiagnosticSlice, FooterItem, LibraryDiagnostic, Text};
-use openvaf_hir::Hir;
+use openvaf_diagnostics::{ListFormatter, HINT_UNSUPPORTED};
+use openvaf_hir::{AllowedOperation, AllowedOperations, Hir};
 use openvaf_ir::ids::DisciplineId;
 use openvaf_session::sourcemap::Span;
-use openvaf_session::symbols::keywords;
+use openvaf_session::symbols::kw;
 use openvaf_session::symbols::{Ident, Symbol};
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
+use crate::allowed_operations::AccessLocation;
+use openvaf_data_structures::iter::Itertools;
 
 #[derive(Clone, Debug)]
 pub struct NetInfo {
@@ -83,15 +84,15 @@ impl AllowedNatures {
     fn to_allowed_list(self) -> Vec<Symbol> {
         match self {
             Self::None | Self::PortPotential => vec![],
-            Self::Potential(_, pot) => vec![keywords::potential, pot],
-            Self::Flow(_, flow) => vec![keywords::flow, flow],
+            Self::Potential(_, pot) => vec![kw::potential, pot],
+            Self::Flow(_, flow) => vec![kw::flow, flow],
             Self::PotentialAndFlow {
                 flow_nature_access,
                 potential_nature_access,
                 ..
             } => vec![
-                keywords::potential,
-                keywords::flow,
+                kw::potential,
+                kw::flow,
                 potential_nature_access,
                 flow_nature_access,
             ],
@@ -127,52 +128,6 @@ impl Display for AllowedNatures {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum NonConstantExpression {
-    VariableReference,
-    ParameterReference,
-    PortReferences,
-    NetReferences,
-    BranchAccess,
-    FunctionCall,
-    AnalogFilter,
-}
-
-impl Display for NonConstantExpression {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::VariableReference => f.write_str("Variable references"),
-            Self::BranchAccess => f.write_str("Branch probe calls"),
-            Self::FunctionCall => f.write_str("Function calls"),
-            Self::AnalogFilter => f.write_str("Analog filters"),
-            Self::ParameterReference => f.write_str("Parameter references"),
-            Self::PortReferences => f.write_str("Port references"),
-            Self::NetReferences => f.write_str("Net references"),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum NotAllowedInFunction {
-    BranchAccess,
-    AnalogFilters,
-    NamedBlocks,
-    Contribute,
-    NonLocalAccess,
-}
-
-impl Display for NotAllowedInFunction {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::BranchAccess => f.write_str("Accessing branches"),
-            Self::AnalogFilters => f.write_str("Analog filter functions"),
-            Self::NamedBlocks => f.write_str("Named blocks"),
-            Self::NonLocalAccess => f.write_str("Accessing items outside of the function"),
-            Self::Contribute => f.write_str("Contribute statements (<+)"),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum MockSymbolDeclaration {
     Module,
@@ -180,7 +135,7 @@ pub enum MockSymbolDeclaration {
     Variable,
     Branch,
     PortBranch,
-    Net,
+    Node,
     Port,
     Function,
     Discipline,
@@ -197,7 +152,7 @@ impl Display for MockSymbolDeclaration {
             Self::Variable => f.write_str("variable"),
             Self::Branch => f.write_str("branch"),
             Self::PortBranch => f.write_str("port branch"),
-            Self::Net => f.write_str("net"),
+            Self::Node => f.write_str("net"),
             Self::Port => f.write_str("port"),
             Self::Function => f.write_str("function"),
             Self::Discipline => f.write_str("discipline"),
@@ -213,21 +168,16 @@ pub enum AttributeKind {
     DisciplinePotential(Ident),
     DisciplineFlow(Ident),
     DisciplineDomain(Ident),
-    NatureAttribute(NatureAttribute, Ident),
+    NatureAttribute(Ident, Ident),
 }
 
 impl AttributeKind {
     pub fn short(&self) -> Symbol {
         match self {
-            Self::DisciplinePotential(_) => keywords::potential,
-            Self::DisciplineFlow(_) => keywords::flow,
-            Self::DisciplineDomain(_) => keywords::domain,
-            Self::NatureAttribute(NatureAttribute::Abstol, _) => keywords::abstol,
-            Self::NatureAttribute(NatureAttribute::Access, _) => keywords::access,
-            Self::NatureAttribute(NatureAttribute::DerivativeNature, _) => keywords::ddt_nature,
-            Self::NatureAttribute(NatureAttribute::AntiDerivativeNature, _) => keywords::idt_nature,
-            Self::NatureAttribute(NatureAttribute::Units, _) => keywords::units,
-            Self::NatureAttribute(NatureAttribute::User(ident), _) => ident.name,
+            Self::DisciplinePotential(_) => kw::potential,
+            Self::DisciplineFlow(_) => kw::flow,
+            Self::DisciplineDomain(_) => kw::domain,
+            Self::NatureAttribute(ident, _) => ident.name,
         }
     }
 }
@@ -247,24 +197,8 @@ impl Display for AttributeKind {
                 f.write_fmt(format_args!("the domain of {}", discipline))
             }
 
-            Self::NatureAttribute(NatureAttribute::Abstol, nature) => {
-                f.write_fmt(format_args!("The 'abstol' attribute of {}", nature))
-            }
-
-            Self::NatureAttribute(NatureAttribute::Access, nature) => {
-                f.write_fmt(format_args!("The 'access' attribute of {}", nature))
-            }
-            Self::NatureAttribute(NatureAttribute::DerivativeNature, nature) => {
-                f.write_fmt(format_args!("The 'ddt_nature' attribute of {}", nature))
-            }
-            Self::NatureAttribute(NatureAttribute::AntiDerivativeNature, nature) => {
-                f.write_fmt(format_args!("The 'idt_nature' attribute of {}", nature))
-            }
-            Self::NatureAttribute(NatureAttribute::Units, nature) => {
-                f.write_fmt(format_args!("The 'units' attribute of {}", nature))
-            }
-            Self::NatureAttribute(NatureAttribute::User(ident), nature) => {
-                f.write_fmt(format_args!("The user attribute '{}' of {}", ident, nature))
+            Self::NatureAttribute(attr, nature) => {
+                f.write_fmt(format_args!("the '{}' attribute of {}", attr, nature))
             }
         }
     }
@@ -332,10 +266,10 @@ pub enum Error {
     #[error("nature {1} is missing the required attributes {0}")]
     RequiredBaseNatureAttributesNotDefined(ListFormatter<Vec<Symbol>>, Ident, Span),
 
-    #[error("Ccse statements may only have one default case")]
+    #[error("case statements may only have one default case")]
     MultipleDefaultDeclarations { old: Span, new: Span },
 
-    #[error("finction argument {0} is missing separate type declaration")]
+    #[error("function argument {0} is missing separate type declaration")]
     FunctionArgTypeDeclarationMissing(Ident),
 
     #[error("'{0}' was not found in the current scope!")]
@@ -344,8 +278,11 @@ pub enum Error {
     #[error("'{0}' was not found in '{1}'!")]
     NotFoundIn(Ident, Symbol),
 
-    #[error("'{0}' was declared without a discipline! This is not valid in the analog subset of VerilogAMS")]
+    #[error("'{0}' was declared without a discipline!")]
     NetWithoutDiscipline(Ident),
+
+    #[error("'{net}' was declared with an illegal net type {net_type}!")]
+    UnsupportedNetType { net: Ident, net_type: Ident },
 
     #[error("{declaration_name} is not a scope!")]
     NotAScope {
@@ -380,14 +317,19 @@ pub enum Error {
     #[error("the disciplines of {0} and {1} are incompatible")]
     DisciplineMismatch(NetInfo, NetInfo, Span),
 
-    #[error("{0} are not allowed in this expressions!")]
-    NotAllowedInConstantContext(NonConstantExpression, Span),
+    #[error("{op} is not allowed in {loc}!")]
+    NotAllowedInContext {
+        op: AllowedOperation,
+        span: Span,
+        loc: AccessLocation,
+        allowed: AllowedOperations,
+    },
 
-    #[error("{0} is now allowed inside analog functions!")]
-    NotAllowedInFunction(NotAllowedInFunction, Span),
-
-    #[error("partial derivatives may only be calculated over potentials between two nodes, branch flows or temperatures")]
-    DerivativeNotAllowed(Span),
+    #[error("access to {kind} '{ident}' defined outside of the function is not allowed")]
+    NonLocalAccess {
+        kind: MockSymbolDeclaration,
+        ident: Ident,
+    },
 
     #[error("contribution can only be made to branch probes (for example 'I(net1,net2)', 'potential(net)' or 'flow(branch)')")]
     ContributeToNonBranchProbe(Span),
@@ -395,10 +337,7 @@ pub enum Error {
     #[error("port branches ( like (<PORT>) ) can only be read but not contributed to")]
     ContributeToBranchPortProbe(Span),
 
-    #[error("$limit function calls must have at least 2 arguments found 0")]
-    EmptyLimit(Span),
-
-    #[error("$limit calls without an explicitly specifier function are not supported")]
+    #[error("$limit calls without an explicit function are not supported")]
     LimRequiresFunction(Span),
 
     #[error("limit functions me be a function Identifier or a string literal")]
@@ -406,6 +345,12 @@ pub enum Error {
 
     #[error("port flow (like I(< PORT >) ) can not be used in a $lim function")]
     PortFlowCanNotBeANonLinearity(Span),
+
+    #[error("'{ident}' is a reserved keyword of the VerilogAMS language and may not be used as an identifier for a {decl_kind}!")]
+    ReservedSymbol {
+        decl_kind: MockSymbolDeclaration,
+        ident: Ident,
+    },
 }
 
 impl LibraryDiagnostic for Error {
@@ -422,32 +367,54 @@ impl LibraryDiagnostic for Error {
             }],
             Self::RequiredBaseNatureAttributesNotDefined(_, _, _) => vec![FooterItem {
                 id: None,
-                label: Text::const_str("Every base nature (a nature that has not parent) has to define the 'abstol', 'access' and 'units' attribute"),
+                label: Text::const_str("every base nature (a nature that has not parent) has to define the 'abstol', 'access' and 'units' attribute"),
                 annotation_type: AnnotationType::Help,
             }],
 
             Self::LimRequiresFunction(_) => vec![
                 FooterItem {
                     id: None,
-                    label: Text::const_str("A limitation strategy is required because OpenVAF compiles static binaries that can not choose an appropriate strategy at runtime"),
+                    label: Text::const_str(HINT_UNSUPPORTED),
                     annotation_type: AnnotationType::Help,
                 },
                 FooterItem {
                     id: None,
-                    label: Text::const_str("o call a simulator specific function use text. Example\n\t$limit(V(b,e), \"pnjlimit\", vce, $vt) )"),
+                    label: Text::const_str("to call a simulator limitation function provide the name of the function as string. For example\n\t$limit(V(b,e), \"pnjlimit\", vce, vt) )"),
                     annotation_type: AnnotationType::Help,
                 },
                 FooterItem {
                     id: None,
-                    label: Text::const_str("To call a simulator limitation function provide the name of the function as string. For example\n\t$limit(V(b,e), \"pnjlimit\", vce, $vt) )"),
-                    annotation_type: AnnotationType::Help,
-                },
-                FooterItem {
-                    id: None,
-                    label: Text::const_str("To use your own limiting strategy create a VerilogA function and provide the name of the function as string. For example\n\t$limit(V(d,f), my_lim, arg1)"),
+                    label: Text::const_str("to use your own limiting strategy create a VerilogA function and provide the name of the function as string. For example\n\t$limit(V(d,f), custom_pnjlimit, extra_arg1, vce, extra_arg2, vt)"),
                     annotation_type: AnnotationType::Help,
                 },
             ],
+            Self::NetWithoutDiscipline(_) => vec![
+                FooterItem {
+                    id: None,
+                    label: Text::const_str(HINT_UNSUPPORTED),
+                    annotation_type: AnnotationType::Help,
+                }
+            ],
+
+            Self::UnsupportedNetType {..} => vec![
+
+                FooterItem {
+                    id: None,
+                    label: Text::const_str("only nets without explicit type and with 'ground' type are supported"),
+                    annotation_type: AnnotationType::Help,
+                }
+            ],
+
+            Self::NotAllowedInContext{allowed,loc,..} => {
+                let allowed= ListFormatter::with_final_seperator(allowed.iter().collect_vec()," and ");
+                vec![
+                    FooterItem {
+                        id: None,
+                        label: Text::owned(format!("only following operations are allowed in {}:\n{}",loc, allowed)),
+                        annotation_type: AnnotationType::Help,
+                    }
+                ]
+            },
             _ => Vec::new(),
         }
     }
@@ -473,19 +440,19 @@ impl LibraryDiagnostic for Error {
                 let mut messages = vec![
                     (
                         AnnotationType::Info,
-                        Text::const_str("Declared as discrete here"),
+                        Text::const_str("declared as discrete here"),
                         discrete_declaration.data(),
                     ),
                     (
                         AnnotationType::Error,
-                        Text::const_str("Nature declared here"),
+                        Text::const_str("nature declared here"),
                         first_nature.data(),
                     ),
                 ];
                 if let Some(nature) = second_nature {
                     messages.push((
                         AnnotationType::Error,
-                        Text::const_str("Nature declared here"),
+                        Text::const_str("nature declared here"),
                         nature.data(),
                     ))
                 }
@@ -586,16 +553,6 @@ impl LibraryDiagnostic for Error {
                     fold: true,
                 }]
             }
-
-            Self::NotAllowedInFunction(_, span) => vec![DiagnosticSlice {
-                slice_span: span.data(),
-                messages: vec![(
-                    AnnotationType::Error,
-                    Text::const_str("not allowed inside a function"),
-                    span.data(),
-                )],
-                fold: false,
-            }],
 
             Self::FunctionArgTypeDeclarationMissing(Ident { span, .. }) => vec![DiagnosticSlice {
                 slice_span: span.data(),
@@ -738,22 +695,22 @@ impl LibraryDiagnostic for Error {
                 },
             ],
 
-            Self::NotAllowedInConstantContext(_, span) => vec![DiagnosticSlice {
+            Self::NotAllowedInContext { span, loc, .. } => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("not allowed in constant expressions"),
+                    Text::owned(format!("not allowed in {}", loc)),
                     span.data(),
                 )],
                 fold: false,
             }],
 
-            Self::DerivativeNotAllowed(span) => vec![DiagnosticSlice {
-                slice_span: span.data(),
+            Self::NonLocalAccess { ident, .. } => vec![DiagnosticSlice {
+                slice_span: ident.span.data(),
                 messages: vec![(
                     AnnotationType::Error,
-                    Text::const_str("expected node potential or branch flow"),
-                    span.data(),
+                    Text::const_str("accessing items defined outside of the function is forbidden"),
+                    ident.span.data(),
                 )],
                 fold: false,
             }],
@@ -831,7 +788,7 @@ impl LibraryDiagnostic for Error {
                 ],
                 fold: true,
             }],
-            Self::LimRequiresFunction(span) | Self::EmptyLimit(span) => vec![DiagnosticSlice {
+            Self::LimRequiresFunction(span) => vec![DiagnosticSlice {
                 slice_span: span.data(),
                 messages: vec![(
                     AnnotationType::Error,
@@ -857,6 +814,24 @@ impl LibraryDiagnostic for Error {
                     AnnotationType::Error,
                     Text::const_str("expected a branch access such as V(b,e)"),
                     span.data(),
+                )],
+                fold: false,
+            }],
+            Self::ReservedSymbol { ident, .. } => vec![DiagnosticSlice {
+                slice_span: ident.span.data(),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::const_str("this is a reserved keyword"),
+                    ident.span.data(),
+                )],
+                fold: false,
+            }],
+            Self::UnsupportedNetType { net, net_type } => vec![DiagnosticSlice {
+                slice_span: net.span.data().extend(net_type.span.data()),
+                messages: vec![(
+                    AnnotationType::Error,
+                    Text::const_str("illegal net type"),
+                    net_type.span.data(),
                 )],
                 fold: false,
             }],

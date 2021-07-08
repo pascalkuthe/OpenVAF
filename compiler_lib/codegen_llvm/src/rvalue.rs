@@ -13,10 +13,11 @@ use crate::{CallTypeCodeGen, CfgCodegen};
 use inkwell::values::{BasicValue, BasicValueEnum, InstructionOpcode};
 use inkwell::{FloatPredicate, IntPredicate};
 use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_middle::{COperand, CallArg, CallType, RValueFold, Type};
+use openvaf_ir::{ids::CallArg, SimpleConstVal};
+use openvaf_middle::{COperand, CfgFunctions, RValueFold, Type};
 use openvaf_session::sourcemap::Span;
 
-impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
+impl<'lt, 'a, 'c, A: CfgFunctions, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
     for CfgCodegen<'lt, 'a, 'c, C::CodeGenData, A, C>
 {
     type T = BasicValueEnum<'c>;
@@ -460,6 +461,23 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>> RValueFold<C>
     fn fold_log(&mut self, _: Span, arg: &COperand<C>) -> Self::T {
         let arg = self.operand(arg);
         self.ctx.build_intrinsic_call(Intrinsic::Log, &[arg])
+    }
+
+    fn fold_clog2(&mut self, _span: Span, arg: &COperand<C>) -> Self::T {
+        let arg = self.operand(arg);
+        let flag = self.ctx.simple_constant(SimpleConstVal::Bool(false));
+        let leading_zeros = self
+            .ctx
+            .build_intrinsic_call(Intrinsic::LeadingZeros, &[arg, flag]);
+        let c64 = self.ctx.simple_constant(SimpleConstVal::Integer(64));
+        self.ctx
+            .builder
+            .build_int_sub(
+                c64.into_int_value(),
+                leading_zeros.into_int_value(),
+                "clog2",
+            )
+            .as_basic_value_enum()
     }
 
     fn fold_sqrt(&mut self, _: Span, arg: &COperand<C>) -> Self::T {

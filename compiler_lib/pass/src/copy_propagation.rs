@@ -11,7 +11,7 @@
 use crate::UseDefGraph;
 use openvaf_data_structures::HashMap;
 use openvaf_middle::cfg::{CfgPass, ControlFlowGraph, IntLocation, InternedLocations, BasicBlock};
-use openvaf_middle::{impl_pass_span, COperand, COperandData, CallType, OperandData, Local};
+use openvaf_middle::{impl_pass_span, COperand, COperandData, CfgFunctions, OperandData, Local};
 use openvaf_middle::dfa::{Analysis, Forward};
 use openvaf_middle::const_fold::DiamondLattice;
 
@@ -20,7 +20,7 @@ use openvaf_middle::const_fold::DiamondLattice;
 //     locations: &'a InternedLocations,
 // }
 // 
-// impl<'a, C: CallType> CfgPass<'_, C> for CopyPropagation<'a> {
+// impl<'a, C: CfgFunctions> CfgPass<'_, C> for CopyPropagation<'a> {
 //     type Result = ();
 // 
 //     fn run(self, cfg: &mut ControlFlowGraph<C>) -> Self::Result {
@@ -53,14 +53,14 @@ use openvaf_middle::const_fold::DiamondLattice;
 //     impl_pass_span!("copy_propagation");
 // }
 
-pub struct CopyPropagation<'lt, C: CallType> {
+pub struct CopyPropagation<'lt, C: CfgFunctions> {
     pub cfg: &'lt ControlFlowGraph<C>,
 }
 
 
 
 
-impl<'lt, C: CallType> Analysis<C> for CopyPropagation<'lt, C> {
+impl<'lt, C: CfgFunctions> Analysis<C> for CopyPropagation<'lt, C> {
     type Set = HashMap<Local,COperand<C>>;
     type Direction = Forward;
 

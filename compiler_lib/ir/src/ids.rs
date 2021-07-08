@@ -8,72 +8,176 @@
  *  *****************************************************************************************
  */
 
-//! All IRS use preallocated Arenas for each node type. These Ids and their implementations are generated using the `id_type!` macro in this module.
-//! The [`impl_id_type!`](impl_id_type) is also defined here which provides the implementation necessary for an ID type to interact with an IR
-
 // IndexVec macro is a bit unpretty atm
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::used_underscore_binding)]
 
 use more_asserts::assert_ge;
-use openvaf_data_structures::index_vec::Idx;
+use openvaf_data_structures::index_vec::{define_index_type, Idx};
 use std::fmt::Debug;
 use std::iter;
 use std::ops::Range;
 
 pub type IdxRangeIter<I> = iter::Map<Range<usize>, fn(usize) -> I>;
 
-#[macro_export]
-macro_rules! id_type {
-    ($name:ident($type:ident)) => {
-        // see the index_vec documentation
-        ::openvaf_data_structures::index_vec::define_index_type! {
-            pub struct $name = $type;
+define_index_type! {
+    pub struct SyntaxCtx = u32;
 
-            DISPLAY_FORMAT = "{}";
+    DISPLAY_FORMAT = "synctx{}";
+    DEBUG_FORMAT = "synctx{}";
 
-            DEBUG_FORMAT = stringify!(<$name {}>);
-
-            IMPL_RAW_CONVERSIONS = true;
-        }
-    };
+    IMPL_RAW_CONVERSIONS = true;
 }
-
-id_type!(SyntaxCtx(u32));
 
 impl SyntaxCtx {
     pub const ROOT: Self = Self::from_raw_unchecked(0);
 }
 
-id_type!(BranchId(u16));
-id_type!(PortBranchId(u16));
+define_index_type! {
+    pub struct BranchId = u16;
 
-id_type!(NetId(u16));
+    DISPLAY_FORMAT = "branch{}";
+    DEBUG_FORMAT = "branch{}";
 
-id_type!(PortId(u16));
+    IMPL_RAW_CONVERSIONS = true;
+}
 
-id_type!(ParameterId(u32));
+define_index_type! {
+    pub struct PortBranchId = u16;
 
-id_type!(VariableId(u32));
+    DISPLAY_FORMAT = "port_branch{}";
+    DEBUG_FORMAT = "port_branch{}";
 
-id_type!(ModuleId(u16));
+    IMPL_RAW_CONVERSIONS = true;
+}
 
-id_type!(FunctionId(u16));
+define_index_type! {
+    pub struct NetId = u16;
 
-id_type!(DisciplineId(u16));
+    DISPLAY_FORMAT = "net{}";
+    DEBUG_FORMAT = "net{}";
 
-id_type!(ExpressionId(u32));
-id_type!(RealExpressionId(u32));
-id_type!(IntegerExpressionId(u32));
-id_type!(StringExpressionId(u32));
+    IMPL_RAW_CONVERSIONS = true;
+}
 
-id_type!(BlockId(u16));
+define_index_type! {
+    /// Corresponds to a simulator node
+    /// Nodes mostly correspond to VerilogA nets except for grounded nets which all get merged into node 0
+    pub struct NodeId = u16;
 
-id_type!(AttributeId(u16));
+    DISPLAY_FORMAT = "node{}";
+    DEBUG_FORMAT = "node{}";
 
-id_type!(StatementId(u32));
+    IMPL_RAW_CONVERSIONS = true;
+}
 
-id_type!(NatureId(u16));
+define_index_type! {
+    pub struct PortId = u16;
+
+    DISPLAY_FORMAT = "port{}";
+    DEBUG_FORMAT = "port{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct ParameterId = u32;
+
+    DISPLAY_FORMAT = "param{}";
+    DEBUG_FORMAT = "param{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct VariableId = u32;
+
+    DISPLAY_FORMAT = "var{}";
+    DEBUG_FORMAT = "var{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct ModuleId = u16;
+
+    DISPLAY_FORMAT = "module{}";
+    DEBUG_FORMAT = "module{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct FunctionId = u16;
+
+    DISPLAY_FORMAT = "fun{}";
+    DEBUG_FORMAT = "fun{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct DisciplineId = u16;
+
+    DISPLAY_FORMAT = "discipline{}";
+    DEBUG_FORMAT = "discipline{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct ExpressionId = u32;
+
+    DISPLAY_FORMAT = "expr{}";
+    DEBUG_FORMAT = "expr{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct BlockId = u16;
+
+    DISPLAY_FORMAT = "block{}";
+    DEBUG_FORMAT = "block{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct AttributeId = u16;
+
+    DISPLAY_FORMAT = "attr{}";
+    DEBUG_FORMAT = "attr{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct StatementId = u32;
+
+    DISPLAY_FORMAT = "attr{}";
+    DEBUG_FORMAT = "attr{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct NatureId = u16;
+
+    DISPLAY_FORMAT = "attr{}";
+    DEBUG_FORMAT = "attr{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct CallArg = u8;
+
+    DISPLAY_FORMAT = "arg{}";
+    DEBUG_FORMAT = "arg{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
 
 #[derive(Clone, Debug)]
 pub struct IdRange<I: Idx>(pub Range<I>);

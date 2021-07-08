@@ -10,7 +10,7 @@
 
 use openvaf_data_structures::bit_set::BitSet;
 use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, ModificationPass};
-use openvaf_middle::{impl_pass_span, CallType};
+use openvaf_middle::{impl_pass_span, CfgFunctions};
 
 pub struct Strip<'a> {
     pub retain: &'a BitSet<IntLocation>,
@@ -19,7 +19,7 @@ pub struct Strip<'a> {
 
 impl<'a, C> ModificationPass<'_, C> for Strip<'a>
 where
-    C: CallType,
+    C: CfgFunctions,
 {
     type Result = ();
 

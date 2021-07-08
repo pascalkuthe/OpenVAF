@@ -16,7 +16,7 @@ use openvaf_ir::{PrintOnFinish, StopTaskKind};
 use openvaf_middle::const_fold::FlatSet;
 use openvaf_middle::derivatives::RValueAutoDiff;
 use openvaf_middle::{
-    COperand, COperandData, CallArg, CallType, CallTypeConversion, ConstVal, Operand, OperandData,
+    COperand, COperandData, CallArg, CfgConversion, CfgFunctions, ConstVal, Operand, OperandData,
     RValue, SimpleConstVal, StmntKind,
 };
 use openvaf_session::sourcemap::Span;
@@ -33,14 +33,14 @@ pub enum DcLoadFunctionCall {
     },
 }
 
-impl CallType for DcLoadFunctionCall {
+impl CfgFunctions for DcLoadFunctionCall {
     type I = GeneralOsdiInput;
 
     fn const_fold(&self, _call: &[FlatSet]) -> FlatSet {
         FlatSet::Top
     }
 
-    fn derivative<C: CallType>(
+    fn derivative<C: CfgFunctions>(
         &self,
         _args: &IndexSlice<CallArg, [COperand<Self>]>,
         _ad: &mut RValueAutoDiff<Self, C>,
@@ -72,10 +72,10 @@ impl Debug for DcLoadFunctionCall {
 
 pub struct GeneralToDcLoad;
 
-impl CallTypeConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad {
+impl CfgConversion<GeneralOsdiCall, DcLoadFunctionCall> for GeneralToDcLoad {
     fn map_input(
         &mut self,
-        src: <GeneralOsdiCall as CallType>::I,
+        src: <GeneralOsdiCall as CfgFunctions>::I,
     ) -> COperandData<DcLoadFunctionCall> {
         OperandData::Read(src)
     }

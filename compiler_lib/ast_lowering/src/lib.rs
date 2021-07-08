@@ -36,8 +36,6 @@
 //!
 //!
 
-use bitflags::bitflags;
-
 #[doc(inline)]
 pub use branches::resolver::BranchResolver;
 #[doc(inline)]
@@ -49,21 +47,24 @@ use global::Global;
 #[doc(inline)]
 use statements::Statements;
 
-use crate::error::Error;
-use crate::error::Error::ExpectedIdentifier;
+use crate::error::Error::{ExpectedIdentifier, ReservedSymbol};
+use crate::error::{Error, MockSymbolDeclaration};
 
-pub use crate::expression::AllowedReferences;
-use crate::expression::ConstantExpressionFolder;
+use crate::allowed_operations::VerilogAState;
 use crate::name_resolution::Resolver;
 use openvaf_ast as ast;
 use openvaf_ast::{Ast, HierarchicalId};
 use openvaf_data_structures::bit_set::BitSet;
+use openvaf_data_structures::index_vec::index_vec;
+use openvaf_data_structures::index_vec::IndexVec;
 use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
-use openvaf_hir::{Hir, SyntaxContextData};
+use openvaf_hir::{AllowedOperations, Hir, Node, SyntaxContextData};
 use openvaf_ir::ids::{AttributeId, SyntaxCtx};
 use openvaf_ir::{Attributes, Spanned};
+use openvaf_session::sourcemap::span::DUMMY_SP;
 use openvaf_session::sourcemap::Span;
-use openvaf_session::symbols::{Ident, Symbol};
+use openvaf_session::symbols::{kw, Ident, Symbol};
+use std::mem::take;
 use tracing::trace_span;
 
 #[macro_use]
@@ -78,6 +79,7 @@ mod global;
 #[doc(hidden)]
 mod statements;
 
+mod allowed_operations;
 pub mod error;
 pub mod lints;
 
@@ -85,21 +87,69 @@ pub mod lints;
 
 /// A struct that contains data and functionality all ast to hir folds share
 /// It is used for abstracting over functionality/data for the `resolve!`/`resolve_hierarchical!` openvaf_macros and [`BranchResolver`](crate::branches::resolver::BranchResolver)
-pub struct Fold<'lt, F: Fn(Symbol) -> AllowedReferences> {
-    pub resolver: Resolver<'lt>,
+pub struct Fold<'ast, F: Fn(Symbol) -> AllowedOperations> {
+    pub resolver: Resolver<'ast>,
     pub errors: MultiDiagnostic<Error>,
     pub hir: Hir,
-    pub ast: &'lt Ast,
+    pub ast: &'ast Ast,
     pub sctx: SyntaxCtx,
     folded_attribute: BitSet<AttributeId>,
     allowed_attribute_references: F,
 }
 
-impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
+impl<'lt, F: Fn(Symbol) -> AllowedOperations> Fold<'lt, F> {
+    pub fn check_ident(&mut self, ident: Ident, decl_kind: MockSymbolDeclaration) {
+        if ident.is_reserved() {
+            self.error(ReservedSymbol { decl_kind, ident })
+        }
+    }
+
     pub fn new(ast: &'lt mut Ast, allowed_attribute_references: F) -> Self {
-        let folded_attribute = BitSet::new_empty(ast.attributes.len());
+        let mut syntax_ctx = IndexVec::with_capacity(
+            ast.parameters.len()
+                + ast.variables.len()
+                + ast.nets.len()
+                + ast.disciplines.len()
+                + ast.statements.len()
+                + ast.branches.len()
+                + ast.blocks.len()
+                + ast.modules.len()
+                + ast.functions.len()
+                + 20,
+        );
+
+        syntax_ctx.push(SyntaxContextData {
+            span: DUMMY_SP,
+            attributes: Attributes::EMPTY,
+            parent: None,
+        });
+
+        let gnd_node = Node {
+            ident: Ident::new(kw::ground, DUMMY_SP),
+            discipline: None,
+            sctx: SyntaxCtx::ROOT,
+        };
+
+        let hir = Hir {
+            attributes: take(&mut ast.attributes),
+            variables: index_vec![openvaf_hir::Variable::PLACEHOLDER; ast.variables.len()],
+            parameters: index_vec![openvaf_hir::Parameter::PLACEHOLDER; ast.parameters.len()],
+            functions: index_vec![openvaf_hir::UserFunction::PLACEHOLDER; ast.functions.len()],
+            nodes: index_vec![gnd_node],
+
+            ports: IndexVec::new(),
+            branches: IndexVec::with_capacity(ast.branches.len()),
+            modules: IndexVec::with_capacity(ast.modules.len()),
+            disciplines: IndexVec::new(),
+            natures: IndexVec::new(),
+            expressions: IndexVec::with_capacity(ast.expressions.len()),
+            statements: IndexVec::with_capacity(ast.statements.len()),
+            syntax_ctx,
+        };
+
+        let folded_attribute = BitSet::new_empty(hir.attributes.len());
         let mut res = Self {
-            hir: Hir::init(ast),
+            hir,
             ast: &*ast,
             errors: MultiDiagnostic(Vec::with_capacity(32)),
             resolver: Resolver::new(&*ast),
@@ -175,30 +225,22 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
             let _enter = span.enter();
 
             self.hir[attribute].value = self.hir[attribute].value.and_then(|value| {
-                ConstantExpressionFolder((self.allowed_attribute_references)(
-                    self.hir[attribute].ident.name,
-                ))
-                .fold(value, self)
+                let allowed_operations =
+                    (self.allowed_attribute_references)(self.hir[attribute].ident.name);
+
+                ExpressionFolder {
+                    state: VerilogAState::new_attribute(allowed_operations),
+                    branch_resolver: None,
+                    base: self,
+                }
+                .fold(value)
             })
         }
     }
 }
 
-bitflags! {
-    /// The Verilog AMS standard uses multiple different grammar rules to enfoce that constants/analog exprerssions only contain items valid in their context
-    /// OpenVAF uses flags stored inside this struct instead during the AST to MIR folding process in this module
-    pub struct VerilogContext: u8{
-        const CONSTANT = 0b0000_0001;
-        const CONDITIONAL = 0b0000_0010;
-        const FUNCTION = 0b0000_1000;
-        // attributes receive special treatment because all references are allowed which would normally not be the allowed
-        const ATTRIBUTE = 0b0001_0000;
-
-    }
-}
-
 /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
-pub fn lower_ast_userfacing<F: Fn(Symbol) -> AllowedReferences>(
+pub fn lower_ast_userfacing<F: Fn(Symbol) -> AllowedOperations>(
     ast: Ast,
     allowed_attributes: F,
 ) -> UserResult<Hir> {
@@ -208,7 +250,7 @@ pub fn lower_ast_userfacing<F: Fn(Symbol) -> AllowedReferences>(
 /// Lowers an AST to an HIR by resolving references, ambiguities and enforcing nature/discipline comparability
 pub fn lower_ast_userfacing_with_printer<
     P: DiagnosticSlicePrinter,
-    F: Fn(Symbol) -> AllowedReferences,
+    F: Fn(Symbol) -> AllowedOperations,
 >(
     ast: Ast,
     allowed_attributes: F,
@@ -217,7 +259,7 @@ pub fn lower_ast_userfacing_with_printer<
 }
 
 /// A Helper method to avoid code duplication until try blocks are stable
-pub fn lower_ast<F: Fn(Symbol) -> AllowedReferences>(
+pub fn lower_ast<F: Fn(Symbol) -> AllowedOperations>(
     mut ast: Ast,
     allowed_attributes: F,
 ) -> Result<Hir, MultiDiagnostic<Error>> {

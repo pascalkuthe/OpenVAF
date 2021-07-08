@@ -8,15 +8,13 @@
  *  *****************************************************************************************
  */
 
-use crate::{
-    BinOp, COperand, CallArg, CallType, ComparisonOp, DoubleArgMath, RValue, SingleArgMath, Type,
-};
+use crate::{BinOp, COperand, CallArg, CfgFunctions, ComparisonOp, Math1, Math2, RValue, Type};
 use openvaf_data_structures::index_vec::IndexSlice;
 use openvaf_ir::UnaryOperator;
 use openvaf_session::sourcemap::Span;
 
 #[inline]
-pub fn fold_rvalue<C: CallType, F: RValueFold<C>>(
+pub fn fold_rvalue<C: CfgFunctions, F: RValueFold<C>>(
     fold: &mut F,
     rvalue: &RValue<C>,
     ty: Type,
@@ -81,32 +79,33 @@ pub fn fold_rvalue<C: CallType, F: RValueFold<C>>(
             BinOp::Or => unreachable!("Misstyped MIR"),
         },
 
-        RValue::SingleArgMath(kind, ref arg) => match kind.contents {
-            SingleArgMath::Abs if ty == Type::CMPLX => fold.fold_cmplx_abs(kind.span, arg),
-            SingleArgMath::Abs if ty == Type::REAL => fold.fold_real_abs(kind.span, arg),
-            SingleArgMath::Abs if ty == Type::INT => fold.fold_int_abs(kind.span, arg),
-            SingleArgMath::Abs => unreachable!("Misstyped MIR"),
+        RValue::Math1(kind, ref arg) => match kind.contents {
+            Math1::Abs if ty == Type::CMPLX => fold.fold_cmplx_abs(kind.span, arg),
+            Math1::Abs if ty == Type::REAL => fold.fold_real_abs(kind.span, arg),
+            Math1::Abs if ty == Type::INT => fold.fold_int_abs(kind.span, arg),
+            Math1::Abs => unreachable!("Misstyped MIR"),
 
             // TODO CMPLX numbers
             // always real (assuming correctly typed MIR)
-            SingleArgMath::Sqrt => fold.fold_sqrt(kind.span, arg),
-            SingleArgMath::Exp(lim) => fold.fold_exp(kind.span, arg, lim),
-            SingleArgMath::Ln => fold.fold_ln(kind.span, arg),
-            SingleArgMath::Log => fold.fold_log(kind.span, arg),
-            SingleArgMath::Floor => fold.fold_floor(kind.span, arg),
-            SingleArgMath::Ceil => fold.fold_ceil(kind.span, arg),
-            SingleArgMath::Sin => fold.fold_sin(kind.span, arg),
-            SingleArgMath::Cos => fold.fold_cos(kind.span, arg),
-            SingleArgMath::Tan => fold.fold_tan(kind.span, arg),
-            SingleArgMath::ArcSin => fold.fold_asin(kind.span, arg),
-            SingleArgMath::ArcCos => fold.fold_acos(kind.span, arg),
-            SingleArgMath::ArcTan => fold.fold_atan(kind.span, arg),
-            SingleArgMath::SinH => fold.fold_sinh(kind.span, arg),
-            SingleArgMath::CosH => fold.fold_cosh(kind.span, arg),
-            SingleArgMath::TanH => fold.fold_tanh(kind.span, arg),
-            SingleArgMath::ArcSinH => fold.fold_asinh(kind.span, arg),
-            SingleArgMath::ArcCosH => fold.fold_acosh(kind.span, arg),
-            SingleArgMath::ArcTanH => fold.fold_atanh(kind.span, arg),
+            Math1::Sqrt => fold.fold_sqrt(kind.span, arg),
+            Math1::Exp(lim) => fold.fold_exp(kind.span, arg, lim),
+            Math1::Ln => fold.fold_ln(kind.span, arg),
+            Math1::Log => fold.fold_log(kind.span, arg),
+            Math1::Clog2 => fold.fold_clog2(kind.span, arg),
+            Math1::Floor => fold.fold_floor(kind.span, arg),
+            Math1::Ceil => fold.fold_ceil(kind.span, arg),
+            Math1::Sin => fold.fold_sin(kind.span, arg),
+            Math1::Cos => fold.fold_cos(kind.span, arg),
+            Math1::Tan => fold.fold_tan(kind.span, arg),
+            Math1::ArcSin => fold.fold_asin(kind.span, arg),
+            Math1::ArcCos => fold.fold_acos(kind.span, arg),
+            Math1::ArcTan => fold.fold_atan(kind.span, arg),
+            Math1::SinH => fold.fold_sinh(kind.span, arg),
+            Math1::CosH => fold.fold_cosh(kind.span, arg),
+            Math1::TanH => fold.fold_tanh(kind.span, arg),
+            Math1::ArcSinH => fold.fold_asinh(kind.span, arg),
+            Math1::ArcCosH => fold.fold_acosh(kind.span, arg),
+            Math1::ArcTanH => fold.fold_atanh(kind.span, arg),
         },
 
         RValue::Comparison(op, ref lhs, ref rhs, ty) => match op.contents {
@@ -130,19 +129,19 @@ pub fn fold_rvalue<C: CallType, F: RValueFold<C>>(
             ComparisonOp::NotEqual => fold.fold_ne(op.span, lhs, rhs, ty),
         },
 
-        RValue::DoubleArgMath(kind, ref arg1, ref arg2) => match kind.contents {
-            DoubleArgMath::Min if ty == Type::REAL => fold.fold_real_min(kind.span, arg1, arg2),
-            DoubleArgMath::Min if ty == Type::INT => fold.fold_int_min(kind.span, arg1, arg2),
-            DoubleArgMath::Min => unreachable!("Misstyped MIR"),
+        RValue::Math2(kind, ref arg1, ref arg2) => match kind.contents {
+            Math2::Min if ty == Type::REAL => fold.fold_real_min(kind.span, arg1, arg2),
+            Math2::Min if ty == Type::INT => fold.fold_int_min(kind.span, arg1, arg2),
+            Math2::Min => unreachable!("Misstyped MIR"),
 
-            DoubleArgMath::Max if ty == Type::REAL => fold.fold_real_max(kind.span, arg1, arg2),
-            DoubleArgMath::Max if ty == Type::INT => fold.fold_int_max(kind.span, arg1, arg2),
-            DoubleArgMath::Max => unreachable!("Misstyped MIR"),
+            Math2::Max if ty == Type::REAL => fold.fold_real_max(kind.span, arg1, arg2),
+            Math2::Max if ty == Type::INT => fold.fold_int_max(kind.span, arg1, arg2),
+            Math2::Max => unreachable!("Misstyped MIR"),
 
             // always real (assuming correctly typed MIR)
-            DoubleArgMath::Pow => fold.fold_pow(kind.span, arg1, arg2),
-            DoubleArgMath::Hypot => fold.fold_hypot(kind.span, arg1, arg2),
-            DoubleArgMath::ArcTan2 => fold.fold_atan2(kind.span, arg1, arg2),
+            Math2::Pow => fold.fold_pow(kind.span, arg1, arg2),
+            Math2::Hypot => fold.fold_hypot(kind.span, arg1, arg2),
+            Math2::ArcTan2 => fold.fold_atan2(kind.span, arg1, arg2),
         },
 
         RValue::Cast(ref arg) => fold.fold_cast(arg, ty),
@@ -154,7 +153,7 @@ pub fn fold_rvalue<C: CallType, F: RValueFold<C>>(
     }
 }
 
-pub trait RValueFold<C: CallType> {
+pub trait RValueFold<C: CfgFunctions> {
     /// Result of the Fold
     type T;
 
@@ -216,6 +215,7 @@ pub trait RValueFold<C: CallType> {
     fn fold_exp(&mut self, span: Span, arg: &COperand<C>, limit: bool) -> Self::T;
     fn fold_ln(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
     fn fold_log(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
+    fn fold_clog2(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
     fn fold_sqrt(&mut self, span: Span, arg: &COperand<C>) -> Self::T;
 
     fn fold_cmplx_abs(&mut self, span: Span, arg: &COperand<C>) -> Self::T;

@@ -19,12 +19,12 @@ use openvaf_middle::cfg::{
 use openvaf_middle::dfa::{
     self, direciton::Forward, GenKill, GenKillAnalysis, GenKillAnalysisDomain,
 };
-use openvaf_middle::{impl_pass_span, CallType, Local, Statement, StmntKind};
+use openvaf_middle::{impl_pass_span, CfgFunctions, Local, Statement, StmntKind};
 use std::borrow::Borrow;
 
 pub struct FindAssignments<'a>(pub &'a InternedLocations);
 
-impl<'a, C: CallType> AnalysisPass<'_, C> for FindAssignments<'a> {
+impl<'a, C: CfgFunctions> AnalysisPass<'_, C> for FindAssignments<'a> {
     type Result = SparseBitMatrix<Local, IntLocation>;
     impl_pass_span!("Find Assignments");
 
@@ -50,7 +50,7 @@ impl<'a, C: CallType> AnalysisPass<'_, C> for FindAssignments<'a> {
 
 impl<'a, C, B> AnalysisPass<'a, C> for ReachingDefinitionsAnalysis<'a, B>
 where
-    C: CallType + 'a,
+    C: CfgFunctions + 'a,
     B: Borrow<SparseBitMatrix<Local, IntLocation>> + 'a,
 {
     type Result = dfa::GenKillResults<C, Self>;
@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<'a, C: CallType + 'a> AnalysisPass<'a, C>
+impl<'a, C: CfgFunctions + 'a> AnalysisPass<'a, C>
     for ReachingDefinitionsAnalysis<'a, FindAssignments<'a>>
 {
     type Result = dfa::GenKillResults<
@@ -86,7 +86,7 @@ pub struct ReachingDefinitionsAnalysis<'a, A> {
 
 impl<'a, C, B> GenKillAnalysisDomain<C> for ReachingDefinitionsAnalysis<'a, B>
 where
-    C: CallType,
+    C: CfgFunctions,
     B: Borrow<SparseBitMatrix<Local, IntLocation>>,
 {
     type Domain = BitSet<IntLocation>;
@@ -124,7 +124,7 @@ where
 
 impl<'a, C, B> GenKillAnalysis<C> for ReachingDefinitionsAnalysis<'a, B>
 where
-    C: CallType,
+    C: CfgFunctions,
     B: Borrow<SparseBitMatrix<Local, IntLocation>>,
 {
     fn phi_effect(

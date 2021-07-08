@@ -16,7 +16,7 @@ use openvaf_middle::cfg::{
     Terminator, TerminatorKind,
 };
 use openvaf_middle::dfa::ResultsVisitor;
-use openvaf_middle::{dfa, impl_pass_span, CallType, Local, StmntKind};
+use openvaf_middle::{dfa, impl_pass_span, CfgFunctions, Local, StmntKind};
 use std::borrow::Borrow;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -50,7 +50,7 @@ pub struct BuildUseDefGraph<'a, R, A> {
 impl<'a, C> AnalysisPass<'_, C>
     for BuildUseDefGraph<'a, CalculateReachingDefinitions, FindAssignments<'a>>
 where
-    C: CallType,
+    C: CfgFunctions,
 {
     type Result = UseDefGraph;
     impl_pass_span!("Use-Def Graph Construction");
@@ -73,7 +73,7 @@ where
 
 impl<'a, C, A> AnalysisPass<'_, C> for BuildUseDefGraph<'a, CalculateReachingDefinitions, A>
 where
-    C: CallType,
+    C: CfgFunctions,
     A: Borrow<SparseBitMatrix<Local, IntLocation>>,
 {
     type Result = UseDefGraph;
@@ -95,7 +95,7 @@ where
 
 impl<'a, 'b, C, A, R> AnalysisPass<'_, C> for BuildUseDefGraph<'a, R, A>
 where
-    C: CallType,
+    C: CfgFunctions,
     A: Borrow<SparseBitMatrix<Local, IntLocation>>,
     R: Borrow<dfa::GenKillResults<C, ReachingDefinitionsAnalysis<'b, A>>>,
 {
@@ -148,7 +148,7 @@ impl<'a> UseDefBuilder<'a> {
     }
 }
 
-impl<'a, C: CallType> ResultsVisitor<C> for UseDefBuilder<'a> {
+impl<'a, C: CfgFunctions> ResultsVisitor<C> for UseDefBuilder<'a> {
     type FlowState = BitSet<IntLocation>;
 
     #[inline]

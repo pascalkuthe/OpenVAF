@@ -8,6 +8,7 @@
  *  *****************************************************************************************
  */
 
+use crate::framework::session::TestFunctions;
 use crate::framework::{Result, TestInitInfo, TestSession};
 use eyre::WrapErr;
 use openvaf_codegen_llvm::inkwell::context::Context;
@@ -18,8 +19,9 @@ use openvaf_codegen_llvm::inkwell::targets::{
 use openvaf_codegen_llvm::inkwell::OptimizationLevel;
 use openvaf_codegen_llvm::LlvmCodegen;
 use openvaf_diagnostics::{ExpansionPrinter, MultiDiagnostic};
-use openvaf_middle::cfg::START_BLOCK;
+use openvaf_middle::cfg::{ControlFlowGraph, START_BLOCK};
 use openvaf_middle::const_fold::ConstantPropagation;
+use openvaf_middle::DefaultConversion;
 use openvaf_pass::{RemoveDeadLocals, Simplify, SimplifyBranches};
 
 test! {
@@ -35,7 +37,8 @@ fn run(sess: &TestSession) -> Result<()> {
     let mir = sess.compile_to_mir(model)?;
 
     for (id, module) in mir.modules.iter_enumerated() {
-        let mut cfg = module.analog_cfg.borrow_mut();
+        let cfg = module.analog_cfg.borrow_mut();
+        let mut cfg: ControlFlowGraph<TestFunctions> = cfg.clone().map(&mut DefaultConversion);
 
         let mut errors = MultiDiagnostic(Vec::new());
         cfg.generate_derivatives(&mir, &mut errors);

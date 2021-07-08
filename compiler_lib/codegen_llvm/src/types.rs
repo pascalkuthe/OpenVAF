@@ -14,7 +14,7 @@ use inkwell::values::{ArrayValue, BasicValue, BasicValueEnum, FloatValue, IntVal
 use inkwell::AddressSpace;
 use openvaf_middle::osdi_types::ConstVal::{Array, Scalar};
 use openvaf_middle::osdi_types::SimpleConstVal::{Bool, Cmplx, Integer, Real, String};
-use openvaf_middle::{CallType, ConstVal, Local, SimpleType, Type};
+use openvaf_middle::{CfgFunctions, ConstVal, Local, SimpleType, Type};
 use openvaf_middle::{SimpleConstVal, TypeInfo};
 
 pub trait ArrayCreation<'ctx>: Copy {
@@ -78,7 +78,7 @@ pub fn array<'c, T: ArrayCreation<'c> + BasicType<'c>>(
     data[0]
 }
 
-impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
+impl<'a, 'c, A: CfgFunctions> LlvmCodegen<'a, 'c, A> {
     pub fn ty(&self, ty: Type) -> BasicTypeEnum<'c> {
         ty.with_info(|info| self.ty_from_info(info))
     }
@@ -256,7 +256,9 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
     }
 }
 
-impl<'lt, 'a, 'c, D, A: CallType, C: CallTypeCodeGen<'lt, 'c>> CfgCodegen<'lt, 'a, 'c, D, A, C> {
+impl<'lt, 'a, 'c, D, A: CfgFunctions, C: CallTypeCodeGen<'lt, 'c>>
+    CfgCodegen<'lt, 'a, 'c, D, A, C>
+{
     pub fn local_ty(&self, local: Local) -> BasicTypeEnum<'c> {
         let ty = self.cfg.locals[local].ty;
         self.ctx.ty(ty)

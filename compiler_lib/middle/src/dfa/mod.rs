@@ -14,7 +14,7 @@ use crate::cfg::{BasicBlock, ControlFlowGraph, Location, LocationKind, Phi, PhiD
 use crate::dfa::direciton::Direction;
 use crate::dfa::engine::Engine;
 use crate::dfa::lattice::JoinSemiLattice;
-use crate::{CallType, RValue, Statement, StatementId};
+use crate::{CfgFunctions, RValue, Statement, StatementId};
 use openvaf_data_structures::{
     bit_set::{BitSet, FullBitSetOperations, HybridBitSet},
     index_vec::Idx,
@@ -40,7 +40,7 @@ pub mod visitor;
 ///
 /// This trait specifies the lattice on which this analysis operates (the domain) as well as its
 /// initial value at the entry point of each basic block.
-pub trait AnalysisDomain<C: CallType> {
+pub trait AnalysisDomain<C: CfgFunctions> {
     /// The type that holds the dataflow state at any given point in the program.
     type Domain: Clone + JoinSemiLattice + Debug;
 
@@ -67,7 +67,7 @@ pub trait AnalysisDomain<C: CallType> {
 ///
 /// This trait specifies the lattice on which this analysis operates (the domain) as well as its
 /// initial value at the entry point of each basic block.
-pub trait GenKillAnalysisDomain<C: CallType> {
+pub trait GenKillAnalysisDomain<C: CfgFunctions> {
     /// The type that holds the dataflow state at any given point in the program.
     type Domain: Clone + JoinSemiLattice + GenKill<Self::Idx> + BorrowMut<BitSet<Self::Idx>> + Debug;
 
@@ -110,7 +110,7 @@ pub trait GenKillAnalysisDomain<C: CallType> {
 /// monotonically until fixpoint is reached. Note that this monotonicity requirement only applies
 /// to the same point in the program at different points in time. The dataflow state at a given
 /// point in the program may or may not be greater than the state at any preceding point.
-pub trait Analysis<C: CallType>: AnalysisDomain<C> {
+pub trait Analysis<C: CfgFunctions>: AnalysisDomain<C> {
     /// Init the state of block before the other analysis functions are called.
     #[inline(always)]
     fn init_block(&self, _cfg: &ControlFlowGraph<C>, _state: &mut Self::Domain) {}
@@ -215,7 +215,7 @@ pub trait Analysis<C: CallType>: AnalysisDomain<C> {
 /// be computed efficiently.
 ///
 /// `Analysis` is automatically implemented for all implementers of `GenKillAnalysis`.
-pub trait GenKillAnalysis<C: CallType>: GenKillAnalysisDomain<C> {
+pub trait GenKillAnalysis<C: CfgFunctions>: GenKillAnalysisDomain<C> {
     /// Updates the current dataflow state with the effect of evaluating a phi.
     fn phi_effect(
         &self,
@@ -261,7 +261,7 @@ pub struct GenKillAnalysisImpl<A>(A);
 
 impl<A, C> AnalysisDomain<C> for GenKillAnalysisImpl<A>
 where
-    C: CallType,
+    C: CfgFunctions,
     A: GenKillAnalysisDomain<C>,
 {
     type Domain = A::Domain;
@@ -281,7 +281,7 @@ where
 
 impl<A, C> Analysis<C> for GenKillAnalysisImpl<A>
 where
-    C: CallType,
+    C: CfgFunctions,
     A: GenKillAnalysis<C>,
 {
     #[inline(always)]
@@ -467,7 +467,11 @@ impl Effect {
         EffectIndex { effect: self, idx }
     }
 
-    pub fn at_location<C: CallType>(self, loc: Location, cfg: &ControlFlowGraph<C>) -> EffectIndex {
+    pub fn at_location<C: CfgFunctions>(
+        self,
+        loc: Location,
+        cfg: &ControlFlowGraph<C>,
+    ) -> EffectIndex {
         let idx = match loc.kind {
             LocationKind::Phi(x) => x.index(),
             LocationKind::Statement(x) => x.index() + cfg.blocks[loc.block].phi_statements.len(),

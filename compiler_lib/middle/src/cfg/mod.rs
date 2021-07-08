@@ -8,9 +8,9 @@
  *  *****************************************************************************************
  */
 
-use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_data_structures::{index_vec::define_index_type, index_vec::IndexVec};
 use openvaf_ir::ids::{StatementId, SyntaxCtx};
-use openvaf_ir::{id_type, impl_id_type, Unknown};
+use openvaf_ir::{impl_id_type, Unknown};
 
 use crate::cfg::predecessors::PredecessorCache;
 use crate::cfg::transversal::ReversePostorderIterMut;
@@ -18,18 +18,19 @@ use crate::cfg::transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
 };
 use crate::{
-    COperand, CallType, CallTypeConversion, CallTypeDerivative, Derivative, InputKind, Local,
-    LocalDeclaration, LocalKind, Mir, OperandData, ParameterCallType, ParameterInput, RValue,
-    Spanned, Statement, VariableLocalKind,
+    COperand, CallTypeDerivative, CfgConversion, CfgFunctions, CfgInputs, DefaultConversion,
+    Derivative, Local, LocalDeclaration, LocalKind, Mir, OperandData, RValue, Spanned, Statement,
+    VariableLocalKind,
 };
 use openvaf_data_structures::HashMap;
 use osdi_types::Type;
 
 use crate::cfg::builder::CfgBuilder;
 use crate::cfg::graph_cyclical_cache::GraphIsCyclicCache;
+use crate::functions::{DefaultFunctions, ParameterCallType};
+use crate::inputs::ParameterInput;
 use crate::util::AtMostTwoIter;
 use openvaf_data_structures::arrayvec::ArrayVec;
-use openvaf_ir::convert::Convert;
 use osdi_types::ConstVal::Scalar;
 use osdi_types::SimpleConstVal::Real;
 use std::fmt;
@@ -49,11 +50,35 @@ mod graphviz;
 mod print;
 
 // Macros that call functions that produce a cfg with more or less blocks (and therefore a new tag)
-id_type!(BasicBlock(u16));
-id_type!(IntLocation(u32));
-id_type!(Phi(u16));
 
-impl_id_type!(BasicBlock in ControlFlowGraph<C> => blocks as BasicBlockData<C> where <C: CallType>);
+define_index_type! {
+    pub struct BasicBlock = u16;
+
+    DISPLAY_FORMAT = "bb{}";
+    DEBUG_FORMAT = "bb{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct IntLocation = u32;
+
+    DISPLAY_FORMAT = "loc{}";
+    DEBUG_FORMAT = "loc{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+define_index_type! {
+    pub struct Phi = u16;
+
+    DISPLAY_FORMAT = "phi{}";
+    DEBUG_FORMAT = "phi{}";
+
+    IMPL_RAW_CONVERSIONS = true;
+}
+
+impl_id_type!(BasicBlock in ControlFlowGraph<C> => blocks as BasicBlockData<C> where <C: CfgFunctions>);
 
 #[derive(Debug)]
 pub struct BlockLocations {
@@ -161,7 +186,7 @@ pub type Successors = AtMostTwoIter<BasicBlock>;
 pub type SuccessorsMut<'a> = AtMostTwoIter<&'a mut BasicBlock>;
 
 #[derive(Clone, Debug, Default)]
-pub struct ControlFlowGraph<C: CallType> {
+pub struct ControlFlowGraph<C: CfgFunctions = DefaultFunctions> {
     /// The external input that the ControlFlowGraph requires
     pub locals: IndexVec<Local, LocalDeclaration>,
     pub blocks: IndexVec<BasicBlock, BasicBlockData<C>>,
@@ -170,14 +195,14 @@ pub struct ControlFlowGraph<C: CallType> {
     pub is_cyclic: GraphIsCyclicCache,
 }
 
-pub trait ModificationPass<'a, C: CallType> {
+pub trait ModificationPass<'a, C: CfgFunctions> {
     type Result: 'a;
     const NAME: &'static str;
     fn span(&self) -> Span;
     fn run(self, cfg: &'a mut ControlFlowGraph<C>) -> Self::Result;
 }
 
-pub trait AnalysisPass<'a, C: CallType> {
+pub trait AnalysisPass<'a, C: CfgFunctions> {
     type Result: 'a;
     const NAME: &'static str;
     fn span(&self) -> Span;
@@ -207,10 +232,10 @@ pub const START_BLOCK: BasicBlock = BasicBlock::from_raw_unchecked(0);
 // TODO branches?
 impl<C> ControlFlowGraph<C>
 where
-    C: CallType + From<ParameterCallType>,
+    C: CfgFunctions + From<ParameterCallType>,
     C::I: From<ParameterInput>,
 {
-    pub fn insert_variable_declarations<A: CallType>(&mut self, mir: &Mir<A>) {
+    pub fn insert_variable_declarations<A: CfgFunctions>(&mut self, mir: &Mir<A>) {
         let terminator = self.blocks[START_BLOCK].terminator.take().unwrap();
 
         let old_end = self.end();
@@ -235,9 +260,14 @@ where
                             sctx,
                         );
                     }
+
                     VariableLocalKind::User => {
                         let default = mir.variables[var].default.borrow().clone();
-                        let val = builder.insert_expr::<_, true, true>(sctx, default);
+                        let val = builder.insert_expr::<_, _, true, true>(
+                            sctx,
+                            default,
+                            &mut DefaultConversion,
+                        );
                         builder.assign(local, val, sctx);
                     }
                 }
@@ -258,7 +288,7 @@ where
     }
 }
 
-impl<C: CallType> ControlFlowGraph<C> {
+impl<C: CfgFunctions> ControlFlowGraph<C> {
     pub fn empty() -> Self {
         Self {
             locals: IndexVec::new(),
@@ -391,48 +421,14 @@ impl<C: CallType> ControlFlowGraph<C> {
         buff.into_iter().map(|local_ptr| unsafe { &mut *local_ptr })
     }
 
-    pub fn map<X: CallType>(
+    pub fn map<X: CfgFunctions>(
         self,
-        conversion: &mut impl CallTypeConversion<C, X>,
+        conversion: &mut impl CfgConversion<C, X>,
     ) -> ControlFlowGraph<X> {
         let blocks = self
             .blocks
             .into_iter()
-            .map(|bb| {
-                let statements = bb
-                    .statements
-                    .into_iter()
-                    .map(|(kind, sctx)| (conversion.map_stmnt(kind), sctx))
-                    .collect();
-
-                let terminator = bb.terminator.map(|term| {
-                    let kind = match term.kind {
-                        TerminatorKind::Goto(dst) => TerminatorKind::Goto(dst),
-                        TerminatorKind::Split {
-                            condition,
-                            true_block,
-                            false_block,
-                            loop_head,
-                        } => TerminatorKind::Split {
-                            condition: condition.map_operands(conversion),
-                            true_block,
-                            false_block,
-                            loop_head,
-                        },
-                        TerminatorKind::End => TerminatorKind::End,
-                    };
-                    Terminator {
-                        kind,
-                        sctx: term.sctx,
-                    }
-                });
-
-                BasicBlockData {
-                    phi_statements: bb.phi_statements,
-                    statements,
-                    terminator,
-                }
-            })
+            .map(|bb| bb.map(conversion))
             .collect();
 
         ControlFlowGraph {
@@ -493,7 +489,7 @@ impl<C: CallType> ControlFlowGraph<C> {
     /// * if `operand` contains a reference to a local that is not part of this CFG
     /// * if a branch local was supplied (these may not be read only written to)
     /// * if the derivative of a non numeric (string) local was demanded
-    pub fn demand_operand_derivative_unchecked<MC: CallType>(
+    pub fn demand_operand_derivative_unchecked<MC: CfgFunctions>(
         &mut self,
         mir: &Mir<MC>,
         operand: &COperand<C>,
@@ -507,7 +503,7 @@ impl<C: CallType> ControlFlowGraph<C> {
                 Derivative::Operand(OperandData::Copy(derivative))
             }
 
-            OperandData::Read(ref input) => input.derivative(unknown, mir),
+            OperandData::Read(ref input) => input.derivative(unknown, mir).into(),
         }
     }
 
@@ -564,23 +560,6 @@ impl<C: CallType> ControlFlowGraph<C> {
     }
 }
 
-impl<A, B> Convert<ControlFlowGraph<B>> for ControlFlowGraph<A>
-where
-    B: CallType,
-    A: Into<B> + CallType,
-    A::I: Into<B::I>,
-{
-    fn convert(self) -> ControlFlowGraph<B> {
-        ControlFlowGraph {
-            locals: self.locals,
-            blocks: self.blocks.into_iter().map(|bb| bb.convert()).collect(),
-            derivatives: self.derivatives,
-            predecessor_cache: self.predecessor_cache,
-            is_cyclic: self.is_cyclic,
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct PhiData {
     pub dst: Local,
@@ -606,32 +585,49 @@ impl Debug for PhiData {
 }
 
 #[derive(Clone, Debug)]
-pub struct BasicBlockData<C: CallType> {
+pub struct BasicBlockData<C: CfgFunctions> {
     pub phi_statements: IndexVec<Phi, PhiData>,
     pub statements: IndexVec<StatementId, Statement<C>>,
     pub terminator: Option<Terminator<C>>,
 }
 
-impl<A, B> Convert<BasicBlockData<B>> for BasicBlockData<A>
-where
-    B: CallType,
-    A: Into<B> + CallType,
-    A::I: Into<B::I>,
-{
-    fn convert(self) -> BasicBlockData<B> {
+impl<C: CfgFunctions> BasicBlockData<C> {
+    fn map<X: CfgFunctions>(self, conversion: &mut impl CfgConversion<C, X>) -> BasicBlockData<X> {
+        let statements = self
+            .statements
+            .into_iter()
+            .map(|(kind, sctx)| (conversion.map_stmnt(kind), sctx))
+            .collect();
+
+        let terminator = self.terminator.map(|term| {
+            let kind = match term.kind {
+                TerminatorKind::Goto(dst) => TerminatorKind::Goto(dst),
+                TerminatorKind::Split {
+                    condition,
+                    true_block,
+                    false_block,
+                    loop_head,
+                } => TerminatorKind::Split {
+                    condition: condition.map_operands(conversion),
+                    true_block,
+                    false_block,
+                    loop_head,
+                },
+                TerminatorKind::End => TerminatorKind::End,
+            };
+            Terminator {
+                kind,
+                sctx: term.sctx,
+            }
+        });
+
         BasicBlockData {
             phi_statements: self.phi_statements,
-            statements: self
-                .statements
-                .into_iter()
-                .map(|(stmnt, sctx)| (stmnt.convert(), sctx))
-                .collect(),
-            terminator: self.terminator.convert(),
+            statements,
+            terminator,
         }
     }
-}
 
-impl<C: CallType> BasicBlockData<C> {
     #[must_use]
     pub fn successors(&self) -> Successors {
         self.terminator().successors()
@@ -708,12 +704,12 @@ impl<C: CallType> BasicBlockData<C> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Terminator<C: CallType> {
+pub struct Terminator<C: CfgFunctions = DefaultFunctions> {
     pub sctx: SyntaxCtx,
     pub kind: TerminatorKind<C>,
 }
 
-impl<C: CallType> Terminator<C> {
+impl<C: CfgFunctions> Terminator<C> {
     #[must_use]
     pub fn successors(&self) -> Successors {
         self.kind.successors()
@@ -731,47 +727,8 @@ impl<C: CallType> Terminator<C> {
     }
 }
 
-impl<A, B> Convert<Terminator<B>> for Terminator<A>
-where
-    B: CallType,
-    A: Into<B> + CallType,
-    A::I: Into<B::I>,
-{
-    fn convert(self) -> Terminator<B> {
-        Terminator {
-            sctx: self.sctx,
-            kind: self.kind.convert(),
-        }
-    }
-}
-
-impl<A, B> Convert<TerminatorKind<B>> for TerminatorKind<A>
-where
-    B: CallType,
-    A: Into<B> + CallType,
-    A::I: Into<B::I>,
-{
-    fn convert(self) -> TerminatorKind<B> {
-        match self {
-            Self::Goto(dst) => TerminatorKind::Goto(dst),
-            Self::End => TerminatorKind::End,
-            Self::Split {
-                condition,
-                true_block,
-                false_block,
-                loop_head,
-            } => TerminatorKind::Split {
-                condition: condition.convert(),
-                true_block,
-                false_block,
-                loop_head,
-            },
-        }
-    }
-}
-
 #[derive(Clone, PartialEq)]
-pub enum TerminatorKind<C: CallType> {
+pub enum TerminatorKind<C: CfgFunctions = DefaultFunctions> {
     Goto(BasicBlock),
     Split {
         condition: RValue<C>,
@@ -782,7 +739,7 @@ pub enum TerminatorKind<C: CallType> {
     End,
 }
 
-impl<C: CallType> Display for TerminatorKind<C> {
+impl<C: CfgFunctions> Display for TerminatorKind<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Goto(bb) => {
@@ -805,13 +762,13 @@ impl<C: CallType> Display for TerminatorKind<C> {
     }
 }
 
-impl<C: CallType> Debug for TerminatorKind<C> {
+impl<C: CfgFunctions> Debug for TerminatorKind<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self, f)
     }
 }
 
-impl<C: CallType> TerminatorKind<C> {
+impl<C: CfgFunctions> TerminatorKind<C> {
     #[must_use]
     pub fn successors(&self) -> Successors {
         match self {

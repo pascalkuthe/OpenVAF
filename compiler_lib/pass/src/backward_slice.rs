@@ -15,7 +15,7 @@ use openvaf_data_structures::WorkQueue;
 use openvaf_middle::cfg::{
     AnalysisPass, ControlFlowGraph, IntLocation, InternedLocations, LocationKind,
 };
-use openvaf_middle::{impl_pass_span, CallType, Local};
+use openvaf_middle::{impl_pass_span, CfgFunctions, Local};
 use std::borrow::Borrow;
 use tracing::{debug, trace, trace_span};
 
@@ -126,7 +126,7 @@ where
 impl<'a, C, A> AnalysisPass<'_, C> for BackwardSlice<'a, A>
 where
     A: Borrow<SparseBitMatrix<Local, IntLocation>>,
-    C: CallType,
+    C: CfgFunctions,
 {
     type Result = BitSet<IntLocation>;
 

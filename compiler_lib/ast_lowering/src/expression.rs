@@ -8,536 +8,306 @@
  *  *****************************************************************************************
  */
 
+use crate::allowed_operations::VerilogAState;
 use crate::ast;
-use crate::branches::resolver::{BranchProbeKind, BranchResolver, NatureAccess};
-use crate::error::Error::{
-    DerivativeNotAllowed, NotAllowedInConstantContext, PortFlowCanNotBeANonLinearity,
-};
-use crate::error::{Error, NonConstantExpression};
-use crate::lints::{NonStandardCode, NonStandardCodeType};
-use crate::{Fold, VerilogContext};
-use openvaf_diagnostics::lints::Linter;
-use openvaf_hir::{DisciplineAccess, LimFunction};
-use openvaf_hir::{Expression, Primary};
-use openvaf_ir::ids::ExpressionId;
-use openvaf_ir::Unknown;
-use openvaf_ir::{NoiseSource, SimpleConstVal};
-use openvaf_ir::{Spanned, SystemFunctionCall};
-use openvaf_session::symbols::{keywords, Symbol};
+use crate::branches::resolver::{BranchResolver, NatureAccess};
+use crate::Fold;
+use openvaf_data_structures::index_vec::IndexVec;
+use openvaf_hir::functions::{Derivative, Function, Noise, ParameterizationRead, AcStimulus, Discontinuity, LimFunction};
+use openvaf_hir::{AllowedOperation, AllowedOperations, BranchId, Expression};
+use openvaf_ir::ids::{CallArg, ExpressionId};
+use openvaf_ir::{DisciplineAccess, SimpleConstVal};
+use openvaf_ir::{Math1, Math2, Print, Spanned, StopTask};
+use openvaf_session::sourcemap::{Span, StringLiteral};
+use openvaf_session::symbols::{kw, sysfun, Ident, Symbol};
 use tracing::trace_span;
+use osdi_types::ConstVal::Scalar;
 
-pub trait ExpressionFolder<F: Fn(Symbol) -> AllowedReferences> {
-    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<F>) -> Option<ExpressionId>;
 
-    fn allowed_references(&self) -> AllowedReferences;
+pub(crate) enum FunctionFoldResult {
+    BranchAccess((DisciplineAccess, BranchId)),
+    Function(Function, IndexVec<CallArg, ExpressionId>, Span),
 }
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum AllowedReferences {
-    None,
-    Parameters,
-    All,
-}
-
 /// Folds real constants. These may not even contain references to parameters
-pub struct ConstantExpressionFolder(pub AllowedReferences);
-impl<F: Fn(Symbol) -> AllowedReferences> ExpressionFolder<F> for ConstantExpressionFolder {
-    #[inline]
-    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<F>) -> Option<ExpressionId> {
-        let span = trace_span!("expression", id = expression_id.index());
-        let _enter = span.enter();
-        base.fold_expression(expression_id, self)
+pub struct ExpressionFolder<'a, 'ast, F: Fn(Symbol) -> AllowedOperations> {
+    pub state: VerilogAState,
+    pub branch_resolver: Option<&'a mut BranchResolver>,
+    pub base: &'a mut Fold<'ast, F>,
+}
+impl<'a, 'ast, F: Fn(Symbol) -> AllowedOperations> ExpressionFolder<'a, 'ast, F> {
+    fn fold_branch_probe(
+        &mut self,
+        access: NatureAccess,
+        span: Span,
+        parameters: &IndexVec<CallArg, ExpressionId>,
+    ) -> Option<(DisciplineAccess, BranchId)> {
+        self.test_allowed(AllowedOperation::BranchAccess, span)?;
+        let (access, branch) = self
+            .branch_resolver
+            .as_mut()
+            .unwrap()
+            .resolve_branch_probe_call(access, parameters, self.base)?;
+        match access {
+            DisciplineAccess::Potential => self.base.hir[branch].voltage_access.push(span),
+            DisciplineAccess::Flow => self.base.hir[branch].current_acccess.push(span),
+        }
+        Some((access, branch))
     }
 
-    fn allowed_references(&self) -> AllowedReferences {
-        self.0
+    fn test_allowed(&mut self, op: AllowedOperation, span: Span) -> Option<()> {
+        if self.state.test_allowed(self.base, op, span) {
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn fold_function(
+        &mut self,
+        span: Span,
+        ident: Ident,
+        parameters: &IndexVec<CallArg, ExpressionId>,
+    ) -> Option<FunctionFoldResult> {
+        let fun = match ident.name {
+            kw::potential => {
+                return FunctionFoldResult::BranchAccess(self.fold_branch_probe(
+                    NatureAccess::Flow(ident.span),
+                    span,
+                    parameters,
+                )?)
+                .into()
+            }
+            kw::flow => {
+                return FunctionFoldResult::BranchAccess(self.fold_branch_probe(
+                    NatureAccess::Flow(ident.span),
+                    span,
+                    parameters,
+                )?)
+                .into()
+            }
+
+            sysfun::clog2 => Math1::Clog2.into(),
+            kw::abs => Math1::Abs.into(),
+            kw::acos | sysfun::acos => Math1::ArcCos.into(),
+            kw::acosh | sysfun::acosh => Math1::ArcCosH.into(),
+            kw::asin | sysfun::asin => Math1::ArcSin.into(),
+            kw::asinh | sysfun::asinh => Math1::ArcSinH.into(),
+            kw::atan | sysfun::atan => Math1::ArcTan.into(),
+            kw::atanh | sysfun::atanh => Math1::ArcTan.into(),
+            kw::ceil | sysfun::ceil => Math1::Ceil.into(),
+            kw::cos | sysfun::cos => Math1::Cos.into(),
+            kw::cosh | sysfun::cosh => Math1::CosH.into(),
+            kw::exp | sysfun::exp => Math1::Exp(false).into(),
+            kw::ln | sysfun::ln => Math1::Ln.into(),
+            kw::sin | sysfun::sin => Math1::Sin.into(),
+            kw::sinh | sysfun::sinh => Math1::SinH.into(),
+            kw::sqrt | sysfun::sqrt => Math1::Sqrt.into(),
+            kw::tan | sysfun::tan => Math1::Tan.into(),
+            kw::tanh | sysfun::tanh => Math1::TanH.into(),
+            kw::log | sysfun::log10 => Math1::Log.into(),
+            kw::floor | sysfun::floor => Math1::Floor.into(),
+
+            kw::atan2 | sysfun::atan2 => Math2::ArcTan2.into(),
+            kw::hypot | sysfun::hypot => Math2::Hypot.into(),
+            kw::pow | sysfun::pow => Math2::Pow.into(),
+            kw::max => Math2::Max.into(),
+            kw::min => Math2::Min.into(),
+
+            kw::limexp => {
+                self.test_allowed(AllowedOperation::AnalogFilters, span);
+                Math1::Exp(true).into()
+            }
+            kw::ddt => {
+                self.test_allowed(AllowedOperation::AnalogFilters, span);
+                Derivative::Time.into()
+            }
+            kw::ddx => {
+                self.test_allowed(AllowedOperation::AnalogFilters, span);
+                Derivative::Partial.into()
+            }
+
+            kw::idt
+            | kw::idtmod
+            | kw::absdelay
+            | kw::laplace_nd
+            | kw::laplace_np
+            | kw::laplace_zd
+            | kw::laplace_zp
+            | kw::zi_nd
+            | kw::zi_np
+            | kw::zi_zd
+            | kw::zi_zp
+            | kw::slew
+            | kw::transition
+            | kw::last_crossing => {
+                todo!("Error")
+            }
+
+            kw::flicker_noise => Noise::Flicker.into(),
+            kw::noise_table => Noise::Table.into(),
+            kw::noise_table_log => Noise::TableLog.into(),
+            kw::white_noise => Noise::White.into(),
+            kw::ac_stim => AcStimulus.into(),
+
+            sysfun::display => Print::Display.into(),
+            sysfun::strobe => Print::Strobe.into(),
+            sysfun::write => Print::Write.into(),
+            sysfun::debug => Print::Debug.into(),
+
+            sysfun::finish => StopTask::Finish.into(),
+            sysfun::stop => StopTask::Stop.into(),
+            sysfun::fatal => Print::Fatal.into(),
+
+            sysfun::warning => Print::Warn.into(),
+            sysfun::error => Print::Err.into(),
+            sysfun::info => Print::Info.into(),
+
+            sysfun::temperature => ParameterizationRead::Temperature.into(),
+            sysfun::vt => ParameterizationRead::Vt.into(),
+            sysfun::simparam => ParameterizationRead::Simparam.into(),
+            sysfun::simparam_str => ParameterizationRead::SimparamStr.into(),
+
+            sysfun::param_given => ParameterizationRead::ParameterGiven.into(),
+            sysfun::port_connected => ParameterizationRead::PortConnected.into(),
+
+            sysfun::discontinuity => Discontinuity.into(),
+            sysfun::limit => parameters.get(1).and_then(|fun| {
+                match self.base.ast[*fun].contents{
+                    ast::Expression::Primary(ast::Primary::Constant(Scalar(SimpleConstVal::String(fun)))) => LimFunction::Native(fun).into(),
+                    ast::Expression::Primary(ast::Primary::Reference(ref fun)) => {
+                        let fun = resolve_hierarchical!(self.base; fun as Function(id) => id)?;
+                        LimFunction::VerilogA(fun).into()
+                    }
+                    _ => todo!("error")
+
+                }
+            }).unwrap_or(LimFunction::Native(StringLiteral::DUMMY)).into(),
+
+            sysfun if sysfun.is_valid_system_function_call() => {
+                todo!("error")
+            }
+            sysfun if sysfun.is_system_function_call() => {
+                todo!("error")
+            }
+
+            _ => resolve! ( self.base; ident as
+                Function(fid) => fid.into(),
+                NatureAccess(id) => return FunctionFoldResult::BranchAccess(self.fold_branch_probe(NatureAccess::Named(id), span, parameters)?).into()
+            )?,
+        };
+
+        let parameters = parameters
+            .iter_enumerated()
+            .filter_map(|(arg, expr)| {
+                let old_state = self.state.enter_function_arg(arg, &fun, &self.base.hir);
+                let res = self.fold(*expr);
+                self.state = old_state;
+                res
+            })
+            .collect();
+
+        FunctionFoldResult::Function(fun, parameters, span).into()
     }
 }
 
-impl<'lt, F: Fn(Symbol) -> AllowedReferences> Fold<'lt, F> {
-    #[inline]
-    fn fold_expression(
-        &mut self,
-        expression_id: ExpressionId,
-        expr_folder: &mut impl ExpressionFolder<F>,
-    ) -> Option<ExpressionId> {
+impl<'lt, 'ast, F: Fn(Symbol) -> AllowedOperations> ExpressionFolder<'lt, 'ast, F> {
+    pub fn fold(&mut self, expression_id: ExpressionId) -> Option<ExpressionId> {
         let tspan = trace_span!("expression", id = expression_id.index());
         let _enter = tspan.enter();
 
-        let expression = &self.ast[expression_id];
+        let expression = &self.base.ast[expression_id];
         let res = match expression.contents {
             ast::Expression::BinaryOperator(lhs, op, rhs) => {
-                let lhs = expr_folder.fold(lhs, &mut *self);
-                let rhs = expr_folder.fold(rhs, &mut *self);
-                self.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::BinaryOperator(lhs?, op, rhs?),
-                })
+                let lhs = self.fold(lhs);
+                let rhs = self.fold(rhs);
+                Expression::BinaryOperator(lhs?, op, rhs?)
             }
 
             ast::Expression::UnaryOperator(unary_op, expr) => {
-                let expr = expr_folder.fold(expr, &mut *self)?;
-                self.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::UnaryOperator(unary_op, expr),
-                })
+                let expr = self.fold(expr)?;
+                Expression::UnaryOperator(unary_op, expr)
             }
 
             ast::Expression::Primary(ast::Primary::Constant(ref val)) => {
-                self.hir.expressions.push(Spanned {
-                    contents: Expression::Primary(Primary::Constant(val.clone())),
-                    span: expression.span,
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::DoubleArgMath(call, arg1, arg2)) => {
-                let arg1 = expr_folder.fold(arg1, &mut *self);
-                let arg2 = expr_folder.fold(arg2, &mut *self);
-                self.hir.expressions.push(Spanned {
-                    contents: Expression::BuiltInFunctionCall2p(call, arg1?, arg2?),
-                    span: expression.span,
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::SingleArgMath(call, arg)) => {
-                let arg = expr_folder.fold(arg, &mut *self)?;
-                self.hir.expressions.push(Spanned {
-                    contents: Expression::BuiltInFunctionCall1p(call, arg),
-                    span: expression.span,
-                })
+                Expression::Constant(val.clone())
             }
 
             ast::Expression::Condition(condition, if_val, else_val) => {
-                let condition = expr_folder.fold(condition, &mut *self);
-                let if_val = expr_folder.fold(if_val, &mut *self);
-                let else_val = expr_folder.fold(else_val, &mut *self);
-                self.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::Condition(condition?, if_val?, else_val?),
-                })
+                let condition = self.fold(condition);
+                let old_state = self.state.enter_conditional_behaviour();
+                let if_val = self.fold(if_val);
+                let else_val = self.fold(else_val);
+                self.state = old_state;
+                Expression::Condition(condition?, if_val?, else_val?)
             }
 
             ast::Expression::Primary(ast::Primary::Reference(ref ident)) => {
-                resolve_hierarchical!(self; ident as
+                resolve_hierarchical!(self.base; ident as
                     Variable(vid) => {
-                        if expr_folder.allowed_references() == AllowedReferences::All{
-                            self.hir.expressions.push(Spanned{
-                                span:expression.span,
-                                contents:Expression::Primary(Primary::VariableReference(vid))
-                            })
-                        }else {
-                            self.error(NotAllowedInConstantContext(NonConstantExpression::VariableReference,expression.span));
-                            return None
-                        }
+                        self.test_allowed(AllowedOperation::VariableReferences, expression.span)?;
+                        Expression::VariableReference(vid)
                     },
 
-                    Net(nid) => {
-                        if expr_folder.allowed_references() == AllowedReferences::All{
-                            self.hir.expressions.push(Spanned{
-                                span:expression.span,
-                                contents:Expression::Primary(Primary::NetReference(nid))
-                            })
-                        }else {
-                            self.error(NotAllowedInConstantContext(NonConstantExpression::PortReferences,expression.span));
-                            return None
-                        }
+                    Node(_,nid) => {
+                        self.test_allowed(AllowedOperation::NetReferences, expression.span)?;
+                        Expression::NodeReference(nid)
                     },
 
                     Port(pid) => {
-                        if expr_folder.allowed_references() == AllowedReferences::All{
-                            self.hir.expressions.push(Spanned{
-                                span:expression.span,
-                                contents:Expression::Primary(Primary::PortReference(pid))
-                            })
-                        }else {
-                            self.error(NotAllowedInConstantContext(NonConstantExpression::NetReferences,expression.span));
-                            return None
-                        }
+                        self.test_allowed(AllowedOperation::PortReferences, expression.span)?;
+                        Expression::PortReference(pid)
                     },
 
                     Parameter(pid) => {
-                        if expr_folder.allowed_references()  == AllowedReferences::None{
-                            self.error(NotAllowedInConstantContext(NonConstantExpression::ParameterReference,expression.span));
-                            return None
-                        }else {
-                            self.hir.expressions.push(Spanned{
-                                span:expression.span,
-                                contents:Expression::Primary(Primary::ParameterReference(pid))
-                            })
-                        }
+                        self.test_allowed(AllowedOperation::ParameterReferences, expression.span)?;
+                        Expression::ParameterReference(pid)
+                    },
+                    
+                    // Required for lim function args. just an implementation detail 
+                    Function(fid) => {
+                        self.test_allowed(AllowedOperation::UserFunctionReference, expression.span)?;
+                        Expression::FunctionCall(fid.into(),IndexVec::new(),expression.span)
                     }
                 )?
             }
 
             ast::Expression::Array(ref arr) => {
-                let arr = arr
-                    .iter()
-                    .filter_map(|expr| expr_folder.fold(*expr, self))
-                    .collect();
-                self.hir
-                    .expressions
-                    .push(Spanned::new(Expression::Array(arr), expression.span))
+                let arr = arr.iter().filter_map(|expr| self.fold(*expr)).collect();
+                Expression::Array(arr)
             }
 
-            // These are "real" constant. Standard allows this but we just cant do this here
-            ast::Expression::Primary(ast::Primary::FunctionCall(_, _))
-            | ast::Expression::Primary(ast::Primary::SystemFunctionCall(_)) => {
-                self.error(NotAllowedInConstantContext(
-                    NonConstantExpression::FunctionCall,
-                    expression.span,
-                ));
-                return None;
+            ast::Expression::Primary(ast::Primary::PortFlowProbe(access, ref port)) => {
+                self.test_allowed(AllowedOperation::BranchAccess, expression.span)?;
+                let port = resolve_hierarchical!(self.base; port as Port(id) => id);
+                let access = NatureAccess::resolve_from_ident(access, self.base)?;
+                let port = port?;
+                let discipline = self.base.hir[self.base.hir[port].node].discipline?;
+                let branch = self
+                    .branch_resolver
+                    .as_mut()
+                    .unwrap()
+                    .resolve_port_access(self.base, access, discipline, port);
+                Expression::BranchAccess(DisciplineAccess::Flow, branch)
             }
 
-            ast::Expression::Primary(ast::Primary::PortFlowProbe(_, _))
-            | ast::Expression::Primary(ast::Primary::PartialDerivative(_, _))
-            | ast::Expression::Primary(ast::Primary::DerivativeByTime(_))
-            | ast::Expression::Primary(ast::Primary::Noise(_, _)) => {
-                self.error(NotAllowedInConstantContext(
-                    NonConstantExpression::BranchAccess,
-                    expression.span,
-                ));
-
-                return None;
+            ast::Expression::Primary(ast::Primary::FunctionCall(ident, ref parameters)) => {
+                match self.fold_function(expression.span, ident, parameters)? {
+                    FunctionFoldResult::BranchAccess((access, branch)) => {
+                        Expression::BranchAccess(access, branch)
+                    }
+                    FunctionFoldResult::Function(fun, args, span) => {
+                        Expression::FunctionCall(fun, args, span)
+                    }
+                }
             }
 
             ast::Expression::Error => unreachable!("encountered error node in hir lowerinfg"),
         };
+
+        let res = self.base.hir.expressions.push(Spanned {
+            contents: res,
+            span: expression.span,
+        });
         Some(res)
-    }
-}
-
-pub struct StatementExpressionFolder<'lt> {
-    pub(super) state: VerilogContext,
-    pub(super) branch_resolver: &'lt mut BranchResolver,
-}
-
-impl<'a, F: Fn(Symbol) -> AllowedReferences> ExpressionFolder<F> for StatementExpressionFolder<'a> {
-    fn fold(&mut self, expression_id: ExpressionId, base: &mut Fold<F>) -> Option<ExpressionId> {
-        let expression = &base.ast[expression_id];
-        let res = match expression.contents {
-            ast::Expression::Primary(ast::Primary::PortFlowProbe(access, ref port)) => {
-                if self.state.contains(VerilogContext::FUNCTION) {
-                    base.error(NotAllowedInConstantContext(
-                        NonConstantExpression::FunctionCall,
-                        expression.span,
-                    ));
-
-                    return None;
-                }
-
-                let port = resolve_hierarchical!(base; port as Port(id) => id);
-                let access = NatureAccess::resolve_from_ident(access, base)?;
-                let port = port?;
-                let discipline = base.hir[base.hir[port].net].discipline;
-                BranchResolver::check_port_discipline_access(base, access, discipline);
-                base.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::Primary(Primary::PortFlowAccess(port)),
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::DerivativeByTime(expr)) => {
-                if self.state.contains(VerilogContext::FUNCTION) {
-                    base.error(NotAllowedInConstantContext(
-                        NonConstantExpression::AnalogFilter,
-                        expression.span,
-                    ));
-                    return None;
-                }
-                let expr = self.fold(expr, base)?;
-                base.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::TimeDerivative(expr),
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::Noise(source, src)) => {
-                if self.state.contains(VerilogContext::FUNCTION) {
-                    base.error(NotAllowedInConstantContext(
-                        NonConstantExpression::AnalogFilter,
-                        expression.span,
-                    ));
-
-                    return None;
-                }
-                let source = match source {
-                    NoiseSource::White(expr) => NoiseSource::White(self.fold(expr, base)?),
-                    NoiseSource::Flicker(expr1, expr2) => {
-                        NoiseSource::Flicker(self.fold(expr1, base)?, self.fold(expr2, base)?)
-                    }
-                    NoiseSource::Table(_) | NoiseSource::TableLog(_) => todo!(),
-                };
-
-                let src = src.and_then(|expr| self.fold(expr, base));
-
-                base.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::Noise(source, src),
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::PartialDerivative(expr_to_derive, unkown)) => {
-                if self.state.contains(VerilogContext::FUNCTION) {
-                    base.error(NotAllowedInConstantContext(
-                        NonConstantExpression::AnalogFilter,
-                        expression.span,
-                    ));
-                    return None;
-                }
-                let expr_to_derive = self.fold(expr_to_derive, base);
-
-                let unknown = match &base.ast[unkown].contents {
-                    ast::Expression::Primary(ast::Primary::SystemFunctionCall(
-                        SystemFunctionCall::Temperature,
-                    )) => {
-                        Linter::dispatch_early(Box::new(NonStandardCode {
-                            span: base.ast[unkown].span,
-                            kind: NonStandardCodeType::DerivativeByTemperatureDerivatives,
-                        }));
-                        Unknown::Temperature
-                    }
-
-                    ast::Expression::Primary(ast::Primary::FunctionCall(access_ident, args)) => {
-                        let access = NatureAccess::resolve_from_ident(*access_ident, base);
-                        self.branch_resolver
-                            .handle_branch_probe_args(
-                                *access_ident,
-                                &args,
-                                |_, base, net, _span| {
-                                    let discipline = base.hir[net].discipline;
-                                    let access = BranchResolver::resolve_discipline_access(
-                                        base, access?, discipline,
-                                    )?;
-                                    match access {
-                                        DisciplineAccess::Flow => {
-                                            base.error(DerivativeNotAllowed(expression.span));
-                                            None
-                                        }
-                                        DisciplineAccess::Potential => {
-                                            Some(Unknown::NodePotential(net))
-                                        }
-                                    }
-                                },
-                                |resolver, base, hi, lo, span| {
-                                    BranchResolver::check_branch(hi, lo, span, base);
-                                    let discipline = base.hir[hi].discipline;
-                                    let access = BranchResolver::resolve_discipline_access(
-                                        base, access?, discipline,
-                                    )?;
-                                    match access {
-                                        DisciplineAccess::Flow => Some(Unknown::Flow(
-                                            resolver.unnamed_branch(span, hi, lo, base),
-                                        )),
-                                        DisciplineAccess::Potential => {
-                                            Linter::dispatch_early(Box::new(NonStandardCode{ span, kind: NonStandardCodeType::DerivativeByVoltageDifference }));
-                                            Some(Unknown::BranchPotential(hi, lo))
-                                        }
-                                    }
-                                },
-                                |_, base, branch, span| {
-                                    let discipline = base.hir[base.hir[branch].hi].discipline;
-                                    let access = BranchResolver::resolve_discipline_access(
-                                        base, access?, discipline,
-                                    )?;
-                                    match access {
-                                        DisciplineAccess::Flow => Some(Unknown::Flow(branch)),
-                                        DisciplineAccess::Potential => {
-                                            base.error(DerivativeNotAllowed(span));
-                                            None
-                                        }
-                                    }
-                                },
-                                |_, base, _port, span| {
-                                    base.error(DerivativeNotAllowed(span));
-                                    None
-                                },
-                                base,
-                            )
-                            .flatten()?
-                    }
-
-                    _ => {
-                        base.error(DerivativeNotAllowed(expression.span));
-                        return None;
-                    }
-                };
-
-                base.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::PartialDerivative(expr_to_derive?, unknown),
-                })
-            }
-
-            ast::Expression::Primary(ast::Primary::FunctionCall(ref ident, ref parameters)) => {
-                let access = match ident.name {
-                    keywords::potential => NatureAccess::Pot(ident.span),
-                    keywords::flow => NatureAccess::Flow(ident.span),
-                    _ => {
-                        let nature = resolve! ( base; ident as
-                            Function(fid) => {
-                                let parameters = parameters
-                                    .iter()
-                                    .copied()
-                                    .filter_map(|expr| self.fold(expr,&mut *base))
-                                    .collect();
-
-                                return Some(base.hir.expressions.push(Spanned{
-                                    span:expression.span,
-                                    contents:Expression::FunctionCall(fid,parameters)
-                                }))
-                            },
-
-                            NatureAccess(id) => id
-                        )?;
-                        NatureAccess::Named(nature)
-                    }
-                };
-
-                match self
-                    .branch_resolver
-                    .resolve_branch_probe_call(access, parameters, base)?
-                {
-                    BranchProbeKind::Port(id) => base.hir.expressions.push(Spanned {
-                        span: expression.span,
-                        contents: Expression::Primary(Primary::PortFlowAccess(id)),
-                    }),
-                    BranchProbeKind::Branch(access, branch) => base.hir.expressions.push(Spanned {
-                        span: expression.span,
-                        contents: Expression::Primary(Primary::BranchAccess(access, branch)),
-                    }),
-                }
-            }
-
-            ast::Expression::Primary(ast::Primary::SystemFunctionCall(ref call)) => {
-                let new_call = match call {
-                    SystemFunctionCall::Temperature => SystemFunctionCall::Temperature,
-
-                    SystemFunctionCall::Vt(temp) => {
-                        SystemFunctionCall::Vt(temp.map(|temp| self.fold(temp, base)).flatten())
-                    }
-
-                    SystemFunctionCall::Simparam(name, default) => {
-                        let default = default
-                            .map(|default| {
-                                ConstantExpressionFolder(AllowedReferences::None)
-                                    .fold(default, base)
-                            })
-                            .flatten();
-                        SystemFunctionCall::Simparam(self.fold(*name, base)?, default)
-                    }
-
-                    SystemFunctionCall::SimparamStr(name) => SystemFunctionCall::SimparamStr(
-                        ConstantExpressionFolder(AllowedReferences::None).fold(*name, base)?,
-                    ),
-
-                    SystemFunctionCall::PortConnected(ref port) => {
-                        let port = base.reinterpret_expression_as_hierarchical_identifier(
-                            "$port_connected",
-                            &base.ast[*port],
-                        )?;
-                        resolve_hierarchical!(base; port as Port(port) => SystemFunctionCall::PortConnected(port) )?
-                    }
-
-                    SystemFunctionCall::ParameterGiven(parameter) => {
-                        let parameter = base.reinterpret_expression_as_hierarchical_identifier(
-                            "$param_given",
-                            &base.ast[*parameter],
-                        )?;
-                        resolve_hierarchical!(base; parameter as Parameter(param) => SystemFunctionCall::ParameterGiven(param) )?
-                    }
-
-                    SystemFunctionCall::Lim { args, .. } => {
-                        let (access, fun, args) = match args.as_slice() {
-                            [] => {
-                                base.error(Error::EmptyLimit(expression.span));
-                                return None;
-                            }
-                            [_] => {
-                                base.error(Error::LimRequiresFunction(expression.span));
-                                return None;
-                            }
-
-                            [access, fun, args @ ..] => (access, fun, args),
-                        };
-
-                        let fun = &base.ast.expressions[*fun];
-
-                        let fun = match fun.contents {
-                            ast::Expression::Primary(ast::Primary::Reference(ref name)) => {
-                                resolve_hierarchical!(base; name as Function(fun) => fun)
-                                    .map(LimFunction::VerilogA)
-                            }
-
-                            ast::Expression::Primary(ast::Primary::Constant(
-                                ast::ConstVal::Scalar(SimpleConstVal::String(name)),
-                            )) => Some(LimFunction::Native(name)),
-
-                            _ => {
-                                base.error(Error::IllegalLimitFn(fun.span));
-                                None
-                            }
-                        };
-
-                        let access_expr = &base.ast.expressions[*access];
-                        let access = if let ast::Expression::Primary(ast::Primary::FunctionCall(
-                            ref ident,
-                            ref parameters,
-                        )) = access_expr.contents
-                        {
-                            let access = match ident.name {
-                                keywords::potential => Some(NatureAccess::Pot(ident.span)),
-                                keywords::flow => Some(NatureAccess::Flow(ident.span)),
-                                _ => {
-                                    resolve! ( base; ident as NatureAccess(id) => NatureAccess::Named(id))
-                                }
-                            };
-
-                            access.and_then(|access| {
-                                if let BranchProbeKind::Branch(access, branch) = self
-                                    .branch_resolver
-                                    .resolve_branch_probe_call(access, parameters, base)?
-                                {
-                                    Some((access, branch))
-                                } else {
-                                    base.error(PortFlowCanNotBeANonLinearity(access_expr.span));
-                                    None
-                                }
-                            })
-                        } else {
-                            None
-                        };
-
-                        let args = args
-                            .iter()
-                            .copied()
-                            .filter_map(|expr| self.fold(expr, &mut *base))
-                            .collect();
-
-                        SystemFunctionCall::Lim {
-                            access: access?,
-                            fun: fun?,
-                            args,
-                        }
-                    }
-                };
-
-                base.hir.expressions.push(Spanned {
-                    span: expression.span,
-                    contents: Expression::SystemFunctionCall(new_call),
-                })
-            }
-
-            _ => base.fold_expression(expression_id, self)?,
-        };
-        Some(res)
-    }
-
-    fn allowed_references(&self) -> AllowedReferences {
-        if self.state.contains(VerilogContext::CONSTANT) {
-            AllowedReferences::Parameters
-        } else {
-            AllowedReferences::All
-        }
     }
 }

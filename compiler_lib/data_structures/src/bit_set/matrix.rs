@@ -40,6 +40,7 @@ use crate::bit_set::{
 };
 use crate::index_vec::{Idx, IndexSliceExntesions, IndexVec, IndexVecExtensions};
 use crate::iter;
+use derivative::Derivative;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
@@ -51,7 +52,8 @@ use std::marker::PhantomData;
 ///
 /// All operations that involve a row and/or column index will panic if the
 /// index exceeds the relevant bound.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Derivative, Eq, PartialEq)]
+#[derivative(Clone(clone_from = "true"))]
 pub struct BitMatrix<R: Idx, C: Idx> {
     num_rows: usize,
     num_columns: usize,
@@ -261,7 +263,8 @@ impl<R: Idx, C: Idx> fmt::Debug for BitMatrix<R, C> {
 ///
 /// `R` and `C` are index types used to identify rows and columns respectively;
 /// typically newtyped `usize` wrappers, but they can also just be `usize`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Derivative, PartialEq, Eq)]
+#[derivative(Clone(clone_from = "true"))]
 pub struct SparseBitMatrix<R, C>
 where
     R: Idx,

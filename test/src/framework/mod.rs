@@ -10,7 +10,7 @@
 mod collection;
 mod models;
 mod runner;
-mod session;
+pub(crate) mod session;
 
 use crate::framework::models::Model;
 use clap::clap_derive::Clap;

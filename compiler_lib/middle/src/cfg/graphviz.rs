@@ -16,13 +16,13 @@ use rustc_ap_graphviz::{Edges, Id, LabelText, Nodes};
 use std::borrow::Cow;
 use std::io::Write;
 
-impl<C: CallType> ControlFlowGraph<C> {
+impl<C: CfgFunctions> ControlFlowGraph<C> {
     pub fn render_as_graphviz<W: Write>(&self, write: &mut W) {
         dot::render(self, write).expect("Rendering failed")
     }
 }
 
-impl<'a, C: CallType> dot::Labeller<'a> for ControlFlowGraph<C> {
+impl<'a, C: CfgFunctions> dot::Labeller<'a> for ControlFlowGraph<C> {
     type Node = BasicBlock;
     type Edge = (BasicBlock, BasicBlock);
 
@@ -76,7 +76,7 @@ impl<'a, C: CallType> dot::Labeller<'a> for ControlFlowGraph<C> {
     }
 }
 
-impl<'a, C: CallType> dot::GraphWalk<'a> for ControlFlowGraph<C> {
+impl<'a, C: CfgFunctions> dot::GraphWalk<'a> for ControlFlowGraph<C> {
     type Node = BasicBlock;
     type Edge = (BasicBlock, BasicBlock);
 

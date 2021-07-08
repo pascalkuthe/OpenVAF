@@ -13,9 +13,9 @@ readme="../README.md"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-bitflags = "1.2.1"
 tracing = "0.1.26"
 thiserror = "1.0.26"
+derive_more = "0.99.16"
 
 openvaf-data-structures = {version = "0.8.0", path = "../data_structures" }
 
@@ -25,3 +25,4 @@ openvaf-ast = {version = "0.8.0", path = "../ast"}
 openvaf-diagnostics = {version = "0.8.0", path = "../diagnostics"}
 openvaf-session = {version = "0.8.0", path = "../session"}
 
+osdi-types = {version = "0.1", path="../../osdi/osdi_types"}

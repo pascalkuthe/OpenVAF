@@ -10,21 +10,172 @@
 
 pub use crate::ids::IdRange;
 
-use crate::ids::{AttributeId, BranchId, ExpressionId, NetId, ParameterId};
-use core::convert::TryFrom;
+use crate::ids::{AttributeId, BranchId, ExpressionId, NodeId, ParameterId};
 use core::fmt::Debug;
 use openvaf_session::sourcemap::{Span, StringLiteral};
-use openvaf_session::symbols::Ident;
+use openvaf_session::symbols::{kw, sysfun, Ident, Symbol};
 use std::ops::Range;
 
 pub type ConstVal = osdi_types::ConstVal<StringLiteral>;
+
 pub use osdi_types::{SimpleConstVal, SimpleType, Type, TypeInfo};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
 #[macro_use]
 pub mod ids;
-pub mod convert;
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum Math1 {
+    Sqrt,
+    Exp(bool),
+    Ln,
+    Log,
+    Clog2,
+
+    Abs,
+    Floor,
+    Ceil,
+
+    Sin,
+    Cos,
+    Tan,
+
+    ArcSin,
+    ArcCos,
+    ArcTan,
+
+    SinH,
+    CosH,
+    TanH,
+
+    ArcSinH,
+    ArcCosH,
+    ArcTanH,
+}
+
+impl Math1 {
+    pub const fn symbol(&self) -> Symbol {
+        match self {
+            Self::Sqrt => kw::sqrt,
+            Self::Exp(false) => kw::exp,
+            Self::Exp(true) => kw::limexp,
+            Self::Ln => kw::ln,
+            Self::Log => kw::log,
+            Self::Clog2 => sysfun::clog2,
+            Self::Abs => kw::abs,
+            Self::Floor => kw::floor,
+            Self::Ceil => kw::ceil,
+            Self::Sin => kw::sin,
+            Self::Cos => kw::cos,
+            Self::Tan => kw::tan,
+            Self::ArcSin => kw::asin,
+            Self::ArcCos => kw::acos,
+            Self::ArcTan => kw::atan,
+            Self::SinH => kw::sinh,
+            Self::CosH => kw::cosh,
+            Self::TanH => kw::tanh,
+            Self::ArcSinH => kw::asinh,
+            Self::ArcCosH => kw::acosh,
+            Self::ArcTanH => kw::atanh,
+        }
+    }
+
+    pub const fn ty(&self) -> Type {
+        match self {
+            Self::Clog2 => Type::INT,
+            _ => Type::REAL,
+        }
+    }
+}
+
+impl Display for Math1 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.symbol())
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum Math2 {
+    Pow,
+    Hypot,
+    Min,
+    Max,
+    ArcTan2,
+}
+
+impl Math2 {
+    pub const fn symbol(&self) -> Symbol {
+        match self {
+            Self::Pow => kw::pow,
+            Self::Hypot => kw::hypot,
+            Self::Min => kw::min,
+            Self::Max => kw::max,
+            Self::ArcTan2 => kw::atan2,
+        }
+    }
+}
+
+impl Display for Math2 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.symbol())
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum StopTask {
+    Stop,
+    Finish,
+}
+
+impl StopTask {
+    pub const fn symbol(&self) -> Symbol {
+        match self {
+            Self::Stop => sysfun::stop,
+            Self::Finish => sysfun::finish,
+        }
+    }
+}
+
+impl Display for StopTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.symbol())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Copy)]
+pub enum Print {
+    // strobe, display and write (write does not have a newline after are equivalent. write
+    Strobe,
+    Display,
+    Write,
+    Debug,
+    Info,
+    Warn,
+    Err,
+    Fatal,
+}
+
+impl Print {
+    pub const fn symbol(&self) -> Symbol {
+        match self {
+            Self::Strobe => sysfun::strobe,
+            Self::Display => sysfun::display,
+            Self::Write => sysfun::write,
+            Self::Debug => sysfun::debug,
+            Self::Info => sysfun::info,
+            Self::Warn => sysfun::warning,
+            Self::Err => sysfun::error,
+            Self::Fatal => sysfun::fatal,
+        }
+    }
+}
+
+impl Display for Print {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.symbol())
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Spanned<T> {
@@ -126,16 +277,16 @@ impl Default for Attributes {
 
 /// A special type of IR Node. Contains a Span and attributes in addition to whatever that node holds
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Node<T> {
+pub struct AttrSpanned<T> {
     pub attributes: Attributes,
     pub span: Span,
     pub contents: T,
 }
 
-impl<T: Copy + Clone> Node<T> {
+impl<T: Copy + Clone> AttrSpanned<T> {
     #[inline]
-    pub fn copy_with<X: Clone>(self, f: impl FnOnce(T) -> X) -> Node<X> {
-        Node {
+    pub fn copy_with<X: Clone>(self, f: impl FnOnce(T) -> X) -> AttrSpanned<X> {
+        AttrSpanned {
             attributes: self.attributes,
             span: self.span,
             contents: f(self.contents),
@@ -143,18 +294,18 @@ impl<T: Copy + Clone> Node<T> {
     }
 
     #[inline]
-    pub fn copy_as<X: Clone>(self, contents: X) -> Node<X> {
-        Node {
+    pub fn copy_as<X: Clone>(self, contents: X) -> AttrSpanned<X> {
+        AttrSpanned {
             attributes: self.attributes,
             span: self.span,
             contents,
         }
     }
 }
-impl<T> Node<T> {
+impl<T> AttrSpanned<T> {
     #[inline]
-    pub fn map_with<X>(&self, f: impl FnOnce(&T) -> X) -> Node<X> {
-        Node {
+    pub fn map_with<X>(&self, f: impl FnOnce(&T) -> X) -> AttrSpanned<X> {
+        AttrSpanned {
             attributes: self.attributes,
             span: self.span,
             contents: f(&self.contents),
@@ -162,8 +313,8 @@ impl<T> Node<T> {
     }
 
     #[inline]
-    pub fn map<X>(&self, contents: X) -> Node<X> {
-        Node {
+    pub fn map<X>(&self, contents: X) -> AttrSpanned<X> {
+        AttrSpanned {
             attributes: self.attributes,
             span: self.span,
             contents,
@@ -191,8 +342,8 @@ impl Display for UnaryOperator {
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Unknown {
     Parameter(ParameterId),
-    NodePotential(NetId),
-    BranchPotential(NetId, NetId),
+    NodePotential(NodeId),
+    BranchPotential(NodeId, NodeId),
     Flow(BranchId),
     Temperature,
 }
@@ -209,205 +360,19 @@ impl Display for Unknown {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum SingleArgMath {
-    Sqrt,
-    Exp(bool),
-    Ln,
-    Log,
-    Abs,
-    Floor,
-    Ceil,
-
-    Sin,
-    Cos,
-    Tan,
-
-    ArcSin,
-    ArcCos,
-    ArcTan,
-
-    SinH,
-    CosH,
-    TanH,
-
-    ArcSinH,
-    ArcCosH,
-    ArcTanH,
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum DisciplineAccess {
+    Potential,
+    Flow,
 }
 
-impl Display for SingleArgMath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
-    }
-}
-
-impl SingleArgMath {
-    pub fn name(self) -> &'static str {
+impl Display for DisciplineAccess {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Sqrt => "sqrt",
-            Self::Exp(_) => "exp",
-            Self::Ln => "ln",
-            Self::Log => "log",
-            Self::Abs => "abs",
-            Self::Floor => "floor",
-            Self::Ceil => "ceil",
-            Self::Sin => "floor",
-            Self::Cos => "cos",
-            Self::Tan => "tan",
-            Self::ArcSin => "asin",
-            Self::ArcCos => "acos",
-            Self::ArcTan => "atan",
-            Self::SinH => "sinh",
-            Self::CosH => "cosh",
-            Self::TanH => "tanh",
-            Self::ArcSinH => "asinh",
-            Self::ArcCosH => "acosh",
-            Self::ArcTanH => "atanh",
+            Self::Potential => f.write_str("pot"),
+            Self::Flow => f.write_str("flow"),
         }
     }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum DoubleArgMath {
-    Pow,
-    Hypot,
-    Min,
-    Max,
-    ArcTan2,
-}
-
-impl DoubleArgMath {
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Pow => "pow",
-            Self::Hypot => "hypot",
-            Self::Min => "min",
-            Self::Max => "max",
-            Self::ArcTan2 => "arctan2",
-        }
-    }
-}
-
-impl Display for DoubleArgMath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum NoiseSource<Expr, Table> {
-    White(Expr),
-    Flicker(Expr, Expr),
-    Table(Table),
-    TableLog(Table),
-}
-
-impl<Expr, Table> NoiseSource<Expr, Table> {
-    pub fn fold<NewExpr, NewTable>(
-        self,
-        mut fold_expr: impl FnMut(Expr) -> NewExpr,
-        mut fold_table: impl FnMut(Table) -> NewTable,
-    ) -> NoiseSource<NewExpr, NewTable> {
-        match self {
-            NoiseSource::White(expr) => NoiseSource::White(fold_expr(expr)),
-            NoiseSource::Flicker(expr1, expr2) => {
-                NoiseSource::Flicker(fold_expr(expr1), fold_expr(expr2))
-            }
-            NoiseSource::Table(table) => NoiseSource::Table(fold_table(table)),
-            NoiseSource::TableLog(table) => NoiseSource::TableLog(fold_table(table)),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Port {
-    pub input: bool,
-    pub output: bool,
-    pub net: NetId,
-}
-
-// TODO add system to generalise (dynamically add more)
-#[derive(Clone, Debug)]
-pub enum SystemFunctionCall<Port, Parameter, BranchAccess, Fun> {
-    Temperature,
-    Vt(Option<ExpressionId>),
-    Simparam(ExpressionId, Option<ExpressionId>),
-    SimparamStr(ExpressionId),
-    PortConnected(Port),
-    ParameterGiven(Parameter),
-    Lim {
-        access: BranchAccess,
-        fun: Fun,
-        args: Vec<ExpressionId>,
-    },
-}
-
-impl<Port, Parameter, BranchAccess, Fun> SystemFunctionCall<Port, Parameter, BranchAccess, Fun> {
-    pub fn ty(&self) -> Type {
-        match self {
-            Self::Temperature | Self::Vt(_) | Self::Simparam(_, _) | Self::Lim { .. } => Type::REAL,
-            Self::SimparamStr(_) => Type::STRING,
-            Self::PortConnected(_) | Self::ParameterGiven(_) => Type::BOOL,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum StopTaskKind {
-    Stop,
-    Finish,
-}
-
-impl Display for StopTaskKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
-    }
-}
-
-impl Debug for StopTaskKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        Display::fmt(self, f)
-    }
-}
-
-impl StopTaskKind {
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Stop => "$stop",
-            Self::Finish => "$finish",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Copy, Eq, PartialEq)]
-pub enum PrintOnFinish {
-    Nothing,
-    Location,
-    LocationAndResourceUsage,
-}
-
-impl TryFrom<i64> for PrintOnFinish {
-    type Error = ();
-
-    fn try_from(finish_number: i64) -> Result<Self, Self::Error> {
-        Ok(match finish_number {
-            0 => Self::Nothing,
-            1 => Self::Location,
-            2 => Self::LocationAndResourceUsage,
-            _ => return Err(()),
-        })
-    }
-}
-#[derive(Clone, Debug, Copy)]
-pub enum DisplayTaskKind {
-    // stprob, display and write (write does not have a newline after are equivalent. write
-    Convergence(bool),
-    Debug,
-    Info,
-    Warn,
-    Error,
-    Fatal(PrintOnFinish),
 }
 
 pub type ParameterRangeConstraint<T> = Range<ParameterRangeConstraintBound<T>>;

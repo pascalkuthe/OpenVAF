@@ -12,34 +12,33 @@ use crate::cfg::{
     BasicBlock, BasicBlockData, ControlFlowGraph, PhiData, Terminator, TerminatorKind,
 };
 use crate::{
-    BranchId, COperand, CallType, DisciplineAccess, Expression, Local, LocalDeclaration, LocalKind,
-    Mir, OperandData, RValue, Spanned, StatementId, StmntKind, SyntaxCtx, TyRValue, Type,
-    VariableId, VariableLocalKind,
+    BranchId, COperand, CfgConversion, CfgFunctions, DisciplineAccess, Expression, Local,
+    LocalDeclaration, LocalKind, Mir, OperandData, RValue, Spanned, StatementId, StmntKind,
+    SyntaxCtx, TyRValue, Type, VariableId, VariableLocalKind,
 };
 use openvaf_data_structures::index_vec::{index_vec, IndexVec};
 use openvaf_data_structures::HashMap;
-use openvaf_ir::convert::Convert;
 use openvaf_session::sourcemap::Span;
 use std::array;
 use tracing::trace;
 
 pub trait CfgEdit {
-    type CallType: CallType;
-    fn borrow_mut(&mut self) -> &mut ControlFlowGraph<Self::CallType>;
+    type CfgFunctions: CfgFunctions;
+    fn borrow_mut(&mut self) -> &mut ControlFlowGraph<Self::CfgFunctions>;
 }
 
-impl<'a, C: CallType> CfgEdit for &'a mut ControlFlowGraph<C> {
-    type CallType = C;
+impl<'a, C: CfgFunctions> CfgEdit for &'a mut ControlFlowGraph<C> {
+    type CfgFunctions = C;
 
-    fn borrow_mut(&mut self) -> &mut ControlFlowGraph<Self::CallType> {
+    fn borrow_mut(&mut self) -> &mut ControlFlowGraph<Self::CfgFunctions> {
         self
     }
 }
 
-impl<C: CallType> CfgEdit for ControlFlowGraph<C> {
-    type CallType = C;
+impl<C: CfgFunctions> CfgEdit for ControlFlowGraph<C> {
+    type CfgFunctions = C;
 
-    fn borrow_mut(&mut self) -> &mut ControlFlowGraph<Self::CallType> {
+    fn borrow_mut(&mut self) -> &mut ControlFlowGraph<Self::CfgFunctions> {
         self
     }
 }
@@ -52,7 +51,7 @@ pub struct CfgBuilder<C> {
     pub current: BasicBlock,
 }
 
-impl<C: CallType> CfgBuilder<ControlFlowGraph<C>> {
+impl<C: CfgFunctions> CfgBuilder<ControlFlowGraph<C>> {
     pub fn new_small() -> Self {
         let mut res = Self {
             cfg: ControlFlowGraph::new(),
@@ -96,7 +95,7 @@ impl<C: CallType> CfgBuilder<ControlFlowGraph<C>> {
     }
 }
 
-impl<'a, C: CallType> CfgBuilder<&'a mut ControlFlowGraph<C>> {
+impl<'a, C: CfgFunctions> CfgBuilder<&'a mut ControlFlowGraph<C>> {
     pub fn edit<const INIT_BRANCHES: bool, const INIT_VARS: bool>(
         cfg: &'a mut ControlFlowGraph<C>,
         current_bb: BasicBlock,
@@ -145,7 +144,7 @@ impl<'a, C: CallType> CfgBuilder<&'a mut ControlFlowGraph<C>> {
     }
 }
 
-impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
+impl<C: CfgFunctions, CFG: CfgEdit<CfgFunctions = C>> CfgBuilder<CFG> {
     pub fn finish(mut self, sctx: SyntaxCtx) -> CFG {
         let end = self.cfg.borrow_mut().end();
         self.terminate_bb(end, TerminatorKind::End, sctx);
@@ -156,14 +155,16 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
     /// This funciton is optimized for joining multiple cfgs late in the compilation process.
     /// It therefore doesn't join derivative mappings If you need that do it manually (simply join the hashmaps with the second cfgs locals offsetet).
     /// Furthermore it doesn't invalidate the predecessor cache you need to do that after you are done with modifying the cfg
-    pub fn insert_cfg<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(
+    pub fn insert_cfg<
+        X: CfgFunctions,
+        Conversion: CfgConversion<X, C>,
+        const RETAIN_END: bool,
+        const MAP_LOCALS: bool,
+    >(
         &mut self,
         mut cfg: ControlFlowGraph<X>,
-    ) -> BasicBlock
-    where
-        X: CallType + Into<C>,
-        X::I: Into<C::I>,
-    {
+        conversion: &mut Conversion,
+    ) -> BasicBlock {
         debug_assert!(!cfg.blocks.is_empty());
 
         let dst = self.cfg.borrow_mut();
@@ -202,14 +203,14 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             // Add the blocks before the end block
             dst.blocks.splice(
                 dst.end()..dst.end(),
-                cfg.blocks.into_iter().map(|block| block.convert()),
+                cfg.blocks.into_iter().map(|block| block.map(conversion)),
             );
             (inserted_cfg_start, new_end - 1)
         } else {
             let inserted_cfg_start = dst.blocks.len_idx();
             // add the cfg at the end
             dst.blocks
-                .extend(cfg.blocks.into_iter().map(|block| block.convert()));
+                .extend(cfg.blocks.into_iter().map(|block| block.map(conversion)));
             (inserted_cfg_start, new_end)
         };
 
@@ -220,16 +221,22 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
     }
 
     /// See `insert_cfg`
-    pub fn insert_expr<X, const RETAIN_END: bool, const MAP_LOCALS: bool>(
+    pub fn insert_expr<
+        X,
+        Convert: CfgConversion<X, C>,
+        const RETAIN_END: bool,
+        const MAP_LOCALS: bool,
+    >(
         &mut self,
         sctx: SyntaxCtx,
         expr: Expression<X>,
+        conversion: &mut Convert,
     ) -> RValue<C>
     where
-        X: CallType + Into<C>,
+        X: CfgFunctions + Into<C>,
         X::I: Into<C::I>,
     {
-        let mut res = expr.1.convert();
+        let mut res = expr.1;
         let cfg = expr.0;
         if !cfg.blocks.is_empty() {
             if MAP_LOCALS {
@@ -239,7 +246,7 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
             }
 
             let pred = self.current;
-            let start = self.insert_cfg::<X, RETAIN_END, MAP_LOCALS>(cfg);
+            let start = self.insert_cfg::<X, _, RETAIN_END, MAP_LOCALS>(cfg, conversion);
 
             // pred must not be moved (either dont retain the end or you are not allowed to call this function with the builder at the end)
             assert!(!RETAIN_END || self.cfg.borrow_mut().end() != pred);
@@ -247,14 +254,18 @@ impl<C: CallType, CFG: CfgEdit<CallType = C>> CfgBuilder<CFG> {
                 self.terminate_bb(pred, TerminatorKind::Goto(start), sctx)
             }
         }
-        RValue::Use(res)
+        RValue::Use(conversion.map_operand(res))
     }
 
     pub fn new_temporary(&mut self, ty: Type) -> Local {
         self.cfg.borrow_mut().new_temporary(ty)
     }
 
-    pub fn variable_local<A: CallType>(&mut self, var: VariableId, mir: &Mir<A>) -> (Local, Type) {
+    pub fn variable_local<A: CfgFunctions>(
+        &mut self,
+        var: VariableId,
+        mir: &Mir<A>,
+    ) -> (Local, Type) {
         if let Some(res) = self.vars[var] {
             (res, self.cfg.borrow_mut().locals[res].ty)
         } else {

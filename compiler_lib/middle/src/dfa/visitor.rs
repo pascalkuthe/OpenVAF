@@ -10,7 +10,7 @@
 
 use super::{Analysis, Direction, Results};
 use crate::cfg::{BasicBlock, BasicBlockData, ControlFlowGraph, Phi, PhiData, Terminator};
-use crate::{CallType, Statement, StatementId};
+use crate::{CfgFunctions, Statement, StatementId};
 
 /// Calls the corresponding method in `ResultsVisitor` for every location in a ControlFlow Graph with the
 /// dataflow state at that location.
@@ -20,7 +20,7 @@ pub fn visit_results<'a, C, F, V>(
     results: &V,
     vis: &mut impl ResultsVisitor<C, FlowState = F>,
 ) where
-    C: CallType,
+    C: CfgFunctions,
     V: ResultsVisitable<C, FlowState = F>,
 {
     let mut state = results.new_flow_state(cfg);
@@ -38,7 +38,7 @@ pub fn visit_results_mut<C, F, V>(
     results: &V,
     vis: &mut impl ResultsVisitorMut<C, FlowState = F>,
 ) where
-    C: CallType,
+    C: CfgFunctions,
     V: ResultsVisitable<C, FlowState = F>,
 {
     let mut state = results.new_flow_state(cfg);
@@ -48,7 +48,7 @@ pub fn visit_results_mut<C, F, V>(
     }
 }
 
-pub trait ResultsVisitor<C: CallType> {
+pub trait ResultsVisitor<C: CfgFunctions> {
     type FlowState;
 
     #[inline(always)]
@@ -128,7 +128,7 @@ pub trait ResultsVisitor<C: CallType> {
     }
 }
 
-pub trait ResultsVisitorMut<C: CallType> {
+pub trait ResultsVisitorMut<C: CfgFunctions> {
     type FlowState;
 
     #[inline(always)]
@@ -212,7 +212,7 @@ pub trait ResultsVisitorMut<C: CallType> {
 ///
 /// This trait exists so that we can visit the results of multiple dataflow analyses simultaneously.
 /// DO NOT IMPLEMENT MANUALLY. Instead, use the `impl_visitable` macro below.
-pub trait ResultsVisitable<C: CallType> {
+pub trait ResultsVisitable<C: CfgFunctions> {
     type Direction: Direction;
     type FlowState;
 
@@ -256,7 +256,7 @@ pub trait ResultsVisitable<C: CallType> {
     );
 }
 
-impl<C: CallType, A> ResultsVisitable<C> for Results<C, A>
+impl<C: CfgFunctions, A> ResultsVisitable<C> for Results<C, A>
 where
     A: Analysis<C>,
 {

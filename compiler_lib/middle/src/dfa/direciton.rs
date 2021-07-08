@@ -12,7 +12,7 @@ use super::Analysis;
 use crate::cfg::{BasicBlock, BasicBlockData, ControlFlowGraph, Phi, TerminatorKind};
 use crate::dfa::visitor::{ResultsVisitable, ResultsVisitor, ResultsVisitorMut};
 use crate::dfa::{Effect, EffectIndex, GenKillAnalysis, GenKillSet};
-use crate::{CallType, StatementId};
+use crate::{CfgFunctions, StatementId};
 use std::cmp::max;
 use std::ops::RangeInclusive;
 
@@ -30,7 +30,7 @@ pub trait Direction {
         block_data: &BasicBlockData<C>,
         effects: RangeInclusive<EffectIndex>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>;
 
     fn apply_effects_in_block<A, C>(
@@ -40,7 +40,7 @@ pub trait Direction {
         block: BasicBlock,
         block_data: &BasicBlockData<C>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>;
 
     fn gen_kill_effects_in_block<A, C>(
@@ -50,7 +50,7 @@ pub trait Direction {
         block: BasicBlock,
         block_data: &BasicBlockData<C>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: GenKillAnalysis<C>;
 
     fn visit_results_in_block<C, F, R>(
@@ -62,7 +62,7 @@ pub trait Direction {
         vis: &mut impl ResultsVisitor<C, FlowState = F>,
     ) where
         R: ResultsVisitable<C, FlowState = F>,
-        C: CallType;
+        C: CfgFunctions;
 
     fn visit_results_in_block_mut<C, F, R>(
         state: &mut F,
@@ -72,7 +72,7 @@ pub trait Direction {
         vis: &mut impl ResultsVisitorMut<C, FlowState = F>,
     ) where
         R: ResultsVisitable<C, FlowState = F>,
-        C: CallType;
+        C: CfgFunctions;
 
     fn join_state_into_successors_of<A, C>(
         analysis: &mut A,
@@ -81,7 +81,7 @@ pub trait Direction {
         block: (BasicBlock, &BasicBlockData<C>),
         propagate: impl FnMut(BasicBlock, &A::Domain),
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>;
 }
 
@@ -99,7 +99,7 @@ impl Direction for Backward {
         block_data: &BasicBlockData<C>,
         effects: RangeInclusive<EffectIndex>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>,
     {
         let (from, to) = (*effects.start(), *effects.end());
@@ -165,7 +165,7 @@ impl Direction for Backward {
         block: BasicBlock,
         block_data: &BasicBlockData<C>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>,
     {
         analysis.init_block(cfg, state);
@@ -188,7 +188,7 @@ impl Direction for Backward {
         block: BasicBlock,
         block_data: &BasicBlockData<C>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: GenKillAnalysis<C>,
     {
         let terminator = block_data.terminator();
@@ -212,7 +212,7 @@ impl Direction for Backward {
         vis: &mut impl ResultsVisitor<C, FlowState = F>,
     ) where
         R: ResultsVisitable<C, FlowState = F>,
-        C: CallType,
+        C: CfgFunctions,
     {
         assert!(block < cfg.blocks.len_idx());
 
@@ -246,7 +246,7 @@ impl Direction for Backward {
         vis: &mut impl ResultsVisitorMut<C, FlowState = F>,
     ) where
         R: ResultsVisitable<C, FlowState = F>,
-        C: CallType,
+        C: CfgFunctions,
     {
         assert!(block < cfg.blocks.len_idx());
 
@@ -341,7 +341,7 @@ impl Direction for Backward {
         block: (BasicBlock, &BasicBlockData<C>),
         mut propagate: impl FnMut(BasicBlock, &A::Domain),
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>,
     {
         for pred in cfg.predecessors(block.0).iter().copied() {
@@ -364,7 +364,7 @@ impl Direction for Forward {
         block_data: &BasicBlockData<C>,
         effects: RangeInclusive<EffectIndex>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>,
     {
         let (from, to) = (*effects.start(), *effects.end());
@@ -425,7 +425,7 @@ impl Direction for Forward {
         block: BasicBlock,
         block_data: &BasicBlockData<C>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>,
     {
         analysis.init_block(cfg, state);
@@ -448,7 +448,7 @@ impl Direction for Forward {
         block: BasicBlock,
         block_data: &BasicBlockData<C>,
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: GenKillAnalysis<C>,
     {
         for (statement_index, phi) in block_data.phi_statements.iter_enumerated() {
@@ -472,7 +472,7 @@ impl Direction for Forward {
         vis: &mut impl ResultsVisitor<C, FlowState = F>,
     ) where
         R: ResultsVisitable<C, FlowState = F>,
-        C: CallType,
+        C: CfgFunctions,
     {
         assert!(block < cfg.blocks.len_idx());
 
@@ -507,7 +507,7 @@ impl Direction for Forward {
         vis: &mut impl ResultsVisitorMut<C, FlowState = F>,
     ) where
         R: ResultsVisitable<C, FlowState = F>,
-        C: CallType,
+        C: CfgFunctions,
     {
         assert!(block < cfg.blocks.len_idx());
 
@@ -602,7 +602,7 @@ impl Direction for Forward {
         block: (BasicBlock, &BasicBlockData<C>),
         mut propagate: impl FnMut(BasicBlock, &A::Domain),
     ) where
-        C: CallType,
+        C: CfgFunctions,
         A: Analysis<C>,
     {
         match block.1.terminator().kind {

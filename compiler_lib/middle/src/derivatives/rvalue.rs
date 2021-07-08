@@ -18,16 +18,16 @@ use crate::BinOp::{Divide, Minus, Multiply, Plus};
 use crate::ComparisonOp::Equal;
 use crate::OperandData::Constant;
 use crate::{
-    fold_rvalue, BinOp, COperand, CallArg, CallType, CallTypeDerivative, Derivative, Local,
+    fold_rvalue, BinOp, COperand, CallArg, CallTypeDerivative, CfgFunctions, Derivative, Local,
     Operand, OperandData, RValue, RValueFold, StmntKind, SyntaxCtx, Type,
 };
 use enum_map::{Enum, EnumMap};
 use openvaf_data_structures::index_vec::IndexSlice;
 use openvaf_diagnostics::lints::Linter;
-use openvaf_ir::DoubleArgMath::Pow;
-use openvaf_ir::SingleArgMath::{Cos, CosH, Ln, Sin, SinH, Sqrt};
+use openvaf_ir::Math1::{Cos, CosH, Ln, Sin, SinH, Sqrt};
+use openvaf_ir::Math2::Pow;
 use openvaf_ir::UnaryOperator::ArithmeticNegate;
-use openvaf_ir::{SingleArgMath, Spanned, UnaryOperator, Unknown};
+use openvaf_ir::{Math1, Spanned, UnaryOperator, Unknown};
 use openvaf_session::sourcemap::span::DUMMY_SP;
 use openvaf_session::sourcemap::Span;
 
@@ -40,7 +40,7 @@ impl OuterDerivativeCacheSlot {
     pub const SINGLE: Self = Self::Lhs;
 }
 
-impl<'lt, C: CallType, MC: CallType> AutoDiff<'lt, C, MC> {
+impl<'lt, C: CfgFunctions, MC: CfgFunctions> AutoDiff<'lt, C, MC> {
     pub(crate) fn rvalue_derivative(
         &mut self,
         lhs: Local,
@@ -71,7 +71,7 @@ enum OneAndSquareKind {
     SquaredMinusOne,
 }
 
-pub struct RValueAutoDiff<'lt, 'adlt, C: CallType, MC: CallType> {
+pub struct RValueAutoDiff<'lt, 'adlt, C: CfgFunctions, MC: CfgFunctions> {
     /// Local that the RValue this is being derived will be saved to
     pub original_local: Local,
     origin: SyntaxCtx,
@@ -80,7 +80,9 @@ pub struct RValueAutoDiff<'lt, 'adlt, C: CallType, MC: CallType> {
     outer_derivative_cache: &'lt mut EnumMap<OuterDerivativeCacheSlot, Option<COperand<C>>>,
 }
 
-impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt, 'adlt, C, MC> {
+impl<'lt, 'adlt, C: CfgFunctions, MC: CfgFunctions> RValueFold<C>
+    for RValueAutoDiff<'lt, 'adlt, C, MC>
+{
     type T = Option<RValue<C>>;
 
     fn fold_cmplx_arith_negate(&mut self, _op: Span, _arg: &COperand<C>) -> Self::T {
@@ -263,7 +265,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
             |fold| {
                 let two = Self::gen_constant(2.0, op);
                 let rhs = fold.gen_temporary(RValue::Cast(rhs.clone()), op);
-                RValue::DoubleArgMath(Spanned::new(Pow, op), two, rhs)
+                RValue::Math2(Spanned::new(Pow, op), two, rhs)
             },
             op,
             OuterDerivativeCacheSlot::Lhs,
@@ -313,7 +315,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
                     op,
                 );
                 let rhs = fold.gen_temporary(RValue::Cast(rhs), op);
-                RValue::DoubleArgMath(Spanned::new(Pow, op), two, rhs)
+                RValue::Math2(Spanned::new(Pow, op), two, rhs)
             },
             op,
             OuterDerivativeCacheSlot::Lhs,
@@ -531,6 +533,14 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
         )
     }
 
+    fn fold_clog2(&mut self, span: Span, _arg: &COperand<C>) -> Self::T {
+        Linter::dispatch_late(
+            Box::new(RoundingDerivativeNotFullyDefined(span)),
+            self.origin,
+        );
+        None
+    }
+
     fn fold_sqrt(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
         // f' * (1/2 / sqrt(x))
         self.chain_rule(
@@ -577,7 +587,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
     fn fold_sin(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
         self.chain_rule(
             arg,
-            |_| RValue::SingleArgMath(Spanned::new(Cos, span), arg.clone()),
+            |_| RValue::Math1(Spanned::new(Cos, span), arg.clone()),
             span,
             OuterDerivativeCacheSlot::SINGLE,
         )
@@ -613,7 +623,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
     fn fold_sinh(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
         self.chain_rule(
             arg,
-            |_| RValue::SingleArgMath(Spanned::new(CosH, span), arg.clone()),
+            |_| RValue::Math1(Spanned::new(CosH, span), arg.clone()),
             span,
             OuterDerivativeCacheSlot::SINGLE,
         )
@@ -622,7 +632,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
     fn fold_cosh(&mut self, span: Span, arg: &COperand<C>) -> Self::T {
         self.chain_rule(
             arg,
-            |_| RValue::SingleArgMath(Spanned::new(SinH, span), arg.clone()),
+            |_| RValue::Math1(Spanned::new(SinH, span), arg.clone()),
             span,
             OuterDerivativeCacheSlot::SINGLE,
         )
@@ -759,7 +769,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
 
         let sum2 = self.chain_rule(
             &rhs,
-            |_| RValue::SingleArgMath(Spanned::new(Ln, span), lhs.clone()),
+            |_| RValue::Math1(Spanned::new(Ln, span), lhs.clone()),
             span,
             OuterDerivativeCacheSlot::Rhs,
         );
@@ -917,7 +927,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueFold<C> for RValueAutoDiff<'lt
     }
 }
 
-impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
+impl<'lt, 'adlt, C: CfgFunctions, MC: CfgFunctions> RValueAutoDiff<'lt, 'adlt, C, MC> {
     fn minmax_derivative(
         &mut self,
         span: Span,
@@ -969,7 +979,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
         Some(RValue::Select(cond, darg, minus_darg))
     }
 
-    fn derivative_sum(
+    pub fn derivative_sum(
         lhs_derivative: Spanned<CallTypeDerivative<C>>,
         rhs_derivative: Spanned<CallTypeDerivative<C>>,
         span: Span,
@@ -1003,7 +1013,7 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
         }
     }
 
-    fn derivative_sub(
+    pub fn derivative_sub(
         lhs_derivative: Spanned<CallTypeDerivative<C>>,
         rhs_derivative: Spanned<CallTypeDerivative<C>>,
         span: Span,
@@ -1143,25 +1153,25 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
         )
     }
 
-    fn gen_constant(val: f64, span: Span) -> COperand<C> {
+    pub fn gen_constant(val: f64, span: Span) -> COperand<C> {
         Operand::new(OperandData::Constant(val.into()), span)
     }
 
-    fn gen_temporary(&mut self, rhs: RValue<C>, span: Span) -> COperand<C> {
+    pub fn gen_temporary(&mut self, rhs: RValue<C>, span: Span) -> COperand<C> {
         let local = self.ad.cfg.new_temporary(Type::REAL);
         let kind = StmntKind::Assignment(local, rhs);
         self.ad.forward_stmnts.push((kind, self.origin));
         Operand::new(OperandData::Copy(local), span)
     }
 
-    fn gen_logic_temporary(&mut self, rhs: RValue<C>, span: Span) -> COperand<C> {
+    pub fn gen_logic_temporary(&mut self, rhs: RValue<C>, span: Span) -> COperand<C> {
         let local = self.ad.cfg.new_temporary(Type::BOOL);
         let kind = StmntKind::Assignment(local, rhs);
         self.ad.forward_stmnts.push((kind, self.origin));
         Operand::new(OperandData::Copy(local), span)
     }
 
-    fn gen_binop(
+    pub fn gen_binop(
         &mut self,
         op: BinOp,
         lhs: COperand<C>,
@@ -1172,13 +1182,8 @@ impl<'lt, 'adlt, C: CallType, MC: CallType> RValueAutoDiff<'lt, 'adlt, C, MC> {
         self.gen_temporary(rhs, span)
     }
 
-    fn gen_single_arg_math(
-        &mut self,
-        kind: SingleArgMath,
-        arg: COperand<C>,
-        span: Span,
-    ) -> COperand<C> {
-        let rhs = RValue::SingleArgMath(Spanned::new(kind, span), arg);
+    fn gen_single_arg_math(&mut self, kind: Math1, arg: COperand<C>, span: Span) -> COperand<C> {
+        let rhs = RValue::Math1(Spanned::new(kind, span), arg);
         self.gen_temporary(rhs, span)
     }
 

@@ -15,7 +15,7 @@ use inkwell::module::{Linkage, Module};
 use inkwell::types::FunctionType;
 use inkwell::values::{BasicValueEnum, FunctionValue};
 use inkwell::AddressSpace;
-use openvaf_middle::CallType;
+use openvaf_middle::CfgFunctions;
 
 pub type IntrinsicPrototypes<'ctx> = EnumMap<Intrinsic, FunctionValue<'ctx>>;
 
@@ -55,6 +55,7 @@ pub enum Intrinsic {
     Sqrt,
     Pow,
     Log,
+    LeadingZeros,
     Ln,
     Exp,
     FloatAbs,
@@ -89,6 +90,7 @@ impl Intrinsic {
             Self::IntMin => "llvm.minnum.i64",
             Self::FloatMax => "llvm.maxnum.f64",
             Self::IntMax => "llvm.maxnum.i64",
+            Self::LeadingZeros => "llvm.ctlz.i64",
 
             //system libc calls
             Self::Tan => "tan",
@@ -149,11 +151,14 @@ impl Intrinsic {
                 let char_ptr = ctx.i8_type().ptr_type(AddressSpace::Generic).into();
                 ctx.i32_type().fn_type(&[char_ptr, char_ptr], false)
             }
+            Self::LeadingZeros => ctx
+                .i64_type()
+                .fn_type(&[ctx.i64_type().into(), ctx.bool_type().into()], false),
         }
     }
 }
 
-impl<'a, 'ctx, A: CallType> LlvmCodegen<'a, 'ctx, A> {
+impl<'a, 'ctx, A: CfgFunctions> LlvmCodegen<'a, 'ctx, A> {
     pub fn build_intrinsic_call(
         &mut self,
         intrinisc: Intrinsic,

@@ -16,11 +16,11 @@ use inkwell::module::Module;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{FloatPredicate, IntPredicate};
 use openvaf_data_structures::index_vec::{index_vec, IndexSlice, IndexVec};
-use openvaf_ir::ids::BranchId;
+use openvaf_ir::ids::{BranchId, CallArg};
 use openvaf_middle::cfg::{BasicBlock, ControlFlowGraph, PhiData, TerminatorKind};
 use openvaf_middle::{
-    fold_rvalue, COperand, CallArg, CallType, ComparisonOp, DisciplineAccess, Local, LocalKind,
-    Mir, OperandData, RValue, StmntKind, Type, VariableLocalKind,
+    fold_rvalue, COperand, CfgFunctions, ComparisonOp, DisciplineAccess, Local, LocalKind, Mir,
+    OperandData, RValue, StmntKind, Type, VariableLocalKind,
 };
 use openvaf_session::sourcemap::StringLiteral;
 
@@ -39,7 +39,7 @@ pub enum LocalValue<'ctx> {
     Undef,
 }
 
-pub struct LlvmCodegen<'a, 'c, A: CallType> {
+pub struct LlvmCodegen<'a, 'c, A: CfgFunctions> {
     pub mir: &'a Mir<A>,
     pub context: &'c Context,
     pub module: Module<'c>,
@@ -49,7 +49,7 @@ pub struct LlvmCodegen<'a, 'c, A: CallType> {
     pub target: &'a TargetData,
 }
 
-impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
+impl<'a, 'c, A: CfgFunctions> LlvmCodegen<'a, 'c, A> {
     pub fn new(
         mir: &'a Mir<A>,
         context: &'c Context,
@@ -103,7 +103,7 @@ impl<'a, 'c, A: CallType> LlvmCodegen<'a, 'c, A> {
     }
 }
 
-pub struct CfgCodegen<'lt, 'a, 'c, D, A: CallType, C: CallTypeCodeGen<'lt, 'c>> {
+pub struct CfgCodegen<'lt, 'a, 'c, D, A: CfgFunctions, C: CallTypeCodeGen<'lt, 'c>> {
     pub ctx: &'lt mut LlvmCodegen<'a, 'c, A>,
     pub call_type_data: D,
     pub blocks: IndexVec<BasicBlock, LlvmBasicBlock<'c>>,
@@ -114,7 +114,7 @@ pub struct CfgCodegen<'lt, 'a, 'c, D, A: CallType, C: CallTypeCodeGen<'lt, 'c>> 
 
 impl<'lt, 'a, 'c, A, C> CfgCodegen<'lt, 'a, 'c, (), A, C>
 where
-    A: CallType,
+    A: CfgFunctions,
     C: CallTypeCodeGen<'lt, 'c>,
 {
     pub fn new(
@@ -139,7 +139,7 @@ where
 
 impl<'lt, 'a, 'c, D, A, C> CfgCodegen<'lt, 'a, 'c, D, A, C>
 where
-    A: CallType,
+    A: CfgFunctions,
     C: CallTypeCodeGen<'lt, 'c>,
 {
     pub fn new_with(
@@ -182,7 +182,7 @@ where
     }
 }
 
-impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>>
+impl<'lt, 'a, 'c, A: CfgFunctions, C: CallTypeCodeGen<'lt, 'c>>
     CfgCodegen<'lt, 'a, 'c, C::CodeGenData, A, C>
 {
     pub fn alloc_vars_and_branches(
@@ -411,27 +411,27 @@ impl<'lt, 'a, 'c, A: CallType, C: CallTypeCodeGen<'lt, 'c>>
     }
 }
 
-pub trait CallTypeCodeGen<'lt, 'c>: CallType {
+pub trait CallTypeCodeGen<'lt, 'c>: CfgFunctions {
     type CodeGenData;
 
-    fn read_input<'a, A: CallType>(
+    fn read_input<'a, A: CfgFunctions>(
         cg: &mut CfgCodegen<'lt, 'a, 'c, Self::CodeGenData, A, Self>,
         input: &Self::I,
     ) -> BasicValueEnum<'c>;
 
-    fn gen_call_rvalue<'a, A: CallType>(
+    fn gen_call_rvalue<'a, A: CfgFunctions>(
         &self,
         cg: &mut CfgCodegen<'lt, 'a, 'c, Self::CodeGenData, A, Self>,
         args: &IndexSlice<CallArg, [BasicValueEnum<'c>]>,
     ) -> BasicValueEnum<'c>;
 
-    fn gen_call<'a, A: CallType>(
+    fn gen_call<'a, A: CfgFunctions>(
         &self,
         cg: &mut CfgCodegen<'lt, 'a, 'c, Self::CodeGenData, A, Self>,
         args: &IndexSlice<CallArg, [BasicValueEnum<'c>]>,
     );
 
-    fn gen_limexp<'a, A: CallType>(
+    fn gen_limexp<'a, A: CfgFunctions>(
         cg: &mut CfgCodegen<'lt, 'a, 'c, Self::CodeGenData, A, Self>,
         args: BasicValueEnum<'c>,
     ) -> BasicValueEnum<'c>;

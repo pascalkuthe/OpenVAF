@@ -9,7 +9,7 @@
  */
 
 use crate::cfg::{BasicBlock, ControlFlowGraph, START_BLOCK};
-use crate::CallType;
+use crate::CfgFunctions;
 use openvaf_data_structures::bit_set::BitSet;
 use openvaf_data_structures::sync::OnceCell;
 
@@ -27,7 +27,7 @@ impl GraphIsCyclicCache {
         }
     }
 
-    pub(super) fn is_cyclic<C: CallType>(&self, cfg: &ControlFlowGraph<C>) -> bool {
+    pub(super) fn is_cyclic<C: CfgFunctions>(&self, cfg: &ControlFlowGraph<C>) -> bool {
         *self.cache.get_or_init(|| {
             TriColorDepthFirstSearch::new(cfg)
                 .run_from_start(&mut CycleDetector)
@@ -105,14 +105,14 @@ struct Event<N> {
 /// those successors), we will pop off that node's `Settled` event.
 ///
 /// [CLR]: https://en.wikipedia.org/wiki/Introduction_to_Algorithms
-pub struct TriColorDepthFirstSearch<'graph, C: CallType> {
+pub struct TriColorDepthFirstSearch<'graph, C: CfgFunctions> {
     graph: &'graph ControlFlowGraph<C>,
     stack: Vec<Event<BasicBlock>>,
     visited: BitSet<BasicBlock>,
     settled: BitSet<BasicBlock>,
 }
 
-impl<'a, C: CallType> TriColorDepthFirstSearch<'a, C> {
+impl<'a, C: CfgFunctions> TriColorDepthFirstSearch<'a, C> {
     pub fn new(graph: &'a ControlFlowGraph<C>) -> Self {
         TriColorDepthFirstSearch {
             graph,
@@ -194,7 +194,7 @@ impl<'a, C: CallType> TriColorDepthFirstSearch<'a, C> {
     }
 }
 
-impl<'a, C: CallType> TriColorDepthFirstSearch<'a, C> {
+impl<'a, C: CfgFunctions> TriColorDepthFirstSearch<'a, C> {
     /// Performs a depth-first search, starting from `G::start_node()`.
     ///
     /// This won't visit nodes that are not reachable from the start node.

@@ -12,7 +12,7 @@ use core::fmt::Formatter;
 use openvaf_diagnostics::lints::{builtin, Lint, LintDiagnostic};
 use openvaf_diagnostics::{AnnotationType, DiagnosticSlice, Text};
 use openvaf_session::sourcemap::Span;
-use openvaf_session::symbols::Symbol;
+use openvaf_session::symbols::{Ident, Symbol};
 use std::error::Error;
 use std::fmt::Display;
 
@@ -57,3 +57,35 @@ impl LintDiagnostic for AtrributeOverwritten {
         vec![slice]
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct EventIgnored(pub Ident);
+
+impl Error for EventIgnored {}
+impl Display for EventIgnored {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Events are currently ignored. The code is evaluated in place")
+    }
+}
+
+impl LintDiagnostic for EventIgnored {
+    #[inline(always)]
+    fn lint(&self) -> Lint {
+        builtin::event_ignored
+    }
+
+    fn slices(&self, main_type: AnnotationType) -> Vec<DiagnosticSlice> {
+        let slice = DiagnosticSlice {
+            slice_span: self.0.span.data(),
+            messages: vec![(
+                main_type,
+                Text::owned(format!("Event {} is ignored", self.0.name)),
+                self.0.span.data(),
+            )],
+            fold: false,
+        };
+
+        vec![slice]
+    }
+}
+

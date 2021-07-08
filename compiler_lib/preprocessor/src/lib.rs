@@ -33,7 +33,7 @@ use openvaf_session::sourcemap::span::DUMMY_SP;
 use openvaf_session::sourcemap::string_literals::{unesacpe_string, StringLiteral};
 use openvaf_session::sourcemap::Span;
 use openvaf_session::sourcemap::{BytePos, FileId, SourceMap, SyntaxContext};
-use openvaf_session::symbols::{keywords, Ident, Symbol};
+use openvaf_session::symbols::{sym, Ident, Symbol};
 use tracing::{debug, debug_span, trace_span};
 mod lints;
 
@@ -175,7 +175,7 @@ impl<'sm> Preprocessor<'sm> {
         let mut macros = HashMap::with_capacity(64);
 
         macros.insert(
-            keywords::OpenVAF,
+            sym::OpenVAF,
             Macro {
                 head: DUMMY_SP,
                 body: vec![],
@@ -775,6 +775,12 @@ pub trait TokenProcessor<'lt> {
                 return Ok(Self::Res::default());
             }
 
+            LexicalToken::SystemCall => {
+                let name = Symbol::intern(self.preprocessor().lexer.slice(&span.data()));
+                self.save_token(ParserToken::SystemFunctionIdent(name), span);
+                return Ok(Self::Res::default());
+            }
+
             LexicalToken::EscapedIdentifier => {
                 let mut name_span = span.data();
                 name_span.lo += 1;
@@ -783,22 +789,12 @@ pub trait TokenProcessor<'lt> {
                 ParserToken::Ident(Symbol::intern(name))
             }
 
-            LexicalToken::Finish => ParserToken::Finish,
-            LexicalToken::Stop => ParserToken::Stop,
-            LexicalToken::Info => ParserToken::Info,
-            LexicalToken::Warn => ParserToken::Warn,
-            LexicalToken::Error => ParserToken::Error,
-            LexicalToken::Fatal => ParserToken::Fatal,
-            LexicalToken::Temperature => ParserToken::Temperature,
-            LexicalToken::Vt => ParserToken::Vt,
-            LexicalToken::SimParam => ParserToken::SimParam,
-            LexicalToken::SimParamStr => ParserToken::SimParamStr,
-            LexicalToken::PortConnected => ParserToken::PortConnected,
-            LexicalToken::ParamGiven => ParserToken::ParamGiven,
-            LexicalToken::Display => ParserToken::Display,
-            LexicalToken::Debug => ParserToken::Debug,
-            LexicalToken::Strobe => ParserToken::Strobe,
-            LexicalToken::Write => ParserToken::Write,
+            LexicalToken::NetType => {
+                let name = Symbol::intern(self.preprocessor().lexer.slice(&span.data()));
+                self.save_token(ParserToken::NetType(name), span);
+                return Ok(Self::Res::default());
+            }
+
             LexicalToken::Accessor => ParserToken::Accessor,
             LexicalToken::Semicolon => ParserToken::Semicolon,
             LexicalToken::Colon => ParserToken::Colon,
@@ -869,70 +865,21 @@ pub trait TokenProcessor<'lt> {
             LexicalToken::Realtime => ParserToken::Realtime,
             LexicalToken::Integer => ParserToken::Integer,
             LexicalToken::Real => ParserToken::Real,
-            LexicalToken::Reg => ParserToken::Reg,
-            LexicalToken::Wreal => ParserToken::Wreal,
-            LexicalToken::Supply0 => ParserToken::Supply0,
-            LexicalToken::Supply1 => ParserToken::Supply1,
-            LexicalToken::Tri => ParserToken::Tri,
-            LexicalToken::TriAnd => ParserToken::TriAnd,
-            LexicalToken::TriOr => ParserToken::TriOr,
-            LexicalToken::Tri0 => ParserToken::Tri0,
-            LexicalToken::Tri1 => ParserToken::Tri1,
-            LexicalToken::Wire => ParserToken::Wire,
-            LexicalToken::Uwire => ParserToken::Uwire,
-            LexicalToken::Wand => ParserToken::Wand,
-            LexicalToken::Wor => ParserToken::Wor,
-            LexicalToken::Ground => ParserToken::Ground,
             LexicalToken::Potential => ParserToken::Potential,
             LexicalToken::Flow => ParserToken::Flow,
             LexicalToken::Domain => ParserToken::Domain,
             LexicalToken::Discrete => ParserToken::Discrete,
             LexicalToken::Continuous => ParserToken::Continuous,
-            LexicalToken::TimeDerivative => ParserToken::TimeDerivative,
-            LexicalToken::PartialDerivative => ParserToken::PartialDerivative,
-            LexicalToken::TimeIntegral => ParserToken::TimeIntegral,
-            LexicalToken::TimeIntegralMod => ParserToken::TimeIntegralMod,
-            LexicalToken::LimExp => ParserToken::LimExp,
-            LexicalToken::WhiteNoise => ParserToken::WhiteNoise,
-            LexicalToken::FlickerNoise => ParserToken::FlickerNoise,
-            LexicalToken::Pow => ParserToken::Pow,
-            LexicalToken::Sqrt => ParserToken::Sqrt,
-            LexicalToken::Hypot => ParserToken::Hypot,
-            LexicalToken::Exp => ParserToken::Exp,
-            LexicalToken::Ln => ParserToken::Ln,
-            LexicalToken::Log => ParserToken::Log,
-            LexicalToken::Min => ParserToken::Min,
-            LexicalToken::Max => ParserToken::Max,
-            LexicalToken::Abs => ParserToken::Abs,
-            LexicalToken::Floor => ParserToken::Floor,
-            LexicalToken::Ceil => ParserToken::Ceil,
-            LexicalToken::Sin => ParserToken::Sin,
-            LexicalToken::Cos => ParserToken::Cos,
-            LexicalToken::Tan => ParserToken::Tan,
-            LexicalToken::ArcSin => ParserToken::ArcSin,
-            LexicalToken::ArcCos => ParserToken::ArcCos,
-            LexicalToken::ArcTan => ParserToken::ArcTan,
-            LexicalToken::ArcTan2 => ParserToken::ArcTan2,
-            LexicalToken::SinH => ParserToken::SinH,
-            LexicalToken::CosH => ParserToken::CosH,
-            LexicalToken::TanH => ParserToken::TanH,
-            LexicalToken::ArcSinH => ParserToken::ArcSinH,
-            LexicalToken::ArcCosH => ParserToken::ArcCosH,
-            LexicalToken::ArcTanH => ParserToken::ArcTanH,
             LexicalToken::From => ParserToken::From,
             LexicalToken::Exclude => ParserToken::Exclude,
+
             LexicalToken::Infinity => ParserToken::Infinity,
             LexicalToken::MinusInfinity => ParserToken::MinusInfinity,
-            LexicalToken::Abstol => ParserToken::Abstol,
-            LexicalToken::Access => ParserToken::Access,
-            LexicalToken::TimeDerivativeNature => ParserToken::TimeDerivativeNature,
-            LexicalToken::TimeIntegralNature => ParserToken::TimeIntegralNature,
-            LexicalToken::Units => ParserToken::Units,
-            LexicalToken::Limit => ParserToken::Limit,
 
             LexicalToken::ConcatStart => ParserToken::ConcatStart,
             LexicalToken::ConcatEnd => ParserToken::ConcatEnd,
             LexicalToken::ArrStart => ParserToken::ArrStart,
+            LexicalToken::EventStart => ParserToken::EventStart,
 
             LexicalToken::MacroElsif
             | LexicalToken::MacroElse

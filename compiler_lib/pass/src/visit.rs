@@ -11,7 +11,7 @@
 use openvaf_middle::cfg::{
     AnalysisPass, ControlFlowGraph, IntLocation, InternedLocations, PhiData, TerminatorKind,
 };
-use openvaf_middle::{impl_pass_span, COperand, CallType, OperandData, RValue, StmntKind};
+use openvaf_middle::{impl_pass_span, COperand, CfgFunctions, OperandData, RValue, StmntKind};
 
 pub struct Visit<'a, V> {
     pub visitor: &'a mut V,
@@ -20,7 +20,7 @@ pub struct Visit<'a, V> {
 
 impl<'a, C, V> AnalysisPass<'_, C> for Visit<'a, V>
 where
-    C: CallType,
+    C: CfgFunctions,
     V: CfgVisitor<C>,
 {
     type Result = ();
@@ -44,10 +44,10 @@ where
     }
 }
 
-pub trait CfgVisitor<C: CallType> {
+pub trait CfgVisitor<C: CfgFunctions> {
     fn visit_input(
         &mut self,
-        _input: &<C as CallType>::I,
+        _input: &<C as CfgFunctions>::I,
         _loc: IntLocation,
         _cfg: &ControlFlowGraph<C>,
     ) {

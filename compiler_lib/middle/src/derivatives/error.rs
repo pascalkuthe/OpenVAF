@@ -39,13 +39,10 @@ impl Display for UndefinedDerivative {
 
 #[derive(Error, Debug, Clone)]
 pub enum Error {
-    #[error("The derivative of {0} is not defined")]
+    #[error("the derivative of {0} is not defined")]
     DerivativeNotDefined(UndefinedDerivative, Span),
 
-    #[error("Symbolic derivatives of numeric (time) derivatives can not be calculated")]
-    PartialDerivativeOfTimeDerivative(Span),
-
-    #[error("Derivatives can only be calulated for numeric variables")]
+    #[error("derivatives can only be calculated for numeric variables")]
     OnlyNumericExpressionsCanBeDerived(Span),
 }
 
@@ -62,16 +59,6 @@ impl LibraryDiagnostic for Error {
                 messages: vec![(
                     AnnotationType::Error,
                     Text::const_str("Derivative of this expression is not defined"),
-                    span.data(),
-                )],
-                fold: false,
-            }],
-
-            Self::PartialDerivativeOfTimeDerivative(span) => vec![DiagnosticSlice {
-                slice_span: span.data(),
-                messages: vec![(
-                    AnnotationType::Error,
-                    Text::const_str("Can not calculate symbolic derivative"),
                     span.data(),
                 )],
                 fold: false,

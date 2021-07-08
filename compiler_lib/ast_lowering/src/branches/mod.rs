@@ -8,16 +8,16 @@
  *  *****************************************************************************************
  */
 
-use crate::error::Error;
+use crate::error::{Error, MockSymbolDeclaration};
 use crate::Fold;
 use crate::Statements;
-use crate::VerilogContext;
 use resolver::BranchResolver;
 
-use crate::expression::AllowedReferences;
+use crate::allowed_operations::VerilogAState;
+use crate::error::Error::ReservedSymbol;
 use openvaf_diagnostics::MultiDiagnostic;
-use openvaf_hir::{Branch, SyntaxContextData};
-use openvaf_ir::ids::PortId;
+use openvaf_hir::{AllowedOperations, Branch, BranchKind, SyntaxContextData};
+use openvaf_ir::ids::{NodeId, PortId};
 use openvaf_session::symbols::Symbol;
 use tracing::trace_span;
 
@@ -25,10 +25,10 @@ pub mod resolver;
 
 /// The second fold folds all branches. This requires folding of disciplines be complete and is required for expressions and statement folding
 /// After this fold is complete Branches can be safely accessed from the hir
-pub struct Branches<'lt, F: Fn(Symbol) -> AllowedReferences> {
+pub struct Branches<'lt, F: Fn(Symbol) -> AllowedOperations> {
     pub(super) base: Fold<'lt, F>,
 }
-impl<'lt, F: Fn(Symbol) -> AllowedReferences> Branches<'lt, F> {
+impl<'lt, F: Fn(Symbol) -> AllowedOperations> Branches<'lt, F> {
     pub fn fold(mut self) -> std::result::Result<Statements<'lt, F>, MultiDiagnostic<Error>> {
         let span = trace_span!("branches_fold");
         let _enter = span.enter();
@@ -40,37 +40,50 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Branches<'lt, F> {
 
             for id in module.contents.branches.clone() {
                 let declaration = &self.base.ast[id];
-                if let Some((hi, lo)) = branch_resolver.resolve_branch(
-                    &mut self.base,
-                    &declaration.contents.hi_net,
-                    declaration.contents.lo_net.as_ref(),
-                ) {
-                    let sctx = self.base.hir.syntax_ctx.push(SyntaxContextData {
-                        span: declaration.span,
-                        attributes: declaration.attributes,
-                        parent: None,
-                    });
-
-                    debug_assert_eq!(self.base.hir.branches.len_idx(), id);
-
-                    self.base.hir.branches.push(Branch {
+                if declaration.contents.ident.is_reserved() {
+                    self.base.error(ReservedSymbol {
+                        decl_kind: MockSymbolDeclaration::Branch,
                         ident: declaration.contents.ident,
-                        hi,
-                        lo,
-                        sctx,
-                    });
+                    })
                 }
+                let sctx = self.base.hir.syntax_ctx.push(SyntaxContextData {
+                    span: declaration.span,
+                    attributes: declaration.attributes,
+                    parent: None,
+                });
+
+                let (hi, lo) = branch_resolver
+                    .resolve_branch(
+                        &mut self.base,
+                        &declaration.contents.hi_net,
+                        declaration.contents.lo_net.as_ref(),
+                    )
+                    .unwrap_or((NodeId::from_raw_unchecked(0), NodeId::from_raw_unchecked(0)));
+
+                self.base.hir.branches.push(Branch {
+                    ident: declaration.contents.ident,
+                    hi,
+                    lo,
+                    sctx,
+                    kind: BranchKind::Explicit,
+                    current_contributions: vec![],
+                    voltage_contributions: vec![],
+                    current_acccess: vec![],
+                    voltage_access: vec![],
+                });
             }
 
             for id in module.contents.port_branches.clone() {
-                debug_assert_eq!(branch_resolver.port_branches.len_idx(), id);
+                let ident = self.base.ast[id].contents.ident;
+                self.base
+                    .check_ident(ident, MockSymbolDeclaration::PortBranch);
 
                 let ident = &self.base.ast[id].contents.port;
                 self.base.fold_attributes(self.base.ast[id].attributes);
                 #[allow(clippy::or_fun_call)]
                 let id = resolve_hierarchical!(self.base; ident as Port(id) => id)
                     .unwrap_or(PortId::from_raw_unchecked(0));
-                branch_resolver.port_branches.push(id);
+                branch_resolver.port_branche_probes.push(id);
             }
 
             self.base.resolver.exit_scope();
@@ -79,7 +92,7 @@ impl<'lt, F: Fn(Symbol) -> AllowedReferences> Branches<'lt, F> {
         if self.base.errors.is_empty() {
             Ok(Statements {
                 branch_resolver,
-                state: VerilogContext::empty(),
+                state: VerilogAState::new_analog_block(),
                 base: self.base,
             })
         } else {

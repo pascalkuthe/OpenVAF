@@ -126,6 +126,7 @@ lints! {
     pub const macro_overwritten = LintData{default_lvl: Warn, documentation_id: None};
 
     pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id: None};
+    pub const event_ignored = LintData{default_lvl: Warn, documentation_id: None}; // TODO documentation
 
     pub const ignored_display_task = LintData{default_lvl: Warn, documentation_id: None};
     pub const empty_builtin_attribute = LintData{default_lvl: Warn, documentation_id: None};
@@ -147,6 +148,8 @@ lints! {
 
     pub const unkown_lint = LintData{default_lvl: Deny, documentation_id: None};
     pub const lint_level_owerwrite = LintData{default_lvl: Warn, documentation_id: None};
+    pub const useless_function_call = LintData{default_lvl: Warn, documentation_id: None};
+
 
     pub const non_standard_code = LintData{default_lvl: Warn, documentation_id: None};
 

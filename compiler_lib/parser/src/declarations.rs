@@ -11,10 +11,10 @@
 use crate::error::Error;
 use crate::error::Error::AlreadyDeclaredInThisScope;
 use openvaf_ast::symbol_table::{SymbolDeclaration, SymbolTable};
-use openvaf_ast::{Ast, Net, NetType, Type, Variable};
+use openvaf_ast::{Ast, Net, Type, Variable};
 use openvaf_diagnostics::MultiDiagnostic;
 use openvaf_ir::ids::{NetId, VariableId};
-use openvaf_ir::{Attributes, Node};
+use openvaf_ir::{AttrSpanned, Attributes};
 use openvaf_session::symbols::Ident;
 
 pub struct SymbolTableBuilder(SymbolTable, Vec<SymbolTable>);
@@ -37,7 +37,7 @@ impl SymbolTableBuilder {
             ty: Type::REAL,
             default: None,
         };
-        let return_var = ast.variables.push(Node {
+        let return_var = ast.variables.push(AttrSpanned {
             attributes: Attributes::EMPTY,
             span: ident.span,
             contents: return_var,
@@ -86,13 +86,12 @@ impl SymbolTableBuilder {
         &mut self,
         ast: &mut Ast,
         errors: &mut MultiDiagnostic<Error>,
-        declaration: Node<Net>,
+        declaration: AttrSpanned<Net>,
     ) -> Option<NetId> {
         if let Some(old_declaration) = self.current_table().get(&declaration.contents.ident.name) {
             if let SymbolDeclaration::Port(id) = *old_declaration {
                 let id = ast[id].net;
-                if ast[id].contents.net_type == NetType::UNDECLARED
-                    && ast[id].contents.discipline.is_none()
+                if ast[id].contents.net_type.is_none() && ast[id].contents.discipline.is_none()
                 //TODO range
                 {
                     ast[id].contents.net_type = declaration.contents.net_type;

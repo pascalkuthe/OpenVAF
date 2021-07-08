@@ -8,17 +8,15 @@
  *  *****************************************************************************************
  */
 
-use openvaf_data_structures::index_vec::{define_index_type, IndexSlice, IndexVec};
-pub use openvaf_hir::{Branch, DisciplineAccess, Net};
+use openvaf_data_structures::index_vec::{define_index_type, IndexVec};
 
 pub use openvaf_ir::ids::{
-    AttributeId, BranchId, DisciplineId, IdRange, IntegerExpressionId, ModuleId, NatureId, NetId,
-    ParameterId, PortId, RealExpressionId, StatementId, StringExpressionId, SyntaxCtx, VariableId,
+    AttributeId, BranchId, DisciplineId, IdRange, ModuleId, NatureId, NetId, ParameterId, PortId,
+    StatementId, SyntaxCtx, VariableId,
 };
 pub use openvaf_ir::{
-    id_type, impl_id_type, Attributes, DoubleArgMath, NoiseSource, ParameterExcludeConstraint,
-    ParameterRangeConstraint, ParameterRangeConstraintBound, Port, PrintOnFinish, SingleArgMath,
-    Spanned, StopTaskKind, UnaryOperator, Unknown,
+    impl_id_type, Attributes, DisciplineAccess, ParameterExcludeConstraint,
+    ParameterRangeConstraint, ParameterRangeConstraintBound, Spanned, UnaryOperator, Unknown,
 };
 
 use openvaf_session::sourcemap::{Span, StringLiteral};
@@ -26,33 +24,37 @@ use openvaf_session::sourcemap::{Span, StringLiteral};
 use openvaf_session::symbols::Ident;
 
 use crate::cfg::ControlFlowGraph;
+use derive_more::{Display, From};
+use std::fmt::{Debug, Display, Formatter};
+
+pub use crate::functions::CfgFunctions;
+pub use fold::{fold_rvalue, RValueFold};
+pub use osdi_types::{SimpleType, Type, TypeInfo};
+
+use openvaf_diagnostics::lints::{Lint, LintLevel};
 
 pub mod cfg;
 pub mod const_fold;
 pub mod derivatives;
 pub mod dfa;
 mod fold;
+pub mod functions;
+pub mod inputs;
 mod util;
-
-pub use fold::{fold_rvalue, RValueFold};
-use openvaf_data_structures::HashMap;
-pub use osdi_types::{SimpleType, Type, TypeInfo};
-use std::fmt::{Debug, Display, Formatter};
-
-use openvaf_diagnostics::lints::{Lint, LintLevel};
-use openvaf_hir::Discipline;
 
 pub type ConstVal = osdi_types::ConstVal<StringLiteral>;
 pub type SimpleConstVal = osdi_types::SimpleConstVal<StringLiteral>;
 
-use crate::derivatives::RValueAutoDiff;
-use crate::dfa::lattice::FlatSet;
+use crate::functions::{DefaultFunctions, ParameterCallType};
+pub use crate::inputs::CfgInputs;
+use crate::inputs::DefaultInputs;
 use openvaf_data_structures::arrayvec::ArrayVec;
-use openvaf_data_structures::iter::Itertools;
-use openvaf_data_structures::sync::RwLock;
+use openvaf_data_structures::{iter::Itertools, sync::RwLock, HashMap};
 use openvaf_diagnostics::ListFormatter;
-use openvaf_ir::convert::Convert;
+use openvaf_ir::ids::{CallArg, NodeId};
+use openvaf_ir::{Math1, Math2};
 pub use osdi_types;
+use std::convert::TryInto;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -64,37 +66,35 @@ pub struct SyntaxContextData {
 
 pub type Statement<C> = (StmntKind<C>, SyntaxCtx);
 
-impl_id_type!(SyntaxCtx in Mir<C> => syntax_ctx as SyntaxContextData where<C: CallType>);
+impl_id_type!(SyntaxCtx in Mir<C> => syntax_ctx as SyntaxContextData where<C: CfgFunctions>);
+impl_id_type!(BranchId in Mir<C> => branches as Branch where<C: CfgFunctions>);
+impl_id_type!(NodeId in Mir<C> => nodes as Node where<C: CfgFunctions>);
+impl_id_type!(PortId in Mir<C> => ports as Port where<C: CfgFunctions>);
+impl_id_type!(VariableId in Mir<C> => variables as  Variable where<C: CfgFunctions>);
+impl_id_type!(ModuleId in Mir<C> => modules as Module<C> where<C: CfgFunctions>);
+impl_id_type!(DisciplineId in Mir<C> => disciplines as Discipline where<C: CfgFunctions>);
+impl_id_type!(NatureId in Mir<C> => natures as Nature where<C: CfgFunctions>);
+impl_id_type!(ParameterId in Mir<C> => parameters as Parameter where<C: CfgFunctions>);
 
-impl_id_type!(BranchId in Mir<C> => branches as Branch where<C: CallType>);
-
-impl_id_type!(NetId in Mir<C> => nets as Net where<C: CallType>);
-
-impl_id_type!(PortId in Mir<C> => ports as Port where<C: CallType>);
-
-impl_id_type!(VariableId in Mir<C> => variables as  Variable where<C: CallType>);
-
-impl_id_type!(ModuleId in Mir<C> => modules as Module<C> where<C: CallType>);
-
-impl_id_type!(DisciplineId in Mir<C> => disciplines as Discipline where<C: CallType>);
-
-impl_id_type!(NatureId in Mir<C> => natures as Nature where<C: CallType>);
-
-impl_id_type!(ParameterId in Mir<C> => parameters as Parameter where<C: CallType>);
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct NoInput;
-
-pub type CallTypeDerivative<C> = Derivative<<C as CallType>::I>;
+pub type CallTypeDerivative<C> = Derivative<<C as CfgFunctions>::I>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Derivative<I: InputKind> {
+pub enum Derivative<I: CfgInputs> {
     One,
     Zero,
     Operand(OperandData<I>),
 }
 
-impl<I: InputKind> Derivative<I> {
+impl<I: CfgInputs> Derivative<I> {
+    #[inline]
+    pub fn map_input<X: CfgInputs>(self, map: impl FnOnce(I) -> X) -> Derivative<X> {
+        match self {
+            Derivative::One => Derivative::One,
+            Derivative::Zero => Derivative::Zero,
+            Derivative::Operand(op) => Derivative::Operand(op.map_input(map)),
+        }
+    }
+
     pub fn into_operand(self) -> OperandData<I> {
         match self {
             Self::One => OperandData::Constant(1.0.into()),
@@ -112,125 +112,6 @@ impl<I: InputKind> Derivative<I> {
     }
 }
 
-impl InputKind for NoInput {
-    fn derivative<C: CallType>(&self, _unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
-        unreachable!("This cfg has no input")
-    }
-
-    fn ty<C: CallType>(&self, _mir: &Mir<C>) -> Type {
-        unreachable!("This cfg has no input")
-    }
-}
-
-impl Display for NoInput {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("ILLEGAL")
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ParameterInput {
-    Value(ParameterId),
-    Given(ParameterId),
-}
-
-impl InputKind for ParameterInput {
-    fn derivative<C: CallType>(&self, unknown: Unknown, _mir: &Mir<C>) -> Derivative<Self> {
-        if matches!((unknown, self), (Unknown::Parameter(x), Self::Value(y)) if &x == y) {
-            Derivative::One
-        } else {
-            Derivative::Zero
-        }
-    }
-
-    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type {
-        match self {
-            Self::Value(param) => mir[*param].ty,
-            Self::Given(_) => Type::BOOL,
-        }
-    }
-}
-
-impl Display for ParameterInput {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Value(param) => Debug::fmt(param, f),
-            Self::Given(param) => write!(f, "$param_given({:?})", param),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ParameterCallType {}
-
-impl CallType for ParameterCallType {
-    type I = ParameterInput;
-
-    fn const_fold(&self, _args: &[FlatSet<ConstVal>]) -> FlatSet<ConstVal> {
-        match *self {}
-    }
-
-    fn derivative<C: CallType>(
-        &self,
-        _args: &IndexSlice<CallArg, [COperand<Self>]>,
-        _ad: &mut RValueAutoDiff<Self, C>,
-        _span: Span,
-    ) -> Option<RValue<Self>> {
-        match *self {}
-    }
-}
-
-impl Display for ParameterCallType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("ILLEGAL")
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum RealConstCallType {}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum RealConstInputType {}
-
-impl InputKind for RealConstInputType {
-    fn derivative<C: CallType>(&self, _: Unknown, _: &Mir<C>) -> Derivative<Self> {
-        match *self {}
-    }
-
-    fn ty<C: CallType>(&self, _: &Mir<C>) -> Type {
-        match *self {}
-    }
-}
-
-impl Display for RealConstCallType {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
-        match *self {}
-    }
-}
-
-impl Display for RealConstInputType {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
-        match *self {}
-    }
-}
-
-impl CallType for RealConstCallType {
-    type I = RealConstInputType;
-
-    fn const_fold(&self, _: &[FlatSet<ConstVal>]) -> FlatSet<ConstVal> {
-        match *self {}
-    }
-
-    fn derivative<C: CallType>(
-        &self,
-        _args: &IndexSlice<CallArg, [COperand<Self>]>,
-        _ad: &mut RValueAutoDiff<Self, C>,
-        _span: Span,
-    ) -> Option<RValue<Self>> {
-        match *self {}
-    }
-}
-
 /// An Expression used for variable default values etc.
 /// In MIR Expressions are replaced by RValues which can have at most two operands.
 ///
@@ -241,9 +122,9 @@ impl CallType for RealConstCallType {
 /// Furthermroe the [`Local`] that the resulting value can be read from after executing the cfg is also required
 
 #[derive(Clone, Debug)]
-pub struct Expression<C: CallType>(pub ControlFlowGraph<C>, pub COperand<C>);
+pub struct Expression<C: CfgFunctions = DefaultFunctions>(pub ControlFlowGraph<C>, pub COperand<C>);
 
-impl<C: CallType> Expression<C> {
+impl<C: CfgFunctions> Expression<C> {
     pub fn new_const(val: ConstVal, span: Span) -> Self {
         Self(
             ControlFlowGraph::empty(),
@@ -252,32 +133,21 @@ impl<C: CallType> Expression<C> {
     }
 }
 
-impl<C: CallType> Expression<C> {
-    pub fn map<X: CallType>(self, conversion: &mut impl CallTypeConversion<C, X>) -> Expression<X> {
+impl<C: CfgFunctions> Expression<C> {
+    pub fn map<X: CfgFunctions>(self, conversion: &mut impl CfgConversion<C, X>) -> Expression<X> {
         Expression(self.0.map(conversion), conversion.map_operand(self.1))
     }
 }
 
-impl<A, B> Convert<Expression<B>> for Expression<A>
-where
-    B: CallType,
-    A: Into<B> + CallType,
-    A::I: Into<B::I>,
-{
-    fn convert(self) -> Expression<B> {
-        Expression(self.0.convert(), self.1.convert())
-    }
-}
-
 #[derive(Debug, Clone, Default)]
-pub struct Mir<C: CallType> {
+pub struct Mir<C: CfgFunctions = DefaultFunctions> {
     /// All branches in this project
     /// Remain unchanged from the HIR
     pub branches: IndexVec<BranchId, Branch>,
 
-    /// All nets in this project
+    /// All nodes (roughly corresponds to nets) in this project
     /// Remain unchanged from the HIR
-    pub nets: IndexVec<NetId, Net>,
+    pub nodes: IndexVec<NodeId, Node>,
 
     /// All ports in this project
     /// Remain unchanged from the HIR
@@ -295,79 +165,48 @@ pub struct Mir<C: CallType> {
     pub syntax_ctx: IndexVec<SyntaxCtx, SyntaxContextData>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display)]
 pub enum BinOp {
+    #[display(fmt = "+")]
     Plus,
+    #[display(fmt = "-")]
     Minus,
+    #[display(fmt = "*")]
     Multiply,
+    #[display(fmt = "/")]
     Divide,
+    #[display(fmt = "%")]
     Modulus,
 
+    #[display(fmt = "<<")]
     ShiftLeft,
+    #[display(fmt = ">>")]
     ShiftRight,
 
+    #[display(fmt = "BitXOR")]
     Xor,
+    #[display(fmt = "BitEQ")]
     NXor,
+    #[display(fmt = "&")]
     And,
+    #[display(fmt = "|")]
     Or,
 }
 
-impl Display for BinOp {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            BinOp::Plus => f.write_str("+"),
-            BinOp::Minus => f.write_str("-"),
-            BinOp::Multiply => f.write_str("*"),
-            BinOp::Divide => f.write_str("/"),
-            BinOp::Modulus => f.write_str("%"),
-            BinOp::ShiftLeft => f.write_str("<<"),
-            BinOp::ShiftRight => f.write_str(">>"),
-            BinOp::Xor => f.write_str("XOR"),
-            BinOp::NXor => f.write_str("EQ"),
-            BinOp::And => f.write_str("&"),
-            BinOp::Or => f.write_str("|"),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display)]
 pub enum ComparisonOp {
+    #[display(fmt = "<")]
     LessThen,
+    #[display(fmt = "<=")]
     LessEqual,
+    #[display(fmt = ">")]
     GreaterThen,
+    #[display(fmt = ">=")]
     GreaterEqual,
+    #[display(fmt = "==")]
     Equal,
+    #[display(fmt = "!=")]
     NotEqual,
-}
-
-impl Display for ComparisonOp {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let raw = match self {
-            ComparisonOp::LessThen => "<",
-            ComparisonOp::LessEqual => "<=",
-            ComparisonOp::GreaterThen => ">",
-            ComparisonOp::GreaterEqual => ">=",
-            ComparisonOp::Equal => "==",
-            ComparisonOp::NotEqual => "!=",
-        };
-        f.write_str(raw)
-    }
-}
-
-pub trait InputKind: Clone + Sized + Debug + PartialEq + Display {
-    fn derivative<C: CallType>(&self, unknown: Unknown, mir: &Mir<C>) -> Derivative<Self>;
-
-    fn ty<C: CallType>(&self, mir: &Mir<C>) -> Type;
-}
-
-define_index_type! {
-    pub struct CallArg = u8;
-
-    DISPLAY_FORMAT = "{}";
-
-    DEBUG_FORMAT = stringify!(<CallArg {}>);
-
-    IMPL_RAW_CONVERSIONS = true;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -404,10 +243,10 @@ pub enum LocalKind {
     Temporary,
 }
 
-pub type Operand<I> = Spanned<OperandData<I>>;
+pub type Operand<I = DefaultInputs> = Spanned<OperandData<I>>;
 
-#[derive(Clone, PartialEq)]
-pub enum OperandData<I: InputKind> {
+#[derive(Clone, PartialEq, From)]
+pub enum OperandData<I: CfgInputs = DefaultInputs> {
     Constant(ConstVal),
 
     Copy(Local),
@@ -415,22 +254,8 @@ pub enum OperandData<I: InputKind> {
     Read(I),
 }
 
-impl<A, B> Convert<OperandData<B>> for OperandData<A>
-where
-    A: InputKind + Into<B>,
-    B: InputKind,
-{
-    fn convert(self) -> OperandData<B> {
-        match self {
-            Self::Constant(val) => OperandData::Constant(val),
-            Self::Copy(local) => OperandData::Copy(local),
-            Self::Read(input) => OperandData::Read(input.into()),
-        }
-    }
-}
-
-impl<I: InputKind> OperandData<I> {
-    pub fn ty<MC: CallType, C: CallType<I = I>>(
+impl<I: CfgInputs> OperandData<I> {
+    pub fn ty<MC: CfgFunctions, C: CfgFunctions<I = I>>(
         &self,
         mir: &Mir<MC>,
         cfg: &ControlFlowGraph<C>,
@@ -441,9 +266,18 @@ impl<I: InputKind> OperandData<I> {
             Self::Read(input) => input.ty(mir),
         }
     }
+
+    #[inline]
+    pub fn map_input<X: CfgInputs>(self, map: impl FnOnce(I) -> X) -> OperandData<X> {
+        match self {
+            Self::Constant(val) => OperandData::Constant(val),
+            Self::Copy(local) => OperandData::Copy(local),
+            Self::Read(input) => OperandData::Read(map(input)),
+        }
+    }
 }
 
-impl<I: InputKind> Display for OperandData<I> {
+impl<I: CfgInputs> Display for OperandData<I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             OperandData::Constant(val) => write!(f, "{:?}", val),
@@ -453,7 +287,7 @@ impl<I: InputKind> Display for OperandData<I> {
     }
 }
 
-impl<I: InputKind> Debug for OperandData<I> {
+impl<I: CfgInputs> Debug for OperandData<I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self, f)
     }
@@ -469,58 +303,47 @@ define_index_type! {
     IMPL_RAW_CONVERSIONS = true;
 }
 
-pub trait CallType: Debug + Clone + PartialEq + Display {
-    type I: InputKind;
-
-    fn const_fold(&self, call: &[FlatSet<ConstVal>]) -> FlatSet<ConstVal>;
-    fn derivative<C: CallType>(
-        &self,
-        args: &IndexSlice<CallArg, [COperand<Self>]>,
-        ad: &mut RValueAutoDiff<Self, C>,
-        span: Span,
-    ) -> Option<RValue<Self>>;
-}
-
-pub type COperand<C> = Operand<<C as CallType>::I>;
-pub type COperandData<C> = OperandData<<C as CallType>::I>;
+pub type COperand<C> = Operand<<C as CfgFunctions>::I>;
+pub type COperandData<C> = OperandData<<C as CfgFunctions>::I>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TyRValue<C: CallType> {
+pub struct TyRValue<C: CfgFunctions = DefaultFunctions> {
     pub val: RValue<C>,
     pub ty: Type,
 }
 
 #[allow(clippy::from_over_into)]
-impl<C: CallType> Into<Type> for TyRValue<C> {
+impl<C: CfgFunctions> Into<Type> for TyRValue<C> {
     fn into(self) -> Type {
         self.ty
     }
 }
 
-impl<C: CallType> From<TyRValue<C>> for RValue<C> {
+impl<C: CfgFunctions> From<TyRValue<C>> for RValue<C> {
     fn from(typed: TyRValue<C>) -> Self {
         typed.val
     }
 }
 
-#[derive(Clone, PartialEq)]
-pub enum RValue<C: CallType> {
+#[derive(Clone, PartialEq, From)]
+pub enum RValue<C: CfgFunctions = DefaultFunctions> {
     UnaryOperation(Spanned<UnaryOperator>, COperand<C>),
     BinaryOperation(Spanned<BinOp>, COperand<C>, COperand<C>),
 
-    SingleArgMath(Spanned<SingleArgMath>, COperand<C>),
-    DoubleArgMath(Spanned<DoubleArgMath>, COperand<C>, COperand<C>),
+    Math1(Spanned<Math1>, COperand<C>),
+    Math2(Spanned<Math2>, COperand<C>, COperand<C>),
     Comparison(Spanned<ComparisonOp>, COperand<C>, COperand<C>, Type),
 
     ///
     Select(COperand<C>, COperand<C>, COperand<C>),
     Cast(COperand<C>),
+    #[from]
     Use(COperand<C>),
     Call(C, IndexVec<CallArg, COperand<C>>, Span),
     Array(Vec<COperand<C>>, Span),
 }
 
-impl<C: CallType> Display for RValue<C> {
+impl<C: CfgFunctions> Display for RValue<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             RValue::UnaryOperation(operator, operand) => {
@@ -531,11 +354,11 @@ impl<C: CallType> Display for RValue<C> {
                 write!(f, "{} {} {}", lhs, op, rhs)
             }
 
-            RValue::SingleArgMath(fun, op) => {
+            RValue::Math1(fun, op) => {
                 write!(f, "{}({})", fun, op)
             }
 
-            RValue::DoubleArgMath(fun, op1, op2) => {
+            RValue::Math2(fun, op1, op2) => {
                 write!(f, "{}({}, {})", fun, op1, op2)
             }
 
@@ -569,59 +392,22 @@ impl<C: CallType> Display for RValue<C> {
     }
 }
 
-impl<C: CallType> Debug for RValue<C> {
+impl<C: CfgFunctions> Debug for RValue<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self, f)
     }
 }
 
-impl<A, B> Convert<RValue<B>> for RValue<A>
-where
-    B: CallType,
-    A: Into<B> + CallType,
-    A::I: Into<B::I>,
-{
-    fn convert(self) -> RValue<B> {
-        match self {
-            Self::UnaryOperation(op, arg) => RValue::UnaryOperation(op, arg.convert()),
-            Self::BinaryOperation(op, lhs, rhs) => {
-                RValue::BinaryOperation(op, lhs.convert(), rhs.convert())
-            }
-            Self::SingleArgMath(op, arg) => RValue::SingleArgMath(op, arg.convert()),
-            Self::DoubleArgMath(op, lhs, rhs) => {
-                RValue::DoubleArgMath(op, lhs.convert(), rhs.convert())
-            }
-            Self::Comparison(op, lhs, rhs, ty) => {
-                RValue::Comparison(op, lhs.convert(), rhs.convert(), ty)
-            }
-            Self::Select(cond, lhs, rhs) => {
-                RValue::Select(cond.convert(), lhs.convert(), rhs.convert())
-            }
-            Self::Cast(arg) => RValue::Cast(arg.convert()),
-            Self::Use(arg) => RValue::Use(arg.convert()),
-            Self::Call(call, args, span) => RValue::Call(
-                call.into(),
-                args.into_iter().map(Operand::convert).collect(),
-                span,
-            ),
-            Self::Array(args, span) => {
-                RValue::Array(args.into_iter().map(Operand::convert).collect(), span)
-            }
-        }
-    }
-}
-
-impl<C: CallType> RValue<C> {
+impl<C: CfgFunctions> RValue<C> {
     pub fn operands(&self) -> impl Iterator<Item = &COperand<C>> {
         let res = match self {
-            Self::UnaryOperation(_, op)
-            | Self::SingleArgMath(_, op)
-            | Self::Cast(op)
-            | Self::Use(op) => vec![op],
+            Self::UnaryOperation(_, op) | Self::Math1(_, op) | Self::Cast(op) | Self::Use(op) => {
+                vec![op]
+            }
 
             Self::BinaryOperation(_, op1, op2)
             | Self::Comparison(_, op1, op2, _)
-            | Self::DoubleArgMath(_, op1, op2) => vec![op1, op2],
+            | Self::Math2(_, op1, op2) => vec![op1, op2],
 
             Self::Select(op1, op2, op3) => vec![op1, op2, op3],
             Self::Call(_x, args, _) => args.iter().collect_vec(),
@@ -649,7 +435,7 @@ impl<C: CallType> RValue<C> {
                     ..
                 },
             )
-            | Self::SingleArgMath(
+            | Self::Math1(
                 _,
                 Operand {
                     contents: OperandData::Copy(local),
@@ -667,7 +453,7 @@ impl<C: CallType> RValue<C> {
 
             Self::BinaryOperation(_, op1, op2)
             | Self::Comparison(_, op1, op2, _)
-            | Self::DoubleArgMath(_, op1, op2) => {
+            | Self::Math2(_, op1, op2) => {
                 if let OperandData::Copy(local) = op1.contents {
                     f(local);
                 }
@@ -705,9 +491,9 @@ impl<C: CallType> RValue<C> {
         }
     }
 
-    pub fn map_operands<X: CallType>(
+    pub fn map_operands<X: CfgFunctions>(
         self,
-        conversion: &mut impl CallTypeConversion<C, X>,
+        conversion: &mut impl CfgConversion<C, X>,
     ) -> RValue<X> {
         match self {
             RValue::UnaryOperation(op, arg) => {
@@ -718,10 +504,8 @@ impl<C: CallType> RValue<C> {
                 conversion.map_operand(arg1),
                 conversion.map_operand(arg2),
             ),
-            RValue::SingleArgMath(fun, arg) => {
-                RValue::SingleArgMath(fun, conversion.map_operand(arg))
-            }
-            RValue::DoubleArgMath(fun, arg1, arg2) => RValue::DoubleArgMath(
+            RValue::Math1(fun, arg) => RValue::Math1(fun, conversion.map_operand(arg)),
+            RValue::Math2(fun, arg1, arg2) => RValue::Math2(
                 fun,
                 conversion.map_operand(arg1),
                 conversion.map_operand(arg2),
@@ -751,14 +535,13 @@ impl<C: CallType> RValue<C> {
 
     pub fn operands_mut(&mut self) -> impl Iterator<Item = &mut COperand<C>> {
         match self {
-            Self::UnaryOperation(_, op)
-            | Self::SingleArgMath(_, op)
-            | Self::Cast(op)
-            | Self::Use(op) => vec![op],
+            Self::UnaryOperation(_, op) | Self::Math1(_, op) | Self::Cast(op) | Self::Use(op) => {
+                vec![op]
+            }
 
             Self::BinaryOperation(_, op1, op2)
             | Self::Comparison(_, op1, op2, _)
-            | Self::DoubleArgMath(_, op1, op2) => vec![op1, op2],
+            | Self::Math2(_, op1, op2) => vec![op1, op2],
 
             Self::Select(op1, op2, op3) => vec![op1, op2, op3],
             Self::Call(_x, args, _) => args.iter_mut().collect_vec(),
@@ -776,7 +559,7 @@ impl<C: CallType> RValue<C> {
                     ..
                 },
             )
-            | Self::SingleArgMath(
+            | Self::Math1(
                 _,
                 Operand {
                     contents: OperandData::Copy(local),
@@ -794,7 +577,7 @@ impl<C: CallType> RValue<C> {
 
             Self::BinaryOperation(_, op1, op2)
             | Self::Comparison(_, op1, op2, _)
-            | Self::DoubleArgMath(_, op1, op2) => {
+            | Self::Math2(_, op1, op2) => {
                 if let OperandData::Copy(local) = &mut op1.contents {
                     f(local);
                 }
@@ -845,14 +628,13 @@ impl<C: CallType> RValue<C> {
 
     pub fn span(&self) -> Span {
         match self {
-            Self::UnaryOperation(_, op)
-            | Self::SingleArgMath(_, op)
-            | Self::Cast(op)
-            | Self::Use(op) => op.span,
+            Self::UnaryOperation(_, op) | Self::Math1(_, op) | Self::Cast(op) | Self::Use(op) => {
+                op.span
+            }
 
             Self::BinaryOperation(_, op1, op2)
             | Self::Comparison(_, op1, op2, _)
-            | Self::DoubleArgMath(_, op1, op2) => op1.span.extend(op2.span),
+            | Self::Math2(_, op1, op2) => op1.span.extend(op2.span),
 
             Self::Select(op1, _op2, op3) => op1.span.extend(op3.span),
             Self::Call(_, _, span) => *span,
@@ -862,7 +644,7 @@ impl<C: CallType> RValue<C> {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum StmntKind<C: CallType> {
+pub enum StmntKind<C: CfgFunctions> {
     Assignment(Local, RValue<C>),
     Call(C, IndexVec<CallArg, COperand<C>>, Span),
 
@@ -871,7 +653,7 @@ pub enum StmntKind<C: CallType> {
     NoOp,
 }
 
-impl<C: CallType> Display for StmntKind<C> {
+impl<C: CfgFunctions> Display for StmntKind<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             StmntKind::Assignment(dst, val) => write!(f, "{} = {}", dst, val),
@@ -886,32 +668,13 @@ impl<C: CallType> Display for StmntKind<C> {
     }
 }
 
-impl<C: CallType> Debug for StmntKind<C> {
+impl<C: CfgFunctions> Debug for StmntKind<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self, f)
     }
 }
 
-impl<A, B> Convert<StmntKind<B>> for StmntKind<A>
-where
-    B: CallType,
-    A: Into<B> + CallType,
-    A::I: Into<B::I>,
-{
-    fn convert(self) -> StmntKind<B> {
-        match self {
-            Self::Assignment(dst, rval) => StmntKind::Assignment(dst, rval.convert()),
-            Self::Call(call, args, span) => StmntKind::Call(
-                call.into(),
-                args.into_iter().map(Operand::convert).collect(),
-                span,
-            ),
-            Self::NoOp => StmntKind::NoOp,
-        }
-    }
-}
-
-impl<C: CallType> StmntKind<C> {
+impl<C: CfgFunctions> StmntKind<C> {
     pub fn read_locals(&self) -> impl Iterator<Item = Local> {
         // All stmnts excepot array construction and calls have 3 or less operands
         // Even calls have 3 or less arguments in practice in 90% of cases
@@ -1030,7 +793,7 @@ pub struct Nature {
 }
 
 #[derive(Debug, Clone)]
-pub struct Module<I: CallType> {
+pub struct Module<I: CfgFunctions = DefaultFunctions> {
     pub ident: Ident,
     pub ports: IdRange<PortId>,
     pub parameters: IdRange<ParameterId>,
@@ -1072,7 +835,98 @@ pub enum ParameterConstraint {
     },
 }
 
-pub trait CallTypeConversion<S: CallType, D: CallType>: Sized {
+pub struct DefaultConversion;
+
+impl<S, D> CfgConversion<S, D> for DefaultConversion
+where
+    S: CfgFunctions + Into<D>,
+    D: CfgFunctions,
+    S::I: Into<D::I>,
+{
+    fn map_input(&mut self, src: S::I) -> COperandData<D> {
+        OperandData::Read(src.into())
+    }
+
+    fn map_call_val(
+        &mut self,
+        call: S,
+        args: IndexVec<CallArg, COperand<S>>,
+        span: Span,
+    ) -> RValue<D> {
+        RValue::Call(
+            call.into(),
+            args.into_iter()
+                .map(|arg| CfgConversion::<S, D>::map_operand(self, arg))
+                .collect(),
+            span,
+        )
+    }
+
+    fn map_call_stmnt(
+        &mut self,
+        call: S,
+        args: IndexVec<CallArg, COperand<S>>,
+        span: Span,
+    ) -> StmntKind<D> {
+        StmntKind::Call(
+            call.into(),
+            args.into_iter()
+                .map(|arg| CfgConversion::<S, D>::map_operand(self, arg))
+                .collect(),
+            span,
+        )
+    }
+}
+
+pub struct TryDefaultConversion;
+
+impl<S, D> CfgConversion<S, D> for TryDefaultConversion
+where
+    S: CfgFunctions + TryInto<D>,
+    D: CfgFunctions,
+    S::I: TryInto<D::I>,
+{
+    fn map_input(&mut self, src: S::I) -> COperandData<D> {
+        OperandData::Read(
+            src.try_into()
+                .unwrap_or_else(|_| unreachable!("Assured CfgInput conversion failed")),
+        )
+    }
+
+    fn map_call_val(
+        &mut self,
+        call: S,
+        args: IndexVec<CallArg, COperand<S>>,
+        span: Span,
+    ) -> RValue<D> {
+        RValue::Call(
+            call.try_into()
+                .unwrap_or_else(|_| unreachable!("Assured CfgFunctions conversion failed")),
+            args.into_iter()
+                .map(|arg| CfgConversion::<S, D>::map_operand(self, arg))
+                .collect(),
+            span,
+        )
+    }
+
+    fn map_call_stmnt(
+        &mut self,
+        call: S,
+        args: IndexVec<CallArg, COperand<S>>,
+        span: Span,
+    ) -> StmntKind<D> {
+        StmntKind::Call(
+            call.try_into()
+                .unwrap_or_else(|_| unreachable!("Assured CfgFunctions conversion failed")),
+            args.into_iter()
+                .map(|arg| CfgConversion::<S, D>::map_operand(self, arg))
+                .collect(),
+            span,
+        )
+    }
+}
+
+pub trait CfgConversion<S: CfgFunctions, D: CfgFunctions>: Sized {
     fn map_operand(&mut self, op: COperand<S>) -> COperand<D> {
         let contents = match op.contents {
             OperandData::Read(input) => self.map_input(input),
@@ -1108,4 +962,36 @@ pub trait CallTypeConversion<S: CallType, D: CallType>: Sized {
             StmntKind::NoOp => StmntKind::NoOp,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Node {
+    pub ident: Ident,
+    pub discipline: Option<DisciplineId>,
+    pub sctx: SyntaxCtx,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Port {
+    pub input: bool,
+    pub output: bool,
+    pub node: NodeId,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Branch {
+    pub ident: Ident,
+    pub hi: NodeId,
+    pub lo: NodeId,
+    pub sctx: SyntaxCtx,
+    pub generated: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Discipline {
+    pub ident: Ident,
+    pub flow_nature: Option<NatureId>,
+    pub potential_nature: Option<NatureId>,
+    pub continuous: bool,
+    pub sctx: SyntaxCtx,
 }

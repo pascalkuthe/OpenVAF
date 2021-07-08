@@ -21,18 +21,20 @@ use crate::subfuncitons::model_temp_update::ModelTempUpdateFunction;
 use crate::subfuncitons::OsdiFunctions;
 use crate::topology::CircuitTopology;
 use itertools::Itertools;
-use openvaf_data_structures::{BitSet, HashMap};
+use openvaf_data_structures::{bit_set::BitSet, HashMap};
 use openvaf_hir::DisciplineAccess;
 use openvaf_ir::ids::VariableId;
 use openvaf_middle::cfg::{
     ControlFlowGraph, IntLocation, InternedLocations, LocationKind, PhiData, START_BLOCK,
 };
 use openvaf_middle::{
-    COperand, CallType, Local, LocalKind, Mir, OperandData, RValue, StmntKind, VariableLocalKind,
+    COperand, CfgFunctions, Local, LocalKind, Mir, OperandData, RValue, StmntKind,
+    VariableLocalKind,
 };
-use openvaf_transformations::{
-    BackwardSlice, CfgVisitor, ForwardSlice, InvProgramDependenceGraph, LiveLocalAnalysis,
-    ProgramDependenceGraph, Strip, Visit,
+use openvaf_pass::{
+    program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph},
+    visit::CfgVisitor,
+    BackwardSlice, ForwardSlice, LiveLocalAnalysis, Strip, Visit,
 };
 
 /// On create the CFG of the full analog block is walked.
@@ -261,7 +263,7 @@ pub struct OutputLocations<'a> {
     topology: &'a CircuitTopology,
 }
 
-impl<'a, C: CallType> CfgVisitor<C> for OutputLocations<'a> {
+impl<'a, C: CfgFunctions> CfgVisitor<C> for OutputLocations<'a> {
     fn visit_stmnt(&mut self, stmnt: &StmntKind<C>, loc: IntLocation, cfg: &ControlFlowGraph<C>) {
         match *stmnt {
             // TODO treat derivatives as temproaries?
@@ -305,7 +307,7 @@ pub struct WrittenStorage<'a> {
     storage: &'a StorageLocations,
 }
 
-impl<'a, C: CallType> CfgVisitor<C> for WrittenStorage<'a> {
+impl<'a, C: CfgFunctions> CfgVisitor<C> for WrittenStorage<'a> {
     fn visit_stmnt(&mut self, stmnt: &StmntKind<C>, _loc: IntLocation, cfg: &ControlFlowGraph<C>) {
         if let StmntKind::Assignment(dst, _) = *stmnt {
             let written_storage = match cfg.locals[dst].kind {
@@ -323,7 +325,7 @@ impl<'a, C: CallType> CfgVisitor<C> for WrittenStorage<'a> {
 }
 
 impl<'a> WrittenStorage<'a> {
-    pub fn find_in_cfg<C: CallType>(
+    pub fn find_in_cfg<C: CfgFunctions>(
         storage: &'a StorageLocations,
         cfg: &mut ControlFlowGraph<C>,
         locations: &InternedLocations,
@@ -434,7 +436,7 @@ pub(super) fn function_cfg_from_full_cfg(
 pub struct ReadVars;
 
 impl ReadVars {
-    pub fn find_in_cfg<C: CallType>(
+    pub fn find_in_cfg<C: CfgFunctions>(
         storage: &StorageLocations,
         cfg: &mut ControlFlowGraph<C>,
     ) -> BitSet<StorageLocation> {

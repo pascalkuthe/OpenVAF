@@ -8,38 +8,52 @@
  *  *****************************************************************************************
  */
 
-use openvaf_hir::{CaseItem, Cases, ConstVal, DisciplineAccess, Expression, ForLoop};
-use openvaf_ir::ids::{BranchId, ExpressionId, FunctionId, VariableId};
-use openvaf_ir::{DoubleArgMath, PrintOnFinish, SingleArgMath, Spanned};
-use openvaf_middle::cfg::{BasicBlock, ControlFlowGraph, PhiData, TerminatorKind};
-use openvaf_middle::{
-    BinOp, COperand, ComparisonOp, Local, Operand, OperandData, RValue, SimpleConstVal,
-    StatementId, TyRValue, Type,
+use crate::{
+    BinaryOperator, CaseItem, Cases, ConstVal, DisciplineAccess, Expression, ForLoop, Statement,
+    UnaryOperator,
 };
 
-use crate::error::Error::{
-    ExpectedNumeric, ExpectedVariableForFunctionOutput, IllegalFinishNumber, MultiTypeMissmatch,
-    Recursion, ReferenceTypeMissmatch, TypeMissmatch, WrongFunctionArgCount,
+use super::errors::Error::{
+    ExpectedNumeric, ExpectedVariableForFunctionOutput, MultiTypeMissmatch, Recursion,
+    ReferenceTypeMissmatch, TypeMissmatch,
 };
-use crate::error::{ReferenceKind, TyPrinter};
-use crate::{ExpressionLowering, HirFold, HirLowering};
-use tracing::trace_span;
+use super::errors::{ReferenceKind, TyPrinter};
+use super::{HirFold, HirLowering};
+
+use openvaf_ir::ids::{BranchId, CallArg, ExpressionId, FunctionId, VariableId};
+use openvaf_ir::{Math2, Spanned};
+use openvaf_middle::cfg::{
+    builder::CfgBuilder, BasicBlock, ControlFlowGraph, PhiData, TerminatorKind,
+};
+use openvaf_middle::{
+    BinOp, ComparisonOp, Local, Operand, OperandData, RValue, SimpleConstVal, StatementId,
+    StmntKind, TyRValue, Type,
+};
 
 use openvaf_data_structures::HashMap;
 use openvaf_diagnostics::ListFormatter;
-use openvaf_hir::{BinaryOperator, Primary, Statement, UnaryOperator};
-use openvaf_middle::cfg::builder::CfgBuilder;
-use openvaf_session::sourcemap::Span;
-use std::convert::TryFrom;
+
+use openvaf_session::sourcemap::{Span, StringLiteral};
+
 use std::mem::replace;
 
-pub struct LocalCtx<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> {
+use crate::functions::{FunctionLoweringReturn, HirFunction};
+use crate::lowering::errors::Error::ExpectedValue;
+use crate::lowering::lints::{UnusedReturnValue, UselessFunctionCall};
+use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
+use openvaf_data_structures::iter::zip;
+use openvaf_diagnostics::lints::Linter;
+use openvaf_middle::functions::NodeCollapse;
+use openvaf_middle::inputs::{CurrentProbe, ParameterInput, SimParam, SimParamKind, Voltage};
+use tracing::trace_span;
+
+pub struct LocalCtx<'a, 'h, L: HirLowering> {
     pub fold: &'a mut HirFold<'h, L>,
     call_stack: Vec<(FunctionId, Span)>,
-    pub cfg_builder: CfgBuilder<ControlFlowGraph<C>>,
+    pub cfg_builder: CfgBuilder<ControlFlowGraph>,
 }
 
-impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
+impl<'a, 'h, L: HirLowering> LocalCtx<'a, 'h, L> {
     pub fn handle_stmnt_attributes(&mut self, stmt: StatementId) {
         let sctx = self.fold.hir[stmt].1;
         let span = trace_span!("stmnt attributes", src = debug(stmt), sctx = sctx.index());
@@ -84,6 +98,83 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             fold,
             call_stack: Vec::with_capacity(32),
         }
+    }
+
+    pub fn lower_optional_simparam(
+        &mut self,
+        name: StringLiteral,
+        default: ExpressionId,
+        span: Span,
+    ) -> Option<RValue> {
+        let start = self.cfg_builder.current; // save the start block for later
+
+        // lower the default expression
+        self.enter_new_block();
+        let default_block_head = self.cfg_builder.current;
+        let default = self.fold_real_rhs(default)?;
+        let default = self.assign_temporary(default);
+        let default_block_tail = self.cfg_builder.current;
+
+        // In another bb read the simpara
+        self.enter_new_block();
+        let read_block = self.cfg_builder.current;
+        let read_simpara = Operand::new(
+            OperandData::Read(
+                SimParam {
+                    name,
+                    kind: SimParamKind::RealOptional,
+                }
+                .into(),
+            ),
+            span,
+        );
+        let val = self.assign_temporary(TyRValue {
+            val: RValue::Use(read_simpara),
+            ty: Type::REAL,
+        });
+
+        self.enter_new_block();
+
+        self.terminate_bb(
+            start,
+            TerminatorKind::Split {
+                condition: RValue::Use(Operand::new(
+                    OperandData::Read(
+                        SimParam {
+                            name,
+                            kind: SimParamKind::RealOptionalGiven,
+                        }
+                        .into(),
+                    ),
+                    span,
+                )),
+                true_block: read_block,
+                false_block: default_block_head,
+                loop_head: false,
+            },
+        );
+
+        self.terminate_bb(read_block, TerminatorKind::Goto(self.cfg_builder.current));
+        self.terminate_bb(
+            default_block_tail,
+            TerminatorKind::Goto(self.cfg_builder.current),
+        );
+
+        let dst = self.new_temporary(Type::REAL);
+
+        let mut sources = HashMap::with_capacity(2);
+        sources.insert(default_block_tail, default);
+        sources.insert(read_block, val);
+
+        self.cfg_builder.cfg[self.cfg_builder.current]
+            .phi_statements
+            .push(PhiData {
+                dst,
+                sources,
+                sctx: self.fold.sctx,
+            });
+
+        RValue::Use(Operand::new(OperandData::Copy(dst), span)).into()
     }
 
     pub fn lower_block(&mut self, block: &[StatementId]) {
@@ -211,26 +302,25 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                 self.terminate_bb(loop_body_tail, TerminatorKind::Goto(loop_cond_head));
             }
 
-            Statement::StopTask(kind, arg) => {
-                let print_on_finish = arg
-                    .and_then(|e| Some((self.fold.eval_int_constant(e)?, self.fold.hir[e].span)))
-                    .and_then(|(x, span)| {
-                        if let Ok(res) = PrintOnFinish::try_from(x) {
-                            Some(res)
-                        } else {
-                            self.fold.errors.add(IllegalFinishNumber(x, span));
-                            None
-                        }
-                    })
-                    .unwrap_or(PrintOnFinish::Location);
-
-                if let Some(stmnt) = C::stop_task(self, kind, print_on_finish, span) {
-                    self.cfg_builder.cfg.blocks[self.cfg_builder.current]
-                        .statements
-                        .push((stmnt, self.fold.sctx));
-                }
-            }
-
+            // Statement::StopTask(kind, arg) => {
+            //     let print_on_finish = arg
+            //         .and_then(|e| Some((self.fold.eval_int_constant(e)?, self.fold.hir[e].span)))
+            //         .and_then(|(x, span)| {
+            //             if let Ok(res) = PrintOnFinish::try_from(x) {
+            //                 Some(res)
+            //             } else {
+            //                 self.fold.errors.add(IllegalFinishNumber(x, span));
+            //                 None
+            //             }
+            //         })
+            //         .unwrap_or(PrintOnFinish::Location);
+            //
+            //     if let Some(stmnt) = C::stop_task(self, kind, print_on_finish, span) {
+            //         self.cfg_builder.cfg.blocks[self.cfg_builder.current]
+            //             .statements
+            //             .push((stmnt, self.fold.sctx));
+            //     }
+            // }
             Statement::Contribute(access, branch, expr) => {
                 if let Some(rhs) = self.fold_real(expr) {
                     if rhs.contents
@@ -242,11 +332,12 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                         let branch = &self.fold.mir.branches[branch];
                         let hi = branch.hi;
                         let lo = branch.lo;
-                        if let Some(stmnt) = C::collapse_hint(self, hi, lo, span) {
-                            self.cfg_builder.cfg.blocks[self.cfg_builder.current]
-                                .statements
-                                .push((stmnt, self.fold.sctx));
-                        }
+                        self.cfg_builder.cfg.blocks[self.cfg_builder.current]
+                            .statements
+                            .push((
+                                StmntKind::Call(NodeCollapse(hi, lo).into(), IndexVec::new(), span),
+                                self.fold.sctx,
+                            ));
                     } else {
                         let lhs = self.branch_local(branch, access);
                         let old = Operand::new(OperandData::Copy(lhs), span);
@@ -299,11 +390,49 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                     self.cfg_builder.current = end
                 }
             }
+            Statement::FunctionCall(function, ref args, span) => {
+                function.check_arg_length(args, &mut self.fold, span);
+
+                if function.returns_value(self.fold.hir) {
+                    Linter::dispatch_late(
+                        Box::new(UnusedReturnValue {
+                            span,
+                            name: function.symbol(self.fold.hir),
+                            decl: function.decl(self.fold.hir),
+                        }),
+                        self.fold.sctx,
+                    )
+                }
+
+                if !function.has_side_effects(self.fold.hir) {
+                    Linter::dispatch_late(
+                        Box::new(UselessFunctionCall {
+                            span,
+                            name: function.symbol(self.fold.hir),
+                            decl: function.decl(self.fold.hir),
+                        }),
+                        self.fold.sctx,
+                    )
+                }
+
+                if let Some(lowering_result) = function.lower(self, args, span) {
+                    if let FunctionLoweringReturn::Val(TyRValue {
+                        val: RValue::Call(fun, args, span),
+                        ..
+                    })
+                    | FunctionLoweringReturn::Void(fun, args, span) = lowering_result
+                    {
+                        self.cfg_builder.cfg.blocks[self.cfg_builder.current]
+                            .statements
+                            .push((StmntKind::Call(fun, args, span), self.fold.sctx));
+                    }
+                }
+            }
         }
         self.fold.sctx = old
     }
 
-    pub fn lower_assignment_expr(&mut self, expr: ExpressionId, ty: Type) -> Option<TyRValue<C>> {
+    pub fn lower_assignment_expr(&mut self, expr: ExpressionId, ty: Type) -> Option<TyRValue> {
         let span = self.expr_span(expr);
         let mut expr = self.lower_expr(expr)?;
         match (expr.ty, ty) {
@@ -321,12 +450,12 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         Some(expr)
     }
 
-    pub fn lower_function_call(
+    pub fn lower_user_function_call(
         &mut self,
         id: FunctionId,
-        args: &[ExpressionId],
+        args: &IndexSlice<CallArg, [ExpressionId]>,
         span: Span,
-    ) -> Option<TyRValue<C>> {
+    ) -> Option<TyRValue> {
         let function = &self.fold.hir.functions[id];
 
         if self.call_stack.iter().any(|(x, _)| x == &id) {
@@ -343,30 +472,21 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
             return None;
         }
 
-        if function.args.len() != args.len() {
-            self.fold.errors.add(WrongFunctionArgCount {
-                expected: self.fold.hir.functions[id].args.len(),
-                found: args.len(),
-                span,
-            });
-            return None;
-        }
-
         let dst_block = self.create_block();
 
-        for (val, arg_info) in args.iter().zip(&function.args) {
+        for (val, arg_info) in zip(args, &function.args) {
             let span = self.expr_span(*val);
             let (local, ty) = self.variable_local(arg_info.local_var);
 
             if arg_info.output {
-                let var = if let Expression::Primary(Primary::VariableReference(var)) =
-                    self.fold.hir[*val].contents
-                {
+                let var = if let Expression::VariableReference(var) = self.fold.hir[*val].contents {
                     var
                 } else {
-                    self.fold
-                        .errors
-                        .add(ExpectedVariableForFunctionOutput(span));
+                    self.fold.errors.add(ExpectedVariableForFunctionOutput {
+                        span,
+                        decl: self.fold.hir[arg_info.local_var].ident,
+                        fun: self.fold.hir[id].ident,
+                    });
                     continue;
                 };
 
@@ -426,7 +546,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         })
     }
 
-    pub fn lower_expr(&mut self, expr: ExpressionId) -> Option<TyRValue<C>> {
+    pub fn lower_expr(&mut self, expr: ExpressionId) -> Option<TyRValue> {
         let Spanned { span, ref contents } = self.fold.hir.expressions[expr];
 
         let val = match *contents {
@@ -476,7 +596,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                 BinaryOperator::Exponent => {
                     let (lhs, rhs) = self.fold_real_binop(lhs_expr, rhs_expr)?;
                     TyRValue {
-                        val: RValue::DoubleArgMath(op.copy_as(DoubleArgMath::Pow), lhs, rhs),
+                        val: RValue::Math2(op.copy_as(Math2::Pow), lhs, rhs),
                         ty: Type::REAL,
                     }
                 }
@@ -748,37 +868,6 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                 }
             }
 
-            Expression::BuiltInFunctionCall2p(call, arg1, arg2) => {
-                let (arg1, arg2, ty) = match call {
-                    DoubleArgMath::Pow | DoubleArgMath::ArcTan2 | DoubleArgMath::Hypot => {
-                        let (arg1, arg2) = self.fold_real_binop(arg1, arg2)?;
-                        (arg1, arg2, Type::REAL)
-                    }
-
-                    DoubleArgMath::Min | DoubleArgMath::Max => {
-                        self.fold_numeric_binop(arg1, arg2)?
-                    }
-                };
-
-                TyRValue {
-                    val: RValue::DoubleArgMath(Spanned::new(call, span), arg1, arg2),
-                    ty,
-                }
-            }
-
-            Expression::BuiltInFunctionCall1p(call, arg) => {
-                let (arg, ty) = if call == SingleArgMath::Abs {
-                    self.fold_numeric(arg)?
-                } else {
-                    (self.fold_real(arg)?, Type::REAL)
-                };
-
-                TyRValue {
-                    val: RValue::SingleArgMath(Spanned::new(call, span), arg),
-                    ty,
-                }
-            }
-
             Expression::PartialDerivative(expr, unkown) => {
                 let arg = self.fold_numeric(expr)?.0;
                 let derivative = self
@@ -793,57 +882,49 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                 }
             }
 
-            Expression::TimeDerivative(arg) => TyRValue {
-                val: C::time_derivative(self, arg, span)?,
-                ty: Type::REAL,
+            Expression::Constant(ref val) => TyRValue {
+                val: RValue::Use(Operand::new(OperandData::Constant(val.clone()), span)),
+                ty: val.ty(),
             },
 
-            Expression::FunctionCall(id, ref args) => {
-                return self.lower_function_call(id, args, span)
+            Expression::VariableReference(var) => {
+                let (local, ty) = self.variable_local(var);
+
+                TyRValue {
+                    val: Operand::new(OperandData::Copy(local), span).into(),
+                    ty,
+                }
             }
 
-            Expression::SystemFunctionCall(ref call) => TyRValue {
-                val: C::system_function_call(self, call, span)?,
-                ty: call.ty(),
-            },
-
-            Expression::Noise(source, name) => TyRValue {
-                val: C::noise(self, source, name, span)?,
-                ty: Type::REAL,
-            },
-
-            Expression::Primary(ref val) => match *val {
-                Primary::Constant(ref val) => TyRValue {
-                    val: RValue::Use(Operand::new(OperandData::Constant(val.clone()), span)),
-                    ty: val.ty(),
-                },
-
-                Primary::VariableReference(var) => {
-                    let (local, ty) = self.variable_local(var);
-
-                    TyRValue {
-                        val: RValue::Use(Operand::new(OperandData::Copy(local), span)),
-                        ty,
-                    }
-                }
-
-                Primary::NetReference(_net) => todo!("Digital"),
-                Primary::PortReference(_port) => todo!("Digital"),
-
-                Primary::ParameterReference(param) => TyRValue {
-                    val: C::parameter_ref(self, param, span)?,
+            Expression::NodeReference(_)
+            | Expression::PortReference(_)
+            | Expression::NatureReference(_) => {
+                todo!("Error")
+            }
+            Expression::ParameterReference(param) => {
+                let input = ParameterInput::Value(param);
+                TyRValue {
+                    val: Operand::new(OperandData::Read(input.into()), span).into(),
                     ty: self.fold.hir[param].ty,
-                },
-                Primary::PortFlowAccess(port) => TyRValue {
-                    val: C::port_flow(self, port, span)?,
-                    ty: Type::REAL,
-                },
+                }
+            }
 
-                Primary::BranchAccess(discipline, branch) => TyRValue {
-                    val: C::branch_access(self, discipline, branch, span)?,
+            Expression::BranchAccess(acccess, branch) => {
+                let input = match acccess {
+                    DisciplineAccess::Potential => Voltage {
+                        hi: self.fold.hir[branch].hi,
+                        lo: self.fold.hir[branch].lo,
+                    }
+                    .into(),
+                    DisciplineAccess::Flow => CurrentProbe(branch).into(),
+                };
+
+                TyRValue {
+                    val: Operand::new(OperandData::Read(input), span).into(),
                     ty: Type::REAL,
-                },
-            },
+                }
+            }
+
             Expression::Array(ref arr) => {
                 let rvalues: Vec<_> = arr
                     .iter()
@@ -898,6 +979,29 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
                     return None;
                 }
             }
+            Expression::FunctionCall(function, ref args, span) => {
+                function.check_arg_length(args, &mut self.fold, span);
+
+                match function.lower(self, args, span) {
+                    Some(FunctionLoweringReturn::Val(res)) => res,
+                    Some(FunctionLoweringReturn::Void(_, _, _)) => {
+                        self.fold.errors.add(ExpectedValue {
+                            span,
+                            function: function.symbol(self.fold.hir),
+                        });
+                        return None;
+                    }
+                    None => {
+                        if !function.returns_value(self.fold.hir) {
+                            self.fold.errors.add(ExpectedValue {
+                                span,
+                                function: function.symbol(self.fold.hir),
+                            });
+                        }
+                        return None;
+                    }
+                }
+            }
         };
 
         Some(val)
@@ -907,7 +1011,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         self.fold.hir[expr].span
     }
 
-    pub fn int_to_bool(&mut self, int_val: TyRValue<C>, span: Span) -> TyRValue<C> {
+    pub fn int_to_bool(&mut self, int_val: TyRValue, span: Span) -> TyRValue {
         let int_val = self.assign_temporary(int_val);
         TyRValue {
             val: RValue::Comparison(
@@ -920,7 +1024,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         }
     }
 
-    pub fn implicit_cast(&mut self, src: TyRValue<C>, dst: Type, span: Span) -> TyRValue<C> {
+    pub fn implicit_cast(&mut self, src: TyRValue, dst: Type, span: Span) -> TyRValue {
         // Most common case that can be performed without introducing additional local (important for node collapse)
         if let RValue::Use(Spanned {
             contents: OperandData::Constant(ConstVal::Scalar(SimpleConstVal::Integer(val))),
@@ -943,7 +1047,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         }
     }
 
-    pub fn fold_numeric(&mut self, expr: ExpressionId) -> Option<(COperand<C>, Type)> {
+    pub fn fold_numeric(&mut self, expr: ExpressionId) -> Option<(Operand, Type)> {
         let res = self.lower_expr(expr)?;
         let res = match res.ty {
             Type::INT | Type::REAL => res,
@@ -965,7 +1069,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         &mut self,
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
-    ) -> Option<(COperand<C>, COperand<C>, Type)> {
+    ) -> Option<(Operand, Operand, Type)> {
         let mut lhs = self.lower_expr(lhs_expr)?;
         let mut rhs = self.lower_expr(rhs_expr)?;
 
@@ -1034,13 +1138,13 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         Some((lhs, rhs, ty))
     }
 
-    pub fn fold_real(&mut self, expr: ExpressionId) -> Option<COperand<C>> {
+    pub fn fold_real(&mut self, expr: ExpressionId) -> Option<Operand> {
         let res = self.fold_real_rhs(expr)?;
 
         Some(self.rvalue_to_operand(res, self.expr_span(expr)))
     }
 
-    pub fn fold_real_rhs(&mut self, expr: ExpressionId) -> Option<TyRValue<C>> {
+    pub fn fold_real_rhs(&mut self, expr: ExpressionId) -> Option<TyRValue> {
         let res = self.lower_expr(expr)?;
 
         match res.ty {
@@ -1060,13 +1164,13 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         }
     }
 
-    pub fn fold_int(&mut self, expr: ExpressionId) -> Option<COperand<C>> {
+    pub fn fold_int(&mut self, expr: ExpressionId) -> Option<Operand> {
         let res = self.fold_int_rhs(expr)?;
 
         Some(self.rvalue_to_operand(res, self.expr_span(expr)))
     }
 
-    pub fn fold_int_rhs(&mut self, expr: ExpressionId) -> Option<TyRValue<C>> {
+    pub fn fold_int_rhs(&mut self, expr: ExpressionId) -> Option<TyRValue> {
         let res = self.lower_expr(expr)?;
 
         let res = match res.ty {
@@ -1089,7 +1193,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         &mut self,
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
-    ) -> Option<(COperand<C>, COperand<C>, Type)> {
+    ) -> Option<(Operand, Operand, Type)> {
         let lhs = self.lower_expr(lhs_expr);
         let mut rhs = self.lower_expr(rhs_expr)?;
         let mut lhs = lhs?;
@@ -1133,7 +1237,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         Some((lhs, rhs, ty))
     }
 
-    pub fn fold_bitwise(&mut self, expr: ExpressionId) -> Option<(COperand<C>, Type)> {
+    pub fn fold_bitwise(&mut self, expr: ExpressionId) -> Option<(Operand, Type)> {
         let res = self.lower_expr(expr)?;
 
         if !matches!(res.ty, Type::INT | Type::BOOL) {
@@ -1149,13 +1253,13 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         Some((self.rvalue_to_operand(res, self.expr_span(expr)), ty))
     }
 
-    pub fn fold_bool(&mut self, expr: ExpressionId) -> Option<COperand<C>> {
+    pub fn fold_bool(&mut self, expr: ExpressionId) -> Option<Operand> {
         let res = self.fold_bool_rhs(expr)?;
 
         Some(self.rvalue_to_operand(res, self.expr_span(expr)))
     }
 
-    pub fn fold_bool_rhs(&mut self, expr: ExpressionId) -> Option<TyRValue<C>> {
+    pub fn fold_bool_rhs(&mut self, expr: ExpressionId) -> Option<TyRValue> {
         let res = self.lower_expr(expr)?;
 
         let res = match res.ty {
@@ -1178,7 +1282,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         &mut self,
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
-    ) -> Option<(COperand<C>, COperand<C>)> {
+    ) -> Option<(Operand, Operand)> {
         let lhs = self.fold_real(lhs_expr);
         let rhs = self.fold_real(rhs_expr);
         Some((lhs?, rhs?))
@@ -1188,7 +1292,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         &mut self,
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
-    ) -> Option<(COperand<C>, COperand<C>)> {
+    ) -> Option<(Operand, Operand)> {
         let lhs = self.fold_int(lhs_expr);
         let rhs = self.fold_int(rhs_expr);
 
@@ -1200,7 +1304,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
         span: Span,
-    ) -> Option<(COperand<C>, COperand<C>, Type)> {
+    ) -> Option<(Operand, Operand, Type)> {
         let lhs = self.lower_expr(lhs_expr);
         let rhs = self.lower_expr(rhs_expr);
         let mut lhs = lhs?;
@@ -1242,7 +1346,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         lhs_expr: ExpressionId,
         rhs_expr: ExpressionId,
         span: Span,
-    ) -> Option<(COperand<C>, COperand<C>, Type)> {
+    ) -> Option<(Operand, Operand, Type)> {
         let lhs = self.lower_expr(lhs_expr);
         let rhs = self.lower_expr(rhs_expr);
         let mut lhs = lhs?;
@@ -1292,10 +1396,10 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
     fn fold_eq_rhs(
         &mut self,
         lhs_expr: ExpressionId,
-        mut rhs: TyRValue<C>,
+        mut rhs: TyRValue,
         rhs_span: Span,
         span: Span,
-    ) -> Option<RValue<C>> {
+    ) -> Option<RValue> {
         let lhs = self.lower_expr(lhs_expr);
         let mut lhs = lhs?;
 
@@ -1347,7 +1451,7 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
         self.cfg_builder.branch_local(branch, access)
     }
 
-    pub fn rvalue_to_operand(&mut self, data: TyRValue<C>, span: Span) -> COperand<C> {
+    pub fn rvalue_to_operand(&mut self, data: TyRValue, span: Span) -> Operand {
         self.cfg_builder
             .rvalue_to_operand(data, span, self.fold.sctx)
     }
@@ -1355,35 +1459,35 @@ impl<'a, 'h, C: ExpressionLowering<L>, L: HirLowering> LocalCtx<'a, 'h, C, L> {
     pub fn rvalue_to_operand_in_bb(
         &mut self,
         bb: BasicBlock,
-        data: TyRValue<C>,
+        data: TyRValue,
         span: Span,
-    ) -> COperand<C> {
+    ) -> Operand {
         self.cfg_builder
             .rvalue_to_operand_in_bb(bb, data, span, self.fold.sctx)
     }
 
-    pub fn assign_temporary(&mut self, data: TyRValue<C>) -> Local {
+    pub fn assign_temporary(&mut self, data: TyRValue) -> Local {
         self.cfg_builder.assign_temporary(data, self.fold.sctx)
     }
 
-    pub fn assign_temporary_in_bb(&mut self, bb: BasicBlock, data: TyRValue<C>) -> Local {
+    pub fn assign_temporary_in_bb(&mut self, bb: BasicBlock, data: TyRValue) -> Local {
         self.cfg_builder
             .assign_temporary_in_bb(bb, data, self.fold.sctx)
     }
 
-    pub fn assign(&mut self, lhs: Local, rhs: RValue<C>) -> StatementId {
+    pub fn assign(&mut self, lhs: Local, rhs: RValue) -> StatementId {
         self.cfg_builder.assign(lhs, rhs, self.fold.sctx)
     }
 
-    pub fn assign_in_bb(&mut self, bb: BasicBlock, lhs: Local, rhs: RValue<C>) -> StatementId {
+    pub fn assign_in_bb(&mut self, bb: BasicBlock, lhs: Local, rhs: RValue) -> StatementId {
         self.cfg_builder.assign_in_bb(bb, lhs, rhs, self.fold.sctx)
     }
 
-    pub fn terminate_bb(&mut self, block: BasicBlock, kind: TerminatorKind<C>) {
+    pub fn terminate_bb(&mut self, block: BasicBlock, kind: TerminatorKind) {
         self.cfg_builder.terminate_bb(block, kind, self.fold.sctx)
     }
 
-    pub fn terminate(&mut self, kind: TerminatorKind<C>) {
+    pub fn terminate(&mut self, kind: TerminatorKind) {
         self.cfg_builder.terminate(kind, self.fold.sctx)
     }
 

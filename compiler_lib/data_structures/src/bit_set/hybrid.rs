@@ -55,6 +55,8 @@ use std::{fmt, slice};
 /// All operations that involve an element will panic if the element is equal
 /// to or greater than the domain size. All operations that involve two bitsets
 /// will panic if the bitsets have differing domain sizes.
+
+// TODO check if deriving clone_from here improves performance
 #[derive(Clone, PartialEq, Eq)]
 pub enum HybridBitSet<T> {
     Sparse(SparseBitSet<T>),

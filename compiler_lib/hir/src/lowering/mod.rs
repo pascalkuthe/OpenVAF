@@ -8,55 +8,58 @@
  *  *****************************************************************************************
  */
 
-pub use crate::error::{Error, TyPrinter};
-use openvaf_diagnostics::{lints::Lint, DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
-use openvaf_hir::{DisciplineAccess, ExpressionId, Hir, Primary};
-use openvaf_ir::{
-    Attribute, NoiseSource, ParameterExcludeConstraint, ParameterRangeConstraint,
-    ParameterRangeConstraintBound, PrintOnFinish, StopTaskKind,
-};
-use openvaf_middle::osdi_types::ConstVal::Scalar;
-use openvaf_middle::osdi_types::SimpleConstVal::{Integer, Real, String};
-use openvaf_middle::{
-    CallType, ConstVal, Expression, Mir, Module, Nature, Operand, OperandData, Parameter,
-    ParameterCallType, ParameterConstraint, ParameterInput, RValue, RealConstCallType, StmntKind,
-    SyntaxContextData, Type, Variable,
-};
-use openvaf_session::symbols::keywords;
+pub use cfg_builder::LocalCtx;
+pub use errors::{Error, TyPrinter};
 
-use crate::error::Error::{ExpectedLintName, TypeMissmatch};
-use openvaf_data_structures::index_vec::IndexVec;
-use openvaf_data_structures::HashMap;
+use errors::Error::{ExpectedLintName, TypeMissmatch};
+use lints::{EmptyBuiltinAttribute, LintLevelOverwrite, UnknownLint};
+
+use crate::{BranchKind, Hir};
+
+use openvaf_data_structures::{bit_set::BitSet, index_vec::IndexVec, sync::RwLock, HashMap};
+
+use openvaf_diagnostics::lints::{Lint, LintLevel, Linter};
+use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
 
 use openvaf_ir::ids::{
-    BranchId, DisciplineId, ModuleId, NatureId, NetId, ParameterId, PortId, StatementId, SyntaxCtx,
-    VariableId,
+    BranchId, DisciplineId, ExpressionId, ModuleId, NatureId, NodeId, ParameterId, StatementId,
+    SyntaxCtx, VariableId,
+};
+use openvaf_ir::{
+    Attribute, ParameterExcludeConstraint, ParameterRangeConstraint, ParameterRangeConstraintBound,
 };
 
-use openvaf_session::sourcemap::{Span, StringLiteral};
+use openvaf_middle::osdi_types::{
+    ConstVal::Scalar,
+    SimpleConstVal::{Integer, Real, String},
+};
+use openvaf_middle::{
+    Branch, ConstVal, Expression, Mir, Module, Nature, Operand, Parameter, ParameterConstraint,
+    SyntaxContextData, TryDefaultConversion, Type, Variable,
+};
 
-use openvaf_data_structures::sync::RwLock;
+use openvaf_session::{
+    sourcemap::StringLiteral,
+    symbols::{kw, sym},
+};
+
+use crate::lowering::errors::Error::{
+    SimultaneousVoltageAndCurrentContribute, SimultaneousVoltageAndCurrentProbe,
+};
+use openvaf_middle::functions::ParameterCallType;
+use std::convert::TryInto;
 use std::mem::take;
-
-mod cfg_builder;
-
 use tracing::trace_span;
 
-use crate::lints::{EmptyBuiltinAttribute, LintLevelOverwrite, UnknownLint};
-pub use cfg_builder::LocalCtx;
-use openvaf_data_structures::bit_set::BitSet;
-use openvaf_diagnostics::lints::{LintLevel, Linter};
-
-mod error;
-mod lints;
-
-pub type HirSystemFunctionCall = openvaf_hir::SystemFunctionCall;
+mod cfg_builder;
+pub mod errors;
+pub mod lints;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum AttributeCtx {
     Variable(VariableId),
     Parameter(ParameterId),
-    Net(NetId),
+    Node(NodeId),
     Branch(BranchId),
     Module(ModuleId),
     Nature(NatureId),
@@ -65,7 +68,6 @@ pub enum AttributeCtx {
 }
 
 pub trait HirLowering: Sized {
-    type AnalogBlockExprLower: ExpressionLowering<Self>;
     fn handle_attribute(
         ctx: &mut HirFold<Self>,
         attr: &Attribute,
@@ -73,207 +75,18 @@ pub trait HirLowering: Sized {
         sctx: SyntaxCtx,
     );
 
-    fn handle_statement_attribute<'a, 'h, C: ExpressionLowering<Self>>(
-        ctx: &mut LocalCtx<'a, 'h, C, Self>,
+    fn handle_statement_attribute<'a, 'h>(
+        ctx: &mut LocalCtx<'a, 'h, Self>,
         attr: &Attribute,
         stmt: StatementId,
         sctx: SyntaxCtx,
     );
 }
 
-// TODO enforce times somehow?
-pub trait ExpressionLowering<L: HirLowering>: CallType {
-    fn port_flow(ctx: &mut LocalCtx<Self, L>, port: PortId, span: Span) -> Option<RValue<Self>>;
-
-    fn branch_access(
-        ctx: &mut LocalCtx<Self, L>,
-        access: DisciplineAccess,
-        branch: BranchId,
-        span: Span,
-    ) -> Option<RValue<Self>>;
-
-    fn parameter_ref(
-        ctx: &mut LocalCtx<Self, L>,
-        param: ParameterId,
-        span: Span,
-    ) -> Option<RValue<Self>>;
-
-    fn time_derivative(
-        ctx: &mut LocalCtx<Self, L>,
-        expr: ExpressionId,
-        span: Span,
-    ) -> Option<RValue<Self>>;
-
-    fn noise(
-        ctx: &mut LocalCtx<Self, L>,
-        source: NoiseSource<ExpressionId, ()>,
-        name: Option<ExpressionId>,
-        span: Span,
-    ) -> Option<RValue<Self>>;
-
-    fn system_function_call(
-        ctx: &mut LocalCtx<Self, L>,
-        call: &HirSystemFunctionCall,
-        span: Span,
-    ) -> Option<RValue<Self>>;
-
-    fn stop_task(
-        ctx: &mut LocalCtx<Self, L>,
-        kind: StopTaskKind,
-        finish: PrintOnFinish,
-        span: Span,
-    ) -> Option<StmntKind<Self>>;
-
-    fn collapse_hint(
-        ctx: &mut LocalCtx<Self, L>,
-        hi: NetId,
-        lo: NetId,
-        span: Span,
-    ) -> Option<StmntKind<Self>>;
-}
-
-impl<L: HirLowering> ExpressionLowering<L> for ParameterCallType {
-    fn port_flow(_: &mut LocalCtx<Self, L>, _: PortId, _: Span) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn branch_access(
-        _: &mut LocalCtx<Self, L>,
-        _: DisciplineAccess,
-        _: BranchId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn parameter_ref(
-        _: &mut LocalCtx<Self, L>,
-        param: ParameterId,
-        span: Span,
-    ) -> Option<RValue<Self>> {
-        Some(RValue::Use(Operand::new(
-            OperandData::Read(ParameterInput::Value(param)),
-            span,
-        )))
-    }
-
-    fn time_derivative(
-        _: &mut LocalCtx<Self, L>,
-        _: ExpressionId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn noise(
-        _: &mut LocalCtx<Self, L>,
-        _: NoiseSource<ExpressionId, ()>,
-        _: Option<ExpressionId>,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn system_function_call(
-        _: &mut LocalCtx<Self, L>,
-        call: &HirSystemFunctionCall,
-        span: Span,
-    ) -> Option<RValue<Self>> {
-        if let HirSystemFunctionCall::ParameterGiven(param) = call {
-            Some(RValue::Use(Operand::new(
-                OperandData::Read(ParameterInput::Given(*param)),
-                span,
-            )))
-        } else {
-            unreachable!()
-        }
-    }
-
-    fn stop_task(
-        _: &mut LocalCtx<Self, L>,
-        _: StopTaskKind,
-        _: PrintOnFinish,
-        _: Span,
-    ) -> Option<StmntKind<Self>> {
-        unimplemented!()
-    }
-
-    fn collapse_hint(
-        _: &mut LocalCtx<Self, L>,
-        _hi: NetId,
-        _lo: NetId,
-        _span: Span,
-    ) -> Option<StmntKind<Self>> {
-        unimplemented!()
-    }
-}
-
-impl<L: HirLowering> ExpressionLowering<L> for RealConstCallType {
-    fn port_flow(_: &mut LocalCtx<Self, L>, _: PortId, _: Span) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn branch_access(
-        _: &mut LocalCtx<Self, L>,
-        _: DisciplineAccess,
-        _: BranchId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn parameter_ref(_: &mut LocalCtx<Self, L>, _: ParameterId, _: Span) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn time_derivative(
-        _: &mut LocalCtx<Self, L>,
-        _: ExpressionId,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn noise(
-        _: &mut LocalCtx<Self, L>,
-        _: NoiseSource<ExpressionId, ()>,
-        _: Option<ExpressionId>,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn system_function_call(
-        _: &mut LocalCtx<Self, L>,
-        _: &HirSystemFunctionCall,
-        _: Span,
-    ) -> Option<RValue<Self>> {
-        unimplemented!()
-    }
-
-    fn stop_task(
-        _: &mut LocalCtx<Self, L>,
-        _: StopTaskKind,
-        _: PrintOnFinish,
-        _: Span,
-    ) -> Option<StmntKind<Self>> {
-        unimplemented!()
-    }
-
-    fn collapse_hint(
-        _: &mut LocalCtx<Self, L>,
-        _hi: NetId,
-        _lo: NetId,
-        _span: Span,
-    ) -> Option<StmntKind<Self>> {
-        unimplemented!()
-    }
-}
-
 pub struct HirFold<'a, L: HirLowering> {
     pub lowering: &'a mut L,
     pub hir: &'a Hir,
-    pub mir: Mir<L::AnalogBlockExprLower>,
+    pub mir: Mir,
     pub errors: MultiDiagnostic<Error>,
     pub sctx: SyntaxCtx,
     pub lower_sctx: BitSet<SyntaxCtx>,
@@ -286,8 +99,8 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         src: AttributeCtx,
         mut handle_attribute: impl FnMut(&mut Self, &Attribute) -> bool,
     ) {
-        if !self.lower_sctx.remove(sctx) && cfg!(debug_assertions) {
-            unreachable!("{:?} was processed twice!", sctx);
+        if !self.lower_sctx.remove(sctx) {
+            return;
         }
 
         for attr in self.hir[sctx].attributes.into_iter() {
@@ -306,25 +119,24 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
 
     pub fn handle_builtin_attribute(&mut self, attr: &Attribute, sctx: SyntaxCtx) -> bool {
         let lvl = match attr.ident.name {
-            keywords::openvaf_allow => LintLevel::Allow,
-            keywords::openvaf_warn => LintLevel::Warn,
-            keywords::openvaf_deny => LintLevel::Deny,
-            keywords::openvaf_forbid => LintLevel::Forbid,
+            sym::openvaf_allow => LintLevel::Allow,
+            sym::openvaf_warn => LintLevel::Warn,
+            sym::openvaf_deny => LintLevel::Deny,
+            sym::openvaf_forbid => LintLevel::Forbid,
             _ => return false,
         };
 
         let names = if let Some(expr) = attr.value {
             match self.hir[expr].contents {
-                openvaf_hir::Expression::Primary(Primary::Constant(Scalar(String(val)))) => {
+                crate::Expression::Constant(Scalar(String(val))) => {
                     vec![(val, self.hir[expr].span)]
                 }
-                openvaf_hir::Expression::Array(ref expressions) => {
+                crate::Expression::Array(ref expressions) => {
                     let res = expressions
                         .iter()
                         .filter_map(|expr| {
-                            if let openvaf_hir::Expression::Primary(Primary::Constant(Scalar(
-                                String(val),
-                            ))) = self.hir[*expr].contents
+                            if let crate::Expression::Constant(Scalar(String(val))) =
+                                self.hir[*expr].contents
                             {
                                 Some((val, self.hir[*expr].span))
                             } else {
@@ -374,7 +186,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         true
     }
 
-    fn lower_nature(&mut self, id: NatureId, nature: &openvaf_hir::Nature) -> Nature {
+    fn lower_nature(&mut self, id: NatureId, nature: &crate::Nature) -> Nature {
         let span = trace_span!("nature", id = id.index(), name = display(nature.ident));
         let _enter = span.enter();
         self.sctx = nature.sctx;
@@ -395,7 +207,38 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         }
     }
 
-    fn lower_variable(&mut self, id: VariableId, var: &openvaf_hir::Variable) -> Variable {
+    fn lower_branch(&mut self, id: BranchId, branch: &crate::Branch) -> Branch {
+        let span = trace_span!("branch", id = id.index(), name = display(branch.ident));
+        let _enter = span.enter();
+        self.sctx = branch.sctx;
+        self.handle_attributes(branch.sctx, AttributeCtx::Branch(id));
+
+        if !branch.voltage_contributions.is_empty() && !branch.current_contributions.is_empty() {
+            self.errors.add(SimultaneousVoltageAndCurrentContribute {
+                branch: branch.ident,
+                voltage_contribute: branch.voltage_contributions.clone(),
+                current_contribute: branch.current_contributions.clone(),
+            })
+        }
+
+        if !branch.voltage_access.is_empty() && !branch.current_acccess.is_empty() {
+            self.errors.add(SimultaneousVoltageAndCurrentProbe {
+                branch: branch.ident,
+                voltage_probes: branch.voltage_access.clone(),
+                current_probes: branch.current_acccess.clone(),
+            })
+        }
+
+        Branch {
+            ident: branch.ident,
+            hi: branch.hi,
+            lo: branch.lo,
+            sctx: branch.sctx,
+            generated: branch.kind != BranchKind::Explicit,
+        }
+    }
+
+    fn lower_variable(&mut self, id: VariableId, var: &crate::Variable) -> Variable {
         let span = trace_span!("variable", id = id.index(), name = display(var.ident));
         let _enter = span.enter();
         let (unit, desc) =
@@ -434,7 +277,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         let mut desc = None;
 
         self.handle_attributes_with(sctx, src, |fold, attr| match attr.ident.name {
-            keywords::desc => {
+            sym::desc => {
                 if let Some(val) = attr.value {
                     desc = fold.eval_string_constant(val)
                 } else {
@@ -442,7 +285,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
                 }
                 true
             }
-            keywords::units => {
+            kw::units => {
                 if let Some(val) = attr.value {
                     unit = fold.eval_string_constant(val)
                 } else {
@@ -456,11 +299,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         (unit, desc)
     }
 
-    fn lower_parameter(
-        &mut self,
-        id: ParameterId,
-        param: &openvaf_hir::Parameter,
-    ) -> Option<Parameter> {
+    fn lower_parameter(&mut self, id: ParameterId, param: &crate::Parameter) -> Option<Parameter> {
         let span = trace_span!("parameter", id = id.index(), name = display(param.ident));
         let _enter = span.enter();
 
@@ -472,7 +311,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         let default = self.lower_assign_expr(param.default, param.ty);
 
         let kind = match &param.constraints {
-            openvaf_hir::ParameterConstraint::Ordered(included, excluded) => {
+            crate::ParameterConstraint::Ordered(included, excluded) => {
                 let included = included
                     .iter()
                     .filter_map(|b| self.lower_parameter_range_constraint(b, param.ty))
@@ -483,7 +322,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
                     .collect();
                 ParameterConstraint::Ordered { included, excluded }
             }
-            openvaf_hir::ParameterConstraint::Unordered(included, excluded) => {
+            crate::ParameterConstraint::Unordered(included, excluded) => {
                 let included = included
                     .iter()
                     .filter_map(|e| self.lower_assign_expr(*e, param.ty))
@@ -547,11 +386,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         })
     }
 
-    fn lower_module(
-        &mut self,
-        id: ModuleId,
-        module: &openvaf_hir::Module,
-    ) -> Module<L::AnalogBlockExprLower> {
+    fn lower_module(&mut self, id: ModuleId, module: &crate::Module) -> Module {
         let span = trace_span!("module", id = id.index(), name = display(module.ident));
         let _enter = span.enter();
 
@@ -574,10 +409,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         }
     }
 
-    pub fn lower_expression<C: ExpressionLowering<L>>(
-        &mut self,
-        expr: ExpressionId,
-    ) -> Option<Expression<C>> {
+    pub fn lower_expression(&mut self, expr: ExpressionId) -> Option<Expression> {
         let span = self.hir[expr].span;
         let mut lctx = LocalCtx::new_small(self);
         let expr = lctx.lower_expr(expr)?;
@@ -586,11 +418,11 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
         Some(Expression(cfg, operand))
     }
 
-    pub fn lower_assign_expr<C: ExpressionLowering<L>>(
+    pub fn lower_assign_expr(
         &mut self,
         expr: ExpressionId,
         ty: Type,
-    ) -> Option<Expression<C>> {
+    ) -> Option<Expression<ParameterCallType>> {
         let span = self.hir[expr].span;
         let mut lctx = LocalCtx::new_small(self);
         let expr = lctx.lower_assignment_expr(expr, ty)?;
@@ -608,23 +440,25 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
             lctx.cfg_builder.finish(self.sctx)
         };
 
+        // In theory this conversion can fail if non const functions/references are used
+        // In practice this should have been caught during AST lowering and its therefore fine to panick here
+        let cfg = cfg.map(&mut TryDefaultConversion);
+        let operand = Operand::new(
+            operand.contents.map_input(|x| x.try_into().unwrap()),
+            operand.span,
+        );
+
         Some(Expression(cfg, operand))
     }
 
-    pub fn lower_real_expression<C: ExpressionLowering<L>>(
-        &mut self,
-        expr: ExpressionId,
-    ) -> Option<Expression<C>> {
+    pub fn lower_real_expression(&mut self, expr: ExpressionId) -> Option<Expression> {
         let mut lctx = LocalCtx::new_small(self);
         let operand = lctx.fold_real(expr)?;
         let cfg = lctx.cfg_builder.finish(self.sctx);
         Some(Expression(cfg, operand))
     }
 
-    pub fn lower_string_expression<C: ExpressionLowering<L>>(
-        &mut self,
-        expr: ExpressionId,
-    ) -> Option<Expression<C>> {
+    pub fn lower_string_expression(&mut self, expr: ExpressionId) -> Option<Expression> {
         let span = self.hir[expr].span;
         let mut lctx = LocalCtx::new_small(self);
         let res = lctx.lower_expr(expr)?;
@@ -643,7 +477,7 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
     }
 
     pub fn eval_string_constant(&mut self, expr: ExpressionId) -> Option<StringLiteral> {
-        self.lower_string_expression::<RealConstCallType>(expr)
+        self.lower_string_expression(expr)
             .map(|x| x.const_eval().unwrap())
             .and_then(|x| {
                 if let Scalar(String(val)) = x {
@@ -655,8 +489,8 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
     }
 
     pub fn eval_real_constant(&mut self, expr: ExpressionId) -> Option<f64> {
-        self.lower_real_expression::<RealConstCallType>(expr)
-            .map(|x| x.const_eval().unwrap())
+        self.lower_real_expression(expr)
+            .and_then(|x| x.const_eval())
             .and_then(|x| {
                 if let Scalar(Real(val)) = x {
                     Some(val)
@@ -667,8 +501,8 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
     }
 
     pub fn eval_int_constant(&mut self, expr: ExpressionId) -> Option<i64> {
-        self.lower_real_expression::<RealConstCallType>(expr)
-            .map(|x| x.const_eval().unwrap())
+        self.lower_real_expression(expr)
+            .and_then(|x| x.const_eval())
             .and_then(|x| {
                 if let Scalar(Integer(val)) = x {
                     Some(val)
@@ -679,24 +513,21 @@ impl<'h, L: HirLowering> HirFold<'h, L> {
     }
 }
 
-pub fn lower_hir_userfacing<L: HirLowering>(
-    hir: Hir,
-    lowering: &mut L,
-) -> UserResult<Mir<L::AnalogBlockExprLower>> {
+pub fn lower_hir_userfacing<L: HirLowering>(hir: Hir, lowering: &mut L) -> UserResult<Mir> {
     lower_hir_userfacing_with_printer(hir, lowering)
 }
 
 pub fn lower_hir_userfacing_with_printer<L: HirLowering, P: DiagnosticSlicePrinter>(
     hir: Hir,
     lowering: &mut L,
-) -> UserResult<Mir<L::AnalogBlockExprLower>, P> {
+) -> UserResult<Mir, P> {
     lower_hir(hir, lowering).map_err(|err| err.user_facing())
 }
 
 pub fn lower_hir<L: HirLowering>(
     mut src: Hir,
     lowering: &mut L,
-) -> Result<Mir<L::AnalogBlockExprLower>, MultiDiagnostic<Error>> {
+) -> Result<Mir, MultiDiagnostic<Error>> {
     let span = trace_span!("hir_lowering");
     let _enter = span.enter();
 
@@ -711,8 +542,8 @@ pub fn lower_hir<L: HirLowering>(
         .collect();
 
     let dst = Mir {
-        branches: take(&mut src.branches),
-        nets: take(&mut src.nets),
+        branches: IndexVec::new(),
+        nodes: take(&mut src.nodes),
         ports: take(&mut src.ports),
         disciplines: take(&mut src.disciplines),
         modules: IndexVec::new(),
@@ -739,18 +570,14 @@ pub fn lower_hir<L: HirLowering>(
         .disciplines
         .iter_enumerated()
         .map(|(id, discipline)| (discipline.sctx, AttributeCtx::Discipline(id)));
-    let branch_iter = fold
-        .mir
-        .branches
-        .iter_enumerated()
-        .map(|(id, branch)| (branch.sctx, AttributeCtx::Branch(id)));
+
     let net_iter = fold
         .mir
-        .nets
+        .nodes
         .iter_enumerated()
-        .map(|(id, net)| (net.sctx, AttributeCtx::Net(id)));
+        .map(|(id, net)| (net.sctx, AttributeCtx::Node(id)));
 
-    let attributes: Vec<_> = discipline_iter.chain(branch_iter).chain(net_iter).collect();
+    let attributes: Vec<_> = discipline_iter.chain(net_iter).collect();
 
     for (sctx, src) in attributes {
         fold.handle_attributes(sctx, src);
@@ -760,6 +587,12 @@ pub fn lower_hir<L: HirLowering>(
         .natures
         .iter_enumerated()
         .map(|(id, nature)| fold.lower_nature(id, nature))
+        .collect();
+
+    fold.mir.branches = src
+        .branches
+        .iter_enumerated()
+        .map(|(id, nature)| fold.lower_branch(id, nature))
         .collect();
 
     fold.mir.parameters = src

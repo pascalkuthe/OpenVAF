@@ -12,7 +12,7 @@
 
 use crate::dfa::lattice::FlatSet::{self, Bottom, Elem, Top};
 use crate::{
-    fold_rvalue, COperand, CallArg, CallType, ConstVal, Local, OperandData, RValue, RValueFold,
+    fold_rvalue, COperand, CallArg, CfgFunctions, ConstVal, Local, OperandData, RValue, RValueFold,
 };
 use openvaf_data_structures::index_vec::IndexSlice;
 use openvaf_session::sourcemap::Span;
@@ -31,6 +31,7 @@ use crate::dfa::lattice::SparseFlatSetMap;
 use crate::osdi_types::SimpleConstVal::Cmplx;
 use itertools::Itertools;
 pub use propagation::ConstantPropagation;
+use std::mem::size_of_val;
 
 #[allow(clippy::from_over_into)]
 impl<T: PartialEq> Into<Option<T>> for FlatSet<T> {
@@ -56,9 +57,9 @@ macro_rules! undefined_operation {
 /// This should only be used if you want multiple CFGs where an input is constant folded in one case
 /// but not the other
 pub trait CallResolver: Debug {
-    type C: CallType;
+    type C: CfgFunctions;
 
-    fn resolve_input(&self, input: &<Self::C as CallType>::I) -> FlatSet<ConstVal>;
+    fn resolve_input(&self, input: &<Self::C as CfgFunctions>::I) -> FlatSet<ConstVal>;
 }
 
 pub struct NoInputConstResolution<C>(PhantomData<fn(&C)>);
@@ -87,10 +88,10 @@ impl<C> Display for NoInputConstResolution<C> {
     }
 }
 
-impl<C: CallType> CallResolver for NoInputConstResolution<C> {
+impl<C: CfgFunctions> CallResolver for NoInputConstResolution<C> {
     type C = C;
 
-    fn resolve_input(&self, _input: &<C as CallType>::I) -> FlatSet<ConstVal> {
+    fn resolve_input(&self, _input: &<C as CfgFunctions>::I) -> FlatSet<ConstVal> {
         FlatSet::Top
     }
 }
@@ -732,6 +733,14 @@ impl<'lt, R: CallResolver, F: Fn(Local) -> FlatSet<ConstVal>> RValueFold<R::C>
 
     fn fold_log(&mut self, _span: Span, arg: &CallResolverOperand<R>) -> Self::T {
         self.eval_real(arg, f64::log10, "LOG")
+    }
+
+    fn fold_clog2(&mut self, _span: Span, arg: &CallResolverOperand<R>) -> Self::T {
+        self.eval_int(
+            arg,
+            |val| 8 * size_of_val(&val) as i64 - val.abs().leading_zeros() as i64,
+            "clog2",
+        )
     }
 
     fn fold_sqrt(&mut self, _span: Span, arg: &CallResolverOperand<R>) -> Self::T {
