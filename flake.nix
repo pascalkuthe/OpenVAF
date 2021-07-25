@@ -24,7 +24,6 @@
       genAttrs = names: f: builtins.listToAttrs (map (n: nameValuePair n (f n)) names);
       allSystems = [ "x86_64-linux" "aarch64-linux" "i686-linux" "x86_64-darwin" ];
 
-
       forSystems = systems: f: genAttrs systems (
         system: f rec {
           inherit system;
@@ -59,8 +58,13 @@
                 cargo-outdated
                 cargo-edit
                 cargo-flamegraph
+                cargo-bloat
+                cargo-deps
+                graphviz
                 tokei
               ];
+
+                NIX_CFLAGS_LINK = "-fuse-ld=lld";
             }
         );
 

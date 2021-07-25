@@ -3,6 +3,7 @@
 with pkgs;
 {
   buildInputs = let
+
     mkStatic = lib.flip lib.overrideDerivation (
       o: {
         dontDisableStatic = true;
@@ -14,12 +15,18 @@ with pkgs;
   in
     map mkStatic [ libffi ncurses ] ++ [ llvmPackages_latest.llvm libxml2 zlib.static];
 
-  nativeBuildInputs = [
+
+  nativeBuildInputs = let
+         bintools_lld = wrapBintoolsWith {
+           bintools = llvmPackages_latest.bintools;
+         };
+     in
+   [
+    bintools_lld
     gcc
     cmake
     llvmPackages_latest.clang
     llvmPackages_latest.libclang
-    llvmPackages_latest.lld.dev
   ];
 
   LLVM_SYS_120_PREFIX = "${llvmPackages_latest.llvm.dev}";
