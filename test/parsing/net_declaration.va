@@ -1,6 +1,0 @@
-module test ();
-    wire x,y;
-    electrical z;
-    wire electrical l;
-
-endmodule

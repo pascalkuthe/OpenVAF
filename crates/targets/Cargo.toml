@@ -1,0 +1,17 @@
+[package]
+name = "targets"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler framework for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+
+[dependencies]
+thiserror = "1.0.26"
+tracing = "0.1.26"

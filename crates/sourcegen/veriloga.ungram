@@ -1,0 +1,256 @@
+//  VerilogA Un-Grammar.
+//
+// This grammar specifies the structure of VerilogA's concrete syntax tree.
+// It does not specify parsing rules (ambiguities, precedence, etc are out of scope).
+// Tokens are processed -- contextual keywords are recognised, compound operators glued.
+//
+// Legend:
+//
+//   //          -- comment
+//   Name =      -- non-terminal definition
+//   'ident'     -- token (terminal)
+//   A B         -- sequence
+//   A | B       -- alternation
+//   A*          -- zero or more repetition
+//   A?          -- zero or one repetition
+//   (A)         -- same as A
+//   label:A     -- suggested name for field of AST node
+
+//*************************//
+// Names, Paths and Macros //
+//*************************//
+
+
+Name = 'ident'
+NameRef = 'ident'
+
+Path =
+  (qualifier:Path '.')? ('ident' | 'root')
+
+AttrList =
+  '(*' (Attr (',' Attr)*)? '*)'
+
+
+
+Attr =
+ Name ('=' val:Expr)?
+
+Type = ('integer' | 'real' | 'string')
+
+//****************************//
+// Statements and Expressions //
+//****************************//
+
+Stmt =
+EmptyStmt
+| AssignStmt
+| ExprStmt
+| IfStmt
+| WhileStmt
+| ForStmt
+| CaseStmt
+| EventStmt
+| BlockStmt
+
+EmptyStmt = AttrList* ';'
+
+ExprStmt =
+  AttrList* Expr ';'
+
+AssignStmt =
+  AttrList* Assign ';'
+
+
+SimpleStmt =
+  Attr* AssignOrExpr
+
+AssignOrExpr =
+  Assign | Expr
+
+Assign = 
+  lval: Expr op: ('<+' | '=') rval: Expr
+
+
+
+IfStmt =
+  AttrList* 'if' '(' condition:Expr ')'
+  then_branch: Stmt
+  ('else' else_branch: Stmt)?
+
+WhileStmt =
+  AttrList* 'while' '(' condition:Expr ')'
+  body: Stmt
+
+ForStmt =
+  AttrList* 'for' '(' init: SimpleStmt ';' condition:Expr ';' incr: SimpleStmt')'
+  body: Stmt
+
+CaseStmt =
+  AttrList* 'case' '(' discriminant: Expr ')'
+  Case*
+  'endcase'
+
+Case =
+  (Expr (',' Expr)* | 'default') ':'? Stmt
+
+EventStmt =
+  '@' '(' Name ')' BlockStmt
+
+BlockStmt =
+  'begin'
+    BlockScope?
+    body:BlockItem*
+  'end'
+
+BlockScope = ':' Name
+
+BlockItem =
+  VarDecl | ParamDecl | Stmt
+
+Expr =
+  Literal
+| PrefixExpr
+| BinExpr
+| ParenExpr
+| ArrayExpr
+| Call
+| SelectExpr
+| PathExpr
+| PortFlow
+
+
+PathExpr = Path // Required to allow
+PortFlow = '<' port: Path '>'
+
+SelectExpr =
+  condition: Expr '?' then_val: Expr ':' else_val: Expr
+
+ArrayExpr =
+  '\'{' (Expr (',' Expr)*)? '}'
+
+Literal =
+   'int_number' | 'string' | 'std_real_number' | 'si_real_number' | 'inf'
+   
+
+PrefixExpr =
+  AttrList* op:( '-' | '!' | '~' | '+') Expr
+
+BinExpr =
+  lhs:Expr
+  op:(
+    '||' | '&&'
+  | '==' | '!=' | '<=' | '>=' | '<' | '>'
+  | '+' | '*' | '-' | '/' | '**'
+  | '%' | '<<' | '>>' | '^' | '^~' | '~^' | '|' | '&'
+  )
+  rhs:Expr
+
+ParenExpr =
+  '(' Expr ')'
+
+ArgList =
+  '(' args: (Expr (',' Expr)*)? ')'
+
+Call =
+  FunctionRef ArgList?
+
+SysFun = 'sysfun'
+
+FunctionRef =
+  Path | SysFun
+
+//*************************//
+//          Items          //
+//*************************//
+
+
+SourceFile =
+  Item*
+
+Item =
+   DisciplineDecl | NatureDecl | ModuleDecl
+
+DisciplineDecl =
+  AttrList* 'discipline' Name ';'
+  DisciplineAttr*
+  'enddiscipline'
+
+DisciplineAttr = 
+  name: Path  '='? val:Expr ';'
+
+NatureDecl =
+  AttrList* 'nature' Name (':' parent: NameRef)? ';'
+  NatureAttr*
+  'endnature'
+
+NatureAttr =
+  Name '=' val: Expr ';'
+
+ModuleDecl =
+  'module' Name ( '('ports: (ModulePort (',' ModulePort)*)? ')' )? ';'
+   ModuleItem*
+  'endmodule'
+
+ModuleItem =
+  BodyPortDecl
+| NetDecl
+| AnalogBehaviour
+| Function
+| BranchDecl
+| VarDecl
+| ParamDecl
+
+
+ModulePort = PortDecl|Name
+
+AnalogBehaviour =
+  AttrList* 'analog' Stmt
+
+VarDecl =
+  AttrList* Type (Var (',' Var)*) ';'
+
+Var =
+  Name ('=' default:Expr)?
+
+
+
+ParamDecl =
+  AttrList* 'parameter' Type paras:(Param (',' Param)*) ';'
+
+Param = Name '=' default:Expr Constraint*
+
+Constraint =
+    ('from' | 'exclude') (Expr | Range)
+
+Range =
+  ('(' | '[') start: Expr ':' end:Expr (')' | ']')
+
+
+NetDecl =
+  AttrList*  discipline:NameRef?  'net_type'? (Name (',' Name)*)';'
+
+BodyPortDecl =
+  PortDecl ';'
+
+PortDecl =
+  AttrList* Direction discipline:NameRef?  'net_type'? (Name (',' Name)*)
+
+Direction =
+  'inout' | 'input' | 'output'
+
+
+Function =
+  'analog' 'function' Type? Name ';'
+  FunctionItem*
+  'endfunction'
+
+FunctionItem =
+  ParamDecl | VarDecl | FunctionArg | Stmt
+
+FunctionArg =
+  AttrList* Direction (Name(',' Name)*)';'
+
+
+
+BranchDecl =
+  AttrList* 'branch' ArgList (Name (',' Name)*)';'

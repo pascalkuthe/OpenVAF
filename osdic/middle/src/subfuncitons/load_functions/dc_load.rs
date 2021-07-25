@@ -10,16 +10,16 @@
 
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
 use crate::lim::LimFunction;
-use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_ir::ids::NetId;
-use openvaf_ir::{PrintOnFinish, StopTaskKind};
-use openvaf_middle::const_fold::FlatSet;
-use openvaf_middle::derivatives::RValueAutoDiff;
-use openvaf_middle::{
+use data_structures::index_vec::{IndexSlice, IndexVec};
+use ir::ids::NetId;
+use ir::{PrintOnFinish, StopTaskKind};
+use middle::const_fold::FlatSet;
+use middle::derivatives::RValueAutoDiff;
+use middle::{
     COperand, COperandData, CallArg, CfgConversion, CfgFunctions, ConstVal, Operand, OperandData,
     RValue, SimpleConstVal, StmntKind,
 };
-use openvaf_session::sourcemap::Span;
+use session::sourcemap::Span;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 

@@ -11,20 +11,20 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
 use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
-use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::{bit_set::BitSet, HashMap};
-use openvaf_hir::Unknown;
-use openvaf_ir::ids::{PortId, VariableId};
-use openvaf_ir::Type;
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
-use openvaf_middle::derivatives::RValueAutoDiff;
-use openvaf_middle::dfa::lattice::FlatSet;
-use openvaf_middle::{
+use data_structures::index_vec::{IndexSlice, IndexVec};
+use data_structures::{bit_set::BitSet, HashMap};
+use hir::Unknown;
+use ir::ids::{PortId, VariableId};
+use ir::Type;
+use middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations};
+use middle::derivatives::RValueAutoDiff;
+use middle::dfa::lattice::FlatSet;
+use middle::{
     COperand, COperandData, CallArg, CfgConversion, CfgFunctions, CfgInputs, Derivative, Mir,
     OperandData, ParameterInput, RValue, StmntKind, VariableLocalKind,
 };
-use openvaf_pass::program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph};
-use openvaf_session::sourcemap::Span;
+use pass::program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph};
+use session::sourcemap::Span;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use tracing::debug_span;

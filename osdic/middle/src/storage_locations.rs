@@ -12,14 +12,14 @@ use crate::storage_locations::StorageLocationValue::{
     Branch, BranchDerivatives, Variable, VariableDerivative,
 };
 use crate::GeneralOsdiCall;
-use openvaf_data_structures::arrayvec::ArrayVec;
-use openvaf_data_structures::index_vec::{define_index_type, IndexVec};
-use openvaf_data_structures::{bit_set::BitSet, HashMap};
-use openvaf_diagnostics::ListPrettyPrinter;
-use openvaf_hir::{Unknown, VariableId};
-use openvaf_ir::ids::BranchId;
-use openvaf_middle::cfg::ControlFlowGraph;
-use openvaf_middle::{DisciplineAccess, Local, LocalKind, VariableLocalKind};
+use data_structures::arrayvec::ArrayVec;
+use data_structures::index_vec::{define_index_type, IndexVec};
+use data_structures::{bit_set::BitSet, HashMap};
+use diagnostics::ListPrettyPrinter;
+use hir::{Unknown, VariableId};
+use ir::ids::BranchId;
+use middle::cfg::ControlFlowGraph;
+use middle::{DisciplineAccess, Local, LocalKind, VariableLocalKind};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Index;

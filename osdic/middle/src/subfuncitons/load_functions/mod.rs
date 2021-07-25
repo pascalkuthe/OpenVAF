@@ -14,20 +14,20 @@ use crate::subfuncitons::automatic_slicing::{ReadVars, TaintedLocations, Written
 use crate::subfuncitons::load_functions::ac_load::AcLoadFunctionCall;
 use crate::subfuncitons::load_functions::dc_load::{DcLoadFunctionCall, GeneralToDcLoad};
 use crate::{optimize_cfg, CircuitTopology};
-use openvaf_data_structures::{bit_set::BitSet, HashMap};
-use openvaf_hir::SyntaxCtx;
-use openvaf_ir::Spanned;
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, START_BLOCK};
-use openvaf_middle::osdi_types::ConstVal::Scalar;
-use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{
+use data_structures::{bit_set::BitSet, HashMap};
+use hir::SyntaxCtx;
+use ir::Spanned;
+use middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, START_BLOCK};
+use middle::osdi_types::ConstVal::Scalar;
+use middle::osdi_types::SimpleConstVal::Real;
+use middle::{
     ConstVal, LocalKind, Mir, OperandData, RValue, StmntKind, VariableId, VariableLocalKind,
 };
-use openvaf_pass::{
+use pass::{
     program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph},
     BackwardSlice, Strip,
 };
-use openvaf_session::sourcemap::span::DUMMY_SP;
+use session::sourcemap::span::DUMMY_SP;
 
 mod ac_load;
 mod dc_load;

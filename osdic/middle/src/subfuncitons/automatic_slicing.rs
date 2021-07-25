@@ -21,17 +21,17 @@ use crate::subfuncitons::model_temp_update::ModelTempUpdateFunction;
 use crate::subfuncitons::OsdiFunctions;
 use crate::topology::CircuitTopology;
 use itertools::Itertools;
-use openvaf_data_structures::{bit_set::BitSet, HashMap};
-use openvaf_hir::DisciplineAccess;
-use openvaf_ir::ids::VariableId;
-use openvaf_middle::cfg::{
+use data_structures::{bit_set::BitSet, HashMap};
+use hir::DisciplineAccess;
+use ir::ids::VariableId;
+use middle::cfg::{
     ControlFlowGraph, IntLocation, InternedLocations, LocationKind, PhiData, START_BLOCK,
 };
-use openvaf_middle::{
+use middle::{
     COperand, CfgFunctions, Local, LocalKind, Mir, OperandData, RValue, StmntKind,
     VariableLocalKind,
 };
-use openvaf_pass::{
+use pass::{
     program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph},
     visit::CfgVisitor,
     BackwardSlice, ForwardSlice, LiveLocalAnalysis, Strip, Visit,

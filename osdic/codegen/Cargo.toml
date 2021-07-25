@@ -2,7 +2,7 @@
 name = "osdic-codegen"
 version = "0.1.0"
 authors = ["DSPOM"]
-edition = "2018"
+edition = "2021"
 repository = "https://gitlab.com/DSPOM/OpenVAF"
 description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
 license = "GPL-3.0"
@@ -15,12 +15,12 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-openvaf-data-structures = { version = "0.8.0", path = "../../compiler_lib/data_structures" }
-openvaf-session = { version = "0.8.0", path = "../../compiler_lib/session" }
-openvaf-diagnostics = { version = "0.8.0", path = "../../compiler_lib/diagnostics" }
-openvaf-middle = { version = "0.8.0", path = "../../compiler_lib/middle" }
-openvaf-codegen-llvm = { version = "0.8.0", path = "../../compiler_lib/codegen_llvm" }
-openvaf-linker = { version = "0.8.0", path = "../../compiler_lib/linker" }
+data-structures = { version = "0.0.0", path = "../../crates/data_structures" }
+session = { version = "0.0.0", path = "../../crates/session" }
+diagnostics = { version = "0.0.0", path = "../../crates/diagnostics" }
+middle = { version = "0.0.0", path = "../../crates/middle" }
+codegen-llvm = { version = "0.0.0", path = "../../crates/codegen_llvm" }
+linker = { version = "0.0.0", path = "../../crates/linker" }
 
 
 osdic-target = { version = "0.1.0", path = "../targets" }

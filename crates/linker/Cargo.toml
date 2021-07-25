@@ -1,0 +1,21 @@
+[package]
+name = "linker"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/osdi"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+
+maintenance = { status = "actively-developed" }
+
+
+[dependencies]
+
+targets = {version = "0.0.0", path = "../targets" }
+tracing = "0.1.26"
+lld = {version = "110.0.0", path= "../lld" }
+thiserror = "1.0.26"

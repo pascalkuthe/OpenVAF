@@ -9,15 +9,15 @@
  */
 
 use crate::GeneralOsdiCall;
-use openvaf_data_structures::index_vec::{define_index_type, index_vec, IndexSlice, IndexVec};
-use openvaf_data_structures::{bit_set::BitSet, HashMap, HashSet};
-use openvaf_hir::{BranchId, DisciplineAccess};
-use openvaf_ir::ids::NetId;
-use openvaf_ir::{ConstVal, Unknown};
-use openvaf_middle::cfg::ControlFlowGraph;
-use openvaf_middle::osdi_types::ConstVal::Scalar;
-use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{Local, LocalKind, Mir, VariableLocalKind};
+use data_structures::index_vec::{define_index_type, index_vec, IndexSlice, IndexVec};
+use data_structures::{bit_set::BitSet, HashMap, HashSet};
+use hir::{BranchId, DisciplineAccess};
+use ir::ids::NetId;
+use ir::{ConstVal, Unknown};
+use middle::cfg::ControlFlowGraph;
+use middle::osdi_types::ConstVal::Scalar;
+use middle::osdi_types::SimpleConstVal::Real;
+use middle::{Local, LocalKind, Mir, VariableLocalKind};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::mem::swap;

@@ -9,11 +9,11 @@
  */
 
 use anyhow::Result;
-use openvaf_codegen_llvm::inkwell::passes::PassManagerBuilder;
-use openvaf_codegen_llvm::inkwell::targets::{
+use codegen_llvm::inkwell::passes::PassManagerBuilder;
+use codegen_llvm::inkwell::targets::{
     CodeModel, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
 };
-use openvaf_codegen_llvm::inkwell::OptimizationLevel;
+use codegen_llvm::inkwell::OptimizationLevel;
 use target_lexicon::Triple;
 
 pub(super) struct CodeGenCfg {

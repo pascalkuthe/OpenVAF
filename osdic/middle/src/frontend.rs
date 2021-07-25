@@ -9,36 +9,36 @@
  */
 
 use crate::lim::LimFunction;
-use openvaf_ast_lowering::{lower_ast_userfacing_with_printer, AllowedReferences};
-use openvaf_data_structures::index_vec::IndexSlice;
-use openvaf_data_structures::{
+use ast_lowering::{lower_ast_userfacing_with_printer, AllowedReferences};
+use data_structures::index_vec::IndexSlice;
+use data_structures::{
     index_vec::{index_vec, IndexVec},
     HashMap,
 };
-use openvaf_diagnostics::lints::Linter;
-use openvaf_diagnostics::{DiagnosticSlicePrinter, UserResult};
-use openvaf_hir::{
+use diagnostics::lints::Linter;
+use diagnostics::{DiagnosticSlicePrinter, UserResult};
+use hir::{
     BranchId, ExpressionId, LimFunction as HirLimFunction, NetId, ParameterId, PortId, StatementId,
     SyntaxCtx,
 };
-use openvaf_hir_lowering::{
+use hir_lowering::{
     lower_hir_userfacing_with_printer, AttributeCtx, Error::WrongFunctionArgCount,
     ExpressionLowering, HirFold, HirLowering, HirSystemFunctionCall, LocalCtx,
 };
-use openvaf_ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, Type, Unknown};
-use openvaf_middle::derivatives::RValueAutoDiff;
-use openvaf_middle::osdi_types::ConstVal::Scalar;
-use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{dfa::lattice::FlatSet, COperand, CallArg};
-use openvaf_middle::{
+use ir::{Attribute, NoiseSource, PrintOnFinish, Spanned, StopTaskKind, Type, Unknown};
+use middle::derivatives::RValueAutoDiff;
+use middle::osdi_types::ConstVal::Scalar;
+use middle::osdi_types::SimpleConstVal::Real;
+use middle::{dfa::lattice::FlatSet, COperand, CallArg};
+use middle::{
     CfgFunctions, CfgInputs, ConstVal, Derivative, DisciplineAccess, Mir, OperandData, RValue,
     SimpleConstVal, StmntKind,
 };
-use openvaf_middle::{ParameterCallType, ParameterInput};
-use openvaf_parser::{parse_facing_with_printer, TokenStream};
-use openvaf_preprocessor::preprocess_user_facing_with_printer;
-use openvaf_session::sourcemap::Span;
-use openvaf_session::{
+use middle::{ParameterCallType, ParameterInput};
+use parser::{parse_facing_with_printer, TokenStream};
+use preprocessor::preprocess_user_facing_with_printer;
+use session::sourcemap::Span;
+use session::{
     sourcemap::{string_literals::StringLiteral, FileId},
     SourceMap,
 };

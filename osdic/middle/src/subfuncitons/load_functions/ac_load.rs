@@ -13,32 +13,32 @@ use crate::subfuncitons::automatic_slicing::TaintedLocations;
 use crate::subfuncitons::load_functions::dc_load::DcLoadFunctionCall;
 use crate::subfuncitons::load_functions::LoadFunctions;
 use crate::{optimize_cfg, CircuitTopology};
-use openvaf_data_structures::index_vec::{IndexSlice, IndexVec};
-use openvaf_data_structures::{bit_set::BitSet, WorkQueue};
-use openvaf_hir::{BranchId, NetId, Type, Unknown};
-use openvaf_ir::ids::{PortId, SyntaxCtx};
-use openvaf_ir::{PrintOnFinish, Spanned, StopTaskKind};
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, LocationKind};
-use openvaf_middle::derivatives::RValueAutoDiff;
-use openvaf_middle::dfa::lattice::FlatSet;
-use openvaf_middle::RValue::{Comparison, DoubleArgMath, SingleArgMath};
-use openvaf_middle::{
+use data_structures::index_vec::{IndexSlice, IndexVec};
+use data_structures::{bit_set::BitSet, WorkQueue};
+use hir::{BranchId, NetId, Type, Unknown};
+use ir::ids::{PortId, SyntaxCtx};
+use ir::{PrintOnFinish, Spanned, StopTaskKind};
+use middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, LocationKind};
+use middle::derivatives::RValueAutoDiff;
+use middle::dfa::lattice::FlatSet;
+use middle::RValue::{Comparison, DoubleArgMath, SingleArgMath};
+use middle::{
     BinOp, COperand, COperandData, CallArg, CfgConversion, CfgFunctions, CfgInputs, ConstVal,
     Derivative, LocalDeclaration, LocalKind, Mir, Operand, OperandData, ParameterInput, RValue,
     SimpleConstVal, StmntKind,
 };
-use openvaf_pass::{
+use pass::{
     program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph},
     BackwardSlice, Strip,
 };
-use openvaf_session::sourcemap::{Span, StringLiteral};
+use session::sourcemap::{Span, StringLiteral};
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::FromIterator;
 
-use openvaf_data_structures::index_vec::index_vec;
-use openvaf_session::sourcemap::span::DUMMY_SP;
+use data_structures::index_vec::index_vec;
+use session::sourcemap::span::DUMMY_SP;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum AcLoadFunctionCall {

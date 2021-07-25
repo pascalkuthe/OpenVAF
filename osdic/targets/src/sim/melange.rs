@@ -9,7 +9,7 @@
  */
 
 use crate::sim::{LimFunctionInfo, Simulator, SimulatorResult};
-use openvaf_data_structures::index_vec::index_box;
+use data_structures::index_vec::index_box;
 use osdi_types::Type;
 
 pub fn simulator() -> SimulatorResult {

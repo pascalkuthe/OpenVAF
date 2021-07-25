@@ -1,0 +1,27 @@
+[package]
+name = "syntax"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+
+[dependencies]
+
+tracing = "0.1.29"
+
+data-structures = {version = "0.0.0", path = "../data_structures" }
+
+parser = {version = "0.0.0", path = "../parser" }
+preprocessor = {version = "0.0.0", path = "../preprocessor" }
+vfs = {version = "0.0.0", path = "../vfs" }
+
+derive_more = "0.99.16"
+linkme = "0.2.7"
+rowan = "0.14.1"

@@ -2,7 +2,7 @@
 name = "osdic-middle"
 version = "0.1.0"
 authors = ["DSPOM"]
-edition = "2018"
+edition = "2021"
 repository = "https://gitlab.com/DSPOM/OpenVAF"
 description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
 license = "GPL-3.0"
@@ -15,18 +15,18 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-openvaf-data-structures = { version = "0.8.0", path = "../../compiler_lib/data_structures" }
-openvaf-session = { version = "0.8.0", path = "../../compiler_lib/session" }
-openvaf-diagnostics = { version = "0.8.0", path = "../../compiler_lib/diagnostics" }
+data-structures = { version = "0.0.0", path = "../../crates/data_structures" }
+session = { version = "0.0.0", path = "../../crates/session" }
+diagnostics = { version = "0.0.0", path = "../../crates/diagnostics" }
 osdic-target = { version = "0.1.0", path = "../targets" }
 
-openvaf-middle = { version = "0.8.0", path = "../../compiler_lib/middle" }
-openvaf-ir = { version = "0.8.0", path = "../../compiler_lib/ir" }
-openvaf-pass = { version = "0.8.0", path = "../../compiler_lib/pass" }
-openvaf-hir = { version = "0.8.0", path = "../../compiler_lib/hir" }
-openvaf-parser = { version = "0.8.0", path = "../../compiler_lib/parser" }
-openvaf-preprocessor = { version = "0.8.0", path = "../../compiler_lib/preprocessor" }
-openvaf-ast-lowering = { version = "0.8.0", path = "../../compiler_lib/ast_lowering"}
+middle = { version = "0.0.0", path = "../../crates/middle" }
+ir = { version = "0.0.0", path = "../../crates/ir" }
+pass = { version = "0.0.0", path = "../../crates/pass" }
+hir = { version = "0.0.0", path = "../../crates/hir" }
+parser = { version = "0.0.0", path = "../../crates/parser_old" }
+preprocessor = { version = "0.0.0", path = "../../crates/preprocessor" }
+ast-lowering = { version = "0.0.0", path = "../../crates/ast_lowering"}
 
 tracing = "0.1"
 itertools = "0.10"

@@ -44,10 +44,7 @@ impl<T: OSDIAbi, const N: usize> OSDIAbi for [T; N] {
     fn osdi_type() -> Type {
         T::osdi_type().with_info(|info| {
             let mut info = info.clone();
-            info.dimensions.push(
-                N.try_into()
-                    .expect("OSDI supports at most u32::MAX size arrys"),
-            );
+            info.dimensions.push(N.try_into().expect("OSDI supports at most u32::MAX size arrys"));
             Type::intern(info)
         })
     }

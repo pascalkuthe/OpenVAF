@@ -8,7 +8,7 @@
  *  *****************************************************************************************
  */
 
-use openvaf_data_structures::index_vec::{define_index_type, IndexBox};
+use data_structures::index_vec::{define_index_type, IndexBox};
 use osdi_types::Type;
 use thiserror::Error;
 

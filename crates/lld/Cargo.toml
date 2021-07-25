@@ -1,0 +1,13 @@
+[package]
+name = "lld"
+version = "110.0.1"
+
+[dependencies]
+libc = "0.2.97"
+
+[build-dependencies]
+cc = "1.0.68"
+lazy_static = "1.4.0"
+regex = "1.5.4"
+semver = "0.11.0"
+llvm-sys = "110.0.1"

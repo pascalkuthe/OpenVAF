@@ -1,0 +1,20 @@
+[package]
+name = "sourcegen"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2018"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+
+proc-macro2 = "1.0"
+quote = "1.0"
+ungrammar = "1.14"
+xshell = "0.1"

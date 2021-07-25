@@ -86,12 +86,7 @@ impl ModelData {
         info_store: &ModelInfoStore,
         val: T,
     ) {
-        val.write(
-            self.0
-                .access()
-                .as_ptr()
-                .add(info_store.parameters[param].model_data_offset),
-        )
+        val.write(self.0.access().as_ptr().add(info_store.parameters[param].model_data_offset))
     }
 
     /// Sets a parameter and marks its values as given
@@ -109,12 +104,7 @@ impl ModelData {
         val: T,
     ) {
         self.mark_parameter_as_set(param, info_store, true);
-        val.write(
-            self.0
-                .access()
-                .as_ptr()
-                .add(info_store.parameters[param].model_data_offset),
-        )
+        val.write(self.0.access().as_ptr().add(info_store.parameters[param].model_data_offset))
     }
 
     // /// # Safety

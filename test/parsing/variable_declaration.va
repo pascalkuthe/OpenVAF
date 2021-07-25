@@ -1,7 +1,0 @@
-module test ();
-    real x;
-    integer y,z;//the default value is only here to test whether this crashes; Expressions are testes separately
-    time t;
-    realtime rt;
-    analog x = 2==y;
-endmodule

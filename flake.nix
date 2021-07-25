@@ -23,6 +23,11 @@
       nameValuePair = name: value: { inherit name value; };
       genAttrs = names: f: builtins.listToAttrs (map (n: nameValuePair n (f n)) names);
       allSystems = [ "x86_64-linux" "aarch64-linux" "i686-linux" "x86_64-darwin" ];
+      rust-analyzer-overlay = final: prev: {
+        rust-analyzer=prev.rust-analyzer.override{
+          rustSrc="${final.rust-bin.nightly.latest.rust-src}/lib/rustlib/src/rust/library";
+        };
+      };
 
       forSystems = systems: f: genAttrs systems (
         system: f rec {
@@ -31,6 +36,7 @@
             inherit system;
             overlays = [
               rust.overlay
+              rust-analyzer-overlay
             ];
           };
           dep = import nix/dependencies.nix { inherit pkgs; lib=nixpkgs.lib; };
@@ -52,7 +58,9 @@
 
               nativeBuildInputs = with pkgs; dep.nativeBuildInputs ++ [
                 # rust-bin.stable.latest.default
-                rust-bin.stable.latest.default
+                rust-bin.nightly.latest.default
+                rust-analyzer
+                
                 cargo-expand
                 crate2nix
                 cargo-outdated

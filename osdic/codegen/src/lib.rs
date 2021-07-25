@@ -10,8 +10,8 @@
 
 mod cfg;
 
-use openvaf_codegen_llvm::inkwell::context::Context;
-use openvaf_codegen_llvm::inkwell::targets::{InitializationConfig, Target};
+use codegen_llvm::inkwell::context::Context;
+use codegen_llvm::inkwell::targets::{InitializationConfig, Target};
 
 pub(super) struct CodeGenCfg {
     msvc: bool,

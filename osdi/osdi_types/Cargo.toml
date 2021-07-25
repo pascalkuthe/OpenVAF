@@ -2,7 +2,7 @@
 name = "osdi-types"
 version = "0.1.0"
 authors = ["DSPOM"]
-edition = "2018"
+edition = "2021"
 repository= "https://gitlab.com/DSPOM/osdi"
 description = "The offical implimentation of the OSDI Model-Info-Store"
 license="BSD+Patent"

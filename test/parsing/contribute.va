@@ -1,5 +1,0 @@
-module test;
-    analog begin
-        I(x)<+(V(x)-V0)**2/(R1R2);
-    end
-endmodule

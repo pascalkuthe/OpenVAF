@@ -11,23 +11,23 @@
 use crate::frontend::{GeneralOsdiCall, GeneralOsdiInput};
 use crate::storage_locations::{StorageLocation, StorageLocations};
 use crate::subfuncitons::automatic_slicing::function_cfg_from_full_cfg;
-use openvaf_data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
-use openvaf_data_structures::{bit_set::BitSet, HashMap};
-use openvaf_hir::SyntaxCtx;
-use openvaf_ir::ids::ParameterId;
-use openvaf_ir::{Spanned, Type};
-use openvaf_middle::cfg::builder::CfgBuilder;
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind};
-use openvaf_middle::derivatives::RValueAutoDiff;
-use openvaf_middle::dfa::lattice::FlatSet;
-use openvaf_middle::{
+use data_structures::index_vec::{IndexBox, IndexSlice, IndexVec};
+use data_structures::{bit_set::BitSet, HashMap};
+use hir::SyntaxCtx;
+use ir::ids::ParameterId;
+use ir::{Spanned, Type};
+use middle::cfg::builder::CfgBuilder;
+use middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, TerminatorKind};
+use middle::derivatives::RValueAutoDiff;
+use middle::dfa::lattice::FlatSet;
+use middle::{
     BinOp, COperand, COperandData, CallArg, CfgConversion, CfgFunctions, ComparisonOp, Expression,
     Local, LocalDeclaration, LocalKind, Mir, OperandData, Parameter, ParameterCallType,
     ParameterConstraint, ParameterExcludeConstraint, ParameterInput, PrintOnFinish, RValue,
     StmntKind, StopTaskKind, TyRValue, VariableId, VariableLocalKind,
 };
-use openvaf_pass::program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph};
-use openvaf_session::sourcemap::Span;
+use pass::program_dependence::{InvProgramDependenceGraph, ProgramDependenceGraph};
+use session::sourcemap::Span;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;

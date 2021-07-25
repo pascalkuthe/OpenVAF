@@ -240,27 +240,12 @@ impl Display for TypeInfo {
 }
 
 impl TypeInfo {
-    pub const REAL: Self = Self {
-        element: SimpleType::Real,
-        dimensions: Vec::new(),
-    };
-    pub const INT: Self = Self {
-        element: SimpleType::Integer,
-        dimensions: Vec::new(),
-    };
-    pub const STRING: Self = Self {
-        element: SimpleType::String,
-        dimensions: Vec::new(),
-    };
-    pub const BOOL: Self = Self {
-        element: SimpleType::Bool,
-        dimensions: Vec::new(),
-    };
+    pub const REAL: Self = Self { element: SimpleType::Real, dimensions: Vec::new() };
+    pub const INT: Self = Self { element: SimpleType::Integer, dimensions: Vec::new() };
+    pub const STRING: Self = Self { element: SimpleType::String, dimensions: Vec::new() };
+    pub const BOOL: Self = Self { element: SimpleType::Bool, dimensions: Vec::new() };
 
-    pub const CMPLX: Self = Self {
-        element: SimpleType::Cmplx,
-        dimensions: Vec::new(),
-    };
+    pub const CMPLX: Self = Self { element: SimpleType::Cmplx, dimensions: Vec::new() };
 
     pub fn has_derviative(&self) -> bool {
         self.dimensions.is_empty() && matches!(self.element, SimpleType::Real | SimpleType::Integer)

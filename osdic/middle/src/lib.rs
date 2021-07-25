@@ -11,22 +11,22 @@
 use crate::storage_locations::StorageLocations;
 pub use frontend::{run_frontend, run_frontend_from_ts, GeneralOsdiCall};
 use itertools::Itertools;
-use openvaf_data_structures::{bit_set::BitSet, HashMap};
-use openvaf_diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
-use openvaf_ir::ids::SyntaxCtx;
-use openvaf_ir::Spanned;
-use openvaf_middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, START_BLOCK};
-use openvaf_middle::const_fold::{ConstantPropagation, NoInputConstResolution};
-use openvaf_middle::osdi_types::ConstVal::Scalar;
-use openvaf_middle::osdi_types::SimpleConstVal::Real;
-use openvaf_middle::{
+use data_structures::{bit_set::BitSet, HashMap};
+use diagnostics::{DiagnosticSlicePrinter, MultiDiagnostic, UserResult};
+use ir::ids::SyntaxCtx;
+use ir::Spanned;
+use middle::cfg::{ControlFlowGraph, IntLocation, InternedLocations, START_BLOCK};
+use middle::const_fold::{ConstantPropagation, NoInputConstResolution};
+use middle::osdi_types::ConstVal::Scalar;
+use middle::osdi_types::SimpleConstVal::Real;
+use middle::{
     CfgFunctions, LocalKind, Mir, OperandData, RValue, StmntKind, VariableLocalKind,
 };
-use openvaf_pass::{
+use pass::{
     visit::CfgVisitor, BackwardSlice, DeadCodeElimination, LiveLocalAnalysis, RemoveDeadLocals,
     Simplify, SimplifyBranches, Visit,
 };
-use openvaf_session::sourcemap::span::DUMMY_SP;
+use session::sourcemap::span::DUMMY_SP;
 use std::fs::File;
 pub use subfuncitons::OsdiFunctions;
 pub use topology::CircuitTopology;
