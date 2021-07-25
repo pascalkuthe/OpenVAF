@@ -33,7 +33,7 @@ tracing = { version = "0.1.26", features = ["max_level_trace"] }
 
 tracing-subscriber = { version = "0.2.19", features = ["fmt","json"] }
 tracing-appender = "0.1.2"
-clap = "3.0.0-beta.2"
+pico-args = "0.4.2"
 console = "0.14.1"
 indicatif = "0.16.2"
 
@@ -50,20 +50,19 @@ exitcode = "1.1.2"
 derive_more = "0.99.16"
 
 
-[profile.dev]
-incremental = false
+
 
 [profile.dev.package.backtrace]
 opt-level = 3
 
 [profile.release]
-incremental = false
 debug = true
 debug-assertions = true
 
 
 [features]
 default = []
+
 
 
 

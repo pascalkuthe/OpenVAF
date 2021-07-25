@@ -8,13 +8,20 @@
  *  *****************************************************************************************
  */
 
-use clap::Clap;
-use color_eyre::Section;
+use color_eyre::{Report, Section};
 use openvaf_test::framework::{run_tests, Config};
 
 pub fn main() {
     color_eyre::install().expect("Failed to install error and panic handeling hook");
-    match run_tests(&Config::parse()) {
+    let conf = match Config::parse() {
+        Ok(config) => config,
+        Err(err) => {
+            println!("{}", err);
+            std::process::exit(exitcode::USAGE)
+        }
+    };
+
+    match run_tests(&conf) {
         Ok(true) => std::process::exit(exitcode::OK),
         Ok(false) => std::process::exit(exitcode::SOFTWARE),
 

@@ -7,45 +7,23 @@
  *  distributed except according to the terms contained in the LICENSE file.
  *  *****************************************************************************************
  */
+mod cli;
 mod collection;
 mod models;
 mod runner;
 pub(crate) mod session;
 
 use crate::framework::models::Model;
-use clap::clap_derive::Clap;
 pub use collection::TestInitInfo;
 pub use eyre::Result;
-use eyre::WrapErr;
 use linkme::distributed_slice;
 pub use runner::run_tests;
 pub use session::TestSession;
-use std::ffi::OsStr;
 use std::fmt::{Debug, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-fn shellexpand_input(raw: &OsStr) -> std::result::Result<PathBuf, String> {
-    shellexpand(raw).map_err(|err| {
-        println!("{:?}", err);
-        "".to_string()
-    })
-}
-
-fn shellexpand(raw: &OsStr) -> Result<PathBuf> {
-    if let Some(utf8_str) = raw.to_str() {
-        let root_file: &str = &shellexpand::full(utf8_str)?;
-        Path::new(root_file)
-            .canonicalize()
-            .with_context(|| format!("Failed to open {}", root_file))
-    } else {
-        let path = Path::new(raw);
-        path.canonicalize()
-            .with_context(|| format!("Failed to open {}", path.display()))
-    }
-}
-
-#[derive(Clap)]
-#[clap(name = "openvaf-test")]
+//#[derive(Clap)]
+//#[clap(name = "openvaf-test")]
 /// The OpenVAF test suite is intended to validate the correctness of OpenVAF compiler toolchain.
 ///
 /// It is usually intended for developers and mostly not very useful to users.
@@ -66,7 +44,7 @@ pub struct Config {
     /// openvaf-test --tests MIDDLE, Parser_Units
     ///
     /// Runs the Parser_Units and MIDDLE test.
-    #[clap(long)]
+    //#[clap(long)]
     pub tests: Option<Vec<String>>,
 
     /// Filter which test cases to run.
@@ -79,7 +57,7 @@ pub struct Config {
     /// openvaf-test --tests-cases module_header, HICUML2
     ///
     /// Runs the HICUML2 test_case (of the middle test for example) and the module_header test_case of Parser_Units test.
-    #[clap(long)]
+    // #[clap(long)]
     pub test_cases: Option<Vec<String>>,
 
     /// Filter which models to run tests for.
@@ -94,15 +72,15 @@ pub struct Config {
     /// openvaf-test --models BSIM6, HICUML2
     ///
     /// Runs tests for the BSIM v6 and HICUM/L2 models.
-    #[clap(long)]
+    //#[clap(long)]
     pub models: Option<Vec<String>>,
 
     /// The path to the src directory of the test_suite where the tested VA files can be found
-    #[clap(long, parse(try_from_os_str = shellexpand_input), default_value = "test")]
+    //#[clap(long, parse(try_from_os_str = shellexpand_input), default_value = "test")]
     pub src_dirs: PathBuf,
 
     /// Setting this flag causes the test_suite to emit a textual representation of the MIR to the test_results directory
-    #[clap(long)]
+    //#[clap(long)]
     pub print_mir: bool,
 }
 

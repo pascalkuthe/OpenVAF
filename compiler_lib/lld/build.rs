@@ -7,7 +7,6 @@
  *  distributed except according to the terms contained in the LICENSE file.
  *  *****************************************************************************************
  */
-
 extern crate cc;
 #[macro_use]
 extern crate lazy_static;
@@ -15,7 +14,7 @@ extern crate regex;
 extern crate semver;
 
 use regex::Regex;
-use semver::{BuildMetadata, Prerelease, Version};
+use semver::Version;
 use std::env;
 use std::ffi::OsStr;
 use std::io::{self, ErrorKind};
@@ -144,8 +143,8 @@ fn is_blacklisted_llvm(llvm_version: &Version) -> Option<&'static str> {
             major,
             minor,
             patch,
-            pre: Prerelease::EMPTY,
-            build: BuildMetadata::EMPTY,
+            pre: vec![],
+            build: vec![],
         };
 
         if &bad_version == llvm_version {
@@ -224,6 +223,74 @@ fn llvm_version<S: AsRef<OsStr>>(binary: S) -> io::Result<Version> {
     Ok(Version::parse(&s).unwrap())
 }
 
+/// Get the names of the dylibs required by LLVM, including the C++ standard
+/// library.
+fn get_system_libraries() -> Vec<String> {
+    llvm_config("--system-libs")
+        .split(&[' ', '\n'] as &[char])
+        .filter(|s| !s.is_empty())
+        .map(|flag| {
+            if cfg!(target_env = "msvc") {
+                // Same as --libnames, foo.lib
+                assert!(flag.ends_with(".lib"));
+                &flag[..flag.len() - 4]
+            } else {
+                // Linker flags style, -lfoo
+                assert!(flag.starts_with("-l"));
+                &flag[2..]
+            }
+        })
+        .chain(get_system_libcpp())
+        .map(str::to_owned)
+        .collect::<Vec<String>>()
+}
+
+/// Get the library that must be linked for C++, if any.
+fn get_system_libcpp() -> Option<&'static str> {
+    if cfg!(target_env = "msvc") {
+        // MSVC doesn't need an explicit one.
+        None
+    } else if cfg!(target_os = "macos") || cfg!(target_os = "freebsd") {
+        // On OS X 10.9 and later, LLVM's libc++ is the default. On earlier
+        // releases GCC's libstdc++ is default. Unfortunately we can't
+        // reasonably detect which one we need (on older ones libc++ is
+        // available and can be selected with -stdlib=lib++), so assume the
+        // latest, at the cost of breaking the build on older OS releases
+        // when LLVM was built against libstdc++.
+        Some("c++")
+    } else {
+        // Otherwise assume GCC's libstdc++.
+        // This assumption is probably wrong on some platforms, but would need
+        // testing on them.
+        Some("stdc++")
+    }
+}
+
+/// Get the names of libraries to link against.
+fn get_link_libraries() -> Vec<String> {
+    // Using --libnames in conjunction with --libdir is particularly important
+    // for MSVC when LLVM is in a path with spaces, but it is generally less of
+    // a hack than parsing linker flags output from --libs and --ldflags.
+    llvm_config("--libnames")
+        .split(&[' ', '\n'] as &[char])
+        .filter(|s| !s.is_empty())
+        .map(|name| {
+            // --libnames gives library filenames. Extract only the name that
+            // we need to pass to the linker.
+            if cfg!(target_env = "msvc") {
+                // LLVMfoo.lib
+                assert!(name.ends_with(".lib"));
+                &name[..name.len() - 4]
+            } else {
+                // libLLVMfoo.a
+                assert!(name.starts_with("lib") && name.ends_with(".a"));
+                &name[3..name.len() - 2]
+            }
+        })
+        .map(str::to_owned)
+        .collect::<Vec<String>>()
+}
+
 fn get_llvm_cxxflags() -> String {
     let output = llvm_config("--cxxflags");
 
@@ -251,6 +318,11 @@ fn get_llvm_cxxflags() -> String {
         .join(" ")
 }
 
+fn is_llvm_debug() -> bool {
+    // Has to be either Debug or Release
+    llvm_config("--build-mode").contains("Debug")
+}
+
 fn main() {
     // Build the extra wrapper functions.
     std::env::set_var("CXXFLAGS", get_llvm_cxxflags());
@@ -263,8 +335,59 @@ fn main() {
         return;
     }
 
-    if let Ok(val) = std::env::var("LLD_LIB_DIR") {
-        println!("cargo:libdir={}", val); // DEP_LLVM_LIBDIR
+    let libdir = llvm_config("--libdir");
+
+    // Export information to other crates
+    println!("cargo:config_path={}", LLVM_CONFIG_PATH.display()); // will be DEP_LLVM_CONFIG_PATH
+    println!("cargo:libdir={}", libdir); // DEP_LLVM_LIBDIR
+
+    // Link LLVM libraries
+    println!("cargo:rustc-link-search=native={}", libdir);
+    let blacklist = vec!["LLVMLineEditor"];
+    for name in get_link_libraries()
+        .iter()
+        .filter(|n| !blacklist.iter().any(|blacklisted| n.contains(*blacklisted)))
+    {
+        println!("cargo:rustc-link-lib=static={}", name);
     }
-    println!("cargo:rerun-if-env-changed=LLD_LIB_DIR");
+
+    // Link system libraries
+    for name in get_system_libraries() {
+        println!("cargo:rustc-link-lib=dylib={}", name);
+    }
+
+    let use_debug_msvcrt = env::var_os(format!(
+        "LLVM_SYS_{}_USE_DEBUG_MSVCRT",
+        env!("CARGO_PKG_VERSION_MAJOR")
+    ))
+    .is_some();
+    if cfg!(target_env = "msvc") && (use_debug_msvcrt || is_llvm_debug()) {
+        println!("cargo:rustc-link-lib=msvcrtd");
+    }
+
+    // Link libffi if the user requested this workaround.
+    // See https://bitbucket.org/tari/llvm-sys.rs/issues/12/
+    let force_ffi = env::var_os(format!(
+        "LLVM_SYS_{}_FFI_WORKAROUND",
+        env!("CARGO_PKG_VERSION_MAJOR")
+    ))
+    .is_some();
+    if force_ffi {
+        println!("cargo:rustc-link-lib=dylib=ffi");
+    }
+
+    println!("cargo:rustc-link-lib=static=lldCOFF");
+    println!("cargo:rustc-link-lib=static=lldCommon");
+    println!("cargo:rustc-link-lib=static=lldCore");
+    println!("cargo:rustc-link-lib=static=lldDriver");
+    println!("cargo:rustc-link-lib=static=lldELF");
+    println!("cargo:rustc-link-lib=static=lldMachO");
+    println!("cargo:rustc-link-lib=static=lldMinGW");
+    println!("cargo:rustc-link-lib=static=lldReaderWriter");
+    println!("cargo:rustc-link-lib=static=lldWasm");
+    println!("cargo:rustc-link-lib=static=lldYAML");
+
+    if cfg!(not(target_os = "windows")) {
+        println!("cargo:rustc-link-lib=dylib=ffi");
+    }
 }
