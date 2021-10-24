@@ -2,7 +2,7 @@
 name = "test"
 version = "0.0.0"
 authors = ["DSPOM"]
-edition = "2018"
+edition = "2021"
 repository= "https://gitlab.com/DSPOM/OpenVAF"
 description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
 license="GPL-3.0"
