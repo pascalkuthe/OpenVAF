@@ -8,6 +8,8 @@ description = "A compiler frontend for VerilogA aimed predominently at compact m
 license="GPL-3.0"
 readme="../README.md"
 
+[lib]
+doctest = false
 
 [badges]
 maintenance = { status = "actively-developed" }

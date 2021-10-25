@@ -14,12 +14,12 @@ mod node_ext;
 mod traits;
 
 pub use self::{
-    expr_ext::{ArrayExprKind, BinOp, LiteralKind, PrefixOp},
+    expr_ext::{ArrayExprKind, BinaryOp, LiteralKind, UnaryOp},
     generated::{nodes::*, tokens::*},
-    node_ext::{PathSegment,PathSegmentKind},
+    node_ext::{PathSegment, PathSegmentKind, AssignOp, BranchKind, ConstraintKind},
     traits::*,
 };
-use crate::syntax_node::{SyntaxNode, SyntaxNodeChildren, SyntaxToken};
+use crate::syntax_node::{SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
 use parser::SyntaxKind;
 use std::marker::PhantomData;
 
@@ -88,8 +88,29 @@ impl<N: AstNode> Iterator for AstChildren<N> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct AstChildTokens<N> {
+    inner: SyntaxElementChildren,
+    ph: PhantomData<N>,
+}
+
+impl<N> AstChildTokens<N> {
+    fn new(parent: &SyntaxNode) -> Self {
+        AstChildTokens { inner: parent.children_with_tokens(), ph: PhantomData }
+    }
+}
+
+impl<N: AstToken> Iterator for AstChildTokens<N> {
+    type Item = N;
+    fn next(&mut self) -> Option<N> {
+        self.inner.find_map(|child| N::cast(child.into_token()?))
+    }
+}
+
 mod support {
-    use super::{AstChildren, AstNode, SyntaxKind, SyntaxNode, SyntaxToken};
+    use super::{
+        AstChildTokens, AstChildren, AstNode, AstToken, SyntaxKind, SyntaxNode, SyntaxToken,
+    };
 
     pub(super) fn child<N: AstNode>(parent: &SyntaxNode) -> Option<N> {
         parent.children().find_map(N::cast)
@@ -97,6 +118,10 @@ mod support {
 
     pub(super) fn children<N: AstNode>(parent: &SyntaxNode) -> AstChildren<N> {
         AstChildren::new(parent)
+    }
+
+    pub(super) fn child_token<N: AstToken>(parent: &SyntaxNode) -> AstChildTokens<N> {
+        AstChildTokens::new(parent)
     }
 
     pub(super) fn token(parent: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {

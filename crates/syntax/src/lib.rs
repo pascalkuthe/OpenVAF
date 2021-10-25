@@ -13,29 +13,30 @@ mod parsing;
 mod ptr;
 mod syntax_node;
 mod token_text;
+mod validation;
 
 use data_structures::pretty;
 use derive_more::Display;
-use preprocessor::sourcemap::{CtxSpan, SourceContext};
+use preprocessor::sourcemap::{CtxSpan, FileSpan, SourceContext};
 use std::{cmp::Ordering, marker::PhantomData, sync::Arc};
 use vfs::FileId;
 
 pub use ast::AstNode;
 pub use parser::{SyntaxKind, T};
 pub use preprocessor::{
-    diagnostics::{MacroOverwritten, PreprocessorDiagnostic},
-    preprocess, sourcemap, FileReadError, Preprocess, SourceProvider,
+    diagnostics::PreprocessorDiagnostic, preprocess, sourcemap, FileReadError, Preprocess,
+    SourceProvider,
 };
+pub use ptr::{AstPtr, SyntaxNodePtr};
 pub use rowan::{
     Direction, GreenNode, NodeOrToken, SyntaxText, TextRange, TextSize, TokenAtOffset, WalkEvent,
 };
 pub use syntax_node::{SyntaxNode, SyntaxToken};
 pub use token_text::TokenText;
-pub use ptr::{AstPtr,SyntaxNodePtr};
 
 #[derive(Display, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum SyntaxError {
-    #[display(fmt = "unexpected token {}; expected {}", "found", "expected")]
+    #[display(fmt = "unexpected token '{}'; expected {}", "found", "expected")]
     UnexpectedToken {
         expected: pretty::List<Vec<SyntaxKind>>,
         found: SyntaxKind,
@@ -43,13 +44,35 @@ pub enum SyntaxError {
         expected_at: Option<TextRange>,
         missing_delimeter: bool,
     },
-}
 
-impl SyntaxError {
-    pub fn range(&self) -> TextRange {
-        let SyntaxError::UnexpectedToken { span, .. } = *self;
-        span
-    }
+    #[display(fmt = "unexpected '{}' token", "found")]
+    SurplusToken { found: SyntaxKind, span: TextRange },
+
+    #[display(fmt = "unexpected token")]
+    MissingToken { expected: SyntaxKind, span: TextRange, expected_at: TextRange },
+
+    #[display(fmt = "$root is only allowed as a prefix")]
+    IllegalRootSegment { path_segment: TextRange, prefix: Option<TextRange> },
+
+    #[display(fmt = "declarations in blocks are only allowed before the first stmt")]
+    BlockItemsAfterStmt { items: Vec<AstPtr<ast::BlockItem>>, first_stmt: TextRange },
+    #[display(fmt = "declarations in blocks require an explicit scope")]
+    BlockItemsWithoutScope { items: Vec<AstPtr<ast::BlockItem>>, begin_token: TextRange },
+
+    #[display(fmt = "functions may not contain any items after the function body")]
+    FunItemsAfterBody { items: Vec<AstPtr<ast::FunctionItem>>, body: TextRange },
+
+    #[display(fmt = "functions may only contain one body")]
+    MultipleFunBodys { additional_bodys: Vec<TextRange>, body: AstPtr<ast::Stmt> },
+
+    #[display(fmt = "function is missing a body")]
+    FunWithoutBody { fun: TextRange },
+
+    #[display(fmt = "branch declaration require 1 or 2 nets; found {}", "cnt")]
+    IllegalBranchNodeCnt { arg_list: TextRange, cnt: usize },
+
+    #[display(fmt = "illegal expr was used to declare a branch node!")]
+    IllegalBranchNodeExpr { single: bool, illegal_nodes: Vec<TextRange> },
 }
 
 /// `Parse` is the result of the parsing: a syntax tree and a collection of
@@ -110,11 +133,10 @@ impl<T> Parse<T> {
         (ctx, relative_pos)
     }
 
-    pub fn to_span(&self, range: TextRange, sm: &sourcemap::SourceMap) -> CtxSpan {
+    pub fn to_ctx_span(&self, range: TextRange, sm: &sourcemap::SourceMap) -> CtxSpan {
         let (ctx_range1, ctx1, offset1) = self.find_ctx_range(range.start());
         if range.end() <= ctx_range1.end() {
             // Special case common case that start and end are in the same SourceContext
-            println!("found ctx {}", ctx1);
             CtxSpan { range: range - ctx_range1.start() + offset1, ctx: ctx1 }
         } else {
             let (ctx_range2, ctx2, offset2) = self.find_ctx_range(range.end());
@@ -123,13 +145,18 @@ impl<T> Parse<T> {
             if ctx1 == ctx2 {
                 CtxSpan { range: TextRange::new(start, end), ctx: ctx1 }
             } else {
-                let (ctx, range1, range2) = sm.lowest_common_parent(ctx1, ctx2);
-                let range1 = range1.unwrap_or(TextRange::empty(start));
-                let range2 = range2.unwrap_or(TextRange::empty(end));
+                let (ctx, range1, range2) = sm.lowest_common_parent(
+                    CtxSpan { range: TextRange::empty(start), ctx: ctx1 },
+                    CtxSpan { range: TextRange::empty(end), ctx: ctx2 },
+                );
 
                 CtxSpan { range: range1.cover(range2), ctx }
             }
         }
+    }
+
+    pub fn to_file_span(&self, range: TextRange, sm: &sourcemap::SourceMap) -> FileSpan {
+        self.to_ctx_span(range, sm).to_file_span(sm)
     }
 }
 
@@ -171,15 +198,15 @@ impl Parse<SyntaxNode> {
 }
 
 impl Parse<SourceFile> {
-    pub fn debug_dump(&self) -> String {
-        use std::fmt::Write;
+    // pub fn debug_dump(&self) -> String {
+    //     use std::fmt::Write;
 
-        let mut buf = format!("{:#?}", self.tree().syntax());
-        for err in self.errors.iter() {
-            write!(buf, "error {:?}: {}\n", err.range(), err).unwrap();
-        }
-        buf
-    }
+    //     let mut buf = format!("{:#?}", self.tree().syntax());
+    //     for err in self.errors.iter() {
+    //         writeln!(buf, "error {:?}: {}", err.range(), err).unwrap();
+    //     }
+    //     buf
+    // }
 
     // pub fn reparse(&self, indel: &Indel) -> Parse<SourceFile> {
     //     self.full_reparse(indel)
@@ -209,14 +236,14 @@ pub use crate::ast::SourceFile;
 
 impl SourceFile {
     pub fn parse(db: &dyn SourceProvider, root_file: FileId) -> Parse<SourceFile> {
-        let (green, errors, ctx_map) = parsing::parse_text(db, root_file);
+        let (green, mut errors, ctx_map) = parsing::parse_text(db, root_file);
         let root = SyntaxNode::new_root(green.clone());
 
         // if cfg!(debug_assertions) {
         //     validation::validate_block_structure(&root);
         // }
 
-        // errors.extend(validation::validate(&root));
+        validation::validate(&root, &mut errors);
 
         assert_eq!(root.kind(), SyntaxKind::SOURCE_FILE);
 

@@ -41,6 +41,7 @@ mod anchored_path;
 pub mod loader;
 mod path_interner;
 mod vfs_path;
+pub mod va_std;
 
 use std::{fmt, mem};
 
@@ -108,6 +109,10 @@ impl Vfs {
         self.data.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     /// Id of the given path if it exists in the `Vfs` and is not deleted.
     pub fn file_id(&self, path: &VfsPath) -> Option<FileId> {
         self.interner.get(path).filter(|&it| self.get(it).is_some())
@@ -164,6 +169,13 @@ impl Vfs {
         *self.get_mut(file_id) = contents;
         self.changes.push(ChangedFile { file_id, change_kind });
         true
+    }
+
+
+    pub fn add_virt_file(&mut self, name: &str, src: &str) -> FileId {
+        let path = VfsPath::new_virtual_path(name.to_owned());
+        self.set_file_contents(path.clone(), Some(src.as_bytes().to_owned()));
+        self.file_id(&path).unwrap()
     }
 
     /// Returns `true` if the `Vfs` contains [changes](ChangedFile).

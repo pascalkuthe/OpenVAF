@@ -8,7 +8,7 @@
  *  *****************************************************************************************
  */
 
-use std::{convert::TryFrom, ops::RangeBounds};
+use std::convert::TryFrom;
 
 use data_structures::{
     index_vec::{define_index_type, index_vec, IndexVec},
@@ -83,6 +83,23 @@ impl FileSpan {
     }
 }
 
+// TODO switch to ariadne
+// impl ariadne::Span for FileSpan{
+//     type SourceId = FileId;
+
+//     fn source(&self) -> &Self::SourceId {
+//         &self.file
+//     }
+
+//     fn start(&self) -> usize {
+//         self.range.start().into()
+//     }
+
+//     fn end(&self) -> usize {
+//         self.range.end().into()
+//     }
+// }
+
 /// A CtxSpan refers a contious range of Text a SourceContext (macro expansion or file).
 /// The range is relative to the start of the particular context so thgat ranges can be changed
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -120,9 +137,7 @@ impl CtxSpan {
         if self.ctx == other.ctx {
             Self { range: self.range.cover(other.range), ctx: self.ctx }
         } else {
-            let (ctx, range1, range2) = sm.lowest_common_parent(self.ctx, other.ctx);
-            let range1 = range1.unwrap_or(self.range);
-            let range2 = range2.unwrap_or(other.range);
+            let (ctx, range1, range2) = sm.lowest_common_parent(self, other);
 
             Self { range: range1.cover(range2), ctx }
         }
@@ -189,20 +204,20 @@ impl SourceMap {
     #[must_use]
     pub fn lowest_common_parent(
         &self,
-        sctx1: SourceContext,
-        sctx2: SourceContext,
-    ) -> (SourceContext, Option<TextRange>, Option<TextRange>) {
+        span1: CtxSpan,
+        span2: CtxSpan,
+    ) -> (SourceContext, TextRange, TextRange) {
         // self.index() is used as a capacity because it is the lowest upper bound we know
-        let mut ancestors = HashMap::with_capacity(sctx2.index());
-        ancestors.insert(sctx1, None);
-        let mut current = sctx1;
+        let mut ancestors = HashMap::new();
+        ancestors.insert(span1.ctx, span1.range);
+        let mut current = span1.ctx;
         while let Some(call_site) = self.ctx_tree[current].call_site {
             current = call_site.ctx;
-            ancestors.insert(current, Some(call_site.range));
+            ancestors.insert(current, call_site.range);
         }
 
-        current = sctx2;
-        let mut current_call_span = None;
+        current = span2.ctx;
+        let mut current_call_span = span2.range;
 
         loop {
             if let Some(call_span) = ancestors.get(&current).copied() {
@@ -211,8 +226,30 @@ impl SourceMap {
 
             let span = self.ctx_tree[current].call_site.expect("CTXT paths dont intersect at root");
             current = span.ctx;
-            current_call_span = Some(span.range);
+            current_call_span = span.range;
         }
+    }
+
+    pub fn to_same_ctx(&self, spans: &mut [CtxSpan]) -> SourceContext {
+        let mut merge = (0, spans[0]);
+        for i in 1..spans.len() {
+            if spans[i].ctx != merge.1.ctx {
+                let (ctx, range1, range2) = self.lowest_common_parent(spans[i], spans[i - 1]);
+                spans[i] = CtxSpan { ctx, range: range1 };
+                if ctx != merge.1.ctx {
+                    merge = (i, CtxSpan { ctx, range: range2 });
+                }
+            }
+        }
+        spans[..merge.0].fill(merge.1);
+        merge.1.ctx
+    }
+
+    pub fn to_file_spans(&self, spans: &mut [CtxSpan]) -> (FileId, Vec<TextRange>) {
+        let ctx = self.to_same_ctx(spans);
+        let decl = self.ctx_data(ctx).decl;
+        let ranges = spans.iter_mut().map(|span| decl.with_subrange(span.range).range).collect();
+        (decl.file, ranges)
     }
 
     pub fn ctx_data(&self, ctx: SourceContext) -> &SourceContextData {

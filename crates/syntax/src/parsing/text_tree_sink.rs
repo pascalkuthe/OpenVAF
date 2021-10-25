@@ -202,7 +202,7 @@ impl<'a> TextTreeSink<'a> {
             } else {
                 debug!("{:?} ; {:?} ; {:#?}", kind, span, &src[decl.range]);
             }
-            self.current_src = self.db.file_text(span.to_file_span(self.sm).file).unwrap();
+            self.current_src = src;
             self.ranges.push((range, ctx.0, ctx.1))
         }
         let range = span.to_file_span(self.sm).range;

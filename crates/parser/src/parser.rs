@@ -151,11 +151,11 @@ impl<'t> Parser<'t> {
         }
     }
 
-    pub(crate) fn expect_with(&mut self, kind: SyntaxKind, msg: Vec<SyntaxKind>) -> bool {
+    pub(crate) fn expect_with(&mut self, kind: SyntaxKind, msg: &[SyntaxKind]) -> bool {
         if self.eat(kind) {
             return true;
         }
-        self.error(self.unexpected_tokens_msg(msg));
+        self.error(self.unexpected_tokens_msg(msg.to_owned()));
         false
     }
 
@@ -173,10 +173,10 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// Create an error node and consume the next token.
-    pub(crate) fn err_and_bump(&mut self, err: SyntaxError) {
-        self.err_recover(err, TokenSet::EMPTY);
-    }
+    // Create an error node and consume the next token.
+    // pub(crate) fn err_and_bump(&mut self, err: SyntaxError) {
+    //     self.err_recover(err, TokenSet::EMPTY);
+    // }
 
     /// Create an error node and consume the next token.
     pub(crate) fn err_recover(&mut self, err: SyntaxError, recovery: TokenSet) -> bool {
@@ -255,13 +255,14 @@ impl Marker {
 
 pub(crate) struct CompletedMarker {
     start_pos: u32,
-    finish_pos: u32,
-    kind: SyntaxKind,
+    // finish_pos: u32,
+    // kind: SyntaxKind,
 }
 
 impl CompletedMarker {
-    fn new(start_pos: u32, finish_pos: u32, kind: SyntaxKind) -> Self {
-        CompletedMarker { start_pos, finish_pos, kind }
+    fn new(start_pos: u32, _finish_pos: u32, _kind: SyntaxKind) -> Self {
+        // CompletedMarker { start_pos, finish_pos, kind }
+        CompletedMarker { start_pos }
     }
 
     /// This method allows to create a new node which starts
@@ -288,22 +289,22 @@ impl CompletedMarker {
         new_pos
     }
 
-    /// Undo this completion and turns into a `Marker`
-    pub(crate) fn undo_completion(self, p: &mut Parser) -> Marker {
-        let start_idx = self.start_pos as usize;
-        let finish_idx = self.finish_pos as usize;
-        match &mut p.events[start_idx] {
-            Event::Start { kind, forward_parent: None } => *kind = TOMBSTONE,
-            _ => unreachable!(),
-        }
-        match &mut p.events[finish_idx] {
-            slot @ Event::Finish => *slot = Event::tombstone(),
-            _ => unreachable!(),
-        }
-        Marker::new(self.start_pos)
-    }
+    // /// Undo this completion and turns into a `Marker`
+    // pub(crate) fn undo_completion(self, p: &mut Parser) -> Marker {
+    //     let start_idx = self.start_pos as usize;
+    //     let finish_idx = self.finish_pos as usize;
+    //     match &mut p.events[start_idx] {
+    //         Event::Start { kind, forward_parent: None } => *kind = TOMBSTONE,
+    //         _ => unreachable!(),
+    //     }
+    //     match &mut p.events[finish_idx] {
+    //         slot @ Event::Finish => *slot = Event::tombstone(),
+    //         _ => unreachable!(),
+    //     }
+    //     Marker::new(self.start_pos)
+    // }
 
-    pub(crate) fn kind(&self) -> SyntaxKind {
-        self.kind
-    }
+    // pub(crate) fn kind(&self) -> SyntaxKind {
+    //     self.kind
+    // }
 }

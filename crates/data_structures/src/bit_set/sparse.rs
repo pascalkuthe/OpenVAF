@@ -37,7 +37,6 @@
 use crate::arrayvec::ArrayVec;
 use crate::bit_set::{BitSet, SubtractFromBitSet, UnionIntoBitSet};
 use crate::index_vec::Idx;
-use derivative::Derivative;
 use std::fmt::{Debug, Formatter};
 use std::{fmt, slice};
 
@@ -48,10 +47,19 @@ pub(super) const SPARSE_MAX: usize = 8;
 /// no duplicates.
 ///
 /// This type is used by `HybridBitSet`; do not use directly.
-#[derive(Derivative, PartialEq, Eq)]
-#[derivative(Clone(clone_from = "true"))]
+#[derive(PartialEq, Eq)]
 pub struct SparseBitSet<T> {
     pub(super) elems: ArrayVec<T, SPARSE_MAX>,
+}
+
+impl<T: Clone> Clone for SparseBitSet<T> {
+    fn clone_from(&mut self, source: &Self) {
+        self.elems.clone_from(&source.elems)
+    }
+
+    fn clone(&self) -> Self {
+        Self { elems: self.elems.clone() }
+    }
 }
 
 impl<T: Debug> Debug for SparseBitSet<T> {

@@ -44,7 +44,7 @@ pub(crate) struct Parser<'a, 'd> {
     relevant_tokens: IndexVec<RelevantTokenIdx, (RawToken, FullTokenIdx)>,
     curr: (RawToken, FullTokenIdx, RelevantTokenIdx),
     src: &'a str,
-    ctx: SourceContext,
+    pub(crate) ctx: SourceContext,
     pub(crate) dst: &'d mut TokenStream,
     pub(crate) working_dir: VfsPath,
 }
@@ -140,7 +140,7 @@ impl<'a, 'd> Parser<'a, 'd> {
     }
 
     fn do_bump(&mut self, save_token: bool) {
-        trace!(token = display(self.current()), save = save_token, "bump");
+        // trace!(token = display(self.current()), save = save_token, "bump");
 
         if self.curr.0 == RawToken::EOF {
             return;
@@ -157,24 +157,25 @@ impl<'a, 'd> Parser<'a, 'd> {
     }
 
     fn save_tokens(src: &[SpannedRawToken], dst: &mut TokenStream, ctx: SourceContext) {
-        let mut iter = src.iter();
+        // let mut iter = src.iter();
 
-        if let Some((kind, range)) = iter.next().cloned() {
-            if let Some(previous_whitespace) = previous_whitespace(dst, kind) {
-                if previous_whitespace.ctx == ctx {
-                    previous_whitespace.range =
-                        TextRange::new(previous_whitespace.range.start(), range.end())
-                } else if let Ok(kind) = TokenKind::try_from(kind) {
-                    dst.push(Token { kind, span: CtxSpan { range, ctx } })
-                }
-            }
-        }
+        // if let Some((kind, range)) = iter.next().cloned() {
+        //     if let Some(previous_whitespace) = previous_whitespace(dst, kind) {
+        //         if previous_whitespace.ctx == ctx {
+        //             previous_whitespace.range =
+        //                 TextRange::new(previous_whitespace.range.start(), range.end())
+        //         } else if let Ok(kind) = TokenKind::try_from(kind) {
+        //             dst.push(Token { kind, span: CtxSpan { range, ctx } })
+        //         }
+        //     }
+        // }
 
         dst.reserve(src.len());
         for (kind, range) in src.iter().cloned() {
-            if let Some(prev_span) = previous_whitespace(dst, kind) {
-                prev_span.range = TextRange::new(prev_span.range.start(), range.end());
-            } else if let Ok(kind) = TokenKind::try_from(kind) {
+            // if let Some(prev_span) = previous_whitespace(dst, kind).and_then(|prev_span|) {
+            //     prev_span.range = TextRange::new(prev_span.range.start(), range.end());
+            // } else 
+            if let Ok(kind) = TokenKind::try_from(kind) {
                 dst.push(Token { kind, span: CtxSpan { range, ctx } });
             }
         }
@@ -183,9 +184,10 @@ impl<'a, 'd> Parser<'a, 'd> {
     fn save_tokens_to_macro(src: &[SpannedRawToken], dst: &mut ParsedTokenStream) {
         dst.reserve(src.len());
         for (kind, range) in src.iter().cloned() {
-            if let Some(prev_span) = previous_macro_whitespace(dst, kind) {
-                *prev_span = TextRange::new(prev_span.start(), range.end());
-            } else if let Ok(t) = ParsedToken::try_from(kind) {
+            // if let Some(prev_span) = previous_macro_whitespace(dst, kind) {
+            //     *prev_span = TextRange::new(prev_span.start(), range.end());
+            // } else 
+            if let Ok(t) = ParsedToken::try_from(kind) {
                 dst.push((t, range));
             }
         }

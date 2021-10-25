@@ -10,7 +10,6 @@
 
 use crate::bit_set::BitSet;
 use core::fmt::Formatter;
-use derivative::Derivative;
 use index_vec::Idx;
 use std::collections::VecDeque;
 use std::fmt::Debug;
@@ -21,11 +20,21 @@ use std::fmt::Debug;
 /// enqueued has no effect. This implementation assumes that the
 /// elements are dense indices, so it can allocate the queue to size
 /// and also use a bit set to track occupancy.
-#[derive(Eq, PartialEq, Derivative)]
-#[derivative(Clone(clone_from = "true"))]
+#[derive(Eq, PartialEq)]
 pub struct WorkQueue<T: Idx> {
     pub deque: VecDeque<T>,
     pub set: BitSet<T>,
+}
+
+impl<T: Idx> Clone for WorkQueue<T> {
+    fn clone_from(&mut self, source: &Self) {
+        self.deque.clone_from(&source.deque);
+        self.set.clone_from(&source.set);
+    }
+
+    fn clone(&self) -> Self {
+        Self { deque: self.deque.clone(), set: self.set.clone() }
+    }
 }
 
 impl<T: Idx + From<usize>> WorkQueue<T> {

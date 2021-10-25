@@ -86,9 +86,6 @@ fn expr_bp(p: &mut Parser, bp: u8) -> Option<CompletedMarker> {
     Some(lhs)
 }
 
-pub(crate) const LITERAL_FIRST: TokenSet =
-    TokenSet::new(&[INT_NUMBER, SI_REAL_NUMBER, STD_REAL_NUMBER, STRING, INF_KW]);
-
 pub(crate) const EXPR_RECOVERY_SET: TokenSet = TokenSet::new(&[
     T![;],
     T![endmodule],
@@ -98,15 +95,6 @@ pub(crate) const EXPR_RECOVERY_SET: TokenSet = TokenSet::new(&[
     T![endcase],
     T![end],
 ]);
-
-pub(crate) fn literal(p: &mut Parser) -> Option<CompletedMarker> {
-    let m = p.start();
-    if !p.eat_ts(LITERAL_FIRST) {
-        m.abandon(p);
-        return None;
-    }
-    Some(m.complete(p, LITERAL))
-}
 
 fn atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
     // if let Some(m) = literal(p) {
@@ -124,18 +112,17 @@ fn atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
         }
         IDENT|ROOT_KW => {
             let m = p.start();
-            let path = path(p);
+            path(p);
             if p.at(T!('(')) {
                 let fun_ref = m.complete(p, FUNCTION_REF);
                 call(p, fun_ref)
             } else {
-                m.abandon(p);
-                path
+                m.complete(p, PATH_EXPR)
             }
         }
         SYSFUN => sys_fun_call(p),
         T![<] => port_flow(p),
-        INT_NUMBER | SI_REAL_NUMBER | STD_REAL_NUMBER | STRING | INF_KW => {
+        INT_NUMBER | SI_REAL_NUMBER | STD_REAL_NUMBER | STR_LIT | INF_KW => {
             let m = p.start();
             p.bump_any();
             m.complete(p, LITERAL)
@@ -151,7 +138,7 @@ fn atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
 fn port_flow(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(T![<]);
-    name(p);
+    path(p);
     p.expect(T![>]);
     m.complete(p, PORT_FLOW)
 }

@@ -1,5 +1,5 @@
 use crate::allowed_options::{AllowedOps, ALLOWED_OPS_UNCONDITIONAL_ANALOG_BEHAVIOUR};
-use crate::name::{kw, sysfun, Name};
+use crate::name::{kw, sysfun};
 use crate::Type;
 // use data_structures::iter::zip;
 

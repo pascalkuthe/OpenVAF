@@ -1,0 +1,300 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js ayu">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Language Support - OpenVAF</title>
+                
+
+        <!-- Custom HTML head -->
+        
+
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+                <link rel="icon" href="favicon.svg">
+                        <link rel="shortcut icon" href="favicon.png">
+                <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+                <link rel="stylesheet" href="css/print.css" media="print">
+        
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+                <link rel="stylesheet" href="fonts/fonts.css">
+        
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        
+            </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "ayu";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('ayu')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="diagnostics.html"><strong aria-hidden="true">2.</strong> Diagnostics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="diagnostics/lints.html"><strong aria-hidden="true">2.1.</strong> Lints</a></li></ol></li><li class="chapter-item expanded "><a href="language_support.html" class="active"><strong aria-hidden="true">3.</strong> Language Support</a></li></ol>            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu (default)</button></li>
+                        </ul>
+                                                <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                                            </div>
+
+                    <h1 class="menu-title">OpenVAF</h1>
+
+                    <div class="right-buttons">
+                                                <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                                                                        
+                    </div>
+                </div>
+
+                                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <p>OpenVAF follows the <a href="https://www.accellera.org/images/downloads/standards/v-ams/VAMS-LRM-2-4.pdf">Verilog-AMS Language Reference Manual 2.4.0</a>.
+Currently the goal is only to support the analog (Verilog-A) subset definied within this standard.
+That means that digital behaviour can not be parsed.</p>
+<p>Furthermore the OpenVAF compiler is primiarly aimed at compact modelling.
+To better facilitate compact modelling (and to reduce the scope of the implementation) the behaviour of the compiler
+differes from the one defined in the standard. 
+Herein all differences between the language subset implemented by OpenVAF and the Verilog-A subset of the <a href="https://www.accellera.org/images/downloads/standards/v-ams/VAMS-LRM-2-4.pdf">Verilog-AMS Language Reference Manual</a> are documented.</p>
+<h1 id="incomplete-features"><a class="header" href="#incomplete-features">Incomplete Features</a></h1>
+<p>Many language features in the <a href="https://www.accellera.org/images/downloads/standards/v-ams/VAMS-LRM-2-4.pdf">Verilog-AMS Language Reference Manual</a> are aimed at behavioural modelling or describing entire circuits.
+These features are hard or even impossible support when statically compiling compact models.
+Therefore OpenVAF purpusfully does not implement these features.
+Here all lange features not implemented by OpenVAF are laid out.</p>
+<p><em>This section is currently incomplete</em></p>
+<h2 id="analog-event-control-statements"><a class="header" href="#analog-event-control-statements">(Analog) Event Control Statements</a></h2>
+<ul>
+<li><em>Standard Section</em> 5.10 Analog event control statements</li>
+<li><em>Status</em> Syntax for events other than <code>inital_step</code> and <code>final_step</code> can't be parsed</li>
+</ul>
+<p>The Verilog-AMS standard allows marking statements with event control.
+Thes statements are only executed when the indicated event has occured.
+These events are usually not used in compact modelling because they may introduce discountinueties.
+Therefore OpenVAF only supportes the <code>inital_step</code> and <code>final_step</code> events for initalization code.</p>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<p>There are four kinds of events specified in the standard.
+They are listed here with an example and an indication to show whether OpenVAF currently supports this syntax:</p>
+<ul>
+<li>Global events (<code>@(initial_step)</code>, <code>@(final_step)</code>) <em>suported</em></li>
+<li>Named (manually trigerred) events (<code>@foo</code>) <em>not supported</em></li>
+<li>Monitored events (<code>@(cross(V(smpl) - thresh, dir))</code>) <em>not supported</em></li>
+<li>Or Events (a combination of multiple other events) <code>@(initial_step or cross(V(smpl)-2.5,+1))</code> <em>not supported</em></li>
+</ul>
+<h1 id="additional-features"><a class="header" href="#additional-features">Additional Features</a></h1>
+<p>Some features that are not part of the VerilogA standard have been added to OpenVAF.
+The need for these features arose when OpenVAF was used in practice for compact model compilation and parameter extraction.
+Below a list of these features is provided together with an example.</p>
+<table><thead><tr><th>Feature</th><th>Example</th></tr></thead><tbody>
+<tr><td><a href="#symbolic-derivatives-by-voltage-difference">Voltage Derivatives</a></td><td><code>ddx(foo,V(a,b))</code></td></tr>
+<tr><td><a href="#symbolic-derivatives-by-temperature">Temperature Derivatives</a></td><td><code>ddx(foo,$temperature)</code></td></tr>
+</tbody></table>
+<p>In the following section each feature -including a motivation- is explained in detail.
+To make it easy to remain standard compliant OpenVAF will emit a warning by default when any one of the listed features are used.</p>
+<h2 id="symbolic-derivatives-by-temperature"><a class="header" href="#symbolic-derivatives-by-temperature">Symbolic Derivatives by Temperature</a></h2>
+<p>The <a href="https://www.accellera.org/images/downloads/standards/v-ams/VAMS-LRM-2-4.pdf">Verilog-AMS Language Reference Manual</a> allows calculating derivatives with the <code>ddx</code> ananlog filter.
+However only derivatives by node voltage <code>V(node)</code> or branch currents (<code>I(branch)</code>) are allowed.
+For parameter extraction derivatives by ambient Temperature (<code>$temperature</code>) may be of intereset for extracting temperature dependence.</p>
+<h3 id="guide"><a class="header" href="#guide">Guide</a></h3>
+<p>The behaviour of the <code>ddx</code> analog filter is extended so that <code>ddx(foo,$temperature)</code> is valid.
+All voltages and currents are considered as constants (so their derivatives are zero) and only the derivative of <code>$temperature</code> is 1.
+Otherwise the <code>ddx</code> filter behaves identical as when used with nodes/branches.
+So the derivative of the argument is calculated by repeated application of the chain rule.</p>
+<h3 id="examples-1"><a class="header" href="#examples-1">Examples</a></h3>
+<pre><code class="language-verilog">x = ddx($temperature,$temperature)
+y = ddx(v(node),$temperature)
+z = ddx(i(branch),$temperature)
+// x = 1, y=z=0
+
+foo = 20*exp($temperature/10)+V(node)
+bar = ddx(foo,$temperature)
+// bar = 2*exp($temperature/10)
+</code></pre>
+<h2 id="symbolic-derivatives-by-voltage-difference"><a class="header" href="#symbolic-derivatives-by-voltage-difference">Symbolic Derivatives by Voltage Difference</a></h2>
+<p>Equations of compact models usually depend upon Voltage differences <code>V(a,b)</code> (or equivalently branch voltage <code>V(br_ab)</code>).
+The derivatives of these Model Equations are required/useful during parameter extraction.</p>
+<p>They are usually emulated with the derivative of the upper node <code>ddx(foo,V(a,b) = ddx(foo,V(a))</code>.
+However this stops working when an expression depends on multiple branch voltages as demonstrated by the example below.
+To ensure correct behaviour it is therefore more desirable to calculate the derivative by <code>V(a,b)</code> directly.</p>
+<pre><code class="language-verilog">foo = V(a,b) + V(c,a)
+dfoo1 = ddx(foo, V(a))
+dfoo2 = ddx(foo,V(a,b))
+// dfoo1 = 0, dfoo2 = 1
+</code></pre>
+<h3 id="guide-1"><a class="header" href="#guide-1">Guide</a></h3>
+<p>The behaviour of the <code>ddx</code> analog filter is extended so that <code>ddx(foo,V(node1,node2))</code> is valid.
+Branch currents are treated as constants. Voltage access is treated as folows:</p>
+<ul>
+<li>The derivative of <code>V(node1,node2)</code> is 1</li>
+<li>The derivative of <code>V(node2,node1)</code> is -1</li>
+<li>The derivative of <code>V(branchX)</code> is 1 if the branches nodes are <code>node1</code> and <code>node2</code>: <code>branch (node1, node2) branchX</code></li>
+<li>The derivative of <code>V(branchX)</code> is -1 if the branches nodes are <code>node2</code> and <code>node1</code>: <code>branch (node2, node1) branchX</code></li>
+<li>In all other cases the derivative is 0</li>
+</ul>
+<p>Otherwise the <code>ddx</code> filter behaves identical as when used with nodes/branches.
+So the derivative of the argument is calculated by repeated application of the chain rule.</p>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<pre><code class="language-verilog">...
+
+branch (b,e) br_be;
+
+begin
+    Vt = $vt;
+    Ib = Isbc*exp(V(b,c)/Vt) + Isbe*exp(V(br_be)/Vt);
+    gbc = ddx(Ib, V(b,c)); // gbc =  Isbc/Vt*exp(V(b,c)/Vt)
+    gbe = ddx(Ib, V(b,e)); // gbe =  Isbe/Vt*exp(V(b,c)/Vt)
+
+end
+
+...
+
+</code></pre>
+<h3 id="technical-background"><a class="header" href="#technical-background">Technical Background</a></h3>
+<p>For performance reasons osdic also uses these derivatives instead of derivatives by individual nodes to calculate matrix entries.
+Consider a network with two nodes <code>a</code> and <code>b</code> that are connected by a single branch <code>br_ab</code> whose current only depends upon the voltage difference of these two nodes. 
+The matrix entries can then be calculated as follows: </p>
+<pre><code class="language-verilog">ddx(I(&lt;a&gt;),V(a))=ddx(I(&lt;b&gt;),V(b)) = ddx(I(br_ab),V(a,b))
+ddx(I(&lt;a&gt;),V(b))= ddx(I(&lt;a&gt;),V(b)) = - ddx(I(br_ab),V(a,b))
+</code></pre>
+<p>Since almost most equations in compact models have the form shown above using this tequinice effectively allows reducing the number of derivatives by a factor of 4.
+Considering how large these derivatives can get it is unlikely even modern compilers could optimze these duplications away completly.
+Even if they could achieve this it would significantly increase compile time.
+Therefore it is preferable for osdic to calculate derivatives by voltage difference and then calculate the Matrix entries from the result.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                                                    <a rel="prev" href="diagnostics/lints.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                        
+                        
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                                    <a rel="prev" href="diagnostics/lints.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+                
+                            </nav>
+
+        </div>
+
+        
+        
+        
+                <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        
+        
+                <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+        
+        
+    </body>
+</html>

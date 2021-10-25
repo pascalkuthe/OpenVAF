@@ -32,29 +32,22 @@
 
 mod lower;
 
-use std::{
-    any::type_name,
-    fmt::{self, Debug},
-    hash::Hash,
-    marker::PhantomData,
-    ops::{Index, Range},
-    sync::Arc,
-};
+use std::{fmt::Debug, hash::Hash, ops::Index, sync::Arc};
 
-use crate::{db::HirDefDB, FileAstId, Name, Type};
+use crate::{db::HirDefDB, FileAstId, Name, Path, Type};
 use basedb::FileId;
-use derive_more::{From, TryInto};
-use la_arena::{Arena, Idx};
-use syntax::{
-    ast,
-    AstNode,
+use data_structures::{
+    arena::{Arena, Idx, IdxRange},
+    HashMap,
 };
+use derive_more::{From, TryInto};
+use syntax::{ast, AstNode};
 
 /// The item tree of a source file.
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct ItemTree {
     pub top_level: Box<[RootItem]>,
-    data: ItemTreeData,
+    pub(crate) data: ItemTreeData,
 }
 
 impl ItemTree {
@@ -100,24 +93,22 @@ impl ItemTree {
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
-struct ItemTreeData {
-    modules: Arena<Module>,
-    disciplines: Arena<Discipline>,
-    natures: Arena<Nature>,
-    nature_attrs: Arena<NatureAttr>,
-    discipline_attrs: Arena<DisciplineAttr>,
+pub(crate) struct ItemTreeData {
+    pub modules: Arena<Module>,
+    pub disciplines: Arena<Discipline>,
+    pub natures: Arena<Nature>,
+    pub nature_attrs: Arena<NatureAttr>,
+    pub discipline_attrs: Arena<DisciplineAttr>,
 
-    variables: Arena<Var>,
-    parameters: Arena<Param>,
-    nets: Arena<Net>,
-    ports: Arena<Port>,
-    branches: Arena<Branch>,
-    functions: Arena<Function>,
-    function_args: Arena<FunctionArg>,
-    block_scopes: Arena<BlockScope>,
+    pub variables: Arena<Var>,
+    pub parameters: Arena<Param>,
+    pub nets: Arena<Net>,
+    pub ports: Arena<Port>,
+    pub branches: Arena<Branch>,
+    pub functions: Arena<Function>,
+    pub function_args: Arena<FunctionArg>,
+    pub block_scopes: Arena<BlockScope>,
     // syntax_ctx: Arena<SyntaxCtx>,
-
-    // inner_items: HashMap<FileAstId<ast::BlockStmt>, SmallVec<[ScopeItem; 1]>>,
 }
 
 /// Trait implemented by all item nodes in the item tree.
@@ -210,8 +201,8 @@ item_tree_nodes! {
     Discipline in disciplines -> ast::DisciplineDecl,
     Nature in natures -> ast::NatureDecl,
 
-    Var in variables -> ast::VarDecl,
-    Param in parameters -> ast::ParamDecl,
+    Var in variables -> ast::Var,
+    Param in parameters -> ast::Param,
     Net in nets -> ast::NetDecl,
     Port in ports -> ast::PortDecl,
     Branch in branches -> ast::BranchDecl,
@@ -221,68 +212,17 @@ item_tree_nodes! {
     DisciplineAttr in discipline_attrs -> ast::DisciplineAttr,
 }
 
-/// A range of densely allocated ItemTree IDs.
-#[derive(Eq)]
-pub struct IdRange<T> {
-    range: Range<u32>,
-    _p: PhantomData<T>,
-}
-
-impl<T> IdRange<T> {
-    pub(crate) fn new(range: Range<Idx<T>>) -> Self {
-        Self { range: range.start.into_raw().into()..range.end.into_raw().into(), _p: PhantomData }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.range.is_empty()
-    }
-    pub(crate) fn extend(&self, other: &Self) -> Self {
-        Self { range: self.range.start..other.range.end, _p: PhantomData }
-    }
-}
-
-impl<T> Iterator for IdRange<T> {
-    type Item = Idx<T>;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.range.next().map(|raw| Idx::from_raw(raw.into()))
-    }
-}
-
-impl<T> DoubleEndedIterator for IdRange<T> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.range.next_back().map(|raw| Idx::from_raw(raw.into()))
-    }
-}
-
-impl<T> fmt::Debug for IdRange<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(&format!("IdRange::<{}>", type_name::<T>())).field(&self.range).finish()
-    }
-}
-
-impl<T> Clone for IdRange<T> {
-    fn clone(&self) -> Self {
-        Self { range: self.range.clone(), _p: PhantomData }
-    }
-}
-
-impl<T> PartialEq for IdRange<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.range == other.range
-    }
-}
-
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Module {
     pub name: Name,
 
     pub exptected_ports: Vec<Name>,
-    pub head_ports: IdRange<Port>,
+    pub head_ports: IdxRange<Port>,
 
-    pub body_ports: IdRange<Port>,
-    pub nets: IdRange<Net>,
-    pub branches: IdRange<Branch>,
-    pub functions: IdRange<Function>,
+    pub body_ports: IdxRange<Port>,
+    pub nets: IdxRange<Net>,
+    pub branches: IdxRange<Branch>,
+    pub functions: IdxRange<Function>,
     pub scope_items: Vec<BlockScopeItem>,
     pub ast_id: FileAstId<ast::ModuleDecl>,
 }
@@ -291,8 +231,8 @@ impl Module {
     /// The Verilog-A standard only allows `body_ports` or `head_ports`.
     /// A lint seperatly checks that the ports are delared legally.
     /// This function simply returns all relevant ports for later stages of the compiler
-    pub fn ports(&self) -> IdRange<Port> {
-        self.head_ports.extend(&self.body_ports)
+    pub fn ports(&self) -> IdxRange<Port> {
+        self.head_ports.cover(&self.body_ports)
     }
 }
 
@@ -300,15 +240,22 @@ impl Module {
 pub struct Port {
     pub name: Name,
     pub discipline: Option<Name>,
+    pub is_gnd: bool,
     pub is_input: bool,
     pub is_output: bool,
+
+    pub name_idx: usize,
     pub ast_id: FileAstId<ast::PortDecl>,
 }
+
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Net {
     pub name: Name,
     pub discipline: Option<Name>,
+    pub is_gnd: bool,
+
+    pub name_idx: usize,
     pub ast_id: FileAstId<ast::NetDecl>,
 }
 
@@ -316,14 +263,14 @@ pub struct Net {
 pub struct Var {
     pub name: Name,
     pub ty: Type,
-    pub ast_id: FileAstId<ast::VarDecl>,
+    pub ast_id: FileAstId<ast::Var>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Param {
     pub name: Name,
     pub ty: Type,
-    pub ast_id: FileAstId<ast::ParamDecl>,
+    pub ast_id: FileAstId<ast::Param>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -333,7 +280,7 @@ pub struct Nature {
     pub access: Option<Name>,
     pub ddt_nature: Option<Name>,
     pub idt_nature: Option<Name>,
-    pub attrs: IdRange<NatureAttr>,
+    pub attrs: IdxRange<NatureAttr>,
     pub ast_id: FileAstId<ast::NatureDecl>,
 }
 
@@ -361,7 +308,7 @@ pub struct Discipline {
 
     pub potential: Option<Name>,
     pub flow: Option<Name>,
-    pub attrs: IdRange<DisciplineAttr>,
+    pub attrs: IdxRange<DisciplineAttr>,
 
     // Not strictly neccessary to resolve this here but
     // we already have to do the other attributes here
@@ -371,10 +318,20 @@ pub struct Discipline {
     pub ast_id: FileAstId<ast::DisciplineDecl>,
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum BranchKind {
+    PortFlow(Path),
+    NodeGnd(Path),
+    Nodes(Path, Path),
+    Missing,
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Branch {
     pub name: Name,
-    // pub ty: BranchType,
+    // Strictly speaking this shouldn't be part of the item tree, because it doesn't effect name
+    // resolution but reconstructing the red layer is just not worth it for such a small thing
+    pub kind: BranchKind,
     pub ast_id: FileAstId<ast::BranchDecl>,
 }
 
@@ -388,9 +345,7 @@ pub struct Branch {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct BlockScope {
     pub name: Name,
-    pub parameters: IdRange<Param>,
-    pub variables: IdRange<Var>,
-    pub scopes: Vec<ItemTreeId<BlockScope>>,
+    pub scope_items: Vec<BlockScopeItem>,
     pub ast_id: FileAstId<ast::BlockStmt>,
 }
 
@@ -398,9 +353,9 @@ pub struct BlockScope {
 pub struct Function {
     pub name: Name,
     pub ty: Type,
-    pub args: IdRange<FunctionArg>,
-    pub params: IdRange<Param>,
-    pub vars: IdRange<Var>,
+    pub args: IdxRange<FunctionArg>,
+    pub params: IdxRange<Param>,
+    pub vars: IdxRange<Var>,
     pub ast_id: FileAstId<ast::Function>,
 }
 

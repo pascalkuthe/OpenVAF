@@ -1,16 +1,16 @@
 //! Various extension methods to ast Expr Nodes, which are hard to code-generate.
 
-use crate::SyntaxNode;
+use parser::SyntaxKind::{self, PARAM_DECL, VAR_DECL};
+
 use crate::{
     ast::{self, support, AstChildren, AstNode, AstToken},
-    SyntaxToken, T,
+    SyntaxNode, SyntaxToken, T,
 };
-use parser::SyntaxKind::{self, PATH, SYSFUN};
 
-use super::FunctionRef;
+use super::{ParamDecl, Stmt, VarDecl};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum PrefixOp {
+pub enum UnaryOp {
     /// The `~` operator for bit inversion
     BitNegate,
     /// The `!` operator for logical inversion
@@ -22,12 +22,12 @@ pub enum PrefixOp {
 }
 
 impl ast::PrefixExpr {
-    pub fn op_kind(&self) -> Option<PrefixOp> {
+    pub fn op_kind(&self) -> Option<UnaryOp> {
         match self.op_token()?.kind() {
-            T![~] => Some(PrefixOp::BitNegate),
-            T![!] => Some(PrefixOp::Not),
-            T![-] => Some(PrefixOp::Neg),
-            T![+] => Some(PrefixOp::Identity),
+            T![~] => Some(UnaryOp::BitNegate),
+            T![!] => Some(UnaryOp::Not),
+            T![-] => Some(UnaryOp::Neg),
+            T![+] => Some(UnaryOp::Identity),
             _ => None,
         }
     }
@@ -38,7 +38,7 @@ impl ast::PrefixExpr {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BinOp {
+pub enum BinaryOp {
     /// The `||` operator for boolean OR
     BooleanOr,
     /// The `&&` operator for boolean AND
@@ -82,36 +82,36 @@ pub enum BinOp {
 }
 
 impl ast::BinExpr {
-    pub fn op_details(&self) -> Option<(SyntaxToken, BinOp)> {
+    pub fn op_details(&self) -> Option<(SyntaxToken, BinaryOp)> {
         self.syntax().children_with_tokens().filter_map(|it| it.into_token()).find_map(|c| {
             let bin_op = match c.kind() {
-                T![||] => BinOp::BooleanOr,
-                T![&&] => BinOp::BooleanAnd,
-                T![==] => BinOp::EqualityTest,
-                T![!=] => BinOp::NegatedEqualityTest,
-                T![<=] => BinOp::LesserEqualTest,
-                T![>=] => BinOp::GreaterEqualTest,
-                T![<] => BinOp::LesserTest,
-                T![>] => BinOp::GreaterTest,
-                T![+] => BinOp::Addition,
-                T![*] => BinOp::Multiplication,
-                T![-] => BinOp::Subtraction,
-                T![/] => BinOp::Division,
-                T![%] => BinOp::Remainder,
-                T![<<] => BinOp::LeftShift,
-                T![>>] => BinOp::RightShift,
-                T![^] => BinOp::BitwiseXor,
-                T![|] => BinOp::BitwiseOr,
-                T![&] => BinOp::BitwiseAnd,
-                T![**] => BinOp::Power,
-                T![~^] | T![^~] => BinOp::BitwiseEq,
+                T![||] => BinaryOp::BooleanOr,
+                T![&&] => BinaryOp::BooleanAnd,
+                T![==] => BinaryOp::EqualityTest,
+                T![!=] => BinaryOp::NegatedEqualityTest,
+                T![<=] => BinaryOp::LesserEqualTest,
+                T![>=] => BinaryOp::GreaterEqualTest,
+                T![<] => BinaryOp::LesserTest,
+                T![>] => BinaryOp::GreaterTest,
+                T![+] => BinaryOp::Addition,
+                T![*] => BinaryOp::Multiplication,
+                T![-] => BinaryOp::Subtraction,
+                T![/] => BinaryOp::Division,
+                T![%] => BinaryOp::Remainder,
+                T![<<] => BinaryOp::LeftShift,
+                T![>>] => BinaryOp::RightShift,
+                T![^] => BinaryOp::BitwiseXor,
+                T![|] => BinaryOp::BitwiseOr,
+                T![&] => BinaryOp::BitwiseAnd,
+                T![**] => BinaryOp::Power,
+                T![~^] | T![^~] => BinaryOp::BitwiseEq,
                 _ => return None,
             };
             Some((c, bin_op))
         })
     }
 
-    pub fn op_kind(&self) -> Option<BinOp> {
+    pub fn op_kind(&self) -> Option<BinaryOp> {
         self.op_details().map(|t| t.1)
     }
 
@@ -159,7 +159,7 @@ impl ast::ArrayExpr {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LiteralKind {
-    String(ast::String),
+    String(ast::StrLit),
     IntNumber(ast::IntNumber),
     SiRealNumber(ast::SiRealNumber),
     StdRealNumber(ast::StdRealNumber),
@@ -187,7 +187,7 @@ impl ast::Literal {
             return LiteralKind::StdRealNumber(t);
         }
 
-        if let Some(t) = ast::String::cast(token.clone()) {
+        if let Some(t) = ast::StrLit::cast(token.clone()) {
             return LiteralKind::String(t);
         }
 
@@ -197,8 +197,6 @@ impl ast::Literal {
         }
     }
 }
-
-
 
 impl ast::StdRealNumber {
     pub fn value(&self) -> f64 {
@@ -234,7 +232,7 @@ impl ast::IntNumber {
     }
 }
 
-impl ast::String {
+impl ast::StrLit {
     pub fn value(&self) -> &str {
         let src = self.syntax.text();
         &src[1..src.len() - 1]
@@ -269,7 +267,7 @@ pub enum AsssigmentOp {
     Contribute,
 }
 
-impl ast::AssignStmt {
+impl ast::Assign {
     pub fn op_details(&self) -> Option<(SyntaxToken, AsssigmentOp)> {
         self.syntax().children_with_tokens().filter_map(|it| it.into_token()).find_map(|c| {
             let bin_op = match c.kind() {
@@ -279,5 +277,11 @@ impl ast::AssignStmt {
             };
             Some((c, bin_op))
         })
+    }
+}
+
+impl ast::BlockStmt {
+    pub fn body(&self) -> AstChildren<Stmt> {
+        support::children(self.syntax())
     }
 }

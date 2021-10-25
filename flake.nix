@@ -1,118 +1,60 @@
 {
-  description = "Flake for the VerilogAE compiler: A compiler for VerilogA files that generates a python interface for compact model extraction";
+  description = "virtual environments";
 
-
-  inputs.gitignore = {
-    type = "github";
-    owner = "hercules-ci";
-    repo = "gitignore.nix";
-    flake = false;
-  };
-
-  inputs.rust = {
-    type = "github";
-    owner = "oxalica";
-    repo = "rust-overlay";
-  };
+  inputs =
+    {
+      nixpkgs.url = github:nixos/nixpkgs/nixos-unstable-small;
+      utils.url = "github:gytis-ivaskevicius/flake-utils-plus";
+      rust.url = "github:oxalica/rust-overlay";
+    };
 
 
 
-  outputs = { self, nixpkgs, gitignore, rust,  ... }:
+  outputs = inputs@{ self, nixpkgs, utils, rust }:
     let
-
-      nameValuePair = name: value: { inherit name value; };
-      genAttrs = names: f: builtins.listToAttrs (map (n: nameValuePair n (f n)) names);
-      allSystems = [ "x86_64-linux" "aarch64-linux" "i686-linux" "x86_64-darwin" ];
       rust-analyzer-overlay = final: prev: {
-        rust-analyzer=prev.rust-analyzer.override{
-          rustSrc="${final.rust-bin.nightly.latest.rust-src}/lib/rustlib/src/rust/library";
+        rust-analyzer = prev.rust-analyzer.override {
+          rustSrc = "${final.rust-bin.stable.latest.rust-src}/lib/rustlib/src/rust/library";
         };
+        rust-analyzer-unwrapped = final.rust-bin.nightly.latest.rust-analyzer-preview;
       };
-
-      forSystems = systems: f: genAttrs systems (
-        system: f rec {
-          inherit system;
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = [
-              rust.overlay
-              rust-analyzer-overlay
-            ];
-          };
-          dep = import nix/dependencies.nix { inherit pkgs; lib=nixpkgs.lib; };
-        }
-      );
-
-
-      forAllSystems = f: forSystems allSystems f;
     in
-      {
-        devShell = forAllSystems (
-          { pkgs, dep, ... }:
-            with dep;
-            pkgs.mkShell {
-              name = "openvaf";
+    utils.lib.mkFlake {
+      inherit self inputs;
 
-              inherit buildInputs LLVM_SYS_120_PREFIX LLD_LIB_DIR LIBCLANG_PATH;
+      sharedOverlays = [
+        rust.overlay
+        rust-analyzer-overlay
+      ];
 
+      outputsBuilder = channels:
+        with import nix/dependencies.nix { pkgs = channels.nixpkgs; lib = nixpkgs.lib; };
+        {
+          # Evaluates to `devShell.<system> = <nixpkgs-channel-reference>.mkShell { name = "devShell"; };`.
+          devShell = channels.nixpkgs.mkShell {
+            name = "openvaf-devel";
 
-              nativeBuildInputs = with pkgs; dep.nativeBuildInputs ++ [
-                rust-bin.stable.latest.default
-                rust-bin.nightly.latest.default
-                rust-analyzer
-                
-                cargo-expand
-                crate2nix
-                cargo-outdated
-                cargo-edit
-                cargo-flamegraph
-                cargo-bloat
-                cargo-deps
-                graphviz
-                tokei
-              ];
+            inherit buildInputs LLVM_SYS_130_PREFIX LLD_LIB_DIR LIBCLANG_PATH;
 
-                NIX_CFLAGS_LINK = "-fuse-ld=lld";
-            }
-        );
+            nativeBuildInputs = with channels.nixpkgs; nativeBuildInputs ++ [
+              rust-bin.stable.latest.default
+              rust-analyzer
+              cargo-expand
+              crate2nix
+              cargo-outdated
+              cargo-edit
+              cargo-flamegraph
+              cargo-bloat
+              cargo-deps
+              graphviz
+              tokei
+              mdbook
+            ];
 
-        # packages =
-        #   forAllSystems
-        #     (
-        #       { system, pkgs, dep, ... }:
-        #         let
-        #           cargoNix = import ./Cargo.nix {
-        #             inherit pkgs;
-        #             defaultCrateOverrides = pkgs.defaultCrateOverrides // {
-        #               llvm-sys = { ... }:
-        #                 with dep;
-        #                 {
-        #                   inherit buildInputs LLVM_SYS_110_PREFIX;
-        #                 };
-        #               libmimalloc-sys = { ... }:
-        #                 with dep;
-        #                 {
-        #                   inherit nativeBuildInputs;
-        #                 };
+            NIX_CFLAGS_LINK = "-fuse-ld=lld";
 
-        #               verilogae = { ... }:
-        #                 with dep;
-        #                 {
-        #                   inherit buildInputs;
-        #                 };
-        #             };
-        #           };
+          };
+        };
 
-        #         in
-        #           {
-        #             openvaf = cargoNix.workspaceMembers.verilogae.build;
-        #           }
-        #     );
-
-
-
-        # defaultPackage = forAllSystems ({ system, ... }: self.packages.${system}.openvaf);
-
-      };
-
+    };
 }

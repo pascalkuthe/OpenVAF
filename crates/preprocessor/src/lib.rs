@@ -1,5 +1,5 @@
 /*
- *  ******************************************************************************************
+ *  *******************************************************************************, span: () *********** error: () 
  *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
  *  It is subject to the license terms in the LICENSE file found in the top-level directory
  *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
@@ -8,6 +8,7 @@
  *  *****************************************************************************************
  */
 
+use std::io;
 
 use data_structures::sync::Arc;
 use sourcemap::SourceMap;
@@ -15,8 +16,8 @@ use sourcemap::SourceMap;
 use crate::processor::Processor;
 pub use crate::tokenstream::{Token, TokenKind, TokenStream};
 use diagnostics::PreprocessorDiagnostic;
-pub use vfs::{FileId, VfsPath};
 use tracing::trace_span;
+pub use vfs::{FileId, VfsPath};
 
 pub mod diagnostics;
 mod grammar;
@@ -26,6 +27,9 @@ mod processor;
 pub mod sourcemap;
 mod token_set;
 mod tokenstream;
+
+#[cfg(test)]
+mod tests;
 
 type Text = Arc<str>;
 type ScopedTextArea = data_structures::ScopedArea<Text>;
@@ -37,7 +41,6 @@ pub struct Preprocess {
     pub sm: Arc<SourceMap>,
     pub diagnostics: Arc<Diagnostics>,
 }
-
 
 /// # Panics
 /// This function panics if called multiple times in the same OpenVAF session
@@ -51,14 +54,30 @@ pub fn preprocess(sources: &dyn SourceProvider, file: FileId) -> Preprocess {
             let (ts, diagnostics) = processor.run(file);
             (ts, diagnostics, processor.source_map)
         }
-        Err(FileReadError::Io) => (
+        Err(FileReadError::Io(error)) => (
             vec![],
-            vec![PreprocessorDiagnostic::IoErrorRoot(sources.file_path(file))],
+            vec![PreprocessorDiagnostic::IoError {
+                file: sources.file_path(file),
+                error,
+                span: None,
+            }],
             SourceMap::new(file, 0.into()),
         ),
         Err(FileReadError::InvalidTextFormat) => (
             vec![],
-            vec![PreprocessorDiagnostic::InvalidTextFormatRoot(sources.file_path(file))],
+            vec![PreprocessorDiagnostic::InvalidTextFormat {
+                file: sources.file_path(file),
+                span: None,
+            }],
+            SourceMap::new(file, 0.into()),
+        ),
+
+        Err(FileReadError::NotFound) => (
+            vec![],
+            vec![PreprocessorDiagnostic::FileNotFound {
+                file: sources.file_path(file).to_string(),
+                span: None,
+            }],
             SourceMap::new(file, 0.into()),
         ),
     };
@@ -66,18 +85,18 @@ pub fn preprocess(sources: &dyn SourceProvider, file: FileId) -> Preprocess {
     Preprocess { ts: Arc::new(ts), diagnostics: Arc::new(diagnostics), sm: Arc::new(sm) }
 }
 
-
-#[derive(PartialEq, Eq,Hash,Debug,Clone, Copy)]
-pub enum FileReadError{
-    Io,
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
+pub enum FileReadError {
+    Io(io::ErrorKind),
     InvalidTextFormat,
+    NotFound,
 }
 
 pub trait SourceProvider {
-    fn include_dirs(&self, root_file: FileId)->Arc<[VfsPath]>;
-    fn macro_flags(&self, file_root: FileId)->Arc<[Arc<str>]>;
+    fn include_dirs(&self, root_file: FileId) -> Arc<[VfsPath]>;
+    fn macro_flags(&self, file_root: FileId) -> Arc<[Arc<str>]>;
 
-    fn file_text(&self, file: FileId)->Result<Arc<str>,FileReadError>;
-    fn file_path(&self, file: FileId)->VfsPath;
-    fn file_id(&self, path: VfsPath)->FileId;
+    fn file_text(&self, file: FileId) -> Result<Arc<str>, FileReadError>;
+    fn file_path(&self, file: FileId) -> VfsPath;
+    fn file_id(&self, path: VfsPath) -> FileId;
 }

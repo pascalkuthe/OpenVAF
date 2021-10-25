@@ -2,7 +2,10 @@ use std::ops::Deref;
 
 use data_structures::SmolStr;
 use derive_more::Display;
-use syntax::ast;
+use syntax::{
+    ast::{self, SysFun},
+    SyntaxToken,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Display)]
 pub struct Name(SmolStr);
@@ -15,8 +18,8 @@ impl Name {
 
     /// Resolve a name from the text of token.
     pub(crate) fn resolve(raw_text: &str) -> Name {
-        if let Some(text) = raw_text.strip_prefix("\\") {
-            Name(SmolStr::new(text))
+        if raw_text.starts_with('\\') {
+            Name(SmolStr::new(&raw_text[1..raw_text.len() - 1]))
         } else {
             Name(raw_text.into())
         }
@@ -62,24 +65,13 @@ pub trait AsIdent {
 
 impl AsIdent for ast::Expr {
     fn as_ident(&self) -> Option<Name> {
-        if let ast::Expr::PathExpr(path_expr) = self {
-            path_expr.path()?.as_ident()
-        } else {
-            None
-        }
+        self.as_raw_ident().as_ref().map(AsName::as_name)
     }
 }
 
 impl AsIdent for ast::Path {
     fn as_ident(&self) -> Option<Name> {
-        let segment = self.segment();
-        if self.qualifier().is_some()
-            || matches!(segment, Some(ast::PathSegment { kind: ast::PathSegmentKind::Root, .. }))
-        {
-            return None;
-        }
-
-        Some(segment?.as_name())
+        self.as_raw_ident().as_ref().map(AsName::as_name)
     }
 }
 
@@ -94,6 +86,12 @@ impl AsIdent for crate::Path {
         } else {
             None
         }
+    }
+}
+
+impl AsName for SysFun {
+    fn as_name(&self) -> Name {
+        Name::resolve(self.sysfun_token().unwrap().text())
     }
 }
 
@@ -115,7 +113,13 @@ impl AsName for ast::NameRef {
 
 impl AsName for ast::PathSegment {
     fn as_name(&self) -> Name {
-        Name::resolve(&self.syntax.text())
+        Name::resolve(self.syntax.text())
+    }
+}
+
+impl AsName for SyntaxToken {
+    fn as_name(&self) -> Name {
+        Name::resolve(self.text())
     }
 }
 

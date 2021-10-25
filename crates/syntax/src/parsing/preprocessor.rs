@@ -36,7 +36,7 @@ pub(super) fn convert_token_to_syntax_kind(t: preprocessor::TokenKind) -> Syntax
         TokenKind::EOF => EOF,
         TokenKind::Identifier => IDENT,
         TokenKind::SystemCall => SYSFUN,
-        TokenKind::LitString => STRING,
+        TokenKind::LitString => STR_LIT,
         TokenKind::LitInteger => INT_NUMBER,
         TokenKind::LitSiRealNumber => SI_REAL_NUMBER,
         TokenKind::LitStdRealNumber => STD_REAL_NUMBER,
@@ -114,6 +114,8 @@ pub(super) fn convert_token_to_syntax_kind(t: preprocessor::TokenKind) -> Syntax
         TokenKind::Error => ERROR,
         TokenKind::ArithmeticShiftLeft => T![<<<],
         TokenKind::ArithmeticShiftRight => T![>>>],
+        TokenKind::InitalStep => T![initial_step],
+        TokenKind::FinalStep => T![final_step],
         TokenKind::Root => ROOT_KW,
     }
 }

@@ -8,39 +8,34 @@
  *  *****************************************************************************************
  */
 
+use std::io;
+
 use crate::{lexer::RawToken, sourcemap::CtxSpan};
-use derive_more::{Display, From};
+use derive_more::Display;
 use vfs::VfsPath;
 
-#[derive(Debug, PartialEq, Display, From, Clone, Eq, Hash)]
+#[derive(Debug, PartialEq, Display, Clone, Eq, Hash)]
 pub enum PreprocessorDiagnostic {
-    #[display(
-        fmt = "macro argument count mismatch expected {} but found {}!",
-        "expected",
-        "found"
-    )]
+    #[display(fmt = "argument mismatch expected {} but found {}!", "expected", "found")]
     MacroArgumentCountMissmatch { expected: usize, found: usize, span: CtxSpan },
 
-    #[display(fmt = "macro '{}' has not been declared", "_0")]
-    MacroNotFound(String, CtxSpan),
+    #[display(fmt = "macro '`{}' has not been declared", "name")]
+    MacroNotFound { name: String, span: CtxSpan },
 
-    #[display(fmt = "macro '{}' was called recursively", "_0")]
-    MacroRecursion(String, CtxSpan),
+    #[display(fmt = "macro '`{}' was called recursively", "name")]
+    MacroRecursion { name: String, span: CtxSpan },
 
-    #[display(fmt = "failed to read '{}': An IO error occured!", "_0")]
-    IoErrorRoot(VfsPath), 
+    #[display(fmt = "failed to read '{}': {}", "file", "std::io::Error::from(*error)")]
+    IoError { file: VfsPath, error: io::ErrorKind, span: Option<CtxSpan> },
 
-    #[display(fmt = "failed to read '{}': File contents are not valid text (UTF-8 or UTF-16)", "_0")]
-    InvalidTextFormatRoot(VfsPath), 
+    #[display(fmt = "failed to read '{}': file not found", "file")]
+    FileNotFound { span: Option<CtxSpan>, file: String },
 
-    #[display(fmt = "failed to include file: An IO error occured!")]
-    IoError(CtxSpan), 
-
-    #[display(fmt = "failed to include File: File contents are not valid text (UTF-8 or UTF-16)")]
-    InvalidTextFormat(CtxSpan), 
+    #[display(fmt = "failed to read {}: file contents are not valid text", "file")]
+    InvalidTextFormat { span: Option<CtxSpan>, file: VfsPath },
 
     //General
-    #[display(fmt = "unexpected EOF, expected '{}'", "expected")]
+    #[display(fmt = "unexpected EOF, expected {}", "expected")]
     UnexpectedEof { expected: RawToken, span: CtxSpan },
 
     #[display(fmt = "unexpected token, expected '{}'", "expected")]
@@ -49,20 +44,6 @@ pub enum PreprocessorDiagnostic {
     #[display(fmt = "encountered unexpected token!")]
     UnexpectedToken(CtxSpan),
 
-    #[from]
-    MacroOverwritten(MacroOverwritten),
-
+    #[display(fmt = "macro '`{}' was overwritten", "name")]
+    MacroOverwritten { old: CtxSpan, new: CtxSpan, name: String },
 }
-
-#[derive(Debug, Clone, Display, PartialEq,Eq, Hash)]
-#[display(fmt = "macro '{}' was overwritten", "name")]
-pub struct MacroOverwritten {
-    pub old: CtxSpan,
-    pub new: CtxSpan,
-    pub name: String,
-}
-
-
-
-
-

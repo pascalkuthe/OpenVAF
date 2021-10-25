@@ -5,9 +5,13 @@ use crate::ast::support;
 use crate::ast::{self, AstNode};
 use crate::SyntaxToken;
 use parser::SyntaxKind::{IDENT, ROOT_KW};
+use parser::T;
 use std::iter::successors;
 
-use super::AstChildren;
+use super::{
+    AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, Constraint, EventStmt,
+    Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit,
+};
 
 // impl ast::PathSegment {
 //     pub fn parent_path(&self) -> Option<Path> {
@@ -24,19 +28,19 @@ impl ast::Path {
         successors(Some(self.clone()), ast::Path::qualifier).last().unwrap()
     }
 
-    //     pub fn first_segment(&self) -> Option<ast::PathSegment> {
-    //         self.first_qualifier().segment()
-    //     }
+    pub fn first_segment(&self) -> Option<ast::PathSegment> {
+        self.first_qualifier().segment()
+    }
 
     //     pub fn last_segment(&self) -> Option<ast::PathSegment> {
     //         self.top_path().segment()
     //     }
 
-    //     pub fn segments(&self) -> impl Iterator<Item = ast::PathSegment> + Clone {
-    //         successors(self.first_segment(), |p| {
-    //             p.parent_path().and_then(|path| path.parent_path()).and_then(|p| p.segment())
-    //         })
-    //     }
+    pub fn segments(&self) -> impl Iterator<Item = ast::PathSegment> + Clone {
+        successors(self.first_segment(), |p| {
+            p.parent_path().and_then(|path| path.parent_path()).and_then(|p| p.segment())
+        })
+    }
 
     pub fn qualifiers(&self) -> impl Iterator<Item = ast::Path> + Clone {
         successors(self.qualifier(), |p| p.qualifier())
@@ -72,8 +76,43 @@ impl ast::Path {
         })
     }
 
+    pub fn as_raw_ident(&self) -> Option<SyntaxToken> {
+        let segment = self.segment()?;
+        let is_valid =
+            self.qualifier().is_none() && matches!(segment.kind, ast::PathSegmentKind::Name);
+        is_valid.then(|| segment.syntax)
+    }
+}
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct PathSegment {
+    pub syntax: SyntaxToken,
+    pub kind: PathSegmentKind,
+}
 
+impl PathSegment {
+    pub fn parent_path(&self) -> Option<ast::Path> {
+        self.syntax.parent().and_then(ast::Path::cast)
+    }
+}
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum PathSegmentKind {
+    Root,
+    Name,
+}
+
+impl ast::Expr {
+    pub fn as_raw_ident(&self) -> Option<SyntaxToken> {
+        self.as_path()?.as_raw_ident()
+    }
+
+    pub fn as_path(&self) -> Option<Path> {
+        if let ast::Expr::PathExpr(path_expr) = self {
+            path_expr.path()
+        } else {
+            None
+        }
+    }
 }
 
 impl ast::Range {
@@ -107,19 +146,120 @@ impl ast::IfStmt {
 }
 
 impl ast::ModuleDecl {
-    pub fn analog_behaviour(&self) -> AstChildren<ast::AnalogBehaviour> {
-        support::children(&self.syntax)
+    pub fn analog_behaviour(&self) -> impl Iterator<Item = Stmt> {
+        support::children::<AnalogBehaviour>(self.syntax()).filter_map(|it| it.stmt())
     }
 }
 
-#[derive(PartialEq, Eq,Debug,Clone)]
-pub struct PathSegment {
-    pub syntax: SyntaxToken,
-    pub kind: PathSegmentKind,
+impl ModulePort {
+    pub fn kind(&self) -> ModulePortKind {
+        support::child(&self.syntax).unwrap()
+    }
 }
 
-#[derive(PartialEq, Eq,Debug,Clone, Copy)]
-pub enum PathSegmentKind {
-    Root,
-    Name,
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum AssignOp {
+    Contribute,
+    Assign,
+}
+
+impl Assign {
+    pub fn op(&self) -> Option<AssignOp> {
+        if support::token(self.syntax(), T![=]).is_some() {
+            Some(AssignOp::Assign)
+        } else if support::token(self.syntax(), T![<+]).is_some() {
+            Some(AssignOp::Contribute)
+        } else {
+            None
+        }
+    }
+
+    pub fn lval(&self) -> Option<ast::Expr> {
+        support::child(self.syntax())
+    }
+
+    pub fn rval(&self) -> Option<ast::Expr> {
+        support::children(self.syntax()).nth(1)
+    }
+}
+
+impl ForStmt {
+    pub fn init(&self) -> Option<Stmt> {
+        support::child(self.syntax())
+    }
+
+    pub fn incr(&self) -> Option<Stmt> {
+        support::children(self.syntax()).nth(1)
+    }
+
+    pub fn for_body(&self) -> Option<Stmt> {
+        support::children(self.syntax()).nth(2)
+    }
+}
+
+impl EventStmt {
+    pub fn sim_phases(&self) -> AstChildTokens<StrLit> {
+        support::child_token(self.syntax())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchKind {
+    PortFlow(PortFlow),
+    NodeGnd(Path),
+    Nodes(Path, Path),
+}
+
+impl ast::BranchDecl {
+    pub fn branch_kind(&self) -> Option<BranchKind> {
+        let nodes = self.arg_list()?;
+        let node1 = nodes.args().next()?;
+        let node2 = nodes.args().nth(1);
+
+        let kind = match node2 {
+            Some(node2) => BranchKind::Nodes(node1.as_path()?, node2.as_path()?),
+            None => {
+                if let Some(node) = node1.as_path() {
+                    BranchKind::NodeGnd(node)
+                } else if let ast::Expr::PortFlow(port_flow) = node1 {
+                    BranchKind::PortFlow(port_flow)
+                } else {
+                    return None;
+                }
+            }
+        };
+
+        Some(kind)
+    }
+}
+
+pub enum ConstraintKind {
+    Exclude(Expr),
+    ExcludeRange(Range),
+    From(Range),
+}
+
+impl Constraint {
+    pub fn kind(&self) -> Option<ConstraintKind> {
+        let is_from = self.from_token().is_some();
+        let res = if let Some(range) = self.range() {
+            if is_from {
+                ConstraintKind::From(range)
+            } else {
+                ConstraintKind::ExcludeRange(range)
+            }
+        } else {
+            if is_from {
+                return None;
+            }
+            ConstraintKind::Exclude(self.expr()?)
+        };
+        Some(res)
+    }
+}
+
+impl Function {
+    pub fn body(&self) -> AstChildren<Stmt> {
+        support::children(self.syntax())
+    }
 }

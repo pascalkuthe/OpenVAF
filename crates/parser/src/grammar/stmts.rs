@@ -1,8 +1,8 @@
 use super::*;
 
 pub(super) const STMT_TS: TokenSet =
-    TokenSet::new(&[IF_KW, WHILE_KW, FOR_KW, CASE_KW, BEGIN_KW, T![;], IDENT, SYSFUN]);
-pub(super) const STMT_RECOVER: TokenSet = TokenSet::new(&[EOF, ENDMODULE_KW,T![;]]);
+    TokenSet::new(&[IF_KW, WHILE_KW, FOR_KW, CASE_KW, BEGIN_KW, T![;], IDENT, SYSFUN, T![@]]);
+pub(super) const STMT_RECOVER: TokenSet = TokenSet::new(&[EOF, ENDMODULE_KW, T![;]]);
 
 pub(super) fn stmt_with_attrs(p: &mut Parser) {
     let m = p.start();
@@ -17,7 +17,8 @@ pub(super) fn stmt(p: &mut Parser, m: Marker, expected: TokenSet, recover: Token
         FOR_KW => for_stmt(p, m),
         CASE_KW => case_stmt(p, m),
         BEGIN_KW => block_stmt(p, m),
-        IDENT | SYSFUN => expr_or_assign_stmt(p, m),
+        T![@] => event_stmt(p, m),
+        IDENT | SYSFUN => expr_or_assign_stmt::<true>(p, m),
         _ => {
             m.abandon(p);
             let err = p.unexpected_tokens_msg(expected.iter().collect());
@@ -31,20 +32,12 @@ fn empty_stmt(p: &mut Parser, m: Marker) {
     m.complete(p, EMPTY_STMT);
 }
 
-fn simple_stmt(p: &mut Parser){
-    let m = p.start();
-    attrs(p, STMT_RECOVER);
-    assign_or_expr(p);
-    m.complete(p, SIMPLE_STMT);
-}
+fn expr_or_assign_stmt<const SEMICOLON: bool>(p: &mut Parser, m: Marker) {
+    let kind = if assign_or_expr(p) { ASSIGN_STMT } else { EXPR_STMT };
 
-fn expr_or_assign_stmt(p: &mut Parser, m: Marker){
-    let kind = if assign_or_expr(p){
-        ASSIGN_STMT
-    }else{
-        EXPR_STMT
-    };
-    p.expect(T![;]);
+    if SEMICOLON {
+        p.expect(T![;]);
+    }
     m.complete(p, kind);
 }
 
@@ -55,10 +48,31 @@ fn assign_or_expr(p: &mut Parser) -> bool {
         expr(p);
         m.complete(p, ASSIGN);
         true
-    }else{
+    } else {
         m.abandon(p);
         false
     }
+}
+
+fn event_stmt(p: &mut Parser, m: Marker) {
+    p.bump(T![@]);
+    p.expect(T!['(']);
+    p.expect_ts_r(
+        TokenSet::new(&[INITIAL_STEP_KW, FINAL_STEP_KW]),
+        TokenSet::new(&[T![')'], T!['(']]),
+    );
+    if p.eat(T!['(']) {
+        while !p.at_ts(TokenSet::new(&[T![')'], T![begin], ENDMODULE_KW])) {
+            p.expect(STR_LIT);
+            if !p.at(T![')']) {
+                p.expect_with(T![,], &[T![')'], T![,]]);
+            }
+        }
+        p.eat(T![')']);
+    }
+    p.expect(T![')']);
+    stmt_with_attrs(p);
+    m.complete(p, EVENT_STMT);
 }
 
 fn if_stmt(p: &mut Parser, m: Marker) {
@@ -88,15 +102,18 @@ fn for_stmt(p: &mut Parser, m: Marker) {
     p.expect(T!['(']);
 
     // init
-    simple_stmt(p);
-    p.expect(T![;]);
+    let stmt = p.start();
+    attrs(p, STMT_RECOVER.union(TokenSet::new(&[IDENT])));
+    expr_or_assign_stmt::<true>(p, stmt);
 
     // condition
     expr(p);
     p.expect(T![;]);
 
     // incr
-    simple_stmt(p);
+    let stmt = p.start();
+    attrs(p, STMT_RECOVER.union(TokenSet::new(&[IDENT])));
+    expr_or_assign_stmt::<false>(p, stmt);
 
     p.expect(T![')']);
 
@@ -125,22 +142,26 @@ const CASE_COND_RECOVERY: TokenSet = TokenSet::new(&[ENDCASE_KW, EOF, T![:], END
 
 fn case_item(p: &mut Parser) {
     let m = p.start();
+    vals_or_default(p);
+    stmt_with_attrs(p);
+    m.complete(p, CASE);
+}
+
+fn vals_or_default(p: &mut Parser) {
     if p.eat(DEFAULT_KW) {
         p.eat(T![:]);
     } else {
         while !p.at_ts(CASE_COND_RECOVERY) {
             expr(p);
             if !p.at(T![:]) {
-                p.expect_with(T![,], vec![T![:], T![,]]);
+                p.expect_with(T![,], &[T![:], T![,]]);
             }
         }
-        p.eat(T![:]);
+        p.expect(T![:]);
     }
-    stmt_with_attrs(p);
-    m.complete(p, CASE);
 }
 
-const BLOCK_RECOVER: TokenSet = TokenSet::new(&[END_KW,EOF, ENDMODULE_KW]);
+const BLOCK_RECOVER: TokenSet = TokenSet::new(&[END_KW, EOF, ENDMODULE_KW]);
 const BLOCK_STMT_TS: TokenSet = STMT_TS.union(TYPE_TS).union(TokenSet::unique(PARAMETER_KW));
 fn block_stmt(p: &mut Parser, m: Marker) {
     p.bump(BEGIN_KW);
@@ -150,9 +171,6 @@ fn block_stmt(p: &mut Parser, m: Marker) {
         name(p);
         m.complete(p, BLOCK_SCOPE);
     }
-
-    // TODO verify that declarations come before stmnt
-    // TODO verify that no declarations are present without explicit scope
 
     while !p.at_ts(BLOCK_RECOVER) {
         let m = p.start();

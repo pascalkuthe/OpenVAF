@@ -21,6 +21,7 @@ use crate::{
 };
 use std::fs::read_to_string;
 
+#[test]
 pub fn sourcegen_ast() {
     let src = read_to_string(project_root().join("crates/sourcegen/veriloga.ungram")).unwrap();
     let grammar = src.parse().unwrap();
@@ -422,7 +423,7 @@ fn generate_syntax_kinds(grammar: KindsSrc<'_>) -> String {
                     #(Self::#all_keywords => #keywords_pretty,)*
                     Self::INT_NUMBER => "an integer",
                     Self::STD_REAL_NUMBER| Self::SI_REAL_NUMBER  => "a real number",
-                    Self::STRING => "a string literal",
+                    Self::STR_LIT => "a string literal",
                     Self::LITERAL => "any literal value",
                     Self::IDENT|  Self::NAME => "an identifier",
                     Self::SYSFUN => "a system function identifier",
@@ -517,7 +518,7 @@ impl Field {
 
 fn lower(grammar: &Grammar) -> AstSrc {
     let mut res = AstSrc {
-        tokens: "Whitespace Comment String IntNumber StdRealNumber SiRealNumber NetType Sysfun"
+        tokens: "Whitespace Comment StrLit IntNumber StdRealNumber SiRealNumber NetType Sysfun"
             .split_ascii_whitespace()
             .map(|it| it.to_string())
             .collect::<Vec<_>>(),
@@ -528,6 +529,7 @@ fn lower(grammar: &Grammar) -> AstSrc {
     let nodes = grammar.iter().collect::<Vec<_>>();
 
     for &node in &nodes {
+
         let name = grammar[node].name.clone();
         let rule = &grammar[node].rule;
         match lower_enum(grammar, rule) {
@@ -542,6 +544,7 @@ fn lower(grammar: &Grammar) -> AstSrc {
                 res.enums.push(enum_src);
             }
             None => {
+
                 let mut fields = Vec::new();
                 lower_rule(&mut fields, grammar, None, rule);
                 res.nodes.push(AstNodeSrc { doc: Vec::new(), name, traits: Vec::new(), fields });
@@ -550,7 +553,7 @@ fn lower(grammar: &Grammar) -> AstSrc {
     }
 
     deduplicate_fields(&mut res);
-    extract_enums(&mut res);
+    // extract_enums(&mut res);
     extract_struct_traits(&mut res);
     extract_enum_traits(&mut res);
     res
@@ -594,6 +597,7 @@ fn lower_rule(acc: &mut Vec<Field>, grammar: &Grammar, label: Option<&String>, r
     match rule {
         Rule::Node(node) => {
             let ty = grammar[*node].name.clone();
+
             let name = label.cloned().unwrap_or_else(|| to_lower_snake_case(&ty));
             let field = Field::Node { name, ty, cardinality: Cardinality::Optional };
             acc.push(field);
@@ -602,7 +606,7 @@ fn lower_rule(acc: &mut Vec<Field>, grammar: &Grammar, label: Option<&String>, r
             assert_eq!(label, None);
             let mut name = grammar[*token].name.clone();
             if name != "int_number"
-                && name != "string"
+                && name != "str_lit"
                 && name != "std_real_number"
                 && name != "si_real_number"
             {
@@ -643,6 +647,9 @@ fn lower_rule(acc: &mut Vec<Field>, grammar: &Grammar, label: Option<&String>, r
                     | "literal"
                     | "init"
                     | "incr"
+                    | "kind"
+                    | "for_body"
+                    | "sim_phases"
             );
             if manually_implemented {
                 return;
@@ -650,6 +657,7 @@ fn lower_rule(acc: &mut Vec<Field>, grammar: &Grammar, label: Option<&String>, r
             lower_rule(acc, grammar, Some(l), rule);
         }
         Rule::Seq(rules) | Rule::Alt(rules) => {
+
             for rule in rules {
                 lower_rule(acc, grammar, label, rule)
             }
@@ -705,25 +713,26 @@ fn deduplicate_fields(ast: &mut AstSrc) {
     }
 }
 
-fn extract_enums(ast: &mut AstSrc) {
-    for node in &mut ast.nodes {
-        for enm in &ast.enums {
-            let mut to_remove = Vec::new();
-            for (i, field) in node.fields.iter().enumerate() {
-                let ty = field.ty().to_string();
-                if enm.variants.iter().any(|it| it.name() == &ty) {
-                    to_remove.push(i);
-                }
-            }
-            if to_remove.len() == enm.variants.len() {
-                node.remove_field(to_remove);
-                let ty = enm.name.clone();
-                let name = to_lower_snake_case(&ty);
-                node.fields.push(Field::Node { name, ty, cardinality: Cardinality::Optional });
-            }
-        }
-    }
-}
+// fn extract_enums(ast: &mut AstSrc) {
+//     for node in &mut ast.nodes {
+//         for enm in &ast.enums {
+//             let mut to_remove = Vec::new();
+//             for (i, field) in node.fields.iter().enumerate() {
+//                 let ty = field.ty().to_string();
+//                 if enm.variants.iter().any(|it| it.name() == &ty) {
+//                     to_remove.push(i);
+//                 }
+//             }
+//             if to_remove.len() == enm.variants.len() {
+//                 println!("{} is enum {}: {:?} == {:?}",&node.name,enm.name,enm.variants,&to_remove);
+//                 node.remove_field(to_remove);
+//                 let ty = enm.name.clone();
+//                 let name = to_lower_snake_case(&ty);
+//                 node.fields.push(Field::Node { name, ty, cardinality: Cardinality::Optional });
+//             }
+//         }
+//     }
+// }
 
 fn extract_struct_traits(ast: &mut AstSrc) {
     let traits: &[(&str, &[&str])] =

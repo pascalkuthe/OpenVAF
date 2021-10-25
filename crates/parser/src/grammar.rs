@@ -87,15 +87,15 @@ fn name(p: &mut Parser) {
     name_r(p, TokenSet::EMPTY);
 }
 
-fn expect_name(p: &mut Parser) -> bool {
-    if eat_name(p) {
-        true
-    } else {
-        let err = p.unexpected_token_msg(NAME);
-        p.error(err);
-        false
-    }
-}
+// fn expect_name(p: &mut Parser) -> bool {
+//     if eat_name(p) {
+//         true
+//     } else {
+//         let err = p.unexpected_token_msg(NAME);
+//         p.error(err);
+//         false
+//     }
+// }
 
 fn eat_name(p: &mut Parser) -> bool {
     let m = p.start();

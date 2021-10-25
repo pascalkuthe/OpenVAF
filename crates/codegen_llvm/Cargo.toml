@@ -8,6 +8,10 @@ description = "A rust proc macro based code generation backend for OpenVAF"
 license="GPL-3.0"
 readme="../README.md"
 
+[lib]
+doctest = false
+
+
 [badges]
 maintenance = { status = "actively-developed" }
 

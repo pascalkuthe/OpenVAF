@@ -40,7 +40,6 @@ use crate::bit_set::{
 };
 use crate::index_vec::{Idx, IndexSliceExntesions, IndexVec, IndexVecExtensions};
 use crate::iter;
-use derivative::Derivative;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
@@ -52,13 +51,29 @@ use std::marker::PhantomData;
 ///
 /// All operations that involve a row and/or column index will panic if the
 /// index exceeds the relevant bound.
-#[derive(Derivative, Eq, PartialEq)]
-#[derivative(Clone(clone_from = "true"))]
+#[derive(Eq, PartialEq)]
 pub struct BitMatrix<R: Idx, C: Idx> {
     num_rows: usize,
     num_columns: usize,
     words: Vec<Word>,
     marker: PhantomData<(R, C)>,
+}
+
+impl<R: Idx, C: Idx> Clone for BitMatrix<R, C> {
+    fn clone_from(&mut self, source: &Self) {
+        self.num_rows = source.num_rows;
+        self.num_columns = source.num_columns;
+        self.words.clone_from(&source.words);
+    }
+
+    fn clone(&self) -> Self {
+        Self {
+            num_rows: self.num_rows,
+            num_columns: self.num_columns,
+            words: self.words.clone(),
+            marker: self.marker.clone(),
+        }
+    }
 }
 
 impl<R: Idx, C: Idx> BitMatrix<R, C> {
@@ -256,8 +271,7 @@ impl<R: Idx, C: Idx> fmt::Debug for BitMatrix<R, C> {
 ///
 /// `R` and `C` are index types used to identify rows and columns respectively;
 /// typically newtyped `usize` wrappers, but they can also just be `usize`.
-#[derive(Derivative, PartialEq, Eq)]
-#[derivative(Clone(clone_from = "true"))]
+#[derive(PartialEq, Eq)]
 pub struct SparseBitMatrix<R, C>
 where
     R: Idx,
@@ -266,6 +280,18 @@ where
     num_columns: usize,
     num_rows: usize,
     rows: IndexVec<R, HybridBitSet<C>>,
+}
+
+impl<R: Idx, C: Idx> Clone for SparseBitMatrix<R, C> {
+    fn clone_from(&mut self, source: &Self) {
+        self.rows.clone_from(&source.rows);
+        self.num_columns = source.num_columns;
+        self.num_rows = source.num_rows;
+    }
+
+    fn clone(&self) -> Self {
+        Self { num_columns: self.num_columns, num_rows: self.num_rows, rows: self.rows.clone() }
+    }
 }
 
 impl<R, C> Debug for SparseBitMatrix<R, C>

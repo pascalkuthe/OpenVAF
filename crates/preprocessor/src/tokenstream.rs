@@ -208,6 +208,9 @@ pub enum TokenKind {
     Exclude,
     Infinity,
 
+    InitalStep,
+    FinalStep,
+
     Error,
 }
 
@@ -302,6 +305,8 @@ impl TryFrom<RawToken> for TokenKind {
             RawToken::NetType => Self::NetType,
             RawToken::Root => Self::Root,
             RawToken::Unexpected => Self::Error,
+            RawToken::InitialStep => Self::InitalStep,
+            RawToken::FinalStep => Self::FinalStep,
             _ => return Err(()),
         };
 

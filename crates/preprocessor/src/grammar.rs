@@ -8,15 +8,15 @@
  *  *****************************************************************************************
  */
 
-use crate::diagnostics::PreprocessorDiagnostic::UnexpectedEof;
+use crate::diagnostics::PreprocessorDiagnostic::{self, UnexpectedEof};
 use crate::lexer::RawToken;
-use crate::sourcemap::SourceMap;
+use crate::sourcemap::{CtxSpan, SourceMap};
 use crate::token_set::TokenSet;
 use crate::tokenstream::{Macro, MacroArg, MacroCall, ParsedToken, ParsedTokenStream};
 use crate::{parser::Parser, processor::Processor, Diagnostics};
 use data_structures::index_vec::IndexVec;
 use data_structures::text_size::TextRange;
-use tracing::{debug, trace, trace_span};
+use tracing::{debug, error, trace, trace_span};
 
 pub(crate) fn parse_condition<'a>(
     p: &mut Parser<'a, '_>,
@@ -29,7 +29,7 @@ pub(crate) fn parse_condition<'a>(
 
     let name = p.current_text();
     if p.expect(RawToken::SimpleIdentifier, err) {
-        trace!(name=name,"condition");
+        trace!(name = name, "condition");
         if processor.is_macro_defined(name) != inverted {
             parse_if_body::<true, false>(p, err, processor); // condition is true
         } else {
@@ -54,13 +54,12 @@ fn parse_if_body<'a, const PROCESS: bool, const CONSIDER_ELSE: bool>(
                 break;
             }
 
-            RawToken::MacroEndIf  => {
+            RawToken::MacroEndIf => {
                 depth -= 1;
             }
             RawToken::MacroIfn | RawToken::MacroIf if !PROCESS => {
                 depth += 1;
             }
-
 
             RawToken::EOF => {
                 err.push(UnexpectedEof { expected: RawToken::MacroEndIf, span: p.current_span() });
@@ -83,14 +82,14 @@ fn parse_if_body<'a, const PROCESS: bool, const CONSIDER_ELSE: bool>(
                 break;
             }
 
-            _ => () 
+            _ => (),
         }
-        if PROCESS{ 
+        if PROCESS {
             processor.process_token(p, err)
-        }else{
-                // ignore tokens
-                p.bump_any()
-            }
+        } else {
+            // ignore tokens
+            p.bump_any()
+        }
     }
 }
 
@@ -105,13 +104,13 @@ pub(crate) fn parse_include<'a>(
     p.bump(RawToken::Include);
     let path = p.current_text();
     if p.expect(RawToken::LitString, err) {
-        Some((&path[1..path.len() - 1], TextRange::new(start,p.current_range().start())))
+        Some((&path[1..path.len() - 1], TextRange::new(start, p.current_range().start())))
     } else {
         None
     }
 }
 
-const MACRO_ARGS_TERMINATOR_SET: TokenSet =
+const MACRO_ARG_DEF_TERMINATOR_SET: TokenSet =
     TokenSet::new(&[RawToken::ParenClose]).union(MACRO_TERMINATOR_SET);
 
 const MACRO_TERMINATOR_SET: TokenSet = TokenSet::new(&[RawToken::EOF, RawToken::Newline]);
@@ -132,7 +131,7 @@ pub(crate) fn parse_define<'a>(
     let args = if followed_by_bracket {
         p.bump(RawToken::ParenOpen);
         let mut args = Vec::new();
-        while !p.at_ts(MACRO_ARGS_TERMINATOR_SET) {
+        while !p.at_ts(MACRO_ARG_DEF_TERMINATOR_SET) {
             args.push(p.current_text());
             if !p.expect(RawToken::SimpleIdentifier, err) {
                 success = false
@@ -141,7 +140,7 @@ pub(crate) fn parse_define<'a>(
                 success &= p.expect_with_recovery(
                     RawToken::Comma,
                     RawToken::ParenClose,
-                    MACRO_ARGS_TERMINATOR_SET,
+                    MACRO_ARG_DEF_TERMINATOR_SET,
                     err,
                 )
             }
@@ -158,7 +157,7 @@ pub(crate) fn parse_define<'a>(
     let mut body = Vec::new();
 
     while !p.at_ts(MACRO_TERMINATOR_SET) {
-        parse_macro_token(p, err, &args, &mut body, sm)
+        parse_macro_token::<true>(p, err, &args, &mut body, sm)
     }
     p.bump_any();
 
@@ -173,14 +172,14 @@ pub(crate) fn parse_define<'a>(
     }
 }
 
-fn parse_macro_token<'a>(
+fn parse_macro_token<'a, const INSIDE_MACRO: bool>(
     p: &mut Parser<'a, '_>,
     err: &mut Diagnostics,
     args: &[&'a str],
     dst: &mut ParsedTokenStream<'a>,
     sm: &mut SourceMap,
 ) {
-    trace!(token = display(p.current()), "parse macro token");
+    // trace!(token = display(p.current()), "parse macro token");
 
     if p.at(RawToken::SimpleIdentifier) {
         if let Some(arg) = args.iter().position(|x| *x == p.current_text()) {
@@ -192,7 +191,7 @@ fn parse_macro_token<'a>(
     }
 
     if p.at(RawToken::MacroCall) {
-        let (call, span) = parse_macro_call(p, err, args, sm);
+        let (call, span) = parse_macro_call::<INSIDE_MACRO>(p, err, args, sm);
         dst.push((ParsedToken::MacroCall(call), span));
         return;
     }
@@ -200,7 +199,10 @@ fn parse_macro_token<'a>(
     p.bumpy_any_to_macro(dst)
 }
 
-pub(crate) fn parse_macro_call<'a>(
+const MACRO_ARG_CALL_TERMINATOR_SET: TokenSet =
+    TokenSet::new(&[RawToken::ParenClose, RawToken::EOF]);
+
+pub(crate) fn parse_macro_call<'a, const INSIDE_MACRO: bool>(
     p: &mut Parser<'a, '_>,
     err: &mut Diagnostics,
     args: &[&'a str],
@@ -213,9 +215,15 @@ pub(crate) fn parse_macro_call<'a>(
     let name = &p.current_text()[1..];
     p.bump(RawToken::MacroCall);
 
+    let terminator = if INSIDE_MACRO {
+        MACRO_ARG_CALL_TERMINATOR_SET.union(MACRO_TERMINATOR_SET)
+    } else {
+        MACRO_ARG_CALL_TERMINATOR_SET
+    };
+
     let arg_bindings = if p.eat(RawToken::ParenOpen) {
         let mut arg_bindings = IndexVec::<MacroArg, _>::with_capacity(4);
-        while !p.at_ts(MACRO_ARGS_TERMINATOR_SET) {
+        'outer: while !p.at_ts(terminator) {
             let mut dst = Vec::with_capacity(18);
             let start = p.current_range().start();
 
@@ -225,19 +233,24 @@ pub(crate) fn parse_macro_call<'a>(
                     RawToken::ParenClose if depth != 0 => depth -= 1,
                     RawToken::ParenOpen => depth += 1,
                     RawToken::ParenClose | RawToken::Comma if depth == 0 => break,
-                    RawToken::EOF | RawToken::Newline  => break,
+                    RawToken::EOF => break,
+                    RawToken::Newline if INSIDE_MACRO => {
+                        error!("BREAK INSIDE MACRO");
+                        err.push(PreprocessorDiagnostic::MissingOrUnexpectedToken {
+                            expected: RawToken::ParenClose,
+                            expected_at: CtxSpan { range: p.previous_span(), ctx: p.ctx },
+                            span: CtxSpan { range: p.current_range(), ctx: p.ctx },
+                        });
+                        break 'outer;
+                    }
                     _ => (),
                 }
-                parse_macro_token(p, err, args, &mut dst, sm)
+
+                parse_macro_token::<INSIDE_MACRO>(p, err, args, &mut dst, sm)
             }
 
             if !p.at(RawToken::ParenClose) {
-                p.expect_with_recovery(
-                    RawToken::Comma,
-                    RawToken::ParenClose,
-                    MACRO_ARGS_TERMINATOR_SET,
-                    err,
-                );
+                p.expect_with_recovery(RawToken::Comma, RawToken::ParenClose, terminator, err);
             }
             let end = p.previous_span().end();
             arg_bindings.push((dst, TextRange::new(start, end)));

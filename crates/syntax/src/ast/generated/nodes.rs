@@ -58,6 +58,7 @@ pub struct Type {
 impl Type {
     pub fn integer_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![integer]) }
     pub fn real_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![real]) }
+    pub fn string_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![string]) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EmptyStmt {
@@ -73,8 +74,8 @@ pub struct AssignStmt {
 }
 impl ast::AttrsOwner for AssignStmt {}
 impl AssignStmt {
+    pub fn assign(&self) -> Option<Assign> { support::child(&self.syntax) }
     pub fn semicolon_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![;]) }
-    pub fn assign_or_expr(&self) -> Option<AssignOrExpr> { support::child(&self.syntax) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExprStmt {
@@ -120,7 +121,6 @@ impl ForStmt {
     pub fn semicolon_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![;]) }
     pub fn condition(&self) -> Option<Expr> { support::child(&self.syntax) }
     pub fn r_paren_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![')']) }
-    pub fn body(&self) -> Option<Stmt> { support::child(&self.syntax) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CaseStmt {
@@ -142,9 +142,14 @@ pub struct EventStmt {
 impl EventStmt {
     pub fn at_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![@]) }
     pub fn l_paren_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T!['(']) }
-    pub fn name(&self) -> Option<Name> { support::child(&self.syntax) }
+    pub fn initial_step_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, T![initial_step])
+    }
+    pub fn final_step_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, T![final_step])
+    }
     pub fn r_paren_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![')']) }
-    pub fn block_stmt(&self) -> Option<BlockStmt> { support::child(&self.syntax) }
+    pub fn stmt(&self) -> Option<Stmt> { support::child(&self.syntax) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BlockStmt {
@@ -153,7 +158,7 @@ pub struct BlockStmt {
 impl BlockStmt {
     pub fn begin_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![begin]) }
     pub fn block_scope(&self) -> Option<BlockScope> { support::child(&self.syntax) }
-    pub fn body(&self) -> AstChildren<BlockItem> { support::children(&self.syntax) }
+    pub fn items(&self) -> AstChildren<BlockItem> { support::children(&self.syntax) }
     pub fn end_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![end]) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -161,14 +166,6 @@ pub struct Assign {
     pub(crate) syntax: SyntaxNode,
 }
 impl Assign {}
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SimpleStmt {
-    pub(crate) syntax: SyntaxNode,
-}
-impl SimpleStmt {
-    pub fn attrs(&self) -> AstChildren<Attr> { support::children(&self.syntax) }
-    pub fn assign_or_expr(&self) -> Option<AssignOrExpr> { support::child(&self.syntax) }
-}
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Case {
     pub(crate) syntax: SyntaxNode,
@@ -377,6 +374,11 @@ impl NatureAttr {
     pub fn semicolon_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![;]) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ModulePort {
+    pub(crate) syntax: SyntaxNode,
+}
+impl ModulePort {}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BodyPortDecl {
     pub(crate) syntax: SyntaxNode,
 }
@@ -531,11 +533,6 @@ pub enum Stmt {
     BlockStmt(BlockStmt),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AssignOrExpr {
-    Assign(Assign),
-    Expr(Expr),
-}
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BlockItem {
     VarDecl(VarDecl),
     ParamDecl(ParamDecl),
@@ -554,11 +551,6 @@ pub enum Item {
     ModuleDecl(ModuleDecl),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ModulePort {
-    PortDecl(PortDecl),
-    Name(Name),
-}
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ModuleItem {
     BodyPortDecl(BodyPortDecl),
     NetDecl(NetDecl),
@@ -567,6 +559,11 @@ pub enum ModuleItem {
     BranchDecl(BranchDecl),
     VarDecl(VarDecl),
     ParamDecl(ParamDecl),
+}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ModulePortKind {
+    PortDecl(PortDecl),
+    Name(Name),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FunctionItem {
@@ -743,17 +740,6 @@ impl AstNode for BlockStmt {
 }
 impl AstNode for Assign {
     fn can_cast(kind: SyntaxKind) -> bool { kind == ASSIGN }
-    fn cast(syntax: SyntaxNode) -> Option<Self> {
-        if Self::can_cast(syntax.kind()) {
-            Some(Self { syntax })
-        } else {
-            None
-        }
-    }
-    fn syntax(&self) -> &SyntaxNode { &self.syntax }
-}
-impl AstNode for SimpleStmt {
-    fn can_cast(kind: SyntaxKind) -> bool { kind == SIMPLE_STMT }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
         if Self::can_cast(syntax.kind()) {
             Some(Self { syntax })
@@ -985,6 +971,17 @@ impl AstNode for DisciplineAttr {
 }
 impl AstNode for NatureAttr {
     fn can_cast(kind: SyntaxKind) -> bool { kind == NATURE_ATTR }
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        if Self::can_cast(syntax.kind()) {
+            Some(Self { syntax })
+        } else {
+            None
+        }
+    }
+    fn syntax(&self) -> &SyntaxNode { &self.syntax }
+}
+impl AstNode for ModulePort {
+    fn can_cast(kind: SyntaxKind) -> bool { kind == MODULE_PORT }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
         if Self::can_cast(syntax.kind()) {
             Some(Self { syntax })
@@ -1253,33 +1250,6 @@ impl AstNode for Stmt {
         }
     }
 }
-impl From<Assign> for AssignOrExpr {
-    fn from(node: Assign) -> AssignOrExpr { AssignOrExpr::Assign(node) }
-}
-impl From<Expr> for AssignOrExpr {
-    fn from(node: Expr) -> AssignOrExpr { AssignOrExpr::Expr(node) }
-}
-impl AstNode for AssignOrExpr {
-    fn can_cast(kind: SyntaxKind) -> bool {
-        match kind {
-            ASSIGN => true,
-            _ => Expr::can_cast(kind),
-        }
-    }
-    fn cast(syntax: SyntaxNode) -> Option<Self> {
-        let res = match syntax.kind() {
-            ASSIGN => AssignOrExpr::Assign(Assign { syntax }),
-            _ => AssignOrExpr::Expr(Expr::cast(syntax)?),
-        };
-        Some(res)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            AssignOrExpr::Assign(it) => &it.syntax,
-            AssignOrExpr::Expr(it) => it.syntax(),
-        }
-    }
-}
 impl From<VarDecl> for BlockItem {
     fn from(node: VarDecl) -> BlockItem { BlockItem::VarDecl(node) }
 }
@@ -1373,34 +1343,6 @@ impl AstNode for Item {
         }
     }
 }
-impl From<PortDecl> for ModulePort {
-    fn from(node: PortDecl) -> ModulePort { ModulePort::PortDecl(node) }
-}
-impl From<Name> for ModulePort {
-    fn from(node: Name) -> ModulePort { ModulePort::Name(node) }
-}
-impl AstNode for ModulePort {
-    fn can_cast(kind: SyntaxKind) -> bool {
-        match kind {
-            PORT_DECL | NAME => true,
-            _ => false,
-        }
-    }
-    fn cast(syntax: SyntaxNode) -> Option<Self> {
-        let res = match syntax.kind() {
-            PORT_DECL => ModulePort::PortDecl(PortDecl { syntax }),
-            NAME => ModulePort::Name(Name { syntax }),
-            _ => return None,
-        };
-        Some(res)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            ModulePort::PortDecl(it) => &it.syntax,
-            ModulePort::Name(it) => &it.syntax,
-        }
-    }
-}
 impl From<BodyPortDecl> for ModuleItem {
     fn from(node: BodyPortDecl) -> ModuleItem { ModuleItem::BodyPortDecl(node) }
 }
@@ -1455,6 +1397,34 @@ impl AstNode for ModuleItem {
         }
     }
 }
+impl From<PortDecl> for ModulePortKind {
+    fn from(node: PortDecl) -> ModulePortKind { ModulePortKind::PortDecl(node) }
+}
+impl From<Name> for ModulePortKind {
+    fn from(node: Name) -> ModulePortKind { ModulePortKind::Name(node) }
+}
+impl AstNode for ModulePortKind {
+    fn can_cast(kind: SyntaxKind) -> bool {
+        match kind {
+            PORT_DECL | NAME => true,
+            _ => false,
+        }
+    }
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        let res = match syntax.kind() {
+            PORT_DECL => ModulePortKind::PortDecl(PortDecl { syntax }),
+            NAME => ModulePortKind::Name(Name { syntax }),
+            _ => return None,
+        };
+        Some(res)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            ModulePortKind::PortDecl(it) => &it.syntax,
+            ModulePortKind::Name(it) => &it.syntax,
+        }
+    }
+}
 impl From<ParamDecl> for FunctionItem {
     fn from(node: ParamDecl) -> FunctionItem { FunctionItem::ParamDecl(node) }
 }
@@ -1502,11 +1472,6 @@ impl std::fmt::Display for Stmt {
         std::fmt::Display::fmt(self.syntax(), f)
     }
 }
-impl std::fmt::Display for AssignOrExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self.syntax(), f)
-    }
-}
 impl std::fmt::Display for BlockItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
@@ -1522,12 +1487,12 @@ impl std::fmt::Display for Item {
         std::fmt::Display::fmt(self.syntax(), f)
     }
 }
-impl std::fmt::Display for ModulePort {
+impl std::fmt::Display for ModuleItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }
 }
-impl std::fmt::Display for ModuleItem {
+impl std::fmt::Display for ModulePortKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }
@@ -1613,11 +1578,6 @@ impl std::fmt::Display for BlockStmt {
     }
 }
 impl std::fmt::Display for Assign {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self.syntax(), f)
-    }
-}
-impl std::fmt::Display for SimpleStmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }
@@ -1723,6 +1683,11 @@ impl std::fmt::Display for DisciplineAttr {
     }
 }
 impl std::fmt::Display for NatureAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.syntax(), f)
+    }
+}
+impl std::fmt::Display for ModulePort {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }

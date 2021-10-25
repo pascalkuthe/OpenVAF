@@ -11,6 +11,8 @@ readme="../README.md"
 [badges]
 maintenance = { status = "actively-developed" }
 
+[lib]
+doctest = false
 
 [dependencies]
 
@@ -23,5 +25,4 @@ preprocessor = {version = "0.0.0", path = "../preprocessor" }
 vfs = {version = "0.0.0", path = "../vfs" }
 
 derive_more = "0.99.16"
-linkme = "0.2.7"
-rowan = "0.14.1"
+rowan = "0.15"

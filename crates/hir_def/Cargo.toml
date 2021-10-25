@@ -11,6 +11,8 @@ readme="../README.md"
 [badges]
 maintenance = { status = "actively-developed" }
 
+[lib]
+doctest = false
 
 [dependencies]
 
@@ -23,8 +25,11 @@ data-structures = {version = "0.0.0", path = "../data_structures" }
 basedb = {version = "0.0.0", path = "../basedb" }
 syntax = {version = "0.0.0", path = "../syntax"}
 
-la-arena = "0.2"
 salsa = "0.17.0-pre.2"
 tracing = "0.1.26"
 derive_more = "0.99.16"
+
+[dev-dependencies]
+
+sourcegen = {version ="0.0.0", path ="../sourcegen"}
 

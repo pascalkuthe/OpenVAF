@@ -43,7 +43,7 @@ fn module_ports(p: &mut Parser) {
         }
         m.complete(p, MODULE_PORT);
         if !p.at(T![')']) {
-            p.expect_with(T![,], vec![T![,], T![')']]);
+            p.expect_with(T![,], &[T![,], T![')']]);
         }
     }
     p.expect(T![')']);
@@ -60,36 +60,28 @@ fn port_decl<const MODULE_HEAD: bool>(p: &mut Parser, m: Marker) {
     direction.complete(p, DIRECTION);
 
     //direction and type are both optional since only one is required
-    if !p.nth_at(1, T![,]) {
+    if !p.nth_at_ts(1, MODULE_PORT_RECOVERY.union(TokenSet::unique(T![,]))) {
         eat_name_ref(p);
     }
     p.eat(NET_TYPE);
 
-    // TODO Ast verification:
-    // * at least one name
-    // * either discipline or net type are provided
-
     if MODULE_HEAD {
-        while !p.at_ts(MODULE_PORT_RECOVERY) {
-            name_r(p, MODULE_PORT_RECOVERY.union(TokenSet::unique(T![,])));
-
-            // ambiguity is resolved here
-            // TODO figure out what is better for error resistance here...
-
-            if p.at(T![,]) && p.nth_at_ts(1, MODULE_PORT_RECOVERY) {
-                break;
-            }
-
-            if !p.at(T![')']) {
-                p.expect_with(T![,], vec![T![,], T![')']]);
-            }
-        }
+        decl_list(p, T![')'], module_port, MODULE_PORT_RECOVERY);
     } else {
         net_dec_list(p);
-        p.expect(T![;]);
     }
 
-    m.complete(p, PORT_DECL);
+    let finished = m.complete(p, PORT_DECL);
+    if !MODULE_HEAD {
+        let m = finished.precede(p);
+        p.eat(T![;]);
+        m.complete(p, BODY_PORT_DECL);
+    }
+}
+
+fn module_port(p: &mut Parser) -> bool {
+    name_r(p, MODULE_PORT_RECOVERY.union(TokenSet::unique(T![,])));
+    !(p.at(T![,]) && p.nth_at_ts(1, MODULE_PORT_RECOVERY))
 }
 
 fn module_item(p: &mut Parser) {
@@ -102,8 +94,11 @@ fn module_item(p: &mut Parser) {
             stmt_with_attrs(p);
             m.complete(p, ANALOG_BEHAVIOUR);
         }
-        NET_TYPE | IDENT => {
-            net_decl(p, m);
+        NET_TYPE => {
+            net_decl::<true>(p, m);
+        }
+        IDENT => {
+            net_decl::<false>(p, m);
         }
         PARAMETER_KW => {
             parameter_decl(p, m);
@@ -122,30 +117,24 @@ fn module_item(p: &mut Parser) {
     }
 }
 
-fn net_decl(p: &mut Parser, m: Marker) {
+fn net_decl<const NET_TYPE_FIRST: bool>(p: &mut Parser, m: Marker) {
     //direction and type ar both optional since only one is required
-    p.eat(NET_TYPE);
-
-    if !p.nth_at(1, T![,]) {
-        eat_name_ref(p);
+    if NET_TYPE_FIRST {
+        p.bump(NET_TYPE);
+        if !p.nth_at(1, T![,]) {
+            eat_name_ref(p);
+        }
+    } else {
+        name_r(p, MODULE_ITEM_OR_ATTR_RECOVERY.union(TokenSet::unique(T![;])))
     }
 
-    // TODO Ast verification:
-    // * at least one name
-    // * either discipline or net type are provided
-
     net_dec_list(p);
-    p.expect(T![;]);
+    p.eat(T![;]);
     m.complete(p, NET_DECL);
 }
 
 fn net_dec_list(p: &mut Parser) {
-    while !p.at_ts(NET_RECOVERY) {
-        name_r(p, NET_RECOVERY.union(TokenSet::unique(T![,])));
-        if !p.at_ts(NET_RECOVERY) {
-            p.expect_with(T![,], vec![T![,], T![;]]);
-        }
-    }
+    decl_list(p, T![;], decl_name, NET_RECOVERY);
 }
 
 const FUNCTION_RECOVER: TokenSet = TokenSet::new(&[EOF, ENDMODULE_KW, ENDFUNCTION_KW]);
@@ -161,9 +150,6 @@ fn func_decl(p: &mut Parser, m: Marker) {
     eat_ty(p);
     name_r(p, TokenSet::unique(T![;]));
     p.expect(T![;]);
-
-    // TODO Ast Verification:
-    //  Only allow a single trailing stmt
 
     while !p.at_ts(FUNCTION_RECOVER) {
         let m = p.start();
@@ -182,15 +168,11 @@ fn func_decl(p: &mut Parser, m: Marker) {
     m.complete(p, FUNCTION);
 }
 
-const FUNC_ARG_RECOVER: TokenSet = TokenSet::new(&[T![;], EOF, ENDMODULE_KW]);
+const FUNC_ARG_RECOVER: TokenSet = TokenSet::new(&[EOF, ENDMODULE_KW]);
 fn func_arg(p: &mut Parser, m: Marker) {
     p.bump_ts(DIRECTION_TS);
-    while !p.at_ts(FUNC_ARG_RECOVER) {
-        name_r(p, FUNC_ARG_RECOVER.union(TokenSet::unique(T![,])));
-        if !p.at(T![;]) {
-            p.expect_with(T![,], vec![T![;], T![,]]);
-        }
-    }
+    decl_list(p, T![;], decl_name, FUNC_ARG_RECOVER);
+    p.eat(T![;]);
     m.complete(p, FUNCTION_ARG);
 }
 
@@ -202,12 +184,7 @@ fn branch_decl(p: &mut Parser, m: Marker) {
         p.error(p.unexpected_token_msg(T!['(']))
     }
     arg_list(p);
-    while !p.at_ts(BRANCH_RECOVER) {
-        name(p);
-        if !p.at_ts(BRANCH_RECOVER) {
-            p.expect(T![,]);
-        }
-    }
-    p.expect(T![;]);
+    decl_list(p, T![;], decl_name, MODULE_ITEM_OR_ATTR_RECOVERY);
+    p.eat(T![;]);
     m.complete(p, BRANCH_DECL);
 }

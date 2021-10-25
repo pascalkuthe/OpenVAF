@@ -2,8 +2,9 @@
 name = "vfs"
 version = "0.0.0"
 description = "TBD"
-license = "MIT OR Apache-2.0"
+license="GPL-3.0"
 edition = "2021"
+rust-version = "1.56"
 
 [lib]
 doctest = false

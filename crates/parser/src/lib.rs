@@ -15,7 +15,6 @@ mod token_set;
 #[macro_use]
 mod syntax_kind;
 mod event;
-//mod grammar;
 mod error;
 mod grammar;
 mod parser;

@@ -39,7 +39,6 @@ fn discipline(p: &mut Parser, m: Marker) {
             p.err_recover(err, DISCIPLINE_RECOVERY_SET.union(TokenSet::unique(IDENT)));
         }
         m.complete(p, DISCIPLINE_ATTR);
-        // TODO verify presence of = for attrs whos path are not domain, potential float
     }
     p.expect(ENDDISCIPLINE_KW);
     m.complete(p, DISCIPLINE_DECL);
@@ -70,39 +69,56 @@ fn nature(p: &mut Parser, m: Marker) {
     m.complete(p, NATURE_DECL);
 }
 
-const VAR_RECOVERY: TokenSet = MODULE_ITEM_OR_ATTR_RECOVERY.union(TokenSet::new(&[T![;], EOF]));
-pub(super) fn var_decl(p: &mut Parser, m: Marker) {
-    ty(p);
-    while !p.at_ts(VAR_RECOVERY) {
-        let m = p.start();
-        name_r(p, TokenSet::new(&[T![,], T![=]]));
-        if p.eat(T![=]) {
-            expr(p);
-        }
-        m.complete(p, VAR);
-        if !p.at(T![;]) {
-            p.expect_with(T![,], vec![T![,], T![;]]);
+pub(super) fn decl_list(
+    p: &mut Parser,
+    terminator: SyntaxKind,
+    mut parse_entry: impl FnMut(&mut Parser) -> bool,
+    recovery: TokenSet,
+) {
+    let recovery = recovery.union(TokenSet::new(&[terminator]));
+    if p.at_ts(recovery) {
+        p.error(p.unexpected_token_msg(IDENT));
+    } else {
+        while !p.at_ts(recovery) && parse_entry(p) {
+            if !p.at(terminator) {
+                p.expect_with(T![,], &[T![,], terminator]);
+            }
         }
     }
+}
+
+pub(super) fn decl_name(p: &mut Parser) -> bool {
+    name_r(p, TokenSet::new(&[T![,], T![;]]));
+    true
+}
+
+pub(super) fn var_decl(p: &mut Parser, m: Marker) {
+    ty(p);
+    decl_list(p, T![;], var, MODULE_ITEM_OR_ATTR_RECOVERY);
     p.eat(T![;]);
     m.complete(p, VAR_DECL);
+}
+
+fn var(p: &mut Parser) -> bool {
+    let m = p.start();
+    name_r(p, TokenSet::new(&[T![,], T![=], T![;]]));
+    if p.eat(T![=]) {
+        expr(p);
+    }
+    m.complete(p, VAR);
+    true
 }
 
 pub(super) fn parameter_decl(p: &mut Parser, m: Marker) {
     p.bump(PARAMETER_KW);
     ty(p);
-    while !p.at_ts(VAR_RECOVERY) {
-        parameter(p);
-        if !p.at_ts(VAR_RECOVERY) {
-            p.expect(T![,]);
-        }
-    }
-    p.expect(T![;]);
+    decl_list(p, T![;], parameter, MODULE_ITEM_OR_ATTR_RECOVERY);
+    p.eat(T![;]);
     m.complete(p, PARAM_DECL);
 }
 
-const PARAM_RECOVER: TokenSet = VAR_RECOVERY.union(TokenSet::unique(T![,]));
-fn parameter(p: &mut Parser) {
+const PARAM_RECOVER: TokenSet = MODULE_ITEM_OR_ATTR_RECOVERY.union(TokenSet::new(&[T![,], T![;]]));
+fn parameter(p: &mut Parser) -> bool {
     let m = p.start();
     name_r(p, TokenSet::new(&[T![,], T![;]]));
     p.expect(T![=]);
@@ -111,6 +127,7 @@ fn parameter(p: &mut Parser) {
         constraint(p)
     }
     m.complete(p, PARAM);
+    true
 }
 
 fn constraint(p: &mut Parser) {

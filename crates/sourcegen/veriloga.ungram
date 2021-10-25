@@ -55,22 +55,13 @@ EmptyStmt
 EmptyStmt = AttrList* ';'
 
 ExprStmt =
-  AttrList* Expr ';'
+  AttrList* Expr ';'?
 
 AssignStmt =
-  AttrList* Assign ';'
-
-
-SimpleStmt =
-  Attr* AssignOrExpr
-
-AssignOrExpr =
-  Assign | Expr
+  AttrList* Assign ';'?
 
 Assign = 
   lval: Expr op: ('<+' | '=') rval: Expr
-
-
 
 IfStmt =
   AttrList* 'if' '(' condition:Expr ')'
@@ -82,8 +73,8 @@ WhileStmt =
   body: Stmt
 
 ForStmt =
-  AttrList* 'for' '(' init: SimpleStmt ';' condition:Expr ';' incr: SimpleStmt')'
-  body: Stmt
+  AttrList* 'for' '(' init: Stmt ';' condition:Expr ';' incr: Stmt ')'
+  for_body: Stmt
 
 CaseStmt =
   AttrList* 'case' '(' discriminant: Expr ')'
@@ -93,18 +84,22 @@ CaseStmt =
 Case =
   (Expr (',' Expr)* | 'default') ':'? Stmt
 
+
+
+
 EventStmt =
-  '@' '(' Name ')' BlockStmt
+  '@' '(' ('initial_step' | 'final_step') ('(' sim_phases: ('str_lit' (',' 'str_lit')*) ')')? ')' Stmt
+
 
 BlockStmt =
   'begin'
     BlockScope?
-    body:BlockItem*
+    items: BlockItem*
   'end'
 
 BlockScope = ':' Name
 
-BlockItem =
+BlockItem = 
   VarDecl | ParamDecl | Stmt
 
 Expr =
@@ -129,7 +124,7 @@ ArrayExpr =
   '\'{' (Expr (',' Expr)*)? '}'
 
 Literal =
-   'int_number' | 'string' | 'std_real_number' | 'si_real_number' | 'inf'
+   'int_number' | 'str_lit' | 'std_real_number' | 'si_real_number' | 'inf'
    
 
 PrefixExpr =
@@ -201,7 +196,8 @@ ModuleItem =
 | ParamDecl
 
 
-ModulePort = PortDecl|Name
+ModulePort = kind: ModulePortKind
+ModulePortKind = PortDecl| Name
 
 AnalogBehaviour =
   AttrList* 'analog' Stmt

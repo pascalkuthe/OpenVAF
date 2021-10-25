@@ -11,11 +11,11 @@ fn attr_list(p: &mut Parser, recovery: TokenSet) {
     let m = p.start();
     p.bump(T!["(*"]);
 
-    while !p.at_ts(TokenSet::new(&[EOF,T!["*)"]])) {
+    while !p.at_ts(TokenSet::new(&[EOF, T!["*)"]])) {
         attr(p, recovery);
 
         if !p.at(T!["*)"]) {
-            p.expect_with(T![,],vec![T![,],T!["*)"]]);
+            p.expect_with(T![,], &[T![,], T!["*)"]]);
         }
     }
 

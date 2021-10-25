@@ -1,0 +1,2 @@
+EKV 2.6 copied from ngspice https://pilotfiber.dl.sourceforge.net/project/ngspice/ng-spice-rework/34/ngspice-adms-va.7z
+Note that ADMS puts attribute declarations AFTER statements, wheras the verilogA standard requires them BEFORE, so patch.py repairs these

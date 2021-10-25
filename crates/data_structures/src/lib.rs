@@ -32,6 +32,12 @@ pub type IndexSet<T> = indexmap::IndexSet<T,RandomState>;
 pub type IndexMap<T,V> = indexmap::IndexMap<T,V,RandomState>;
 
 pub use text_size;
-pub use beef::lean::Cow;
+// pub use beef::lean::Cow;
 pub use smallvec::{self,SmallVec};
 pub use smol_str::SmolStr;
+
+pub mod arena;
+
+
+
+

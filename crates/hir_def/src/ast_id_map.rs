@@ -12,7 +12,7 @@ use std::{
     marker::PhantomData,
 };
 
-use la_arena::{Arena, Idx};
+use data_structures::arena::{Arena, Idx};
 use syntax::{ast, match_ast, AstNode, AstPtr, SyntaxNode, SyntaxNodePtr};
 
 /// `AstId` points to an AST node in a specific file.
@@ -84,8 +84,18 @@ impl AstIdMap {
                         true
                     },
 
-                    ast::BodyPortDecl(_decl) => {
-                        false
+                    ast::BodyPortDecl(_decl) => false,
+                    ast::ParamDecl(_decl) => false,
+                    ast::VarDecl(_decl) => false,
+
+                    ast::Param(decl) => {
+                        res.alloc(decl.syntax());
+                        true
+                    },
+
+                    ast::Var(decl) => {
+                        res.alloc(decl.syntax());
+                        true
                     },
 
                     // Also includes variable decl/parameters inside BlockStmts
@@ -133,22 +143,22 @@ impl AstIdMap {
 
     fn erased_ast_id(&self, item: &SyntaxNode) -> ErasedFileAstId {
         let ptr = SyntaxNodePtr::new(item);
-        match self.arena.iter().find(|(_id, i)| **i == ptr) {
+        match self.arena.iter_enumerated().find(|(_id, i)| **i == ptr) {
             Some((it, _)) => it,
             None => panic!(
-                "Can't find {:?} in AstIdMap:\n{:?}",
+                "Can't find {:?} in AstIdMap",
                 item,
-                self.arena.iter().map(|(_id, i)| i).collect::<Vec<_>>(),
+                // self.arena.iter_enumerated().map(|(_id, i)| i).collect::<Vec<_>>(),
             ),
         }
     }
 
     pub fn get<N: AstNode>(&self, id: FileAstId<N>) -> AstPtr<N> {
-        self.arena[id.raw].clone().cast::<N>().unwrap()
+        self.arena[id.raw].cast::<N>().unwrap()
     }
 
     fn alloc(&mut self, item: &SyntaxNode) -> ErasedFileAstId {
-        self.arena.alloc(SyntaxNodePtr::new(item))
+        self.arena.push(SyntaxNodePtr::new(item))
     }
 }
 

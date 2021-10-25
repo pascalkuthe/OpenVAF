@@ -15,7 +15,7 @@ use data_structures::{
     text_size::{TextRange, TextSize},
     HashMap,
 };
-use std::iter;
+use std::{iter, usize};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LineIndex {
@@ -23,6 +23,8 @@ pub struct LineIndex {
     pub newlines: Vec<TextSize>,
     /// List of non-ASCII characters on each line
     pub utf16_lines: HashMap<u32, Vec<Utf16Char>>,
+    /// Length of the entire source text
+    pub len: TextSize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -65,6 +67,27 @@ impl Utf16Char {
     }
 }
 
+/// Represent a line inside a file.
+/// The backing number is 0 based
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Line(u32);
+
+impl From<usize> for Line {
+    #[inline]
+    fn from(raw: usize) -> Line {
+        // just casting here is just fine because if we have more lines than u32::MAX we also have
+        // just as many (or more) characters which would have caused a panic earlier
+        Line(raw as u32)
+    }
+}
+
+impl From<Line> for usize {
+    #[inline]
+    fn from(line: Line) -> usize {
+        line.0 as usize
+    }
+}
+
 impl LineIndex {
     pub fn new(text: &str) -> LineIndex {
         let mut utf16_lines = HashMap::default();
@@ -104,7 +127,19 @@ impl LineIndex {
             utf16_lines.insert(line, utf16_chars);
         }
 
-        LineIndex { newlines, utf16_lines }
+        LineIndex { newlines, utf16_lines, len: TextSize::of(text) }
+    }
+
+    pub fn line(&self, offset: TextSize) -> Line {
+        let line = self.newlines.partition_point(|&it| it <= offset) - 1;
+        Line(line as u32)
+    }
+
+    pub fn line_range(&self, line: Line) -> TextRange {
+        let line: usize = line.into();
+        let start = self.newlines[line];
+        let end = self.newlines.get(line + 1).copied().unwrap_or(self.len);
+        TextRange::new(start, end)
     }
 
     pub fn line_col(&self, offset: TextSize) -> LineCol {
