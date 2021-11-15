@@ -311,7 +311,7 @@ macro_rules! intrinsics {
     ($($names: ident),*) => {
         const BUILTIN_CNT: usize = [$(stringify!($names)),*].len();
         const BUILTIN_INFO: &'static [BuiltinFunctionInfo;BUILTIN_CNT] = &[$(info::$names),*];
-        pub (crate) const BUILTIN_FUNCTIONS: &'static [BuiltinFunction] = &[$(BuiltinFunction::$names),*];
+        pub (crate) const BUILTIN_FUNCTIONS: &'static [BuiltInFunction] = &[$(BuiltInFunction::$names),*];
 
 
         #[doc(hidden)]
@@ -323,7 +323,7 @@ macro_rules! intrinsics {
         #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
         #[repr(u8)]
         #[allow(non_camel_case_types)]
-        pub enum BuiltinFunction{
+        pub enum BuiltInFunction{
             $($names=intrinsic_idx::$names),*
         }
 
@@ -384,7 +384,7 @@ intrinsics![
     PARAM_GIVEN
 ];
 
-impl BuiltinFunction {
+impl BuiltInFunction {
     pub fn info(self) -> &'static BuiltinFunctionInfo {
         &BUILTIN_INFO[self as u8 as usize]
     }

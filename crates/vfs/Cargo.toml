@@ -11,5 +11,6 @@ doctest = false
 
 [dependencies]
 
-data-structures = {path="../data_structures",version="0.0.0"}
-
+paths = {path="../paths",version="0.0.0"}
+indexmap = "1.6"
+ahash = "0.7"

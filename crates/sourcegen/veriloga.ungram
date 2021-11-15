@@ -88,11 +88,11 @@ Case =
 
 
 EventStmt =
-  '@' '(' ('initial_step' | 'final_step') ('(' sim_phases: ('str_lit' (',' 'str_lit')*) ')')? ')' Stmt
+  AttrList* '@' '(' ('initial_step' | 'final_step') ('(' sim_phases: ('str_lit' (',' 'str_lit')*) ')')? ')' Stmt
 
 
 BlockStmt =
-  'begin'
+  AttrList* 'begin'
     BlockScope?
     items: BlockItem*
   'end'
@@ -182,7 +182,7 @@ NatureAttr =
   Name '=' val: Expr ';'
 
 ModuleDecl =
-  'module' Name ( '('ports: (ModulePort (',' ModulePort)*)? ')' )? ';'
+  AttrList* 'module' Name ( '('ports: (ModulePort (',' ModulePort)*)? ')' )? ';'
    ModuleItem*
   'endmodule'
 
@@ -236,7 +236,7 @@ Direction =
 
 
 Function =
-  'analog' 'function' Type? Name ';'
+  AttrList* 'analog' 'function' Type? Name ';'
   FunctionItem*
   'endfunction'
 

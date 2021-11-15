@@ -11,11 +11,9 @@
 //! `LineIndex` maps flat `TextSize` offsets into `(Line, Column)`
 //! representation.
 //!
-use data_structures::{
-    text_size::{TextRange, TextSize},
-    HashMap,
-};
+use ahash::AHashMap as HashMap;
 use std::{iter, usize};
+use text_size::{TextRange, TextSize};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LineIndex {

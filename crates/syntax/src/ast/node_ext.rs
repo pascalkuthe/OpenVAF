@@ -1,17 +1,14 @@
 //! Various extension methods to ast Nodes, which are hard to code-generate.
 //! Extensions for various expressions live in a sibling `expr_extensions` module.
 
-use crate::ast::support;
-use crate::ast::{self, AstNode};
-use crate::SyntaxToken;
-use parser::SyntaxKind::{IDENT, ROOT_KW};
-use parser::T;
+use crate::SyntaxKind::{IDENT, ROOT_KW};
+use crate::{
+    ast::{self, support, AstNode},
+    SyntaxToken, T,
+};
 use std::iter::successors;
 
-use super::{
-    AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, Constraint, EventStmt,
-    Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit,
-};
+use super::{AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, AttrsOwner, Constraint, EventStmt, Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit};
 
 // impl ast::PathSegment {
 //     pub fn parent_path(&self) -> Option<Path> {
@@ -263,3 +260,4 @@ impl Function {
         support::children(self.syntax())
     }
 }
+

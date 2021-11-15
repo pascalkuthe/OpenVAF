@@ -1,28 +1,17 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
 pub mod ast;
+mod error;
 mod parsing;
 mod ptr;
 mod syntax_node;
 mod token_text;
 mod validation;
 
-use data_structures::pretty;
-use derive_more::Display;
 use preprocessor::sourcemap::{CtxSpan, FileSpan, SourceContext};
 use std::{cmp::Ordering, marker::PhantomData, sync::Arc};
 use vfs::FileId;
 
 pub use ast::AstNode;
-pub use parser::{SyntaxKind, T};
+pub use error::SyntaxError;
 pub use preprocessor::{
     diagnostics::PreprocessorDiagnostic, preprocess, sourcemap, FileReadError, Preprocess,
     SourceProvider,
@@ -33,47 +22,7 @@ pub use rowan::{
 };
 pub use syntax_node::{SyntaxNode, SyntaxToken};
 pub use token_text::TokenText;
-
-#[derive(Display, Eq, PartialEq, Debug, Clone, Hash)]
-pub enum SyntaxError {
-    #[display(fmt = "unexpected token '{}'; expected {}", "found", "expected")]
-    UnexpectedToken {
-        expected: pretty::List<Vec<SyntaxKind>>,
-        found: SyntaxKind,
-        span: TextRange,
-        expected_at: Option<TextRange>,
-        missing_delimeter: bool,
-    },
-
-    #[display(fmt = "unexpected '{}' token", "found")]
-    SurplusToken { found: SyntaxKind, span: TextRange },
-
-    #[display(fmt = "unexpected token")]
-    MissingToken { expected: SyntaxKind, span: TextRange, expected_at: TextRange },
-
-    #[display(fmt = "$root is only allowed as a prefix")]
-    IllegalRootSegment { path_segment: TextRange, prefix: Option<TextRange> },
-
-    #[display(fmt = "declarations in blocks are only allowed before the first stmt")]
-    BlockItemsAfterStmt { items: Vec<AstPtr<ast::BlockItem>>, first_stmt: TextRange },
-    #[display(fmt = "declarations in blocks require an explicit scope")]
-    BlockItemsWithoutScope { items: Vec<AstPtr<ast::BlockItem>>, begin_token: TextRange },
-
-    #[display(fmt = "functions may not contain any items after the function body")]
-    FunItemsAfterBody { items: Vec<AstPtr<ast::FunctionItem>>, body: TextRange },
-
-    #[display(fmt = "functions may only contain one body")]
-    MultipleFunBodys { additional_bodys: Vec<TextRange>, body: AstPtr<ast::Stmt> },
-
-    #[display(fmt = "function is missing a body")]
-    FunWithoutBody { fun: TextRange },
-
-    #[display(fmt = "branch declaration require 1 or 2 nets; found {}", "cnt")]
-    IllegalBranchNodeCnt { arg_list: TextRange, cnt: usize },
-
-    #[display(fmt = "illegal expr was used to declare a branch node!")]
-    IllegalBranchNodeExpr { single: bool, illegal_nodes: Vec<TextRange> },
-}
+pub use tokens::{SyntaxKind, T};
 
 /// `Parse` is the result of the parsing: a syntax tree and a collection of
 /// errors.

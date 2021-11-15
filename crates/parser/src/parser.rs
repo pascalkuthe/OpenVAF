@@ -3,7 +3,7 @@
 use std::cell::Cell;
 
 use drop_bomb::DropBomb;
-use data_structures::pretty::List;
+use stdx::pretty::List;
 
 use crate::token_set::TokenSet;
 use crate::{

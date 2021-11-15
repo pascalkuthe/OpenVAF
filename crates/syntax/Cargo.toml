@@ -16,13 +16,13 @@ doctest = false
 
 [dependencies]
 
-tracing = "0.1.29"
-
-data-structures = {version = "0.0.0", path = "../data_structures" }
-
 parser = {version = "0.0.0", path = "../parser" }
 preprocessor = {version = "0.0.0", path = "../preprocessor" }
 vfs = {version = "0.0.0", path = "../vfs" }
+stdx = {version = "0.0.0", path = "../stdx" }
+tokens = {version="0.0.0", path="../tokens"}
 
-derive_more = "0.99.16"
+text-size = "1.1"
+
 rowan = "0.15"
+

@@ -1,6 +1,5 @@
 use std::iter::successors;
 
-use data_structures::iter::Itertools;
 use syntax::ast;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +37,7 @@ impl Type {
 
     pub fn dim(&self) -> Vec<u32> {
         if let Type::Array { ref ty, len } = *self {
-            let mut dims = successors(Some((&*ty, len)), |(ty, _)| {
+            let mut dims: Vec<_> = successors(Some((&*ty, len)), |(ty, _)| {
                 if let Type::Array { ref ty, len } = ***ty {
                     Some((&*ty, len))
                 } else {
@@ -46,7 +45,7 @@ impl Type {
                 }
             })
             .map(|(_, len)| len)
-            .collect_vec();
+            .collect();
             dims.reverse();
             dims
         } else {

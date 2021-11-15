@@ -1,13 +1,11 @@
 //! Various extension methods to ast Expr Nodes, which are hard to code-generate.
 
-use parser::SyntaxKind::{self, PARAM_DECL, VAR_DECL};
-
 use crate::{
     ast::{self, support, AstChildren, AstNode, AstToken},
-    SyntaxNode, SyntaxToken, T,
+    SyntaxToken, T,
 };
 
-use super::{ParamDecl, Stmt, VarDecl};
+use super::Stmt;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UnaryOp {

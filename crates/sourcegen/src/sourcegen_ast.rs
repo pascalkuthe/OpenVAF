@@ -28,7 +28,7 @@ pub fn sourcegen_ast() {
 
     let ast = lower(&grammar);
 
-    let syntax_kinds_file = project_root().join("crates/parser/src/syntax_kind/generated.rs");
+    let syntax_kinds_file = project_root().join("crates/tokens/src/parser/generated.rs");
     let syntax_kinds = generate_syntax_kinds(KINDS_SRC);
     ensure_file_contents(syntax_kinds_file.as_path(), &syntax_kinds);
 
@@ -402,6 +402,13 @@ fn generate_syntax_kinds(grammar: KindsSrc<'_>) -> String {
             pub fn from_keyword(ident: &str) -> Option<SyntaxKind> {
                 let kw = match ident {
                     #(#full_keywords_values => #full_keywords,)*
+                      "reg"
+                    |"wreal"
+                    |"wire"
+                    |"uwire"
+                    |"wand"
+                    |"wor"
+                    |"ground" => NET_TYPE,
                     _ => return None,
                 };
                 Some(kw)
@@ -529,7 +536,6 @@ fn lower(grammar: &Grammar) -> AstSrc {
     let nodes = grammar.iter().collect::<Vec<_>>();
 
     for &node in &nodes {
-
         let name = grammar[node].name.clone();
         let rule = &grammar[node].rule;
         match lower_enum(grammar, rule) {
@@ -544,7 +550,6 @@ fn lower(grammar: &Grammar) -> AstSrc {
                 res.enums.push(enum_src);
             }
             None => {
-
                 let mut fields = Vec::new();
                 lower_rule(&mut fields, grammar, None, rule);
                 res.nodes.push(AstNodeSrc { doc: Vec::new(), name, traits: Vec::new(), fields });
@@ -657,7 +662,6 @@ fn lower_rule(acc: &mut Vec<Field>, grammar: &Grammar, label: Option<&String>, r
             lower_rule(acc, grammar, Some(l), rule);
         }
         Rule::Seq(rules) | Rule::Alt(rules) => {
-
             for rule in rules {
                 lower_rule(acc, grammar, label, rule)
             }
@@ -772,8 +776,8 @@ fn extract_enum_traits(ast: &mut AstSrc) {
             .map(|var| {
                 nodes
                     .iter()
-                    .find(|it| &it.name == var.name())
-                    .expect(&format!("Node not found {}", var.name()))
+                    .find(|it| it.name == var.name())
+                    .unwrap_or_else(|| panic!("Node not found {}", var.name()))
             })
             .map(|node| node.traits.iter().cloned().collect::<BTreeSet<_>>());
 

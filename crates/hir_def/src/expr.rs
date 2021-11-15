@@ -12,7 +12,7 @@
 //!
 //! See also a neighboring `body` module.
 
-use data_structures::arena::Idx;
+use arena::Idx;
 use std::{
     fmt::{Debug, Display},
     intrinsics::transmute,

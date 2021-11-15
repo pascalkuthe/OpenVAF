@@ -1,10 +1,8 @@
 mod parser_integration;
 mod parser_unit_test;
 
-use data_structures::sync::RwLock;
-
+use parking_lot::RwLock;
 use syntax::{Parse, Preprocess, SourceFile};
-use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use vfs::{FileId, Vfs};
 
 use crate::{
@@ -23,7 +21,7 @@ impl TestDataBase {
         let mut res = Self { storage: salsa::Storage::default(), vfs: None, root_file: None };
         let vfs = RwLock::new(Vfs::default());
         let foo: &mut dyn BaseDB = &mut res;
-        let root_file = foo.setup_test_db(root_file_name, root_file, &mut vfs.borrow_mut());
+        let root_file = foo.setup_test_db(root_file_name, root_file, &mut vfs.write());
         res.root_file = Some(root_file);
         res.vfs = Some(vfs);
         res
@@ -36,10 +34,10 @@ impl TestDataBase {
         self.vfs.as_ref().unwrap()
     }
     pub fn parse_and_check(&self) -> Parse<SourceFile> {
-        let filter = tracing_subscriber::EnvFilter::from_env("OPENVAF_TEST_LOG");
-        let printer = tracing_subscriber::fmt::layer().compact().without_time().with_ansi(true);
-        let subscriber = tracing_subscriber::Registry::default().with(filter).with(printer);
-        let _guard = tracing::subscriber::set_default(subscriber);
+        // let filter = tracing_subscriber::EnvFilter::from_env("OPENVAF_TEST_LOG");
+        // let printer = tracing_subscriber::fmt::layer().compact().without_time().with_ansi(true);
+        // let subscriber = tracing_subscriber::Registry::default().with(filter).with(printer);
+        // let _guard = tracing::subscriber::set_default(subscriber);
 
         let root_file = self.root_file();
         let Preprocess { diagnostics, .. } = self.preprocess(root_file);

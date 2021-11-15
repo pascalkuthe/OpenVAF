@@ -1,4 +1,4 @@
-use data_structures::iter::{zip, Itertools};
+use stdx::iter::zip;
 use syntax::ast::{BranchKind, Item, ModuleItem, ModulePortKind};
 
 use crate::tests::TestDataBase;
@@ -33,7 +33,7 @@ fn branches() {
         )
         .collect();
 
-    assert_eq!(branches[0].names().map(|it| it.text().to_owned()).collect_vec(), &["ab1", "ab2"]);
+    assert_eq!(branches[0].names().map(|it| it.text().to_owned()).collect::<Vec<_>>(), &["ab1", "ab2"]);
 
     if let BranchKind::Nodes(hi, lo) =
         branches[0].branch_kind().expect("decl 1 was not parsed correctly")
@@ -47,7 +47,7 @@ fn branches() {
         )
     }
 
-    assert_eq!(branches[1].names().map(|it| it.text().to_owned()).collect_vec(), &["a_gnd"]);
+    assert_eq!(branches[1].names().map(|it| it.text().to_owned()).collect::<Vec<_>>(), &["a_gnd"]);
 
     if let BranchKind::NodeGnd(node) =
         branches[1].branch_kind().expect("decl 1 was not parsed correctly")
@@ -60,7 +60,7 @@ fn branches() {
         )
     }
 
-    assert_eq!(branches[2].names().map(|it| it.text().to_owned()).collect_vec(), &["port_flow_b"]);
+    assert_eq!(branches[2].names().map(|it| it.text().to_owned()).collect::<Vec<_>>(), &["port_flow_b"]);
 
     if let BranchKind::PortFlow(node) =
         branches[2].branch_kind().expect("decl 1 was not parsed correctly")
@@ -70,7 +70,7 @@ fn branches() {
                 .expect("port is missing from port flow")
                 .segments()
                 .map(|seg| seg.syntax.text().to_owned())
-                .collect_vec(),
+                .collect::<Vec<_>>(),
             &["$root", "test", "b"]
         );
     } else {
@@ -107,7 +107,7 @@ module test2 (a,b,c,d,e,f,g);
     inout electrical wire g;
 endmodule
 
-module test3 (output a,b, input electrical c,d,e, (*foo*) inout electrical tri f);
+module test3 (output a,b, input electrical c,d,e, (*foo*) inout electrical wire f);
 endmodule
 "#;
 

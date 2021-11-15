@@ -12,7 +12,7 @@ use std::{
     marker::PhantomData,
 };
 
-use data_structures::arena::{Arena, Idx};
+use arena::{Arena, Idx, RawIdx};
 use syntax::{ast, match_ast, AstNode, AstPtr, SyntaxNode, SyntaxNodePtr};
 
 /// `AstId` points to an AST node in a specific file.
@@ -42,7 +42,7 @@ impl<N: AstNode> Hash for FileAstId<N> {
 
 impl<N: AstNode> fmt::Debug for FileAstId<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FileAstId::<{}>({})", type_name::<N>(), self.raw.into_raw())
+        write!(f, "FileAstId::<{}>({})", type_name::<N>(), RawIdx::from(self.raw))
     }
 }
 
@@ -158,7 +158,7 @@ impl AstIdMap {
     }
 
     fn alloc(&mut self, item: &SyntaxNode) -> ErasedFileAstId {
-        self.arena.push(SyntaxNodePtr::new(item))
+        self.arena.push_and_get_key(SyntaxNodePtr::new(item))
     }
 }
 

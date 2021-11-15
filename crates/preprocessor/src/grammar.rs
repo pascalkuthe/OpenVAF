@@ -9,14 +9,13 @@
  */
 
 use crate::diagnostics::PreprocessorDiagnostic::{self, UnexpectedEof};
-use crate::lexer::RawToken;
+use crate::parser::{CompilerDirective, FullTokenIdx, PreprocessorToken};
+use crate::processor::{Macro, MacroArg, MacroCall, ParsedToken, ParsedTokenKind};
 use crate::sourcemap::{CtxSpan, SourceMap};
-use crate::token_set::TokenSet;
-use crate::tokenstream::{Macro, MacroArg, MacroCall, ParsedToken, ParsedTokenStream};
 use crate::{parser::Parser, processor::Processor, Diagnostics};
-use data_structures::index_vec::IndexVec;
-use data_structures::text_size::TextRange;
-use tracing::{debug, error, trace, trace_span};
+use text_size::TextRange;
+// use tracing::{debug, trace, trace_span};
+use typed_index_collections::TiVec;
 
 pub(crate) fn parse_condition<'a>(
     p: &mut Parser<'a, '_>,
@@ -24,12 +23,13 @@ pub(crate) fn parse_condition<'a>(
     processor: &mut Processor<'a>,
     inverted: bool,
 ) {
-    let tspan = trace_span!("parsing macro condition");
-    let _tspan = tspan.enter();
+    // let tspan = trace_span!("parsing macro condition");
+    // let _tspan = tspan.enter();
 
     let name = p.current_text();
-    if p.expect(RawToken::SimpleIdentifier, err) {
-        trace!(name = name, "condition");
+
+    if p.expect(PreprocessorToken::SimpleIdent, "an identifier", err) {
+        // trace!(name = name, "condition");
         if processor.is_macro_defined(name) != inverted {
             parse_if_body::<true, false>(p, err, processor); // condition is true
         } else {
@@ -49,46 +49,48 @@ fn parse_if_body<'a, const PROCESS: bool, const CONSIDER_ELSE: bool>(
     let mut depth = 0;
     loop {
         match p.current() {
-            RawToken::MacroEndIf if depth == 0 => {
-                p.bump(RawToken::MacroEndIf);
+            PreprocessorToken::CompilerDirective => match p.compiler_directive() {
+                CompilerDirective::IfDef | CompilerDirective::IfNotDef if !PROCESS => depth += 1,
+
+                CompilerDirective::EndIf if depth == 0 => {
+                    p.bump();
+                    break;
+                }
+
+                CompilerDirective::Else | CompilerDirective::ElseIf if PROCESS && depth == 0 => {
+                    parse_if_body::<false, false>(p, err, processor);
+                    return;
+                }
+
+                CompilerDirective::Else if CONSIDER_ELSE && depth == 0 => {
+                    p.bump();
+                    parse_if_body::<true, false>(p, err, processor);
+                    break;
+                }
+
+                CompilerDirective::ElseIf if CONSIDER_ELSE && depth == 0 => {
+                    p.bump();
+                    parse_condition(p, err, processor, false);
+                    break;
+                }
+
+                CompilerDirective::EndIf => depth -= 1,
+                _ => (),
+                // x => eprintln!("skipping {:?} {}", x, p.current_text()),
+            },
+            PreprocessorToken::Eof => {
+                eprintln!("EOF?");
+                err.push(UnexpectedEof { expected: "`endif", span: p.current_span() });
                 break;
             }
-
-            RawToken::MacroEndIf => {
-                depth -= 1;
-            }
-            RawToken::MacroIfn | RawToken::MacroIf if !PROCESS => {
-                depth += 1;
-            }
-
-            RawToken::EOF => {
-                err.push(UnexpectedEof { expected: RawToken::MacroEndIf, span: p.current_span() });
-                break;
-            }
-            RawToken::MacroElse | RawToken::MacroElsif if PROCESS && depth == 0 => {
-                parse_if_body::<false, false>(p, err, processor);
-                return;
-            }
-
-            RawToken::MacroElse if CONSIDER_ELSE && depth == 0 => {
-                p.bump(RawToken::MacroElse);
-                parse_if_body::<true, false>(p, err, processor);
-                break;
-            }
-
-            RawToken::MacroElsif if CONSIDER_ELSE && depth == 0 => {
-                p.bump(RawToken::MacroElsif);
-                parse_condition(p, err, processor, false);
-                break;
-            }
-
             _ => (),
         }
+
         if PROCESS {
             processor.process_token(p, err)
         } else {
             // ignore tokens
-            p.bump_any()
+            p.bump()
         }
     }
 }
@@ -97,71 +99,90 @@ pub(crate) fn parse_include<'a>(
     p: &mut Parser<'a, '_>,
     err: &mut Diagnostics,
 ) -> Option<(&'a str, TextRange)> {
-    let tspan = trace_span!("parsing `include");
-    let _tspan = tspan.enter();
+    // let tspan = trace_span!("parsing `include");
+    // let _tspan = tspan.enter();
 
     let start = p.current_range().start();
-    p.bump(RawToken::Include);
+    p.bump();
     let path = p.current_text();
-    if p.expect(RawToken::LitString, err) {
+    if p.expect(PreprocessorToken::StrLit, "a string literal", err) {
         Some((&path[1..path.len() - 1], TextRange::new(start, p.current_range().start())))
     } else {
         None
     }
 }
 
-const MACRO_ARG_DEF_TERMINATOR_SET: TokenSet =
-    TokenSet::new(&[RawToken::ParenClose]).union(MACRO_TERMINATOR_SET);
+// const MACRO_ARG_DEF_TERMINATOR_SET: TokenSet =
+//     TokenSet::new(&[RawToken::ParenClose]).union(MACRO_TERMINATOR_SET);
 
-const MACRO_TERMINATOR_SET: TokenSet = TokenSet::new(&[RawToken::EOF, RawToken::Newline]);
+// const MACRO_TERMINATOR_SET: TokenSet = TokenSet::new(&[RawToken::Eof, RawToken::Newline]);
 
 pub(crate) fn parse_define<'a>(
     p: &mut Parser<'a, '_>,
     err: &mut Diagnostics,
     sm: &mut SourceMap,
+    end: FullTokenIdx,
 ) -> Option<(&'a str, Macro<'a>)> {
     let start = p.current_range();
-    p.bump(RawToken::MacroDef);
+    p.bump();
     let name = p.current_text();
-    let tspan = trace_span!("parsing `define", name = name);
-    let _tspan = tspan.enter();
+    // let tspan = trace_span!("parsing `define", name = name);
+    // let _tspan = tspan.enter();
 
-    let followed_by_bracket = p.lookahead_nth_with_trivia(1) == RawToken::ParenOpen;
-    let mut success = p.expect(RawToken::SimpleIdentifier, err);
+    let followed_by_bracket = p.followed_by_bracket_without_space();
+    let mut success = p.expect(PreprocessorToken::SimpleIdent, "an identifier", err);
     let args = if followed_by_bracket {
-        p.bump(RawToken::ParenOpen);
+        debug_assert!(p.at(PreprocessorToken::OpenParen));
+        p.bump();
         let mut args = Vec::new();
-        while !p.at_ts(MACRO_ARG_DEF_TERMINATOR_SET) {
+        loop {
+            if !p.before(end) {
+                success = false;
+                err.push(UnexpectedEof {
+                    expected: ")",
+                    span: CtxSpan { ctx: p.ctx(), range: p.current_range() },
+                });
+                break;
+            }
             args.push(p.current_text());
-            if !p.expect(RawToken::SimpleIdentifier, err) {
+            if !p.expect(PreprocessorToken::SimpleIdent, "an identifier", err) {
                 success = false
             }
-            if !p.at(RawToken::ParenClose) {
-                success &= p.expect_with_recovery(
-                    RawToken::Comma,
-                    RawToken::ParenClose,
-                    MACRO_ARG_DEF_TERMINATOR_SET,
-                    err,
-                )
+
+            if !p.before(end) {
+                success = false;
+                err.push(UnexpectedEof {
+                    expected: ")",
+                    span: CtxSpan { ctx: p.ctx(), range: p.current_range() },
+                });
+                break;
+            }
+
+            if p.eat(PreprocessorToken::CloseParen) {
+                break;
+            } else {
+                let expect = p.expect(PreprocessorToken::Comma, ")", err);
+                if !expect {
+                    eprintln!("found {:?}", p.current());
+                }
+                success &= expect;
             }
         }
-
-        p.eat(RawToken::ParenClose);
         args
     } else {
         Vec::new()
     };
 
-    let head = p.previous_span().end() - start.start();
+    let head = p.previous_range().end() - start.start();
 
     let mut body = Vec::new();
 
-    while !p.at_ts(MACRO_TERMINATOR_SET) {
-        parse_macro_token::<true>(p, err, &args, &mut body, sm)
+    while p.before(end) {
+        parse_macro_token(p, err, &args, &mut body, sm, end)
     }
-    p.bump_any();
+    // p.bump();
 
-    let range = start.cover(p.previous_span());
+    let range = TextRange::new(start.start(), p.end_pos(end));
     if success {
         Some((
             name,
@@ -172,95 +193,97 @@ pub(crate) fn parse_define<'a>(
     }
 }
 
-fn parse_macro_token<'a, const INSIDE_MACRO: bool>(
+fn parse_macro_token<'a>(
     p: &mut Parser<'a, '_>,
     err: &mut Diagnostics,
     args: &[&'a str],
-    dst: &mut ParsedTokenStream<'a>,
+    dst: &mut Vec<ParsedToken<'a>>,
     sm: &mut SourceMap,
+    end: FullTokenIdx,
 ) {
     // trace!(token = display(p.current()), "parse macro token");
 
-    if p.at(RawToken::SimpleIdentifier) {
+    if p.at(PreprocessorToken::SimpleIdent) {
         if let Some(arg) = args.iter().position(|x| *x == p.current_text()) {
-            debug!(name = p.current_text(), idx = arg, "macro arg reference");
-            p.bump(RawToken::SimpleIdentifier);
-            dst.push((ParsedToken::ArgumentReference(MacroArg::new(arg)), p.current_range()));
+            // debug!(name = p.current_text(), idx = arg, "macro arg reference");
+            p.bump();
+            dst.push(ParsedToken {
+                range: p.current_range(),
+                kind: ParsedTokenKind::ArgumentReference(MacroArg::from(arg)),
+            });
             return;
         }
     }
 
-    if p.at(RawToken::MacroCall) {
-        let (call, span) = parse_macro_call::<INSIDE_MACRO>(p, err, args, sm);
-        dst.push((ParsedToken::MacroCall(call), span));
+    if p.at(PreprocessorToken::CompilerDirective) {
+        if p.compiler_directive() == CompilerDirective::Macro {
+            let (call, range) = parse_macro_call(p, err, args, sm, end);
+            dst.push(ParsedToken { range, kind: ParsedTokenKind::MacroCall(call) });
+        } else {
+            // TODO nicer error?
+            err.push(PreprocessorDiagnostic::UnexpectedToken(CtxSpan {
+                ctx: p.ctx,
+                range: p.current_range(),
+            }))
+        }
         return;
     }
 
-    p.bumpy_any_to_macro(dst)
+    p.bump_to_macro(dst, end, err)
 }
-
-const MACRO_ARG_CALL_TERMINATOR_SET: TokenSet =
-    TokenSet::new(&[RawToken::ParenClose, RawToken::EOF]);
-
-pub(crate) fn parse_macro_call<'a, const INSIDE_MACRO: bool>(
+pub(crate) fn parse_macro_call<'a>(
     p: &mut Parser<'a, '_>,
     err: &mut Diagnostics,
     args: &[&'a str],
     sm: &mut SourceMap,
+    end: FullTokenIdx,
 ) -> (MacroCall<'a>, TextRange) {
-    let tspan = trace_span!("parsing macro call");
-    let _tspan = tspan.enter();
+    // let tspan = trace_span!("parsing macro call");
+    // let _tspan = tspan.enter();
 
     let start = p.current_range();
     let name = &p.current_text()[1..];
-    p.bump(RawToken::MacroCall);
-
-    let terminator = if INSIDE_MACRO {
-        MACRO_ARG_CALL_TERMINATOR_SET.union(MACRO_TERMINATOR_SET)
-    } else {
-        MACRO_ARG_CALL_TERMINATOR_SET
-    };
-
-    let arg_bindings = if p.eat(RawToken::ParenOpen) {
-        let mut arg_bindings = IndexVec::<MacroArg, _>::with_capacity(4);
-        'outer: while !p.at_ts(terminator) {
+    let followed = p.followed_by_bracket_without_space();
+    p.bump();
+    let arg_bindings = if followed {
+        p.bump();
+        let mut arg_bindings = TiVec::<MacroArg, _>::with_capacity(4);
+        'outer: while !p.eat(PreprocessorToken::CloseParen) {
             let mut dst = Vec::with_capacity(18);
             let start = p.current_range().start();
 
             let mut depth = 0; // allow for nested brackets inside macros
             loop {
                 match p.current() {
-                    RawToken::ParenClose if depth != 0 => depth -= 1,
-                    RawToken::ParenOpen => depth += 1,
-                    RawToken::ParenClose | RawToken::Comma if depth == 0 => break,
-                    RawToken::EOF => break,
-                    RawToken::Newline if INSIDE_MACRO => {
-                        error!("BREAK INSIDE MACRO");
-                        err.push(PreprocessorDiagnostic::MissingOrUnexpectedToken {
-                            expected: RawToken::ParenClose,
-                            expected_at: CtxSpan { range: p.previous_span(), ctx: p.ctx },
-                            span: CtxSpan { range: p.current_range(), ctx: p.ctx },
+                    PreprocessorToken::OpenParen => depth += 1,
+                    PreprocessorToken::CloseParen | PreprocessorToken::Comma if depth == 0 => {
+                        break;
+                    }
+                    PreprocessorToken::CloseParen => depth -= 1,
+                    _ if p.before(end) => (),
+                    _ => {
+                        let end = p.previous_range().end();
+                        arg_bindings.push((dst, TextRange::new(start, end)));
+                        err.push(UnexpectedEof {
+                            expected: ")",
+                            span: CtxSpan { ctx: p.ctx(), range: p.current_range() },
                         });
                         break 'outer;
                     }
-                    _ => (),
                 }
-
-                parse_macro_token::<INSIDE_MACRO>(p, err, args, &mut dst, sm)
+                parse_macro_token(p, err, args, &mut dst, sm, end)
             }
 
-            if !p.at(RawToken::ParenClose) {
-                p.expect_with_recovery(RawToken::Comma, RawToken::ParenClose, terminator, err);
-            }
-            let end = p.previous_span().end();
+            p.eat(PreprocessorToken::Comma);
+
+            let end = p.previous_range().end();
             arg_bindings.push((dst, TextRange::new(start, end)));
         }
-        p.eat(RawToken::ParenClose);
         arg_bindings
     } else {
-        IndexVec::new()
+        TiVec::new()
     };
 
-    let span = start.cover(p.previous_span());
+    let span = start.cover(p.previous_range());
     (MacroCall { name, arg_bindings }, span)
 }

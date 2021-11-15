@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
-use basedb::FileId;
-use data_structures::arena::IdxRange;
-use syntax::ast::{self, BlockItem};
-use tracing::trace;
+use arena::IdxRange;
+use basedb::{
+    lints::{ErasedItemTreeId, LintRegistry},
+    FileId,
+};
+
+use syntax::ast::{self, AttrIter, AttrsOwner, BlockItem};
+// use tracing::trace;
 
 use crate::{
+    attrs::LintAttrs,
     db::HirDefDB,
     name::{kw, AsIdent, AsName},
     types::AsType,
@@ -28,11 +33,16 @@ fn is_output(direction: &Option<ast::Direction>) -> bool {
 pub(super) struct Ctx {
     tree: ItemTree,
     source_ast_id_map: Arc<AstIdMap>,
+    lint_registry: Arc<LintRegistry>,
 }
 
 impl Ctx {
     pub(super) fn new(db: &dyn HirDefDB, file: FileId) -> Self {
-        Self { tree: ItemTree::default(), source_ast_id_map: db.ast_id_map(file) }
+        Self {
+            tree: ItemTree::default(),
+            source_ast_id_map: db.ast_id_map(file),
+            lint_registry: db.lint_registry(),
+        }
     }
 
     pub(super) fn lower_root_items(mut self, file: &ast::SourceFile) -> ItemTree {
@@ -49,13 +59,25 @@ impl Ctx {
         Some(item)
     }
 
+    fn collect_attrs(
+        &mut self,
+        attrs: AttrIter,
+        parent: Option<ErasedItemTreeId>,
+    ) -> ErasedItemTreeId {
+        let attrs =
+            LintAttrs::resolve(&self.lint_registry, parent, attrs, &mut self.tree.diagnostics);
+        self.tree.lint_attrs.push_and_get_key(attrs)
+    }
+
     fn lower_discipline(&mut self, decl: ast::DisciplineDecl) -> Option<ItemTreeId<Discipline>> {
         let name = decl.name()?.as_name();
         let ast_id = self.source_ast_id_map.ast_id(&decl);
+        let erased_id = self.collect_attrs(decl.attrs(), None);
+
         let mut potential = None;
         let mut flow = None;
         let mut domain = None;
-        let attr_start = self.tree.data.discipline_attrs.len_idx();
+        let attr_start = self.tree.data.discipline_attrs.next_key();
         for attr in decl.discipline_attrs() {
             if let Some(name) = attr.name().and_then(|path| path.as_ident()) {
                 use kw::raw as kw;
@@ -83,28 +105,28 @@ impl Ctx {
                                 continue;
                             }
                             _ => {
-                                trace!(
-                                    discipline = debug(decl.name()),
-                                    val = debug(attr.val()),
-                                    "Value for domnain attr is invalid!"
-                                );
+                                // trace!(
+                                //     discipline = debug(decl.name()),
+                                //     val = debug(attr.val()),
+                                //     "Value for domnain attr is invalid!"
+                                // );
                             }
                         }
                     }
 
+                    // If an attr is not detected as an inbuilt one we add it to the discipline anyway.
+                    // This is mainly used to get duplication errors for free during def map
+                    // construction
                     _ => (),
                 };
 
-                // If an attr is not detected as an inbuilt one we add it to the discipline anyway.
-                // This is mainly used to get duplication errors for free during def map
-                // construction
-                self.tree
-                    .data
-                    .discipline_attrs
-                    .push(DisciplineAttr { name, ast_id: self.source_ast_id_map.ast_id(&attr) });
+                let erased_id = self.collect_attrs(decl.attrs(), Some(erased_id));
+                let ast_id = self.source_ast_id_map.ast_id(&attr);
+
+                self.tree.data.discipline_attrs.push(DisciplineAttr { name, ast_id, erased_id });
             }
         }
-        let attr_end = self.tree.data.discipline_attrs.len_idx();
+        let attr_end = self.tree.data.discipline_attrs.next_key();
         let res = Discipline {
             ast_id,
             name,
@@ -112,14 +134,17 @@ impl Ctx {
             flow,
             attrs: IdxRange::new(attr_start..attr_end),
             domain,
+            erased_id,
         };
-        Some(self.tree.data.disciplines.push(res))
+        Some(self.tree.data.disciplines.push_and_get_key(res))
     }
 
     fn lower_nature(&mut self, decl: ast::NatureDecl) -> Option<ItemTreeId<Nature>> {
         let name = decl.name()?.as_name();
+        let erased_id = self.collect_attrs(decl.attrs(), None);
+
         let parent = decl.parent().map(|it| it.as_name());
-        let attr_start = self.tree.data.nature_attrs.len_idx();
+        let attr_start = self.tree.data.nature_attrs.next_key();
         let mut access = None;
         let mut ddt_nature = None;
         let mut idt_nature = None;
@@ -146,19 +171,19 @@ impl Ctx {
                         }
                     }
 
+                    // If an attr is not detected as an inbuilt one we add it to the discipline anyway.
+                    // This is mainly used to get duplication errors for free during def map
+                    // construction
                     _ => (),
                 };
 
-                // If an attr is not detected as an inbuilt one we add it to the discipline anyway.
-                // This is mainly used to get duplication errors for free during def map
-                // construction
-                self.tree
-                    .data
-                    .nature_attrs
-                    .push(NatureAttr { name, ast_id: self.source_ast_id_map.ast_id(&attr) });
+                let ast_id = self.source_ast_id_map.ast_id(&attr);
+                let erased_id = self.collect_attrs(decl.attrs(), Some(erased_id));
+
+                self.tree.data.nature_attrs.push(NatureAttr { name, ast_id, erased_id });
             }
         }
-        let attr_end = self.tree.data.nature_attrs.len_idx();
+        let attr_end = self.tree.data.nature_attrs.next_key();
         let ast_id = self.source_ast_id_map.ast_id(&decl);
         let res = Nature {
             ast_id,
@@ -168,26 +193,28 @@ impl Ctx {
             ddt_nature,
             idt_nature,
             attrs: IdxRange::new(attr_start..attr_end),
+            erased_id,
         };
-        Some(self.tree.data.natures.push(res))
+        Some(self.tree.data.natures.push_and_get_key(res))
     }
 
     fn lower_module(&mut self, decl: ast::ModuleDecl) -> Option<ItemTreeId<Module>> {
         let name = decl.name()?.as_name();
+        let erased_id = self.collect_attrs(decl.attrs(), None);
 
-        let (head_ports, exptected_ports) = self.lower_module_ports(decl.ports());
+        let (head_ports, exptected_ports) = self.lower_module_ports(decl.ports(), erased_id);
 
-        let port_start = self.tree.data.ports.len_idx();
-        let function_start = self.tree.data.functions.len_idx();
-        let net_start = self.tree.data.nets.len_idx();
-        let branch_start = self.tree.data.branches.len_idx();
+        let port_start = self.tree.data.ports.next_key();
+        let function_start = self.tree.data.functions.next_key();
+        let net_start = self.tree.data.nets.next_key();
+        let branch_start = self.tree.data.branches.next_key();
 
-        let scope_items = self.lower_module_items(decl.module_items());
+        let scope_items = self.lower_module_items(decl.module_items(), erased_id);
 
-        let port_end = self.tree.data.ports.len_idx();
-        let function_end = self.tree.data.functions.len_idx();
-        let net_end = self.tree.data.nets.len_idx();
-        let branch_end = self.tree.data.branches.len_idx();
+        let port_end = self.tree.data.ports.next_key();
+        let function_end = self.tree.data.functions.next_key();
+        let net_end = self.tree.data.nets.next_key();
+        let branch_end = self.tree.data.branches.next_key();
 
         let ast_id = self.source_ast_id_map.ast_id(&decl);
 
@@ -204,65 +231,76 @@ impl Ctx {
             functions: IdxRange::new(function_start..function_end),
 
             ast_id,
+            erased_id,
         };
-        Some(self.tree.data.modules.push(res))
+        Some(self.tree.data.modules.push_and_get_key(res))
     }
 
     fn lower_module_items(
         &mut self,
         items: ast::AstChildren<ast::ModuleItem>,
+        erase_module: ErasedItemTreeId,
     ) -> Vec<BlockScopeItem> {
         let mut block_scope_items = Vec::with_capacity(512);
         for item in items {
             match item {
                 ast::ModuleItem::BodyPortDecl(decl) => {
                     if let Some(decl) = decl.port_decl() {
-                        self.lower_port_decl(decl);
+                        self.lower_port_decl(decl, erase_module);
                     }
                 }
                 ast::ModuleItem::NetDecl(decl) => {
-                    self.lower_net_decl(decl);
+                    self.lower_net_decl(decl, erase_module);
                 }
                 ast::ModuleItem::AnalogBehaviour(behaviour) => {
                     if let Some(stmt) = behaviour.stmt() {
-                        self.lower_stmt(stmt, &mut block_scope_items);
+                        self.lower_stmt(stmt, &mut block_scope_items, erase_module);
                     }
                 }
                 ast::ModuleItem::VarDecl(var) => {
-                    self.lower_var(var, |var| {
-                        block_scope_items.push(BlockScopeItem::Variable(var))
-                    });
+                    self.lower_var(
+                        var,
+                        |var| block_scope_items.push(BlockScopeItem::Variable(var)),
+                        erase_module,
+                    );
                 }
                 ast::ModuleItem::ParamDecl(param) => {
-                    self.lower_param(param, |param| {
-                        block_scope_items.push(BlockScopeItem::Parameter(param))
-                    });
+                    self.lower_param(
+                        param,
+                        |param| block_scope_items.push(BlockScopeItem::Parameter(param)),
+                        erase_module,
+                    );
                 }
                 ast::ModuleItem::Function(fun) => {
-                    self.lower_fun(fun);
+                    self.lower_fun(fun, erase_module);
                 }
-                ast::ModuleItem::BranchDecl(branch) => self.lower_branch(branch),
+                ast::ModuleItem::BranchDecl(branch) => self.lower_branch(branch, erase_module),
             };
         }
         block_scope_items
     }
 
-    fn lower_fun(&mut self, fun: ast::Function) {
-        let var_start = self.tree.data.variables.len_idx();
-        let param_start = self.tree.data.parameters.len_idx();
-        let args_start = self.tree.data.function_args.len_idx();
+    fn lower_fun(&mut self, fun: ast::Function, erased_module_id: ErasedItemTreeId) {
+        let var_start = self.tree.data.variables.next_key();
+        let param_start = self.tree.data.parameters.next_key();
+        let args_start = self.tree.data.function_args.next_key();
+
+        let erased_id = self.collect_attrs(fun.attrs(), Some(erased_module_id));
 
         for item in fun.function_items() {
             match item {
-                ast::FunctionItem::ParamDecl(decl) => self.lower_param(decl, |_| ()),
-                ast::FunctionItem::VarDecl(decl) => self.lower_var(decl, |_| ()),
+                ast::FunctionItem::ParamDecl(decl) => self.lower_param(decl, |_| (), erased_id),
+                ast::FunctionItem::VarDecl(decl) => self.lower_var(decl, |_| (), erased_id),
                 ast::FunctionItem::FunctionArg(arg) => {
+                    let erased_id = self.collect_attrs(arg.attrs(), Some(erased_id));
+                    let ast_id = self.source_ast_id_map.ast_id(&arg);
                     for name in arg.names() {
                         self.tree.data.function_args.push(FunctionArg {
                             name: name.as_name(),
                             is_input: is_input(&arg.direction()),
                             is_output: is_output(&arg.direction()),
-                            ast_id: self.source_ast_id_map.ast_id(&arg),
+                            ast_id,
+                            erased_id,
                         });
                     }
                 }
@@ -270,9 +308,9 @@ impl Ctx {
             }
         }
 
-        let args_end = self.tree.data.function_args.len_idx();
-        let var_end = self.tree.data.variables.len_idx();
-        let param_end = self.tree.data.parameters.len_idx();
+        let args_end = self.tree.data.function_args.next_key();
+        let var_end = self.tree.data.variables.next_key();
+        let param_end = self.tree.data.parameters.next_key();
 
         if let Some(name) = fun.name() {
             let fun = Function {
@@ -282,13 +320,15 @@ impl Ctx {
                 params: IdxRange::new(param_start..param_end),
                 vars: IdxRange::new(var_start..var_end),
                 ast_id: self.source_ast_id_map.ast_id(&fun),
+                erased_id,
             };
             self.tree.data.functions.push(fun);
         }
     }
 
-    fn lower_branch(&mut self, decl: ast::BranchDecl) {
+    fn lower_branch(&mut self, decl: ast::BranchDecl, erased_module: ErasedItemTreeId) {
         let ast_id = self.source_ast_id_map.ast_id(&decl);
+        let erased_id = self.collect_attrs(decl.attrs(), Some(erased_module));
         let kind = decl
             .branch_kind()
             .and_then(|kind| {
@@ -305,7 +345,7 @@ impl Ctx {
             })
             .unwrap_or(BranchKind::Missing);
         for name in decl.names() {
-            let branch = Branch { name: name.as_name(), kind: kind.clone(), ast_id };
+            let branch = Branch { name: name.as_name(), kind: kind.clone(), ast_id, erased_id };
             self.tree.data.branches.push(branch);
         }
     }
@@ -313,27 +353,29 @@ impl Ctx {
     fn lower_module_ports(
         &mut self,
         ports: ast::AstChildren<ast::ModulePort>,
+        erased_module_id: ErasedItemTreeId,
     ) -> (IdxRange<Port>, Vec<Name>) {
-        let port_start = self.tree.data.ports.len_idx();
+        let port_start = self.tree.data.ports.next_key();
         let expected_ports = ports
             .filter_map(|module_port| match module_port.kind() {
                 ast::ModulePortKind::Name(name) => Some(name.as_name()),
                 ast::ModulePortKind::PortDecl(decl) => {
-                    self.lower_port_decl(decl);
+                    self.lower_port_decl(decl, erased_module_id);
                     None
                 }
             })
             .collect();
-        let port_end = self.tree.data.ports.len_idx();
+        let port_end = self.tree.data.ports.next_key();
         (IdxRange::new(port_start..port_end), expected_ports)
     }
 
-    fn lower_port_decl(&mut self, decl: ast::PortDecl) {
+    fn lower_port_decl(&mut self, decl: ast::PortDecl, sctx: ErasedItemTreeId) {
         let discipline = decl.discipline().map(|it| it.as_name());
         let direction = decl.direction();
 
         let is_gnd = decl.net_type_token().map_or(false, |it| it.text() == kw::raw::ground);
         let ast_id = self.source_ast_id_map.ast_id(&decl);
+        let erased_id = self.collect_attrs(decl.attrs(), Some(sctx));
         for (name_idx, name) in decl.names().enumerate() {
             self.tree.data.ports.push(Port {
                 name: name.as_name(),
@@ -343,83 +385,110 @@ impl Ctx {
                 ast_id,
                 name_idx,
                 is_gnd,
-            });
+                erased_id,
+            })
         }
     }
 
-    fn lower_net_decl(&mut self, decl: ast::NetDecl) {
+    fn lower_net_decl(&mut self, decl: ast::NetDecl, erased_id: ErasedItemTreeId) {
         let discipline = decl.discipline().map(|it| it.as_name());
         let ast_id = self.source_ast_id_map.ast_id(&decl);
 
+        let erased_id = self.collect_attrs(decl.attrs(), Some(erased_id));
         let is_gnd = decl.net_type_token().map_or(false, |it| it.text() == kw::raw::ground);
         for (name_idx, name) in decl.names().enumerate() {
-            self.tree.data.nets.push(Net {
+            self.tree.data.nets.push_and_get_key(Net {
                 name: name.as_name(),
                 discipline: discipline.clone(),
                 ast_id,
                 is_gnd,
                 name_idx,
+                erased_id,
             });
         }
     }
 
-    fn lower_stmt(&mut self, stmt: ast::Stmt, scope: &mut Vec<BlockScopeItem>) {
+    fn lower_stmt(
+        &mut self,
+        stmt: ast::Stmt,
+        scope: &mut Vec<BlockScopeItem>,
+        erased_id: ErasedItemTreeId,
+    ) {
         if let ast::Stmt::BlockStmt(block) = stmt {
             if let Some(scope_name) = block.block_scope().and_then(|it| Some(it.name()?.as_name()))
             {
                 let mut scope_items = Vec::with_capacity(4);
+                let erased_id = self.collect_attrs(block.attrs(), Some(erased_id));
 
                 for item in block.items() {
-                    self.lower_block_item(item, &mut scope_items);
+                    self.lower_block_item(item, &mut scope_items, erased_id);
                 }
 
                 let ast_id = self.source_ast_id_map.ast_id(&block);
-                let block_scope = BlockScope { ast_id, name: scope_name, scope_items };
-                let block_scope = self.tree.data.block_scopes.push(block_scope);
+                let block_scope = BlockScope { ast_id, name: scope_name, scope_items, erased_id };
+                let block_scope = self.tree.data.block_scopes.push_and_get_key(block_scope);
                 scope.push(block_scope.into());
             } else {
                 // For unnamed blocks add the scope to the current active scope
                 for item in block.items() {
-                    self.lower_block_item(item, scope);
+                    self.lower_block_item(item, scope, erased_id);
                 }
             }
         }
     }
 
-    fn lower_block_item(&mut self, item: BlockItem, scope: &mut Vec<BlockScopeItem>) {
+    fn lower_block_item(
+        &mut self,
+        item: BlockItem,
+        scope: &mut Vec<BlockScopeItem>,
+        erased_id: ErasedItemTreeId,
+    ) {
         match item {
             ast::BlockItem::VarDecl(var) => {
-                self.lower_var(var, |var| scope.push(var.into()));
+                self.lower_var(var, |var| scope.push(var.into()), erased_id);
             }
             ast::BlockItem::ParamDecl(param) => {
-                self.lower_param(param, |param| scope.push(param.into()));
+                self.lower_param(param, |param| scope.push(param.into()), erased_id);
             }
-            ast::BlockItem::Stmt(stmt) => self.lower_stmt(stmt, scope),
+            ast::BlockItem::Stmt(stmt) => self.lower_stmt(stmt, scope, erased_id),
         }
     }
 
-    fn lower_var(&mut self, decl: ast::VarDecl, mut add_var: impl FnMut(ItemTreeId<Var>)) {
+    fn lower_var(
+        &mut self,
+        decl: ast::VarDecl,
+        mut add_var: impl FnMut(ItemTreeId<Var>),
+        erased_id: ErasedItemTreeId,
+    ) {
         let ty = decl.ty().as_type();
+        let erased_id = self.collect_attrs(decl.attrs(), Some(erased_id));
         for var in decl.vars() {
             if let Some(name) = var.name() {
                 let var = Var {
                     name: name.as_name(),
                     ast_id: self.source_ast_id_map.ast_id(&var),
+                    erased_id,
                     ty: ty.clone(),
                 };
-                let id = self.tree.data.variables.push(var);
+                let id = self.tree.data.variables.push_and_get_key(var);
                 add_var(id)
             }
         }
     }
 
-    fn lower_param(&mut self, decl: ast::ParamDecl, mut add_param: impl FnMut(ItemTreeId<Param>)) {
+    fn lower_param(
+        &mut self,
+        decl: ast::ParamDecl,
+        mut add_param: impl FnMut(ItemTreeId<Param>),
+        erased_id: ErasedItemTreeId,
+    ) {
         let ty = decl.ty().as_type();
+        let erased_id = self.collect_attrs(decl.attrs(), Some(erased_id));
         for param in decl.paras() {
             if let Some(name) = param.name() {
                 let ast_id = self.source_ast_id_map.ast_id(&param);
-                let param = Param { name: name.as_name(), ty: ty.clone(), ast_id };
-                let id = self.tree.data.parameters.push(param);
+                let param = Param { name: name.as_name(), ty: ty.clone(), ast_id, erased_id };
+                let id = self.tree.data.parameters.push_and_get_key(param);
                 add_param(id)
             }
         }

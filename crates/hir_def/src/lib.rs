@@ -10,22 +10,28 @@ mod nameres;
 mod path;
 mod types;
 
+mod attrs;
 #[cfg(test)]
 mod tests;
 
-use data_structures::arena::Idx;
-use derive_more::From;
+use arena::Idx;
+use basedb::{lints::ErasedItemTreeId, FileId};
 pub use path::Path;
+use stdx::{impl_from, impl_from_typed};
 
-use std::hash::{Hash, Hasher};
+use std::{
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
+use db::HirDefDB;
 pub use expr::{Case, Expr, ExprId, Literal, Stmt, StmtId};
 use item_tree::{
     BlockScope, Branch, Discipline, DisciplineAttr, Function, ItemTree, ItemTreeId, ItemTreeNode,
     Module, Nature, NatureAttr, Net, Param, Port, Var,
 };
 pub use name::Name;
-use nameres::{ScopeDefItem, ScopeId};
+use nameres::ScopeDefItem;
 pub use types::Type;
 
 pub use ast_id_map::{AstIdMap, FileAstId};
@@ -41,15 +47,31 @@ pub trait Lookup {
     fn lookup(&self, db: &dyn db::HirDefDB) -> Self::Data;
 }
 
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash)]
+pub struct ScopeId {
+    pub root_file: FileId,
+    pub local_scope: nameres::LocalScopeId,
+}
+
 #[derive(Debug)]
 pub struct ItemLoc<N: ItemTreeNode> {
     pub scope: ScopeId,
-    pub item_tree: ItemTreeId<N>,
+    pub id: ItemTreeId<N>,
+}
+
+impl<N: ItemTreeNode> ItemLoc<N> {
+    pub fn item_tree(&self, db: &dyn HirDefDB) -> Arc<ItemTree> {
+        db.item_tree(self.scope.root_file)
+    }
+
+    pub fn erased_id(&self, db: &dyn HirDefDB) -> ErasedItemTreeId {
+        N::lookup(&self.item_tree(db), self.id).erased_id()
+    }
 }
 
 impl<N: ItemTreeNode> Clone for ItemLoc<N> {
     fn clone(&self) -> Self {
-        Self { scope: self.scope, item_tree: self.item_tree }
+        Self { scope: self.scope, id: self.id }
     }
 }
 
@@ -57,7 +79,7 @@ impl<N: ItemTreeNode> Copy for ItemLoc<N> {}
 
 impl<N: ItemTreeNode> PartialEq for ItemLoc<N> {
     fn eq(&self, other: &Self) -> bool {
-        self.scope == other.scope && self.item_tree == other.item_tree
+        self.scope == other.scope && self.id == other.id
     }
 }
 
@@ -66,7 +88,7 @@ impl<N: ItemTreeNode> Eq for ItemLoc<N> {}
 impl<N: ItemTreeNode> Hash for ItemLoc<N> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.scope.hash(state);
-        self.item_tree.hash(state);
+        self.id.hash(state);
     }
 }
 
@@ -118,28 +140,34 @@ impl_intern!(
     lookup_intern_discipline_attr
 );
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, From, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithExprId {
-    Var(VarId),
-    NatureAttr(NatureAttrId),
-    DisciplineAttr(DisciplineAttrId),
+    VarId(VarId),
+    NatureAttrId(NatureAttrId),
+    DisciplineAttrId(DisciplineAttrId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, From, Hash)]
+impl_from!(VarId, NatureAttrId,DisciplineAttrId for DefWithExprId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithBodyId {
-    Param(ParamId),
-    Module(ModuleId),
-    Function(FunctionId),
-    Var(VarId),
-    NatureAttr(NatureAttrId),
-    DisciplineAttr(DisciplineAttrId),
+    ParamId(ParamId),
+    ModuleId(ModuleId),
+    FunctionId(FunctionId),
+    VarId(VarId),
+    NatureAttrId(NatureAttrId),
+    DisciplineAttrId(DisciplineAttrId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, From, Hash)]
+impl_from!(ParamId, ModuleId,FunctionId,VarId,NatureAttrId,DisciplineAttrId for DefWithBodyId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithBehaviourId {
-    Module(ModuleId),
-    Function(FunctionId),
+    ModuleId(ModuleId),
+    FunctionId(FunctionId),
 }
+
+impl_from!( ModuleId,FunctionId for DefWithBehaviourId);
 
 impl TryFrom<ScopeDefItem> for DefWithExprId {
     type Error = ();
@@ -147,8 +175,8 @@ impl TryFrom<ScopeDefItem> for DefWithExprId {
     fn try_from(item: ScopeDefItem) -> Result<Self, Self::Error> {
         match item {
             ScopeDefItem::VarId(var) => Ok(var.into()),
-            ScopeDefItem::NatureAttr(attr) => Ok(attr.into()),
-            ScopeDefItem::DisciplineAttr(attr) => Ok(attr.into()),
+            ScopeDefItem::NatureAttrId(attr) => Ok(attr.into()),
+            ScopeDefItem::DisciplineAttrId(attr) => Ok(attr.into()),
             _ => Err(()),
         }
     }
@@ -159,8 +187,8 @@ impl TryFrom<ScopeDefItem> for DefWithBehaviourId {
 
     fn try_from(item: ScopeDefItem) -> Result<Self, Self::Error> {
         match item {
-            ScopeDefItem::Module(module) => Ok(module.into()),
-            ScopeDefItem::Function(fun) => Ok(fun.into()),
+            ScopeDefItem::ModuleId(module) => Ok(module.into()),
+            ScopeDefItem::FunctionId(fun) => Ok(fun.into()),
             _ => Err(()),
         }
     }
@@ -168,11 +196,16 @@ impl TryFrom<ScopeDefItem> for DefWithBehaviourId {
 
 pub type NodeId = Idx<Node>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash, From)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub enum NodeTypeDecl {
     Net(ItemTreeId<Net>),
     Port(ItemTreeId<Port>),
 }
+
+impl_from_typed!(
+    Net(ItemTreeId<Net>),
+    Port(ItemTreeId<Port>) for NodeTypeDecl
+);
 
 impl NodeTypeDecl {
     pub fn name<'a>(&self, tree: &'a ItemTree) -> &'a Name {

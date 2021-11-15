@@ -16,11 +16,13 @@ mod traits;
 pub use self::{
     expr_ext::{ArrayExprKind, BinaryOp, LiteralKind, UnaryOp},
     generated::{nodes::*, tokens::*},
-    node_ext::{PathSegment, PathSegmentKind, AssignOp, BranchKind, ConstraintKind},
+    node_ext::{AssignOp, BranchKind, ConstraintKind, PathSegment, PathSegmentKind},
     traits::*,
 };
-use crate::syntax_node::{SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
-use parser::SyntaxKind;
+use crate::{
+    syntax_node::{SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken},
+    SyntaxKind,
+};
 use std::marker::PhantomData;
 
 /// The main trait to go from untyped `SyntaxNode`  to a typed ast. The

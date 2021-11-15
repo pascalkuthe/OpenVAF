@@ -1,4 +1,4 @@
-use parser::T;
+use crate::T;
 use rowan::TextRange;
 
 use crate::{

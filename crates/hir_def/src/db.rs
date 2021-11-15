@@ -85,14 +85,14 @@ fn ast_id_map(db: &dyn HirDefDB, root_file: FileId) -> Arc<AstIdMap> {
 
 fn body_source_map(db: &dyn HirDefDB, root_file: FileId, def: DefWithBodyId) -> Arc<BodySourceMap> {
     match def {
-        DefWithBodyId::Param(param) => db.param_body_with_sourcemap(root_file, param).1,
-        DefWithBodyId::Module(module) => {
+        DefWithBodyId::ParamId(param) => db.param_body_with_sourcemap(root_file, param).1,
+        DefWithBodyId::ModuleId(module) => {
             db.analog_behaviour_with_sourcemap(root_file, module.into()).1
         }
-        DefWithBodyId::Function(fun) => db.analog_behaviour_with_sourcemap(root_file, fun.into()).1,
-        DefWithBodyId::Var(var) => db.expr_body_with_sourcemap(root_file, var.into()).1,
-        DefWithBodyId::NatureAttr(attr) => db.expr_body_with_sourcemap(root_file, attr.into()).1,
-        DefWithBodyId::DisciplineAttr(attr) => {
+        DefWithBodyId::FunctionId(fun) => db.analog_behaviour_with_sourcemap(root_file, fun.into()).1,
+        DefWithBodyId::VarId(var) => db.expr_body_with_sourcemap(root_file, var.into()).1,
+        DefWithBodyId::NatureAttrId(attr) => db.expr_body_with_sourcemap(root_file, attr.into()).1,
+        DefWithBodyId::DisciplineAttrId(attr) => {
             db.expr_body_with_sourcemap(root_file, attr.into()).1
         }
     }

@@ -2,13 +2,13 @@
 //! no longer exist -- the assumption is total size of paths we ever look at is
 //! not too big.
 
-use data_structures::IndexSet;
+use indexmap::IndexSet;
 
 use crate::{FileId, VfsPath};
 
 /// Structure to map between [`VfsPath`] and [`FileId`].
 pub(crate) struct PathInterner {
-    map: IndexSet<VfsPath>,
+    map: IndexSet<VfsPath, ahash::RandomState>,
 }
 
 impl Default for PathInterner {

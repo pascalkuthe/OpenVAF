@@ -4,14 +4,15 @@ use std::{
 };
 
 use crate::{BaseDB, FileId};
-use data_structures::{index_vec::define_index_type, IndexMap};
+use indexmap::IndexMap;
+use stdx::{impl_debug_display, impl_idx_from};
 
 /// Lints can be set to different levls
 /// This enum represents these levls
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LintLevel {
-    /// Same as `Deny` but can not be overwritten by attributes later
-    Forbid,
+    // /// Same as `Deny` but can not be overwritten by attributes later
+    // Forbid,
     /// Generates an error and will cause an error upon generating user diagnostics
     Deny,
     /// A warning
@@ -20,10 +21,20 @@ pub enum LintLevel {
     Allow,
 }
 
+impl LintLevel {
+    pub fn attr(&self) -> &'static str {
+        match self {
+            LintLevel::Deny => "openvaf_allow",
+            LintLevel::Warn => "openvaf_warn",
+            LintLevel::Allow => "openvaf_deny",
+        }
+    }
+}
+
 impl Display for LintLevel {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let name = match self {
-            LintLevel::Forbid => "forbid",
+            // LintLevel::Forbid => "forbid",
             LintLevel::Deny => "deny",
             LintLevel::Warn => "warn",
             LintLevel::Allow => "allow",
@@ -34,31 +45,44 @@ impl Display for LintLevel {
 
 // Implementation defered to HIR database
 pub trait LintResolver {
-    fn lint_overwrite(&self, _lint: Lint, _sctx: SyntaxCtx, _root_file: FileId) -> Option<LintLevel>{None}
+    fn lint_overwrite(
+        &self,
+        _lint: Lint,
+        _sctx: ErasedItemTreeId,
+        _root_file: FileId,
+    ) -> Option<LintLevel> {
+        None
+    }
 }
 
-define_index_type! {
-    pub struct SyntaxCtx = u32;
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct ErasedItemTreeId(u32);
 
-    DISPLAY_FORMAT = "synctx{}";
-    DEBUG_FORMAT = "synctx{}";
-
-    IMPL_RAW_CONVERSIONS = true;
+pub struct LintSrc {
+    pub overwrite: Option<LintLevel>,
+    pub item_tree: Option<ErasedItemTreeId>,
 }
 
-define_index_type! {
-    /// A lint is an Error that a user might plausibly want to ignore
-    /// Most compiler error are **not lints** because they indicate that an
-    /// assumption the compiler made no longer holds
-    pub struct Lint = u16;
-
-    DISPLAY_FORMAT = "lint{}";
-    DEBUG_FORMAT = "lint{}";
-    IMPL_RAW_CONVERSIONS = true;
-
-    // Checks are done when literals are added
-    DISABLE_MAX_INDEX_CHECK = ! cfg!(debug_assertions);
+impl LintSrc {
+    pub const GLOBAL: LintSrc = LintSrc { overwrite: None, item_tree: None };
 }
+
+impl_idx_from!(ErasedItemTreeId(u32));
+impl_debug_display!(c@ErasedItemTreeId => "ctx{}",c.0);
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct Lint(u16);
+
+impl Lint {
+    /// You should not use this function directly it is only public for use in the exported macros
+    #[doc(hidden)]
+    pub const fn _from_raw(raw: u16) -> Lint {
+        Lint(raw)
+    }
+}
+
+impl_idx_from!(Lint(u16));
+impl_debug_display!(c@Lint => "lint{}",c.0);
 
 /// The data associated with a lint
 /// Dont create and register this directly if you are writing a plugin
@@ -75,7 +99,7 @@ pub struct LintData {
 /// and `str (lint name) -> LintData`
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct LintRegistry {
-    lints: IndexMap<&'static str, LintData>,
+    lints: IndexMap<&'static str, LintData, ahash::RandomState>,
 }
 
 impl LintRegistry {
@@ -121,7 +145,7 @@ macro_rules! declare_lints {
        @CONSTS $index: expr, $name:ident $(,$rem: ident)*
     ) => {
        #[allow(non_upper_case_globals)]
-       pub const $name: $crate::lints::Lint = $crate::lints::Lint::from_raw_unchecked($index);
+       pub const $name: $crate::lints::Lint = $crate::lints::Lint::_from_raw($index);
 
        $crate::declare_lints!(@CONSTS $index + 1 $(,$rem)*);
    };
@@ -147,5 +171,6 @@ pub mod builtin {
         pub const lint_level_owerwrite = LintData{default_lvl: Warn, documentation_id: 9};
         pub const useless_function_call = LintData{default_lvl: Warn, documentation_id: 10};
         pub const non_standard_code = LintData{default_lvl: Warn, documentation_id: 11};
+        pub const vams_keyword_compat = LintData{default_lvl: Warn, documentation_id: 12};
     }
 }

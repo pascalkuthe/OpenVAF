@@ -1,13 +1,17 @@
 use std::sync::Arc;
 
+use ahash::AHashMap as HashMap;
+use arena::{Arena, ArenaMap};
 use basedb::FileId;
-use data_structures::{HashMap, arena::{Arena, ArenaMap}, index_vec::IndexVec, iter::Itertools};
 use syntax::{ast, AstNode, AstPtr};
 
 use crate::{
-    db::HirDefDB, item_tree::ItemTreeNode, nameres::ScopeId, DefWithBehaviourId, DefWithExprId,
-    DisciplineAttrLoc, Expr, ExprId, Lookup, ModuleLoc, NatureAttrLoc, ParamId, ParamLoc, FunctionLoc,
-    Stmt, StmtId, VarLoc,
+    attrs::{AttrDiagnostic, LintAttrs},
+    db::HirDefDB,
+    item_tree::ItemTreeNode,
+    nameres::LocalScopeId,
+    DefWithBehaviourId, DefWithExprId, DisciplineAttrLoc, Expr, ExprId, FunctionLoc, Lookup,
+    ModuleLoc, NatureAttrLoc, ParamId, ParamLoc, Stmt, StmtId, VarLoc,
 };
 
 use self::lower::LowerCtx;
@@ -18,24 +22,21 @@ mod lower;
 #[derive(Debug, Eq, PartialEq, Default)]
 pub struct Body {
     pub exprs: Arena<Expr>,
-    pub stmt_scopes: ArenaMap<Stmt, ScopeId>,
+    pub stmt_scopes: ArenaMap<Stmt, LocalScopeId>,
     pub stmts: Arena<Stmt>,
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
 pub struct BodySourceMap {
     expr_map: HashMap<AstPtr<ast::Expr>, ExprId>,
-    expr_map_back: IndexVec<ExprId, Option<AstPtr<ast::Expr>>>,
+    expr_map_back: ArenaMap<Expr, Option<AstPtr<ast::Expr>>>,
     stmt_map: HashMap<AstPtr<ast::Stmt>, StmtId>,
-    stmt_map_back: IndexVec<StmtId, Option<AstPtr<ast::Stmt>>>,
+    stmt_map_back: ArenaMap<Stmt, Option<AstPtr<ast::Stmt>>>,
+    lint_map: ArenaMap<Stmt, LintAttrs>,
+
     /// Diagnostics accumulated during body lowering. These contain `AstPtr`s and so are stored in
     /// the source map (since they're just as volatile).
-    diagnostics: Vec<BodyDiagnostic>,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum BodyDiagnostic {
-    InfOutsideParamBound { ptr: AstPtr<ast::Literal> },
+    diagnostics: Vec<AttrDiagnostic>,
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
@@ -58,20 +59,21 @@ impl AnalogBehaviour {
         let ast_id_map = db.ast_id_map(root_file);
         let ast = db.parse(root_file).tree();
 
-        let (scope, stmts) = match id {
-            DefWithBehaviourId::Module(id) => {
-                let ModuleLoc { scope, item_tree } = id.lookup(db);
+        let (scope, stmts): (_, Vec<_>) = match id {
+            DefWithBehaviourId::ModuleId(id) => {
+                let ModuleLoc { scope, id: item_tree } = id.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                (scope, ast.analog_behaviour().collect_vec())
-            },
-
-            DefWithBehaviourId::Function(id) => {
-                let FunctionLoc { scope, item_tree } = id.lookup(db);
-                let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                (scope, ast.body().collect_vec())
+                (scope, ast.analog_behaviour().collect())
             }
-,
+
+            DefWithBehaviourId::FunctionId(id) => {
+                let FunctionLoc { scope, id: item_tree } = id.lookup(db);
+                let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
+                (scope, ast.body().collect())
+            }
         };
+
+        let registry = db.lint_registry();
 
         let mut ctx = LowerCtx {
             db,
@@ -80,7 +82,8 @@ impl AnalogBehaviour {
             def_map: &def_map,
             tree: &tree,
             ast_id_map: &ast_id_map,
-            curr_scope: scope,
+            curr_scope: scope.local_scope,
+            registry: &registry,
         };
 
         let root_stmts = stmts.into_iter().map(|stmt| ctx.collect_stmt(stmt)).collect();
@@ -137,9 +140,10 @@ impl ParamBody {
         let ast_id_map = db.ast_id_map(root_file);
         let ast = db.parse(root_file).tree();
 
-        let ParamLoc { item_tree, scope } = id.lookup(db);
+        let ParamLoc { id: item_tree, scope } = id.lookup(db);
         let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
 
+        let registry = db.lint_registry();
         let mut ctx = LowerCtx {
             db,
             source_map: &mut source_map,
@@ -147,7 +151,8 @@ impl ParamBody {
             def_map: &def_map,
             tree: &tree,
             ast_id_map: &ast_id_map,
-            curr_scope: scope,
+            curr_scope: scope.local_scope,
+            registry: &registry,
         };
 
         let default = ctx.collect_opt_expr(ast.default());
@@ -195,23 +200,24 @@ impl ExprBody {
         let ast = db.parse(root_file).tree();
 
         let (expr, scope) = match def {
-            DefWithExprId::Var(var) => {
-                let VarLoc { scope, item_tree } = var.lookup(db);
+            DefWithExprId::VarId(var) => {
+                let VarLoc { scope, id: item_tree } = var.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
                 (ast.default(), scope)
             }
-            DefWithExprId::NatureAttr(attr) => {
-                let NatureAttrLoc { scope, item_tree } = attr.lookup(db);
+            DefWithExprId::NatureAttrId(attr) => {
+                let NatureAttrLoc { scope, id: item_tree } = attr.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
                 (ast.val(), scope)
             }
-            DefWithExprId::DisciplineAttr(attr) => {
-                let DisciplineAttrLoc { scope, item_tree } = attr.lookup(db);
+            DefWithExprId::DisciplineAttrId(attr) => {
+                let DisciplineAttrLoc { scope, id: item_tree } = attr.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
                 (ast.val(), scope)
             }
         };
 
+        let registry = db.lint_registry();
         let mut ctx = LowerCtx {
             db,
             source_map: &mut source_map,
@@ -219,7 +225,8 @@ impl ExprBody {
             def_map: &def_map,
             tree: &tree,
             ast_id_map: &ast_id_map,
-            curr_scope: scope,
+            curr_scope: scope.local_scope,
+            registry: &registry,
         };
 
         let val = ctx.collect_opt_expr(expr);

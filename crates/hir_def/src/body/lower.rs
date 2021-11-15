@@ -1,19 +1,21 @@
 use std::mem;
 
 use crate::{
+    attrs::LintAttrs,
     db::HirDefDB,
     expr::{CaseCond, Event, GlobalEvent},
     item_tree::ItemTree,
     name::AsName,
-    nameres::{DefMap, ScopeId},
+    nameres::{DefMap, LocalScopeId},
     AstIdMap, Case, Expr, ExprId, Literal, Path, Stmt, StmtId,
 };
 
+use basedb::lints::{ErasedItemTreeId, LintRegistry};
 use syntax::{
-    ast::{self, ArgListOwner, FunctionRef},
+    ast::{self, ArgListOwner, AttrIter, AttrsOwner, FunctionRef},
     AstPtr,
 };
-use tracing::debug;
+// use tracing::debug;
 
 use super::{Body, BodySourceMap};
 
@@ -24,7 +26,8 @@ pub(super) struct LowerCtx<'a> {
     pub(super) def_map: &'a DefMap,
     pub(super) tree: &'a ItemTree,
     pub(super) ast_id_map: &'a AstIdMap,
-    pub(super) curr_scope: ScopeId,
+    pub(super) curr_scope: LocalScopeId,
+    pub(super) registry: &'a LintRegistry,
 }
 
 impl LowerCtx<'_> {
@@ -122,11 +125,11 @@ impl LowerCtx<'_> {
                     assignment_kind: a.op().unwrap(),
                 },
                 None => {
-                    debug!(
-                        tree = debug(stmt),
-                        src = display(stmt),
-                        "Assign Statement without assign?"
-                    );
+                    // debug!(
+                    //     tree = debug(stmt),
+                    //     src = display(stmt),
+                    //     "Assign Statement without assign?"
+                    // );
                     Stmt::Missing
                 }
             },
@@ -153,7 +156,7 @@ impl LowerCtx<'_> {
             ast::Stmt::EventStmt(stmt) => return self.collect_event_stmt(stmt),
             ast::Stmt::BlockStmt(stmt) => return self.collect_block(stmt),
         };
-        self.alloc_stmt(s, AstPtr::new(&stmt))
+        self.alloc_stmt(s, AstPtr::new(&stmt), stmt.attrs())
     }
 
     fn collect_event_stmt(&mut self, event_stmt: &ast::EventStmt) -> StmtId {
@@ -169,7 +172,7 @@ impl LowerCtx<'_> {
         let event = Event::Global { kind, phases };
         let stmt = Stmt::EventControl { event, body: self.collect_opt_stmt(event_stmt.stmt()) };
 
-        self.alloc_stmt(stmt, AstPtr::new(event_stmt).cast().unwrap())
+        self.alloc_stmt(stmt, AstPtr::new(event_stmt).cast().unwrap(), event_stmt.attrs())
     }
 
     fn collect_case_stmt(&mut self, case_stmt: &ast::CaseStmt) -> Stmt {
@@ -203,7 +206,7 @@ impl LowerCtx<'_> {
         if let Some(parent_scope) = parent_scope {
             self.curr_scope = parent_scope;
         }
-        self.alloc_stmt(Stmt::Block { body }, ast_ptr.cast().unwrap())
+        self.alloc_stmt(Stmt::Block { body }, ast_ptr.cast().unwrap(), block.attrs())
     }
 
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
@@ -222,30 +225,47 @@ impl LowerCtx<'_> {
     }
 
     fn make_expr(&mut self, expr: Expr, src: Option<AstPtr<ast::Expr>>) -> ExprId {
-        let id = self.body.exprs.push(expr);
+        let id = self.body.exprs.push_and_get_key(expr);
         self.source_map.expr_map_back.insert(id, src);
         id
     }
 
-    fn alloc_stmt(&mut self, stmt: Stmt, ptr: AstPtr<ast::Stmt>) -> StmtId {
-        let id = self.make_stmt(stmt, Some(ptr.clone()));
+    fn alloc_stmt(&mut self, stmt: Stmt, ptr: AstPtr<ast::Stmt>, attrs: AttrIter) -> StmtId {
+        let erased_id = self.erased_item_tree_id();
+        let attrs =
+            LintAttrs::resolve(self.registry, erased_id, attrs, &mut self.source_map.diagnostics);
+
+        let id = self.make_stmt(stmt, Some(ptr.clone()), attrs);
         self.source_map.stmt_map.insert(ptr, id);
+
         id
     }
+
     // desugared exprs don't have ptr, that's wrong and should be fixed
     // somehow.
     fn alloc_stmt_desugared(&mut self, stmt: Stmt) -> StmtId {
-        self.make_stmt(stmt, None)
+        self.make_stmt(stmt, None, LintAttrs::empty(self.erased_item_tree_id()))
+    }
+
+    fn erased_item_tree_id(&self) -> Option<ErasedItemTreeId> {
+        self.def_map[self.curr_scope].origin.erased_item_tree_id(self.db)
     }
 
     fn missing_stmt(&mut self) -> StmtId {
         self.alloc_stmt_desugared(Stmt::Missing)
     }
 
-    fn make_stmt(&mut self, stmt: Stmt, src: Option<AstPtr<ast::Stmt>>) -> StmtId {
-        let id = self.body.stmts.push(stmt);
-        let id2 = self.body.stmt_scopes.push(self.curr_scope);
+    fn make_stmt(
+        &mut self,
+        stmt: Stmt,
+        src: Option<AstPtr<ast::Stmt>>,
+        attrs: LintAttrs,
+    ) -> StmtId {
+        let id = self.body.stmts.push_and_get_key(stmt);
+        let id2 = self.body.stmt_scopes.push_and_get_key(self.curr_scope);
+        let id3 = self.source_map.lint_map.push_and_get_key(attrs);
         debug_assert_eq!(id, id2);
+        debug_assert_eq!(id2, id3);
         self.source_map.stmt_map_back.insert(id, src);
         id
     }

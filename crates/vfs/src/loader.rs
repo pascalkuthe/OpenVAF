@@ -1,7 +1,7 @@
 //! Object safe interface for file watching and reading.
 use std::fmt;
 
-use data_structures::paths::{AbsPathBuf,AbsPath};
+use paths::{AbsPathBuf,AbsPath};
 
 /// A set of files on the file system.
 #[derive(Debug, Clone)]

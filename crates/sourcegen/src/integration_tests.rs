@@ -51,7 +51,7 @@ pub fn parser() {
                     {
                         let path = project_root().join("integration_tests").join(#test_name).join(#files);
                         let file_contents =read_to_string(path).unwrap();
-                        db.vfs().borrow_mut().add_virt_file(#file_names, &file_contents);
+                        db.vfs().write().add_virt_file(#file_names, &file_contents);
                     }
                 )*
                 db.parse_and_check();
@@ -60,7 +60,7 @@ pub fn parser() {
     });
 
     let file_string = quote!(
-        use crate::{tests::TestDataBase, BaseDB};
+        use crate::{tests::TestDataBase};
         use sourcegen::{skip_slow_tests,project_root};
         use std::{fs::read_to_string,path::PathBuf};
         #(#test_impl)*
@@ -97,7 +97,7 @@ pub fn hir_def() {
                     {
                         let path = project_root().join("integration_tests").join(#test_name).join(#files);
                         let file_contents =read_to_string(path).unwrap();
-                        db.vfs().borrow_mut().add_virt_file(#file_names, &file_contents);
+                        db.vfs().write().add_virt_file(#file_names, &file_contents);
                     }
                 )*
                 db.lower_and_check();

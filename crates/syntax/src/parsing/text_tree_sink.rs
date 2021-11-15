@@ -1,18 +1,17 @@
 //! See [`TextTreeSink`].
 
-use super::preprocessor::Token;
 use crate::{
     syntax_node::{GreenNode, SyntaxTreeBuilder},
-    SyntaxError, SyntaxKind, TextRange, TextSize,
+    SyntaxError, SyntaxKind, TextRange, TextSize, T,
 };
-use data_structures::sync::Arc;
-use parser::{TreeSink, T};
+use parser::TreeSink;
+use preprocessor::Token;
 use preprocessor::{
     sourcemap::{CtxSpan, SourceContext, SourceMap},
-    FileId, SourceProvider,
+    SourceProvider,
 };
-use std::mem;
-use tracing::debug;
+use std::{mem, sync::Arc};
+use vfs::FileId;
 
 /// Bridges the parser with our specific syntax tree representation.
 ///
@@ -103,10 +102,11 @@ impl<'a> TreeSink for TextTreeSink<'a> {
 
     fn error(&mut self, error: parser::SyntaxError) {
         let n_trivias =
-            self.tokens[self.token_pos..].iter().take_while(|it| it.is_trivia()).count();
+            self.tokens[self.token_pos..].iter().take_while(|it| it.kind.is_trivia()).count();
         let leading_trivias = &self.tokens[self.token_pos..self.token_pos + n_trivias];
-        let pos = self.text_pos + leading_trivias.iter().map(|it| it.len()).sum::<TextSize>();
-        let len = self.tokens[self.token_pos + n_trivias].len();
+        let pos =
+            self.text_pos + leading_trivias.iter().map(|it| it.span.range.len()).sum::<TextSize>();
+        let len = self.tokens[self.token_pos + n_trivias].span.range.len();
         let parser::SyntaxError::UnexpectedToken { expected, found }: parser::SyntaxError = error;
         let missing_delimeter = found == T![end];
 
@@ -197,11 +197,11 @@ impl<'a> TextTreeSink<'a> {
             // Unwrap is okay here because the file was already read succesffully by he preprocessor or the SourceContext wouldn't exist
             let decl = self.sm.ctx_data(span.ctx).decl;
             let src = self.db.file_text(decl.file).unwrap();
-            if span.ctx == SourceContext::ROOT {
-                debug!("{:?} ; {:?} ; root", kind, span);
-            } else {
-                debug!("{:?} ; {:?} ; {:#?}", kind, span, &src[decl.range]);
-            }
+            // if span.ctx == SourceContext::ROOT {
+            //     debug!("{:?} ; {:?} ; root", kind, span);
+            // } else {
+            //     debug!("{:?} ; {:?} ; {:#?}", kind, span, &src[decl.range]);
+            // }
             self.current_src = src;
             self.ranges.push((range, ctx.0, ctx.1))
         }

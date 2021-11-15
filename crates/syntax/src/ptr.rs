@@ -78,13 +78,11 @@ impl SyntaxNodePtr {
         Some(AstPtr { raw: self, _ty: PhantomData })
     }
 
-
     #[inline]
     pub fn syntax_kind(&self) -> SyntaxKind {
         self.kind
     }
 }
-
 
 /// Like `SyntaxNodePtr`, but remembers the type of node
 #[derive(Debug)]
@@ -95,7 +93,7 @@ pub struct AstPtr<N: AstNode> {
 
 impl<N: AstNode> Clone for AstPtr<N> {
     fn clone(&self) -> AstPtr<N> {
-        AstPtr { raw: self.raw.clone(), _ty: PhantomData }
+        AstPtr { raw: self.raw, _ty: PhantomData }
     }
 }
 
@@ -127,7 +125,7 @@ impl<N: AstNode> AstPtr<N> {
 
     #[inline]
     pub fn syntax_node_ptr(&self) -> SyntaxNodePtr {
-        self.raw.clone()
+        self.raw
     }
 
     #[inline]

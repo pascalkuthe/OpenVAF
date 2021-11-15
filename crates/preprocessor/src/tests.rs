@@ -1,14 +1,9 @@
-use std::{cell::RefCell, str::from_utf8, sync::Arc};
+use std::{cell::RefCell, path::PathBuf, str::from_utf8, sync::Arc};
 
-use data_structures::iter::Itertools;
+use expect_test::expect_file;
 use vfs::{FileId, Vfs, VfsPath};
 
-use crate::{
-    preprocess, FileReadError, Preprocess, SourceProvider,
-    TokenKind::{
-        Comma, Comment, Div, Identifier, Modulus, Mul, ParenClose, ParenOpen, Plus, WhiteSpace,
-    },
-};
+use crate::{preprocess, FileReadError, Preprocess, SourceProvider};
 
 struct TestSourceProvider {
     vfs: RefCell<Vfs>,
@@ -49,7 +44,37 @@ impl SourceProvider for TestSourceProvider {
     }
 }
 
-pub(super) const SRC: &str = r#"
+fn check_prepocessor(sources: TestSourceProvider, root_file: FileId, test_name: &'static str) {
+    let Preprocess { ts, diagnostics, sm } = preprocess(&sources, root_file);
+    assert_eq!(diagnostics.as_slice(), &[]);
+    let actual_tokens: String = ts.iter().map(|token| format!("{:?}\n", token.kind,)).collect();
+    let expected = PathBuf::from(".").join("test_data").join(format!("{}.tokens", test_name));
+    expect_file![expected].assert_eq(&actual_tokens);
+
+
+    let vfs = sources.vfs.borrow();
+    let actual_content: String = ts
+        .iter()
+        .map(|token| {
+            let filespan = token.span.to_file_span(&sm);
+            let src = from_utf8(vfs.file_contents(filespan.file).unwrap()).unwrap();
+            &src[filespan.range]
+        })
+        .collect();
+
+    let expected = PathBuf::from(".").join("test_data").join(format!("{}_expanded.va", test_name));
+    expect_file![expected].assert_eq(&actual_content);
+}
+
+fn check_prepocessor_single_file(src: &str, test_name: &'static str) {
+    let sources = TestSourceProvider::new(vec![]);
+    let file = sources.vfs.borrow_mut().add_virt_file("/macro_expansion_test.va", src);
+    check_prepocessor(sources, file, test_name)
+}
+
+#[test]
+pub fn smoke_test() {
+    const SRC: &str = r#"
 `define test5(x,y) (x)+(y)
 `ifdef test1 ERROR
 `endif
@@ -67,6 +92,7 @@ x*(y%z)\
 /* bar */
 SMS__
 `endif
+
 `ifndef test4
 `define test4 OK4
                                             `endif
@@ -84,54 +110,59 @@ ERROR
 `test6(a,b,c)
 "#;
 
-const EXPANDED_SRC: &str = r#"
-
-OK1
-,
-    OK2,
-
-SMS__
-
-
-
-OK3\
-OK3L
-
-,
-
-
-OK4
-
-(Sum1)+(Sum2)
-(\
-/* foo */ \
-a*(b%c)\
-/* bar */)+(f(a/b)*c)
-"#;
+    check_prepocessor_single_file(SRC, "smoke_test")
+}
 
 #[test]
-pub fn macro_expansion() {
-    let sources = TestSourceProvider::new(vec![]);
-    let file = sources.vfs.borrow_mut().add_virt_file("/macro_expansion_test.va", SRC);
+fn whitespaces() {
+    check_prepocessor_single_file(
+        r#"
+        `define FOO BAR
+        // foo
+        `define TEST `FOO\
+        BAR
+        "#,
+        "whitespaces",
+    )
+}
 
-    let Preprocess { ts, diagnostics, sm } = preprocess(&sources, file);
-    assert_eq!(diagnostics.as_slice(), &[]);
-    assert_eq!(
-        ts.iter().map(|t| t.kind).collect_vec(),
-        [
-            WhiteSpace, WhiteSpace, Identifier, WhiteSpace, Comma, WhiteSpace, WhiteSpace,
-            Identifier, Comma, WhiteSpace, WhiteSpace, Identifier, WhiteSpace, WhiteSpace,
-            WhiteSpace, WhiteSpace, Identifier, WhiteSpace, Identifier, WhiteSpace, WhiteSpace,
-            Comma, WhiteSpace, WhiteSpace, WhiteSpace, Identifier, WhiteSpace, WhiteSpace,
-            ParenOpen, Identifier, ParenClose, Plus, ParenOpen, Identifier, ParenClose, WhiteSpace,
-            ParenOpen, WhiteSpace, Comment, WhiteSpace, WhiteSpace, Identifier, Mul, ParenOpen,
-            Identifier, Modulus, Identifier, ParenClose, WhiteSpace, Comment, ParenClose, Plus,
-            ParenOpen, Identifier, ParenOpen, Identifier, Div, Identifier, ParenClose, Mul,
-            Identifier, ParenClose, WhiteSpace,
-        ]
-    );
+#[test]
+fn condition_enabled() {
+    check_prepocessor_single_file(
+        r#"
+`ifdef DISABLE_STROBE
+	`define STROBE(X)
+	`define STROBE2(X,Y)
+`else
+	`define STROBE(X) $strobe(X)
+	`define STROBE2(X,Y) $strobe(X,Y)
+`endif
 
-    let full_expansion: String = ts.iter().map(|t| &SRC[t.span.to_file_span(&sm).range]).collect();
+`STROBE(foo)
+`STROBE2(bar,test)
 
-    assert_eq!(full_expansion, EXPANDED_SRC);
+        "#,
+        "condition_enabled",
+    )
+}
+
+#[test]
+fn condition_disabled() {
+    check_prepocessor_single_file(
+        r#"
+`define DISABLE_STROBE
+`ifdef DISABLE_STROBE
+	`define STROBE(X)
+	`define STROBE2(X,Y)
+`else
+	`define STROBE(X) $strobe(X)
+	`define STROBE2(X,Y) $strobe(X,Y)
+`endif
+
+`STROBE(foo)
+`STROBE2(bar,test)
+
+        "#,
+        "condition_disacled",
+    )
 }

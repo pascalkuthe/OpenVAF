@@ -2,7 +2,7 @@ use super::*;
 use crate::grammar::call::{call, sys_fun_call};
 use crate::grammar::paths::path;
 
-const EXPR_EXPECTED: &'static [SyntaxKind] =
+const EXPR_EXPECTED: & [SyntaxKind] =
     &[T!['('], T!["'{"], SYSFUN, NAME, LITERAL, T![~], T![!], T![+], T![-]];
 
 pub(super) fn expr(p: &mut Parser) -> Option<CompletedMarker> {

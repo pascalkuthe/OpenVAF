@@ -11,9 +11,9 @@
 #[cfg(test)]
 mod ast_src;
 #[cfg(test)]
-mod sourcegen_ast;
-#[cfg(test)]
 mod integration_tests;
+#[cfg(test)]
+mod sourcegen_ast;
 
 use std::{
     fmt, fs, mem,
@@ -253,13 +253,14 @@ pub fn to_pascal_case(s: &str) -> String {
 pub fn pluralize(s: &str) -> String {
     format!("{}s", s)
 }
+
 /// Returns `false` if slow tests should not run, otherwise returns `true` and
 /// also creates a file at `./target/.slow_tests_cookie` which serves as a flag
 /// that slow tests did run.
 pub fn skip_slow_tests() -> bool {
-    let should_skip = std::env::var("CI").is_err() && std::env::var("RUN_SLOW_TESTS").is_err();
+    let should_skip = option_env!("CI").is_none() && std::env::var("RUN_SLOW_TESTS").is_err();
     if should_skip {
-        eprintln!("ignoring slow test");
+        std::eprintln!("ignoring slow test");
     } else {
         let path = project_root().join("./target/.slow_tests_cookie");
         fs::write(&path, ".").unwrap();

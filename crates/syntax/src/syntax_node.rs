@@ -26,7 +26,7 @@ impl Language for VerilogALanguage {
 
 pub type SyntaxNode = rowan::SyntaxNode<VerilogALanguage>;
 pub type SyntaxToken = rowan::SyntaxToken<VerilogALanguage>;
-pub type SyntaxElement = rowan::SyntaxElement<VerilogALanguage>;
+// pub type SyntaxElement = rowan::SyntaxElement<VerilogALanguage>;
 pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<VerilogALanguage>;
 pub type SyntaxElementChildren = rowan::SyntaxElementChildren<VerilogALanguage>;
 

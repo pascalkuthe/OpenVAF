@@ -1,0 +1,18 @@
+[package]
+name = "lexer"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+[lib]
+doctest = false
+
+[dependencies]
+text-size = "1.1"
+tokens = {version="0.0.0", path="../tokens"}
+
+[dev-dependencies]
+expect-test = "1.1.0"
+
+

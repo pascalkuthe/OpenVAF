@@ -1,16 +1,5 @@
-
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
 use crate::{
-    lints::{Lint, LintData, LintLevel, SyntaxCtx},
+    lints::{Lint, LintData, LintLevel, LintSrc},
     BaseDB, FileId,
 };
 
@@ -37,19 +26,22 @@ use syntax::{
 };
 
 pub trait Diagnostic {
-    fn lint(&self) -> Option<(Lint, Option<SyntaxCtx>)> {
+    fn lint(&self) -> Option<(Lint, LintSrc)> {
         None
     }
 
     fn build_report(&self, root_file: FileId, db: &dyn BaseDB) -> Report;
 
     fn to_report(&self, root_file: FileId, db: &dyn BaseDB) -> Option<Report> {
-        if let Some((lint, sctx)) = self.lint() {
-            let (lvl, is_default) = db.lint_lvl(lint, root_file, sctx);
+        if let Some((lint, lint_src)) = self.lint() {
+            let (lvl, is_default) = match lint_src.overwrite {
+                Some(lvl) => (lvl, false),
+                None => db.lint_lvl(lint, root_file, lint_src.item_tree),
+            };
             let LintData { name, documentation_id, .. } = db.lint_data(lint);
 
             let seververity = match lvl {
-                LintLevel::Deny | LintLevel::Forbid => Severity::Error,
+                LintLevel::Deny => Severity::Error,
                 LintLevel::Warn => Severity::Warning,
                 LintLevel::Allow => return None,
             };

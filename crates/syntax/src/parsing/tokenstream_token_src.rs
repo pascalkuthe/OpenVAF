@@ -1,11 +1,9 @@
 //! See `TsTokenSource` docs.
 
-use std::convert::TryInto;
-
 use crate::SyntaxKind::{self, EOF};
 use parser::TokenSource;
 
-use super::preprocessor::Token;
+use preprocessor::Token;
 
 /// Implementation of `parser::TokenSource` that takes tokens from source code text.
 pub(crate) struct TsTokenSource {
@@ -54,11 +52,7 @@ impl TsTokenSource {
         let token_offset_pairs: Vec<_> = raw_tokens
             .iter()
             .enumerate()
-            .filter_map(|(pos, t)| {
-                (*t).try_into()
-                    .ok()
-                    .and_then(|t: Token| (!t.kind.is_trivia()).then(|| (t.kind, pos)))
-            })
+            .filter_map(|(pos, t)| (!t.kind.is_trivia()).then(|| (t.kind, pos)))
             .collect();
         let curr = (mk_token(0, &token_offset_pairs), 0);
         TsTokenSource { token_offset_pairs, curr }

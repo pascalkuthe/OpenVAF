@@ -1,12 +1,15 @@
 use std::iter::once;
 
-use data_structures::iter::zip;
+use stdx::iter::zip;
 use syntax::{sourcemap::FileSpan, SyntaxError, SyntaxKind::BLOCK_STMT, TextRange, TextSize};
 
-use crate::{BaseDB, FileId, diagnostics::{
-    text_range_list_to_unified_spans, text_ranges_to_unified_spans, Diagnostic, Label, LabelStyle,
-    Report,
-}};
+use crate::{
+    diagnostics::{
+        text_range_list_to_unified_spans, text_ranges_to_unified_spans, Diagnostic, Label,
+        LabelStyle, Report,
+    },
+    BaseDB, FileId,
+};
 
 fn syntax_err_report(missing_delimeter: bool) -> Report {
     if missing_delimeter {
@@ -139,10 +142,10 @@ impl Diagnostic for SyntaxError {
                 ])
             }
             SyntaxError::BlockItemsAfterStmt { ref items, first_stmt } => {
-                let mut ranges: Vec<_> =
+                let ranges: Vec<_> =
                     once(first_stmt).chain(items.iter().map(|item| item.range())).collect();
 
-                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &mut ranges);
+                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &ranges);
 
                 let first_stmt = ranges[0];
                 let item_ranges = &ranges[1..];
@@ -169,10 +172,10 @@ impl Diagnostic for SyntaxError {
                 Report::error().with_labels(labels)
             }
             SyntaxError::BlockItemsWithoutScope { ref items, begin_token } => {
-                let mut ranges: Vec<_> =
+                let ranges: Vec<_> =
                     once(begin_token).chain(items.iter().map(|item| item.range())).collect();
 
-                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &mut ranges);
+                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &ranges);
 
                 let begin_token = TextRange::at(ranges[0].end() + TextSize::from(1), 1.into());
                 let item_ranges = &ranges[1..];
@@ -196,10 +199,10 @@ impl Diagnostic for SyntaxError {
                 Report::error().with_labels(labels)
             }
             SyntaxError::FunItemsAfterBody { ref items, body } => {
-                let mut ranges: Vec<_> =
+                let ranges: Vec<_> =
                     once(body).chain(items.iter().map(|item| item.range())).collect();
 
-                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &mut ranges);
+                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &ranges);
 
                 let body = ranges[0];
                 let item_ranges = &ranges[1..];
@@ -236,10 +239,9 @@ impl Diagnostic for SyntaxError {
                     )
                 };
 
-                let mut ranges: Vec<_> =
-                    once(range).chain(additional_bodys.iter().copied()).collect();
+                let ranges: Vec<_> = once(range).chain(additional_bodys.iter().copied()).collect();
 
-                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &mut ranges);
+                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &ranges);
 
                 let range = ranges[0];
                 let item_ranges = &ranges[1..];

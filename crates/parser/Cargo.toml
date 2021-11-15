@@ -16,10 +16,7 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 
-# Error reporting
-tracing = "0.1.26"
-thiserror = "1.0.26"
-
-data-structures = {version = "0.0.0", path = "../data_structures" }
+# data-structures = {version = "0.0.0", path = "../data_structures" }
 drop_bomb = "0.1.5"
-derive_more = "0.99.16"
+stdx = {version="0.0.0", path="../stdx"}
+tokens = {version="0.0.0", path="../tokens"}

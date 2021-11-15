@@ -3,36 +3,35 @@ use std::{
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign},
 };
 
-use derive_more::Display;
 
 /// Some expressions are only allowed in certain a certain context.
 /// OpenVAF use bitflags to keep track of what is currently allowed during hir validation
 #[repr(u16)]
-#[derive(Display, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Allowed {
-    #[display(fmt = "referencing nets")]
+    // #[display(fmt = "referencing nets")]
     NetReferences = 0b0000_0000_0000_0001,
-    #[display(fmt = "referencing ports")]
+    // #[display(fmt = "referencing ports")]
     PortReferences = 0b0000_0000_0000_0010,
-    #[display(fmt = "referencing parameter")]
+    // #[display(fmt = "referencing parameter")]
     ParameterReferences = 0b0000_0000_0000_0100,
-    #[display(fmt = "referencing variables")]
+    // #[display(fmt = "referencing variables")]
     VariableReferences = 0b0000_0000_0000_1000,
-    #[display(fmt = "calling analog filter functions")]
+    // #[display(fmt = "calling analog filter functions")]
     AnalogFilters = 0b0000_0000_0001_0000,
-    #[display(fmt = "accessing branches")]
+    // #[display(fmt = "accessing branches")]
     BranchAccess = 0b0000_0000_0010_0000,
-    #[display(fmt = "calling system functions")]
+    // #[display(fmt = "calling system functions")]
     SystemFunctionCalls = 0b0000_0000_0100_0000,
-    #[display(fmt = "calling the $temperature system function")]
+    // #[display(fmt = "calling the $temperature system function")]
     Temperature = 0b0000_0000_1000_0000,
-    #[display(fmt = "calling VerilogA functions")]
+    // #[display(fmt = "calling VerilogA functions")]
     UserFunctionCalls = 0b0000_0001_0000_0000,
-    #[display(fmt = "a user defined function")]
+    // #[display(fmt = "a user defined function")]
     UserFunctionReference = 0b0000_0010_0000_0000,
-    #[display(fmt = "contributing to branches")]
+    // #[display(fmt = "contributing to branches")]
     Contribute = 0b0000_0100_0000_0000,
-    #[display(fmt = "declaring named blocks")]
+    // #[display(fmt = "declaring named blocks")]
     NamedBlocks = 0b0000_1000_0000_0000,
 }
 

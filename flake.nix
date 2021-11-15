@@ -38,6 +38,7 @@
 
             nativeBuildInputs = with channels.nixpkgs; nativeBuildInputs ++ [
               rust-bin.stable.latest.default
+              # rust-bin.nightly.latest.default
               rust-analyzer
               cargo-expand
               crate2nix

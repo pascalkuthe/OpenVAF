@@ -10,40 +10,36 @@
 
 use std::io;
 
-use crate::{lexer::RawToken, sourcemap::CtxSpan};
-use derive_more::Display;
+use crate::sourcemap::CtxSpan;
+use stdx::impl_display;
 use vfs::VfsPath;
 
-#[derive(Debug, PartialEq, Display, Clone, Eq, Hash)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum PreprocessorDiagnostic {
-    #[display(fmt = "argument mismatch expected {} but found {}!", "expected", "found")]
     MacroArgumentCountMissmatch { expected: usize, found: usize, span: CtxSpan },
-
-    #[display(fmt = "macro '`{}' has not been declared", "name")]
     MacroNotFound { name: String, span: CtxSpan },
-
-    #[display(fmt = "macro '`{}' was called recursively", "name")]
     MacroRecursion { name: String, span: CtxSpan },
-
-    #[display(fmt = "failed to read '{}': {}", "file", "std::io::Error::from(*error)")]
     IoError { file: VfsPath, error: io::ErrorKind, span: Option<CtxSpan> },
-
-    #[display(fmt = "failed to read '{}': file not found", "file")]
     FileNotFound { span: Option<CtxSpan>, file: String },
-
-    #[display(fmt = "failed to read {}: file contents are not valid text", "file")]
     InvalidTextFormat { span: Option<CtxSpan>, file: VfsPath },
-
-    //General
-    #[display(fmt = "unexpected EOF, expected {}", "expected")]
-    UnexpectedEof { expected: RawToken, span: CtxSpan },
-
-    #[display(fmt = "unexpected token, expected '{}'", "expected")]
-    MissingOrUnexpectedToken { expected: RawToken, expected_at: CtxSpan, span: CtxSpan },
-
-    #[display(fmt = "encountered unexpected token!")]
+    UnexpectedEof { expected: &'static str, span: CtxSpan },
+    MissingOrUnexpectedToken { expected: &'static str, expected_at: CtxSpan, span: CtxSpan },
     UnexpectedToken(CtxSpan),
-
-    #[display(fmt = "macro '`{}' was overwritten", "name")]
     MacroOverwritten { old: CtxSpan, new: CtxSpan, name: String },
+}
+
+use PreprocessorDiagnostic::*;
+impl_display! {
+    match PreprocessorDiagnostic{
+        MacroArgumentCountMissmatch { expected, found, ..} => "argument mismatch expected {} but found {}!", expected, found;
+        MacroNotFound{name,..} =>  "macro '`{}' has not been declared", name;
+        MacroRecursion { name,..} => "macro '`{}' was called recursively",name;
+        IoError { file, error, .. } => "failed to read '{}': {}", file, std::io::Error::from(*error);
+        FileNotFound {  file, ..} => "failed to read '{}': file not found", file;
+        InvalidTextFormat {  file, ..} => "failed to read {}: file contents are not valid text", file;
+        UnexpectedEof { expected ,..} => "unexpected EOF, expected {}",expected;
+        MissingOrUnexpectedToken { expected, ..} => "unexpected token, expected '{}'", expected;
+        UnexpectedToken(_) => "encountered unexpected token!";
+        MacroOverwritten { name, .. } => "macro '`{}' was overwritten", name;
+    }
 }

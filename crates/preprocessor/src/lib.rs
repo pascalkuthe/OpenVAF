@@ -1,43 +1,30 @@
-/*
- *  *******************************************************************************, span: () *********** error: () 
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
+use std::{io, sync::Arc};
 
-use std::io;
-
-use data_structures::sync::Arc;
-use sourcemap::SourceMap;
+use sourcemap::{CtxSpan, SourceMap};
+use vfs::{FileId, VfsPath};
 
 use crate::processor::Processor;
-pub use crate::tokenstream::{Token, TokenKind, TokenStream};
 use diagnostics::PreprocessorDiagnostic;
-use tracing::trace_span;
-pub use vfs::{FileId, VfsPath};
+// use tracing::trace_span;
 
 pub mod diagnostics;
 mod grammar;
-mod lexer;
 mod parser;
 mod processor;
 pub mod sourcemap;
-mod token_set;
-mod tokenstream;
 
+mod scoped_arc_arena;
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests;
 
 type Text = Arc<str>;
-type ScopedTextArea = data_structures::ScopedArea<Text>;
+type ScopedTextArea = scoped_arc_arena::ScopedArea<Text>;
 type Diagnostics = Vec<PreprocessorDiagnostic>;
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Preprocess {
-    pub ts: Arc<TokenStream>,
+    pub ts: Arc<Vec<Token>>,
     pub sm: Arc<SourceMap>,
     pub diagnostics: Arc<Diagnostics>,
 }
@@ -45,8 +32,8 @@ pub struct Preprocess {
 /// # Panics
 /// This function panics if called multiple times in the same OpenVAF session
 pub fn preprocess(sources: &dyn SourceProvider, file: FileId) -> Preprocess {
-    let span = trace_span!("preprocessor", main_file = display(sources.file_path(file)));
-    let _scope = span.enter();
+    // let span = trace_span!("preprocessor", main_file = display(sources.file_path(file)));
+    // let _scope = span.enter();
 
     let storage = ScopedTextArea::new();
     let (ts, diagnostics, sm) = match Processor::new(&storage, file, sources) {
@@ -99,4 +86,10 @@ pub trait SourceProvider {
     fn file_text(&self, file: FileId) -> Result<Arc<str>, FileReadError>;
     fn file_path(&self, file: FileId) -> VfsPath;
     fn file_id(&self, path: VfsPath) -> FileId;
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Token {
+    pub span: CtxSpan,
+    pub kind: tokens::parser::SyntaxKind,
 }

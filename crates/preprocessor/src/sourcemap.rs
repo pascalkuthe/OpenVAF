@@ -1,24 +1,13 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe.  This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
-use std::convert::TryFrom;
-
-use data_structures::{
-    index_vec::{define_index_type, index_vec, IndexVec},
+use std::{
+    convert::{TryFrom, TryInto},
     sync::Arc,
-    text_size::{TextRange, TextSize},
-    HashMap,
 };
-use vfs::{FileId, VfsPath};
 
-use std::convert::TryInto;
+use ahash::AHashMap;
+use stdx::{impl_debug_display, impl_idx_from};
+use text_size::{TextRange, TextSize};
+use typed_index_collections::TiVec;
+use vfs::{FileId, VfsPath};
 
 use crate::SourceProvider;
 
@@ -47,8 +36,9 @@ impl FileSpan {
         let range = relative_range + self.range.start();
         assert!(
             range.end() <= self.range.end(),
-            "subrange {:?} must fit into the total range {:?}",
+            "subrange {:?} -> {:?} must fit into the total range {:?}",
             relative_range,
+            range,
             self.range
         );
         FileSpan { range, file: self.file }
@@ -83,23 +73,6 @@ impl FileSpan {
     }
 }
 
-// TODO switch to ariadne
-// impl ariadne::Span for FileSpan{
-//     type SourceId = FileId;
-
-//     fn source(&self) -> &Self::SourceId {
-//         &self.file
-//     }
-
-//     fn start(&self) -> usize {
-//         self.range.start().into()
-//     }
-
-//     fn end(&self) -> usize {
-//         self.range.end().into()
-//     }
-// }
-
 /// A CtxSpan refers a contious range of Text a SourceContext (macro expansion or file).
 /// The range is relative to the start of the particular context so thgat ranges can be changed
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -110,7 +83,7 @@ pub struct CtxSpan {
 }
 
 impl CtxSpan {
-    pub fn with_ctx(self, ctx: SourceContext, sm: &SourceMap) -> CtxSpan {
+    pub fn with_ctx(self, ctx: SourceContext) -> CtxSpan {
         CtxSpan { range: self.range, ctx }
     }
     pub fn with_range(self, range: TextRange) -> CtxSpan {
@@ -156,17 +129,18 @@ impl CtxSpan {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct SourceMap {
-    ctx_tree: IndexVec<SourceContext, SourceContextData>,
+    ctx_tree: TiVec<SourceContext, SourceContextData>,
     // ranges: Vec<(TextRange, SourceContext, isize)>,
 }
 
 impl SourceMap {
     pub(crate) fn new(root_file: FileId, root_file_len: TextSize) -> SourceMap {
         SourceMap {
-            ctx_tree: index_vec![SourceContextData {
+            ctx_tree: vec![SourceContextData {
                 decl: FileSpan { range: TextRange::up_to(root_file_len), file: root_file },
                 call_site: None,
-            }],
+            }]
+            .into(),
         }
     }
 
@@ -208,7 +182,7 @@ impl SourceMap {
         span2: CtxSpan,
     ) -> (SourceContext, TextRange, TextRange) {
         // self.index() is used as a capacity because it is the lowest upper bound we know
-        let mut ancestors = HashMap::new();
+        let mut ancestors = AHashMap::new();
         ancestors.insert(span1.ctx, span1.range);
         let mut current = span1.ctx;
         while let Some(call_site) = self.ctx_tree[current].call_site {
@@ -257,19 +231,18 @@ impl SourceMap {
     }
 
     pub(crate) fn add_ctx(&mut self, decl: FileSpan, call_site: CtxSpan) -> SourceContext {
-        self.ctx_tree.push(SourceContextData { decl, call_site: Some(call_site) })
+        self.ctx_tree.push_and_get_key(SourceContextData { decl, call_site: Some(call_site) })
     }
 }
 
-define_index_type! {
-            pub struct SourceContext = u32;
-            DISPLAY_FORMAT = "syntax_ctxt{}";
-            DEBUG_FORMAT = "syntax_ctxt{}";
-            IMPL_RAW_CONVERSIONS = true;
-}
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct SourceContext(u32);
+
+impl_idx_from!(SourceContext(u32));
+impl_debug_display!(c@SourceContext => "ctx{}",c.0);
 
 impl SourceContext {
-    pub const ROOT: Self = Self::from_raw_unchecked(0);
+    pub const ROOT: Self = SourceContext(0);
 
     pub fn call_site(self, sm: &SourceMap) -> Option<CtxSpan> {
         sm.ctx_tree[self].call_site

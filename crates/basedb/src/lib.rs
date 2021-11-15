@@ -1,13 +1,3 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
 #[cfg(test)]
 mod tests;
 
@@ -15,23 +5,20 @@ pub mod diagnostics;
 pub mod line_index;
 pub mod lints;
 
-use std::intrinsics::transmute;
 use std::str::from_utf8;
+use std::{intrinsics::transmute, sync::Arc};
 
-use data_structures::iter::Itertools;
-use data_structures::sync::RwLock;
-use data_structures::{index_vec::IndexBox, sync::Arc};
-
-use data_structures::index_vec::{index_box, IndexSlice};
 use line_index::{Line, LineIndex};
-use lints::{Lint, LintData, LintLevel, LintRegistry, LintResolver, SyntaxCtx};
+use lints::{Lint, LintData, LintLevel, LintRegistry, LintResolver, ErasedItemTreeId};
+use parking_lot::RwLock;
 use salsa::Durability;
 use syntax::{
     sourcemap::SourceMap, FileReadError, Parse, Preprocess, SourceFile, SourceProvider, TextRange,
     TextSize,
 };
 
-pub use vfs::{FileId, VfsPath, Vfs};
+use typed_index_collections::{TiSlice, TiVec};
+pub use vfs::{FileId, Vfs, VfsPath};
 
 pub trait VfsStorage {
     fn vfs(&self) -> &RwLock<Vfs>;
@@ -42,10 +29,7 @@ pub trait BaseDB: LintResolver + VfsStorage + salsa::Database {
     #[salsa::input]
     fn plugin_lints(&self) -> &'static [LintData];
     #[salsa::input]
-    fn global_lint_overwrites(
-        &self,
-        root_file: FileId,
-    ) -> Arc<IndexSlice<Lint, [Option<LintLevel>]>>;
+    fn global_lint_overwrites(&self, root_file: FileId) -> Arc<TiSlice<Lint, Option<LintLevel>>>;
 
     #[salsa::input]
     fn include_dirs(&self, root_file: FileId) -> Arc<[VfsPath]>;
@@ -86,12 +70,14 @@ pub trait BaseDB: LintResolver + VfsStorage + salsa::Database {
     #[salsa::transparent]
     fn lint_data(&self, lint: Lint) -> LintData;
 
+
+
     #[salsa::transparent]
-    fn lint_lvl(&self, lint: Lint, root_file: FileId, sctx: Option<SyntaxCtx>)
+    fn lint_lvl(&self, lint: Lint, root_file: FileId, sctx: Option<ErasedItemTreeId>)
         -> (LintLevel, bool);
 
     #[salsa::transparent]
-    fn empty_global_lint_overwrites(&self) -> IndexBox<Lint, [Option<LintLevel>]>;
+    fn empty_global_lint_overwrites(&self) -> TiVec<Lint, Option<LintLevel>>;
 }
 
 fn lint(db: &dyn BaseDB, name: &str) -> Option<Lint> {
@@ -106,7 +92,7 @@ fn lint_lvl(
     db: &dyn BaseDB,
     lint: Lint,
     root_file: FileId,
-    sctx: Option<SyntaxCtx>,
+    sctx: Option<ErasedItemTreeId>,
 ) -> (LintLevel, bool) {
     if let Some(sctx) = sctx {
         if let Some(lvl) = db.lint_overwrite(lint, sctx, root_file) {
@@ -137,8 +123,8 @@ fn line_range(db: &dyn BaseDB, line: Line, file: FileId) -> TextRange {
     db.line_index(file).line_range(line)
 }
 
-fn empty_global_lint_overwrites(db: &dyn BaseDB) -> IndexBox<Lint, [Option<LintLevel>]> {
-    index_box!(None; db.plugin_lints().len()+lints::builtin::ALL.len())
+fn empty_global_lint_overwrites(db: &dyn BaseDB) -> TiVec<Lint, Option<LintLevel>> {
+    vec![None; db.plugin_lints().len() + lints::builtin::ALL.len()].into()
 }
 // #[inline]
 // fn line_col(db: &dyn BaseDB, span: FileSpan) -> LineCol {
@@ -246,17 +232,13 @@ impl dyn BaseDB {
         let include_dirs = Arc::from(vec![VfsPath::new_virtual_path("/std".to_owned())]);
         self.set_include_dirs(root_file, include_dirs);
 
-        self.set_macro_flags(
-            root_file,
-            Arc::from(STANDARD_FLAGS.iter().map(|x| Arc::from(*x)).collect_vec()),
-        );
+        let macro_flags: Vec<_> = STANDARD_FLAGS.iter().map(|x| Arc::from(*x)).collect();
+        self.set_macro_flags(root_file, Arc::from(macro_flags));
 
         self.set_plugin_lints(&[]);
-        let overwrites: Arc<[_]> = Arc::from(self.empty_global_lint_overwrites().as_raw_slice());
+        let overwrites: Arc<[_]> = Arc::from(self.empty_global_lint_overwrites().as_ref());
         let overwrites = unsafe {
-            transmute::<Arc<[Option<LintLevel>]>, Arc<IndexSlice<Lint, [Option<LintLevel>]>>>(
-                overwrites,
-            )
+            transmute::<Arc<[Option<LintLevel>]>, Arc<TiSlice<Lint, Option<LintLevel>>>>(overwrites)
         };
 
         self.set_global_lint_overwrites(root_file, overwrites);

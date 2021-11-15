@@ -3,14 +3,14 @@ use vfs::FileId;
 
 use crate::{
     diagnostics::{to_unified_spans, Diagnostic, Label, LabelStyle, Report},
-    lints::{self, Lint, SyntaxCtx},
+    lints::{self, Lint, LintSrc},
     BaseDB,
 };
 
 impl Diagnostic for PreprocessorDiagnostic {
-    fn lint(&self) -> Option<(Lint, Option<SyntaxCtx>)> {
+    fn lint(&self) -> Option<(Lint, LintSrc)> {
         if let PreprocessorDiagnostic::MacroOverwritten { .. } = self {
-            Some((lints::builtin::macro_overwritten, None))
+            Some((lints::builtin::macro_overwritten, LintSrc::GLOBAL))
         } else {
             None
         }

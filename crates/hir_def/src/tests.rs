@@ -1,9 +1,9 @@
 use crate::{
     db::{HirDefDB, HirDefDatabase, InternDatabase},
-    nameres::{DefMap, ScopeId},
+    nameres::{DefMap, LocalScopeId},
 };
 use basedb::{lints::LintResolver, BaseDB, BaseDatabase, FileId, Vfs, VfsStorage};
-use data_structures::sync::RwLock;
+use parking_lot::RwLock;
 
 mod integration;
 
@@ -19,7 +19,7 @@ impl TestDataBase {
         let mut res = Self { storage: salsa::Storage::default(), vfs: None, root_file: None };
         let vfs = RwLock::new(Vfs::default());
         let foo: &mut dyn BaseDB = &mut res;
-        let root_file = foo.setup_test_db(root_file_name, root_file, &mut vfs.borrow_mut());
+        let root_file = foo.setup_test_db(root_file_name, root_file, &mut vfs.write());
         res.root_file = Some(root_file);
         res.vfs = Some(vfs);
         res
@@ -39,7 +39,7 @@ impl TestDataBase {
         self.lower_and_check_rec(root_scope, &def_map);
     }
 
-    fn lower_and_check_rec(&self, scope: ScopeId, def_map: &DefMap) {
+    fn lower_and_check_rec(&self, scope: LocalScopeId, def_map: &DefMap) {
         let root_file = self.root_file();
 
         for (_, declaration) in &def_map[scope].declarations {

@@ -20,14 +20,24 @@ doctest = false
 
 salsa = "0.17.0-pre.2"
 
+stdx = {version = "0.0.0", path = "../stdx" }
 vfs = {version = "0.0.0", path = "../vfs" }
 syntax = {version = "0.0.0", path = "../syntax" }
-data-structures = {version = "0.0.0", path = "../data_structures" }
+
 codespan-reporting = "0.11"
-tracing = "0.1"
+
+# Netype Wrappers
+text-size = "1.1"
+typed-index-collections = "3.0"
+
+# Performant collections
+parking_lot = "0.11"
+indexmap = "1.6"
+ahash = "0.7"
+
+
 
 [dev-dependencies]
 
 sourcegen = {version = "0.0.0",path ="../sourcegen"}
-tracing-subscriber = {version="0.3",features=["env-filter","registry"]}
-
+# tracing-subscriber = {version="0.3",features=["env-filter","registry"]}

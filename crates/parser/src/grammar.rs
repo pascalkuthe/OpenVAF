@@ -18,6 +18,8 @@ mod items;
 mod paths;
 mod stmts;
 
+use tokens::T;
+
 use crate::{
     parser::{CompletedMarker, Marker, Parser},
     SyntaxKind::{self, *},
@@ -59,7 +61,6 @@ fn eat_ty(p: &mut Parser) {
     }
 }
 
-
 fn name_r(p: &mut Parser, recovery: TokenSet) {
     let m = p.start();
     if p.eat(IDENT) {
@@ -70,7 +71,6 @@ fn name_r(p: &mut Parser, recovery: TokenSet) {
         p.err_recover(err, recovery);
     }
 }
-
 
 fn name_ref_r(p: &mut Parser, recovery: TokenSet) {
     let m = p.start();
@@ -107,7 +107,6 @@ fn eat_name(p: &mut Parser) -> bool {
         false
     }
 }
-
 
 fn eat_name_ref(p: &mut Parser) -> bool {
     let m = p.start();

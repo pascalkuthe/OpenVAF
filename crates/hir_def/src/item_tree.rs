@@ -1,31 +1,11 @@
 //! A simplified AST that only contains items.
 //!
 //! This is the primary IR used throughout `hir_def`. It is the input to the name resolution
-//! algorithm, as well as to the queries defined in `adt.rs`, `data.rs`, and most things in
-//! `attr.rs`.
-//!
-//! `ItemTree`s are built per `HirFileId`, from the syntax tree of the parsed file. This means that
-//! they are crate-independent: they don't know which `#[cfg]`s are active or which module they
-//! belong to, since those concepts don't exist at this level (a single `ItemTree` might be part of
-//! multiple crates, or might be included into the same crate twice via `#[path]`).
+//! algorith
 //!
 //! One important purpose of this layer is to provide an "invalidation barrier" for incremental
 //! computations: when typing inside an item body, the `ItemTree` of the modified file is typically
 //! unaffected, so we don't have to recompute name resolution results or item data (see `data.rs`).
-//!
-//! The `ItemTree` for the currently open file can be displayed by using the VS Code command
-//! "Rust Analyzer: Debug ItemTree".
-//!
-//! Compared to rustc's architecture, `ItemTree` has properties from both rustc's AST and HIR: many
-//! syntax-level Rust features are already desugared to simpler forms in the `ItemTree`, but name
-//! resolution has not yet been performed. `ItemTree`s are per-file, while rustc's AST and HIR are
-//! per-crate, because we are interested in incrementally computing it.
-//!
-//! The representation of items in the `ItemTree` should generally mirror the surface syntax: it is
-//! usually a bad idea to desugar a syntax-level construct to something that is structurally
-//! different here. Name resolution needs to be able to process attributes and expand macros
-//! (including attribute macros), and having a 1-to-1 mapping between syntax and the `ItemTree`
-//! avoids introducing subtle bugs.
 //!
 //! In general, any item in the `ItemTree` stores its `AstId`, which allows mapping it back to its
 //! surface syntax.
@@ -34,20 +14,28 @@ mod lower;
 
 use std::{fmt::Debug, hash::Hash, ops::Index, sync::Arc};
 
-use crate::{db::HirDefDB, FileAstId, Name, Path, Type};
-use basedb::FileId;
-use data_structures::{
-    arena::{Arena, Idx, IdxRange},
-    HashMap,
+use crate::{
+    attrs::{AttrDiagnostic, LintAttrs},
+    db::HirDefDB,
+    FileAstId, Name, Path, Type,
 };
-use derive_more::{From, TryInto};
+// use ahash::AHashMap as HashMap;
+use arena::{Arena, Idx, IdxRange};
+use basedb::{
+    lints::{ErasedItemTreeId, Lint, LintLevel},
+    FileId,
+};
+use stdx::impl_from_typed;
 use syntax::{ast, AstNode};
+use typed_index_collections::TiVec;
 
 /// The item tree of a source file.
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct ItemTree {
     pub top_level: Box<[RootItem]>,
     pub(crate) data: ItemTreeData,
+    pub(crate) lint_attrs: TiVec<ErasedItemTreeId, LintAttrs>,
+    pub diagnostics: Vec<AttrDiagnostic>,
 }
 
 impl ItemTree {
@@ -90,6 +78,16 @@ impl ItemTree {
         nature_attrs.shrink_to_fit();
         discipline_attrs.shrink_to_fit();
     }
+
+    pub fn lint_lvl(&self, mut id: ErasedItemTreeId, lint: Lint) -> Option<LintLevel> {
+        loop {
+            let attrs = &self.lint_attrs[id];
+            if let Some(lvl) = attrs.level(lint) {
+                return Some(lvl);
+            }
+            id = attrs.parent()?;
+        }
+    }
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
@@ -108,7 +106,6 @@ pub(crate) struct ItemTreeData {
     pub functions: Arena<Function>,
     pub function_args: Arena<FunctionArg>,
     pub block_scopes: Arena<BlockScope>,
-    // syntax_ctx: Arena<SyntaxCtx>,
 }
 
 /// Trait implemented by all item nodes in the item tree.
@@ -116,6 +113,7 @@ pub trait ItemTreeNode: Clone {
     type Source: AstNode;
 
     fn ast_id(&self) -> FileAstId<Self::Source>;
+    fn erased_id(&self) -> ErasedItemTreeId;
 
     /// Looks up an instance of `Self` in an item tree.
     fn lookup(tree: &ItemTree, index: Idx<Self>) -> &Self;
@@ -129,19 +127,31 @@ pub trait ItemTreeNode: Clone {
 
 pub type ItemTreeId<N: ItemTreeNode> = Idx<N>;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, From, TryInto)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum RootItem {
     Module(ItemTreeId<Module>),
     Nature(ItemTreeId<Nature>),
     Discipline(ItemTreeId<Discipline>),
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, From, TryInto)]
+impl_from_typed! (
+    Module(ItemTreeId<Module>),
+    Nature(ItemTreeId<Nature>),
+    Discipline(ItemTreeId<Discipline>) for RootItem
+);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum BlockScopeItem {
     Scope(ItemTreeId<BlockScope>),
     Parameter(ItemTreeId<Param>),
     Variable(ItemTreeId<Var>),
 }
+
+impl_from_typed! (
+    Scope(ItemTreeId<BlockScope>),
+    Parameter(ItemTreeId<Param>),
+    Variable(ItemTreeId<Var>) for BlockScopeItem
+);
 
 macro_rules! item_tree_nodes {
     ( $( $typ:ident in $fld:ident -> $ast:ty ),+ $(,)? ) => {
@@ -166,6 +176,10 @@ macro_rules! item_tree_nodes {
 
                 fn ast_id(&self) -> FileAstId<Self::Source> {
                     self.ast_id
+                }
+
+                fn erased_id(&self) -> ErasedItemTreeId {
+                    self.erased_id
                 }
 
                 fn lookup(tree: &ItemTree, index: Idx<Self>) -> &Self {
@@ -225,6 +239,7 @@ pub struct Module {
     pub functions: IdxRange<Function>,
     pub scope_items: Vec<BlockScopeItem>,
     pub ast_id: FileAstId<ast::ModuleDecl>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 impl Module {
@@ -246,8 +261,8 @@ pub struct Port {
 
     pub name_idx: usize,
     pub ast_id: FileAstId<ast::PortDecl>,
+    pub erased_id: ErasedItemTreeId,
 }
-
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Net {
@@ -257,6 +272,7 @@ pub struct Net {
 
     pub name_idx: usize,
     pub ast_id: FileAstId<ast::NetDecl>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -264,6 +280,7 @@ pub struct Var {
     pub name: Name,
     pub ty: Type,
     pub ast_id: FileAstId<ast::Var>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -271,6 +288,7 @@ pub struct Param {
     pub name: Name,
     pub ty: Type,
     pub ast_id: FileAstId<ast::Param>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -282,18 +300,21 @@ pub struct Nature {
     pub idt_nature: Option<Name>,
     pub attrs: IdxRange<NatureAttr>,
     pub ast_id: FileAstId<ast::NatureDecl>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct NatureAttr {
     pub name: Name,
     pub ast_id: FileAstId<ast::NatureAttr>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct DisciplineAttr {
     pub name: Name,
     pub ast_id: FileAstId<ast::DisciplineAttr>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -316,6 +337,7 @@ pub struct Discipline {
     pub domain: Option<Domain>,
 
     pub ast_id: FileAstId<ast::DisciplineDecl>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -333,6 +355,7 @@ pub struct Branch {
     // resolution but reconstructing the red layer is just not worth it for such a small thing
     pub kind: BranchKind,
     pub ast_id: FileAstId<ast::BranchDecl>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 // #[derive(Debug, Eq, PartialEq, Clone)]
@@ -347,6 +370,7 @@ pub struct BlockScope {
     pub name: Name,
     pub scope_items: Vec<BlockScopeItem>,
     pub ast_id: FileAstId<ast::BlockStmt>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -357,6 +381,7 @@ pub struct Function {
     pub params: IdxRange<Param>,
     pub vars: IdxRange<Var>,
     pub ast_id: FileAstId<ast::Function>,
+    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -365,4 +390,5 @@ pub struct FunctionArg {
     pub is_input: bool,
     pub is_output: bool,
     pub ast_id: FileAstId<ast::FunctionArg>,
+    pub erased_id: ErasedItemTreeId,
 }

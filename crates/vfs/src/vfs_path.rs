@@ -1,7 +1,7 @@
 //! Abstract-ish representation of paths for VFS.
 use std::fmt;
 
-use data_structures::paths::{AbsPath, AbsPathBuf};
+use paths::{AbsPath, AbsPathBuf};
 
 /// Path in [`Vfs`].
 ///
@@ -36,15 +36,15 @@ impl VfsPath {
     /// Creates a new `VfsPath` with `path` adjoined to `self`.
     pub fn join(&self, path: &str) -> Option<VfsPath> {
         match &self.0 {
-            VfsPathRepr::PathBuf(it) => { 
-            #[cfg(target_os = "windows")]
-            let path: String = path
-                .chars()
-                .map(|c| match c {
-                    '/' => std::path::MAIN_SEPARATOR,
-                    c => c,
-                })
-                .collect();
+            VfsPathRepr::PathBuf(it) => {
+                #[cfg(target_os = "windows")]
+                let path: String = path
+                    .chars()
+                    .map(|c| match c {
+                        '/' => std::path::MAIN_SEPARATOR,
+                        c => c,
+                    })
+                    .collect();
                 let res = it.join(path).normalize();
                 Some(VfsPath(VfsPathRepr::PathBuf(res)))
             }

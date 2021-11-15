@@ -139,6 +139,7 @@ impl CaseStmt {
 pub struct EventStmt {
     pub(crate) syntax: SyntaxNode,
 }
+impl ast::AttrsOwner for EventStmt {}
 impl EventStmt {
     pub fn at_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![@]) }
     pub fn l_paren_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T!['(']) }
@@ -155,6 +156,7 @@ impl EventStmt {
 pub struct BlockStmt {
     pub(crate) syntax: SyntaxNode,
 }
+impl ast::AttrsOwner for BlockStmt {}
 impl BlockStmt {
     pub fn begin_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![begin]) }
     pub fn block_scope(&self) -> Option<BlockScope> { support::child(&self.syntax) }
@@ -341,6 +343,7 @@ impl NatureDecl {
 pub struct ModuleDecl {
     pub(crate) syntax: SyntaxNode,
 }
+impl ast::AttrsOwner for ModuleDecl {}
 impl ModuleDecl {
     pub fn module_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![module]) }
     pub fn name(&self) -> Option<Name> { support::child(&self.syntax) }
@@ -412,6 +415,7 @@ impl AnalogBehaviour {
 pub struct Function {
     pub(crate) syntax: SyntaxNode,
 }
+impl ast::AttrsOwner for Function {}
 impl Function {
     pub fn analog_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![analog]) }
     pub fn function_token(&self) -> Option<SyntaxToken> {
@@ -532,6 +536,7 @@ pub enum Stmt {
     EventStmt(EventStmt),
     BlockStmt(BlockStmt),
 }
+impl ast::AttrsOwner for Stmt {}
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BlockItem {
     VarDecl(VarDecl),
@@ -550,6 +555,7 @@ pub enum Item {
     NatureDecl(NatureDecl),
     ModuleDecl(ModuleDecl),
 }
+impl ast::AttrsOwner for Item {}
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ModuleItem {
     BodyPortDecl(BodyPortDecl),

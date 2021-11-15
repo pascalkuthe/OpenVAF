@@ -1,60 +1,53 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
+use std::{cmp::min, ops::Range};
 
-use std::convert::{TryFrom, TryInto};
-
-use data_structures::index_vec::{define_index_type, IndexSlice, IndexVec};
+use stdx::impl_idx_math_from;
+use text_size::{TextRange, TextSize};
+use tokens::{
+    lexer::{LiteralKind, Token, TokenKind},
+    parser::SyntaxKind,
+    LexerErrorKind,
+};
+// use tracing::debug;
+use typed_index_collections::{TiSlice, TiVec};
 use vfs::VfsPath;
 
-use crate::diagnostics::PreprocessorDiagnostic;
-use crate::tokenstream::{ParsedToken, ParsedTokenStream, TokenKind};
-use crate::Token;
 use crate::{
-    lexer::RawToken,
+    diagnostics::PreprocessorDiagnostic,
+    processor::ParsedToken,
     sourcemap::{CtxSpan, SourceContext},
-    token_set::TokenSet,
-    tokenstream::TokenStream,
     Diagnostics,
 };
-use logos::Logos;
-use data_structures::text_size::{TextRange, TextSize};
-use std::ops::Range;
-use tracing::{debug, trace};
 
-define_index_type! {
-     struct FullTokenIdx = u32;
-     IMPL_RAW_CONVERSIONS = true;
-}
-define_index_type! {
-     struct RelevantTokenIdx = u32;
-     IMPL_RAW_CONVERSIONS = true;
-}
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct FullTokenIdx(u32);
+impl_idx_math_from!(FullTokenIdx(u32));
 
-pub(crate) type SpannedRawToken = (RawToken, TextRange);
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct RelevantTokenIdx(u32);
+impl_idx_math_from!(RelevantTokenIdx(u32));
 
 pub(crate) struct Parser<'a, 'd> {
-    full_tokens: IndexVec<FullTokenIdx, SpannedRawToken>,
-    relevant_tokens: IndexVec<RelevantTokenIdx, (RawToken, FullTokenIdx)>,
-    curr: (RawToken, FullTokenIdx, RelevantTokenIdx),
+    full_tokens: TiVec<FullTokenIdx, tokens::lexer::Token>,
+    relevant_tokens: TiVec<RelevantTokenIdx, (PreprocessorToken, FullTokenIdx)>,
+    previous_offset: TextSize,
+    offset: TextSize,
+    token: PreprocessorToken,
+    pos: RelevantTokenIdx,
+    full_token_pos: FullTokenIdx,
     src: &'a str,
     pub(crate) ctx: SourceContext,
-    pub(crate) dst: &'d mut TokenStream,
+    pub(crate) dst: &'d mut Vec<crate::Token>,
     pub(crate) working_dir: VfsPath,
 }
 
 fn mk_token(
     pos: RelevantTokenIdx,
-    relevant_tokens: &IndexSlice<RelevantTokenIdx, [(RawToken, FullTokenIdx)]>,
+    relevant_tokens: &TiSlice<RelevantTokenIdx, (PreprocessorToken, FullTokenIdx)>,
     file_end: FullTokenIdx,
-) -> (RawToken, FullTokenIdx) {
-    relevant_tokens.get(pos).map_or((RawToken::EOF, file_end), |(token, pos)| (*token, *pos))
+) -> (PreprocessorToken, FullTokenIdx) {
+    relevant_tokens
+        .get(pos)
+        .map_or((PreprocessorToken::Eof, file_end), |(token, pos)| (*token, *pos))
 }
 
 impl<'a, 'd> Parser<'a, 'd> {
@@ -62,57 +55,71 @@ impl<'a, 'd> Parser<'a, 'd> {
         src: &'a str,
         ctx: SourceContext,
         working_dir: VfsPath,
-        dst: &'d mut TokenStream,
+        dst: &'d mut Vec<crate::Token>,
+        err: &mut Vec<PreprocessorDiagnostic>,
     ) -> Self {
-        let mut full_tokens: IndexVec<FullTokenIdx, _> = RawToken::lexer(src)
-            .spanned()
-            .map(|(token, span)| {
-                let span =
-                    TextRange::new(span.start.try_into().unwrap(), span.end.try_into().unwrap());
-                (token, span)
-            })
-            .collect();
-        let end_pos = TextSize::of(src).checked_sub(1.into()).unwrap_or(0.into());
-        full_tokens.push((RawToken::EOF, TextRange::empty(end_pos)));
-
-        let relevant_tokens: IndexVec<_, _> = full_tokens
+        let full_tokens = TiVec::from(lexer::tokenize(src));
+        let mut relevant_tokens: TiVec<_, _> = full_tokens
             .iter_enumerated()
-            .filter_map(|(pos, (token, _))| {
-                match token {
-                    RawToken::WhiteSpace | RawToken::BlockComment => None, // No effect
-                    RawToken::Comment => Some((RawToken::Newline, pos)), // The line comment always acts like a newline
-                    token => Some((*token, pos)),
-                }
+            .filter_map(|(pos, token)| {
+                let token = match token.kind {
+                    TokenKind::Define { end } => {
+                        PreprocessorToken::Define { end: FullTokenIdx::from(end) }
+                    }
+                    TokenKind::SimpleIdent => PreprocessorToken::SimpleIdent,
+                    TokenKind::OpenParen => PreprocessorToken::OpenParen,
+                    TokenKind::CloseParen => PreprocessorToken::CloseParen,
+                    TokenKind::Comma => PreprocessorToken::Comma,
+                    TokenKind::CompilerDirective => PreprocessorToken::CompilerDirective,
+                    TokenKind::Literal { kind: LiteralKind::Str { .. } } => {
+                        PreprocessorToken::StrLit
+                    }
+                    TokenKind::Whitespace
+                    | TokenKind::LineComment
+                    | TokenKind::BlockComment { .. } => return None,
+                    _ => PreprocessorToken::Other,
+                };
+                Some((token, pos))
             })
             .collect();
 
+        relevant_tokens.push((PreprocessorToken::Eof, full_tokens.next_key()));
         dst.reserve(dst.capacity() - dst.len() + full_tokens.len());
 
-        let (curr, pos) = mk_token(
-            RelevantTokenIdx::from_raw_unchecked(0),
-            &relevant_tokens,
-            full_tokens.len_idx(),
-        );
+        let (token, full_token_pos) =
+            mk_token(RelevantTokenIdx(0), &relevant_tokens, full_tokens.next_key());
 
         let mut res = Self {
             relevant_tokens,
             full_tokens,
-            curr: (curr, pos, RelevantTokenIdx::new(0)),
             src,
             ctx,
             dst,
             working_dir,
+            previous_offset: 0.into(),
+            offset: 0.into(),
+            token,
+            pos: RelevantTokenIdx(0),
+            full_token_pos,
         };
-        Self::save_tokens(res.full_tokens[..pos].as_raw_slice(), &mut res.dst, ctx);
+
+        res.advance(true, 0u32.into(), err);
         res
     }
 
-    pub(crate) fn current(&self) -> RawToken {
-        self.curr.0
+    pub(crate) fn before(&self, end: FullTokenIdx) -> bool {
+        self.full_token_pos < end
+    }
+
+    pub(crate) fn current(&self) -> PreprocessorToken {
+        self.token
     }
 
     pub(crate) fn current_range(&self) -> TextRange {
-        self.full_tokens[self.curr.1].1
+        TextRange::at(
+            self.offset,
+            self.full_tokens.get(self.full_token_pos).map_or(0.into(), |t| t.len),
+        )
     }
 
     pub(crate) fn current_span(&self) -> CtxSpan {
@@ -120,209 +127,210 @@ impl<'a, 'd> Parser<'a, 'd> {
     }
 
     pub(crate) fn current_text(&self) -> &'a str {
-        let range: Range<usize> = self.current_range().into();
-        &self.src[range]
-    }
-    //
-    // pub(crate) fn lookahead_nth(&self, n: usize) -> RawToken {
-    //     mk_token(self.curr.2 + n, &self.relevant_tokens, self.full_tokens.len_idx()).0
-    // }
-
-    pub(crate) fn previous_span(&self) -> TextRange {
-        let previous_token_pos =
-            self.relevant_tokens.get(self.curr.2 - 1).map_or(self.curr.1, |(_, pos)| *pos);
-        self.full_tokens[previous_token_pos].1
+        &self.src[self.current_range()]
     }
 
-    /// Lookahead n tokens. However trivia tokens (whitespace, comment and blockcomment) are included
-    pub(crate) fn lookahead_nth_with_trivia(&self, n: usize) -> RawToken {
-        self.full_tokens[self.curr.1 + n].0
+    pub(crate) fn end(&self) -> FullTokenIdx {
+        self.full_tokens.next_key() - 1u32
     }
 
-    fn do_bump(&mut self, save_token: bool) {
+    pub(crate) fn end_pos(&self, end: FullTokenIdx) -> TextSize {
+        let pos = self.relevant_tokens[self.pos].1;
+        let len: TextSize = self.full_tokens[end..pos].iter().map(|t| t.len).sum();
+        self.offset - len
+    }
+
+    pub(crate) fn previous_range(&self) -> TextRange {
+        let pos =
+            self.relevant_tokens.get(self.pos - 1u32).map_or(self.full_token_pos, |(_, pos)| *pos);
+        let len = self.full_tokens[pos].len;
+        TextRange::at(self.previous_offset, len)
+    }
+
+    pub(crate) fn followed_by_bracket_without_space(&self) -> bool {
+        let (token, idx) = self.relevant_tokens[self.pos + 1u32];
+        token == PreprocessorToken::OpenParen && idx == (self.full_token_pos + 1u32)
+    }
+
+    fn do_bump(&mut self, save: bool, err: &mut Vec<PreprocessorDiagnostic>) {
         // trace!(token = display(self.current()), save = save_token, "bump");
 
-        if self.curr.0 == RawToken::EOF {
+        if self.token == PreprocessorToken::Eof {
             return;
         }
 
-        let start = self.curr.1;
-        let (token, pos) =
-            mk_token(self.curr.2 + 1, &self.relevant_tokens, self.full_tokens.len_idx());
+        self.previous_offset = self.offset;
+        let start = self.full_token_pos;
 
-        self.curr = (token, pos, self.curr.2 + 1);
-        if save_token {
-            Self::save_tokens(self.full_tokens[start..pos].as_raw_slice(), &mut self.dst, self.ctx)
+        let (token, full_token_pos) =
+            mk_token(self.pos + 1u32, &self.relevant_tokens, self.full_tokens.next_key());
+        self.token = token;
+        self.full_token_pos = full_token_pos;
+        self.pos += 1u32;
+        self.advance(save, start, err);
+    }
+
+    fn advance(&mut self, save: bool, start: FullTokenIdx, err: &mut Vec<PreprocessorDiagnostic>) {
+        let range = start..self.full_token_pos;
+        if save {
+            self.dst.extend(self.full_tokens[range].iter().filter_map(|token| {
+                let (kind, range) =
+                    Self::convert_lexer_token(*token, self.offset, self.src, err, self.ctx)?;
+                self.offset += token.len;
+                Some(crate::Token { span: CtxSpan { range, ctx: self.ctx }, kind })
+            }))
+        } else {
+            let len: TextSize = self.full_tokens[range].iter().map(|token| token.len).sum();
+            self.offset += len;
         }
     }
 
-    fn save_tokens(src: &[SpannedRawToken], dst: &mut TokenStream, ctx: SourceContext) {
-        // let mut iter = src.iter();
-
-        // if let Some((kind, range)) = iter.next().cloned() {
-        //     if let Some(previous_whitespace) = previous_whitespace(dst, kind) {
-        //         if previous_whitespace.ctx == ctx {
-        //             previous_whitespace.range =
-        //                 TextRange::new(previous_whitespace.range.start(), range.end())
-        //         } else if let Ok(kind) = TokenKind::try_from(kind) {
-        //             dst.push(Token { kind, span: CtxSpan { range, ctx } })
-        //         }
-        //     }
-        // }
-
-        dst.reserve(src.len());
-        for (kind, range) in src.iter().cloned() {
-            // if let Some(prev_span) = previous_whitespace(dst, kind).and_then(|prev_span|) {
-            //     prev_span.range = TextRange::new(prev_span.range.start(), range.end());
-            // } else 
-            if let Ok(kind) = TokenKind::try_from(kind) {
-                dst.push(Token { kind, span: CtxSpan { range, ctx } });
+    fn convert_lexer_token(
+        token: Token,
+        offset: TextSize,
+        src: &str,
+        err: &mut Vec<PreprocessorDiagnostic>,
+        ctx: SourceContext,
+    ) -> Option<(SyntaxKind, TextRange)> {
+        let range = TextRange::at(offset, token.len);
+        let (syntax, error) = token.kind.to_syntax(&src[range]);
+        if let Some(error) = error {
+            let span = CtxSpan { range, ctx };
+            match error {
+                LexerErrorKind::UnterminatedStr => {
+                    err.push(PreprocessorDiagnostic::UnexpectedEof { expected: "\"", span })
+                }
+                LexerErrorKind::UnexpectedToken => {
+                    err.push(PreprocessorDiagnostic::UnexpectedToken(span))
+                }
+                LexerErrorKind::UnterminatedBlockComment => {
+                    err.push(PreprocessorDiagnostic::UnexpectedEof { expected: "*/", span })
+                }
             }
         }
+        syntax.map(|kind| (kind, range))
     }
-
-    fn save_tokens_to_macro(src: &[SpannedRawToken], dst: &mut ParsedTokenStream) {
-        dst.reserve(src.len());
-        for (kind, range) in src.iter().cloned() {
-            // if let Some(prev_span) = previous_macro_whitespace(dst, kind) {
-            //     *prev_span = TextRange::new(prev_span.start(), range.end());
-            // } else 
-            if let Ok(t) = ParsedToken::try_from(kind) {
-                dst.push((t, range));
-            }
-        }
-    }
-
-    pub(crate) fn bumpy_any_to_macro(&mut self, dst: &mut ParsedTokenStream) {
-        // trace!(token = display(self.current()), "bump to macro");
-        if self.curr.0 == RawToken::EOF {
-            return;
-        }
-
-        let start = self.curr.1;
-        let (token, pos) =
-            mk_token(self.curr.2 + 1, &self.relevant_tokens, self.full_tokens.len_idx());
-
-        self.curr = (token, pos, self.curr.2 + 1);
-        Self::save_tokens_to_macro(self.full_tokens[start..pos].as_raw_slice(), dst)
-    }
-
-    pub(crate) fn expect(&mut self, expected: RawToken, errors: &mut Diagnostics) -> bool {
-        self.expect_with(expected, expected, errors)
-    }
-
-    pub(crate) fn expect_with(
+    fn save_tokens_to_macro(
         &mut self,
-        token: RawToken,
-        expected: RawToken,
+        range: Range<FullTokenIdx>,
+        dst: &mut Vec<ParsedToken<'a>>,
+        err: &mut Vec<PreprocessorDiagnostic>,
+    ) {
+        dst.extend(self.full_tokens[range].iter().filter_map(|token| {
+            let (kind, range) =
+                Self::convert_lexer_token(*token, self.offset, self.src, err, self.ctx)?;
+            self.offset += token.len;
+            Some(ParsedToken { kind: kind.into(), range })
+        }))
+    }
+
+    pub(crate) fn bump_to_macro(
+        &mut self,
+        dst: &mut Vec<ParsedToken<'a>>,
+        end: FullTokenIdx,
+        err: &mut Vec<PreprocessorDiagnostic>,
+    ) {
+        if self.token == PreprocessorToken::Eof {
+            return;
+        }
+
+        self.previous_offset = self.offset;
+        let start = self.full_token_pos;
+
+        let (token, full_token_pos) =
+            mk_token(self.pos + 1u32, &self.relevant_tokens, self.full_tokens.next_key());
+        self.token = token;
+        self.full_token_pos = full_token_pos;
+        self.pos += 1u32;
+        let macro_end = min(end, self.full_token_pos);
+        self.save_tokens_to_macro(start..macro_end, dst, err);
+        self.advance(true, macro_end, err)
+    }
+
+    pub(crate) fn expect(
+        &mut self,
+        token: PreprocessorToken,
+        expected: &'static str,
         errors: &mut Diagnostics,
     ) -> bool {
         if !self.eat(token) {
-            debug!("syntax error: expected {} but found {}", token, self.current());
+            // debug!("syntax error: expected {:?} but found {:?}", token, self.current());
             errors.push(PreprocessorDiagnostic::MissingOrUnexpectedToken {
                 expected,
-                expected_at: CtxSpan { range: self.previous_span(), ctx: self.ctx },
+                expected_at: CtxSpan { range: self.previous_range(), ctx: self.ctx },
                 span: CtxSpan { range: self.current_range(), ctx: self.ctx },
             });
-            self.eat(RawToken::Unexpected); // Only report lexer errors once
+            // self.eat(RawToken::Unexpected); // Only report lexer errors once
             false
         } else {
             true
         }
     }
 
-    pub(crate) fn expect_with_recovery(
-        &mut self,
-        token: RawToken,
-        expected: RawToken,
-        recover: TokenSet,
-        errors: &mut Diagnostics,
-    ) -> bool {
-        if !self.eat(token) {
-            debug!("syntax error: expected {} but found {}", token, self.current());
-            errors.push(PreprocessorDiagnostic::MissingOrUnexpectedToken {
-                expected,
-                expected_at: CtxSpan { range: self.previous_span(), ctx: self.ctx },
-                span: CtxSpan { range: self.current_range(), ctx: self.ctx },
-            });
-            if !self.at_ts(recover) {
-                self.bump_any()
-            }
-            false
-        } else {
-            true
-        }
-    }
-
-    pub(crate) fn at(&self, token: RawToken) -> bool {
+    pub(crate) fn at(&self, token: PreprocessorToken) -> bool {
         self.current() == token
-    }
-    pub(crate) fn at_ts(&self, token: TokenSet) -> bool {
-        token.contains(self.current())
     }
 
     pub(crate) fn ctx(&self) -> SourceContext {
         self.ctx
     }
 
-    // /// Lookahead operation: returns the kind of the next nth
-    // /// token.
-    // pub(crate) fn nth(&self, n: usize) -> SyntaxKind {
-    //     assert!(n <= 2);
-    //     self.lookahead_nth(n)
-    // }
-    //
-    // /// Checks if the current token is `kind`.
-    // pub(crate) fn at(&self, token: RawToken) -> bool {
-    //     self.current() == token
-    // }
-    //
-    // pub(crate) fn nth_at(&self, n: usize, token: RawToken) -> bool {
-    //     self.lookahead_nth(n) == token
-    // }
-
     /// Consume the next token if `kind` matches.
-    pub(crate) fn eat(&mut self, token: RawToken) -> bool {
+    pub(crate) fn eat(&mut self, token: PreprocessorToken) -> bool {
         if !self.at(token) {
             return false;
         }
-        self.do_bump(false);
+        self.do_bump(false, &mut Vec::new());
         true
     }
 
     /// Consume the next token if `kind` matches.
-    pub(crate) fn bump(&mut self, token: RawToken) {
-        assert!(self.eat(token));
+    pub(crate) fn bump(&mut self) {
+        self.do_bump(false, &mut Vec::new())
     }
 
-    /// Consume the next token if `kind` matches.
-    pub(crate) fn bump_any(&mut self) {
-        self.do_bump(false);
-    }
+    // pub(crate) fn bump(&mut self) {
+    //     self.do_bump(false);
+    // }
 
     /// Advances the parser by one token
-    pub(crate) fn save_token(&mut self) {
-        self.do_bump(true)
+    pub(crate) fn save_token(&mut self, err: &mut Vec<PreprocessorDiagnostic>) {
+        self.do_bump(true, err)
+    }
+
+    pub(crate) fn compiler_directive(&self) -> CompilerDirective {
+        match self.current_text() {
+            "`include" => CompilerDirective::Include,
+            "`ifdef" => CompilerDirective::IfDef,
+            "`ifndef" => CompilerDirective::IfNotDef,
+            "`else" => CompilerDirective::Else,
+            "`elif" => CompilerDirective::ElseIf,
+            "`endif" => CompilerDirective::EndIf,
+            _ => CompilerDirective::Macro,
+        }
     }
 }
 
-fn previous_whitespace(dst: &mut TokenStream, t: RawToken) -> Option<&mut CtxSpan> {
-    if matches!(t, RawToken::WhiteSpace | RawToken::Newline | RawToken::MacroDefNewLine) {
-        if let Token { kind: TokenKind::WhiteSpace, span } = dst.last_mut()? {
-            return Some(span);
-        }
-    }
-    None
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum PreprocessorToken {
+    Define { end: FullTokenIdx },
+    StrLit,
+    SimpleIdent,
+    OpenParen,
+    CloseParen,
+    CompilerDirective,
+    Comma,
+    Other,
+    Eof,
 }
 
-fn previous_macro_whitespace<'a>(
-    dst: &'a mut ParsedTokenStream,
-    t: RawToken,
-) -> Option<&'a mut TextRange> {
-    if matches!(t, RawToken::WhiteSpace | RawToken::Newline | RawToken::MacroDefNewLine) {
-        if let (ParsedToken::ResolvedToken(TokenKind::WhiteSpace), span) = dst.last_mut()? {
-            return Some(span);
-        }
-    }
-    None
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum CompilerDirective {
+    Include,
+    IfDef,
+    IfNotDef,
+    Else,
+    ElseIf,
+    EndIf,
+    Macro,
 }

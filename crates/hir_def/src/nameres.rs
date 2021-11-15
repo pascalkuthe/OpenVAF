@@ -4,16 +4,15 @@ use std::sync::Arc;
 use crate::item_tree::ItemTree;
 use crate::name::AsName;
 use crate::{
-    builtin::BuiltinFunction, db::HirDefDB, BlockId, BranchId, DisciplineAttrId, DisciplineId,
+    builtin::BuiltInFunction, db::HirDefDB, BlockId, BranchId, DisciplineAttrId, DisciplineId,
     FunctionId, Lookup, ModuleId, NatureAttrId, NatureId, NodeId, ParamId, VarId,
 };
 use crate::{AstIdMap, Name, Node};
+use ahash::AHashMap as HashMap;
+use arena::{Arena, Idx};
+use basedb::lints::ErasedItemTreeId;
 use basedb::FileId;
-use data_structures::{
-    arena::{Arena, Idx},
-    HashMap,
-};
-use derive_more::{From, Into, TryInto, Unwrap};
+use stdx::{impl_from, impl_from_typed};
 use syntax::{ast, AstPtr};
 
 mod collect;
@@ -25,69 +24,80 @@ pub struct DefMap {
     nodes: Arena<Node>,
 }
 
-impl Index<ScopeId> for DefMap {
+impl Index<LocalScopeId> for DefMap {
     type Output = Scope;
 
-    fn index(&self, index: ScopeId) -> &Self::Output {
+    fn index(&self, index: LocalScopeId) -> &Self::Output {
         &self.scopes[index]
     }
 }
 
-impl IndexMut<ScopeId> for DefMap {
-    fn index_mut(&mut self, index: ScopeId) -> &mut Self::Output {
+impl IndexMut<LocalScopeId> for DefMap {
+    fn index_mut(&mut self, index: LocalScopeId) -> &mut Self::Output {
         &mut self.scopes[index]
     }
 }
 
 impl DefMap {
-    pub fn root(&self) -> ScopeId {
-        ScopeId::from_raw(0u32)
+    pub fn root(&self) -> LocalScopeId {
+        LocalScopeId::from(0u32)
     }
 }
 
-#[derive(Debug, Hash, Clone, Copy, From, PartialEq, Eq)]
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub enum AccessFunction {
     Flow,
     Potential,
 }
 
-#[derive(Debug, Hash, Clone, Copy, From, Into, PartialEq, Eq)]
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct NatureAccess(pub NatureId);
 
-#[derive(Debug, Hash, Clone, Copy, From, TryInto, PartialEq, Eq)]
-pub enum ScopeDefItem {
-    Module(ModuleId),
-    Block(BlockId),
-    Nature(NatureId),
-    NatureAccess(NatureAccess),
-    Discipline(DisciplineId),
-    Node(NodeId),
-    VarId(VarId),
-    ParamId(ParamId),
-    Branch(BranchId),
-    Function(FunctionId),
-    NatureAttr(NatureAttrId),
-    DisciplineAttr(DisciplineAttrId),
-    BuiltInFunction(BuiltinFunction),
+impl From<NatureAccess> for NatureId {
+    fn from(access: NatureAccess) -> Self {
+        access.0
+    }
 }
 
-impl ScopeDefItem {
-    pub const fn item_kind(&self) -> &'static str {
-        match self {
-            ScopeDefItem::Module(_) => ModuleId::NAME,
-            ScopeDefItem::Block(_) => BlockId::NAME,
-            ScopeDefItem::Nature(_) => NatureId::NAME,
-            ScopeDefItem::NatureAccess(_) => NatureAccess::NAME,
-            ScopeDefItem::Discipline(_) => DisciplineId::NAME,
-            ScopeDefItem::Node(_) => NodeId::NAME,
-            ScopeDefItem::VarId(_) => VarId::NAME,
-            ScopeDefItem::ParamId(_) => ParamId::NAME,
-            ScopeDefItem::Branch(_) => BranchId::NAME,
-            ScopeDefItem::NatureAttr(_) => NatureAttrId::NAME,
-            ScopeDefItem::Function(_) | ScopeDefItem::BuiltInFunction(_) => FunctionId::NAME,
-            ScopeDefItem::DisciplineAttr(_) => DisciplineAttrId::NAME,
-        }
+impl From<NatureId> for NatureAccess {
+    fn from(id: NatureId) -> Self {
+        NatureAccess(id)
     }
+}
+
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
+pub enum ScopeDefItem {
+    ModuleId(ModuleId),
+    BlockId(BlockId),
+    NatureId(NatureId),
+    NatureAccess(NatureAccess),
+    DisciplineId(DisciplineId),
+    NodeId(NodeId),
+    VarId(VarId),
+    ParamId(ParamId),
+    BranchId(BranchId),
+    FunctionId(FunctionId),
+    NatureAttrId(NatureAttrId),
+    DisciplineAttrId(DisciplineAttrId),
+    BuiltInFunction(BuiltInFunction),
+}
+
+impl_from! {
+    ModuleId,
+    BlockId,
+    NatureId,
+    NatureAccess,
+    DisciplineId,
+    NodeId,
+    VarId,
+    ParamId,
+    BranchId,
+    FunctionId,
+    NatureAttrId,
+    DisciplineAttrId,
+    BuiltInFunction
+
+    for ScopeDefItem
 }
 
 pub trait ScopeDefItemKind: TryFrom<ScopeDefItem> {
@@ -97,6 +107,13 @@ pub trait ScopeDefItemKind: TryFrom<ScopeDefItem> {
 macro_rules! scope_item_kinds {
     ($($ty: ident => $name:literal),*) => {
         $(impl ScopeDefItemKind for $ty{const NAME: &'static str = $name;})*
+        impl ScopeDefItem {
+            pub const fn item_kind(&self) -> &'static str {
+                match self {
+                    $(ScopeDefItem::$ty(_) => $ty::NAME,)*
+                }
+            }
+        }
 
     };
 }
@@ -112,12 +129,12 @@ scope_item_kinds! {
     ParamId => "parameter",
     BranchId => "branch",
     FunctionId => "function",
-    BuiltinFunction => "function",
+    BuiltInFunction => "function",
     NatureAttrId => "nature attribute",
     DisciplineAttrId => "discipline attribute"
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, Unwrap)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum ScopeOrigin {
     Root,
     Module(ModuleId),
@@ -125,14 +142,46 @@ pub enum ScopeOrigin {
     Discipline(DisciplineId),
     BlockScope(BlockId),
 }
-pub type ScopeId = Idx<Scope>;
+
+impl ScopeOrigin {
+    pub fn erased_item_tree_id(&self, db: &dyn HirDefDB) -> Option<ErasedItemTreeId> {
+        match self {
+            ScopeOrigin::Root => None,
+            ScopeOrigin::Module(id) => {
+                let loc = id.lookup(db);
+                Some(loc.erased_id(db))
+            }
+            ScopeOrigin::Nature(id) => {
+                let loc = id.lookup(db);
+                Some(loc.erased_id(db))
+            }
+            ScopeOrigin::Discipline(id) => {
+                let loc = id.lookup(db);
+                Some(loc.erased_id(db))
+            }
+            ScopeOrigin::BlockScope(id) => {
+                let loc = id.lookup(db);
+                Some(loc.erased_id(db))
+            }
+        }
+    }
+}
+
+pub type LocalScopeId = Idx<Scope>;
+
+impl_from_typed! {
+    Module(ModuleId),
+    Nature(NatureId),
+    Discipline(DisciplineId),
+    BlockScope(BlockId) for ScopeOrigin
+}
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Scope {
-    origin: ScopeOrigin,
-    parent: Option<ScopeId>,
-    pub children: HashMap<Name, ScopeId>,
-    duplicate_children: Vec<ScopeId>,
+    pub origin: ScopeOrigin,
+    parent: Option<LocalScopeId>,
+    pub children: HashMap<Name, LocalScopeId>,
+    duplicate_children: Vec<LocalScopeId>,
     /// All Items visible in this scope (superset of declarations)
     pub visible_items: HashMap<Name, ScopeDefItem>,
     /// Items declared in this scopes
@@ -146,7 +195,7 @@ impl DefMap {
 
     pub fn resolve_name_in_scope(
         &self,
-        scope: ScopeId,
+        scope: LocalScopeId,
         name: &Name,
     ) -> Result<ScopeDefItem, PathResolveError> {
         self.scopes[scope]
@@ -158,7 +207,7 @@ impl DefMap {
 
     pub fn resolve_item_in_scope<T: ScopeDefItemKind>(
         &self,
-        scope: ScopeId,
+        scope: LocalScopeId,
         name: &Name,
     ) -> Result<T, PathResolveError> {
         let res = self.resolve_name_in_scope(scope, name)?;
@@ -169,10 +218,9 @@ impl DefMap {
         })
     }
 
-
     pub fn resolve_path_in_scope(
         &self,
-        scope: ScopeId,
+        scope: LocalScopeId,
         path: &[Name],
         db: &dyn HirDefDB,
     ) -> Result<ScopeDefItem, PathResolveError> {
@@ -184,8 +232,8 @@ impl DefMap {
 
         let root_scope = self.resolve_name_in_scope(scope, root)?;
         let root_scope = match root_scope {
-            ScopeDefItem::Module(module) => module.lookup(db).scope,
-            ScopeDefItem::Block(block) => block.lookup(db).scope,
+            ScopeDefItem::ModuleId(module) => module.lookup(db).scope.local_scope,
+            ScopeDefItem::BlockId(block) => block.lookup(db).scope.local_scope,
             // TODO more items with scope
             _ => {
                 return Err(PathResolveError::ExpectedScope {
@@ -220,19 +268,20 @@ impl DefMap {
 
     pub(crate) fn block_scope(
         &self,
-        parent: ScopeId,
+        parent: LocalScopeId,
         block: &ast::BlockStmt,
         ast_ptr: &AstPtr<ast::BlockStmt>,
         ast_id_map: &AstIdMap,
         tree: &ItemTree,
         db: &dyn HirDefDB,
-    ) -> Option<ScopeId> {
+    ) -> Option<LocalScopeId> {
         let name = block.block_scope()?.name()?.as_name();
         let scope = *self.scopes[parent].children.get(&name)?;
         // At this point we already have the scope
         // However if another blocks with the same name was declared then this scope is incorrect
         // So the ASTs need to be compared
-        let item_tree = self.scopes[scope].origin.unwrap_block_scope().lookup(db).item_tree;
+        let block_scope: BlockId = self.scopes[scope].origin.try_into().unwrap();
+        let item_tree = block_scope.lookup(db).id;
         if &ast_id_map.get(tree[item_tree].ast_id) == ast_ptr {
             Some(scope)
         } else {
@@ -241,7 +290,7 @@ impl DefMap {
                 .iter()
                 .find(|scope| {
                     if let ScopeOrigin::BlockScope(block) = self.scopes[**scope].origin {
-                        let item_tree = block.lookup(db).item_tree;
+                        let item_tree = block.lookup(db).id;
                         &ast_id_map.get(tree[item_tree].ast_id) == ast_ptr
                     } else {
                         false
@@ -256,7 +305,7 @@ impl DefMap {
 #[derive(Debug, Clone)]
 pub enum PathResolveError {
     NotFound { name: Name },
-    NotFoundIn { name: Name, scope: ScopeId },
+    NotFoundIn { name: Name, scope: LocalScopeId },
     ExpectedScope { name: Name, found: ScopeDefItem },
     ExpectedItemKind { name: Name, expected: &'static str, found: &'static str },
 }

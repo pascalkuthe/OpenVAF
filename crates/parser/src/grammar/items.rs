@@ -142,6 +142,9 @@ fn constraint(p: &mut Parser) {
 
 fn range_or_expr(p: &mut Parser) {
     let m = p.start();
+
+    // while all branches parse an expr they need to eat [/( or nothing first
+    #[allow(clippy::branches_sharing_code)]
     if p.eat(T!['(']) {
         expr(p);
         if !p.at(T![:]) {

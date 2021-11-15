@@ -51,7 +51,7 @@ pub use crate::{
     anchored_path::{AnchoredPath, AnchoredPathBuf},
     vfs_path::VfsPath,
 };
-pub use data_structures::paths::{AbsPath, AbsPathBuf};
+pub use paths::{AbsPath, AbsPathBuf};
 
 /// Handle to a file in [`Vfs`]
 ///

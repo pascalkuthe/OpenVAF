@@ -1,14 +1,19 @@
-use std::ops::Deref;
+use std::{fmt::Display, ops::Deref};
 
-use data_structures::SmolStr;
-use derive_more::Display;
+use smol_str::SmolStr;
 use syntax::{
     ast::{self, SysFun},
     SyntaxToken,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Name(SmolStr);
+
+impl Display for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl Name {
     /// Shortcut to create inline plain text name
@@ -40,6 +45,10 @@ impl Name {
 
     pub fn is_reserved(&self) -> bool {
         kw::is_reserved(self.0.as_str())
+    }
+
+    pub fn is_reserved_compat(&self) -> bool {
+        kw_comp::is_reserved(self.0.as_str())
     }
 
     pub fn is_known_sysfun(&self) -> bool {
@@ -123,30 +132,30 @@ impl AsName for SyntaxToken {
     }
 }
 
-pub mod kw {
-    macro_rules! keywords {
-        ($($ident:ident),* $(,)?) => {
+macro_rules! keywords {
+    ($($ident:ident),* $(,)?) => {
+        $(
+            #[allow(bad_style, dead_code)]
+            pub const $ident: super::Name =
+                super::Name::new_inline(stringify!($ident));
+        )*
+        pub mod raw{
             $(
                 #[allow(bad_style, dead_code)]
-                pub const $ident: super::Name =
-                    super::Name::new_inline(stringify!($ident));
+                pub const $ident: &str = stringify!($ident);
             )*
-            pub mod raw{
-                $(
-                    #[allow(bad_style, dead_code)]
-                    pub const $ident: &str = stringify!($ident);
-                )*
 
-                #[allow(bad_style, dead_code)]
-                pub const use_:&str = "use";
-            }
+            #[allow(bad_style, dead_code)]
+            pub const use_:&str = "use";
+        }
 
-            pub fn is_reserved(name: &str) -> bool{
-                matches!(name,$(stringify!($ident) |)* "use")
-            }
-        };
-    }
+        pub fn is_reserved(name: &str) -> bool{
+            matches!(name,$(stringify!($ident) |)* "use")
+        }
+    };
+}
 
+pub mod kw {
     #[allow(bad_style, dead_code)]
     pub const use_: super::Name = super::Name::new_inline("use");
 
@@ -175,19 +184,10 @@ pub mod kw {
         automatic,
         begin,
         branch,
-        buf,
-        bufif0,
-        bufif1,
         case,
-        casex,
-        casez,
         ceil,
         cell,
-        cmos,
         config,
-        connect,
-        connectmodule,
-        connectrules,
         continuous,
         cos,
         cosh,
@@ -235,8 +235,6 @@ pub mod kw {
         generate,
         genvar,
         ground,
-        highz0,
-        highz1,
         hypot,
         idt,
         idtmod,
@@ -268,15 +266,12 @@ pub mod kw {
         log,
         macromodule,
         max,
-        medium,
-        merged,
         min,
         module,
         nand,
         nature,
         negedge,
         net_resolution,
-        nmos,
         noise_table,
         noise_table_log,
         nor,
@@ -288,28 +283,18 @@ pub mod kw {
         output,
         parameter,
         paramset,
-        pmos,
 
 
         posedge,
         potential,
         pow,
         primitive,
-        pull0,
-        pull1,
-        pulldown,
-        pullup,
         pulsestyle_onevent,
         pulsestyle_ondetect,
-        rcmos,
         real,
         realtime,
-        reg,
         release,
         repeat,
-        resolveto,
-        rnmos,
-        rpmos,
         rtran,
         rtranif0,
         rtranif1,
@@ -323,13 +308,8 @@ pub mod kw {
         small,
         specify,
         specparam,
-        split,
         sqrt,
         string,
-        strong0,
-        strong1,
-        supply0,
-        supply1,
         table,
         tan,
         tanh,
@@ -340,12 +320,6 @@ pub mod kw {
         tranif0,
         tranif1,
         transition,
-        tri,
-        tri0,
-        tri1,
-        triand,
-        trior,
-        trireg,
 
         units,
         unsigned,
@@ -353,18 +327,75 @@ pub mod kw {
         vectored,
         wait,
         wand,
-        weak0,
-        weak1,
+        pulldown,
+        pullup,
+
         white_noise,
         wire,
         wor,
-        wreal,
         xnor,
         xor,
         zi_nd,
         zi_np,
         zi_zd,
         zi_zp,
+    }
+}
+
+/// keywords that will never be used by openvaf because they belong to (exeotic parts) of the
+/// digital subset of VerilogAMS. According to the standard these are still reserved.
+/// However some compact models still use these and OpenVAF should allow that.
+/// Therefore we emit a (warn by default) lint when these are used
+pub mod kw_comp {
+    keywords! {
+        // gate level logic
+        cmos,
+        nmos,
+        pmos,
+        rcmos,
+        rnmos,
+        rpmos,
+
+        // tri state
+        tri,
+        tri0,
+        tri1,
+        triand,
+        trior,
+        trireg,
+
+        // drive strengths
+        highz0,
+        highz1,
+        pull0,
+        pull1,
+        weak0,
+        weak1,
+        strong0,
+        strong1,
+        supply0,
+        supply1,
+        medium,
+
+        // As specified by the standard
+        connect,
+        connectmodule,
+        connectrules,
+        merged,
+        net_resolution,
+        resolveto,
+        split,
+        wreal,
+
+        casex,
+        casez,
+
+        reg,
+
+
+        buf,
+        bufif0,
+        bufif1,
     }
 }
 

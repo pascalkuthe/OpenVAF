@@ -1,0 +1,10 @@
+[package]
+name = "stdx"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+[lib]
+doctest = false
+

@@ -176,8 +176,6 @@ fn func_arg(p: &mut Parser, m: Marker) {
     m.complete(p, FUNCTION_ARG);
 }
 
-const BRANCH_RECOVER: TokenSet = MODULE_ITEM_OR_ATTR_RECOVERY.union(TokenSet::unique(T![;]));
-
 fn branch_decl(p: &mut Parser, m: Marker) {
     p.bump(BRANCH_KW);
     if !p.at(T!['(']) {
