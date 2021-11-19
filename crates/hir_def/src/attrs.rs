@@ -9,30 +9,35 @@ use syntax::{
 mod diagnostics;
 pub use diagnostics::AttrDiagnostic;
 
-use crate::item_tree::ItemTree;
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LintAttrs {
     overwrites: AHashMap<Lint, LintLevel>,
-    parent: Option<ErasedItemTreeId>,
+    parent: ErasedItemTreeId,
 }
 
 impl LintAttrs {
     pub fn empty(parent: Option<ErasedItemTreeId>) -> LintAttrs {
-        LintAttrs { parent, overwrites: AHashMap::new() }
+        LintAttrs { parent: parent.unwrap_or(ErasedItemTreeId::ROOT), overwrites: AHashMap::new() }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.overwrites.is_empty()
+    }
+
     pub fn resolve(
         registry: &LintRegistry,
         parent: Option<ErasedItemTreeId>,
         attrs: AttrIter,
         err: &mut Vec<AttrDiagnostic>,
     ) -> LintAttrs {
+        let parent = parent.unwrap_or(ErasedItemTreeId::ROOT);
         fn insert_lint(
             lit: ast::Literal,
             err: &mut Vec<AttrDiagnostic>,
             registry: &LintRegistry,
             overwrites: &mut AHashMap<Lint, (LintLevel, TextRange)>,
             lvl: LintLevel,
+            parent: ErasedItemTreeId,
         ) {
             match lit.kind() {
                 LiteralKind::String(lit) => {
@@ -43,12 +48,21 @@ impl LintAttrs {
                     } else {
                         if !lint_name.contains("::") {
                             // Plugins use plugin::lint_name. Plugin lints for unused plugins are fine
-                            err.push(AttrDiagnostic::UnkownLint { range, lint: lint_name });
+                            err.push(AttrDiagnostic::unknownLint {
+                                range,
+                                lint: lint_name,
+                                item_tree: parent,
+                            });
                         }
                         return;
                     };
                     if let Some((_, old)) = overwrites.insert(lint, (lvl, range)) {
-                        err.push(AttrDiagnostic::LintOverwrite { old, new: range, name: lint_name })
+                        err.push(AttrDiagnostic::LintOverwrite {
+                            old,
+                            new: range,
+                            name: lint_name,
+                            item_tree: parent,
+                        })
                     }
                 }
 
@@ -69,13 +83,13 @@ impl LintAttrs {
 
             match attr.val() {
                 Some(ast::Expr::Literal(lit)) if matches!(lit.kind(), LiteralKind::String(_)) => {
-                    insert_lint(lit, err, registry, &mut overwrites, lvl)
+                    insert_lint(lit, err, registry, &mut overwrites, lvl, parent)
                 }
 
                 Some(ast::Expr::ArrayExpr(e)) => {
                     for expr in e.exprs() {
                         if let ast::Expr::Literal(lit) = expr {
-                            insert_lint(lit, err, registry, &mut overwrites, lvl)
+                            insert_lint(lit, err, registry, &mut overwrites, lvl, parent)
                         } else {
                             err.push(AttrDiagnostic::ExpectedLiteral {
                                 range: expr.syntax().text_range(),
@@ -111,7 +125,11 @@ impl LintAttrs {
     }
 
     pub fn parent(&self) -> Option<ErasedItemTreeId> {
-        self.parent
+        if self.parent == ErasedItemTreeId::ROOT {
+            None
+        } else {
+            Some(self.parent)
+        }
     }
 }
 

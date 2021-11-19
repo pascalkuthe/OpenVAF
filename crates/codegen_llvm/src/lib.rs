@@ -195,9 +195,9 @@ impl<'lt, 'a, 'c, A: CfgFunctions, C: CallTypeCodeGen<'lt, 'c>>
                     )
                 }
 
-                LocalKind::Variable(id, VariableLocalKind::Derivative(ref unkowns)) => {
+                LocalKind::Variable(id, VariableLocalKind::Derivative(ref unknowns)) => {
                     let name =
-                        format!("variable derivative {} by {:?}", mir.variables[id].ident, unkowns);
+                        format!("variable derivative {} by {:?}", mir.variables[id].ident, unknowns);
                     LocalValue::Ptr(
                         self.ctx.builder.build_alloca(self.ctx.context.f64_type(), &name),
                     )

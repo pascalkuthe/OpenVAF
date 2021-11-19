@@ -160,6 +160,21 @@ pub enum DefWithBodyId {
 }
 
 impl_from!(ParamId, ModuleId,FunctionId,VarId,NatureAttrId,DisciplineAttrId for DefWithBodyId);
+impl TryFrom<ScopeDefItem> for DefWithBodyId {
+    type Error = ();
+    fn try_from(src: ScopeDefItem) -> Result<DefWithBodyId, ()> {
+        let res = match src {
+            ScopeDefItem::ModuleId(module) => module.into(),
+            ScopeDefItem::VarId(var) => var.into(),
+            ScopeDefItem::ParamId(param) => param.into(),
+            ScopeDefItem::FunctionId(fun) => fun.into(),
+            ScopeDefItem::NatureAttrId(attr) => attr.into(),
+            ScopeDefItem::DisciplineAttrId(attr) => attr.into(),
+            _ => return Err(())
+        };
+        Ok(res)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithBehaviourId {

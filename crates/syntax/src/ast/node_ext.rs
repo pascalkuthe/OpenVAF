@@ -8,7 +8,11 @@ use crate::{
 };
 use std::iter::successors;
 
-use super::{AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, AttrsOwner, Constraint, EventStmt, Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit};
+use super::{
+    AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, AttrsOwner, Constraint,
+    EventStmt, Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt,
+    StrLit,
+};
 
 // impl ast::PathSegment {
 //     pub fn parent_path(&self) -> Option<Path> {
@@ -230,28 +234,35 @@ impl ast::BranchDecl {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum ConstraintKind {
-    Exclude(Expr),
-    ExcludeRange(Range),
-    From(Range),
+    Exclude,
+    From,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum ConstraintValue {
+    Range(Range),
+    Val(Expr),
 }
 
 impl Constraint {
     pub fn kind(&self) -> Option<ConstraintKind> {
-        let is_from = self.from_token().is_some();
-        let res = if let Some(range) = self.range() {
-            if is_from {
-                ConstraintKind::From(range)
-            } else {
-                ConstraintKind::ExcludeRange(range)
-            }
+        if self.from_token().is_some() {
+            Some(ConstraintKind::From)
+        } else if self.exclude_token().is_some() {
+            Some(ConstraintKind::Exclude)
         } else {
-            if is_from {
-                return None;
-            }
-            ConstraintKind::Exclude(self.expr()?)
-        };
-        Some(res)
+            None
+        }
+    }
+
+    pub fn val(&self) -> Option<ConstraintValue> {
+        if let Some(range) = self.range() {
+            Some(ConstraintValue::Range(range))
+        } else {
+            Some(ConstraintValue::Val(self.expr()?))
+        }
     }
 }
 
@@ -260,4 +271,3 @@ impl Function {
         support::children(self.syntax())
     }
 }
-

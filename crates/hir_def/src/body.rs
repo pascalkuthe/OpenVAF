@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
 use arena::{Arena, ArenaMap};
-use basedb::FileId;
+use basedb::{
+    lints::{Lint, LintSrc},
+    FileId,
+};
 use syntax::{ast, AstNode, AstPtr};
 
 use crate::{
@@ -14,7 +17,9 @@ use crate::{
     ModuleLoc, NatureAttrLoc, ParamId, ParamLoc, Stmt, StmtId, VarLoc,
 };
 
-use self::lower::LowerCtx;
+use lower::LowerCtx;
+
+pub use ast::ConstraintKind;
 
 mod lower;
 
@@ -28,15 +33,21 @@ pub struct Body {
 
 #[derive(Default, Debug, Eq, PartialEq)]
 pub struct BodySourceMap {
-    expr_map: HashMap<AstPtr<ast::Expr>, ExprId>,
-    expr_map_back: ArenaMap<Expr, Option<AstPtr<ast::Expr>>>,
-    stmt_map: HashMap<AstPtr<ast::Stmt>, StmtId>,
-    stmt_map_back: ArenaMap<Stmt, Option<AstPtr<ast::Stmt>>>,
+    pub expr_map: HashMap<AstPtr<ast::Expr>, ExprId>,
+    pub expr_map_back: ArenaMap<Expr, Option<AstPtr<ast::Expr>>>,
+    pub stmt_map: HashMap<AstPtr<ast::Stmt>, StmtId>,
+    pub stmt_map_back: ArenaMap<Stmt, Option<AstPtr<ast::Stmt>>>,
     lint_map: ArenaMap<Stmt, LintAttrs>,
 
     /// Diagnostics accumulated during body lowering. These contain `AstPtr`s and so are stored in
     /// the source map (since they're just as volatile).
-    diagnostics: Vec<AttrDiagnostic>,
+    pub diagnostics: Vec<AttrDiagnostic>,
+}
+
+impl BodySourceMap {
+    pub fn lint_src(&self, stmt: StmtId, lint: Lint) -> LintSrc {
+        self.lint_map[stmt].lint_src(lint)
+    }
 }
 
 #[derive(Default, Debug, Eq, PartialEq)]
@@ -97,7 +108,7 @@ impl AnalogBehaviour {
 pub struct ParamBody {
     pub body: Body,
     pub default: ExprId,
-    pub bounds: Vec<ParamBounds>,
+    pub bounds: Vec<ParamConstraint>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -108,22 +119,16 @@ pub struct Range {
     pub end_inclusive: bool,
 }
 
-impl Range {
-    fn new(ast: ast::Range, ctx: &mut LowerCtx) -> Self {
-        Range {
-            start: ctx.collect_opt_expr(ast.start()),
-            start_inclusive: ast.start_inclusive(),
-            end: ctx.collect_opt_expr(ast.end()),
-            end_inclusive: ast.end_inclusive(),
-        }
-    }
+#[derive(Debug, Eq, PartialEq)]
+pub enum ConstraintValue {
+    Value(ExprId),
+    Range(Range),
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum ParamBounds {
-    Exclud(ExprId),
-    ExcludeRange(Range),
-    From(Range),
+pub struct ParamConstraint {
+    pub kind: ConstraintKind,
+    pub val: ConstraintValue,
 }
 
 impl ParamBody {
@@ -159,18 +164,17 @@ impl ParamBody {
         let bounds = ast
             .constraints()
             .filter_map(|constraint| {
-                let constraint = match constraint.kind()? {
-                    ast::ConstraintKind::From(range) => {
-                        ParamBounds::From(Range::new(range, &mut ctx))
-                    }
-                    ast::ConstraintKind::Exclude(expr) => {
-                        ParamBounds::Exclud(ctx.collect_expr(expr))
-                    }
-                    ast::ConstraintKind::ExcludeRange(range) => {
-                        ParamBounds::ExcludeRange(Range::new(range, &mut ctx))
-                    }
+                let kind = constraint.kind()?;
+                let val = match constraint.val()? {
+                    ast::ConstraintValue::Val(val) => ConstraintValue::Value(ctx.collect_expr(val)),
+                    ast::ConstraintValue::Range(range) => ConstraintValue::Range(Range {
+                        start: ctx.collect_opt_expr(range.start()),
+                        start_inclusive: range.start_inclusive(),
+                        end: ctx.collect_opt_expr(range.end()),
+                        end_inclusive: range.end_inclusive(),
+                    }),
                 };
-                Some(constraint)
+                Some(ParamConstraint { kind, val })
             })
             .collect();
 

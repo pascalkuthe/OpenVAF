@@ -2,10 +2,15 @@ use crate::{
     db::{HirDefDB, HirDefDatabase, InternDatabase},
     nameres::{DefMap, LocalScopeId},
 };
-use basedb::{lints::LintResolver, BaseDB, BaseDatabase, FileId, Vfs, VfsStorage};
+use basedb::{
+    diagnostics::{sink::Buffer, Config, ConsoleSink, DiagnosticSink},
+    lints::{ErasedItemTreeId, Lint, LintLevel, LintResolver},
+    BaseDB, BaseDatabase, FileId, Vfs, VfsStorage,
+};
 use parking_lot::RwLock;
 
 mod integration;
+mod lints;
 
 #[salsa::database(BaseDatabase, InternDatabase, HirDefDatabase)]
 pub struct TestDataBase {
@@ -31,33 +36,33 @@ impl TestDataBase {
     pub fn vfs(&self) -> &RwLock<Vfs> {
         self.vfs.as_ref().unwrap()
     }
-    pub fn lower_and_check(&self) {
+    pub fn lower_and_check(&self) -> String {
         let root_file = self.root_file();
         let def_map = self.def_map(root_file);
-        // TODO assert that the diagnostics are empty
-        let root_scope = def_map.root();
-        self.lower_and_check_rec(root_scope, &def_map);
+        let mut buf = Buffer::no_color();
+        {
+            let mut sink = ConsoleSink::buffer(Config::default(), self, &mut buf);
+            let diagnostics = &self.item_tree(root_file).diagnostics;
+            sink.add_diagnostics(diagnostics, root_file, self);
+            let root_scope = def_map.root();
+            self.lower_and_check_rec(root_scope, &def_map, &mut sink);
+        }
+        let data = buf.into_inner();
+        String::from_utf8(data).unwrap()
     }
 
-    fn lower_and_check_rec(&self, scope: LocalScopeId, def_map: &DefMap) {
+    fn lower_and_check_rec(&self, scope: LocalScopeId, def_map: &DefMap, dst: &mut ConsoleSink) {
         let root_file = self.root_file();
 
         for (_, declaration) in &def_map[scope].declarations {
             if let Ok(id) = (*declaration).try_into() {
-                self.analog_behaviour(root_file, id);
-            }
-
-            if let Ok(id) = (*declaration).try_into() {
-                self.param_body(root_file, id);
-            }
-
-            if let Ok(id) = (*declaration).try_into() {
-                self.expr_body(root_file, id);
+                let diagnostics = &self.body_source_map(root_file, id).diagnostics;
+                dst.add_diagnostics(diagnostics, root_file, self);
             }
         }
 
         for (_, child) in &def_map[scope].children {
-            self.lower_and_check_rec(*child, def_map)
+            self.lower_and_check_rec(*child, def_map, dst)
         }
     }
 }
@@ -69,4 +74,13 @@ impl VfsStorage for TestDataBase {
         self.vfs()
     }
 }
-impl LintResolver for TestDataBase {}
+impl LintResolver for TestDataBase {
+    fn lint_overwrite(
+        &self,
+        lint: Lint,
+        item_tree: ErasedItemTreeId,
+        root_file: FileId,
+    ) -> Option<LintLevel> {
+        self.item_tree(root_file).lint_lvl(item_tree, lint)
+    }
+}

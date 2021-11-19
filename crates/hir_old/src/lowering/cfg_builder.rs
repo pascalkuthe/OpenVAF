@@ -799,12 +799,12 @@ impl<'a, 'h, L: HirLowering> LocalCtx<'a, 'h, L> {
                 TyRValue { val: RValue::Select(cond?, true_val, false_val), ty }
             }
 
-            Expression::PartialDerivative(expr, unkown) => {
+            Expression::PartialDerivative(expr, unknown) => {
                 let arg = self.fold_numeric(expr)?.0;
                 let derivative = self
                     .cfg_builder
                     .cfg
-                    .demand_operand_derivative_unchecked(&self.fold.mir, &arg, unkown)
+                    .demand_operand_derivative_unchecked(&self.fold.mir, &arg, unknown)
                     .into_operand();
 
                 TyRValue { val: RValue::Use(Spanned::new(derivative, arg.span)), ty: Type::REAL }

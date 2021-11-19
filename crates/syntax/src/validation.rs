@@ -1,5 +1,6 @@
 use crate::T;
 use rowan::TextRange;
+use tokens::SyntaxKind;
 
 use crate::{
     ast::{self, ArgListOwner, BlockItem, FunctionItem, PathSegmentKind},
@@ -15,9 +16,32 @@ pub(crate) fn validate(root: &SyntaxNode, errors: &mut Vec<SyntaxError>) {
                 ast::Function(fun) => validate_function(fun, errors),
                 ast::BranchDecl(decl) => validate_branch_decl(decl, errors),
                 ast::DisciplineDecl(decl) => validate_discipline_decl(decl,errors),
+        ast::Literal(decl) => validate_literal(decl, errors),
                 _ => ()
             }
         }
+    }
+}
+
+fn is_valid_inf_position(s: SyntaxNode) -> bool {
+    if s.kind() == SyntaxKind::RANGE {
+        return true;
+    }
+    if s.parent().map_or(false, |parent| parent.kind() == SyntaxKind::RANGE) {
+        if let Some(expr) = ast::PrefixExpr::cast(s) {
+            if matches!(expr.op_kind(), Some(ast::UnaryOp::Neg) | None) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn validate_literal(literal: ast::Literal, errors: &mut Vec<SyntaxError>) {
+    if literal.kind() == ast::LiteralKind::Inf
+        && !literal.syntax.parent().map_or(true, is_valid_inf_position)
+    {
+        errors.push(SyntaxError::IllegalInfToken { range: literal.syntax().text_range() });
     }
 }
 
@@ -193,5 +217,3 @@ fn validate_discipline_decl(discipline: ast::DisciplineDecl, errors: &mut Vec<Sy
         }
     }
 }
-
-// TODO forbid parameter ... from single_value

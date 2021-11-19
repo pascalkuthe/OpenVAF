@@ -1974,11 +1974,11 @@ pub mod cfg {
                                  res
                              }),
                             LocalKind::Variable(var,
-                                                VariableLocalKind::Derivative(ref unkowns))
+                                                VariableLocalKind::Derivative(ref unknowns))
                             => {
-                                let unkowns =
+                                let unknowns =
                                     ListPrettyPrinter{list:
-                                                          unkowns.as_slice(),
+                                                          unknowns.as_slice(),
                                                       prefix: "d/d",
                                                       postfix: " ",};
                                 (decl.ty.with_info(|ty|
@@ -2064,7 +2064,7 @@ pub mod cfg {
                                                                                                " ",
                                                                                                " (",
                                                                                                ")"],
-                                                                                             &match (&unkowns,
+                                                                                             &match (&unknowns,
                                                                                                      &mir.variables[var].ident,
                                                                                                      &var)
                                                                                                   {
@@ -2184,11 +2184,11 @@ pub mod cfg {
                                  res
                              }),
                             LocalKind::Branch(access, branch,
-                                              VariableLocalKind::Derivative(ref unkowns))
+                                              VariableLocalKind::Derivative(ref unknowns))
                             => {
-                                let unkowns =
+                                let unknowns =
                                     ListPrettyPrinter{list:
-                                                          unkowns.as_slice(),
+                                                          unknowns.as_slice(),
                                                       prefix: "d/d",
                                                       postfix: " ",};
                                 (decl.ty.with_info(|ty|
@@ -2274,7 +2274,7 @@ pub mod cfg {
                                                                                                " ",
                                                                                                "(",
                                                                                                "), "],
-                                                                                             &match (&unkowns,
+                                                                                             &match (&unknowns,
                                                                                                      &access,
                                                                                                      &mir.branches[branch].ident,
                                                                                                      &branch)
@@ -4437,45 +4437,45 @@ pub mod cfg {
                                                                                                                                                                VariableLocalKind::User)
                                                                                                                                            =>
                                                                                                                                            {
-                                                                                                                                               let mut unkowns =
+                                                                                                                                               let mut unknowns =
                                                                                                                                                    ArrayVec::new();
-                                                                                                                                               unkowns.push(unknown);
+                                                                                                                                               unknowns.push(unknown);
                                                                                                                                                LocalKind::Variable(var,
-                                                                                                                                                                   VariableLocalKind::Derivative(unkowns))
+                                                                                                                                                                   VariableLocalKind::Derivative(unknowns))
                                                                                                                                            }
                                                                                                                                            LocalKind::Variable(var,
-                                                                                                                                                               VariableLocalKind::Derivative(ref unkowns))
+                                                                                                                                                               VariableLocalKind::Derivative(ref unknowns))
                                                                                                                                            =>
                                                                                                                                            {
-                                                                                                                                               let mut unkowns =
-                                                                                                                                                   unkowns.clone();
-                                                                                                                                               unkowns.push(unknown);
+                                                                                                                                               let mut unknowns =
+                                                                                                                                                   unknowns.clone();
+                                                                                                                                               unknowns.push(unknown);
                                                                                                                                                LocalKind::Variable(var,
-                                                                                                                                                                   VariableLocalKind::Derivative(unkowns))
+                                                                                                                                                                   VariableLocalKind::Derivative(unknowns))
                                                                                                                                            }
                                                                                                                                            LocalKind::Branch(access,
                                                                                                                                                              branch,
                                                                                                                                                              VariableLocalKind::User)
                                                                                                                                            =>
                                                                                                                                            {
-                                                                                                                                               let mut unkowns =
+                                                                                                                                               let mut unknowns =
                                                                                                                                                    ArrayVec::new();
-                                                                                                                                               unkowns.push(unknown);
+                                                                                                                                               unknowns.push(unknown);
                                                                                                                                                LocalKind::Branch(access,
                                                                                                                                                                  branch,
-                                                                                                                                                                 VariableLocalKind::Derivative(unkowns))
+                                                                                                                                                                 VariableLocalKind::Derivative(unknowns))
                                                                                                                                            }
                                                                                                                                            LocalKind::Branch(access,
                                                                                                                                                              branch,
-                                                                                                                                                             VariableLocalKind::Derivative(ref unkowns))
+                                                                                                                                                             VariableLocalKind::Derivative(ref unknowns))
                                                                                                                                            =>
                                                                                                                                            {
-                                                                                                                                               let mut unkowns =
-                                                                                                                                                   unkowns.clone();
-                                                                                                                                               unkowns.push(unknown);
+                                                                                                                                               let mut unknowns =
+                                                                                                                                                   unknowns.clone();
+                                                                                                                                               unknowns.push(unknown);
                                                                                                                                                LocalKind::Branch(access,
                                                                                                                                                                  branch,
-                                                                                                                                                                 VariableLocalKind::Derivative(unkowns))
+                                                                                                                                                                 VariableLocalKind::Derivative(unknowns))
                                                                                                                                            }
                                                                                                                                        };
                                                                                                                                    locals.push(LocalDeclaration{kind,
@@ -8275,9 +8275,9 @@ pub mod derivatives {
                     self.forward_stmnts.push((StmntKind::Assignment(new_value,
                                                                     rhs.clone()),
                                               sctx));
-                    for (unkown, derivative_local) in derivatives {
+                    for (unknown, derivative_local) in derivatives {
                         let derivative_rhs =
-                            self.rvalue_derivative(new_value, &rhs, unkown,
+                            self.rvalue_derivative(new_value, &rhs, unknown,
                                                    sctx, &mut cache);
                         self.append_assignment_and_derivatives(derivative_local,
                                                                derivative_rhs,
@@ -8317,7 +8317,7 @@ pub mod derivatives {
                 let mut phis =
                     replace(&mut self.cfg[id].phi_statements, phis);
                 for phi in &phis {
-                    for (unkown, dst) in
+                    for (unknown, dst) in
                         self.cfg.derivatives.get(&phi.dst).cloned().into_iter().flatten()
                         {
                         let sources =
@@ -8325,7 +8325,7 @@ pub mod derivatives {
                                                        {
                                                            (*bb,
                                                             self.cfg.demand_derivative_unchecked(*local,
-                                                                                                 unkown))
+                                                                                                 unknown))
                                                        }).collect();
                         self.cfg[id].phi_statements.push(PhiData{dst,
                                                                  sources,

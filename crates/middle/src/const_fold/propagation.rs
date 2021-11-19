@@ -114,7 +114,7 @@ mod __sealed {
             val: FlatSet<ConstVal>,
         ) {
             if LocalKind::Temporary == cfg.locals[dst].kind {
-                // Constant temporaries changed if the temporary was previously unkown
+                // Constant temporaries changed if the temporary was previously unknown
                 // Access to const_temporaries is save here since the reference is dropped immediately and constant_temporaries is sealed within this module so no other references can exist
                 state.temporaries_changed =
                     unsafe { &mut *self.constant_temporaries.get() }.set_flat_set(dst, val)

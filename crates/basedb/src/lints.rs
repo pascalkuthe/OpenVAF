@@ -58,6 +58,11 @@ pub trait LintResolver {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct ErasedItemTreeId(u32);
 
+impl ErasedItemTreeId {
+    pub const ROOT: ErasedItemTreeId = ErasedItemTreeId(0);
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct LintSrc {
     pub overwrite: Option<LintLevel>,
     pub item_tree: Option<ErasedItemTreeId>,
@@ -167,7 +172,7 @@ pub mod builtin {
         pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id:5};
         pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: 6};
         pub const noise_derivative = LintData{default_lvl: Warn, documentation_id: 7};
-        pub const unkown_lint = LintData{default_lvl: Deny, documentation_id: 8};
+        pub const lint_not_found = LintData{default_lvl: Deny, documentation_id: 8};
         pub const lint_level_owerwrite = LintData{default_lvl: Warn, documentation_id: 9};
         pub const useless_function_call = LintData{default_lvl: Warn, documentation_id: 10};
         pub const non_standard_code = LintData{default_lvl: Warn, documentation_id: 11};

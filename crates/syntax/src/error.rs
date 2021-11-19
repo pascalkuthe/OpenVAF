@@ -52,6 +52,9 @@ pub enum SyntaxError {
         single: bool,
         illegal_nodes: Vec<TextRange>,
     },
+    IllegalInfToken{
+        range: TextRange
+    }
 }
 
 use SyntaxError::*;
@@ -69,5 +72,6 @@ impl_display! {
         FunWithoutBody {..} => "function is missing a body";
         IllegalBranchNodeCnt { cnt,..} => "branch declaration require 1 or 2 nets; found {}", cnt;
         IllegalBranchNodeExpr{..} => "illegal expr was used to declare a branch node!";
+        IllegalInfToken{..} => "unexpected token 'inf'; expected an expression";
     }
 }

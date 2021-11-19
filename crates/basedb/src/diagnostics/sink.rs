@@ -5,10 +5,12 @@ use codespan_reporting::{
     files::Files,
     term::{
         emit,
-        termcolor::{ColorChoice, StandardStream},
+        termcolor::{StandardStream, WriteColor},
         Config,
     },
 };
+
+pub use codespan_reporting::term::termcolor::{Ansi, Buffer, NoColor, ColorChoice};
 use vfs::VfsPath;
 
 use crate::{
@@ -82,11 +84,24 @@ pub struct ConsoleSink<'a> {
     error_cnt: usize,
     config: Config,
     db: &'a dyn BaseDB,
+    dst: Box<dyn WriteColor + 'a>,
 }
 
-impl ConsoleSink<'_> {
-    pub fn new(config: Config, db: &dyn BaseDB) -> ConsoleSink {
-        ConsoleSink { warning_cnt: 0, error_cnt: 0, config, db }
+impl<'a> ConsoleSink<'a> {
+    pub fn new(config: Config, db: &'a dyn BaseDB) -> ConsoleSink<'a> {
+        ConsoleSink::new_with(config, db, Box::new(StandardStream::stderr(ColorChoice::Auto)))
+    }
+
+    pub fn buffer(config: Config, db: &'a dyn BaseDB, buffer: &'a mut Buffer) -> ConsoleSink<'a> {
+        ConsoleSink::new_with(config, db, Box::new(buffer))
+    }
+
+    pub fn new_with(
+        config: Config,
+        db: &'a dyn BaseDB,
+        dst: Box<dyn WriteColor + 'a>,
+    ) -> ConsoleSink<'a> {
+        ConsoleSink { warning_cnt: 0, error_cnt: 0, config, db, dst }
     }
 }
 
@@ -112,13 +127,8 @@ impl DiagnosticSink for ConsoleSink<'_> {
             _ => (),
         }
 
-        emit(
-            &mut StandardStream::stderr(ColorChoice::Auto),
-            &self.config,
-            &FileSrc(self.db),
-            &report,
-        )
-        .expect("Span emitting should never fail");
+        emit(&mut self.dst, &self.config, &FileSrc(self.db), &report)
+            .expect("Span emitting should never fail");
     }
 }
 

@@ -100,7 +100,8 @@ pub fn hir_def() {
                         db.vfs().write().add_virt_file(#file_names, &file_contents);
                     }
                 )*
-                db.lower_and_check();
+                let diagnostics = db.lower_and_check();
+                assert_eq!(&diagnostics,"")
             }
         }
     });

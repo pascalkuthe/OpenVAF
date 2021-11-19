@@ -517,29 +517,29 @@ impl<C: CfgFunctions> ControlFlowGraph<C> {
                 let kind = match locals[local].kind {
                     LocalKind::Temporary => LocalKind::Temporary,
                     LocalKind::Variable(var, VariableLocalKind::User) => {
-                        let mut unkowns = ArrayVec::new();
-                        unkowns.push(unknown);
+                        let mut unknowns = ArrayVec::new();
+                        unknowns.push(unknown);
 
-                        LocalKind::Variable(var, VariableLocalKind::Derivative(unkowns))
+                        LocalKind::Variable(var, VariableLocalKind::Derivative(unknowns))
                     }
-                    LocalKind::Variable(var, VariableLocalKind::Derivative(ref unkowns)) => {
-                        let mut unkowns = unkowns.clone();
-                        unkowns.push(unknown);
-                        LocalKind::Variable(var, VariableLocalKind::Derivative(unkowns))
+                    LocalKind::Variable(var, VariableLocalKind::Derivative(ref unknowns)) => {
+                        let mut unknowns = unknowns.clone();
+                        unknowns.push(unknown);
+                        LocalKind::Variable(var, VariableLocalKind::Derivative(unknowns))
                     }
                     LocalKind::Branch(access, branch, VariableLocalKind::User) => {
-                        let mut unkowns = ArrayVec::new();
-                        unkowns.push(unknown);
-                        LocalKind::Branch(access, branch, VariableLocalKind::Derivative(unkowns))
+                        let mut unknowns = ArrayVec::new();
+                        unknowns.push(unknown);
+                        LocalKind::Branch(access, branch, VariableLocalKind::Derivative(unknowns))
                     }
                     LocalKind::Branch(
                         access,
                         branch,
-                        VariableLocalKind::Derivative(ref unkowns),
+                        VariableLocalKind::Derivative(ref unknowns),
                     ) => {
-                        let mut unkowns = unkowns.clone();
-                        unkowns.push(unknown);
-                        LocalKind::Branch(access, branch, VariableLocalKind::Derivative(unkowns))
+                        let mut unknowns = unknowns.clone();
+                        unknowns.push(unknown);
+                        LocalKind::Branch(access, branch, VariableLocalKind::Derivative(unknowns))
                     }
                 };
                 locals.push(LocalDeclaration { kind, ty: Type::REAL })

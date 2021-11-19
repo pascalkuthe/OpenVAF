@@ -30,12 +30,24 @@ use syntax::{ast, AstNode};
 use typed_index_collections::TiVec;
 
 /// The item tree of a source file.
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ItemTree {
     pub top_level: Box<[RootItem]>,
     pub(crate) data: ItemTreeData,
     pub(crate) lint_attrs: TiVec<ErasedItemTreeId, LintAttrs>,
     pub diagnostics: Vec<AttrDiagnostic>,
+}
+
+impl Default for ItemTree {
+    fn default() -> Self {
+        Self {
+            top_level: Default::default(),
+            data: Default::default(),
+            // Ensure roo sctx
+            lint_attrs: TiVec::from(vec![LintAttrs::empty(None)]),
+            diagnostics: Default::default(),
+        }
+    }
 }
 
 impl ItemTree {
@@ -125,7 +137,7 @@ pub trait ItemTreeNode: Clone {
     fn id_to_mod_item(id: ItemTreeId<Self>) -> ScopeItem;
 }
 
-pub type ItemTreeId<N: ItemTreeNode> = Idx<N>;
+pub type ItemTreeId<N> = Idx<N>;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum RootItem {

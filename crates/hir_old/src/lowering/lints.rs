@@ -50,7 +50,7 @@ impl Error for UnknownLint {}
 
 impl LintDiagnostic for UnknownLint {
     fn lint(&self) -> Lint {
-        builtin::unkown_lint
+        builtin::lint_not_found
     }
 
     fn slices(&self, main_annotation_type: AnnotationType) -> Vec<DiagnosticSlice> {
@@ -58,7 +58,7 @@ impl LintDiagnostic for UnknownLint {
             slice_span: self.span.data(),
             messages: vec![(
                 main_annotation_type,
-                Text::const_str("Unkown lint"),
+                Text::const_str("unknown lint"),
                 self.span.data(),
             )],
             fold: false,

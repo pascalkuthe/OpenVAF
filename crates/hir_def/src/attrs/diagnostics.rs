@@ -1,8 +1,8 @@
 use basedb::{
     diagnostics::{text_ranges_to_unified_spans, Diagnostic, Label, LabelStyle, Report},
     lints::{
-        builtin::{lint_level_owerwrite, unkown_lint},
-        Lint, LintSrc,
+        builtin::{lint_level_owerwrite, lint_not_found},
+        ErasedItemTreeId, Lint, LintSrc,
     },
     BaseDB, FileId,
 };
@@ -13,8 +13,8 @@ use syntax::{sourcemap::FileSpan, TextRange};
 pub enum AttrDiagnostic {
     ExpectedArrayOrLiteral { range: TextRange, attr: &'static str },
     ExpectedLiteral { range: TextRange, attr: &'static str },
-    UnkownLint { range: TextRange, lint: String },
-    LintOverwrite { old: TextRange, new: TextRange, name: String },
+    unknownLint { range: TextRange, lint: String, item_tree: ErasedItemTreeId },
+    LintOverwrite { old: TextRange, new: TextRange, name: String, item_tree: ErasedItemTreeId },
 }
 
 use AttrDiagnostic::*;
@@ -23,7 +23,7 @@ impl_display! {
     match AttrDiagnostic{
         ExpectedArrayOrLiteral{attr,..} => "'{}' attribute exptects a string literal or and array of literals",attr;
         ExpectedLiteral{attr,..} => "'{}' attribute expepects a string literal here", attr;
-        UnkownLint{lint,..} => "unkown lint '{}'",lint;
+        unknownLint{lint,..} => "unknown lint '{}'",lint;
         LintOverwrite{name,..} => "lint level for '{}' was set multiple times",name;
     }
 }
@@ -31,8 +31,13 @@ impl_display! {
 impl Diagnostic for AttrDiagnostic {
     fn lint(&self) -> Option<(Lint, LintSrc)> {
         match self {
-            UnkownLint { .. } => Some((unkown_lint, LintSrc::GLOBAL)),
-            LintOverwrite { .. } => Some((lint_level_owerwrite, LintSrc::GLOBAL)),
+            unknownLint { item_tree, .. } => {
+                Some((lint_not_found, LintSrc { overwrite: None, item_tree: Some(*item_tree) }))
+            }
+            LintOverwrite { item_tree, .. } => Some((
+                lint_level_owerwrite,
+                LintSrc { overwrite: None, item_tree: Some(*item_tree) },
+            )),
             _ => None,
         }
     }
@@ -41,7 +46,7 @@ impl Diagnostic for AttrDiagnostic {
         let sm = db.sourcemap(root_file);
         let parse = db.parse(root_file);
 
-        match *self {
+        let report = match *self {
             ExpectedArrayOrLiteral { range, attr } => {
                 let FileSpan { file: file_id, range } = parse.to_file_span(range, &sm);
                 Report::error()
@@ -87,17 +92,19 @@ impl Diagnostic for AttrDiagnostic {
                             .to_owned(),
                     ])
             }
-            UnkownLint { range, .. } => {
+            unknownLint { range, .. } => {
                 let FileSpan { file: file_id, range } = parse.to_file_span(range, &sm);
                 Report::error()
                     .with_labels(vec![Label {
                         style: LabelStyle::Primary,
                         file_id,
                         range: range.into(),
-                        message: "unkown lint".to_owned(),
+                        message: "unknown lint".to_owned(),
                     }])
                     .with_notes(vec!["help: this attribute has no effect".to_owned()])
             }
-        }
+        };
+
+        report.with_message(self.to_string())
     }
 }

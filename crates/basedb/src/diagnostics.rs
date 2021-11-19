@@ -6,7 +6,7 @@ use crate::{
 pub use sink::{print_all, ConsoleSink, DiagnosticSink};
 
 mod preprocessor_error;
-mod sink;
+pub mod sink;
 mod syntax_error;
 
 // pub use ariadne::{Label, ReportKind};
@@ -49,10 +49,7 @@ pub trait Diagnostic {
             let mut report = self.build_report(root_file, db);
 
             if is_default {
-                let hint = format!(
-"the {} lint is set to {} by default.
-This can be changed with an attribute such as (*openvaf_allow={}*) or with command line arguments (see --help)",
-            name, lvl,name);
+                let hint = format!("{} is set to {} by default", name, lvl);
                 report.notes.push(hint)
             }
 

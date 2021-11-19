@@ -150,6 +150,7 @@ dependencies = [
  "arena",
  "basedb",
  "bitset",
+ "expect-test",
  "parking_lot",
  "salsa",
  "smol_str",

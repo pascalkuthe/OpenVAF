@@ -16,7 +16,8 @@ fn bsim6() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/bsim6.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn bsimbulk() {
@@ -33,7 +34,8 @@ fn bsimbulk() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/bsimbulk.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn bsimcmg() {
@@ -92,7 +94,8 @@ fn bsimcmg() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/common_defs.include", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn bsimimg() {
@@ -135,7 +138,8 @@ fn bsimimg() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/common_defs.include", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn bsimsoi() {
@@ -152,7 +156,8 @@ fn bsimsoi() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/bsimsoi.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn diode() {
@@ -169,7 +174,8 @@ fn diode() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/diode.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn hicuml2() {
@@ -186,7 +192,8 @@ fn hicuml2() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/hicuml2.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn bsim3() {
@@ -203,7 +210,8 @@ fn bsim3() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/bsim3.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn bsim4() {
@@ -220,7 +228,8 @@ fn bsim4() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/bsim4.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }
 #[test]
 fn ekv() {
@@ -236,5 +245,6 @@ fn ekv() {
         let file_contents = read_to_string(path).unwrap();
         db.vfs().write().add_virt_file("/ekv.va", &file_contents);
     }
-    db.lower_and_check();
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
 }

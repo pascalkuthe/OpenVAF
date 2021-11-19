@@ -1,14 +1,6 @@
 use std::mem;
 
-use crate::{
-    attrs::LintAttrs,
-    db::HirDefDB,
-    expr::{CaseCond, Event, GlobalEvent},
-    item_tree::ItemTree,
-    name::AsName,
-    nameres::{DefMap, LocalScopeId},
-    AstIdMap, Case, Expr, ExprId, Literal, Path, Stmt, StmtId,
-};
+use crate::{AstIdMap, Case, Expr, ExprId, Literal, Path, Stmt, StmtId, attrs::{LintAttrs}, db::HirDefDB, expr::{CaseCond, Event, GlobalEvent}, item_tree::ItemTree, name::AsName, nameres::{DefMap, LocalScopeId}};
 
 use basedb::lints::{ErasedItemTreeId, LintRegistry};
 use syntax::{
@@ -234,7 +226,6 @@ impl LowerCtx<'_> {
         let erased_id = self.erased_item_tree_id();
         let attrs =
             LintAttrs::resolve(self.registry, erased_id, attrs, &mut self.source_map.diagnostics);
-
         let id = self.make_stmt(stmt, Some(ptr.clone()), attrs);
         self.source_map.stmt_map.insert(ptr, id);
 

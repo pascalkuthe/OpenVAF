@@ -59,9 +59,9 @@ impl<'lt, C: CfgFunctions, MC: CfgFunctions> AutoDiff<'lt, C, MC> {
                 let new_value = self.cfg.new_temporary(self.cfg.locals[lhs].ty);
                 let new_rhs = RValue::Use(Operand::new(OperandData::Copy(new_value), rhs.span()));
                 self.forward_stmnts.push((StmntKind::Assignment(new_value, rhs.clone()), sctx));
-                for (unkown, derivative_local) in derivatives {
+                for (unknown, derivative_local) in derivatives {
                     let derivative_rhs =
-                        self.rvalue_derivative(new_value, &rhs, unkown, sctx, &mut cache);
+                        self.rvalue_derivative(new_value, &rhs, unknown, sctx, &mut cache);
                     self.append_assignment_and_derivatives(derivative_local, derivative_rhs, sctx)
                 }
                 rhs = new_rhs;
@@ -100,14 +100,14 @@ impl<'lt, C: CfgFunctions, MC: CfgFunctions> AutoDiff<'lt, C, MC> {
             let mut phis = replace(&mut self.cfg[id].phi_statements, phis);
 
             for phi in &phis {
-                for (unkown, dst) in
+                for (unknown, dst) in
                     self.cfg.derivatives.get(&phi.dst).cloned().into_iter().flatten()
                 {
                     let sources = phi
                         .sources
                         .iter()
                         .map(|(bb, local)| {
-                            (*bb, self.cfg.demand_derivative_unchecked(*local, unkown))
+                            (*bb, self.cfg.demand_derivative_unchecked(*local, unknown))
                         })
                         .collect();
 

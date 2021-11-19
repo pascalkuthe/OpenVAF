@@ -16,7 +16,9 @@ mod traits;
 pub use self::{
     expr_ext::{ArrayExprKind, BinaryOp, LiteralKind, UnaryOp},
     generated::{nodes::*, tokens::*},
-    node_ext::{AssignOp, BranchKind, ConstraintKind, PathSegment, PathSegmentKind},
+    node_ext::{
+        AssignOp, BranchKind, ConstraintKind, ConstraintValue, PathSegment, PathSegmentKind,
+    },
     traits::*,
 };
 use crate::{

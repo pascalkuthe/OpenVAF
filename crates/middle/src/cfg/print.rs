@@ -155,16 +155,16 @@ impl<C: CfgFunctions> ControlFlowGraph<C> {
                     decl.ty.with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
                     format!("Corresponds to {} ({:?})", mir.variables[var].ident, var),
                 ),
-                LocalKind::Variable(var, VariableLocalKind::Derivative(ref unkowns)) => {
-                    let unkowns =
-                        ListPrettyPrinter { list: unkowns.as_slice(), prefix: "d/d", postfix: " " };
+                LocalKind::Variable(var, VariableLocalKind::Derivative(ref unknowns)) => {
+                    let unknowns =
+                        ListPrettyPrinter { list: unknowns.as_slice(), prefix: "d/d", postfix: " " };
 
                     (
                         decl.ty
                             .with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
                         format!(
                             "Corresponds to {} {} ({:?})",
-                            unkowns, mir.variables[var].ident, var
+                            unknowns, mir.variables[var].ident, var
                         ),
                     )
                 }
@@ -176,16 +176,16 @@ impl<C: CfgFunctions> ControlFlowGraph<C> {
                         access, mir.branches[branch].ident, branch
                     ),
                 ),
-                LocalKind::Branch(access, branch, VariableLocalKind::Derivative(ref unkowns)) => {
-                    let unkowns =
-                        ListPrettyPrinter { list: unkowns.as_slice(), prefix: "d/d", postfix: " " };
+                LocalKind::Branch(access, branch, VariableLocalKind::Derivative(ref unknowns)) => {
+                    let unknowns =
+                        ListPrettyPrinter { list: unknowns.as_slice(), prefix: "d/d", postfix: " " };
 
                     (
                         decl.ty
                             .with_info(|ty| format!("{0}{0}let mut {1}: {2};", INDENT, local, ty)),
                         format!(
                             "Corresponds to a {} {}({}), {:?}",
-                            unkowns, access, mir.branches[branch].ident, branch
+                            unknowns, access, mir.branches[branch].ident, branch
                         ),
                     )
                 }

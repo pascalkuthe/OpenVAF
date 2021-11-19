@@ -6,7 +6,10 @@ use basedb::{
     FileId,
 };
 
-use syntax::ast::{self, AttrIter, AttrsOwner, BlockItem};
+use syntax::{
+    ast::{self, AttrIter, AttrsOwner, BlockItem},
+    AstNode,
+};
 // use tracing::trace;
 
 use crate::{
@@ -17,10 +20,7 @@ use crate::{
     AstIdMap, Name, Path,
 };
 
-use super::{
-    BlockScope, BlockScopeItem, Branch, BranchKind, Discipline, DisciplineAttr, Domain, Function,
-    FunctionArg, ItemTree, ItemTreeId, Module, Nature, NatureAttr, Net, Param, Port, RootItem, Var,
-};
+use super::{BlockScope, BlockScopeItem, Branch, BranchKind, Discipline, DisciplineAttr, Domain, Function, FunctionArg, ItemTree, ItemTreeId, Module, Nature, NatureAttr, Net, Param, Port, RootItem, Var};
 
 fn is_input(direction: &Option<ast::Direction>) -> bool {
     direction.as_ref().map_or(false, |it| it.input_token().is_some() || it.inout_token().is_some())
@@ -254,7 +254,8 @@ impl Ctx {
                 }
                 ast::ModuleItem::AnalogBehaviour(behaviour) => {
                     if let Some(stmt) = behaviour.stmt() {
-                        self.lower_stmt(stmt, &mut block_scope_items, erase_module);
+                        let erased_id = self.collect_attrs(behaviour.attrs(), Some(erase_module));
+                        self.lower_stmt(stmt, &mut block_scope_items, erased_id);
                     }
                 }
                 ast::ModuleItem::VarDecl(var) => {
@@ -412,13 +413,14 @@ impl Ctx {
         &mut self,
         stmt: ast::Stmt,
         scope: &mut Vec<BlockScopeItem>,
-        erased_id: ErasedItemTreeId,
+        parent_erased_id: ErasedItemTreeId,
     ) {
         if let ast::Stmt::BlockStmt(block) = stmt {
             if let Some(scope_name) = block.block_scope().and_then(|it| Some(it.name()?.as_name()))
             {
                 let mut scope_items = Vec::with_capacity(4);
-                let erased_id = self.collect_attrs(block.attrs(), Some(erased_id));
+                let erased_id = self.collect_attrs(block.attrs(), Some(parent_erased_id));
+                let children: Vec<_> = block.syntax().children().collect();
 
                 for item in block.items() {
                     self.lower_block_item(item, &mut scope_items, erased_id);
@@ -431,7 +433,7 @@ impl Ctx {
             } else {
                 // For unnamed blocks add the scope to the current active scope
                 for item in block.items() {
-                    self.lower_block_item(item, scope, erased_id);
+                    self.lower_block_item(item, scope, parent_erased_id);
                 }
             }
         }
