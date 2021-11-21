@@ -24,6 +24,9 @@ pub use syntax_node::{SyntaxNode, SyntaxToken};
 pub use token_text::TokenText;
 pub use tokens::{SyntaxKind, T};
 
+#[cfg(test)]
+mod tests;
+
 /// `Parse` is the result of the parsing: a syntax tree and a collection of
 /// errors.
 ///

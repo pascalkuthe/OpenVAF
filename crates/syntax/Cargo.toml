@@ -26,3 +26,10 @@ text-size = "1.1"
 
 rowan = "0.15"
 
+
+[dev-dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+ungrammar = "1.14"
+sourcegen = {version = "0.0.0", path="../sourcegen"}
+

@@ -19,6 +19,7 @@ use crate::{
     db::HirDefDB,
     FileAstId, Name, Path, Type,
 };
+use ahash::AHashMap;
 // use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx, IdxRange};
 use basedb::{
@@ -26,7 +27,10 @@ use basedb::{
     FileId,
 };
 use stdx::impl_from_typed;
-use syntax::{ast, AstNode};
+use syntax::{
+    ast::{self, BlockStmt},
+    AstNode,
+};
 use typed_index_collections::TiVec;
 
 /// The item tree of a source file.
@@ -34,8 +38,9 @@ use typed_index_collections::TiVec;
 pub struct ItemTree {
     pub top_level: Box<[RootItem]>,
     pub(crate) data: ItemTreeData,
-    pub(crate) lint_attrs: TiVec<ErasedItemTreeId, LintAttrs>,
+    lint_attrs: TiVec<ErasedItemTreeId, LintAttrs>,
     pub diagnostics: Vec<AttrDiagnostic>,
+    pub(crate) blocks: AHashMap<FileAstId<BlockStmt>, Block>,
 }
 
 impl Default for ItemTree {
@@ -46,6 +51,7 @@ impl Default for ItemTree {
             // Ensure roo sctx
             lint_attrs: TiVec::from(vec![LintAttrs::empty(None)]),
             diagnostics: Default::default(),
+            blocks: AHashMap::new(),
         }
     }
 }
@@ -73,7 +79,6 @@ impl ItemTree {
             branches,
             functions,
             function_args,
-            block_scopes,
         } = &mut self.data;
         function_args.shrink_to_fit();
         modules.shrink_to_fit();
@@ -86,7 +91,6 @@ impl ItemTree {
         ports.shrink_to_fit();
         branches.shrink_to_fit();
         functions.shrink_to_fit();
-        block_scopes.shrink_to_fit();
         nature_attrs.shrink_to_fit();
         discipline_attrs.shrink_to_fit();
     }
@@ -99,6 +103,10 @@ impl ItemTree {
             }
             id = attrs.parent()?;
         }
+    }
+
+    pub fn block_scope(&self, block: FileAstId<BlockStmt>) -> &Block {
+        &self.blocks[&block]
     }
 }
 
@@ -117,7 +125,7 @@ pub(crate) struct ItemTreeData {
     pub branches: Arena<Branch>,
     pub functions: Arena<Function>,
     pub function_args: Arena<FunctionArg>,
-    pub block_scopes: Arena<BlockScope>,
+    // pub block_scopes: Arena<BlockScope>,
 }
 
 /// Trait implemented by all item nodes in the item tree.
@@ -154,13 +162,13 @@ impl_from_typed! (
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum BlockScopeItem {
-    Scope(ItemTreeId<BlockScope>),
+    Scope(FileAstId<BlockStmt>),
     Parameter(ItemTreeId<Param>),
     Variable(ItemTreeId<Var>),
 }
 
 impl_from_typed! (
-    Scope(ItemTreeId<BlockScope>),
+    Scope(FileAstId<BlockStmt>),
     Parameter(ItemTreeId<Param>),
     Variable(ItemTreeId<Var>) for BlockScopeItem
 );
@@ -233,7 +241,6 @@ item_tree_nodes! {
     Port in ports -> ast::PortDecl,
     Branch in branches -> ast::BranchDecl,
     Function in functions -> ast::Function,
-    BlockScope in block_scopes -> ast::BlockStmt,
     NatureAttr in nature_attrs -> ast::NatureAttr,
     DisciplineAttr in discipline_attrs -> ast::DisciplineAttr,
 }
@@ -329,7 +336,7 @@ pub struct DisciplineAttr {
     pub erased_id: ErasedItemTreeId,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum Domain {
     Discrete,
     Continous,
@@ -378,10 +385,10 @@ pub struct Branch {
 // }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct BlockScope {
-    pub name: Name,
+pub struct Block {
+    pub name: Option<Name>,
     pub scope_items: Vec<BlockScopeItem>,
-    pub ast_id: FileAstId<ast::BlockStmt>,
+    // pub ast_id: FileAstId<ast::BlockStmt>,
     pub erased_id: ErasedItemTreeId,
 }
 
@@ -390,8 +397,7 @@ pub struct Function {
     pub name: Name,
     pub ty: Type,
     pub args: IdxRange<FunctionArg>,
-    pub params: IdxRange<Param>,
-    pub vars: IdxRange<Var>,
+    pub scope_items: Vec<BlockScopeItem>,
     pub ast_id: FileAstId<ast::Function>,
     pub erased_id: ErasedItemTreeId,
 }

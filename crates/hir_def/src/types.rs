@@ -1,6 +1,14 @@
-use std::iter::successors;
-
+// use std::iter::successors;
+use stdx::impl_display;
+// use stdx::impl_display;
 use syntax::ast;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionSignature {
+    inputs: Box<[Type]>,
+    outputs: Box<[Type]>,
+    return_ty: Box<Type>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
@@ -10,56 +18,79 @@ pub enum Type {
     Bool,
     String,
     Array { ty: Box<Type>, len: u32 },
+    Void,
+    // NetDiscipline(DisciplineId),
+    // Branch(DisciplineId),
+    // VoltageAccess(DisciplineId),
+    // FlowAccess(DisciplineId),
+    // Function(FunctionSignature),
+    // Parameter(Box<Type>),
 }
 
-impl Type {
-    pub fn is_numeric(&self) -> bool {
-        matches!(self, Type::Real | Type::Integer)
-    }
-
-    pub fn is_convertable_to(&self, dst: &Type) -> bool {
-        self == dst
-            || matches!((dst, self), (Type::Real, Type::Integer))
-            // VerilogA has no boolean type. The Type is only an implementation detail used for
-            // better code generation as such these two types are always convertable
-            || matches!((dst, self), (Type::Integer, Type::Bool))
-            || matches!((dst, self), (Type::Bool, Type::Integer)) 
-            || self.dim() == dst.dim() && self.base_type().is_convertable_to(dst.base_type())
-    }
-
-    pub fn base_type(&self) -> &Type {
-        let mut curr = self;
-        while let Type::Array { ty, .. } = self {
-            curr = ty
-        }
-        curr
-    }
-
-    pub fn dim(&self) -> Vec<u32> {
-        if let Type::Array { ref ty, len } = *self {
-            let mut dims: Vec<_> = successors(Some((&*ty, len)), |(ty, _)| {
-                if let Type::Array { ref ty, len } = ***ty {
-                    Some((&*ty, len))
-                } else {
-                    None
-                }
-            })
-            .map(|(_, len)| len)
-            .collect();
-            dims.reverse();
-            dims
-        } else {
-            vec![]
-        }
-    }
-
-    pub fn is_assignable_to(&self, dst: &Type) -> bool {
-        self.is_convertable_to(dst)
-            || (self.base_type().is_numeric()
-                && dst.base_type().is_numeric()
-                && self.dim() == dst.dim())
+use Type::*;
+impl_display! {
+    match Type{
+        Err => "[missing]";
+        Real => "real";
+        Integer => "integer";
+        Bool => "integer";
+        Void => "void";
+        String => "string";
+        Array{ty,len} => "{}[0:{}]",ty,len;
     }
 }
+
+// impl Type {
+//     pub fn is_numeric(&self) -> bool {
+//         matches!(self, Type::Real | Type::Integer)
+//     }
+
+//     pub fn matches(&self, requirement: TypeRequirement) -> bool {
+//         match requirement{
+
+//         }
+//         self == dst
+//             || matches!((dst, self), (Type::Real, Type::Integer))
+//             // VerilogA has no boolean type. The Type is only an implementation detail used for
+//             // better code generation as such these two types are always convertable
+//             || matches!((dst, self), (Type::Integer, Type::Bool))
+//             || matches!((dst, self), (Type::Bool, Type::Integer))
+//             || self.dim() == dst.dim() && self.base_type().is_convertable_to(dst.base_type())
+//     }
+
+//     pub fn base_type(&self) -> &Type {
+//         let mut curr = self;
+//         while let Type::Array { ty, .. } = self {
+//             curr = ty
+//         }
+//         curr
+//     }
+
+//     pub fn dim(&self) -> Vec<u32> {
+//         if let Type::Array { ref ty, len } = *self {
+//             let mut dims: Vec<_> = successors(Some((&*ty, len)), |(ty, _)| {
+//                 if let Type::Array { ref ty, len } = ***ty {
+//                     Some((&*ty, len))
+//                 } else {
+//                     None
+//                 }
+//             })
+//             .map(|(_, len)| len)
+//             .collect();
+//             dims.reverse();
+//             dims
+//         } else {
+//             vec![]
+//         }
+//     }
+
+//     pub fn is_assignable_to(&self, dst: &Type) -> bool {
+//         self.is_convertable_to(dst)
+//             || (self.base_type().is_numeric()
+//                 && dst.base_type().is_numeric()
+//                 && self.dim() == dst.dim())
+//     }
+// }
 
 pub trait AsType {
     fn as_type(&self) -> Type;

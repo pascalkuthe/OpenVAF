@@ -15,8 +15,4 @@ doctest = false
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-
-proc-macro2 = "1.0"
-quote = "1.0"
-ungrammar = "1.14"
 xshell = "0.1"

@@ -1,6 +1,12 @@
 use std::mem;
 
-use crate::{AstIdMap, Case, Expr, ExprId, Literal, Path, Stmt, StmtId, attrs::{LintAttrs}, db::HirDefDB, expr::{CaseCond, Event, GlobalEvent}, item_tree::ItemTree, name::AsName, nameres::{DefMap, LocalScopeId}};
+use crate::{
+    attrs::LintAttrs,
+    db::HirDefDB,
+    expr::{CaseCond, Event, GlobalEvent},
+    name::AsName,
+    AstIdMap, BlockLoc, Case, Expr, ExprId, Intern, ItemTree, Literal, Path, ScopeId, Stmt, StmtId,
+};
 
 use basedb::lints::{ErasedItemTreeId, LintRegistry};
 use syntax::{
@@ -13,13 +19,12 @@ use super::{Body, BodySourceMap};
 
 pub(super) struct LowerCtx<'a> {
     pub(super) db: &'a dyn HirDefDB,
-    pub(super) source_map: &'a mut BodySourceMap,
     pub(super) body: &'a mut Body,
-    pub(super) def_map: &'a DefMap,
-    pub(super) tree: &'a ItemTree,
+    pub(super) source_map: &'a mut BodySourceMap,
     pub(super) ast_id_map: &'a AstIdMap,
-    pub(super) curr_scope: LocalScopeId,
+    pub(super) curr_scope: (ScopeId, ErasedItemTreeId),
     pub(super) registry: &'a LintRegistry,
+    pub(super) tree: &'a ItemTree,
 }
 
 impl LowerCtx<'_> {
@@ -146,7 +151,7 @@ impl LowerCtx<'_> {
             }
             ast::Stmt::CaseStmt(stmt) => self.collect_case_stmt(stmt),
             ast::Stmt::EventStmt(stmt) => return self.collect_event_stmt(stmt),
-            ast::Stmt::BlockStmt(stmt) => return self.collect_block(stmt),
+            ast::Stmt::BlockStmt(stmt) => self.collect_block(stmt),
         };
         self.alloc_stmt(s, AstPtr::new(&stmt), stmt.attrs())
     }
@@ -186,19 +191,32 @@ impl LowerCtx<'_> {
         Stmt::Case { discr, case_arms }
     }
 
-    pub fn collect_block(&mut self, block: &ast::BlockStmt) -> StmtId {
-        let ast_ptr = AstPtr::new(block);
-        let parent_scope = self
-            .def_map
-            .block_scope(self.curr_scope, block, &ast_ptr, self.ast_id_map, self.tree, self.db)
-            .map(|scope| mem::replace(&mut self.curr_scope, scope));
+    pub fn collect_block(&mut self, block: &ast::BlockStmt) -> Stmt {
+        let ast = self.ast_id_map.ast_id(block);
+        let id = BlockLoc { ast, parent: self.curr_scope.0 }.intern(self.db);
+        let scope = self.db.block_def_map(id);
+        let erased_id = self.tree.block_scope(ast).erased_id;
+
+        let parent_scope = match scope {
+            Some(def_map) => {
+                let scope = ScopeId {
+                    root_file: self.curr_scope.0.root_file,
+                    local_scope: def_map.root(),
+                    block: Some(id),
+                };
+
+                mem::replace(&mut self.curr_scope, (scope, erased_id))
+            }
+            None => {
+                let scope = self.curr_scope.0;
+                mem::replace(&mut self.curr_scope, (scope, erased_id))
+            }
+        };
 
         let body = block.body().map(|stmt| self.collect_stmt(stmt)).collect();
 
-        if let Some(parent_scope) = parent_scope {
-            self.curr_scope = parent_scope;
-        }
-        self.alloc_stmt(Stmt::Block { body }, ast_ptr.cast().unwrap(), block.attrs())
+        self.curr_scope = parent_scope;
+        Stmt::Block { body }
     }
 
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
@@ -223,9 +241,12 @@ impl LowerCtx<'_> {
     }
 
     fn alloc_stmt(&mut self, stmt: Stmt, ptr: AstPtr<ast::Stmt>, attrs: AttrIter) -> StmtId {
-        let erased_id = self.erased_item_tree_id();
-        let attrs =
-            LintAttrs::resolve(self.registry, erased_id, attrs, &mut self.source_map.diagnostics);
+        let attrs = LintAttrs::resolve(
+            self.registry,
+            Some(self.curr_scope.1),
+            attrs,
+            &mut self.source_map.diagnostics,
+        );
         let id = self.make_stmt(stmt, Some(ptr.clone()), attrs);
         self.source_map.stmt_map.insert(ptr, id);
 
@@ -235,11 +256,7 @@ impl LowerCtx<'_> {
     // desugared exprs don't have ptr, that's wrong and should be fixed
     // somehow.
     fn alloc_stmt_desugared(&mut self, stmt: Stmt) -> StmtId {
-        self.make_stmt(stmt, None, LintAttrs::empty(self.erased_item_tree_id()))
-    }
-
-    fn erased_item_tree_id(&self) -> Option<ErasedItemTreeId> {
-        self.def_map[self.curr_scope].origin.erased_item_tree_id(self.db)
+        self.make_stmt(stmt, None, LintAttrs::empty(Some(self.curr_scope.1)))
     }
 
     fn missing_stmt(&mut self) -> StmtId {
@@ -253,7 +270,7 @@ impl LowerCtx<'_> {
         attrs: LintAttrs,
     ) -> StmtId {
         let id = self.body.stmts.push_and_get_key(stmt);
-        let id2 = self.body.stmt_scopes.push_and_get_key(self.curr_scope);
+        let id2 = self.body.stmt_scopes.push_and_get_key(self.curr_scope.0);
         let id3 = self.source_map.lint_map.push_and_get_key(attrs);
         debug_assert_eq!(id, id2);
         debug_assert_eq!(id2, id3);

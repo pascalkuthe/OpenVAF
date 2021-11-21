@@ -20,9 +20,9 @@ impl LintAttrs {
         LintAttrs { parent: parent.unwrap_or(ErasedItemTreeId::ROOT), overwrites: AHashMap::new() }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.overwrites.is_empty()
-    }
+    // pub fn is_empty(&self) -> bool {
+    //     self.overwrites.is_empty()
+    // }
 
     pub fn resolve(
         registry: &LintRegistry,
@@ -48,7 +48,7 @@ impl LintAttrs {
                     } else {
                         if !lint_name.contains("::") {
                             // Plugins use plugin::lint_name. Plugin lints for unused plugins are fine
-                            err.push(AttrDiagnostic::unknownLint {
+                            err.push(AttrDiagnostic::UnknownLint {
                                 range,
                                 lint: lint_name,
                                 item_tree: parent,
@@ -133,6 +133,6 @@ impl LintAttrs {
     }
 }
 
-pub fn is_openvaf_attr(attr: &str) {
-    matches!(attr, "openvaf_allow" | "openvaf_warn" | "openvaf_deny");
-}
+// pub fn is_openvaf_attr(attr: &str) {
+//     matches!(attr, "openvaf_allow" | "openvaf_warn" | "openvaf_deny");
+// }

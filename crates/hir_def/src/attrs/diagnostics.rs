@@ -13,7 +13,7 @@ use syntax::{sourcemap::FileSpan, TextRange};
 pub enum AttrDiagnostic {
     ExpectedArrayOrLiteral { range: TextRange, attr: &'static str },
     ExpectedLiteral { range: TextRange, attr: &'static str },
-    unknownLint { range: TextRange, lint: String, item_tree: ErasedItemTreeId },
+    UnknownLint { range: TextRange, lint: String, item_tree: ErasedItemTreeId },
     LintOverwrite { old: TextRange, new: TextRange, name: String, item_tree: ErasedItemTreeId },
 }
 
@@ -23,7 +23,7 @@ impl_display! {
     match AttrDiagnostic{
         ExpectedArrayOrLiteral{attr,..} => "'{}' attribute exptects a string literal or and array of literals",attr;
         ExpectedLiteral{attr,..} => "'{}' attribute expepects a string literal here", attr;
-        unknownLint{lint,..} => "unknown lint '{}'",lint;
+        UnknownLint{lint,..} => "unknown lint '{}'",lint;
         LintOverwrite{name,..} => "lint level for '{}' was set multiple times",name;
     }
 }
@@ -31,7 +31,7 @@ impl_display! {
 impl Diagnostic for AttrDiagnostic {
     fn lint(&self) -> Option<(Lint, LintSrc)> {
         match self {
-            unknownLint { item_tree, .. } => {
+            UnknownLint { item_tree, .. } => {
                 Some((lint_not_found, LintSrc { overwrite: None, item_tree: Some(*item_tree) }))
             }
             LintOverwrite { item_tree, .. } => Some((
@@ -92,7 +92,7 @@ impl Diagnostic for AttrDiagnostic {
                             .to_owned(),
                     ])
             }
-            unknownLint { range, .. } => {
+            UnknownLint { range, .. } => {
                 let FileSpan { file: file_id, range } = parse.to_file_span(range, &sm);
                 Report::error()
                     .with_labels(vec![Label {

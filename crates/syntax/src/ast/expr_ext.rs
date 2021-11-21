@@ -225,7 +225,7 @@ impl ast::SiRealNumber {
 }
 
 impl ast::IntNumber {
-    pub fn value(&self) -> i64 {
+    pub fn value(&self) -> i32 {
         self.syntax.text().parse().unwrap()
     }
 }

@@ -9,9 +9,8 @@ use crate::{
 use std::iter::successors;
 
 use super::{
-    AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, AttrsOwner, Constraint,
-    EventStmt, Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt,
-    StrLit,
+    AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, Constraint, EventStmt,
+    Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit,
 };
 
 // impl ast::PathSegment {
@@ -271,3 +270,5 @@ impl Function {
         support::children(self.syntax())
     }
 }
+
+

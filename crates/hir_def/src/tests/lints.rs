@@ -74,7 +74,7 @@ module foo();
         (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar;
        
         analog 
-            (*openvaf_warn="lint_not_found"*) begin: foo
+            (*openvaf_warn="lint_not_found"*) begin
                 (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real other;
             end
 
@@ -191,7 +191,4 @@ endmodule
 }
 
 
-
-//         (*openvaf_warn='{"lint_not_found","foo"}*) analog begin: foo
-//             (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar;
-//         end
+// TODO document that lint attributes only apply recrusively for items

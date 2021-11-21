@@ -46,6 +46,9 @@ pub trait HirDefDB: InternDB {
     #[salsa::invoke(DefMap::def_map_query)]
     fn def_map(&self, root_file: FileId) -> Arc<DefMap>;
 
+    #[salsa::invoke(DefMap::block_def_map_query)]
+    fn block_def_map(&self, block: BlockId) -> Option<Arc<DefMap>>;
+
     #[salsa::invoke(AnalogBehaviour::body_with_sourcemap_query)]
     fn analog_behaviour_with_sourcemap(
         &self,
@@ -89,7 +92,9 @@ fn body_source_map(db: &dyn HirDefDB, root_file: FileId, def: DefWithBodyId) -> 
         DefWithBodyId::ModuleId(module) => {
             db.analog_behaviour_with_sourcemap(root_file, module.into()).1
         }
-        DefWithBodyId::FunctionId(fun) => db.analog_behaviour_with_sourcemap(root_file, fun.into()).1,
+        DefWithBodyId::FunctionId(fun) => {
+            db.analog_behaviour_with_sourcemap(root_file, fun.into()).1
+        }
         DefWithBodyId::VarId(var) => db.expr_body_with_sourcemap(root_file, var.into()).1,
         DefWithBodyId::NatureAttrId(attr) => db.expr_body_with_sourcemap(root_file, attr.into()).1,
         DefWithBodyId::DisciplineAttrId(attr) => {

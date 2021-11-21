@@ -13,7 +13,22 @@ use std::{
 };
 
 use arena::{Arena, Idx, RawIdx};
+use basedb::FileId;
 use syntax::{ast, match_ast, AstNode, AstPtr, SyntaxNode, SyntaxNodePtr};
+
+// #[derive(Debug, PartialEq, Eq, Hash)]
+// pub struct AstId<N: AstNode> {
+//     file: FileId,
+//     ast: FileAstId<N>,
+// }
+
+// impl<N: AstNode> Copy for AstId<N> {}
+
+// impl<N: AstNode> Clone for AstId<N> {
+//     fn clone(&self) -> AstId<N> {
+//         *self
+//     }
+// }
 
 /// `AstId` points to an AST node in a specific file.
 pub struct FileAstId<N: AstNode> {
@@ -26,6 +41,7 @@ impl<N: AstNode> Clone for FileAstId<N> {
         *self
     }
 }
+
 impl<N: AstNode> Copy for FileAstId<N> {}
 
 impl<N: AstNode> PartialEq for FileAstId<N> {

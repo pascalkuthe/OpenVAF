@@ -1,20 +1,3 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
-#[cfg(test)]
-mod ast_src;
-#[cfg(test)]
-mod integration_tests;
-#[cfg(test)]
-mod sourcegen_ast;
-
 use std::{
     fmt, fs, mem,
     path::{Path, PathBuf},
@@ -267,3 +250,25 @@ pub fn skip_slow_tests() -> bool {
     }
     should_skip
 }
+
+
+pub fn collect_integration_tests() -> impl Iterator<Item = (String, Vec<String>)> {
+    const ERR: &str = "failed to read integration_tests directory";
+    let dir = project_root().join("integration_tests");
+    fs::read_dir(dir).expect(ERR).map(|entry|{
+        let entry = entry.expect(ERR);
+        assert!(entry.file_type().expect(ERR).is_dir());
+        let name = entry.path().file_name().expect(ERR).to_str().expect("intergation test names must be valid UTF-8").to_owned();
+        let children = fs::read_dir(entry.path()).expect(ERR).filter_map(|entry|{
+            let entry = entry.expect(ERR);
+            let include =  entry.path().extension().and_then(|ex|ex.to_str()).map_or(false, |ex|matches!(ex,"va"|"vams"|"include"));
+            if !include{
+                eprintln!("warning: {} will not be includeded in the integration test {}!\n Only files with the extensions .va and .include are included",entry.path().display(), &name)
+            }
+            include.then(||entry.file_name().to_str().unwrap().to_owned())
+        }).collect();
+        assert!(entry.path().join(format!("{}.va",name.to_lowercase())).exists());
+        (name, children)
+    })
+}
+

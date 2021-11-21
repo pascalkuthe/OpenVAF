@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{mem, sync::Arc};
 
 use arena::IdxRange;
 use basedb::{
@@ -7,8 +7,8 @@ use basedb::{
 };
 
 use syntax::{
-    ast::{self, AttrIter, AttrsOwner, BlockItem},
-    AstNode,
+    ast::{self, AttrIter, AttrsOwner},
+    match_ast, AstNode, WalkEvent,
 };
 // use tracing::trace;
 
@@ -20,7 +20,10 @@ use crate::{
     AstIdMap, Name, Path,
 };
 
-use super::{BlockScope, BlockScopeItem, Branch, BranchKind, Discipline, DisciplineAttr, Domain, Function, FunctionArg, ItemTree, ItemTreeId, Module, Nature, NatureAttr, Net, Param, Port, RootItem, Var};
+use super::{
+    Block, BlockScopeItem, Branch, BranchKind, Discipline, DisciplineAttr, Domain, Function,
+    FunctionArg, ItemTree, ItemTreeId, Module, Nature, NatureAttr, Net, Param, Port, RootItem, Var,
+};
 
 fn is_input(direction: &Option<ast::Direction>) -> bool {
     direction.as_ref().map_or(false, |it| it.input_token().is_some() || it.inout_token().is_some())
@@ -282,16 +285,19 @@ impl Ctx {
     }
 
     fn lower_fun(&mut self, fun: ast::Function, erased_module_id: ErasedItemTreeId) {
-        let var_start = self.tree.data.variables.next_key();
-        let param_start = self.tree.data.parameters.next_key();
         let args_start = self.tree.data.function_args.next_key();
 
         let erased_id = self.collect_attrs(fun.attrs(), Some(erased_module_id));
 
+        let mut scope_items = Vec::new();
         for item in fun.function_items() {
             match item {
-                ast::FunctionItem::ParamDecl(decl) => self.lower_param(decl, |_| (), erased_id),
-                ast::FunctionItem::VarDecl(decl) => self.lower_var(decl, |_| (), erased_id),
+                ast::FunctionItem::ParamDecl(decl) => {
+                    self.lower_param(decl, |decl| scope_items.push(decl.into()), erased_id)
+                }
+                ast::FunctionItem::VarDecl(decl) => {
+                    self.lower_var(decl, |decl| scope_items.push(decl.into()), erased_id)
+                }
                 ast::FunctionItem::FunctionArg(arg) => {
                     let erased_id = self.collect_attrs(arg.attrs(), Some(erased_id));
                     let ast_id = self.source_ast_id_map.ast_id(&arg);
@@ -305,21 +311,18 @@ impl Ctx {
                         });
                     }
                 }
-                ast::FunctionItem::Stmt(_) => (), // No need to visit this, named blocks are not allowed here
+                ast::FunctionItem::Stmt(stmt) => self.lower_stmt(stmt, &mut scope_items, erased_id),
             }
         }
 
         let args_end = self.tree.data.function_args.next_key();
-        let var_end = self.tree.data.variables.next_key();
-        let param_end = self.tree.data.parameters.next_key();
 
         if let Some(name) = fun.name() {
             let fun = Function {
                 name: name.as_name(),
                 ty: fun.ty().as_type(),
                 args: IdxRange::new(args_start..args_end),
-                params: IdxRange::new(param_start..param_end),
-                vars: IdxRange::new(var_start..var_end),
+                scope_items,
                 ast_id: self.source_ast_id_map.ast_id(&fun),
                 erased_id,
             };
@@ -412,48 +415,78 @@ impl Ctx {
     fn lower_stmt(
         &mut self,
         stmt: ast::Stmt,
-        scope: &mut Vec<BlockScopeItem>,
+        parent_scope: &mut Vec<BlockScopeItem>,
         parent_erased_id: ErasedItemTreeId,
     ) {
-        if let ast::Stmt::BlockStmt(block) = stmt {
-            if let Some(scope_name) = block.block_scope().and_then(|it| Some(it.name()?.as_name()))
-            {
-                let mut scope_items = Vec::with_capacity(4);
-                let erased_id = self.collect_attrs(block.attrs(), Some(parent_erased_id));
-                let children: Vec<_> = block.syntax().children().collect();
+        let mut block_stack = Vec::new();
+        let mut block_scope_stack = Vec::new();
+        let mut blocks = mem::take(&mut self.tree.blocks);
 
-                for item in block.items() {
-                    self.lower_block_item(item, &mut scope_items, erased_id);
+        for event in stmt.syntax().preorder() {
+            match event {
+                WalkEvent::Enter(node) => {
+                    match_ast! {
+                        match node {
+                            ast::BlockStmt(block) => {
+                                let (erased_id, scope) =  match block_scope_stack.last() {
+                                    Some(block) => {
+                                        let block = blocks.get_mut(block).unwrap();
+                                        let id = block.erased_id;
+                                        (id, &mut block.scope_items)
+                                    }
+                                    None => (parent_erased_id, &mut *parent_scope),
+                                };
+                                let ast_id = self.source_ast_id_map.ast_id(&block);
+                                let erased_id = self.collect_attrs(block.attrs(), Some(erased_id));
+                                let name = block.block_scope().and_then(|it| Some(it.name()?.as_name()));
+                                let block_info = Block { name, scope_items: Vec::new(), erased_id };
+
+                                if block.block_scope().is_some() {
+                                    scope.push(ast_id.into());
+                                    block_scope_stack.push(ast_id);
+                                }
+
+                                blocks.insert(ast_id, block_info);
+                                block_stack.push(ast_id);
+                            },
+                            ast::VarDecl(var) => {
+                              let (erased_id, scope) =  match block_stack.last() {
+                                    Some(block) => {
+                                        let block = blocks.get_mut(block).unwrap();
+                                        let id = block.erased_id;
+                                        (id, &mut block.scope_items)
+                                    }
+                                    None => (parent_erased_id, &mut *parent_scope),
+                                };
+                                self.lower_var(var, |var| scope.push(var.into()), erased_id);
+                            },
+                            ast::ParamDecl(param) => {
+                              let (erased_id, scope) =  match block_stack.last() {
+                                    Some(block) => {
+                                        let block = blocks.get_mut(block).unwrap();
+                                        let id = block.erased_id;
+                                        (id, &mut block.scope_items)
+                                    }
+                                    None => (parent_erased_id, &mut *parent_scope),
+                                };
+                                self.lower_param(param, |param| scope.push(param.into()), erased_id);
+                            },
+                            _ => ()
+                        }
+                    }
                 }
-
-                let ast_id = self.source_ast_id_map.ast_id(&block);
-                let block_scope = BlockScope { ast_id, name: scope_name, scope_items, erased_id };
-                let block_scope = self.tree.data.block_scopes.push_and_get_key(block_scope);
-                scope.push(block_scope.into());
-            } else {
-                // For unnamed blocks add the scope to the current active scope
-                for item in block.items() {
-                    self.lower_block_item(item, scope, parent_erased_id);
+                WalkEvent::Leave(node) => {
+                    if let Some(block) = ast::BlockStmt::cast(node) {
+                        block_stack.pop();
+                        if block.block_scope().is_some() {
+                            block_scope_stack.pop();
+                        }
+                    }
                 }
             }
         }
-    }
 
-    fn lower_block_item(
-        &mut self,
-        item: BlockItem,
-        scope: &mut Vec<BlockScopeItem>,
-        erased_id: ErasedItemTreeId,
-    ) {
-        match item {
-            ast::BlockItem::VarDecl(var) => {
-                self.lower_var(var, |var| scope.push(var.into()), erased_id);
-            }
-            ast::BlockItem::ParamDecl(param) => {
-                self.lower_param(param, |param| scope.push(param.into()), erased_id);
-            }
-            ast::BlockItem::Stmt(stmt) => self.lower_stmt(stmt, scope, erased_id),
-        }
+        self.tree.blocks = blocks;
     }
 
     fn lower_var(

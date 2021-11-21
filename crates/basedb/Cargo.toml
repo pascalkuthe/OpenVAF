@@ -39,5 +39,7 @@ ahash = "0.7"
 
 [dev-dependencies]
 
+proc-macro2 = "1.0"
+quote = "1.0"
 sourcegen = {version = "0.0.0",path ="../sourcegen"}
 # tracing-subscriber = {version="0.3",features=["env-filter","registry"]}

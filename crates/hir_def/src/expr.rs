@@ -26,7 +26,7 @@ pub type ExprId = Idx<Expr>;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Literal {
     String(String),
-    Int(i64),
+    Int(i32),
     Float(BitewiseF64),
     Inf,
 }

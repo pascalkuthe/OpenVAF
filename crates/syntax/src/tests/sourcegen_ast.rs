@@ -12,18 +12,18 @@ use proc_macro2::{Punct, Spacing};
 use quote::{format_ident, quote};
 use ungrammar::{Grammar, Rule};
 
-use crate::{add_preamble, ensure_file_contents, project_root, reformat};
-use crate::{
-    ast_src::{
-        AstEnumSrc, AstEnumVariant, AstNodeSrc, AstSrc, Cardinality, Field, KindsSrc, KINDS_SRC,
-    },
-    pluralize, to_lower_snake_case, to_pascal_case, to_upper_snake_case,
+use sourcegen::{
+    add_preamble, ensure_file_contents, pluralize, project_root, reformat, to_lower_snake_case,
+    to_pascal_case, to_upper_snake_case,
 };
-use std::fs::read_to_string;
+
+use crate::tests::ast_src::{
+    AstEnumSrc, AstEnumVariant, AstNodeSrc, AstSrc, Cardinality, Field, KindsSrc, KINDS_SRC,
+};
 
 #[test]
 pub fn sourcegen_ast() {
-    let src = read_to_string(project_root().join("crates/sourcegen/veriloga.ungram")).unwrap();
+    let src = include_str!("../../veriloga.ungram");
     let grammar = src.parse().unwrap();
 
     let ast = lower(&grammar);

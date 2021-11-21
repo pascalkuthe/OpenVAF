@@ -40,6 +40,8 @@ dependencies = [
  "codespan-reporting",
  "indexmap",
  "parking_lot",
+ "proc-macro2",
+ "quote",
  "salsa",
  "sourcegen",
  "stdx",
@@ -151,7 +153,11 @@ dependencies = [
  "basedb",
  "bitset",
  "expect-test",
+ "indexmap",
+ "once_cell",
  "parking_lot",
+ "proc-macro2",
+ "quote",
  "salsa",
  "smol_str",
  "sourcegen",
@@ -159,6 +165,19 @@ dependencies = [
  "syntax",
  "text-size",
  "typed-index-collections",
+]
+
+[[package]]
+name = "hir_ty"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "arena",
+ "basedb",
+ "hir_def",
+ "stdx",
+ "syntax",
+ "text-size",
 ]
 
 [[package]]
@@ -383,9 +402,6 @@ checksum = "61d15c83e300cce35b7c8cd39ff567c1ef42dde6d4a1a38dbdbf9a59902261bd"
 name = "sourcegen"
 version = "0.0.0"
 dependencies = [
- "proc-macro2",
- "quote",
- "ungrammar",
  "xshell",
 ]
 
@@ -410,10 +426,14 @@ version = "0.0.0"
 dependencies = [
  "parser",
  "preprocessor",
+ "proc-macro2",
+ "quote",
  "rowan",
+ "sourcegen",
  "stdx",
  "text-size",
  "tokens",
+ "ungrammar",
  "vfs",
 ]
 

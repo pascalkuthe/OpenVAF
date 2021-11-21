@@ -12,9 +12,8 @@ use crate::{
     attrs::{AttrDiagnostic, LintAttrs},
     db::HirDefDB,
     item_tree::ItemTreeNode,
-    nameres::LocalScopeId,
     DefWithBehaviourId, DefWithExprId, DisciplineAttrLoc, Expr, ExprId, FunctionLoc, Lookup,
-    ModuleLoc, NatureAttrLoc, ParamId, ParamLoc, Stmt, StmtId, VarLoc,
+    ModuleLoc, NatureAttrLoc, ParamId, ParamLoc, ScopeId, Stmt, StmtId, VarLoc,
 };
 
 use lower::LowerCtx;
@@ -27,7 +26,7 @@ mod lower;
 #[derive(Debug, Eq, PartialEq, Default)]
 pub struct Body {
     pub exprs: Arena<Expr>,
-    pub stmt_scopes: ArenaMap<Stmt, LocalScopeId>,
+    pub stmt_scopes: ArenaMap<Stmt, ScopeId>,
     pub stmts: Arena<Stmt>,
 }
 
@@ -66,21 +65,22 @@ impl AnalogBehaviour {
         let mut source_map = BodySourceMap::default();
 
         let tree = db.item_tree(root_file);
-        let def_map = db.def_map(root_file);
         let ast_id_map = db.ast_id_map(root_file);
         let ast = db.parse(root_file).tree();
 
-        let (scope, stmts): (_, Vec<_>) = match id {
+        let (curr_scope, stmts): (_, Vec<_>) = match id {
             DefWithBehaviourId::ModuleId(id) => {
                 let ModuleLoc { scope, id: item_tree } = id.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                (scope, ast.analog_behaviour().collect())
+                let item_tree = tree[item_tree].erased_id;
+                ((scope, item_tree), ast.analog_behaviour().collect())
             }
 
             DefWithBehaviourId::FunctionId(id) => {
                 let FunctionLoc { scope, id: item_tree } = id.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                (scope, ast.body().collect())
+                let item_tree = tree[item_tree].erased_id;
+                ((scope, item_tree), ast.body().collect())
             }
         };
 
@@ -90,11 +90,10 @@ impl AnalogBehaviour {
             db,
             source_map: &mut source_map,
             body: &mut body,
-            def_map: &def_map,
-            tree: &tree,
             ast_id_map: &ast_id_map,
-            curr_scope: scope.local_scope,
+            curr_scope,
             registry: &registry,
+            tree: &tree,
         };
 
         let root_stmts = stmts.into_iter().map(|stmt| ctx.collect_stmt(stmt)).collect();
@@ -141,23 +140,22 @@ impl ParamBody {
         let mut source_map = BodySourceMap::default();
 
         let tree = db.item_tree(root_file);
-        let def_map = db.def_map(root_file);
         let ast_id_map = db.ast_id_map(root_file);
         let ast = db.parse(root_file).tree();
 
         let ParamLoc { id: item_tree, scope } = id.lookup(db);
         let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
+        let item_tree = tree[item_tree].erased_id;
 
         let registry = db.lint_registry();
         let mut ctx = LowerCtx {
             db,
             source_map: &mut source_map,
             body: &mut body,
-            def_map: &def_map,
-            tree: &tree,
             ast_id_map: &ast_id_map,
-            curr_scope: scope.local_scope,
+            curr_scope: (scope, item_tree),
             registry: &registry,
+            tree: &tree,
         };
 
         let default = ctx.collect_opt_expr(ast.default());
@@ -198,7 +196,6 @@ impl ExprBody {
         let mut body = Body::default();
         let mut source_map = BodySourceMap::default();
 
-        let def_map = db.def_map(root_file);
         let tree = db.item_tree(root_file);
         let ast_id_map = db.ast_id_map(root_file);
         let ast = db.parse(root_file).tree();
@@ -207,17 +204,20 @@ impl ExprBody {
             DefWithExprId::VarId(var) => {
                 let VarLoc { scope, id: item_tree } = var.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                (ast.default(), scope)
+                let item_tree = tree[item_tree].erased_id;
+                (ast.default(), (scope, item_tree))
             }
             DefWithExprId::NatureAttrId(attr) => {
                 let NatureAttrLoc { scope, id: item_tree } = attr.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                (ast.val(), scope)
+                let item_tree = tree[item_tree].erased_id;
+                (ast.val(), (scope, item_tree))
             }
             DefWithExprId::DisciplineAttrId(attr) => {
                 let DisciplineAttrLoc { scope, id: item_tree } = attr.lookup(db);
                 let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                (ast.val(), scope)
+                let item_tree = tree[item_tree].erased_id;
+                (ast.val(), (scope, item_tree))
             }
         };
 
@@ -226,11 +226,10 @@ impl ExprBody {
             db,
             source_map: &mut source_map,
             body: &mut body,
-            def_map: &def_map,
-            tree: &tree,
             ast_id_map: &ast_id_map,
-            curr_scope: scope.local_scope,
+            curr_scope: scope,
             registry: &registry,
+            tree: &tree,
         };
 
         let val = ctx.collect_opt_expr(expr);

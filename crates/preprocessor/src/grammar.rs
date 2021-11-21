@@ -79,7 +79,6 @@ fn parse_if_body<'a, const PROCESS: bool, const CONSIDER_ELSE: bool>(
                 // x => eprintln!("skipping {:?} {}", x, p.current_text()),
             },
             PreprocessorToken::Eof => {
-                eprintln!("EOF?");
                 err.push(UnexpectedEof { expected: "`endif", span: p.current_span() });
                 break;
             }
@@ -162,9 +161,6 @@ pub(crate) fn parse_define<'a>(
                 break;
             } else {
                 let expect = p.expect(PreprocessorToken::Comma, ")", err);
-                if !expect {
-                    eprintln!("found {:?}", p.current());
-                }
                 success &= expect;
             }
         }

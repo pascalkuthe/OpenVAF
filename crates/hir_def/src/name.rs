@@ -158,7 +158,8 @@ macro_rules! keywords {
 pub mod kw {
     #[allow(bad_style, dead_code)]
     pub const use_: super::Name = super::Name::new_inline("use");
-
+    #[allow(bad_style, dead_code)]
+    pub const root: super::Name = super::Name::new_inline("$root");
     keywords! {
         above,
         abs,
@@ -319,7 +320,6 @@ pub mod kw {
         tran,
         tranif0,
         tranif1,
-        transition,
 
         units,
         unsigned,
@@ -396,6 +396,8 @@ pub mod kw_comp {
         buf,
         bufif0,
         bufif1,
+
+        transition,
     }
 }
 
@@ -433,7 +435,7 @@ pub mod sysfun {
     #[allow(bad_style, dead_code)]
     pub const value_plusargs: super::Name = super::Name::new_inline("$value$plusargs");
     #[allow(bad_style, dead_code)]
-    pub const simparam_str: super::Name = super::Name::new_inline("$simpara$str");
+    pub const simparam_str: super::Name = super::Name::new_inline("$simparam$str");
 
     system_functions! {
         display,
@@ -482,7 +484,7 @@ pub mod sysfun {
         dist_erlang,
         dist_normal,
         dist_t,
-        rando,
+        random,
         arandom,
         rdist_chi_square,
         rdist_exponential,
