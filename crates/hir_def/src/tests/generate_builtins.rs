@@ -1,12 +1,9 @@
-use ahash::AHashSet;
 use indexmap::IndexSet;
 use quote::{format_ident, quote};
-use sourcegen::{
-    add_preamble, ensure_file_contents, project_root, reformat, to_upper_snake_case,
-};
+use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat, to_upper_snake_case};
 use stdx::iter::multiunzip;
 
-const BUILTINS: [&str; 132] = [
+const BUILTINS: [&str; 134] = [
     "analysis",
     "acos",
     "acosh",
@@ -24,6 +21,7 @@ const BUILTINS: [&str; 132] = [
     "flicker_noise",
     "floor",
     "flow",
+    "potential",
     "hypot",
     "idt",
     "idtmod",
@@ -47,7 +45,7 @@ const BUILTINS: [&str; 132] = [
     "last_crossing",
     "slew",
     "white_noise",
-    // "transition", 
+    // "transition",
     "absdelay",
     "zi_nd",
     "zi_np",
@@ -145,6 +143,7 @@ const BUILTINS: [&str; 132] = [
     // "$table_model",
     "$value$plusargs",
     "$simparam$str",
+    "abs",
 ];
 
 #[test]

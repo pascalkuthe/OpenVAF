@@ -3,9 +3,9 @@ mod ast_id_map;
 mod attrs;
 pub mod body;
 pub mod db;
-mod expr;
+pub mod expr;
 mod item_tree;
-mod name;
+pub mod name;
 pub mod nameres;
 mod path;
 mod types;
@@ -18,7 +18,7 @@ mod tests;
 
 use arena::Idx;
 use basedb::FileId;
-use nameres::{DefMap, PathResolveError, ScopeDefItemKind};
+use nameres::{DefMap, LocalNodeId, PathResolveError, ScopeDefItemKind};
 use stdx::{impl_from, impl_from_typed};
 use syntax::{ast::BlockStmt, AstNode};
 
@@ -76,7 +76,7 @@ impl ScopeId {
     pub fn resolve_path(
         &self,
         db: &dyn HirDefDB,
-        path: Path,
+        path: &Path,
     ) -> Result<ScopeDefItem, PathResolveError> {
         if path.is_root_path {
             DefMap::resolve_root_path(db, self.root_file, &path.segments)
@@ -88,7 +88,7 @@ impl ScopeId {
     pub fn resolve_item_path<T: ScopeDefItemKind>(
         &self,
         db: &dyn HirDefDB,
-        path: Path,
+        path: &Path,
     ) -> Result<T, PathResolveError> {
         if path.is_root_path {
             DefMap::resolve_root_item_path_in_scope(db, self.root_file, &path.segments)
@@ -112,7 +112,7 @@ impl<N: ItemTreeNode> ItemLoc<N> {
         let ast_id = N::lookup(&self.item_tree(db), self.id).ast_id();
         db.ast_id_map(self.scope.root_file)
             .get(ast_id)
-            .to_node(&db.parse(self.scope.root_file).tree().syntax())
+            .to_node(db.parse(self.scope.root_file).tree().syntax())
     }
 }
 
@@ -212,7 +212,6 @@ impl_intern!(
     intern_discipline_attr,
     lookup_intern_discipline_attr
 );
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithExprId {
     VarId(VarId),
@@ -282,53 +281,27 @@ impl TryFrom<ScopeDefItem> for DefWithBehaviourId {
     }
 }
 
-pub type NodeId = Idx<Node>;
-
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
-pub enum NodeTypeDecl {
-    Net(ItemTreeId<Net>),
-    Port(ItemTreeId<Port>),
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct NodeLoc {
+    pub scope: ScopeId,
+    pub id: LocalNodeId,
 }
 
-impl_from_typed!(
-    Net(ItemTreeId<Net>),
-    Port(ItemTreeId<Port>) for NodeTypeDecl
-);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(salsa::InternId);
 
-impl NodeTypeDecl {
-    pub fn name<'a>(&self, tree: &'a ItemTree) -> &'a Name {
-        match *self {
-            NodeTypeDecl::Net(net) => &tree[net].name,
-            NodeTypeDecl::Port(port) => &tree[port].name,
-        }
+impl_intern_key!(NodeId);
+impl Intern for NodeLoc {
+    type ID = NodeId;
+
+    fn intern(self, db: &dyn db::HirDefDB) -> Self::ID {
+        db.intern_node(self)
     }
 }
+impl Lookup for NodeId {
+    type Data = NodeLoc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Node {
-    port: Option<ItemTreeId<Port>>,
-    discipline: Option<NodeTypeDecl>,
-    gnd_declaration: Option<NodeTypeDecl>,
-}
-
-impl Node {
-    pub fn discipline<'a>(&self, tree: &'a ItemTree) -> Option<&'a Name> {
-        self.discipline.map(|d| d.name(tree))
-    }
-
-    pub fn is_input(&self, tree: &ItemTree) -> bool {
-        self.port.map_or(false, |port| tree[port].is_input)
-    }
-
-    pub fn is_output(&self, tree: &ItemTree) -> bool {
-        self.port.map_or(false, |port| tree[port].is_output)
-    }
-
-    pub fn is_port(&self) -> bool {
-        self.port.is_some()
-    }
-
-    pub fn is_gnd(&self) -> bool {
-        self.gnd_declaration.is_some()
+    fn lookup(&self, db: &dyn db::HirDefDB) -> Self::Data {
+        db.lookup_intern_node(*self)
     }
 }

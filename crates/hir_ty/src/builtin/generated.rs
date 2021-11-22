@@ -2,7 +2,7 @@
 
 use super::*;
 use hir_def::BuiltIn;
-const BUILTIN_INFO: [BuiltinInfo; 113usize] = [
+const BUILTIN_INFO: [BuiltinInfo; 115usize] = [
     ANALYSIS,
     ACOS,
     ACOSH,
@@ -20,6 +20,7 @@ const BUILTIN_INFO: [BuiltinInfo; 113usize] = [
     FLICKER_NOISE,
     FLOOR,
     FLOW,
+    POTENTIAL,
     HYPOT,
     IDT,
     IDTMOD,
@@ -116,5 +117,6 @@ const BUILTIN_INFO: [BuiltinInfo; 113usize] = [
     ANALOG_PORT_ALIAS,
     VALUE_PLUSARGS,
     SIMPARAM_STR,
+    ABS,
 ];
 pub fn bultin_info(builtin: BuiltIn) -> BuiltinInfo { BUILTIN_INFO[builtin as u8 as usize] }

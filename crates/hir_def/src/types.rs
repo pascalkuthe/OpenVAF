@@ -1,3 +1,5 @@
+use std::iter::successors;
+
 // use std::iter::successors;
 use stdx::impl_display;
 // use stdx::impl_display;
@@ -18,13 +20,8 @@ pub enum Type {
     Bool,
     String,
     Array { ty: Box<Type>, len: u32 },
+    EmptyArray,
     Void,
-    // NetDiscipline(DisciplineId),
-    // Branch(DisciplineId),
-    // VoltageAccess(DisciplineId),
-    // FlowAccess(DisciplineId),
-    // Function(FunctionSignature),
-    // Parameter(Box<Type>),
 }
 
 use Type::*;
@@ -36,61 +33,117 @@ impl_display! {
         Bool => "integer";
         Void => "void";
         String => "string";
+        EmptyArray => "_[0:0]";
         Array{ty,len} => "{}[0:{}]",ty,len;
     }
 }
 
-// impl Type {
-//     pub fn is_numeric(&self) -> bool {
-//         matches!(self, Type::Real | Type::Integer)
-//     }
+impl Type {
+    pub fn is_numeric(&self) -> bool {
+        matches!(self, Type::Real | Type::Integer | Type::Bool)
+    }
 
-//     pub fn matches(&self, requirement: TypeRequirement) -> bool {
-//         match requirement{
+    pub fn is_convertable_to(&self, dst: &Type) -> bool {
+        match (dst, self) {
+            (Type::Real, Type::Integer | Type::Bool)
+            | (Type::Integer, Type::Bool)
+            | (Type::Err, _)
+            | (_, Type::Err)
+            | (Type::EmptyArray, Type::Array { len: 0, .. })
+            | (Type::Array { len: 0, .. }, Type::EmptyArray)
+            | (Type::Bool, Type::Integer) => true,
 
-//         }
-//         self == dst
-//             || matches!((dst, self), (Type::Real, Type::Integer))
-//             // VerilogA has no boolean type. The Type is only an implementation detail used for
-//             // better code generation as such these two types are always convertable
-//             || matches!((dst, self), (Type::Integer, Type::Bool))
-//             || matches!((dst, self), (Type::Bool, Type::Integer))
-//             || self.dim() == dst.dim() && self.base_type().is_convertable_to(dst.base_type())
-//     }
+            _ => {
+                dst == self
+                    || self.dim() == dst.dim()
+                        && self.base_type().is_convertable_to(dst.base_type())
+            }
+        }
+    }
 
-//     pub fn base_type(&self) -> &Type {
-//         let mut curr = self;
-//         while let Type::Array { ty, .. } = self {
-//             curr = ty
-//         }
-//         curr
-//     }
+    pub fn is_semantically_equivalent(&self, dst: &Type) -> bool {
+        match (dst, self) {
+            (Type::Real, Type::Integer | Type::Bool)
+            | (Type::Integer, Type::Bool)
+            | (Type::EmptyArray, Type::Array { len: 0, .. })
+            | (Type::Array { len: 0, .. }, Type::EmptyArray)
+            | (Type::Bool, Type::Integer) => true,
 
-//     pub fn dim(&self) -> Vec<u32> {
-//         if let Type::Array { ref ty, len } = *self {
-//             let mut dims: Vec<_> = successors(Some((&*ty, len)), |(ty, _)| {
-//                 if let Type::Array { ref ty, len } = ***ty {
-//                     Some((&*ty, len))
-//                 } else {
-//                     None
-//                 }
-//             })
-//             .map(|(_, len)| len)
-//             .collect();
-//             dims.reverse();
-//             dims
-//         } else {
-//             vec![]
-//         }
-//     }
+            _ => {
+                dst == self
+                    || self.dim() == dst.dim()
+                        && self.base_type().is_semantically_equivalent(dst.base_type())
+            }
+        }
+    }
 
-//     pub fn is_assignable_to(&self, dst: &Type) -> bool {
-//         self.is_convertable_to(dst)
-//             || (self.base_type().is_numeric()
-//                 && dst.base_type().is_numeric()
-//                 && self.dim() == dst.dim())
-//     }
-// }
+
+
+    pub fn union(&self, other: &Type) -> Option<Type> {
+        match (self, other) {
+            (Type::Real, Type::Integer | Type::Bool) | (Type::Integer | Type::Bool, Type::Real) => {
+                Some(Type::Real)
+            }
+            (Type::Bool, Type::Integer) | (Type::Integer, Type::Bool) => Some(Type::Integer),
+
+            (
+                Type::EmptyArray | Type::Array { len: 0, .. },
+                Type::EmptyArray | Type::Array { len: 0, .. },
+            ) => Some(Type::EmptyArray),
+
+            _ if self == other => Some(self.clone()),
+            _ if self.dim() == other.dim() => {
+                let base_type1 = self.base_type();
+                let base_type2 = self.base_type();
+                let ty = base_type1.union(base_type2)?;
+                debug_assert_ne!(self.dim(), &[]);
+                Some(ty.to_dim(&self.dim()))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn base_type(&self) -> &Type {
+        let mut curr = self;
+        while let Type::Array { ty, .. } = self {
+            curr = ty
+        }
+        curr
+    }
+
+    pub fn to_dim(self, dim: &[u32]) -> Type {
+        let mut ty = self;
+        for len in dim.iter().rev().copied() {
+            ty = Type::Array { ty: Box::new(ty), len };
+        }
+        ty
+    }
+
+    pub fn dim(&self) -> Vec<u32> {
+        if let Type::Array { ref ty, len } = *self {
+            let mut dims: Vec<_> = successors(Some((&*ty, len)), |(ty, _)| {
+                if let Type::Array { ref ty, len } = ***ty {
+                    Some((&*ty, len))
+                } else {
+                    None
+                }
+            })
+            .map(|(_, len)| len)
+            .collect();
+            dims.reverse();
+            dims
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn is_assignable_to(&self, dst: &Type) -> bool {
+        self.is_convertable_to(dst)
+            || (self.base_type().is_numeric()
+                && dst.base_type().is_numeric()
+                && self.dim() == dst.dim())
+    }
+}
 
 pub trait AsType {
     fn as_type(&self) -> Type;

@@ -175,6 +175,7 @@ dependencies = [
  "arena",
  "basedb",
  "hir_def",
+ "salsa",
  "stdx",
  "syntax",
  "text-size",

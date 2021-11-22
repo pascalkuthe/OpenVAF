@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx};
-use basedb::lints::ErasedItemTreeId;
 use basedb::FileId;
 use bitset::BitSet;
 use syntax::AstNode;
 
-use crate::item_tree::{Block, Discipline, Net, Port};
+use crate::item_tree::{Discipline, Net, Port};
 use crate::name::kw;
+use crate::nameres::Node;
 use crate::{
     db::HirDefDB,
     item_tree::{BlockScopeItem, ItemTree, ItemTreeId, ItemTreeNode, Module, RootItem},
@@ -16,7 +16,7 @@ use crate::{
     BlockLoc, DisciplineAttrLoc, DisciplineLoc, Intern, ItemLoc, ModuleLoc, Name, Nature,
     NatureAttrLoc, NatureId, NatureLoc,
 };
-use crate::{BlockId, Lookup, Node, NodeId, ScopeId};
+use crate::{BlockId, Lookup, NodeId, NodeLoc, ScopeId};
 use stdx::vec::SliceExntesions;
 
 use super::{DefMap, LocalScopeId, Scope, ScopeDefItem, ScopeDefItemKind, ScopeOrigin};
@@ -28,7 +28,7 @@ pub fn collect_root_def_map(db: &dyn HirDefDB, root_file: FileId) -> Arc<DefMap>
     let mut collector = DefCollector {
         map: DefMap {
             scopes: Arena::with_capacity(scope_cnt),
-            nodes: Arena::with_capacity(tree.data.nets.len()),
+            // nodes: Arena::with_capacity(tree.data.nets.len()),
             block: None,
         },
         tree,
@@ -57,7 +57,7 @@ pub fn collect_block_map(db: &dyn HirDefDB, block: BlockId) -> Option<Arc<DefMap
     }
 
     let mut collector = DefCollector {
-        map: DefMap { scopes: Arena::with_capacity(1), nodes: Arena::new(), block: Some(block) },
+        map: DefMap { scopes: Arena::with_capacity(1), block: Some(block) },
         tree,
         db,
         root_file: parent.root_file,
@@ -97,34 +97,39 @@ impl DefCollector<'_> {
         res
     }
 
-    fn insert_port(&mut self, id: ItemTreeId<Port>, scope: LocalScopeId) {
+    fn insert_port(&mut self, id: ItemTreeId<Port>, local_scope: LocalScopeId) {
         let port = &self.tree[id];
+        debug_assert_eq!(self.map.block, None);
 
         let node = Node {
             port: Some(id),
             discipline: port.discipline.as_ref().map(|_| id.into()),
             gnd_declaration: port.is_gnd.then(|| id.into()),
+            scope: ScopeId { root_file: self.root_file, local_scope, block: self.map.block },
         };
 
-        self.insert_or_update_node(node, scope, &port.name)
+        self.insert_or_update_node(node, local_scope, &port.name)
     }
 
-    fn insert_net(&mut self, id: ItemTreeId<Net>, scope: LocalScopeId) {
+    fn insert_net(&mut self, id: ItemTreeId<Net>, local_scope: LocalScopeId) {
         let net = &self.tree[id];
 
+        debug_assert_eq!(self.map.block, None);
         let node = Node {
             port: None,
             discipline: net.discipline.as_ref().map(|_| id.into()),
             gnd_declaration: net.is_gnd.then(|| id.into()),
+            scope: ScopeId { root_file: self.root_file, local_scope, block: self.map.block },
         };
 
-        self.insert_or_update_node(node, scope, &net.name)
+        self.insert_or_update_node(node, local_scope, &net.name)
     }
 
     fn insert_or_update_node(&mut self, node: Node, scope: LocalScopeId, name: &Name) {
         match self.resolve_existing_decl_in_scope::<NodeId>(scope, name) {
             Some(res) => {
-                let existing_node = &mut self.map.nodes[res];
+                let res = res.lookup(self.db).id;
+                let existing_node = &mut self.map.scopes[scope].nodes[res];
                 if let Some(port) = node.port {
                     if let Some(other) = existing_node.port.replace(port) {
                         todo!("direction redeclared for {:?}", other)
@@ -144,7 +149,16 @@ impl DefCollector<'_> {
                 }
             }
             None => {
-                let node = self.map.nodes.push_and_get_key(node);
+                let id = self.map[scope].nodes.push_and_get_key(node);
+                let node = NodeLoc {
+                    scope: ScopeId {
+                        root_file: self.root_file,
+                        local_scope: scope,
+                        block: self.map.block,
+                    },
+                    id,
+                }
+                .intern(self.db);
                 self.insert_decl(scope, name.clone(), node)
             }
         }
@@ -396,7 +410,7 @@ impl DefCollector<'_> {
             parent: None,
             children: HashMap::new(),
             declarations: HashMap::new(),
-            duplicate_children: Vec::new(),
+            nodes: Arena::new(),
         });
 
         debug_assert_eq!(root_scope, self.map.root());
@@ -438,12 +452,6 @@ impl DefCollector<'_> {
         id: impl Into<ScopeDefItem>,
     ) {
         self.insert_decl(parent, name.clone(), id);
-        if let Some(duplicate) = self.map.scopes[parent].children.insert(name, scope) {
-            // No need for diagnostic here already emitted in insert_item_decl
-            // Save duplicate children to a seperate a vector so that they can still be found in
-            // block_scope(..)
-            self.map.scopes[parent].duplicate_children.push(duplicate)
-        }
     }
 
     fn insert_item_decl<N>(&mut self, dst: LocalScopeId, name: Name, item_tree: ItemTreeId<N>)
@@ -503,7 +511,7 @@ impl DefCollector<'_> {
             children: HashMap::new(),
             // visible_items: HashMap::new(),
             declarations: HashMap::new(),
-            duplicate_children: Vec::new(),
+            nodes: Arena::new(),
         })
     }
 }

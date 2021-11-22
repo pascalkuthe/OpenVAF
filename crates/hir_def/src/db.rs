@@ -2,15 +2,7 @@ use std::sync::Arc;
 
 use basedb::{BaseDB, FileId};
 
-use crate::{
-    body::{AnalogBehaviour, BodySourceMap, ExprBody, ParamBody},
-    item_tree::ItemTree,
-    nameres::DefMap,
-    AstIdMap, BlockId, BlockLoc, BranchId, BranchLoc, DefWithBehaviourId, DefWithBodyId,
-    DefWithExprId, DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionId,
-    FunctionLoc, ModuleId, ModuleLoc, NatureAttrId, NatureAttrLoc, NatureId, NatureLoc, ParamId,
-    ParamLoc, VarId, VarLoc,
-};
+use crate::{AstIdMap, BlockId, BlockLoc, BranchId, BranchLoc, DefWithBehaviourId, DefWithBodyId, DefWithExprId, DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionId, FunctionLoc, ModuleId, ModuleLoc, NatureAttrId, NatureAttrLoc, NatureId, NatureLoc, NodeId, NodeLoc, ParamId, ParamLoc, VarId, VarLoc, body::{AnalogBehaviour, BodySourceMap, ExprBody, ParamBody}, data::{DisciplineData, NatureData, NodeData, ParamData, VarData}, item_tree::ItemTree, nameres::DefMap};
 
 #[salsa::query_group(InternDatabase)]
 pub trait InternDB: BaseDB {
@@ -34,6 +26,8 @@ pub trait InternDB: BaseDB {
     fn intern_nature_attr(&self, loc: NatureAttrLoc) -> NatureAttrId;
     #[salsa::interned]
     fn intern_discipline_attr(&self, loc: DisciplineAttrLoc) -> DisciplineAttrId;
+    #[salsa::interned]
+    fn intern_node(&self, loc: NodeLoc) -> NodeId;
 }
 
 #[salsa::query_group(HirDefDatabase)]
@@ -78,6 +72,21 @@ pub trait HirDefDB: InternDB {
 
     #[salsa::transparent]
     fn body_source_map(&self, root_file: FileId, def: DefWithBodyId) -> Arc<BodySourceMap>;
+
+    #[salsa::invoke(DisciplineData::discipline_data_query)]
+    fn disipline_data(&self, discipline: DisciplineId) -> Arc<DisciplineData>;
+
+    #[salsa::invoke(NatureData::nature_data_query)]
+    fn nature_data(&self, nature: NatureId) -> Arc<NatureData>;
+
+    #[salsa::invoke(VarData::var_data_query)]
+    fn var_data(&self, var: VarId) -> Arc<VarData>;
+
+    #[salsa::invoke(ParamData::param_data_query)]
+    fn param_data(&self, param: ParamId) -> Arc<ParamData>;
+
+    #[salsa::invoke(NodeData::node_data_query)]
+    fn node_data(&self, node: NodeId) -> Arc<NodeData>;
 }
 
 fn ast_id_map(db: &dyn HirDefDB, root_file: FileId) -> Arc<AstIdMap> {

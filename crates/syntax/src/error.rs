@@ -54,6 +54,9 @@ pub enum SyntaxError {
     },
     IllegalInfToken{
         range: TextRange
+    },
+    UnitsExpectedStringLiteral{
+        range: TextRange
     }
 }
 
@@ -73,5 +76,6 @@ impl_display! {
         IllegalBranchNodeCnt { cnt,..} => "branch declaration require 1 or 2 nets; found {}", cnt;
         IllegalBranchNodeExpr{..} => "illegal expr was used to declare a branch node!";
         IllegalInfToken{..} => "unexpected token 'inf'; expected an expression";
+        UnitsExpectedStringLiteral{..} => "'units' attribute must be a string literal";
     }
 }

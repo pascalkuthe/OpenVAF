@@ -2,15 +2,15 @@ use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 
 use crate::builtin::{insert_builtin_scope, BuiltIn};
+use crate::item_tree::{ItemTreeId, Net, Port};
 use crate::name::kw;
 use crate::{
     db::HirDefDB, BlockId, BranchId, DisciplineAttrId, DisciplineId, FunctionId, Lookup, ModuleId,
     NatureAttrId, NatureId, NodeId, ParamId, VarId,
 };
-use crate::{Name, Node};
+use crate::{ItemTree, Name, ScopeId};
 use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx};
-use basedb::lints::ErasedItemTreeId;
 use basedb::FileId;
 use once_cell::sync::Lazy;
 use stdx::{impl_from, impl_from_typed};
@@ -22,7 +22,6 @@ mod diagnostics;
 pub struct DefMap {
     block: Option<BlockId>,
     scopes: Arena<Scope>,
-    nodes: Arena<Node>,
 }
 
 impl Index<LocalScopeId> for DefMap {
@@ -160,12 +159,15 @@ pub struct Scope {
     pub origin: ScopeOrigin,
     parent: Option<LocalScopeId>,
     pub children: HashMap<Name, LocalScopeId>,
-    duplicate_children: Vec<LocalScopeId>,
-    /// Items declared in this scopes
     pub declarations: HashMap<Name, ScopeDefItem>,
+    nodes: Arena<Node>,
 }
 
 impl DefMap {
+    pub fn node(&self, scope: LocalScopeId, id: LocalNodeId) -> &Node {
+        &self.scopes[scope].nodes[id]
+    }
+
     pub fn def_map_query(db: &dyn HirDefDB, root_file: FileId) -> Arc<DefMap> {
         collect::collect_root_def_map(db, root_file)
     }
@@ -366,4 +368,58 @@ pub enum PathResolveError {
     NotFoundIn { name: Name, scope: Name },
     ExpectedScope { name: Name, found: ScopeDefItem },
     ExpectedItemKind { name: Name, expected: &'static str, found: ScopeDefItem },
+}
+
+// TODO move this to the module lvl so that these ids are somewhat persistent when working with
+// multiple modules
+pub type LocalNodeId = Idx<Node>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
+pub enum NodeTypeDecl {
+    Net(ItemTreeId<Net>),
+    Port(ItemTreeId<Port>),
+}
+
+impl_from_typed!(
+    Net(ItemTreeId<Net>),
+    Port(ItemTreeId<Port>) for NodeTypeDecl
+);
+
+impl NodeTypeDecl {
+    pub fn name<'a>(&self, tree: &'a ItemTree) -> &'a Name {
+        match *self {
+            NodeTypeDecl::Net(net) => &tree[net].name,
+            NodeTypeDecl::Port(port) => &tree[port].name,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node {
+    port: Option<ItemTreeId<Port>>,
+    discipline: Option<NodeTypeDecl>,
+    gnd_declaration: Option<NodeTypeDecl>,
+    scope: ScopeId,
+}
+
+impl Node {
+    pub fn discipline<'a>(&self, tree: &'a ItemTree) -> Option<&'a Name> {
+        self.discipline.map(|d| d.name(tree))
+    }
+
+    pub fn is_input(&self, tree: &ItemTree) -> bool {
+        self.port.map_or(false, |port| tree[port].is_input)
+    }
+
+    pub fn is_output(&self, tree: &ItemTree) -> bool {
+        self.port.map_or(false, |port| tree[port].is_output)
+    }
+
+    pub fn is_port(&self) -> bool {
+        self.port.is_some()
+    }
+
+    pub fn is_gnd(&self) -> bool {
+        self.gnd_declaration.is_some()
+    }
 }

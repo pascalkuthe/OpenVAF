@@ -1,34 +1,26 @@
-use hir_def::Type;
-
 mod generated;
 
-use crate::requirements::TypeRequirement;
+use crate::requirements::{SignatureData, TyRequirement};
+use generated::bultin_info;
+use hir_def::{BuiltIn, Type};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct BuiltinInfo {
-    pub signatures: &'static [Signature],
+    pub signatures: &'static [SignatureData],
     pub min_args: usize,
     pub max_args: Option<usize>,
     pub has_side_effects: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Signature {
-    args: &'static [TypeRequirement],
-    return_ty: Type,
-}
-
-pub use  generated::bultin_info;
-
 impl BuiltinInfo {
-    const fn new(signatures: &'static [Signature], has_side_effects: bool) -> BuiltinInfo {
+    const fn new(signatures: &'static [SignatureData], has_side_effects: bool) -> BuiltinInfo {
         let mut min_args = None;
         let mut max_args = None;
         let mut i = 0;
         while i < signatures.len() {
             let arg_cnt = signatures[i].args.len();
             match min_args {
-                None => max_args = Some(arg_cnt),
+                None => min_args = Some(arg_cnt),
                 Some(old_min) if arg_cnt < old_min => min_args = Some(arg_cnt),
                 _ => (),
             }
@@ -46,11 +38,11 @@ impl BuiltinInfo {
         BuiltinInfo { signatures, min_args, max_args, has_side_effects }
     }
 
-    const fn impure_fn(signatures: &'static [Signature]) -> BuiltinInfo {
+    const fn impure_fn(signatures: &'static [SignatureData]) -> BuiltinInfo {
         BuiltinInfo::new(signatures, true)
     }
 
-    const fn pure_fn(signatures: &'static [Signature]) -> BuiltinInfo {
+    const fn pure_fn(signatures: &'static [SignatureData]) -> BuiltinInfo {
         BuiltinInfo::new(signatures, false)
     }
 
@@ -58,13 +50,41 @@ impl BuiltinInfo {
         BuiltinInfo { signatures: &[], min_args, max_args, has_side_effects: false }
     }
 
-    const fn specical_cased_impure(min_args: usize, max_args: Option<usize>) -> BuiltinInfo {
-        BuiltinInfo { signatures: &[], min_args, max_args, has_side_effects: true }
+    const fn specical_cased_impure(min_args: usize) -> BuiltinInfo {
+        BuiltinInfo { signatures: &[], min_args, max_args: None, has_side_effects: true }
+    }
+
+    const fn varargs(signatures: &'static [SignatureData], has_side_effects: bool) -> BuiltinInfo {
+        let mut min_args = None;
+        let mut i = 0;
+        while i < signatures.len() {
+            let arg_cnt = signatures[i].args.len();
+            match min_args {
+                None => min_args = Some(arg_cnt),
+                Some(old_min) if arg_cnt < old_min => min_args = Some(arg_cnt),
+                _ => (),
+            }
+
+            i += 1;
+        }
+        BuiltinInfo {
+            signatures,
+            has_side_effects,
+            max_args: None,
+            min_args: min_args.unwrap_or(0),
+        }
     }
 }
 
+impl From<BuiltIn> for BuiltinInfo {
+    fn from(builtin: BuiltIn) -> Self {
+        bultin_info(builtin)
+    }
+}
+
+use std::borrow::Cow;
+use TyRequirement::*;
 use Type::*;
-use TypeRequirement::*;
 
 macro_rules! bultins {
     {
@@ -74,8 +94,8 @@ macro_rules! bultins {
         $($rem: tt)*
     } => {
         const $name: BuiltinInfo = BuiltinInfo::pure_fn(
-            &[$(Signature{
-                args: &[$($args),*],
+            &[$(SignatureData{
+                args: Cow::Borrowed(&[$($args),*]),
                 return_ty: Type::$ty,
             }),*]
         );
@@ -89,8 +109,8 @@ macro_rules! bultins {
         $($rem: tt)*
     } => {
         const $name: BuiltinInfo = BuiltinInfo::impure_fn(
-            &[$(Signature{
-                args: &[$($args),*],
+            &[$(SignatureData{
+                args: Cow::Borrowed(&[$($args),*]),
                 return_ty: Type::$ty,
             }),*]
         );
@@ -100,11 +120,32 @@ macro_rules! bultins {
     {} => {};
 }
 
+
+// WARNING: THE ORDER OF THE SIGNATURES IS IMPORTANT AND RELIED UPON TO BE STABLE
+// ALWAYS ADD NEW SIGNATURES AT THE END!
+
 bultins! {
+    const fn FLOW = {
+        fn(Branch) -> Real;
+        fn(Node,Node) -> Real;
+        fn(Node) -> Real;
+        fn(PortFlow) -> Real;
+    }
+
+    const fn MAX = {
+        fn(Val(Real),Val(Real)) -> Real;
+        fn(Val(Integer),Val(Integer)) -> Integer;
+    }
+
+    const fn ABS = {
+        fn(Val(Real)) -> Real;
+        fn(Val(Integer)) -> Integer;
+    }
 
     const fn ANALYSIS = {
         fn(Val(String)) -> Bool;
     }
+
     const fn AC_STIM = {
         fn() -> Real;
         fn(Val(String)) -> Real;
@@ -299,7 +340,7 @@ bultins! {
 
 
     fn ANALOG_NODE_ALIAS = {
-        fn(Net,Val(String)) -> Integer;
+        fn(Node,Val(String)) -> Integer;
     }
 
     const fn PARAM_GIVEN = {
@@ -322,15 +363,25 @@ bultins! {
 
 // TODO TABLE_MODEL
 
-const MAX: BuiltinInfo = BuiltinInfo::specical_cased_pure(2, Some(2));
 const DDX: BuiltinInfo = BuiltinInfo::specical_cased_pure(2, Some(2));
-const FLOW: BuiltinInfo = BuiltinInfo::specical_cased_pure(1, Some(2));
-const POT: BuiltinInfo = BuiltinInfo::specical_cased_pure(1, Some(2));
-const DISPLAY_FUN: BuiltinInfo = BuiltinInfo::specical_cased_impure(0, None);
-const FDISPLAY_FUN: BuiltinInfo = BuiltinInfo::specical_cased_impure(1, None);
-const SFORMAT: BuiltinInfo = BuiltinInfo::specical_cased_impure(2, None);
-const LIMIT: BuiltinInfo = BuiltinInfo::specical_cased_impure(2, None);
-const FATAL: BuiltinInfo = BuiltinInfo::specical_cased_impure(1, None);
+const DISPLAY_FUN: BuiltinInfo = BuiltinInfo::varargs(&[], true);
+const FDISPLAY_FUN: BuiltinInfo = BuiltinInfo::varargs(
+    &[SignatureData { args: Cow::Borrowed(&[Val(Integer)]), return_ty: Type::Void }],
+    true,
+);
+const SWRITE: BuiltinInfo = BuiltinInfo::varargs(
+    &[SignatureData { args: Cow::Borrowed(&[Var(String)]), return_ty: Type::Void }],
+    true,
+);
+const SFORMAT: BuiltinInfo = BuiltinInfo::varargs(
+    &[SignatureData { args: Cow::Borrowed(&[Var(String), Val(String)]), return_ty: Type::Void }],
+    true,
+);
+const LIMIT: BuiltinInfo = BuiltinInfo::specical_cased_impure(2);
+const FATAL: BuiltinInfo = BuiltinInfo::varargs(
+    &[SignatureData { args: Cow::Borrowed(&[Val(Integer)]), return_ty: Type::Void }],
+    true,
+);
 
 macro_rules! copied_builtins {
     {$($name: ident = $val: ident)*}=> {
@@ -397,7 +448,6 @@ copied_builtins! {
     FDEBUG = FDISPLAY_FUN
     SSCANF = FDISPLAY_FUN
     FSCANF = FDISPLAY_FUN
-    SWRITE = FDISPLAY_FUN
 
     REWIND = BASIC_IO
     FEOF = BASIC_IO
@@ -434,4 +484,6 @@ copied_builtins! {
     DIST_NORMAL = DIST_2_ARG
 
     ANALOG_PORT_ALIAS = ANALOG_NODE_ALIAS
+
+    POTENTIAL = FLOW
 }

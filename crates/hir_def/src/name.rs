@@ -494,6 +494,7 @@ pub mod sysfun {
         rdist_normal,
         rdist_t,
 
+        abs,
         clog2,
         ln,
         log10,
@@ -517,6 +518,8 @@ pub mod sysfun {
         asinh,
         acosh,
         atanh,
+        max,
+        min,
 
         temperature,
         vt,

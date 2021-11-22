@@ -1,5 +1,9 @@
-use crate::T;
+use crate::{
+    ast::{Expr, LiteralKind},
+    T,
+};
 use rowan::TextRange;
+
 use tokens::SyntaxKind;
 
 use crate::{
@@ -16,6 +20,7 @@ pub(crate) fn validate(root: &SyntaxNode, errors: &mut Vec<SyntaxError>) {
                 ast::Function(fun) => validate_function(fun, errors),
                 ast::BranchDecl(decl) => validate_branch_decl(decl, errors),
                 ast::DisciplineDecl(decl) => validate_discipline_decl(decl,errors),
+                ast::NatureAttr(attr) => validate_nature_attr(attr,errors),
         ast::Literal(decl) => validate_literal(decl, errors),
                 _ => ()
             }
@@ -35,6 +40,18 @@ fn is_valid_inf_position(s: SyntaxNode) -> bool {
         }
     }
     false
+}
+
+fn validate_nature_attr(attr: ast::NatureAttr, errors: &mut Vec<SyntaxError>) {
+    if attr.name().map_or(false, |name| name.text() == "units") {
+        if let Some(Expr::Literal(literal)) = attr.val() {
+            if !matches!(literal.kind(), LiteralKind::String(_)) {
+                errors.push(SyntaxError::UnitsExpectedStringLiteral {
+                    range: literal.syntax().text_range(),
+                })
+            }
+        }
+    }
 }
 
 fn validate_literal(literal: ast::Literal, errors: &mut Vec<SyntaxError>) {
