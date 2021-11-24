@@ -17,7 +17,7 @@ use crate::{
     db::HirDefDB,
     name::{kw, AsIdent, AsName},
     types::AsType,
-    AstIdMap, Name, Path,
+    AstIdMap, Literal, Name, Path,
 };
 
 use super::{
@@ -151,6 +151,7 @@ impl Ctx {
         let mut access = None;
         let mut ddt_nature = None;
         let mut idt_nature = None;
+        let mut units = None;
         for attr in decl.nature_attrs() {
             if let Some(name) = attr.name().map(|name| name.as_name()) {
                 use kw::raw as kw;
@@ -171,6 +172,17 @@ impl Ctx {
                         if let Some(name) = attr.val().and_then(|e| e.as_ident()) {
                             idt_nature = Some(name);
                             continue;
+                        }
+                    }
+
+                    kw::units if units.is_none() => {
+                        if let Some(Literal::String(val)) =
+                            attr.val().and_then(|e| e.as_literal()).map(|lit| lit.into())
+                        {
+                            units = Some(val);
+                            // Still add units as a normal attribute
+                            // Its essentially just a value and just needs to be extracted here for
+                            // typechecking purposes
                         }
                     }
 
@@ -195,6 +207,7 @@ impl Ctx {
             access,
             ddt_nature,
             idt_nature,
+            units,
             attrs: IdxRange::new(attr_start..attr_end),
             erased_id,
         };

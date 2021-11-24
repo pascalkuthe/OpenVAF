@@ -1,13 +1,16 @@
 use ahash::AHashMap;
 use basedb::lints::{ErasedItemTreeId, Lint, LintLevel, LintRegistry, LintSrc};
-
 use syntax::{
     ast::{self, AstToken, AttrIter, LiteralKind},
     AstNode, TextRange,
 };
 
-mod diagnostics;
 pub use diagnostics::AttrDiagnostic;
+
+mod diagnostics;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LintAttrs {

@@ -170,7 +170,10 @@ fn func_decl(p: &mut Parser, m: Marker) {
 
 const FUNC_ARG_RECOVER: TokenSet = TokenSet::new(&[EOF, ENDMODULE_KW]);
 fn func_arg(p: &mut Parser, m: Marker) {
+    let direction = p.start();
     p.bump_ts(DIRECTION_TS);
+    direction.complete(p, DIRECTION);
+
     decl_list(p, T![;], decl_name, FUNC_ARG_RECOVER);
     p.eat(T![;]);
     m.complete(p, FUNCTION_ARG);

@@ -1,7 +1,4 @@
-use crate::{
-    db::{HirDefDB, HirDefDatabase, InternDatabase},
-    nameres::{DefMap, LocalScopeId},
-};
+use crate::{db::{HirDefDB, HirDefDatabase, InternDatabase}, nameres::{DefMap, LocalScopeId, ScopeDefItem}};
 use basedb::{
     diagnostics::{sink::Buffer, Config, ConsoleSink, DiagnosticSink},
     lints::{ErasedItemTreeId, Lint, LintLevel, LintResolver},
@@ -9,11 +6,12 @@ use basedb::{
 };
 use parking_lot::RwLock;
 use quote::{format_ident, quote};
-use sourcegen::{add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat};
+use sourcegen::{
+    add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
+};
 
-mod integration;
-mod lints;
 mod generate_builtins;
+mod integration;
 
 #[salsa::database(BaseDatabase, InternDatabase, HirDefDatabase)]
 pub struct TestDataBase {
@@ -47,7 +45,7 @@ impl TestDataBase {
             let mut sink = ConsoleSink::buffer(Config::default(), self, &mut buf);
             let diagnostics = &self.item_tree(root_file).diagnostics;
             sink.add_diagnostics(diagnostics, root_file, self);
-            let root_scope = def_map.root();
+            let root_scope = def_map.entry();
             self.lower_and_check_rec(root_scope, &def_map, &mut sink);
         }
         let data = buf.into_inner();
@@ -61,6 +59,10 @@ impl TestDataBase {
             if let Ok(id) = (*declaration).try_into() {
                 let diagnostics = &self.body_source_map(root_file, id).diagnostics;
                 dst.add_diagnostics(diagnostics, root_file, self);
+            }
+            if let ScopeDefItem::FunctionId(fun) = *declaration{
+                // TODO add diagnostics to sink when implemented
+                self.function_def_map(fun);
             }
         }
 
@@ -132,10 +134,7 @@ pub fn generate_integration_tests() {
     )
     .to_string();
 
-    let file_string = add_preamble(
-        "generate_integration_tests",
-        reformat(file_string),
-    );
+    let file_string = add_preamble("generate_integration_tests", reformat(file_string));
 
     ensure_file_contents(&file, &file_string);
 }

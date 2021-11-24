@@ -7,6 +7,16 @@ use crate::{
 
 use super::Stmt;
 
+impl ast::Expr {
+    pub fn as_literal(&self) -> Option<LiteralKind> {
+        if let ast::Expr::Literal(lit) = self {
+            Some(lit.kind())
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     /// The `~` operator for bit inversion

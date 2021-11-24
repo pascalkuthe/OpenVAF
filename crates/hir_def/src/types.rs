@@ -77,8 +77,6 @@ impl Type {
         }
     }
 
-
-
     pub fn union(&self, other: &Type) -> Option<Type> {
         match (self, other) {
             (Type::Real, Type::Integer | Type::Bool) | (Type::Integer | Type::Bool, Type::Real) => {
@@ -155,6 +153,8 @@ impl AsType for ast::Type {
             Type::Integer
         } else if self.real_token().is_some() {
             Type::Real
+        } else if self.string_token().is_some() {
+            Type::String
         } else {
             Type::Err
         }

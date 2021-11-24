@@ -250,3 +250,21 @@ fn ekv() {
     let diagnostics = db.lower_and_check();
     assert_eq!(&diagnostics, "")
 }
+#[test]
+fn hicuml0() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file = read_to_string(PathBuf::from(
+        "/home/dspom/Projects/OpenVAF/integration_tests/HICUML0/hicuml0.va",
+    ))
+    .unwrap();
+    let db = TestDataBase::new("/root.va", &root_file);
+    {
+        let path = project_root().join("integration_tests").join("HICUML0").join("hicuml0.va");
+        let file_contents = read_to_string(path).unwrap();
+        db.vfs().write().add_virt_file("/hicuml0.va", &file_contents);
+    }
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "")
+}

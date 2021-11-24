@@ -46,6 +46,7 @@ impl DisciplineData {
 pub struct NatureData {
     pub name: Name,
     pub parent: Option<Name>,
+    pub units: Option<String>,
 }
 
 impl NatureData {
@@ -53,7 +54,11 @@ impl NatureData {
         let loc = id.lookup(db);
         let nature = &loc.item_tree(db)[loc.id];
 
-        Arc::new(NatureData { name: nature.name.clone(), parent: nature.parent.clone() })
+        Arc::new(NatureData {
+            name: nature.name.clone(),
+            parent: nature.parent.clone(),
+            units: nature.units.clone(),
+        })
     }
 }
 

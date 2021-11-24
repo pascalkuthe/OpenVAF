@@ -21,7 +21,7 @@ pub(crate) fn validate(root: &SyntaxNode, errors: &mut Vec<SyntaxError>) {
                 ast::BranchDecl(decl) => validate_branch_decl(decl, errors),
                 ast::DisciplineDecl(decl) => validate_discipline_decl(decl,errors),
                 ast::NatureAttr(attr) => validate_nature_attr(attr,errors),
-        ast::Literal(decl) => validate_literal(decl, errors),
+                ast::Literal(decl) => validate_literal(decl, errors),
                 _ => ()
             }
         }

@@ -5,6 +5,7 @@ use crate::{
     db::HirDefDB,
     expr::{CaseCond, Event, GlobalEvent},
     name::AsName,
+    nameres::DefMapSource,
     AstIdMap, BlockLoc, Case, Expr, ExprId, Intern, ItemTree, Literal, Path, ScopeId, Stmt, StmtId,
 };
 
@@ -201,8 +202,8 @@ impl LowerCtx<'_> {
             Some(def_map) => {
                 let scope = ScopeId {
                     root_file: self.curr_scope.0.root_file,
-                    local_scope: def_map.root(),
-                    block: Some(id),
+                    local_scope: def_map.entry(),
+                    src: DefMapSource::Block(id),
                 };
 
                 mem::replace(&mut self.curr_scope, (scope, erased_id))

@@ -2,7 +2,13 @@ use std::{borrow::Cow, mem};
 
 use ahash::AHashMap;
 use arena::ArenaMap;
-use hir_def::{BranchId, BuiltIn, Expr, ExprId, FunctionId, Lookup, NodeId, Path, StmtId, Type, VarId, body::Body, db::HirDefDB, expr::Literal, nameres::{NatureAccess, PathResolveError, ScopeDefItem, ScopeDefItemKind}};
+use hir_def::{
+    body::Body,
+    db::HirDefDB,
+    expr::Literal,
+    nameres::{NatureAccess, PathResolveError, ScopeDefItem, ScopeDefItemKind},
+    BranchId, BuiltIn, Expr, ExprId, FunctionId, Lookup, NodeId, Path, StmtId, Type, VarId,
+};
 use stdx::{impl_from, iter::zip};
 use syntax::ast::{BinaryOp, UnaryOp};
 use typed_index_collections::{TiSlice, TiVec};
@@ -162,6 +168,8 @@ impl Ctx<'_> {
                     ScopeDefItem::BuiltIn(_)
                     | ScopeDefItem::FunctionId(_)
                     | ScopeDefItem::NatureAccess(_) => Ty::Function,
+                    ScopeDefItem::FunctionReturn(fun) => Ty::Var(todo!()),
+                    ScopeDefItem::FunctionArgId(arg) => Ty::Var(todo!()),
                 }
             }
 
@@ -262,14 +270,15 @@ impl Ctx<'_> {
         }
     }
 
-    fn infere_nature_acces(&mut self,
+    fn infere_nature_acces(
+        &mut self,
         stmt: StmtId,
         expr: ExprId,
         access: NatureAccess,
         args: &[ExprId],
-    )->Option<Ty>{
-        let nature = access.0
-
+    ) -> Option<Ty> {
+        let nature = access.0;
+        let mut is_potential = false;
     }
 
     fn infere_builtin(

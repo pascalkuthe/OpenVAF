@@ -1,6 +1,5 @@
 use expect_test::expect;
-
-use super::TestDataBase;
+use crate::tests::TestDataBase;
 
 #[test]
 pub fn item_tree_flat() {
@@ -158,7 +157,6 @@ endmodule
     expected.assert_eq(&actual);
 }
 
-
 #[test]
 pub fn body() {
     let src = r#"
@@ -189,6 +187,3 @@ endmodule
     "#]];
     expected.assert_eq(&actual);
 }
-
-
-// TODO document that lint attributes only apply recrusively for items

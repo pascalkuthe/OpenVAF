@@ -42,4 +42,6 @@ ahash = "0.7"
 proc-macro2 = "1.0"
 quote = "1.0"
 sourcegen = {version = "0.0.0",path ="../sourcegen"}
+expect-test = "1.1"
+
 # tracing-subscriber = {version="0.3",features=["env-filter","registry"]}

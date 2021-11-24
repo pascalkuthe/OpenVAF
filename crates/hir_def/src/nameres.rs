@@ -1,14 +1,15 @@
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 
-use crate::builtin::{insert_builtin_scope, BuiltIn};
-use crate::item_tree::{ItemTreeId, Net, Port};
-use crate::name::kw;
+use crate::item_tree::Var;
 use crate::{
-    db::HirDefDB, BlockId, BranchId, DisciplineAttrId, DisciplineId, FunctionId, Lookup, ModuleId,
-    NatureAttrId, NatureId, NodeId, ParamId, VarId,
+    builtin::{insert_builtin_scope, BuiltIn},
+    db::HirDefDB,
+    item_tree::{self, ItemTreeId, Net, Port},
+    name::kw,
+    BlockId, BranchId, DisciplineAttrId, DisciplineId, FunctionArgId, FunctionId, ItemTree, Lookup,
+    ModuleId, Name, NatureAttrId, NatureId, NodeId, ParamId, ScopeId, VarId,
 };
-use crate::{ItemTree, Name, ScopeId};
 use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx};
 use basedb::FileId;
@@ -17,11 +18,24 @@ use stdx::{impl_from, impl_from_typed};
 
 mod collect;
 mod diagnostics;
+mod pretty;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(PartialEq, Eq, Clone, Debug, Copy, Hash)]
+pub enum DefMapSource {
+    Block(BlockId),
+    Function(FunctionId),
+    Root,
+}
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DefMap {
-    block: Option<BlockId>,
+    src: DefMapSource,
     scopes: Arena<Scope>,
+    entry_scope: LocalScopeId,
+    args: Arena<FunctionArg>,
 }
 
 impl Index<LocalScopeId> for DefMap {
@@ -39,6 +53,10 @@ impl IndexMut<LocalScopeId> for DefMap {
 }
 
 impl DefMap {
+    #[inline(always)]
+    pub fn entry(&self) -> LocalScopeId {
+        self.entry_scope
+    }
     #[inline(always)]
     pub fn root(&self) -> LocalScopeId {
         LocalScopeId::from(0u32)
@@ -75,6 +93,8 @@ pub enum ScopeDefItem {
     NatureAttrId(NatureAttrId),
     DisciplineAttrId(DisciplineAttrId),
     BuiltIn(BuiltIn),
+    FunctionReturn(FunctionId),
+    FunctionArgId(FunctionArgId),
 }
 
 impl_from! {
@@ -90,6 +110,7 @@ impl_from! {
     FunctionId,
     NatureAttrId,
     DisciplineAttrId,
+    FunctionArgId,
     BuiltIn
 
     for ScopeDefItem
@@ -106,6 +127,7 @@ macro_rules! scope_item_kinds {
             pub const fn item_kind(&self) -> &'static str {
                 match self {
                     $(ScopeDefItem::$ty(_) => $ty::NAME,)*
+                    ScopeDefItem::FunctionReturn(_) => VarId::NAME
                 }
             }
         }
@@ -126,7 +148,8 @@ scope_item_kinds! {
     FunctionId => "function",
     BuiltIn => "function",
     NatureAttrId => "nature attribute",
-    DisciplineAttrId => "discipline attribute"
+    DisciplineAttrId => "discipline attribute",
+    FunctionArgId => "function argument"
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -136,6 +159,7 @@ pub enum ScopeOrigin {
     Nature(NatureId),
     Discipline(DisciplineId),
     Block(BlockId),
+    Function(FunctionId),
 }
 
 pub type LocalScopeId = Idx<Scope>;
@@ -144,7 +168,8 @@ impl_from_typed! {
     Module(ModuleId),
     Nature(NatureId),
     Discipline(DisciplineId),
-    Block(BlockId)
+    Block(BlockId),
+    Function(FunctionId)
     for ScopeOrigin
 }
 
@@ -174,6 +199,10 @@ impl DefMap {
 
     pub fn block_def_map_query(db: &dyn HirDefDB, block: BlockId) -> Option<Arc<DefMap>> {
         collect::collect_block_map(db, block)
+    }
+
+    pub fn function_def_map_query(db: &dyn HirDefDB, fun: FunctionId) -> Arc<DefMap> {
+        collect::collect_function_map(db, fun)
     }
 
     pub fn resolve_local_name_in_scope(
@@ -237,16 +266,26 @@ impl DefMap {
 
             match current_map[scope].parent {
                 Some(parent) => scope = parent,
-                None => match self.block {
-                    Some(block) => {
+                None => match self.src {
+                    DefMapSource::Block(block) => {
                         let block = block.lookup(db);
                         arc = block.parent.def_map(db);
                         current_map = &*arc;
                     }
-                    None => {
+                    DefMapSource::Root => {
                         if let Some(builtin) = BUILTIN_SCOPE.get(name) {
                             break *builtin;
                         }
+
+                        return Err(PathResolveError::NotFound { name: name.clone() });
+                    }
+                    DefMapSource::Function(fun) => {
+                        if let Some(builtin) = BUILTIN_SCOPE.get(name) {
+                            break *builtin;
+                        }
+                        let parent = fun.lookup(db).scope;
+
+                        parent.def_map(db).resolve_normal_path_in_scope(scope, path, db);
 
                         return Err(PathResolveError::NotFound { name: name.clone() });
                     }
@@ -267,7 +306,7 @@ impl DefMap {
                 Some(block_map) => {
                     arc = block_map;
                     current_map = &*arc;
-                    current_map.root()
+                    current_map.entry()
                 }
                 None => {
                     return Err(PathResolveError::NotFoundIn {
@@ -284,20 +323,20 @@ impl DefMap {
     }
 
     pub fn resolve_root_path(
-        db: &dyn HirDefDB,
-        root_file: FileId,
+        &self,
         segments: &[Name],
+        db: &dyn HirDefDB,
     ) -> Result<ScopeDefItem, PathResolveError> {
-        let def_map = db.def_map(root_file);
-        def_map.resolve_names_in(def_map.root(), &kw::root, segments, db)
+        debug_assert!(matches!(self.src, DefMapSource::Function(_) | DefMapSource::Root));
+        self.resolve_names_in(self.root(), &kw::root, segments, db)
     }
 
-    pub fn resolve_root_item_path_in_scope<T: ScopeDefItemKind>(
-        db: &dyn HirDefDB,
-        root_file: FileId,
+    pub fn resolve_root_item_path<T: ScopeDefItemKind>(
+        &self,
         segments: &[Name],
+        db: &dyn HirDefDB,
     ) -> Result<T, PathResolveError> {
-        let res = DefMap::resolve_root_path(db, root_file, segments)?;
+        let res = self.resolve_root_path(segments, db)?;
         res.try_into().map_err(|_| PathResolveError::ExpectedItemKind {
             name: segments.last().unwrap().clone(),
             expected: T::NAME,
@@ -328,7 +367,7 @@ impl DefMap {
                                 Some(block_map) => {
                                     arc = block_map;
                                     current_map = &*arc;
-                                    scope = current_map.root();
+                                    scope = current_map.entry();
                                 }
                                 None => {
                                     return Err(PathResolveError::NotFoundIn {
@@ -421,5 +460,23 @@ impl Node {
 
     pub fn is_gnd(&self) -> bool {
         self.gnd_declaration.is_some()
+    }
+}
+
+pub type FunctionArgPos = Idx<FunctionArg>;
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct FunctionArg {
+    direction: ItemTreeId<item_tree::FunctionArg>,
+    var: Option<ItemTreeId<Var>>,
+}
+
+impl FunctionArg {
+    pub fn is_input(&self, tree: &ItemTree) -> bool {
+        tree[self.direction].is_input
+    }
+
+    pub fn is_output(&self, tree: &ItemTree) -> bool {
+        tree[self.direction].is_output
     }
 }

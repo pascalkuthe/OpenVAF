@@ -11,6 +11,11 @@
 //! surface syntax.
 
 mod lower;
+mod pretty;
+
+
+#[cfg(test)]
+mod tests;
 
 use std::{fmt::Debug, hash::Hash, ops::Index, sync::Arc};
 
@@ -125,7 +130,6 @@ pub(crate) struct ItemTreeData {
     pub branches: Arena<Branch>,
     pub functions: Arena<Function>,
     pub function_args: Arena<FunctionArg>,
-    // pub block_scopes: Arena<BlockScope>,
 }
 
 /// Trait implemented by all item nodes in the item tree.
@@ -243,6 +247,7 @@ item_tree_nodes! {
     Function in functions -> ast::Function,
     NatureAttr in nature_attrs -> ast::NatureAttr,
     DisciplineAttr in discipline_attrs -> ast::DisciplineAttr,
+    FunctionArg in function_args -> ast::FunctionArg,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -317,6 +322,7 @@ pub struct Nature {
     pub access: Option<Name>,
     pub ddt_nature: Option<Name>,
     pub idt_nature: Option<Name>,
+    pub units: Option<String>,
     pub attrs: IdxRange<NatureAttr>,
     pub ast_id: FileAstId<ast::NatureDecl>,
     pub erased_id: ErasedItemTreeId,

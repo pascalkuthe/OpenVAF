@@ -2,7 +2,16 @@ use std::sync::Arc;
 
 use basedb::{BaseDB, FileId};
 
-use crate::{AstIdMap, BlockId, BlockLoc, BranchId, BranchLoc, DefWithBehaviourId, DefWithBodyId, DefWithExprId, DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionId, FunctionLoc, ModuleId, ModuleLoc, NatureAttrId, NatureAttrLoc, NatureId, NatureLoc, NodeId, NodeLoc, ParamId, ParamLoc, VarId, VarLoc, body::{AnalogBehaviour, BodySourceMap, ExprBody, ParamBody}, data::{DisciplineData, NatureData, NodeData, ParamData, VarData}, item_tree::ItemTree, nameres::DefMap};
+use crate::{
+    body::{AnalogBehaviour, BodySourceMap, ExprBody, ParamBody},
+    data::{DisciplineData, NatureData, NodeData, ParamData, VarData},
+    item_tree::ItemTree,
+    nameres::DefMap,
+    AstIdMap, BlockId, BlockLoc, BranchId, BranchLoc, DefWithBehaviourId, DefWithBodyId,
+    DefWithExprId, DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionArgId,
+    FunctionArgLoc, FunctionId, FunctionLoc, ModuleId, ModuleLoc, NatureAttrId, NatureAttrLoc,
+    NatureId, NatureLoc, NodeId, NodeLoc, ParamId, ParamLoc, VarId, VarLoc,
+};
 
 #[salsa::query_group(InternDatabase)]
 pub trait InternDB: BaseDB {
@@ -28,6 +37,8 @@ pub trait InternDB: BaseDB {
     fn intern_discipline_attr(&self, loc: DisciplineAttrLoc) -> DisciplineAttrId;
     #[salsa::interned]
     fn intern_node(&self, loc: NodeLoc) -> NodeId;
+    #[salsa::interned]
+    fn intern_function_arg(&self, loc: FunctionArgLoc) -> FunctionArgId;
 }
 
 #[salsa::query_group(HirDefDatabase)]
@@ -42,6 +53,9 @@ pub trait HirDefDB: InternDB {
 
     #[salsa::invoke(DefMap::block_def_map_query)]
     fn block_def_map(&self, block: BlockId) -> Option<Arc<DefMap>>;
+
+    #[salsa::invoke(DefMap::function_def_map_query)]
+    fn function_def_map(&self, fun: FunctionId) -> Arc<DefMap>;
 
     #[salsa::invoke(AnalogBehaviour::body_with_sourcemap_query)]
     fn analog_behaviour_with_sourcemap(

@@ -16,10 +16,11 @@ mod data;
 #[cfg(test)]
 mod tests;
 
-use arena::Idx;
 use basedb::FileId;
-use nameres::{DefMap, LocalNodeId, PathResolveError, ScopeDefItemKind};
-use stdx::{impl_from, impl_from_typed};
+use nameres::{
+    DefMap, DefMapSource, FunctionArgPos, LocalNodeId, PathResolveError, ScopeDefItemKind,
+};
+use stdx::impl_from;
 use syntax::{ast::BlockStmt, AstNode};
 
 use std::{
@@ -31,7 +32,7 @@ use crate::{
     db::HirDefDB,
     item_tree::{
         Branch, Discipline, DisciplineAttr, Function, ItemTreeId, ItemTreeNode, Module, Nature,
-        NatureAttr, Net, Param, Port, Var,
+        NatureAttr, Param, Var,
     },
     nameres::ScopeDefItem,
 };
@@ -58,18 +59,23 @@ pub trait Lookup {
     fn lookup(&self, db: &dyn db::HirDefDB) -> Self::Data;
 }
 
+pub enum DefMapKind {
+    Block(BlockId),
+    Function(FunctionId),
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct ScopeId {
     pub root_file: FileId,
     pub local_scope: nameres::LocalScopeId,
-    pub block: Option<BlockId>,
+    pub src: DefMapSource,
 }
 impl ScopeId {
     pub fn def_map(&self, db: &dyn HirDefDB) -> Arc<DefMap> {
-        if let Some(block) = self.block {
-            db.block_def_map(block).unwrap()
-        } else {
-            db.def_map(self.root_file)
+        match self.src {
+            DefMapSource::Block(block) => db.block_def_map(block).unwrap(),
+            DefMapSource::Function(fun) => db.function_def_map(fun),
+            DefMapSource::Root => db.def_map(self.root_file),
         }
     }
 
@@ -78,10 +84,17 @@ impl ScopeId {
         db: &dyn HirDefDB,
         path: &Path,
     ) -> Result<ScopeDefItem, PathResolveError> {
-        if path.is_root_path {
-            DefMap::resolve_root_path(db, self.root_file, &path.segments)
-        } else {
-            self.def_map(db).resolve_normal_path_in_scope(self.local_scope, &path.segments, db)
+        match self.src {
+            DefMapSource::Block(_) if path.is_root_path => {
+                db.def_map(self.root_file).resolve_root_path(&path.segments, db)
+            }
+            DefMapSource::Function(_) | DefMapSource::Root if path.is_root_path => {
+                self.def_map(db).resolve_root_path(&path.segments, db)
+            }
+
+            _ => {
+                self.def_map(db).resolve_normal_path_in_scope(self.local_scope, &path.segments, db)
+            }
         }
     }
 
@@ -90,10 +103,19 @@ impl ScopeId {
         db: &dyn HirDefDB,
         path: &Path,
     ) -> Result<T, PathResolveError> {
-        if path.is_root_path {
-            DefMap::resolve_root_item_path_in_scope(db, self.root_file, &path.segments)
-        } else {
-            self.def_map(db).resolve_normal_item_path_in_scope(self.local_scope, &path.segments, db)
+        match self.src {
+            DefMapSource::Block(_) if path.is_root_path => {
+                db.def_map(self.root_file).resolve_root_item_path(&path.segments, db)
+            }
+            DefMapSource::Function(_) | DefMapSource::Root if path.is_root_path => {
+                self.def_map(db).resolve_root_item_path(&path.segments, db)
+            }
+
+            _ => self.def_map(db).resolve_normal_item_path_in_scope(
+                self.local_scope,
+                &path.segments,
+                db,
+            ),
         }
     }
 }
@@ -212,6 +234,7 @@ impl_intern!(
     intern_discipline_attr,
     lookup_intern_discipline_attr
 );
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithExprId {
     VarId(VarId),
@@ -303,5 +326,30 @@ impl Lookup for NodeId {
 
     fn lookup(&self, db: &dyn db::HirDefDB) -> Self::Data {
         db.lookup_intern_node(*self)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct FunctionArgLoc {
+    fun: FunctionId,
+    arg_pos: FunctionArgPos,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FunctionArgId(salsa::InternId);
+
+impl_intern_key!(FunctionArgId);
+impl Intern for FunctionArgLoc {
+    type ID = FunctionArgId;
+
+    fn intern(self, db: &dyn db::HirDefDB) -> Self::ID {
+        db.intern_function_arg(self)
+    }
+}
+impl Lookup for FunctionArgId {
+    type Data = FunctionArgLoc;
+
+    fn lookup(&self, db: &dyn db::HirDefDB) -> Self::Data {
+        db.lookup_intern_function_arg(*self)
     }
 }
