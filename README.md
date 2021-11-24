@@ -1,11 +1,10 @@
 # OpenVAF
 
-[![crates.io](https://img.shields.io/crates/v/open_vaf)](https://crates.io/crates/open_vaf)
-[![pipeline status](https://gitlab.com/DSPOM/OpenVAF/badges/master/pipeline.svg)](https://gitlab.com/DSPOM/OpenVAF/-/commits/master)
+<!-- [![pipeline status](https://gitlab.com/DSPOM/OpenVAF/badges/master/pipeline.svg)](https://gitlab.com/DSPOM/OpenVAF/-/commits/master) -->
 [![license](https://img.shields.io/badge/license-GPL%203.0-brightgreen)](https://gitlab.com/DSPOM/OpenVAF/-/blob/master/LICENSE)
 ![maintaince](https://img.shields.io/badge/maintenance-actively--developed-informational)
-![documentation](https://img.shields.io/badge/maintenance-actively--developed-informational)
-[![dcoumentation](https://img.shields.io/badge/documentation-WIP-yellow)](https://dspom.gitlab.io/OpenVAF)
+<!-- ![documentation](https://img.shields.io/badge/maintenance-actively--developed-informational) -->
+<!-- [![dcoumentation](https://img.shields.io/badge/documentation-WIP-yellow)](https://dspom.gitlab.io/OpenVAF) -->
 
 A framework that allows implementing compilers for VerilogA aimed predominantly at compact modelling written in Rust.
 The aim of this Project is to provide a high quality fully standard compliant compiler frontend for VerilogA.
@@ -32,4 +31,10 @@ Some highlights of OpenVAF include:
 
 # Acknowledgement
 
-[rustc](https://github.com/rust-lang/rust/) has heavily inspired the design of this compiler. Some code has even been copied straight from rustc (marked appropriately in sourcecode comments) to avoid needless rewrites.
+The architectur [rust-analyzer](https://github.com/rust-analyzer/rust-analyzer) and [rustc](https://github.com/rust-lang/rust/) have heavily inspired the design of this compiler.
+
+# Copyright
+
+This work is free software and licensed under the GPL-3.0 license.
+It contains code that is derived from [rustc](https://github.com/rust-lang/rust/) and [rust-analyzer](https://github.com/rust-analyzer/rust-analyzer). These projects are both licensed und the MIT license. As required a copy of the license and disclaimer can be found in `copyright/LICENSE_MIT`
+
