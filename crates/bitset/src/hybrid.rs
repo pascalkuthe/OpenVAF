@@ -31,7 +31,7 @@ pub enum HybridBitSet<T> {
 
 impl<T> Default for HybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn default() -> Self {
         Self::new_empty()
@@ -40,7 +40,7 @@ where
 
 impl<T> fmt::Debug for HybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn fmt(&self, w: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -58,15 +58,7 @@ impl<T> HybridBitSet<T> {
 
 impl<T> HybridBitSet<T>
 where
-    T: From<usize>
-        + Into<usize>
-        + Copy
-        + PartialOrd
-        + PartialEq
-        + Debug
-        + PartialEq
-        + PartialOrd
-        + Copy,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug + PartialEq + Copy,
 {
     // pub fn domain_size(&self) -> usize {
     //     match self {
@@ -174,7 +166,7 @@ where
 
 impl<T> UnionIntoHybridBitSet<T> for HybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn union_into(&self, other: &mut HybridBitSet<T>, domain_size: usize) -> bool {
         match other {
@@ -220,7 +212,7 @@ where
 
 impl<T> SubtractFromHybridBitSet<T> for HybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
         // Note: we currently don't bother going from Dense back to Sparse.
@@ -245,7 +237,7 @@ where
 
 impl<T> UnionIntoBitSet<T> for HybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn union_into(&self, other: &mut BitSet<T>) -> bool {
         match self {
@@ -257,7 +249,7 @@ where
 
 impl<T> SubtractFromBitSet<T> for HybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn subtract_from(&self, other: &mut BitSet<T>) -> bool {
         match self {
@@ -269,7 +261,7 @@ where
 
 impl<T> UnionIntoHybridBitSet<T> for BitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn union_into(&self, other: &mut HybridBitSet<T>, domain_size: usize) -> bool {
         debug_assert_eq!(self.domain_size, domain_size);
@@ -301,7 +293,7 @@ where
 
 impl<T> SubtractFromHybridBitSet<T> for BitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
         match other {
@@ -325,7 +317,7 @@ where
 
 pub enum HybridIter<'a, T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     Sparse(slice::Iter<'a, T>),
     Dense(BitIter<'a, T>),
@@ -333,7 +325,7 @@ where
 
 impl<'a, T> Iterator for HybridIter<'a, T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     type Item = T;
 

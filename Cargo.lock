@@ -38,6 +38,7 @@ version = "0.0.0"
 dependencies = [
  "ahash",
  "codespan-reporting",
+ "expect-test",
  "indexmap",
  "parking_lot",
  "proc-macro2",
@@ -66,6 +67,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfg"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "arena",
+ "arrayvec",
+ "bitset",
+ "expect-test",
+ "lasso",
+ "once_cell",
+ "stdx",
+ "triomphe",
+ "typed-index-collections",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -82,6 +99,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "const_eval"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "arena",
+ "bitset",
+ "cfg",
+ "data_flow",
+ "stdx",
+ "typed-index-collections",
+ "workqueue",
+]
+
+[[package]]
 name = "countme"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -94,6 +125,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d82cfc11ce7f2c3faef78d8a684447b40d503d9681acebed6cb728d45940c4db"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "data_flow"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "arena",
+ "bitset",
+ "cfg",
+ "stdx",
+ "typed-index-collections",
+ "workqueue",
 ]
 
 [[package]]
@@ -134,6 +178,9 @@ name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
+dependencies = [
+ "ahash",
+]
 
 [[package]]
 name = "heck"
@@ -179,6 +226,7 @@ dependencies = [
  "stdx",
  "syntax",
  "text-size",
+ "typed-index-collections",
 ]
 
 [[package]]
@@ -198,6 +246,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "lasso"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeb7b21a526375c5ca55f1a6dfd4e1fad9fa4edd750f530252a718a44b2608f0"
+dependencies = [
+ "ahash",
+ "hashbrown",
 ]
 
 [[package]]
@@ -461,6 +519,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "triomphe"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46bddb80ec09585c58022a2c55e6e7c11e713d9bb26895f1b56cd945c4040c54"
+dependencies = [
+ "memoffset",
+]
+
+[[package]]
 name = "typed-index-collections"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -541,6 +608,13 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "workqueue"
+version = "0.0.0"
+dependencies = [
+ "bitset",
+]
 
 [[package]]
 name = "xshell"

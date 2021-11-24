@@ -46,7 +46,7 @@ impl<T> BitSet<T> {
     }
 }
 
-impl<T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> BitSet<T> {
+impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
     /// Creates a new, empty bitset with a given `domain_size`.
     #[inline]
     pub fn new_empty(domain_size: usize) -> BitSet<T> {
@@ -226,7 +226,7 @@ impl<T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> BitSe
 
 impl<T> Extend<T> for BitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for x in iter {
@@ -239,7 +239,7 @@ where
 /// passed any type of bitset.
 pub trait UnionIntoBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     // Performs `other = other | self`.
     fn union_into(&self, other: &mut BitSet<T>) -> bool;
@@ -249,7 +249,7 @@ where
 /// passed any type of bitset.
 pub trait SubtractFromBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     // Performs `other = other - self`.
     fn subtract_from(&self, other: &mut BitSet<T>) -> bool;
@@ -259,7 +259,7 @@ where
 /// passed any type of bitset.
 pub trait UnionIntoHybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     // Performs `other = other | self`.
     fn union_into(&self, other: &mut HybridBitSet<T>, domain_size: usize) -> bool;
@@ -268,7 +268,7 @@ where
 pub trait FullBitSetOperations<T>:
     SubtractFromHybridBitSet<T> + UnionIntoHybridBitSet<T> + SubtractFromBitSet<T> + UnionIntoBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
 }
 
@@ -278,7 +278,7 @@ where
         + UnionIntoHybridBitSet<T>
         + SubtractFromBitSet<T>
         + UnionIntoBitSet<T>,
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
 }
 
@@ -286,7 +286,7 @@ where
 /// passed any type of bitset.
 pub trait SubtractFromHybridBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     // Performs `other = other - self`.
     fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool;
@@ -294,7 +294,7 @@ where
 
 impl<T> UnionIntoBitSet<T> for BitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn union_into(&self, other: &mut BitSet<T>) -> bool {
         bitwise(&mut other.words, &self.words, |a, b| a | b)
@@ -303,7 +303,7 @@ where
 
 impl<T> SubtractFromBitSet<T> for BitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn subtract_from(&self, other: &mut BitSet<T>) -> bool {
         bitwise(&mut other.words, &self.words, |a, b| a & !b)
@@ -327,7 +327,7 @@ impl<T> Clone for BitSet<T> {
 
 impl<T> fmt::Debug for BitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug + Debug,
 {
     fn fmt(&self, w: &mut fmt::Formatter<'_>) -> fmt::Result {
         w.debug_list().entries(self.iter()).finish()
@@ -336,7 +336,7 @@ where
 
 impl<T> ToString for BitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn to_string(&self) -> String {
         let mut result = String::new();
@@ -373,7 +373,7 @@ where
     }
 }
 
-pub struct BitIter<'a, T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> {
+pub struct BitIter<'a, T: From<usize> + Into<usize> + Copy + PartialEq + Debug> {
     /// A copy of the current word, but with any already-visited bits cleared.
     /// (This lets us use `trailing_zeros()` to find the next set bit.) When it
     /// is reduced to 0, we move onto the next word.
@@ -388,7 +388,7 @@ pub struct BitIter<'a, T: From<usize> + Into<usize> + Copy + PartialOrd + Partia
     marker: PhantomData<T>,
 }
 
-impl<'a, T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> BitIter<'a, T> {
+impl<'a, T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitIter<'a, T> {
     #[inline]
     fn new(words: &'a [Word]) -> BitIter<'a, T> {
         // We initialize `word` and `offset` to degenerate values. On the first
@@ -405,9 +405,7 @@ impl<'a, T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> B
     }
 }
 
-impl<'a, T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> Iterator
-    for BitIter<'a, T>
-{
+impl<'a, T: From<usize> + Into<usize> + Copy + PartialEq + Debug> Iterator for BitIter<'a, T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         loop {
@@ -457,11 +455,11 @@ where
 /// All operations that involve an element will panic if the element is equal
 /// to or greater than the domain size.
 #[derive(Clone, Debug, PartialEq)]
-pub struct GrowableBitSet<T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> {
+pub struct GrowableBitSet<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> {
     bit_set: BitSet<T>,
 }
 
-impl<T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug> GrowableBitSet<T> {
+impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> GrowableBitSet<T> {
     /// Ensure that the set can hold at least `min_domain_size` elements.
     pub fn ensure(&mut self, min_domain_size: usize) {
         if self.bit_set.domain_size < min_domain_size {

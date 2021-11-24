@@ -1,0 +1,20 @@
+[package]
+name = "data_flow"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+[lib]
+doctest = false
+
+
+[dependencies]
+stdx = {version = "0.0.0", path = "../stdx" }
+arena = {version = "0.0.0", path = "../arena" }
+bitset = {version = "0.0.0", path = "../bitset" }
+workqueue = {version = "0.0.0", path = "../workqueue" }
+cfg = {version = "0.0.0", path = "../cfg" }
+
+ahash = "0.7"
+typed-index-collections = "3.0"

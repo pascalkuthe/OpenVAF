@@ -39,7 +39,7 @@ impl<T> SparseBitSet<T> {
 
 impl<T> SparseBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     pub(super) fn len(&self) -> usize {
         self.elems.len()
@@ -64,7 +64,7 @@ where
 
 impl<T> UnionIntoBitSet<T> for SparseBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn union_into(&self, other: &mut BitSet<T>) -> bool {
         let mut changed = false;
@@ -77,10 +77,10 @@ where
 
 impl<T> SparseBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     pub(super) fn insert(&mut self, elem: T) -> bool {
-        let changed = if let Some(i) = self.elems.iter().position(|&e| e >= elem) {
+        let changed = if let Some(i) = self.elems.iter().position(|&e| e.into() >= elem.into()) {
             if self.elems[i] == elem {
                 // `elem` is already in the set.
                 false
@@ -100,7 +100,7 @@ where
 
 impl<T> SparseBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     pub(super) fn remove(&mut self, elem: T) -> bool {
         if let Some(i) = self.elems.iter().position(|&e| e == elem) {
@@ -118,7 +118,7 @@ where
 
 impl<T> SubtractFromBitSet<T> for SparseBitSet<T>
 where
-    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     fn subtract_from(&self, other: &mut BitSet<T>) -> bool {
         let mut changed = false;
