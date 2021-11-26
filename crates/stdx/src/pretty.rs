@@ -1,6 +1,7 @@
-use std::{fmt::{Debug, Display, Formatter}, ops::Deref};
-
-
+use std::{
+    fmt::{Debug, Display, Formatter},
+    ops::Deref,
+};
 
 #[derive(Clone, PartialEq, Hash, Eq)]
 pub struct List<C> {

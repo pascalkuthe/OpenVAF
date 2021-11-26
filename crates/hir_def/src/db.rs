@@ -4,11 +4,11 @@ use basedb::{BaseDB, FileId};
 
 use crate::{
     body::{AnalogBehaviour, BodySourceMap, ExprBody, ParamBody},
-    data::{DisciplineData, NatureData, NodeData, ParamData, VarData},
+    data::{BranchData, DisciplineData, FunctionData, NatureData, NodeData, ParamData, VarData},
     item_tree::ItemTree,
     nameres::DefMap,
-    AstIdMap, BlockId, BlockLoc, BranchId, BranchLoc, DefWithBehaviourId, DefWithBodyId,
-    DefWithExprId, DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionArgId,
+    BlockId, BlockLoc, BranchId, BranchLoc, DefWithBehaviourId, DefWithBodyId, DefWithExprId,
+    DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionArgId,
     FunctionArgLoc, FunctionId, FunctionLoc, ModuleId, ModuleLoc, NatureAttrId, NatureAttrLoc,
     NatureId, NatureLoc, NodeId, NodeLoc, ParamId, ParamLoc, VarId, VarLoc,
 };
@@ -43,8 +43,6 @@ pub trait InternDB: BaseDB {
 
 #[salsa::query_group(HirDefDatabase)]
 pub trait HirDefDB: InternDB {
-    fn ast_id_map(&self, root_file: FileId) -> Arc<AstIdMap>;
-
     #[salsa::invoke(ItemTree::file_item_tree_query)]
     fn item_tree(&self, root_file: FileId) -> Arc<ItemTree>;
 
@@ -60,32 +58,23 @@ pub trait HirDefDB: InternDB {
     #[salsa::invoke(AnalogBehaviour::body_with_sourcemap_query)]
     fn analog_behaviour_with_sourcemap(
         &self,
-        root_file: FileId,
         id: DefWithBehaviourId,
     ) -> (Arc<AnalogBehaviour>, Arc<BodySourceMap>);
 
-    fn analog_behaviour(&self, root_file: FileId, id: DefWithBehaviourId) -> Arc<AnalogBehaviour>;
+    fn analog_behaviour(&self, id: DefWithBehaviourId) -> Arc<AnalogBehaviour>;
 
     #[salsa::invoke(ParamBody::body_with_sourcemap_query)]
-    fn param_body_with_sourcemap(
-        &self,
-        root_file: FileId,
-        id: ParamId,
-    ) -> (Arc<ParamBody>, Arc<BodySourceMap>);
+    fn param_body_with_sourcemap(&self, id: ParamId) -> (Arc<ParamBody>, Arc<BodySourceMap>);
 
-    fn param_body(&self, root_file: FileId, id: ParamId) -> Arc<ParamBody>;
+    fn param_body(&self, id: ParamId) -> Arc<ParamBody>;
 
     #[salsa::invoke(ExprBody::body_with_sourcemap_query)]
-    fn expr_body_with_sourcemap(
-        &self,
-        root_file: FileId,
-        def: DefWithExprId,
-    ) -> (Arc<ExprBody>, Arc<BodySourceMap>);
+    fn expr_body_with_sourcemap(&self, def: DefWithExprId) -> (Arc<ExprBody>, Arc<BodySourceMap>);
 
-    fn expr_body(&self, root_file: FileId, def: DefWithExprId) -> Arc<ExprBody>;
+    fn expr_body(&self, def: DefWithExprId) -> Arc<ExprBody>;
 
     #[salsa::transparent]
-    fn body_source_map(&self, root_file: FileId, def: DefWithBodyId) -> Arc<BodySourceMap>;
+    fn body_source_map(&self, def: DefWithBodyId) -> Arc<BodySourceMap>;
 
     #[salsa::invoke(DisciplineData::discipline_data_query)]
     fn disipline_data(&self, discipline: DisciplineId) -> Arc<DisciplineData>;
@@ -101,43 +90,33 @@ pub trait HirDefDB: InternDB {
 
     #[salsa::invoke(NodeData::node_data_query)]
     fn node_data(&self, node: NodeId) -> Arc<NodeData>;
+
+    #[salsa::invoke(BranchData::branch_data_query)]
+    fn branch_data(&self, node: BranchId) -> Arc<BranchData>;
+
+    #[salsa::invoke(FunctionData::function_data_query)]
+    fn function_data(&self, node: FunctionId) -> Arc<FunctionData>;
 }
 
-fn ast_id_map(db: &dyn HirDefDB, root_file: FileId) -> Arc<AstIdMap> {
-    let cst = db.parse(root_file).syntax_node();
-    let ast_id_map = AstIdMap::from_source(&cst);
-    Arc::new(ast_id_map)
-}
-
-fn body_source_map(db: &dyn HirDefDB, root_file: FileId, def: DefWithBodyId) -> Arc<BodySourceMap> {
+fn body_source_map(db: &dyn HirDefDB, def: DefWithBodyId) -> Arc<BodySourceMap> {
     match def {
-        DefWithBodyId::ParamId(param) => db.param_body_with_sourcemap(root_file, param).1,
-        DefWithBodyId::ModuleId(module) => {
-            db.analog_behaviour_with_sourcemap(root_file, module.into()).1
-        }
-        DefWithBodyId::FunctionId(fun) => {
-            db.analog_behaviour_with_sourcemap(root_file, fun.into()).1
-        }
-        DefWithBodyId::VarId(var) => db.expr_body_with_sourcemap(root_file, var.into()).1,
-        DefWithBodyId::NatureAttrId(attr) => db.expr_body_with_sourcemap(root_file, attr.into()).1,
-        DefWithBodyId::DisciplineAttrId(attr) => {
-            db.expr_body_with_sourcemap(root_file, attr.into()).1
-        }
+        DefWithBodyId::ParamId(param) => db.param_body_with_sourcemap(param).1,
+        DefWithBodyId::ModuleId(module) => db.analog_behaviour_with_sourcemap(module.into()).1,
+        DefWithBodyId::FunctionId(fun) => db.analog_behaviour_with_sourcemap(fun.into()).1,
+        DefWithBodyId::VarId(var) => db.expr_body_with_sourcemap(var.into()).1,
+        DefWithBodyId::NatureAttrId(attr) => db.expr_body_with_sourcemap(attr.into()).1,
+        DefWithBodyId::DisciplineAttrId(attr) => db.expr_body_with_sourcemap(attr.into()).1,
     }
 }
 
-fn expr_body(db: &dyn HirDefDB, root_file: FileId, def: DefWithExprId) -> Arc<ExprBody> {
-    db.expr_body_with_sourcemap(root_file, def).0
+fn expr_body(db: &dyn HirDefDB, def: DefWithExprId) -> Arc<ExprBody> {
+    db.expr_body_with_sourcemap(def).0
 }
 
-fn param_body(db: &dyn HirDefDB, root_file: FileId, param: ParamId) -> Arc<ParamBody> {
-    db.param_body_with_sourcemap(root_file, param).0
+fn param_body(db: &dyn HirDefDB, param: ParamId) -> Arc<ParamBody> {
+    db.param_body_with_sourcemap(param).0
 }
 
-fn analog_behaviour(
-    db: &dyn HirDefDB,
-    root_file: FileId,
-    module: DefWithBehaviourId,
-) -> Arc<AnalogBehaviour> {
-    db.analog_behaviour_with_sourcemap(root_file, module).0
+fn analog_behaviour(db: &dyn HirDefDB, module: DefWithBehaviourId) -> Arc<AnalogBehaviour> {
+    db.analog_behaviour_with_sourcemap(module).0
 }

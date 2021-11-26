@@ -1,10 +1,9 @@
 use std::borrow::Cow;
 
-use hir_def::{BranchId, DisciplineId, NatureId, NodeId, ParamId, Type, VarId};
+use hir_def::{
+    BranchId, DisciplineId, FunctionId, LocalFunctionArgId, NatureId, NodeId, ParamId, Type, VarId,
+};
 use stdx::{impl_display, impl_idx_from};
-
-pub use self::diagnostics::{SignatureMissmatch, TypeMissmatch, ArrayTypeMissmatch};
-mod diagnostics;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TyRequirement {
@@ -48,6 +47,7 @@ pub enum Ty {
     Nature(NatureId),
     Discipline(DisciplineId),
     Var(Type, VarId),
+    FuntionVar { ty: Type, fun: FunctionId, arg: Option<LocalFunctionArgId> },
     Param(Type, ParamId),
     Literal(Type),
     InfLiteral,
@@ -67,6 +67,7 @@ impl_display! {
         Ty::Nature(_) => "nature reference";
         Ty::Discipline(_) => "discipline reference";
         Ty::Var(ty,_) => "{} variable reference", ty;
+        Ty::FuntionVar{ty,..} => "{} variable reference", ty;
         Ty::Param(ty,_) => "{} parameter ref", ty;
         Ty::Literal(ty) => "{} literal", ty;
         Ty::Branch(_) => "branch reference";
@@ -77,6 +78,29 @@ impl_display! {
 }
 
 impl Ty {
+    pub fn unwrap_branch(&self) -> BranchId {
+        if let Ty::Branch(id) = *self {
+            id
+        } else {
+            unreachable!("expected branch found {:?}", self)
+        }
+    }
+
+    pub fn unwrap_port_flow(&self) -> NodeId {
+        if let Ty::PortFlow(id) = *self {
+            id
+        } else {
+            unreachable!("expected node found {:?}", self)
+        }
+    }
+    pub fn unwrap_node(&self) -> NodeId {
+        if let Ty::Node(id) = *self {
+            id
+        } else {
+            unreachable!("expected node found {:?}", self)
+        }
+    }
+
     pub fn satisfies_exact(&self, requirement: &TyRequirement) -> bool {
         self.satisfies::<false>(requirement)
     }
@@ -87,7 +111,27 @@ impl Ty {
     fn satisfies<const ALLOW_CONVERSION: bool>(&self, requirement: &TyRequirement) -> bool {
         match (self, requirement) {
             (
-                Ty::Val(ty1) | Ty::Literal(ty1) | Ty::Var(ty1, _) | Ty::Param(ty1, _),
+                Ty::Val(_)
+                | Ty::Var(_, _)
+                | Ty::Param(_, _)
+                | Ty::InfLiteral
+                | Ty::Literal(_)
+                | Ty::FuntionVar { .. },
+                TyRequirement::AnyVal,
+            )
+            | (Ty::InfLiteral, TyRequirement::Val(Type::Real))
+            | (
+                Ty::Val(Type::EmptyArray) | Ty::Val(Type::Array { len: 0, .. }),
+                TyRequirement::ArrayAnyLength { .. }
+                | TyRequirement::Val(Type::Array { len: 0, .. }),
+            ) => true,
+
+            (
+                Ty::Val(ty1)
+                | Ty::Literal(ty1)
+                | Ty::Var(ty1, _)
+                | Ty::Param(ty1, _)
+                | Ty::FuntionVar { ty: ty1, .. },
                 TyRequirement::Val(ty2),
             )
             | (Ty::Literal(ty1), TyRequirement::Literal(ty2)) => {
@@ -97,17 +141,6 @@ impl Ty {
                     ty1.is_semantically_equivalent(ty2)
                 }
             }
-
-            (
-                Ty::Val(_) | Ty::Var(_, _) | Ty::Param(_, _) | Ty::InfLiteral,
-                TyRequirement::AnyVal,
-            )
-            | (Ty::InfLiteral, TyRequirement::Val(Type::Real))
-            | (
-                Ty::Val(Type::EmptyArray),
-                TyRequirement::ArrayAnyLength { .. }
-                | TyRequirement::Val(Type::Array { len: 0, .. }),
-            ) => true,
 
             // TODO merge these match arms when there are box/deref patterns (not any time soon)
             (
@@ -122,7 +155,7 @@ impl Ty {
             }
 
             // No conversion for explicit references
-            (Ty::Var(ty1, _), TyRequirement::Var(ty2))
+            (Ty::Var(ty1, _) | Ty::FuntionVar { ty: ty1, .. }, TyRequirement::Var(ty2))
             | (Ty::Param(ty1, _), TyRequirement::Param(ty2)) => ty1 == ty2,
 
             (Ty::Node(_) | Ty::Port(_), TyRequirement::Node)
@@ -138,7 +171,11 @@ impl Ty {
 
     pub fn to_value(&self) -> Option<Type> {
         match self {
-            Ty::Val(ty) | Ty::Var(ty, _) | Ty::Param(ty, _) | Ty::Literal(ty) => Some(ty.clone()),
+            Ty::Val(ty)
+            | Ty::Var(ty, _)
+            | Ty::Param(ty, _)
+            | Ty::Literal(ty)
+            | Ty::FuntionVar { ty, .. } => Some(ty.clone()),
             Ty::InfLiteral => Some(Type::Real),
             _ => None,
         }
@@ -204,7 +241,20 @@ impl SignatureData {
         &[SignatureData::BOOL_BIN_OP, SignatureData::INT_BIN_OP, SignatureData::REAL_BIN_OP];
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Signature(u8);
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct Signature(pub u32);
 
-impl_idx_from!(Signature(u8));
+impl_idx_from!(Signature(u32));
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub(crate) struct BuiltinInfo {
+    pub signatures: &'static [SignatureData],
+    pub min_args: usize,
+    pub max_args: Option<usize>,
+    pub has_side_effects: bool,
+}
+
+pub fn default_return_ty(signatures: &[SignatureData]) -> Option<Ty> {
+    let ty = &signatures[0].return_ty;
+    signatures.iter().all(|sig| &sig.return_ty == ty).then(|| Ty::Val(ty.clone()))
+}

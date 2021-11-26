@@ -1,13 +1,3 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
 use rowan::{GreenNodeData, GreenTokenData, NodeOrToken};
 
 use crate::ast::{support, AstChildren};
@@ -27,16 +17,20 @@ pub type AttrIter = FlatMap<
     fn(ast::AttrList) -> AstChildren<ast::Attr>,
 >;
 
+pub fn attrs(syntax: &SyntaxNode) -> AttrIter {
+    support::children::<ast::AttrList>(syntax)
+        .flat_map(|list| support::children::<ast::Attr>(list.syntax()))
+}
+
 pub trait AttrsOwner: AstNode {
     fn attrs(&self) -> AttrIter {
-        support::children::<ast::AttrList>(self.syntax())
-            .flat_map(|list| support::children::<ast::Attr>(list.syntax()))
+        attrs(self.syntax())
     }
     fn has_attr(&self, name: &str) -> bool {
         self.attrs().any(|attr| attr.name().map_or(false, |n| n.text() == name))
     }
     fn get_attr(&self, name: &str) -> Option<ast::Attr> {
-        self.attrs().find(|attr| attr.name().map_or(false, |n| n.text() == name)).clone()
+        self.attrs().find(|attr| attr.name().map_or(false, |n| n.text() == name))
     }
 }
 
@@ -45,7 +39,6 @@ impl ast::Name {
         text_of_first_token(self.syntax())
     }
 }
-
 
 impl ast::NameRef {
     pub fn text(&self) -> TokenText<'_> {

@@ -37,6 +37,7 @@ name = "basedb"
 version = "0.0.0"
 dependencies = [
  "ahash",
+ "arena",
  "codespan-reporting",
  "expect-test",
  "indexmap",
@@ -99,20 +100,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "const_eval"
-version = "0.0.0"
-dependencies = [
- "ahash",
- "arena",
- "bitset",
- "cfg",
- "data_flow",
- "stdx",
- "typed-index-collections",
- "workqueue",
-]
-
-[[package]]
 name = "countme"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -125,19 +112,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d82cfc11ce7f2c3faef78d8a684447b40d503d9681acebed6cb728d45940c4db"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "data_flow"
-version = "0.0.0"
-dependencies = [
- "ahash",
- "arena",
- "bitset",
- "cfg",
- "stdx",
- "typed-index-collections",
- "workqueue",
 ]
 
 [[package]]
@@ -198,15 +172,14 @@ dependencies = [
  "ahash",
  "arena",
  "basedb",
- "bitset",
  "expect-test",
  "indexmap",
+ "lasso",
  "once_cell",
  "parking_lot",
  "proc-macro2",
  "quote",
  "salsa",
- "smol_str",
  "sourcegen",
  "stdx",
  "syntax",
@@ -221,8 +194,12 @@ dependencies = [
  "ahash",
  "arena",
  "basedb",
+ "expect-test",
  "hir_def",
+ "indexmap",
+ "parking_lot",
  "salsa",
+ "sourcegen",
  "stdx",
  "syntax",
  "text-size",
@@ -488,6 +465,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rowan",
+ "smol_str",
  "sourcegen",
  "stdx",
  "text-size",

@@ -7,14 +7,9 @@ use indexmap::IndexSet;
 use crate::{FileId, VfsPath};
 
 /// Structure to map between [`VfsPath`] and [`FileId`].
+#[derive(Default)]
 pub(crate) struct PathInterner {
     map: IndexSet<VfsPath, ahash::RandomState>,
-}
-
-impl Default for PathInterner {
-    fn default() -> Self {
-        Self { map: IndexSet::default() }
-    }
 }
 
 impl PathInterner {

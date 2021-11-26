@@ -319,7 +319,7 @@ impl FromStr for Op {
             "i32.max" => IntMax,
 
             _ => {
-                if s.len()>2 && &s[0..2] == "cb" {
+                if s.len() > 2 && &s[0..2] == "cb" {
                     let c = u32::from_str(&s[3..]).map_err(|e| e.to_string())?;
                     Call(Callback(c))
                 } else {

@@ -2,7 +2,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
-exclude = ["crates/constants","crates/linker","crates/lld","crates/codegen_llvm","crates/pass","crates/middle","crates/targets"]
+exclude = ["crates/constants","crates/linker","crates/lld","crates/codegen_llvm","crates/pass","crates/middle","crates/targets","crates/const_eval","crates/data_flow"]
 
 # [profile.dev]
 # Disabling debug info speeds up builds a bunch,

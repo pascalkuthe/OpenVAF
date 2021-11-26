@@ -10,7 +10,6 @@ use tokens::lexer::{
     TokenKind::{self, *},
 };
 
-
 /// Creates an iterator that produces tokens from the input string.
 pub fn tokenize(input: &str) -> Vec<Token> {
     let mut cursor = Cursor::new(input);

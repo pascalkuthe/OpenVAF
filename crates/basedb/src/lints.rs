@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{BaseDB, FileId};
+use crate::{BaseDB, ErasedAstId};
 use indexmap::IndexMap;
 use stdx::{impl_debug_display, impl_idx_from};
 
@@ -43,37 +43,21 @@ impl Display for LintLevel {
     }
 }
 
-// Implementation defered to HIR database
-pub trait LintResolver {
-    fn lint_overwrite(
-        &self,
-        _lint: Lint,
-        _sctx: ErasedItemTreeId,
-        _root_file: FileId,
-    ) -> Option<LintLevel> {
-        None
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub struct ErasedItemTreeId(u32);
-
-impl ErasedItemTreeId {
-    pub const ROOT: ErasedItemTreeId = ErasedItemTreeId(0);
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct LintSrc {
     pub overwrite: Option<LintLevel>,
-    pub item_tree: Option<ErasedItemTreeId>,
+    pub ast: Option<ErasedAstId>,
+}
+
+impl From<ErasedAstId> for LintSrc {
+    fn from(src: ErasedAstId) -> Self {
+        LintSrc { overwrite: None, ast: Some(src) }
+    }
 }
 
 impl LintSrc {
-    pub const GLOBAL: LintSrc = LintSrc { overwrite: None, item_tree: None };
+    pub const GLOBAL: LintSrc = LintSrc { overwrite: None, ast: None };
 }
-
-impl_idx_from!(ErasedItemTreeId(u32));
-impl_debug_display!(c@ErasedItemTreeId => "ctx{}",c.0);
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Lint(u16);

@@ -1,6 +1,6 @@
 use syntax::ast::{self, PathSegmentKind};
 
-use crate::{name::AsName, Name};
+use syntax::name::{AsIdent, AsName, Name};
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Path {
@@ -14,8 +14,7 @@ impl Path {
     }
 
     pub fn resolve(syntax: ast::Path) -> Option<Path> {
-        let prefix =
-            if let Some(qual) = syntax.qualifier() { Some(Path::resolve(qual)?) } else { None };
+        let prefix = if let Some(qual) = syntax.qualifier() { Path::resolve(qual) } else { None };
 
         let segment = syntax.segment()?;
 
@@ -30,6 +29,15 @@ impl Path {
                 prefix.segments.push(segment.as_name());
                 Some(prefix)
             }
+        }
+    }
+}
+
+impl AsIdent for Path {
+    fn as_ident(&self) -> Option<Name> {
+        match self.segments.as_slice() {
+            [name] if !self.is_root_path => Some(name.clone()),
+            _ => None,
         }
     }
 }

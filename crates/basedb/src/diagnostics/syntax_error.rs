@@ -1,13 +1,16 @@
 use std::iter::once;
 
 use stdx::iter::zip;
-use syntax::{sourcemap::FileSpan, SyntaxError, SyntaxKind::BLOCK_STMT, TextRange, TextSize};
+use syntax::{
+    sourcemap::FileSpan, AstNode, SyntaxError, SyntaxKind::BLOCK_STMT, TextRange, TextSize,
+};
 
 use crate::{
     diagnostics::{
         text_range_list_to_unified_spans, text_ranges_to_unified_spans, Diagnostic, Label,
         LabelStyle, Report,
     },
+    lints::{builtin::vams_keyword_compat, Lint, LintSrc},
     BaseDB, FileId,
 };
 
@@ -20,6 +23,18 @@ fn syntax_err_report(missing_delimeter: bool) -> Report {
 }
 
 impl Diagnostic for SyntaxError {
+    fn lint(&self, root_file: FileId, db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
+        match self {
+            SyntaxError::ReservedIdentifier { compat: true, src, .. } => Some((
+                vams_keyword_compat,
+                LintSrc {
+                    overwrite: None,
+                    ast: db.ast_id_map(root_file).nearest_ast_id_to_ptr(*src, db, root_file),
+                },
+            )),
+            _ => None,
+        }
+    }
     fn build_report(&self, root_file: FileId, db: &dyn BaseDB) -> Report {
         let sm = db.sourcemap(root_file);
         let parse = db.parse(root_file);
@@ -102,7 +117,7 @@ impl Diagnostic for SyntaxError {
 
             SyntaxError::IllegalRootSegment { path_segment, prefix: None } => {
                 let FileSpan { file: file_id, range } = parse.to_file_span(path_segment, &sm);
-                let end = TextRange::at(range.end(), 1.into());
+                let end = TextRange::at(range.end() - TextSize::from(1), 1.into());
 
                 Report::error().with_labels(vec![
                     Label {
@@ -177,7 +192,7 @@ impl Diagnostic for SyntaxError {
 
                 let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &ranges);
 
-                let begin_token = TextRange::at(ranges[0].end() + TextSize::from(1), 1.into());
+                let begin_token = TextRange::at(ranges[0].end() - TextSize::from(1), 1.into());
                 let item_ranges = &ranges[1..];
 
                 let mut labels: Vec<_> = zip(item_ranges, items)
@@ -325,7 +340,160 @@ impl Diagnostic for SyntaxError {
                     range: range.into(),
                     message: "expected string literal".to_owned(),
                 }])
-            },
+            }
+            SyntaxError::IllegalDisciplineAttrIdent { range } => {
+                let FileSpan { range, file: file_id } = parse.to_file_span(range, &sm);
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id,
+                        range: range.into(),
+                        message: "illegal attribute path".to_owned(),
+                    }])
+                    .with_notes(vec![
+                        "help: expected one of the following".to_owned(),
+                        "an identifier: abstol".to_owned(),
+                        "an identifier precceded by potential or flow: potential.abstol".to_owned(),
+                    ])
+            }
+            SyntaxError::IllegalNatureIdent { range } => {
+                let FileSpan { range, file: file_id } = parse.to_file_span(range, &sm);
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id,
+                        range: range.into(),
+                        message: "illegal nature identifier".to_owned(),
+                    }])
+                    .with_notes(vec![
+                        "help: expected one of the following".to_owned(),
+                        "an identifier: voltage".to_owned(),
+                        "an identifier followed by potential or flow: electrical.potential"
+                            .to_owned(),
+                    ])
+            }
+            SyntaxError::IllegalAttriubte { expected, range, .. } => {
+                let FileSpan { range, file: file_id } = parse.to_file_span(range, &sm);
+                Report::error().with_labels(vec![Label {
+                    style: LabelStyle::Primary,
+                    file_id,
+                    range: range.into(),
+                    message: format!("expected {}", expected),
+                }])
+            }
+            SyntaxError::ReservedIdentifier { src, compat, ref name } => {
+                let FileSpan { file, range } = parse.to_file_span(src.range(), &sm);
+
+                let report = Report::error().with_labels(vec![Label {
+                    style: LabelStyle::Primary,
+                    file_id: file,
+                    range: range.into(),
+                    message: format!("'{}' is a keyword", name),
+                }]);
+
+                // TODO error code (doc)
+
+                if compat {
+                    report.with_notes(vec![
+                        format!(
+                        "'{}' will likely never be used in the implemented language subset so this use is allowed",
+                        name
+                        ),
+                        "to maintain compatibility with the VAMS standard this should be renamed".to_owned()
+                    ])
+                } else {
+                    report
+                }
+            }
+            SyntaxError::DuplicatePort { ref pos, ref name } => {
+                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, pos);
+                let ranges = &ranges[1..];
+                let inital = ranges[0];
+
+                let mut labels: Vec<_> = ranges
+                    .iter()
+                    .map(|range| Label {
+                        style: LabelStyle::Primary,
+                        file_id,
+                        range: (*range).into(),
+                        message: "..redeclared here".to_owned(),
+                    })
+                    .collect();
+
+                labels.push(Label {
+                    style: LabelStyle::Secondary,
+                    file_id,
+                    range: inital.into(),
+                    message: format!("{} first declared here", name),
+                });
+
+                Report::error().with_labels(labels)
+            }
+            SyntaxError::MixedModuleHead { ref module_ports } => {
+                let ports = module_ports.to_node(parse.tree().syntax());
+
+                let name_cnt = ports.names().count();
+                let name_ranges: Vec<_> = ports
+                    .names()
+                    .map(|name| name.syntax().text_range())
+                    .chain(ports.declarations().map(|port| port.syntax().text_range()))
+                    .collect();
+
+                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &name_ranges);
+                let names = &ranges[..name_cnt];
+                let ports = &ranges[name_cnt..];
+
+                let labels: Vec<_> = names
+                    .iter()
+                    .map(|range| Label {
+                        style: LabelStyle::Secondary,
+                        file_id,
+                        range: (*range).into(),
+                        message: "found reference here".to_owned(),
+                    })
+                    .chain(ports.iter().map(|range| Label {
+                        style: LabelStyle::Primary,
+                        file_id,
+                        range: (*range).into(),
+                        message: "port declaration not allowed".to_owned(),
+                    }))
+                    .collect();
+
+                Report::error().with_labels(labels).with_notes(vec![
+                    "either declare all ports directly in the header: module example(inout foo, inout bar);".to_owned(),
+                    "or only reference ports in the header: module example(foo,bar);".to_owned(),
+                ])
+            }
+            SyntaxError::IllegalBodyPorts { head, ref body_ports } => {
+                let mut ranges = vec![head];
+                ranges.extend(body_ports);
+
+                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &ranges);
+                let head = ranges[0];
+                let body_ports = &ranges[1..];
+
+                let mut labels: Vec<_> = body_ports
+                    .iter()
+                    .map(|range| Label {
+                        style: LabelStyle::Primary,
+                        file_id,
+                        range: (*range).into(),
+                        message: "illegal port declaration".to_owned(),
+                    })
+                    .collect();
+
+                labels.push(Label {
+                    style: LabelStyle::Secondary,
+                    file_id,
+                    range: head.into(),
+                    message: "info: ports already declared in header...".to_owned(),
+                });
+
+                Report::error().with_labels(labels).with_notes(vec![
+                    "either place all port declaration in the header".to_owned(),
+                    "or palce all port declarations in the body ".to_owned(),
+                ])
+            }
         };
 
         report.with_message(self.to_string())

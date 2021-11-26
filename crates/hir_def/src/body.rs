@@ -4,18 +4,18 @@ use ahash::AHashMap as HashMap;
 use arena::{Arena, ArenaMap};
 use basedb::{
     lints::{Lint, LintSrc},
-    FileId,
+    AttrDiagnostic, LintAttrs,
 };
 use syntax::{ast, AstNode, AstPtr};
 
 use crate::{
-    attrs::{AttrDiagnostic, LintAttrs},
     db::HirDefDB,
-    item_tree::ItemTreeNode,
-    DefWithBehaviourId, DefWithExprId, DisciplineAttrLoc, Expr, ExprId, FunctionLoc, Lookup,
-    ModuleLoc, NatureAttrLoc, ParamId, ParamLoc, ScopeId, Stmt, StmtId, VarLoc,
+    item_tree::{DisciplineAttr, ItemTreeId, ItemTreeNode, NatureAttr},
+    DefWithBehaviourId, DefWithExprId, DisciplineAttrLoc, DisciplineLoc, Expr, ExprId, FunctionLoc,
+    Lookup, ModuleLoc, NatureAttrLoc, NatureLoc, ParamId, ParamLoc, ScopeId, Stmt, StmtId, VarLoc,
 };
 
+use lasso::Rodeo;
 use lower::LowerCtx;
 
 pub use ast::ConstraintKind;
@@ -41,6 +41,7 @@ pub struct BodySourceMap {
     /// Diagnostics accumulated during body lowering. These contain `AstPtr`s and so are stored in
     /// the source map (since they're just as volatile).
     pub diagnostics: Vec<AttrDiagnostic>,
+    pub str_lit_interner: Rodeo,
 }
 
 impl BodySourceMap {
@@ -58,12 +59,12 @@ pub struct AnalogBehaviour {
 impl AnalogBehaviour {
     pub fn body_with_sourcemap_query(
         db: &dyn HirDefDB,
-        root_file: FileId,
         id: DefWithBehaviourId,
     ) -> (Arc<AnalogBehaviour>, Arc<BodySourceMap>) {
         let mut body = Body::default();
         let mut source_map = BodySourceMap::default();
 
+        let root_file = id.file(db);
         let tree = db.item_tree(root_file);
         let ast_id_map = db.ast_id_map(root_file);
         let ast = db.parse(root_file).tree();
@@ -71,16 +72,16 @@ impl AnalogBehaviour {
         let (curr_scope, stmts): (_, Vec<_>) = match id {
             DefWithBehaviourId::ModuleId(id) => {
                 let ModuleLoc { scope, id: item_tree } = id.lookup(db);
-                let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                let item_tree = tree[item_tree].erased_id;
-                ((scope, item_tree), ast.analog_behaviour().collect())
+                let ast_id = tree[item_tree].ast_id();
+                let ast = ast_id_map.get(ast_id).to_node(ast.syntax());
+                ((scope, ast_id.into()), ast.analog_behaviour().collect())
             }
 
             DefWithBehaviourId::FunctionId(id) => {
                 let FunctionLoc { scope, id: item_tree } = id.lookup(db);
-                let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                let item_tree = tree[item_tree].erased_id;
-                ((scope, item_tree), ast.body().collect())
+                let ast_id = tree[item_tree].ast_id();
+                let ast = ast_id_map.get(ast_id).to_node(ast.syntax());
+                ((scope, ast_id.into()), ast.body().collect())
             }
         };
 
@@ -93,7 +94,6 @@ impl AnalogBehaviour {
             ast_id_map: &ast_id_map,
             curr_scope,
             registry: &registry,
-            tree: &tree,
         };
 
         let root_stmts = stmts.into_iter().map(|stmt| ctx.collect_stmt(stmt)).collect();
@@ -133,19 +133,19 @@ pub struct ParamConstraint {
 impl ParamBody {
     pub fn body_with_sourcemap_query(
         db: &dyn HirDefDB,
-        root_file: FileId,
         id: ParamId,
     ) -> (Arc<ParamBody>, Arc<BodySourceMap>) {
         let mut body = Body::default();
         let mut source_map = BodySourceMap::default();
+        let root_file = id.lookup(db).scope.root_file;
 
         let tree = db.item_tree(root_file);
         let ast_id_map = db.ast_id_map(root_file);
         let ast = db.parse(root_file).tree();
 
         let ParamLoc { id: item_tree, scope } = id.lookup(db);
-        let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-        let item_tree = tree[item_tree].erased_id;
+        let ast_id = tree[item_tree].ast_id();
+        let ast = ast_id_map.get(ast_id).to_node(ast.syntax());
 
         let registry = db.lint_registry();
         let mut ctx = LowerCtx {
@@ -153,9 +153,8 @@ impl ParamBody {
             source_map: &mut source_map,
             body: &mut body,
             ast_id_map: &ast_id_map,
-            curr_scope: (scope, item_tree),
+            curr_scope: (scope, ast_id.into()),
             registry: &registry,
-            tree: &tree,
         };
 
         let default = ctx.collect_opt_expr(ast.default());
@@ -176,6 +175,10 @@ impl ParamBody {
             })
             .collect();
 
+        // Add a dummy stmt so that we can associate scope,lint src etc with the epxressions here;
+        ctx.missing_stmt();
+        debug_assert_eq!(body.stmts.len(), 1);
+
         let body = ParamBody { body, bounds, default };
         (Arc::new(body), Arc::new(source_map))
     }
@@ -190,11 +193,12 @@ pub struct ExprBody {
 impl ExprBody {
     pub fn body_with_sourcemap_query(
         db: &dyn HirDefDB,
-        root_file: FileId,
         def: DefWithExprId,
     ) -> (Arc<ExprBody>, Arc<BodySourceMap>) {
         let mut body = Body::default();
         let mut source_map = BodySourceMap::default();
+
+        let root_file = def.file(db);
 
         let tree = db.item_tree(root_file);
         let ast_id_map = db.ast_id_map(root_file);
@@ -203,21 +207,27 @@ impl ExprBody {
         let (expr, scope) = match def {
             DefWithExprId::VarId(var) => {
                 let VarLoc { scope, id: item_tree } = var.lookup(db);
-                let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                let item_tree = tree[item_tree].erased_id;
-                (ast.default(), (scope, item_tree))
+                let ast_id = tree[item_tree].ast_id();
+                let ast = ast_id_map.get(ast_id).to_node(ast.syntax());
+                (ast.default(), (scope, ast_id.into()))
             }
             DefWithExprId::NatureAttrId(attr) => {
-                let NatureAttrLoc { scope, id: item_tree } = attr.lookup(db);
-                let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                let item_tree = tree[item_tree].erased_id;
-                (ast.val(), (scope, item_tree))
+                let NatureAttrLoc { nature, id } = attr.lookup(db);
+                let NatureLoc { root_file, id: discipline_id } = nature.lookup(db);
+                let nature = &tree[discipline_id];
+                let idx = usize::from(nature.attrs.start()) + usize::from(id);
+                let attr = &tree[ItemTreeId::<NatureAttr>::from(idx)];
+                let ast = ast_id_map.get(attr.ast_id).to_node(ast.syntax());
+                (ast.val(), (ScopeId::root(root_file), attr.ast_id.into()))
             }
             DefWithExprId::DisciplineAttrId(attr) => {
-                let DisciplineAttrLoc { scope, id: item_tree } = attr.lookup(db);
-                let ast = ast_id_map.get(tree[item_tree].ast_id()).to_node(ast.syntax());
-                let item_tree = tree[item_tree].erased_id;
-                (ast.val(), (scope, item_tree))
+                let DisciplineAttrLoc { discipline, id } = attr.lookup(db);
+                let DisciplineLoc { root_file, id: discipline_id } = discipline.lookup(db);
+                let discipline = &tree[discipline_id];
+                let idx = usize::from(discipline.extra_attrs.start()) + usize::from(id);
+                let attr = &tree[ItemTreeId::<DisciplineAttr>::from(idx)];
+                let ast = ast_id_map.get(attr.ast_id).to_node(ast.syntax());
+                (ast.val(), (ScopeId::root(root_file), attr.ast_id.into()))
             }
         };
 
@@ -229,10 +239,14 @@ impl ExprBody {
             ast_id_map: &ast_id_map,
             curr_scope: scope,
             registry: &registry,
-            tree: &tree,
         };
 
         let val = ctx.collect_opt_expr(expr);
+
+        // Add a dummy stmt so that we can associate scope,lint src etc with the epxressions
+        ctx.missing_stmt();
+        debug_assert_eq!(body.stmts.len(), 1);
+
         let body = ExprBody { body, val };
         (Arc::new(body), Arc::new(source_map))
     }

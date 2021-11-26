@@ -1,17 +1,17 @@
 use std::mem;
 
 use crate::{
-    attrs::LintAttrs,
     db::HirDefDB,
     expr::{CaseCond, Event, GlobalEvent},
-    name::AsName,
     nameres::DefMapSource,
-    AstIdMap, BlockLoc, Case, Expr, ExprId, Intern, ItemTree, Literal, Path, ScopeId, Stmt, StmtId,
+    BlockLoc, Case, Expr, ExprId, Intern, Literal, Path, ScopeId, Stmt, StmtId,
 };
 
-use basedb::lints::{ErasedItemTreeId, LintRegistry};
+use basedb::{lints::LintRegistry, AstIdMap, ErasedAstId, LintAttrs};
+use lasso::Rodeo;
 use syntax::{
     ast::{self, ArgListOwner, AttrIter, AttrsOwner, FunctionRef},
+    name::AsName,
     AstPtr,
 };
 // use tracing::debug;
@@ -23,9 +23,8 @@ pub(super) struct LowerCtx<'a> {
     pub(super) body: &'a mut Body,
     pub(super) source_map: &'a mut BodySourceMap,
     pub(super) ast_id_map: &'a AstIdMap,
-    pub(super) curr_scope: (ScopeId, ErasedItemTreeId),
+    pub(super) curr_scope: (ScopeId, ErasedAstId),
     pub(super) registry: &'a LintRegistry,
-    pub(super) tree: &'a ItemTree,
 }
 
 impl LowerCtx<'_> {
@@ -101,7 +100,9 @@ impl LowerCtx<'_> {
                 }
             }
 
-            ast::Expr::Literal(lit) => Expr::Literal(lit.kind().into()),
+            ast::Expr::Literal(lit) => {
+                Expr::Literal(Literal::new(lit.kind(), &mut self.source_map.str_lit_interner))
+            }
         };
         self.alloc_expr(e, AstPtr::new(&expr))
     }
@@ -196,7 +197,6 @@ impl LowerCtx<'_> {
         let ast = self.ast_id_map.ast_id(block);
         let id = BlockLoc { ast, parent: self.curr_scope.0 }.intern(self.db);
         let scope = self.db.block_def_map(id);
-        let erased_id = self.tree.block_scope(ast).erased_id;
 
         let parent_scope = match scope {
             Some(def_map) => {
@@ -206,11 +206,11 @@ impl LowerCtx<'_> {
                     src: DefMapSource::Block(id),
                 };
 
-                mem::replace(&mut self.curr_scope, (scope, erased_id))
+                mem::replace(&mut self.curr_scope, (scope, ast.into()))
             }
             None => {
                 let scope = self.curr_scope.0;
-                mem::replace(&mut self.curr_scope, (scope, erased_id))
+                mem::replace(&mut self.curr_scope, (scope, ast.into()))
             }
         };
 
@@ -244,9 +244,9 @@ impl LowerCtx<'_> {
     fn alloc_stmt(&mut self, stmt: Stmt, ptr: AstPtr<ast::Stmt>, attrs: AttrIter) -> StmtId {
         let attrs = LintAttrs::resolve(
             self.registry,
-            Some(self.curr_scope.1),
             attrs,
             &mut self.source_map.diagnostics,
+            self.curr_scope.1,
         );
         let id = self.make_stmt(stmt, Some(ptr.clone()), attrs);
         self.source_map.stmt_map.insert(ptr, id);
@@ -257,10 +257,10 @@ impl LowerCtx<'_> {
     // desugared exprs don't have ptr, that's wrong and should be fixed
     // somehow.
     fn alloc_stmt_desugared(&mut self, stmt: Stmt) -> StmtId {
-        self.make_stmt(stmt, None, LintAttrs::empty(Some(self.curr_scope.1)))
+        self.make_stmt(stmt, None, LintAttrs::empty(self.curr_scope.1))
     }
 
-    fn missing_stmt(&mut self) -> StmtId {
+    pub(super) fn missing_stmt(&mut self) -> StmtId {
         self.alloc_stmt_desugared(Stmt::Missing)
     }
 
@@ -280,10 +280,12 @@ impl LowerCtx<'_> {
     }
 }
 
-impl From<ast::LiteralKind> for Literal {
-    fn from(kind: ast::LiteralKind) -> Self {
-        match kind {
-            ast::LiteralKind::String(lit) => Literal::String(lit.unescaped_value()),
+impl Literal {
+    pub fn new(ast: ast::LiteralKind, resolver: &mut Rodeo) -> Literal {
+        match ast {
+            ast::LiteralKind::String(lit) => {
+                Literal::String(resolver.get_or_intern(lit.unescaped_value()))
+            }
             ast::LiteralKind::IntNumber(lit) => Literal::Int(lit.value()),
             ast::LiteralKind::SiRealNumber(lit) => Literal::Float(lit.value().into()),
             ast::LiteralKind::StdRealNumber(lit) => Literal::Float(lit.value().into()),

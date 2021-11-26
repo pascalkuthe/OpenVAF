@@ -31,3 +31,13 @@ salsa = "0.17.0-pre.2"
 text-size = "1.1"
 
 ahash = "0.7"
+indexmap = "1.6"
+
+[dev-dependencies]
+
+sourcegen = {version ="0.0.0", path ="../sourcegen"}
+parking_lot = "0.11"
+expect-test = "1.1"
+# proc-macro2 = "1.0"
+# quote = "1.0"
+# indexmap = "1.6"

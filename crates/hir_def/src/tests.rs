@@ -1,7 +1,9 @@
-use crate::{db::{HirDefDB, HirDefDatabase, InternDatabase}, nameres::{DefMap, LocalScopeId, ScopeDefItem}};
+use crate::{
+    db::{HirDefDB, HirDefDatabase, InternDatabase},
+    nameres::{DefMap, LocalScopeId, ScopeDefItem},
+};
 use basedb::{
     diagnostics::{sink::Buffer, Config, ConsoleSink, DiagnosticSink},
-    lints::{ErasedItemTreeId, Lint, LintLevel, LintResolver},
     BaseDB, BaseDatabase, FileId, Vfs, VfsStorage,
 };
 use parking_lot::RwLock;
@@ -43,8 +45,6 @@ impl TestDataBase {
         let mut buf = Buffer::no_color();
         {
             let mut sink = ConsoleSink::buffer(Config::default(), self, &mut buf);
-            let diagnostics = &self.item_tree(root_file).diagnostics;
-            sink.add_diagnostics(diagnostics, root_file, self);
             let root_scope = def_map.entry();
             self.lower_and_check_rec(root_scope, &def_map, &mut sink);
         }
@@ -57,10 +57,10 @@ impl TestDataBase {
 
         for (_, declaration) in &def_map[scope].declarations {
             if let Ok(id) = (*declaration).try_into() {
-                let diagnostics = &self.body_source_map(root_file, id).diagnostics;
+                let diagnostics = &self.body_source_map(id).diagnostics;
                 dst.add_diagnostics(diagnostics, root_file, self);
             }
-            if let ScopeDefItem::FunctionId(fun) = *declaration{
+            if let ScopeDefItem::FunctionId(fun) = *declaration {
                 // TODO add diagnostics to sink when implemented
                 self.function_def_map(fun);
             }
@@ -77,16 +77,6 @@ impl salsa::Database for TestDataBase {}
 impl VfsStorage for TestDataBase {
     fn vfs(&self) -> &RwLock<Vfs> {
         self.vfs()
-    }
-}
-impl LintResolver for TestDataBase {
-    fn lint_overwrite(
-        &self,
-        lint: Lint,
-        item_tree: ErasedItemTreeId,
-        root_file: FileId,
-    ) -> Option<LintLevel> {
-        self.item_tree(root_file).lint_lvl(item_tree, lint)
     }
 }
 

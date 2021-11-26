@@ -19,9 +19,9 @@ pub(super) fn call(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
 
 pub(super) fn sys_fun_call(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    let m2 = p.start();
+    // let m2 = p.start();
     p.bump(SYSFUN);
-    m2.complete(p, FUNCTION_REF);
+    // m2.complete(p, FUNCTION_REF);
     if p.at(T!('(')) {
         arg_list(p);
     }
@@ -42,4 +42,3 @@ pub(super) fn arg_list(p: &mut Parser) {
     p.eat(T![')']);
     m.complete(p, ARG_LIST);
 }
-

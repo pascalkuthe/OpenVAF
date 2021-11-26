@@ -174,7 +174,7 @@ DisciplineAttr =
   name: Path  '='? val:Expr ';'
 
 NatureDecl =
-  AttrList* 'nature' Name (':' parent: NameRef)? ';'
+  AttrList* 'nature' Name (':' parent: Path)? ';'
   NatureAttr*
   'endnature'
 
@@ -182,7 +182,7 @@ NatureAttr =
   Name '=' val: Expr ';'
 
 ModuleDecl =
-  AttrList* 'module' Name ( '('ports: (ModulePort (',' ModulePort)*)? ')' )? ';'
+  AttrList* 'module' Name ModulePorts? ';'
    ModuleItem*
   'endmodule'
 
@@ -195,7 +195,7 @@ ModuleItem =
 | VarDecl
 | ParamDecl
 
-
+ModulePorts = '('ports: (ModulePort (',' ModulePort)*)? ')'
 ModulePort = kind: ModulePortKind
 ModulePortKind = PortDecl| Name
 

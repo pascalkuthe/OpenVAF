@@ -2,7 +2,7 @@ use super::*;
 use crate::grammar::call::{call, sys_fun_call};
 use crate::grammar::paths::path;
 
-const EXPR_EXPECTED: & [SyntaxKind] =
+const EXPR_EXPECTED: &[SyntaxKind] =
     &[T!['('], T!["'{"], SYSFUN, NAME, LITERAL, T![~], T![!], T![+], T![-]];
 
 pub(super) fn expr(p: &mut Parser) -> Option<CompletedMarker> {
@@ -110,13 +110,12 @@ fn atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
             atom_expr(p);
             m.complete(p, PREFIX_EXPR)
         }
-        IDENT|ROOT_KW => {
-            let m = p.start();
-            path(p);
+        IDENT | ROOT_KW => {
+            let m = path(p);
             if p.at(T!('(')) {
-                let fun_ref = m.complete(p, FUNCTION_REF);
-                call(p, fun_ref)
+                call(p, m)
             } else {
+                let m = m.precede(p);
                 m.complete(p, PATH_EXPR)
             }
         }

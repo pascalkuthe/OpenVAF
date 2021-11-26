@@ -40,8 +40,8 @@
 mod anchored_path;
 pub mod loader;
 mod path_interner;
-mod vfs_path;
 pub mod va_std;
+mod vfs_path;
 
 use std::{fmt, mem};
 
@@ -170,7 +170,6 @@ impl Vfs {
         self.changes.push(ChangedFile { file_id, change_kind });
         true
     }
-
 
     pub fn add_virt_file(&mut self, name: &str, src: &str) -> FileId {
         let path = VfsPath::new_virtual_path(name.to_owned());

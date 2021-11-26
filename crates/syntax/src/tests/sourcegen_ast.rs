@@ -272,7 +272,7 @@ fn generate_nodes(kinds: KindsSrc<'_>, grammar: &AstSrc) -> String {
     let ast = quote! {
         use crate::{
             SyntaxNode, SyntaxToken, SyntaxKind::{self, *},
-            ast::{self, AstNode, AstChildren, support, generated::tokens::*},
+            ast::{self, AstNode, AstChildren, support},
             T,
         };
 

@@ -1,5 +1,6 @@
 pub mod ast;
 mod error;
+pub mod name;
 mod parsing;
 mod ptr;
 mod syntax_node;

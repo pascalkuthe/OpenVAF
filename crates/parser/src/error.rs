@@ -34,4 +34,3 @@ pub enum SyntaxError {
     // #[error("Unexpected Token!")]
     // UnexpectedToken { span: Span, ignored: Option<Span> },
 }
-

@@ -253,7 +253,6 @@ impl Parse for Instruction {
         };
 
         let res = Instruction { dst, op, args: args.into_boxed_slice(), src };
-        eprintln!("Successfuly parsed {:?}", res);
         Ok(res)
     }
 }

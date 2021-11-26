@@ -166,3 +166,19 @@ fn condition_disabled() {
         "condition_disacled",
     )
 }
+
+#[test]
+fn source_map_triple_replacement(){
+check_prepocessor_single_file(
+        r#"
+`include "constants.va"
+
+`define y_fv(fv,y);
+
+`define expLin(result, x);
+
+// foo
+"#,
+        "source_map_triple_replacement",
+    )
+}

@@ -1,5 +1,9 @@
-mod requirements;
-mod builtin;
+pub mod builtin;
+pub mod db;
+mod diagnostics;
 mod inference;
 mod lower;
-mod db;
+mod types;
+
+#[cfg(test)]
+mod tests;

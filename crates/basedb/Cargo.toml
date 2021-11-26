@@ -23,6 +23,7 @@ salsa = "0.17.0-pre.2"
 stdx = {version = "0.0.0", path = "../stdx" }
 vfs = {version = "0.0.0", path = "../vfs" }
 syntax = {version = "0.0.0", path = "../syntax" }
+arena = {version = "0.0.0", path = "../arena" }
 
 codespan-reporting = "0.11"
 

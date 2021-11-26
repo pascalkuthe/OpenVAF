@@ -1,12 +1,45 @@
+use crate::BaseDB;
 use expect_test::{expect, Expect};
 use syntax::AstNode;
 
 use crate::tests::TestDataBase;
 
 fn check(src: &str, expected: Expect) {
-    let parse = TestDataBase::new("/root.va", src).parse_and_check();
+    let (parse, diagnostics) = TestDataBase::new("/root.va", src).parse_and_check();
+    if !diagnostics.is_empty() {
+        eprintln!("{}", diagnostics);
+        panic!("encountered unexpected diagnostics")
+    }
     let actual = format!("{:#?}", parse.tree().syntax());
     expected.assert_eq(&actual)
+}
+
+#[test]
+fn source_mapping() {
+    let src = r#"
+`define foo(result, x);
+
+`define y_fv(fv,y);
+
+`define expLin(result, x);
+
+foo
+    "#;
+    let db = TestDataBase::new("/root.va", src);
+    eprintln!("{:?}", db.preprocess(db.root_file()).ts);
+    let (parse, diagnostics) = db.parse_and_check();
+    eprintln!("{:?}", parse.errors());
+    expect![[r#"
+        error: unexpected token 'an identifier'; expected 'discipline', 'nature' or 'module'
+          ┌─ /root.va:8:1
+          │
+        8 │ foo
+          │ ^^^ expected 'discipline', 'nature' or 'module'
+
+    "#]]
+    .assert_eq(&diagnostics)
+
+    // foo
 }
 
 #[test]
@@ -28,23 +61,24 @@ endmodule
                 NAME@8..12
                   IDENT@8..12 "test"
                 WHITESPACE@12..13 " "
-                L_PAREN@13..14 "("
-                MODULE_PORT@14..22
-                  PORT_DECL@14..22
-                    DIRECTION@14..20
-                      OUTPUT_KW@14..20 "output"
-                    WHITESPACE@20..21 " "
-                    NAME@21..22
-                      IDENT@21..22 "a"
-                COMMA@22..23 ","
-                MODULE_PORT@23..30
-                  PORT_DECL@23..30
-                    DIRECTION@23..28
-                      INPUT_KW@23..28 "input"
-                    WHITESPACE@28..29 " "
-                    NAME@29..30
-                      IDENT@29..30 "b"
-                R_PAREN@30..31 ")"
+                MODULE_PORTS@13..31
+                  L_PAREN@13..14 "("
+                  MODULE_PORT@14..22
+                    PORT_DECL@14..22
+                      DIRECTION@14..20
+                        OUTPUT_KW@14..20 "output"
+                      WHITESPACE@20..21 " "
+                      NAME@21..22
+                        IDENT@21..22 "a"
+                  COMMA@22..23 ","
+                  MODULE_PORT@23..30
+                    PORT_DECL@23..30
+                      DIRECTION@23..28
+                        INPUT_KW@23..28 "input"
+                      WHITESPACE@28..29 " "
+                      NAME@29..30
+                        IDENT@29..30 "b"
+                  R_PAREN@30..31 ")"
                 SEMICOLON@31..32 ";"
                 WHITESPACE@32..37 "\n    "
                 BRANCH_DECL@37..58
@@ -139,9 +173,8 @@ endmodule
                     ASSIGN_STMT@39..65
                       ASSIGN@39..64
                         CALL@39..43
-                          FUNCTION_REF@39..40
-                            PATH@39..40
-                              IDENT@39..40 "I"
+                          PATH@39..40
+                            IDENT@39..40 "I"
                           ARG_LIST@40..43
                             L_PAREN@40..41 "("
                             PATH_EXPR@41..42
@@ -155,9 +188,8 @@ endmodule
                               L_PAREN@45..46 "("
                               BIN_EXPR@46..53
                                 CALL@46..50
-                                  FUNCTION_REF@46..47
-                                    PATH@46..47
-                                      IDENT@46..47 "V"
+                                  PATH@46..47
+                                    IDENT@46..47 "V"
                                   ARG_LIST@47..50
                                     L_PAREN@47..48 "("
                                     PATH_EXPR@48..49
@@ -226,35 +258,36 @@ endmodule
                 NAME@33..38
                   IDENT@33..38 "test2"
                 WHITESPACE@38..39 " "
-                L_PAREN@39..40 "("
-                MODULE_PORT@40..41
-                  NAME@40..41
-                    IDENT@40..41 "a"
-                COMMA@41..42 ","
-                MODULE_PORT@42..43
-                  NAME@42..43
-                    IDENT@42..43 "b"
-                COMMA@43..44 ","
-                MODULE_PORT@44..45
-                  NAME@44..45
-                    IDENT@44..45 "c"
-                COMMA@45..46 ","
-                MODULE_PORT@46..47
-                  NAME@46..47
-                    IDENT@46..47 "d"
-                COMMA@47..48 ","
-                MODULE_PORT@48..49
-                  NAME@48..49
-                    IDENT@48..49 "e"
-                COMMA@49..50 ","
-                MODULE_PORT@50..51
-                  NAME@50..51
-                    IDENT@50..51 "f"
-                COMMA@51..52 ","
-                MODULE_PORT@52..53
-                  NAME@52..53
-                    IDENT@52..53 "g"
-                R_PAREN@53..54 ")"
+                MODULE_PORTS@39..54
+                  L_PAREN@39..40 "("
+                  MODULE_PORT@40..41
+                    NAME@40..41
+                      IDENT@40..41 "a"
+                  COMMA@41..42 ","
+                  MODULE_PORT@42..43
+                    NAME@42..43
+                      IDENT@42..43 "b"
+                  COMMA@43..44 ","
+                  MODULE_PORT@44..45
+                    NAME@44..45
+                      IDENT@44..45 "c"
+                  COMMA@45..46 ","
+                  MODULE_PORT@46..47
+                    NAME@46..47
+                      IDENT@46..47 "d"
+                  COMMA@47..48 ","
+                  MODULE_PORT@48..49
+                    NAME@48..49
+                      IDENT@48..49 "e"
+                  COMMA@49..50 ","
+                  MODULE_PORT@50..51
+                    NAME@50..51
+                      IDENT@50..51 "f"
+                  COMMA@51..52 ","
+                  MODULE_PORT@52..53
+                    NAME@52..53
+                      IDENT@52..53 "g"
+                  R_PAREN@53..54 ")"
                 SEMICOLON@54..55 ";"
                 WHITESPACE@55..60 "\n    "
                 BODY_PORT_DECL@60..69
@@ -335,57 +368,58 @@ endmodule
                 NAME@199..204
                   IDENT@199..204 "test3"
                 WHITESPACE@204..205 " "
-                L_PAREN@205..206 "("
-                MODULE_PORT@206..216
-                  PORT_DECL@206..216
-                    DIRECTION@206..212
-                      OUTPUT_KW@206..212 "output"
-                    WHITESPACE@212..213 " "
-                    NAME@213..214
-                      IDENT@213..214 "a"
-                    COMMA@214..215 ","
-                    NAME@215..216
-                      IDENT@215..216 "b"
-                COMMA@216..217 ","
-                WHITESPACE@217..218 " "
-                MODULE_PORT@218..240
-                  PORT_DECL@218..240
-                    DIRECTION@218..223
-                      INPUT_KW@218..223 "input"
-                    WHITESPACE@223..224 " "
-                    NAME_REF@224..234
-                      IDENT@224..234 "electrical"
-                    WHITESPACE@234..235 " "
-                    NAME@235..236
-                      IDENT@235..236 "c"
-                    COMMA@236..237 ","
-                    NAME@237..238
-                      IDENT@237..238 "d"
-                    COMMA@238..239 ","
-                    NAME@239..240
-                      IDENT@239..240 "e"
-                COMMA@240..241 ","
-                WHITESPACE@241..242 " "
-                MODULE_PORT@242..273
-                  PORT_DECL@242..273
-                    ATTR_LIST@242..249
-                      L_ATTR_PAREN@242..244 "(*"
-                      ATTR@244..247
-                        NAME@244..247
-                          IDENT@244..247 "foo"
-                      R_ATTR_PAREN@247..249 "*)"
-                    WHITESPACE@249..250 " "
-                    DIRECTION@250..255
-                      INOUT_KW@250..255 "inout"
-                    WHITESPACE@255..256 " "
-                    NAME_REF@256..266
-                      IDENT@256..266 "electrical"
-                    WHITESPACE@266..267 " "
-                    NET_TYPE@267..271 "wire"
-                    WHITESPACE@271..272 " "
-                    NAME@272..273
-                      IDENT@272..273 "f"
-                R_PAREN@273..274 ")"
+                MODULE_PORTS@205..274
+                  L_PAREN@205..206 "("
+                  MODULE_PORT@206..216
+                    PORT_DECL@206..216
+                      DIRECTION@206..212
+                        OUTPUT_KW@206..212 "output"
+                      WHITESPACE@212..213 " "
+                      NAME@213..214
+                        IDENT@213..214 "a"
+                      COMMA@214..215 ","
+                      NAME@215..216
+                        IDENT@215..216 "b"
+                  COMMA@216..217 ","
+                  WHITESPACE@217..218 " "
+                  MODULE_PORT@218..240
+                    PORT_DECL@218..240
+                      DIRECTION@218..223
+                        INPUT_KW@218..223 "input"
+                      WHITESPACE@223..224 " "
+                      NAME_REF@224..234
+                        IDENT@224..234 "electrical"
+                      WHITESPACE@234..235 " "
+                      NAME@235..236
+                        IDENT@235..236 "c"
+                      COMMA@236..237 ","
+                      NAME@237..238
+                        IDENT@237..238 "d"
+                      COMMA@238..239 ","
+                      NAME@239..240
+                        IDENT@239..240 "e"
+                  COMMA@240..241 ","
+                  WHITESPACE@241..242 " "
+                  MODULE_PORT@242..273
+                    PORT_DECL@242..273
+                      ATTR_LIST@242..249
+                        L_ATTR_PAREN@242..244 "(*"
+                        ATTR@244..247
+                          NAME@244..247
+                            IDENT@244..247 "foo"
+                        R_ATTR_PAREN@247..249 "*)"
+                      WHITESPACE@249..250 " "
+                      DIRECTION@250..255
+                        INOUT_KW@250..255 "inout"
+                      WHITESPACE@255..256 " "
+                      NAME_REF@256..266
+                        IDENT@256..266 "electrical"
+                      WHITESPACE@266..267 " "
+                      NET_TYPE@267..271 "wire"
+                      WHITESPACE@271..272 " "
+                      NAME@272..273
+                        IDENT@272..273 "f"
+                  R_PAREN@273..274 ")"
                 SEMICOLON@274..275 ";"
                 WHITESPACE@275..276 "\n"
                 ENDMODULE_KW@276..285 "endmodule"
@@ -414,8 +448,9 @@ endmodule
                 NAME@8..12
                   IDENT@8..12 "test"
                 WHITESPACE@12..13 " "
-                L_PAREN@13..14 "("
-                R_PAREN@14..15 ")"
+                MODULE_PORTS@13..15
+                  L_PAREN@13..14 "("
+                  R_PAREN@14..15 ")"
                 SEMICOLON@15..16 ";"
                 WHITESPACE@16..21 "\n    "
                 NET_DECL@21..30
@@ -459,22 +494,23 @@ fn var_declarations() {
 module test ();
     real x=1.0;
     integer y=0,z;
-    time t;
-    realtime rt;
+    real t;
+    int rt;
     analog x = 2==y;
 endmodule
 "#,
         expect![[r#"
-            SOURCE_FILE@0..112
+            SOURCE_FILE@0..107
               WHITESPACE@0..1 "\n"
-              MODULE_DECL@1..111
+              MODULE_DECL@1..106
                 MODULE_KW@1..7 "module"
                 WHITESPACE@7..8 " "
                 NAME@8..12
                   IDENT@8..12 "test"
                 WHITESPACE@12..13 " "
-                L_PAREN@13..14 "("
-                R_PAREN@14..15 ")"
+                MODULE_PORTS@13..15
+                  L_PAREN@13..14 "("
+                  R_PAREN@14..15 ")"
                 SEMICOLON@15..16 ";"
                 WHITESPACE@16..21 "\n    "
                 VAR_DECL@21..32
@@ -505,44 +541,45 @@ endmodule
                       IDENT@49..50 "z"
                   SEMICOLON@50..51 ";"
                 WHITESPACE@51..56 "\n    "
-                NET_DECL@56..63
-                  NAME@56..60
-                    IDENT@56..60 "time"
+                VAR_DECL@56..63
+                  TYPE@56..60
+                    REAL_KW@56..60 "real"
                   WHITESPACE@60..61 " "
-                  NAME@61..62
-                    IDENT@61..62 "t"
+                  VAR@61..62
+                    NAME@61..62
+                      IDENT@61..62 "t"
                   SEMICOLON@62..63 ";"
                 WHITESPACE@63..68 "\n    "
-                NET_DECL@68..80
-                  NAME@68..76
-                    IDENT@68..76 "realtime"
-                  WHITESPACE@76..77 " "
-                  NAME@77..79
-                    IDENT@77..79 "rt"
-                  SEMICOLON@79..80 ";"
-                WHITESPACE@80..85 "\n    "
-                ANALOG_BEHAVIOUR@85..101
-                  ANALOG_KW@85..91 "analog"
-                  WHITESPACE@91..92 " "
-                  ASSIGN_STMT@92..101
-                    ASSIGN@92..100
-                      PATH_EXPR@92..93
-                        PATH@92..93
-                          IDENT@92..93 "x"
-                      WHITESPACE@93..94 " "
-                      EQ@94..95 "="
-                      WHITESPACE@95..96 " "
-                      BIN_EXPR@96..100
-                        LITERAL@96..97
-                          INT_NUMBER@96..97 "2"
-                        EQ2@97..99 "=="
-                        PATH_EXPR@99..100
-                          PATH@99..100
-                            IDENT@99..100 "y"
-                    SEMICOLON@100..101 ";"
-                WHITESPACE@101..102 "\n"
-                ENDMODULE_KW@102..111 "endmodule"
-              WHITESPACE@111..112 "\n"
+                NET_DECL@68..75
+                  NAME@68..71
+                    IDENT@68..71 "int"
+                  WHITESPACE@71..72 " "
+                  NAME@72..74
+                    IDENT@72..74 "rt"
+                  SEMICOLON@74..75 ";"
+                WHITESPACE@75..80 "\n    "
+                ANALOG_BEHAVIOUR@80..96
+                  ANALOG_KW@80..86 "analog"
+                  WHITESPACE@86..87 " "
+                  ASSIGN_STMT@87..96
+                    ASSIGN@87..95
+                      PATH_EXPR@87..88
+                        PATH@87..88
+                          IDENT@87..88 "x"
+                      WHITESPACE@88..89 " "
+                      EQ@89..90 "="
+                      WHITESPACE@90..91 " "
+                      BIN_EXPR@91..95
+                        LITERAL@91..92
+                          INT_NUMBER@91..92 "2"
+                        EQ2@92..94 "=="
+                        PATH_EXPR@94..95
+                          PATH@94..95
+                            IDENT@94..95 "y"
+                    SEMICOLON@95..96 ";"
+                WHITESPACE@96..97 "\n"
+                ENDMODULE_KW@97..106 "endmodule"
+              WHITESPACE@106..107 "\n"
         "#]],
     )
 }
@@ -573,8 +610,9 @@ endmodule
                 WHITESPACE@7..8 " "
                 NAME@8..12
                   IDENT@8..12 "test"
-                L_PAREN@12..13 "("
-                R_PAREN@13..14 ")"
+                MODULE_PORTS@12..14
+                  L_PAREN@12..13 "("
+                  R_PAREN@13..14 ")"
                 SEMICOLON@14..15 ";"
                 WHITESPACE@15..24 "\n        "
                 FUNCTION@24..323
@@ -700,9 +738,8 @@ endmodule
                               PLUS@264..265 "+"
                               WHITESPACE@265..266 " "
                               CALL@266..285
-                                FUNCTION_REF@266..270
-                                  PATH@266..270
-                                    IDENT@266..270 "sqrt"
+                                PATH@266..270
+                                  IDENT@266..270 "sqrt"
                                 ARG_LIST@270..285
                                   L_PAREN@270..271 "("
                                   BIN_EXPR@271..284
@@ -757,7 +794,6 @@ endmodule
 // `define calculate(a,b)\
 //     b**a/2;\
 //     C = C**2;
-
 
 // module schaltung (A,B);
 //     inout electrical A,B;

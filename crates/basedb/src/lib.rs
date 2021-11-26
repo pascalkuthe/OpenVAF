@@ -1,15 +1,18 @@
-#[cfg(test)]
-mod tests;
-
+mod ast_id_map;
 pub mod diagnostics;
 pub mod line_index;
+mod lint_attrs;
 pub mod lints;
+
+#[cfg(test)]
+mod tests;
 
 use std::str::from_utf8;
 use std::{intrinsics::transmute, sync::Arc};
 
 use line_index::{Line, LineIndex};
-use lints::{Lint, LintData, LintLevel, LintRegistry, LintResolver, ErasedItemTreeId};
+pub use lint_attrs::{AttrDiagnostic, LintAttrTree, LintAttrs};
+use lints::{Lint, LintData, LintLevel, LintRegistry};
 use parking_lot::RwLock;
 use salsa::Durability;
 use syntax::{
@@ -17,6 +20,7 @@ use syntax::{
     TextSize,
 };
 
+pub use ast_id_map::{AstId, AstIdMap, ErasedAstId};
 use typed_index_collections::{TiSlice, TiVec};
 pub use vfs::{FileId, Vfs, VfsPath};
 
@@ -25,7 +29,7 @@ pub trait VfsStorage {
 }
 
 #[salsa::query_group(BaseDatabase)]
-pub trait BaseDB: LintResolver + VfsStorage + salsa::Database {
+pub trait BaseDB: VfsStorage + salsa::Database {
     #[salsa::input]
     fn plugin_lints(&self) -> &'static [LintData];
     #[salsa::input]
@@ -70,14 +74,21 @@ pub trait BaseDB: LintResolver + VfsStorage + salsa::Database {
     #[salsa::transparent]
     fn lint_data(&self, lint: Lint) -> LintData;
 
-
-
     #[salsa::transparent]
-    fn lint_lvl(&self, lint: Lint, root_file: FileId, sctx: Option<ErasedItemTreeId>)
-        -> (LintLevel, bool);
+    fn lint_lvl(
+        &self,
+        lint: Lint,
+        root_file: FileId,
+        sctx: Option<ErasedAstId>,
+    ) -> (LintLevel, bool);
 
     #[salsa::transparent]
     fn empty_global_lint_overwrites(&self) -> TiVec<Lint, Option<LintLevel>>;
+
+    fn ast_id_map(&self, root_file: FileId) -> Arc<AstIdMap>;
+
+    #[salsa::invoke(LintAttrTree::lint_attr_tree_query)]
+    fn lint_attr_tree(&self, root_file: FileId) -> Arc<LintAttrTree>;
 }
 
 fn lint(db: &dyn BaseDB, name: &str) -> Option<Lint> {
@@ -92,10 +103,12 @@ fn lint_lvl(
     db: &dyn BaseDB,
     lint: Lint,
     root_file: FileId,
-    sctx: Option<ErasedItemTreeId>,
+    ast: Option<ErasedAstId>,
 ) -> (LintLevel, bool) {
-    if let Some(sctx) = sctx {
-        if let Some(lvl) = db.lint_overwrite(lint, sctx, root_file) {
+    if let Some(ast) = ast {
+        if let Some(lvl) =
+            db.lint_attr_tree(root_file).lint_lvl(&db.ast_id_map(root_file), ast, lint)
+        {
             return (lvl, false);
         }
     }
@@ -256,4 +269,10 @@ impl dyn BaseDB {
     pub fn invalidate_file(&mut self, file: FileId) {
         FileTextQuery.in_db_mut(self).invalidate(&file)
     }
+}
+
+fn ast_id_map(db: &dyn BaseDB, root_file: FileId) -> Arc<AstIdMap> {
+    let cst = db.parse(root_file).syntax_node();
+    let ast_id_map = AstIdMap::from_source(&cst);
+    Arc::new(ast_id_map)
 }

@@ -37,8 +37,8 @@
             inherit buildInputs LLVM_SYS_130_PREFIX LLD_LIB_DIR LIBCLANG_PATH;
 
             nativeBuildInputs = with channels.nixpkgs; nativeBuildInputs ++ [
-              rust-bin.stable.latest.default
-              # rust-bin.nightly.latest.default
+              # rust-bin.stable.latest.default
+              rust-bin.nightly.latest.default
               rust-analyzer
               cargo-expand
               crate2nix

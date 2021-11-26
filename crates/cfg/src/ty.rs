@@ -22,7 +22,6 @@
 //! (triomphe::ThinArc) for arrays and boxing complex numbers (to cut their size in half when not
 //! used)
 
-
 use lasso::MiniSpur;
 use stdx::impl_debug;
 use triomphe::ThinArc;
@@ -89,8 +88,4 @@ impl_debug! {
     }
 }
 
-
-
 pub type Array<T> = ThinArc<(), T>;
-
-

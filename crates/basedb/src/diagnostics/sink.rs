@@ -10,7 +10,7 @@ use codespan_reporting::{
     },
 };
 
-pub use codespan_reporting::term::termcolor::{Ansi, Buffer, NoColor, ColorChoice};
+pub use codespan_reporting::term::termcolor::{Ansi, Buffer, ColorChoice, NoColor};
 use vfs::VfsPath;
 
 use crate::{

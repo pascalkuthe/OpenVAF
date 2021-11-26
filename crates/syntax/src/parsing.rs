@@ -2,9 +2,9 @@ mod text_tree_sink;
 mod tokenstream_token_src;
 
 use ::preprocessor::{preprocess, sourcemap::SourceContext, Preprocess, SourceProvider};
-use vfs::FileId;
 use rowan::{TextRange, TextSize};
 use text_tree_sink::TextTreeSink;
+use vfs::FileId;
 
 use crate::{syntax_node::GreenNode, SyntaxError};
 

@@ -1,5 +1,5 @@
-use crate::SyntaxKind;
 use crate::{ast, AstPtr};
+use crate::{SyntaxKind, SyntaxNodePtr};
 use stdx::{impl_display, pretty};
 use text_size::TextRange;
 
@@ -52,12 +52,44 @@ pub enum SyntaxError {
         single: bool,
         illegal_nodes: Vec<TextRange>,
     },
-    IllegalInfToken{
-        range: TextRange
+    IllegalInfToken {
+        range: TextRange,
     },
-    UnitsExpectedStringLiteral{
-        range: TextRange
-    }
+    UnitsExpectedStringLiteral {
+        range: TextRange,
+    },
+    IllegalDisciplineAttrIdent {
+        range: TextRange,
+    },
+
+    IllegalNatureIdent {
+        range: TextRange,
+    },
+    IllegalAttriubte {
+        range: TextRange,
+        attr: &'static str,
+        expected: &'static str,
+    },
+
+    ReservedIdentifier {
+        src: SyntaxNodePtr,
+        compat: bool,
+        name: String,
+    },
+
+    DuplicatePort {
+        pos: Vec<TextRange>,
+        name: String,
+    },
+
+    MixedModuleHead {
+        module_ports: AstPtr<ast::ModulePorts>,
+    },
+
+    IllegalBodyPorts {
+        head: TextRange,
+        body_ports: Vec<TextRange>,
+    },
 }
 
 use SyntaxError::*;
@@ -77,5 +109,12 @@ impl_display! {
         IllegalBranchNodeExpr{..} => "illegal expr was used to declare a branch node!";
         IllegalInfToken{..} => "unexpected token 'inf'; expected an expression";
         UnitsExpectedStringLiteral{..} => "'units' attribute must be a string literal";
+        IllegalDisciplineAttrIdent{..} => "illegal discpline attribute identifier!";
+        IllegalNatureIdent{..} => "illegal nature identifier";
+        IllegalAttriubte{attr,..} => "illegal value provided for {} attribute", attr;
+        ReservedIdentifier{name,..} => "reserved keyword '{}' was used as an identifier",name;
+        DuplicatePort{name,..} => "port '{}' was declared multiple times!",name;
+        MixedModuleHead{..} => "module header contains mix of port references and port declarations";
+        IllegalBodyPorts{..} => "ports declared in module head and body";
     }
 }

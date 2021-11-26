@@ -32,7 +32,7 @@ pub(crate) struct TextTreeSink<'a> {
     at_err: bool,
     sm: &'a SourceMap,
     ranges: Vec<(TextRange, SourceContext, TextSize)>,
-    ctx: (SourceContext, TextSize),
+    current_range: CtxSpan,
 }
 
 enum State {
@@ -149,7 +149,10 @@ impl<'a> TextTreeSink<'a> {
             sm,
             current_src,
             ranges: Vec::with_capacity(128),
-            ctx: (SourceContext::ROOT, TextSize::from(0)),
+            current_range: CtxSpan {
+                ctx: SourceContext::ROOT,
+                range: TextRange::empty(TextSize::from(0)),
+            },
             panic: false,
             at_err: false,
         }
@@ -167,7 +170,7 @@ impl<'a> TextTreeSink<'a> {
         }
         let start = self.ranges.last().map_or(0.into(), |(range, _, _)| range.end());
         let range = TextRange::new(start, self.text_pos);
-        self.ranges.push((range, self.ctx.0, self.ctx.1));
+        self.ranges.push((range, self.current_range.ctx, self.current_range.range.start()));
         let (root_node, errors) = self.inner.finish_raw();
         (root_node, errors, self.ranges)
     }
@@ -190,21 +193,25 @@ impl<'a> TextTreeSink<'a> {
     // }
 
     fn do_token(&mut self, kind: SyntaxKind, span: CtxSpan) {
-        if span.ctx != self.ctx.0 {
+        let same_ctx = span.ctx == self.current_range.ctx;
+        let is_continous = same_ctx && span.range.end() == self.current_range.range.start();
+
+        if !is_continous {
             let start = self.ranges.last().map_or(0.into(), |(range, _, _)| range.end());
             let range = TextRange::new(start, self.text_pos);
-            let ctx = mem::replace(&mut self.ctx, (span.ctx, span.range.start()));
+            let old_range = mem::replace(&mut self.current_range, span);
+            self.ranges.push((range, old_range.ctx, old_range.range.start()))
+        }
+
+        if !same_ctx {
+            // We are in a different ctx and therefore the text comes from somewhere else...
+            // Switch the src code
             // Unwrap is okay here because the file was already read succesffully by he preprocessor or the SourceContext wouldn't exist
             let decl = self.sm.ctx_data(span.ctx).decl;
             let src = self.db.file_text(decl.file).unwrap();
-            // if span.ctx == SourceContext::ROOT {
-            //     debug!("{:?} ; {:?} ; root", kind, span);
-            // } else {
-            //     debug!("{:?} ; {:?} ; {:#?}", kind, span, &src[decl.range]);
-            // }
             self.current_src = src;
-            self.ranges.push((range, ctx.0, ctx.1))
         }
+
         let range = span.to_file_span(self.sm).range;
         let text = &self.current_src[range];
         self.text_pos += range.len();

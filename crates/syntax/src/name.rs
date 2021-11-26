@@ -1,10 +1,10 @@
 use std::{fmt::Display, ops::Deref};
 
-use smol_str::SmolStr;
-use syntax::{
+use crate::{
     ast::{self, SysFun},
     SyntaxToken,
 };
+use smol_str::SmolStr;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Name(SmolStr);
@@ -84,19 +84,19 @@ impl AsIdent for ast::Path {
     }
 }
 
-impl AsIdent for crate::Path {
-    fn as_ident(&self) -> Option<Name> {
-        if self.is_root_path {
-            return None;
-        }
+// impl AsIdent for crate::Path {
+//     fn as_ident(&self) -> Option<Name> {
+//         if self.is_root_path {
+//             return None;
+//         }
 
-        if let [name] = &*self.segments {
-            Some(name.clone())
-        } else {
-            None
-        }
-    }
-}
+//         if let [name] = &*self.segments {
+//             Some(name.clone())
+//         } else {
+//             None
+//         }
+//     }
+// }
 
 impl AsName for SysFun {
     fn as_name(&self) -> Name {

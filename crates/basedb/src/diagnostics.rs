@@ -26,17 +26,17 @@ use syntax::{
 };
 
 pub trait Diagnostic {
-    fn lint(&self) -> Option<(Lint, LintSrc)> {
+    fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
         None
     }
 
     fn build_report(&self, root_file: FileId, db: &dyn BaseDB) -> Report;
 
     fn to_report(&self, root_file: FileId, db: &dyn BaseDB) -> Option<Report> {
-        if let Some((lint, lint_src)) = self.lint() {
+        if let Some((lint, lint_src)) = self.lint(root_file, db) {
             let (lvl, is_default) = match lint_src.overwrite {
                 Some(lvl) => (lvl, false),
-                None => db.lint_lvl(lint, root_file, lint_src.item_tree),
+                None => db.lint_lvl(lint, root_file, lint_src.ast),
             };
             let LintData { name, documentation_id, .. } = db.lint_data(lint);
 
@@ -81,7 +81,7 @@ pub fn to_unified_span_list(sm: &SourceMap, spans: &mut [CtxSpan]) -> (FileId, V
             let FileSpan { range, file } = span.to_file_span(sm);
             (file, vec![range])
         }
-        mut spans => sm.to_file_spans(&mut spans),
+        spans => sm.to_file_spans(spans),
     }
 }
 

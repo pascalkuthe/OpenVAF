@@ -1,8 +1,8 @@
-use basedb::{
+use crate::{
     diagnostics::{text_ranges_to_unified_spans, Diagnostic, Label, LabelStyle, Report},
     lints::{
         builtin::{lint_level_owerwrite, lint_not_found},
-        ErasedItemTreeId, Lint, LintSrc,
+        Lint, LintSrc,
     },
     BaseDB, FileId,
 };
@@ -13,11 +13,13 @@ use syntax::{sourcemap::FileSpan, TextRange};
 pub enum AttrDiagnostic {
     ExpectedArrayOrLiteral { range: TextRange, attr: &'static str },
     ExpectedLiteral { range: TextRange, attr: &'static str },
-    UnknownLint { range: TextRange, lint: String, item_tree: ErasedItemTreeId },
-    LintOverwrite { old: TextRange, new: TextRange, name: String, item_tree: ErasedItemTreeId },
+    UnknownLint { range: TextRange, lint: String, src: ErasedAstId },
+    LintOverwrite { old: TextRange, new: TextRange, name: String, src: ErasedAstId },
 }
 
 use AttrDiagnostic::*;
+
+use crate::ErasedAstId;
 
 impl_display! {
     match AttrDiagnostic{
@@ -29,15 +31,10 @@ impl_display! {
 }
 
 impl Diagnostic for AttrDiagnostic {
-    fn lint(&self) -> Option<(Lint, LintSrc)> {
-        match self {
-            UnknownLint { item_tree, .. } => {
-                Some((lint_not_found, LintSrc { overwrite: None, item_tree: Some(*item_tree) }))
-            }
-            LintOverwrite { item_tree, .. } => Some((
-                lint_level_owerwrite,
-                LintSrc { overwrite: None, item_tree: Some(*item_tree) },
-            )),
+    fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
+        match *self {
+            UnknownLint { src, .. } => Some((lint_not_found, src.into())),
+            LintOverwrite { src, .. } => Some((lint_level_owerwrite, src.into())),
             _ => None,
         }
     }

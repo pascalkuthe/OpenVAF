@@ -76,7 +76,6 @@ fn parse_if_body<'a, const PROCESS: bool, const CONSIDER_ELSE: bool>(
 
                 CompilerDirective::EndIf => depth -= 1,
                 _ => (),
-                // x => eprintln!("skipping {:?} {}", x, p.current_text()),
             },
             PreprocessorToken::Eof => {
                 err.push(UnexpectedEof { expected: "`endif", span: p.current_span() });

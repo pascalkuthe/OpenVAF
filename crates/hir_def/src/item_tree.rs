@@ -13,27 +13,22 @@
 mod lower;
 mod pretty;
 
-
 #[cfg(test)]
 mod tests;
 
 use std::{fmt::Debug, hash::Hash, ops::Index, sync::Arc};
 
 use crate::{
-    attrs::{AttrDiagnostic, LintAttrs},
-    db::HirDefDB,
-    FileAstId, Name, Path, Type,
+    db::HirDefDB, LocalDisciplineAttrId, LocalFunctionArgId, LocalNatureAttrId, LocalNodeId, Path,
+    Type,
 };
 use ahash::AHashMap;
-// use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx, IdxRange};
-use basedb::{
-    lints::{ErasedItemTreeId, Lint, LintLevel},
-    FileId,
-};
+use basedb::{AstId, ErasedAstId, FileId};
 use stdx::impl_from_typed;
 use syntax::{
     ast::{self, BlockStmt},
+    name::Name,
     AstNode,
 };
 use typed_index_collections::TiVec;
@@ -43,21 +38,12 @@ use typed_index_collections::TiVec;
 pub struct ItemTree {
     pub top_level: Box<[RootItem]>,
     pub(crate) data: ItemTreeData,
-    lint_attrs: TiVec<ErasedItemTreeId, LintAttrs>,
-    pub diagnostics: Vec<AttrDiagnostic>,
-    pub(crate) blocks: AHashMap<FileAstId<BlockStmt>, Block>,
+    pub(crate) blocks: AHashMap<AstId<BlockStmt>, Block>,
 }
 
 impl Default for ItemTree {
     fn default() -> Self {
-        Self {
-            top_level: Default::default(),
-            data: Default::default(),
-            // Ensure roo sctx
-            lint_attrs: TiVec::from(vec![LintAttrs::empty(None)]),
-            diagnostics: Default::default(),
-            blocks: AHashMap::new(),
-        }
+        Self { top_level: Default::default(), data: Default::default(), blocks: AHashMap::new() }
     }
 }
 
@@ -83,9 +69,7 @@ impl ItemTree {
             ports,
             branches,
             functions,
-            function_args,
         } = &mut self.data;
-        function_args.shrink_to_fit();
         modules.shrink_to_fit();
         disciplines.shrink_to_fit();
         natures.shrink_to_fit();
@@ -100,17 +84,7 @@ impl ItemTree {
         discipline_attrs.shrink_to_fit();
     }
 
-    pub fn lint_lvl(&self, mut id: ErasedItemTreeId, lint: Lint) -> Option<LintLevel> {
-        loop {
-            let attrs = &self.lint_attrs[id];
-            if let Some(lvl) = attrs.level(lint) {
-                return Some(lvl);
-            }
-            id = attrs.parent()?;
-        }
-    }
-
-    pub fn block_scope(&self, block: FileAstId<BlockStmt>) -> &Block {
+    pub fn block_scope(&self, block: AstId<BlockStmt>) -> &Block {
         &self.blocks[&block]
     }
 }
@@ -129,15 +103,13 @@ pub(crate) struct ItemTreeData {
     pub ports: Arena<Port>,
     pub branches: Arena<Branch>,
     pub functions: Arena<Function>,
-    pub function_args: Arena<FunctionArg>,
 }
 
 /// Trait implemented by all item nodes in the item tree.
 pub trait ItemTreeNode: Clone {
     type Source: AstNode;
 
-    fn ast_id(&self) -> FileAstId<Self::Source>;
-    fn erased_id(&self) -> ErasedItemTreeId;
+    fn ast_id(&self) -> AstId<Self::Source>;
 
     /// Looks up an instance of `Self` in an item tree.
     fn lookup(tree: &ItemTree, index: Idx<Self>) -> &Self;
@@ -166,13 +138,13 @@ impl_from_typed! (
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum BlockScopeItem {
-    Scope(FileAstId<BlockStmt>),
+    Scope(AstId<BlockStmt>),
     Parameter(ItemTreeId<Param>),
     Variable(ItemTreeId<Var>),
 }
 
 impl_from_typed! (
-    Scope(FileAstId<BlockStmt>),
+    Scope(AstId<BlockStmt>),
     Parameter(ItemTreeId<Param>),
     Variable(ItemTreeId<Var>) for BlockScopeItem
 );
@@ -198,13 +170,10 @@ macro_rules! item_tree_nodes {
             impl ItemTreeNode for $typ {
                 type Source = $ast;
 
-                fn ast_id(&self) -> FileAstId<Self::Source> {
+                fn ast_id(&self) -> AstId<Self::Source> {
                     self.ast_id
                 }
 
-                fn erased_id(&self) -> ErasedItemTreeId {
-                    self.erased_id
-                }
 
                 fn lookup(tree: &ItemTree, index: Idx<Self>) -> &Self {
                     &tree.data.$fld[index]
@@ -247,33 +216,34 @@ item_tree_nodes! {
     Function in functions -> ast::Function,
     NatureAttr in nature_attrs -> ast::NatureAttr,
     DisciplineAttr in discipline_attrs -> ast::DisciplineAttr,
-    FunctionArg in function_args -> ast::FunctionArg,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Module {
     pub name: Name,
-
-    pub exptected_ports: Vec<Name>,
-    pub head_ports: IdxRange<Port>,
-
-    pub body_ports: IdxRange<Port>,
-    pub nets: IdxRange<Net>,
-    pub branches: IdxRange<Branch>,
-    pub functions: IdxRange<Function>,
-    pub scope_items: Vec<BlockScopeItem>,
-    pub ast_id: FileAstId<ast::ModuleDecl>,
-    pub erased_id: ErasedItemTreeId,
+    pub nodes: TiVec<LocalNodeId, Node>,
+    pub items: Vec<ModuleItem>,
+    pub ast_id: AstId<ast::ModuleDecl>,
 }
 
-impl Module {
-    /// The Verilog-A standard only allows `body_ports` or `head_ports`.
-    /// A lint seperatly checks that the ports are delared legally.
-    /// This function simply returns all relevant ports for later stages of the compiler
-    pub fn ports(&self) -> IdxRange<Port> {
-        self.head_ports.cover(&self.body_ports)
-    }
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum ModuleItem {
+    Scope(AstId<BlockStmt>),
+    Parameter(ItemTreeId<Param>),
+    Variable(ItemTreeId<Var>),
+    Branch(ItemTreeId<Branch>),
+    Node(LocalNodeId),
+    Function(ItemTreeId<Function>),
 }
+
+impl_from_typed! (
+    Scope(AstId<BlockStmt>),
+    Parameter(ItemTreeId<Param>),
+    Variable(ItemTreeId<Var>),
+    Branch(ItemTreeId<Branch>),
+    Node(LocalNodeId),
+    Function(ItemTreeId<Function>) for ModuleItem
+);
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Port {
@@ -284,8 +254,7 @@ pub struct Port {
     pub is_output: bool,
 
     pub name_idx: usize,
-    pub ast_id: FileAstId<ast::PortDecl>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::PortDecl>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -295,51 +264,66 @@ pub struct Net {
     pub is_gnd: bool,
 
     pub name_idx: usize,
-    pub ast_id: FileAstId<ast::NetDecl>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::NetDecl>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Var {
     pub name: Name,
     pub ty: Type,
-    pub ast_id: FileAstId<ast::Var>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::Var>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Param {
     pub name: Name,
     pub ty: Type,
-    pub ast_id: FileAstId<ast::Param>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::Param>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub struct NatureRef {
+    pub name: Name,
+    pub kind: NatureRefKind,
+}
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Copy)]
+pub enum NatureRefKind {
+    Nature,
+    DisciplinePotential,
+    DisciplineFlow,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Nature {
     pub name: Name,
-    pub parent: Option<Name>,
-    pub access: Option<Name>,
-    pub ddt_nature: Option<Name>,
-    pub idt_nature: Option<Name>,
-    pub units: Option<String>,
+    pub parent: Option<NatureRef>,
+    pub access: Option<(Name, LocalNatureAttrId)>,
+    pub ddt_nature: Option<(NatureRef, LocalNatureAttrId)>,
+    pub idt_nature: Option<(NatureRef, LocalNatureAttrId)>,
+    pub abstol: Option<LocalNatureAttrId>,
+    pub units: Option<(String, LocalNatureAttrId)>,
     pub attrs: IdxRange<NatureAttr>,
-    pub ast_id: FileAstId<ast::NatureDecl>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::NatureDecl>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct NatureAttr {
     pub name: Name,
-    pub ast_id: FileAstId<ast::NatureAttr>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::NatureAttr>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Copy)]
+pub enum DisciplineAttrKind {
+    FlowOverwrite,
+    PotentialOverwrite,
+    UserDefined,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct DisciplineAttr {
     pub name: Name,
-    pub ast_id: FileAstId<ast::DisciplineAttr>,
-    pub erased_id: ErasedItemTreeId,
+    pub kind: DisciplineAttrKind,
+    pub ast_id: AstId<ast::DisciplineAttr>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -352,17 +336,13 @@ pub enum Domain {
 pub struct Discipline {
     pub name: Name,
 
-    pub potential: Option<Name>,
-    pub flow: Option<Name>,
-    pub attrs: IdxRange<DisciplineAttr>,
+    pub potential: Option<(NatureRef, LocalDisciplineAttrId)>,
+    pub flow: Option<(NatureRef, LocalDisciplineAttrId)>,
+    pub domain: Option<(Domain, LocalDisciplineAttrId)>,
 
-    // Not strictly neccessary to resolve this here but
-    // we already have to do the other attributes here
-    // adding extra handeling is not worth it
-    pub domain: Option<Domain>,
+    pub extra_attrs: IdxRange<DisciplineAttr>,
 
-    pub ast_id: FileAstId<ast::DisciplineDecl>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::DisciplineDecl>,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -376,43 +356,118 @@ pub enum BranchKind {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Branch {
     pub name: Name,
-    // Strictly speaking this shouldn't be part of the item tree, because it doesn't effect name
-    // resolution but reconstructing the red layer is just not worth it for such a small thing
+    pub name_idx: usize,
     pub kind: BranchKind,
-    pub ast_id: FileAstId<ast::BranchDecl>,
-    pub erased_id: ErasedItemTreeId,
+    pub ast_id: AstId<ast::BranchDecl>,
 }
-
-// #[derive(Debug, Eq, PartialEq, Clone)]
-// pub enum BranchType {
-//     PortFlowProbe { port: Name },
-//     NodeToGnd { node: Name },
-//     Connection { hi: Name, lo: Name },
-// }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Block {
     pub name: Option<Name>,
     pub scope_items: Vec<BlockScopeItem>,
-    // pub ast_id: FileAstId<ast::BlockStmt>,
-    pub erased_id: ErasedItemTreeId,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Function {
     pub name: Name,
     pub ty: Type,
-    pub args: IdxRange<FunctionArg>,
-    pub scope_items: Vec<BlockScopeItem>,
-    pub ast_id: FileAstId<ast::Function>,
-    pub erased_id: ErasedItemTreeId,
+    pub args: TiVec<LocalFunctionArgId, FunctionArg>,
+    pub items: Vec<FunctionItem>,
+    pub ast_id: AstId<ast::Function>,
 }
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum FunctionItem {
+    Scope(AstId<BlockStmt>),
+    Parameter(ItemTreeId<Param>),
+    Variable(ItemTreeId<Var>),
+    FunctionArg(LocalFunctionArgId),
+}
+
+impl_from_typed! (
+    Scope(AstId<BlockStmt>),
+    Parameter(ItemTreeId<Param>),
+    Variable(ItemTreeId<Var>),
+    FunctionArg(LocalFunctionArgId) for FunctionItem
+);
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct FunctionArg {
     pub name: Name,
+    pub name_idx: usize,
     pub is_input: bool,
     pub is_output: bool,
-    pub ast_id: FileAstId<ast::FunctionArg>,
-    pub erased_id: ErasedItemTreeId,
+    pub declarations: Vec<ItemTreeId<Var>>,
+    pub ast_ids: Vec<AstId<ast::FunctionArg>>,
+}
+
+impl FunctionArg {
+    pub fn ty(&self, tree: &ItemTree) -> Type {
+        self.declarations.first().map_or(Type::Err, |decl| tree[*decl].ty.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
+pub enum NodeTypeDecl {
+    Net(ItemTreeId<Net>),
+    Port(ItemTreeId<Port>),
+}
+
+impl NodeTypeDecl {
+    pub fn discipline<'a>(&self, tree: &'a ItemTree) -> &'a Option<Name> {
+        match *self {
+            NodeTypeDecl::Net(net) => &tree[net].discipline,
+            NodeTypeDecl::Port(port) => &tree[port].discipline,
+        }
+    }
+
+    pub fn is_gnd(&self, tree: &ItemTree) -> bool {
+        match *self {
+            NodeTypeDecl::Net(net) => tree[net].is_gnd,
+            NodeTypeDecl::Port(port) => tree[port].is_gnd,
+        }
+    }
+
+    pub fn direction(&self, tree: &ItemTree) -> Option<(bool, bool)> {
+        match *self {
+            NodeTypeDecl::Port(port) => Some((tree[port].is_input, tree[port].is_output)),
+            NodeTypeDecl::Net(_) => None,
+        }
+    }
+}
+
+impl_from_typed!(
+    Net(ItemTreeId<Net>),
+    Port(ItemTreeId<Port>) for NodeTypeDecl
+);
+
+impl NodeTypeDecl {
+    pub fn name<'a>(&self, tree: &'a ItemTree) -> &'a Name {
+        match *self {
+            NodeTypeDecl::Net(net) => &tree[net].name,
+            NodeTypeDecl::Port(port) => &tree[port].name,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node {
+    pub name: Name,
+    pub ast_id: ErasedAstId,
+    // TODO small vec?
+    pub decls: Vec<NodeTypeDecl>,
+}
+
+impl Node {
+    pub fn direction(&self, tree: &ItemTree) -> (bool, bool) {
+        self.decls.iter().find_map(|decl| decl.direction(tree)).unwrap_or((false, false))
+    }
+
+    pub fn is_gnd(&self, tree: &ItemTree) -> bool {
+        self.decls.iter().any(|decl| decl.is_gnd(tree))
+    }
+
+    pub fn discipline(&self, tree: &ItemTree) -> Option<Name> {
+        self.decls.iter().find_map(|decl| decl.discipline(tree).clone())
+    }
 }

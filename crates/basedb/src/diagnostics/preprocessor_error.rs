@@ -8,7 +8,7 @@ use crate::{
 };
 
 impl Diagnostic for PreprocessorDiagnostic {
-    fn lint(&self) -> Option<(Lint, LintSrc)> {
+    fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
         if let PreprocessorDiagnostic::MacroOverwritten { .. } = self {
             Some((lints::builtin::macro_overwritten, LintSrc::GLOBAL))
         } else {

@@ -1,11 +1,8 @@
 // mod allowed_options;
-mod ast_id_map;
-mod attrs;
 pub mod body;
 pub mod db;
 pub mod expr;
 mod item_tree;
-pub mod name;
 pub mod nameres;
 mod path;
 mod types;
@@ -16,12 +13,17 @@ mod data;
 #[cfg(test)]
 mod tests;
 
-use basedb::FileId;
+use arena::Idx;
+use basedb::{AstId, ErasedAstId, FileId};
+use item_tree::Node;
 use nameres::{
-    DefMap, DefMapSource, FunctionArgPos, LocalNodeId, PathResolveError, ScopeDefItemKind,
+    diagnostics::PathResolveError, DefMap, DefMapSource, ResolvedPath, ScopeDefItemKind,
 };
 use stdx::impl_from;
-use syntax::{ast::BlockStmt, AstNode};
+use syntax::{
+    ast::{self, BlockStmt},
+    AstNode,
+};
 
 use std::{
     hash::{Hash, Hasher},
@@ -31,25 +33,22 @@ use std::{
 use crate::{
     db::HirDefDB,
     item_tree::{
-        Branch, Discipline, DisciplineAttr, Function, ItemTreeId, ItemTreeNode, Module, Nature,
-        NatureAttr, Param, Var,
+        Branch, Discipline, Function, ItemTreeId, ItemTreeNode, Module, Nature, Param, Var,
     },
     nameres::ScopeDefItem,
 };
 
 pub use crate::{
-    ast_id_map::{AstIdMap, FileAstId},
     builtin::BuiltIn,
     expr::{Case, Expr, ExprId, Literal, Stmt, StmtId},
-    item_tree::ItemTree,
-    name::Name,
+    item_tree::{BranchKind, ItemTree, NatureRef, NatureRefKind},
     path::Path,
-    types::{FunctionSignature, Type},
+    types::Type,
 };
 
 pub use basedb::impl_intern_key;
 
-trait Intern {
+pub trait Intern {
     type ID;
     fn intern(self, db: &dyn db::HirDefDB) -> Self::ID;
 }
@@ -83,7 +82,7 @@ impl ScopeId {
         &self,
         db: &dyn HirDefDB,
         path: &Path,
-    ) -> Result<ScopeDefItem, PathResolveError> {
+    ) -> Result<ResolvedPath, PathResolveError> {
         match self.src {
             DefMapSource::Block(_) if path.is_root_path => {
                 db.def_map(self.root_file).resolve_root_path(&path.segments, db)
@@ -118,6 +117,10 @@ impl ScopeId {
             ),
         }
     }
+
+    pub fn root(root_file: FileId) -> ScopeId {
+        ScopeId { root_file, local_scope: 0usize.into(), src: DefMapSource::Root }
+    }
 }
 
 #[derive(Debug)]
@@ -130,8 +133,12 @@ impl<N: ItemTreeNode> ItemLoc<N> {
     pub fn item_tree(&self, db: &dyn HirDefDB) -> Arc<ItemTree> {
         db.item_tree(self.scope.root_file)
     }
+    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<N::Source> {
+        N::lookup(&self.item_tree(db), self.id).ast_id()
+    }
+
     pub fn source(&self, db: &dyn HirDefDB) -> N::Source {
-        let ast_id = N::lookup(&self.item_tree(db), self.id).ast_id();
+        let ast_id = self.ast_id(db);
         db.ast_id_map(self.scope.root_file)
             .get(ast_id)
             .to_node(db.parse(self.scope.root_file).tree().syntax())
@@ -162,10 +169,9 @@ impl<N: ItemTreeNode> Hash for ItemLoc<N> {
 }
 
 macro_rules! impl_intern {
-    ($ty: ident, $id:ident, $loc:ident, $intern:ident, $lookup:ident) => {
+    ($id:ident, $loc:ident, $intern:ident, $lookup:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub struct $id(salsa::InternId);
-        pub type $loc = ItemLoc<$ty>;
 
         impl_intern_key!($id);
 
@@ -186,60 +192,171 @@ macro_rules! impl_intern {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BlockId(salsa::InternId);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockLoc {
-    ast: FileAstId<BlockStmt>,
+    ast: AstId<BlockStmt>,
     parent: ScopeId,
 }
 
-impl_intern_key!(BlockId);
+impl_intern!(BlockId, BlockLoc, intern_block, lookup_intern_block);
 
-impl Intern for BlockLoc {
-    type ID = BlockId;
-    fn intern(self, db: &dyn db::HirDefDB) -> BlockId {
-        db.intern_block(self)
+pub type ModuleLoc = ItemLoc<Module>;
+impl_intern!(ModuleId, ModuleLoc, intern_module, lookup_intern_module);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DisciplineLoc {
+    pub root_file: FileId,
+    pub id: ItemTreeId<Discipline>,
+}
+
+impl DisciplineLoc {
+    pub fn item_tree(&self, db: &dyn HirDefDB) -> Arc<ItemTree> {
+        db.item_tree(self.root_file)
+    }
+
+    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::DisciplineDecl> {
+        self.item_tree(db)[self.id].ast_id
+    }
+
+    pub fn source(&self, db: &dyn HirDefDB) -> ast::DisciplineDecl {
+        let ast_id = self.ast_id(db);
+        db.ast_id_map(self.root_file).get(ast_id).to_node(db.parse(self.root_file).tree().syntax())
     }
 }
 
-impl Lookup for BlockId {
-    type Data = BlockLoc;
-    fn lookup(&self, db: &dyn db::HirDefDB) -> BlockLoc {
-        db.lookup_intern_block(*self)
+impl_intern!(DisciplineId, DisciplineLoc, intern_discipline, lookup_intern_discipline);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NatureLoc {
+    pub root_file: FileId,
+    pub id: ItemTreeId<Nature>,
+}
+
+impl NatureLoc {
+    pub fn item_tree(&self, db: &dyn HirDefDB) -> Arc<ItemTree> {
+        db.item_tree(self.root_file)
+    }
+
+    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::NatureDecl> {
+        db.item_tree(self.root_file)[self.id].ast_id
+    }
+
+    pub fn source(&self, db: &dyn HirDefDB) -> ast::NatureDecl {
+        let ast_id = self.ast_id(db);
+        db.ast_id_map(self.root_file).get(ast_id).to_node(db.parse(self.root_file).tree().syntax())
     }
 }
 
-impl_intern!(Module, ModuleId, ModuleLoc, intern_module, lookup_intern_module);
-// impl_intern!(BlockScope, BlockId, BlockLoc, intern_block, lookup_intern_block);
-impl_intern!(Nature, NatureId, NatureLoc, intern_nature, lookup_intern_nature);
-impl_intern!(Discipline, DisciplineId, DisciplineLoc, intern_discipline, lookup_intern_discipline);
-// impl_intern!(Port, PortId, PortLoc, intern_port, lookup_intern_port);
-// impl_intern!(Net, NetId, NetLoc, intern_net, lookup_intern_net);
-impl_intern!(Branch, BranchId, BranchLoc, intern_branch, lookup_intern_branch);
-impl_intern!(Var, VarId, VarLoc, intern_var, lookup_intern_var);
-impl_intern!(Param, ParamId, ParamLoc, intern_param, lookup_intern_param);
-impl_intern!(Function, FunctionId, FunctionLoc, intern_function, lookup_intern_function);
+impl_intern!(NatureId, NatureLoc, intern_nature, lookup_intern_nature);
+
+pub type BranchLoc = ItemLoc<Branch>;
+impl_intern!(BranchId, BranchLoc, intern_branch, lookup_intern_branch);
+
+pub type VarLoc = ItemLoc<Var>;
+impl_intern!(VarId, VarLoc, intern_var, lookup_intern_var);
+
+pub type ParamLoc = ItemLoc<Param>;
+impl_intern!(ParamId, ParamLoc, intern_param, lookup_intern_param);
+
+pub type FunctionLoc = ItemLoc<Function>;
+impl_intern!(FunctionId, FunctionLoc, intern_function, lookup_intern_function);
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct NodeLoc {
+    pub module: ModuleId,
+    pub id: LocalNodeId,
+}
+
+pub type LocalNodeId = Idx<Node>;
+
+impl_intern!(NodeId, NodeLoc, intern_node, lookup_intern_node);
+
+impl NodeLoc {
+    pub fn ast_id(&self, db: &dyn HirDefDB) -> ErasedAstId {
+        let loc = self.module.lookup(db);
+        loc.item_tree(db)[loc.id].nodes[self.id].ast_id
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct FunctionArgLoc {
+    pub fun: FunctionId,
+    pub id: LocalFunctionArgId,
+}
+
+impl FunctionArgLoc {
+    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::FunctionArg> {
+        let fun = self.fun.lookup(db);
+        fun.item_tree(db)[fun.id].args[self.id].ast_ids[0]
+    }
+}
+
+pub type LocalFunctionArgId = Idx<item_tree::FunctionArg>;
+
+impl_intern!(FunctionArgId, FunctionArgLoc, intern_function_arg, lookup_intern_function_arg);
+
+pub type LocalDisciplineAttrId = Idx<data::DisciplineAttrData>;
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct DisciplineAttrLoc {
+    pub discipline: DisciplineId,
+    pub id: LocalDisciplineAttrId,
+}
+
 impl_intern!(
-    NatureAttr,
-    NatureAttrId,
-    NatureAttrLoc,
-    intern_nature_attr,
-    lookup_intern_nature_attr
-);
-impl_intern!(
-    DisciplineAttr,
     DisciplineAttrId,
     DisciplineAttrLoc,
     intern_discipline_attr,
     lookup_intern_discipline_attr
 );
 
+pub type LocalNatureAttrId = Idx<data::NatureAttrData>;
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct NatureAttrLoc {
+    pub nature: NatureId,
+    pub id: LocalNatureAttrId,
+}
+
+impl NatureAttrLoc {
+    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::NatureAttr> {
+        let nature = self.nature.lookup(db);
+        let item_tree = &nature.item_tree(db);
+        let nature = &item_tree[nature.id];
+        let id = u32::from(nature.attrs.start()) + u32::from(self.id);
+        let id: ItemTreeId<item_tree::NatureAttr> = ItemTreeId::from(id);
+        item_tree[id].ast_id()
+    }
+}
+
+impl_intern!(NatureAttrId, NatureAttrLoc, intern_nature_attr, lookup_intern_nature_attr);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithExprId {
     VarId(VarId),
     NatureAttrId(NatureAttrId),
     DisciplineAttrId(DisciplineAttrId),
+}
+
+impl DefWithExprId {
+    pub fn ty(&self, db: &dyn HirDefDB) -> Option<Type> {
+        match self {
+            DefWithExprId::VarId(var) => Some(db.var_data(*var).ty.clone()),
+            // TODO different types?
+            DefWithExprId::NatureAttrId(_) | DefWithExprId::DisciplineAttrId(_) => None,
+        }
+    }
+}
+
+impl DefWithExprId {
+    pub fn file(&self, db: &dyn HirDefDB) -> FileId {
+        match self {
+            DefWithExprId::VarId(var) => var.lookup(db).scope.root_file,
+            DefWithExprId::NatureAttrId(attr) => attr.lookup(db).nature.lookup(db).root_file,
+            DefWithExprId::DisciplineAttrId(attr) => {
+                attr.lookup(db).discipline.lookup(db).root_file
+            }
+        }
+    }
 }
 
 impl_from!(VarId, NatureAttrId,DisciplineAttrId for DefWithExprId);
@@ -263,8 +380,8 @@ impl TryFrom<ScopeDefItem> for DefWithBodyId {
             ScopeDefItem::VarId(var) => var.into(),
             ScopeDefItem::ParamId(param) => param.into(),
             ScopeDefItem::FunctionId(fun) => fun.into(),
-            ScopeDefItem::NatureAttrId(attr) => attr.into(),
-            ScopeDefItem::DisciplineAttrId(attr) => attr.into(),
+            // ScopeDefItem::NatureAttrId(attr) => attr.into(),
+            // ScopeDefItem::DisciplineAttrId(attr) => attr.into(),
             _ => return Err(()),
         };
         Ok(res)
@@ -277,6 +394,15 @@ pub enum DefWithBehaviourId {
     FunctionId(FunctionId),
 }
 
+impl DefWithBehaviourId {
+    pub fn file(&self, db: &dyn HirDefDB) -> FileId {
+        match self {
+            DefWithBehaviourId::ModuleId(module) => module.lookup(db).scope.root_file,
+            DefWithBehaviourId::FunctionId(function) => function.lookup(db).scope.root_file,
+        }
+    }
+}
+
 impl_from!( ModuleId,FunctionId for DefWithBehaviourId);
 
 impl TryFrom<ScopeDefItem> for DefWithExprId {
@@ -285,8 +411,8 @@ impl TryFrom<ScopeDefItem> for DefWithExprId {
     fn try_from(item: ScopeDefItem) -> Result<Self, Self::Error> {
         match item {
             ScopeDefItem::VarId(var) => Ok(var.into()),
-            ScopeDefItem::NatureAttrId(attr) => Ok(attr.into()),
-            ScopeDefItem::DisciplineAttrId(attr) => Ok(attr.into()),
+            // ScopeDefItem::NatureAttrId(attr) => Ok(attr.into()),
+            // ScopeDefItem::DisciplineAttrId(attr) => Ok(attr.into()),
             _ => Err(()),
         }
     }
@@ -301,55 +427,5 @@ impl TryFrom<ScopeDefItem> for DefWithBehaviourId {
             ScopeDefItem::FunctionId(fun) => Ok(fun.into()),
             _ => Err(()),
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct NodeLoc {
-    pub scope: ScopeId,
-    pub id: LocalNodeId,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct NodeId(salsa::InternId);
-
-impl_intern_key!(NodeId);
-impl Intern for NodeLoc {
-    type ID = NodeId;
-
-    fn intern(self, db: &dyn db::HirDefDB) -> Self::ID {
-        db.intern_node(self)
-    }
-}
-impl Lookup for NodeId {
-    type Data = NodeLoc;
-
-    fn lookup(&self, db: &dyn db::HirDefDB) -> Self::Data {
-        db.lookup_intern_node(*self)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct FunctionArgLoc {
-    fun: FunctionId,
-    arg_pos: FunctionArgPos,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FunctionArgId(salsa::InternId);
-
-impl_intern_key!(FunctionArgId);
-impl Intern for FunctionArgLoc {
-    type ID = FunctionArgId;
-
-    fn intern(self, db: &dyn db::HirDefDB) -> Self::ID {
-        db.intern_function_arg(self)
-    }
-}
-impl Lookup for FunctionArgId {
-    type Data = FunctionArgLoc;
-
-    fn lookup(&self, db: &dyn db::HirDefDB) -> Self::Data {
-        db.lookup_intern_function_arg(*self)
     }
 }

@@ -1,42 +1,55 @@
-use std::{borrow::Cow, mem};
+use std::{borrow::Cow, mem, sync::Arc};
 
 use ahash::AHashMap;
 use arena::ArenaMap;
 use hir_def::{
-    body::Body,
+    body::{Body, ConstraintValue, Range},
     db::HirDefDB,
-    expr::Literal,
-    nameres::{NatureAccess, PathResolveError, ScopeDefItem, ScopeDefItemKind},
-    BranchId, BuiltIn, Expr, ExprId, FunctionId, Lookup, NodeId, Path, StmtId, Type, VarId,
+    expr::{CaseCond, Literal},
+    nameres::{
+        diagnostics::PathResolveError, NatureAccess, ResolvedPath, ScopeDefItem, ScopeDefItemKind,
+    },
+    BranchId, BuiltIn, DefWithBehaviourId, DefWithExprId, Expr, ExprId, FunctionArgLoc, FunctionId,
+    LocalFunctionArgId, Lookup, NatureId, NodeId, ParamId, Path, StmtId, Type, VarId,
 };
+
 use stdx::{impl_from, iter::zip};
-use syntax::ast::{BinaryOp, UnaryOp};
+use syntax::ast::{self, BinaryOp, UnaryOp};
 use typed_index_collections::{TiSlice, TiVec};
 
 use crate::{
-    builtin::BuiltinInfo,
-    requirements::{
-        ArrayTypeMissmatch, Signature, SignatureData, SignatureMissmatch, Ty, TyRequirement,
-        TypeMissmatch,
+    builtin::{
+        DDX_FLOW, DDX_POT, DDX_POT_DIFF, DDX_TEMP, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
+        NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
     },
+    db::HirTyDB,
+    diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch},
+    lower::{BranchTy, DisciplineAccess},
+    types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement},
 };
-
-pub enum ResolvedFunction {
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ResolvedFun {
     User(FunctionId),
-    BuiltIn { fun: BuiltIn },
+    BuiltIn(BuiltIn),
 }
 
-pub enum AsssigmentDestination {
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum AssignDst {
     Var(VarId),
-    ExplicitBranchFlow(BranchId),
-    ExplicitBranchPot(BranchId),
-    ImplicitBranchPot { hi: NodeId, lo: Option<NodeId> },
-    ImplicitBranchFlow { hi: NodeId, lo: Option<NodeId> },
+    FunVar { fun: FunctionId, arg: Option<LocalFunctionArgId> },
+    Flow(BranchWrite),
+    Potential(BranchWrite),
 }
 
-impl AsssigmentDestination {
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum BranchWrite {
+    Explicit(BranchId),
+    Implict { hi: NodeId, lo: Option<NodeId> },
+}
+
+impl AssignDst {
     pub fn ty(&self, db: &dyn HirDefDB) -> Type {
-        if let AsssigmentDestination::Var(var) = *self {
+        if let AssignDst::Var(var) = *self {
             let var = var.lookup(db);
             let tree = var.item_tree(db);
             tree[var.id].ty.clone()
@@ -46,97 +59,252 @@ impl AsssigmentDestination {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InferenceResult {
-    expr_types: ArenaMap<Expr, Type>,
-    resolved_calls: ArenaMap<Expr, ResolvedFunction>,
-    resolved_signatures: ArenaMap<Expr, Signature>,
-    assigment_destination: AHashMap<StmtId, ResolvedFunction>,
-    casts: AHashMap<ExprId, Type>,
-    diagnostics: Vec<InferenceDiagnostic>,
+    pub expr_types: ArenaMap<Expr, Ty>,
+    pub resolved_calls: AHashMap<ExprId, ResolvedFun>,
+    pub resolved_signatures: AHashMap<ExprId, Signature>,
+    pub assigment_destination: AHashMap<StmtId, AssignDst>,
+    pub casts: AHashMap<ExprId, Type>,
+    pub diagnostics: Vec<InferenceDiagnostic>,
+}
+
+impl InferenceResult {
+    fn new(body: &Body) -> InferenceResult {
+        InferenceResult {
+            expr_types: ArenaMap::from(vec![Ty::Val(Type::Err); body.exprs.len()]),
+            ..Default::default()
+        }
+    }
+
+    pub fn infere_analog_behaviour_query(
+        db: &dyn HirTyDB,
+        id: DefWithBehaviourId,
+    ) -> Arc<InferenceResult> {
+        let behaviour = db.analog_behaviour(id);
+        let mut ctx =
+            Ctx { result: InferenceResult::new(&behaviour.body), body: &behaviour.body, db };
+        for root_stmt in &behaviour.root_stmts {
+            ctx.infere_stmt(*root_stmt);
+        }
+        Arc::new(ctx.result)
+    }
+
+    pub fn infere_param_body_query(db: &dyn HirTyDB, param: ParamId) -> Arc<InferenceResult> {
+        let body = db.param_body(param);
+        let mut ctx = Ctx { result: InferenceResult::new(&body.body), body: &body.body, db };
+        let ty = &db.param_data(param).ty;
+
+        // A dummy stmt is used
+        let stmt = StmtId::from(0u32);
+
+        ctx.infere_assigment(stmt, body.default, Some(ty.clone()));
+
+        for bound in &body.bounds {
+            match bound.val {
+                ConstraintValue::Value(val) => ctx.infere_assigment(stmt, val, Some(ty.clone())),
+                ConstraintValue::Range(Range { start, end, .. }) => {
+                    ctx.infere_assigment(stmt, start, Some(ty.clone()));
+                    ctx.infere_assigment(stmt, end, Some(ty.clone()));
+                }
+            }
+        }
+
+        Arc::new(ctx.result)
+    }
+
+    pub fn infere_expr_body_query(db: &dyn HirTyDB, id: DefWithExprId) -> Arc<InferenceResult> {
+        let body = db.expr_body(id);
+        let mut ctx = Ctx { result: InferenceResult::new(&body.body), body: &body.body, db };
+
+        // A dummy stmt is used
+        let stmt = StmtId::from(0u32);
+
+        ctx.infere_assigment(stmt, body.val, id.ty(db.upcast()));
+
+        Arc::new(ctx.result)
+    }
 }
 
 struct Ctx<'a> {
     result: InferenceResult,
     body: &'a Body,
-    db: &'a dyn HirDefDB,
+    db: &'a dyn HirTyDB,
 }
 
 impl Ctx<'_> {
-    // pub fn infere_stmt(&mut self, stmt: StmtId) {
-    // let stmt = self.body.stmts[stmt];
-    // match self.body.stmts[stmt] {
-    //     hir_def::Stmt::Expr(e) => {
-    //         let (ty, has_side_effects) = self.infere_expr(e);
-    //         if !has_side_effects {
-    //             // TODO WARN
-    //         }
-    //     }
-    //     hir_def::Stmt::Assigment { dst, val, assignment_kind} => self.infere_expr(val),
-    //     } => self.infere_expr(val),
-    //     hir_def::Stmt::If { cond, then_branch, else_branch } => todo!(),
-    //     hir_def::Stmt::ForLoop { init, cond, incr, body } => todo!(),
-    //     hir_def::Stmt::WhileLoop { cond, body } => todo!(),
-    //     hir_def::Stmt::Case { discr, case_arms } => todo!(),
-    //     _ => stmt.walk_child_stmts(|stmt| self.infere_stmt(stmt)),
-    // }
-    // }
+    pub fn infere_stmt(&mut self, stmt: StmtId) {
+        match self.body.stmts[stmt] {
+            hir_def::Stmt::Expr(expr) => {
+                self.infere_expr(stmt, expr);
+            }
+            hir_def::Stmt::Assigment { dst, val, ref assignment_kind } => {
+                let dst_ty = self.infere_assigment_dst(stmt, dst, assignment_kind);
+                self.infere_assigment(stmt, val, dst_ty);
+            }
+            hir_def::Stmt::If { cond, .. } => {
+                if let Some(ty) = self.infere_expr(stmt, cond) {
+                    self.expect::<false>(
+                        cond,
+                        None,
+                        ty,
+                        Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]),
+                    );
+                }
+            }
+            hir_def::Stmt::ForLoop { cond, .. } => {
+                if let Some(ty) = self.infere_expr(stmt, cond) {
+                    self.expect::<false>(
+                        cond,
+                        None,
+                        ty,
+                        Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]),
+                    );
+                }
+            }
+            hir_def::Stmt::WhileLoop { cond, .. } => {
+                if let Some(ty) = self.infere_expr(stmt, cond) {
+                    self.expect::<false>(
+                        cond,
+                        None,
+                        ty,
+                        Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]),
+                    );
+                }
+            }
+            hir_def::Stmt::Case { discr, ref case_arms } => {
+                if let Some(ty) = self.infere_expr(stmt, discr) {
+                    let req = ty.to_value().map_or(TyRequirement::AnyVal, TyRequirement::Val);
+                    for case in case_arms {
+                        if let CaseCond::Vals(vals) = &case.cond {
+                            for val in vals {
+                                if let Some(val_ty) = self.infere_expr(stmt, *val) {
+                                    self.expect::<false>(
+                                        *val,
+                                        None,
+                                        val_ty,
+                                        Cow::Owned(vec![req.clone()]),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => (),
+        };
 
-    // pub fn infere_assigment_dst(
-    //     &self,
-    //     e: ExprId,
-    //     assigment_kind: ast::AssignOp,
-    //     stmt: StmtId,
-    // ) -> Result<(Type, AsssigmentDestination), InferenceDiagnostic> {
-    //     let scope = self.body.stmt_scopes[stmt];
-    //     match self.body.exprs[e] {
-    //         Expr::Path { ref path, port: false } => {
-    //             let res: Result<VarId, _> =
-    //                 self.def_map.resolve_item_path_in_scope(scope, path, self.db);
+        self.body.stmts[stmt].walk_child_stmts(|stmt| self.infere_stmt(stmt));
+    }
 
-    //             match assigment_kind {
-    //                 ast::AssignOp::Assign => match res {
-    //                     Ok(var) => {
-    //                         let ty = self.db.var_inf(var).ty;
-    //                         Ok((ty, AsssigmentDestination::Var(var)))
-    //                     }
-    //                     Err(err) => Err(InferenceDiagnostic::PathResolveError { err, e }),
-    //                 },
-    //                 ast::AssignOp::Contribute => Err(InferenceDiagnostic::InvalidContributeDst {
-    //                     e,
-    //                     maybe_assign: res.is_ok(),
-    //                 }),
-    //             }
-    //         }
-    //         Expr::Call { fun, args } => {}
-    //         _ => todo!(),
-    //     }
-    // }
+    fn infere_assigment(&mut self, stmt: StmtId, val: ExprId, dst_ty: Option<Type>) {
+        if let Some(val_ty) = self.infere_expr(stmt, val) {
+            if let Some(value_ty) = val_ty.to_value() {
+                if let Some(dst_ty) = dst_ty {
+                    if dst_ty.is_assignable_to(&value_ty) {
+                        if dst_ty != value_ty {
+                            self.result.casts.insert(val, dst_ty);
+                        }
+                    } else {
+                        self.result.diagnostics.push(
+                            TypeMissmatch {
+                                expected: Cow::Owned(vec![TyRequirement::Val(dst_ty)]),
+                                found_ty: val_ty,
+                                expr: val,
+                            }
+                            .into(),
+                        );
+                    }
+                }
+            } else {
+                let expected = dst_ty.map_or(TyRequirement::AnyVal, TyRequirement::Val);
+                self.result.diagnostics.push(
+                    TypeMissmatch {
+                        expected: Cow::Owned(vec![expected]),
+                        found_ty: val_ty,
+                        expr: val,
+                    }
+                    .into(),
+                );
+            }
+        }
+    }
 
-    // fn infere_nature_acces_call(
-    //     &self,
-    //     stmt: StmtId,
-    //     expr: ExprId,
-    //     acces: NatureAccess,
-    //     args: &[ExprId],
-    // ) -> Result<BranchAccess, InferenceDiagnostic> {
-    //     let nature = acces.0;
+    pub fn infere_assigment_dst(
+        &mut self,
+        stmt: StmtId,
+        expr: ExprId,
+        assigment_kind: &ast::AssignOp,
+    ) -> Option<Type> {
+        let e = self.infere_expr(stmt, expr);
+        let (dst, ty) = match e? {
+            Ty::Var(ty, var) => (AssignDst::Var(var), ty),
+            Ty::FuntionVar { fun, ty, arg } => (AssignDst::FunVar { fun, arg }, ty),
+            Ty::Val(Type::Real)
+                if matches!(
+                    self.result.resolved_calls.get(&expr),
+                    Some(ResolvedFun::BuiltIn(BuiltIn::potential | BuiltIn::flow))
+                ) =>
+            {
+                let mut args = Vec::new();
+                self.body.exprs[expr].walk_child_exprs(|e| args.push(&self.result.expr_types[e]));
+                let kind = match *self.result.resolved_signatures.get(&expr)? {
+                    NATURE_ACCESS_BRANCH => BranchWrite::Explicit(args[0].unwrap_branch()),
+                    NATURE_ACCESS_NODES => BranchWrite::Implict {
+                        hi: args[0].unwrap_node(),
+                        lo: Some(args[1].unwrap_node()),
+                    },
 
-    //     match *args {
-    //         [arg] => match self.body.exprs[arg] {
-    //             Expr::Path { path, port: true } => {
-    //                 let port = self.body.stmt_scopes[stmt].resolve_item_path(self.db, path);
-    //             }
-    //         },
-    //         [arg1, arg2] => (),
-    //         ref args => {
-    //             return Err(InferenceDiagnostic::ArgCntMissmatch {
-    //                 expected: 2,
-    //                 found: args.len(),
-    //                 expr,
-    //             })
-    //         }
-    //     }
-    // }
+                    NATURE_ACCESS_NODE_GND => {
+                        BranchWrite::Implict { hi: args[0].unwrap_node(), lo: None }
+                    }
+
+                    NATURE_ACCESS_PORT_FLOW => {
+                        self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
+                            e: expr,
+                            maybe_different_operand: None,
+                        });
+                        return None;
+                    }
+                    _ => unreachable!(),
+                };
+
+                let dst = match self.result.resolved_calls[&expr] {
+                    ResolvedFun::BuiltIn(BuiltIn::potential) => AssignDst::Potential(kind),
+                    ResolvedFun::BuiltIn(BuiltIn::flow) => AssignDst::Flow(kind),
+                    _ => unreachable!(),
+                };
+                (dst, Type::Real)
+            }
+            _ => {
+                self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
+                    e: expr,
+                    maybe_different_operand: None,
+                });
+                return None;
+            }
+        };
+
+        // check that the correct operator is used
+        match (&dst, assigment_kind) {
+            (AssignDst::Var(_) | AssignDst::FunVar { .. }, ast::AssignOp::Contribute) => {
+                self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
+                    e: expr,
+                    maybe_different_operand: Some(MaybeDifferentOperand::Assign),
+                });
+            }
+            (AssignDst::Flow(_) | AssignDst::Potential(_), ast::AssignOp::Assign) => {
+                self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
+                    e: expr,
+                    maybe_different_operand: Some(MaybeDifferentOperand::Contribute),
+                });
+            }
+            _ => {
+                self.result.assigment_destination.insert(stmt, dst);
+            }
+        }
+        Some(ty)
+    }
 
     fn infere_cond(&mut self, stmt: StmtId, expr: ExprId) {
         if let Some(ty) = self.infere_expr(stmt, expr) {
@@ -152,26 +320,34 @@ impl Ctx<'_> {
                 Ty::PortFlow(port)
             }
 
-            Expr::Path { ref path, port: false } => {
-                match self.resolve_path(stmt, expr, path)? {
-                    ScopeDefItem::BlockId(_) | ScopeDefItem::ModuleId(_) => Ty::Scope,
-                    ScopeDefItem::NatureId(nature) => Ty::Nature(nature),
-                    ScopeDefItem::DisciplineId(discipline) => Ty::Discipline(discipline),
-                    ScopeDefItem::NodeId(node) => Ty::Node(node),
-                    ScopeDefItem::VarId(var) => Ty::Var(self.db.var_data(var).ty.clone(), var),
-                    ScopeDefItem::ParamId(param) => {
-                        Ty::Param(self.db.param_data(param).ty.clone(), param)
-                    }
-                    ScopeDefItem::BranchId(branch) => Ty::Branch(branch),
-                    ScopeDefItem::DisciplineAttrId(_attr) => Ty::Val(Type::Real), // TODO are these really always real numbers?
-                    ScopeDefItem::NatureAttrId(_attr) => Ty::Val(Type::Real), // TODO are these really always real numbers?
-                    ScopeDefItem::BuiltIn(_)
-                    | ScopeDefItem::FunctionId(_)
-                    | ScopeDefItem::NatureAccess(_) => Ty::Function,
-                    ScopeDefItem::FunctionReturn(fun) => Ty::Var(todo!()),
-                    ScopeDefItem::FunctionArgId(arg) => Ty::Var(todo!()),
+            Expr::Path { ref path, port: false } => match self.resolve_path(stmt, expr, path)? {
+                ScopeDefItem::BlockId(_) | ScopeDefItem::ModuleId(_) => Ty::Scope,
+                ScopeDefItem::NatureId(nature) => Ty::Nature(nature),
+                ScopeDefItem::DisciplineId(discipline) => Ty::Discipline(discipline),
+                ScopeDefItem::NodeId(node) => Ty::Node(node),
+                ScopeDefItem::VarId(var) => Ty::Var(self.db.var_data(var).ty.clone(), var),
+                ScopeDefItem::ParamId(param) => {
+                    Ty::Param(self.db.param_data(param).ty.clone(), param)
                 }
-            }
+                ScopeDefItem::BranchId(branch) => Ty::Branch(branch),
+                ScopeDefItem::BuiltIn(_)
+                | ScopeDefItem::FunctionId(_)
+                | ScopeDefItem::NatureAccess(_) => Ty::Function,
+                ScopeDefItem::FunctionReturn(fun) => Ty::FuntionVar {
+                    fun,
+                    ty: self.db.function_data(fun).return_ty.clone(),
+                    arg: None,
+                },
+                ScopeDefItem::FunctionArgId(arg) => {
+                    let FunctionArgLoc { fun, id } = arg.lookup(self.db.upcast());
+                    Ty::FuntionVar {
+                        fun,
+                        ty: self.db.function_data(fun).args[id].ty.clone(),
+                        arg: Some(id),
+                    }
+                }
+                ScopeDefItem::NatureAttrId(attr) => self.db.nature_attr_ty(attr)?,
+            },
 
             Expr::BinaryOp { lhs, rhs, op: Some(op) } => {
                 return self.infere_bin_op(stmt, expr, lhs, rhs, op)
@@ -225,19 +401,22 @@ impl Ctx<'_> {
                     expr,
                     &[then_val, else_val],
                     Cow::Borrowed(TiSlice::from_ref(SignatureData::SELECT)),
+                    None,
                 );
             }
 
             Expr::Call { ref fun, ref args } => {
-                return self.infere_fun_call(stmt, expr, fun.as_ref()?, args)
+                return self.infere_fun_call(stmt, expr, fun.as_ref()?, args);
             }
-            Expr::Array(ref args) if args.len() == 0 => Ty::Val(Type::EmptyArray),
-            Expr::Array(ref args) => return self.infere_array(stmt, expr, args),
+            Expr::Array(ref args) if args.is_empty() => Ty::Val(Type::EmptyArray),
+            Expr::Array(ref args) => return self.infere_array(stmt, args),
             Expr::Literal(Literal::Inf) => Ty::Literal(Type::Integer),
             Expr::Literal(Literal::Float(_)) => Ty::Literal(Type::Real),
             Expr::Literal(Literal::Int(_)) => Ty::Literal(Type::Integer),
             Expr::Literal(Literal::String(_)) => Ty::Literal(Type::String),
         };
+        self.result.expr_types.insert(expr, ty.clone());
+
         Some(ty)
     }
 
@@ -251,16 +430,16 @@ impl Ctx<'_> {
         let def = self.resolve_path(stmt, expr, fun)?;
         match def {
             ScopeDefItem::NatureAccess(access) => {
-                // self.infere_nature_acces(stmt,expr,access,args);
-                todo!()
+                self.infere_nature_acces(stmt, expr, access, args);
+                Some(Ty::Val(Type::Real))
             }
-            ScopeDefItem::FunctionId(fun) => todo!(),
+            ScopeDefItem::FunctionId(fun) => self.infere_user_fun_call(stmt, expr, fun, args),
             ScopeDefItem::BuiltIn(builtin) => self.infere_builtin(stmt, expr, builtin, args),
             found => {
                 self.result.diagnostics.push(InferenceDiagnostic::PathResolveError {
                     err: PathResolveError::ExpectedItemKind {
                         expected: "a function",
-                        found,
+                        found: ResolvedPath::ScopeDefItem(found),
                         name: fun.segments.last().unwrap().to_owned(),
                     },
                     expr,
@@ -270,15 +449,94 @@ impl Ctx<'_> {
         }
     }
 
+    fn infere_user_fun_call(
+        &mut self,
+        stmt: StmtId,
+        expr: ExprId,
+        fun: FunctionId,
+        args: &[ExprId],
+    ) -> Option<Ty> {
+        self.result.resolved_calls.insert(expr, ResolvedFun::User(fun));
+        let fun_info = self.db.function_data(fun);
+        if fun_info.args.len() != args.len() {
+            self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
+                expected: fun_info.args.len(),
+                found: args.len(),
+                expr,
+                exact: true,
+            });
+            return Some(Ty::Val(fun_info.return_ty.clone()));
+        }
+
+        let signature =
+            fun_info.args.iter().map(|arg| TyRequirement::Val(arg.ty.clone())).collect();
+
+        self.resolve_function_args(
+            stmt,
+            expr,
+            args,
+            Cow::Owned(TiVec::from(vec![SignatureData {
+                args: Cow::Owned(signature),
+                return_ty: fun_info.return_ty.clone(),
+            }])),
+            Some(fun),
+        )
+    }
+
     fn infere_nature_acces(
         &mut self,
         stmt: StmtId,
         expr: ExprId,
-        access: NatureAccess,
+        acccess: NatureAccess,
         args: &[ExprId],
-    ) -> Option<Ty> {
-        let nature = access.0;
-        let mut is_potential = false;
+    ) {
+        // resolve as flow first because we don't yet know if this is a flow or pot access
+        // This choise is arbitrary (but must be consistent with the code below
+        if self.infere_builtin(stmt, expr, BuiltIn::flow, args).is_none() {
+            return;
+        }
+
+        // Now that we know that the arguments are valid actually resolve whether this is flow or
+        // pot access
+        let acccess =
+            self.infere_access_kind(acccess.0.lookup(self.db.upcast()).nature, expr, args[0]);
+
+        // update resolved_calls in case this is actually a pot and not a flow access
+        if acccess == Some(DisciplineAccess::Potential) {
+            self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(BuiltIn::potential));
+        }
+    }
+
+    fn infere_access_kind(
+        &self,
+        nature: NatureId,
+        expr: ExprId,
+        arg: ExprId,
+    ) -> Option<DisciplineAccess> {
+        let node = match self.result.resolved_signatures[&expr] {
+            NATURE_ACCESS_BRANCH => {
+                let branch = self.result.expr_types[arg].unwrap_branch();
+                return self.db.branch_info(branch)?.access(nature, self.db);
+            }
+
+            NATURE_ACCESS_NODES | NATURE_ACCESS_NODE_GND => {
+                // TOOD validation check compatability for two nodes
+                self.result.expr_types[arg].unwrap_node()
+            }
+
+            NATURE_ACCESS_PORT_FLOW => {
+                // TODO validation check that this is actually a port
+                self.result.expr_types[arg].unwrap_port_flow()
+            }
+            var => unreachable!("{:?}", var),
+        };
+
+        let node = self.db.node_data(node);
+
+        let def_map = self.db.def_map(nature.lookup(self.db.upcast()).root_file);
+        let discipline =
+            def_map.resolve_local_item_in_scope(def_map.root(), node.discipline.as_ref()?).ok()?;
+        self.db.discipline_info(discipline).access(nature, self.db)
     }
 
     fn infere_builtin(
@@ -288,19 +546,23 @@ impl Ctx<'_> {
         builtin: BuiltIn,
         args: &[ExprId],
     ) -> Option<Ty> {
+        self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(builtin));
+
         let info: BuiltinInfo = builtin.into();
 
+        if builtin == BuiltIn::limit {
+            todo!()
+        }
+
+        let exact = Some(info.min_args) == info.max_args;
         if args.len() < info.min_args {
             self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
                 expected: info.min_args,
                 found: args.len(),
                 expr,
+                exact,
             });
-            return None;
-        }
-
-        if builtin == BuiltIn::limit {
-            todo!()
+            return default_return_ty(info.signatures);
         }
 
         if info.max_args.map_or(false, |max_args| max_args < args.len()) {
@@ -308,12 +570,16 @@ impl Ctx<'_> {
                 expected: info.min_args,
                 found: args.len(),
                 expr,
+                exact,
             });
-            return None;
+            return default_return_ty(info.signatures);
         }
 
         let signature = match builtin {
-            BuiltIn::ddx => todo!(),
+            BuiltIn::ddx => {
+                self.infere_ddx(stmt, expr, args[0], args[1]);
+                return Some(Ty::Val(Type::Real));
+            }
             _ if info.max_args.is_none() => {
                 debug_assert_eq!(info.signatures.len(), 1);
                 let mut signature = info.signatures[0].clone();
@@ -323,20 +589,61 @@ impl Ctx<'_> {
             _ => Cow::Borrowed(TiSlice::from_ref(info.signatures)),
         };
 
-        let signature = self.resolve_function_args(stmt, expr, args, signature)?;
+        let ty = self.resolve_function_args(stmt, expr, args, signature, None)?;
 
-        if builtin == BuiltIn::potential
-            && self.result.resolved_signatures.get(expr) == Some(&Signature::from(3usize))
-        {
-            self.result
-                .diagnostics
-                .push(InferenceDiagnostic::PotentialOfPortFlow { expr, port_flow: args[0] })
-        }
+        // if builtin == BuiltIn::potential TODO validation
+        //     && self.result.resolved_signatures.get(expr) == Some(&NATURE_ACCESS_PORT_FLOW)
+        // {
+        //     self.result
+        //         .diagnostics
+        //         .push(InferenceDiagnostic::PotentialOfPortFlow { expr, port_flow: args[0] })
+        // }
 
-        Some(signature)
+        Some(ty)
     }
 
-    fn infere_array(&mut self, stmt: StmtId, expr: ExprId, args: &[ExprId]) -> Option<Ty> {
+    fn infere_ddx(&mut self, stmt: StmtId, expr: ExprId, val: ExprId, unkown: ExprId) {
+        if let Some(ty) = self.infere_expr(stmt, val) {
+            self.expect::<false>(expr, None, ty, Cow::Borrowed(&[TyRequirement::Val(Type::Real)]));
+        }
+
+        if self.infere_expr(stmt, unkown).is_some() {
+            let (call, signature) = if let (Some(ResolvedFun::BuiltIn(fun)), Some(signature)) = (
+                self.result.resolved_calls.get(&unkown),
+                self.result.resolved_signatures.get(&unkown),
+            ) {
+                (*fun, *signature)
+            } else {
+                self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                return;
+            };
+
+            let signature = match (call, signature) {
+                (BuiltIn::potential, NATURE_ACCESS_NODES) => {
+                    self.result
+                        .diagnostics
+                        .push(InferenceDiagnostic::NonStandardUnkown { e: unkown, stmt });
+                    DDX_POT_DIFF
+                }
+                (BuiltIn::potential, NATURE_ACCESS_NODE_GND) => DDX_POT,
+                (BuiltIn::flow, NATURE_ACCESS_BRANCH) => DDX_FLOW,
+                (BuiltIn::temperature, _) => {
+                    self.result
+                        .diagnostics
+                        .push(InferenceDiagnostic::NonStandardUnkown { e: unkown, stmt });
+                    DDX_TEMP
+                }
+                _ => {
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                    return;
+                }
+            };
+
+            self.result.resolved_signatures.insert(expr, signature);
+        }
+    }
+
+    fn infere_array(&mut self, stmt: StmtId, args: &[ExprId]) -> Option<Ty> {
         let infere_value_ty = |sel: &mut Self, arg| -> Option<Type> {
             sel.infere_expr(stmt, arg).and_then(|ty| {
                 let res = ty.to_value();
@@ -354,7 +661,7 @@ impl Ctx<'_> {
             })
         };
 
-        let mut iter = args.into_iter();
+        let mut iter = args.iter();
         let (ty, first_expr) = loop {
             let arg = match iter.next() {
                 Some(arg) => arg,
@@ -387,6 +694,14 @@ impl Ctx<'_> {
                 }
             }
         });
+
+        for arg in args {
+            if let Some(arg_ty) = self.result.expr_types[*arg].to_value() {
+                if arg_ty != ty {
+                    self.result.casts.insert(*arg, ty.clone());
+                }
+            }
+        }
 
         Some(Ty::Val(ty))
     }
@@ -421,7 +736,7 @@ impl Ctx<'_> {
         };
         let signatures = Cow::Borrowed(TiSlice::from_ref(signatures));
 
-        self.resolve_function_args(stmt, expr, &[lhs, rhs], signatures)
+        self.resolve_function_args(stmt, expr, &[lhs, rhs], signatures, None)
     }
 
     /// Resolves the arguments of a function Call
@@ -433,14 +748,15 @@ impl Ctx<'_> {
         expr: ExprId,
         args: &[ExprId],
         signatures: Cow<'static, TiSlice<Signature, SignatureData>>,
+        src: Option<FunctionId>,
     ) -> Option<Ty> {
         debug_assert!(signatures.iter().any(|sig| sig.args.len() == args.len()));
-        let arg_types: Vec<_> = args.iter().map(|arg| self.infere_expr(stmt, expr)).collect();
+        let arg_types: Vec<_> = args.iter().map(|arg| self.infere_expr(stmt, *arg)).collect();
 
         let mut canditates: Vec<_> = signatures.keys().collect();
         let mut new_candidates = Vec::new();
         let mut errors = Vec::new();
-        for (i, (arg, ty)) in zip(args, arg_types).enumerate() {
+        for (i, (arg, ty)) in zip(args, &arg_types).enumerate() {
             if let Some(ty) = ty {
                 new_candidates.clone_from(&canditates);
                 new_candidates.retain(|candidate| {
@@ -471,6 +787,7 @@ impl Ctx<'_> {
                 SignatureMissmatch {
                     type_missmatches: errors.into_boxed_slice(),
                     signatures: signatures.clone(),
+                    src,
                 }
                 .into(),
             );
@@ -484,13 +801,13 @@ impl Ctx<'_> {
             [res] => *res,
             _ => {
                 canditates.retain(|candidate| {
-                    zip(arg_types, signatures[*candidate].args.as_ref())
-                        .all(|(ty, req)| ty.map_or(false, |ty| ty.satisfies_exact(req)))
+                    zip(&arg_types, signatures[*candidate].args.as_ref())
+                        .all(|(ty, req)| ty.as_ref().map_or(false, |ty| ty.satisfies_exact(req)))
                 });
                 if let [res] = canditates.as_slice() {
                     *res
                 } else {
-                    return None;
+                    return default_return_ty(&signatures.raw);
                 }
             }
         };
@@ -506,10 +823,10 @@ impl Ctx<'_> {
         }
 
         if signatures.len() > 1 {
-            self.result.resolved_signatures.insert(expr, res)
+            self.result.resolved_signatures.insert(expr, res);
         }
 
-        Some(Ty::Val(signatures[res].return_ty))
+        Some(Ty::Val(signatures[res].return_ty.clone()))
     }
 
     fn expect<const EXACT: bool>(
@@ -526,13 +843,15 @@ impl Ctx<'_> {
             Some(matched) => {
                 if !EXACT {
                     if let Some(parent_fun) = parent_fun {
-                        self.result.resolved_signatures.insert(parent_fun, Signature::from(matched))
+                        self.result
+                            .resolved_signatures
+                            .insert(parent_fun, Signature::from(matched));
                     }
 
-                    if let TyRequirement::Val(req) = req[matched] {
+                    if let TyRequirement::Val(req) = &req[matched] {
                         if let Some(ty) = ty.to_value() {
                             if !req.is_semantically_equivalent(&ty) {
-                                self.result.casts.insert(expr, req);
+                                self.result.casts.insert(expr, req.clone());
                             }
                         }
                     }
@@ -548,8 +867,28 @@ impl Ctx<'_> {
     }
 
     fn resolve_path(&mut self, stmt: StmtId, expr: ExprId, path: &Path) -> Option<ScopeDefItem> {
-        match self.body.stmt_scopes[stmt].resolve_path(self.db, path) {
-            Ok(item) => Some(item),
+        let resolved_path = match self.body.stmt_scopes[stmt].resolve_path(self.db.upcast(), path) {
+            Ok(resolved_path) => resolved_path,
+            Err(err) => {
+                self.result.diagnostics.push(InferenceDiagnostic::PathResolveError { err, expr });
+                return None;
+            }
+        };
+
+        let attr = match resolved_path {
+            ResolvedPath::FlowAttriubte { branch, ref name } => {
+                BranchTy::flow_attr(self.db, branch, name)?
+            }
+
+            ResolvedPath::PotentialAttribute { branch, ref name } => {
+                BranchTy::potential_attr(self.db, branch, name)?
+            }
+
+            ResolvedPath::ScopeDefItem(def) => return Some(def),
+        };
+
+        match attr {
+            Ok(attr) => Some(attr.into()),
             Err(err) => {
                 self.result.diagnostics.push(InferenceDiagnostic::PathResolveError { err, expr });
                 None
@@ -563,7 +902,7 @@ impl Ctx<'_> {
         expr: ExprId,
         path: &Path,
     ) -> Option<T> {
-        match self.body.stmt_scopes[stmt].resolve_item_path(self.db, path) {
+        match self.body.stmt_scopes[stmt].resolve_item_path(self.db.upcast(), path) {
             Ok(item) => Some(item),
             Err(err) => {
                 self.result.diagnostics.push(InferenceDiagnostic::PathResolveError { err, expr });
@@ -573,23 +912,23 @@ impl Ctx<'_> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum MaybeDifferentOperand {
+    Contribute,
+    Assign,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InferenceDiagnostic {
-    InvalidContributeDst { e: ExprId, maybe_assign: bool },
-    InvalidAssignmentDst { e: ExprId, maybe_contribute: bool },
+    InvalidAssignDst { e: ExprId, maybe_different_operand: Option<MaybeDifferentOperand> },
     PathResolveError { err: PathResolveError, expr: ExprId },
-    ArgCntMissmatch { expected: usize, found: usize, expr: ExprId },
+    ArgCntMissmatch { expected: usize, found: usize, expr: ExprId, exact: bool },
     TypeMissmatch(TypeMissmatch),
     SignatureMissmatch(SignatureMissmatch),
     ArrayTypeMissmatch(ArrayTypeMissmatch),
-    PotentialOfPortFlow { expr: ExprId, port_flow: ExprId },
+    InvalidUnkown { e: ExprId },
+    NonStandardUnkown { e: ExprId, stmt: StmtId },
+    // PotentialOfPortFlow { expr: ExprId, port_flow: ExprId }, TODO validation
 }
 
 impl_from!(TypeMissmatch,SignatureMissmatch, ArrayTypeMissmatch for InferenceDiagnostic);
-
-pub enum BranchAccess {
-    ExplicitBranchFlow(BranchId),
-    ExplicitBranchPot(BranchId),
-    ImplicitBranchPot { hi: NodeId, lo: Option<NodeId> },
-    ImplicitBranchFlow { hi: NodeId, lo: Option<NodeId> },
-    PortFlow(NodeId),
-}

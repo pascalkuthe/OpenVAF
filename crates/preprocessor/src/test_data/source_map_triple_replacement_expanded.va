@@ -1,0 +1,68 @@
+
+
+// Copyright(c) 2009-2014 Accellera Systems Initiative Inc.
+// 1370 Trancas Street #163, Napa, CA 94558, USA.
+//
+// The material in constants.vams is an essential part of the Accellera Systems
+// Initiative ("Accellera") Verilog-AMS Language Standard. Verbatim copies of
+// the material in this Annex may be used and distributed without restriction.
+// All other uses require permission from Accellera IP Committee
+// (ipr-chair@lists.accellera.org).
+// All other rights reserved
+//
+// Version 2.4.0
+//
+
+// Mathematical and physical constants
+
+
+// M_ is a mathematical constant
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// The following constants have been taken from http://physics.nist.gov
+// P_ is a physical constant
+// charge of electron in Coulombs
+
+
+
+
+// speed of light in vacuum in meters/second
+
+// Boltzmann's constant in Joules/Kelvin
+
+
+
+
+// Planck's constant in Joules*second
+
+
+
+
+// permittivity of vacuum in Farads/meter
+
+
+
+
+// permeability of vacuum in Henrys/meter
+
+// zero Celsius in Kelvin
+
+
+
+
+
+
+// foo

@@ -6,13 +6,6 @@ use stdx::impl_display;
 use syntax::ast;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FunctionSignature {
-    inputs: Box<[Type]>,
-    outputs: Box<[Type]>,
-    return_ty: Box<Type>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Err,
     Real,
@@ -53,11 +46,10 @@ impl Type {
             | (Type::Array { len: 0, .. }, Type::EmptyArray)
             | (Type::Bool, Type::Integer) => true,
 
-            _ => {
-                dst == self
-                    || self.dim() == dst.dim()
-                        && self.base_type().is_convertable_to(dst.base_type())
+            (Type::Array { .. }, Type::Array { .. }) => {
+                self.dim() == dst.dim() && self.base_type().is_convertable_to(dst.base_type())
             }
+            _ => dst == self,
         }
     }
 

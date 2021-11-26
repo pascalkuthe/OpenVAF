@@ -2,7 +2,7 @@ use std::{
     fmt, fs, mem,
     path::{Path, PathBuf},
 };
-use xshell::{cmd, pushenv};
+use xshell::cmd;
 
 pub fn list_rust_files(dir: &Path) -> Vec<PathBuf> {
     let mut res = list_files(dir);
@@ -121,19 +121,19 @@ impl fmt::Display for Location {
     }
 }
 
-fn ensure_rustfmt() {
-    let _e = pushenv("RUSTUP_TOOLCHAIN", "stable");
-    let version = cmd!("rustfmt --version").read().unwrap_or_default();
-    if !version.contains("stable") {
-        panic!(
-            "Failed to run rustfmt from toolchain 'stable'. \
-                 Please run `rustup component add rustfmt --toolchain stable` to install it.",
-        )
-    }
-}
+// fn ensure_rustfmt() {
+//     let _e = pushenv("RUSTUP_TOOLCHAIN", "stable");
+//     let version = cmd!("rustfmt --version").read().unwrap_or_default();
+//     if !version.contains("stable") {
+//         panic!(
+//             "Failed to run rustfmt from toolchain 'stable'. \
+//                  Please run `rustup component add rustfmt --toolchain stable` to install it.",
+//         )
+//     }
+// }
 
 pub fn reformat(text: String) -> String {
-    ensure_rustfmt();
+    // ensure_rustfmt();
     let rustfmt_toml = project_root().join("rustfmt.toml");
     let mut stdout = cmd!("rustfmt --config-path {rustfmt_toml} --config fn_single_line=true")
         .stdin(text)
@@ -251,7 +251,6 @@ pub fn skip_slow_tests() -> bool {
     should_skip
 }
 
-
 pub fn collect_integration_tests() -> impl Iterator<Item = (String, Vec<String>)> {
     const ERR: &str = "failed to read integration_tests directory";
     let dir = project_root().join("integration_tests");
@@ -263,7 +262,7 @@ pub fn collect_integration_tests() -> impl Iterator<Item = (String, Vec<String>)
             let entry = entry.expect(ERR);
             let include =  entry.path().extension().and_then(|ex|ex.to_str()).map_or(false, |ex|matches!(ex,"va"|"vams"|"include"));
             if !include{
-                eprintln!("warning: {} will not be includeded in the integration test {}!\n Only files with the extensions .va and .include are included",entry.path().display(), &name)
+                eprintln!("\n\x1b[33;1mwarning\x1b[0m: {} will not be includeded in the integration test {}!\n Only files with the extensions .va and .include are included",entry.path().display(), &name)
             }
             include.then(||entry.file_name().to_str().unwrap().to_owned())
         }).collect();
@@ -271,4 +270,3 @@ pub fn collect_integration_tests() -> impl Iterator<Item = (String, Vec<String>)
         (name, children)
     })
 }
-

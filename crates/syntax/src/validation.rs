@@ -1,6 +1,7 @@
 use crate::{
-    ast::{Expr, LiteralKind},
-    T,
+    ast::{AttrsOwner, Expr, LiteralKind, ModulePortKind, ModulePorts, Name},
+    name::{kw, kw_comp},
+    SyntaxNodePtr, T,
 };
 use rowan::TextRange;
 
@@ -20,12 +21,62 @@ pub(crate) fn validate(root: &SyntaxNode, errors: &mut Vec<SyntaxError>) {
                 ast::Function(fun) => validate_function(fun, errors),
                 ast::BranchDecl(decl) => validate_branch_decl(decl, errors),
                 ast::DisciplineDecl(decl) => validate_discipline_decl(decl,errors),
+                ast::NatureDecl(decl) => validate_nature_decl(decl,errors),
                 ast::NatureAttr(attr) => validate_nature_attr(attr,errors),
                 ast::Literal(decl) => validate_literal(decl, errors),
+                ast::Name(name) => validate_name(name,errors),
+                ast::ModuleDecl(module) => validate_module(module,errors),
                 _ => ()
             }
         }
     }
+}
+
+fn validate_module(module: ast::ModuleDecl, errors: &mut Vec<SyntaxError>) {
+    let ports = if let Some(ports) = module.module_ports() { ports } else { return };
+    let has_decl = validate_module_ports(&ports, errors);
+    if !has_decl {
+        return;
+    }
+    let body_ports: Vec<_> = module.body_ports().map(|port| port.syntax().text_range()).collect();
+    if !body_ports.is_empty() {
+        errors.push(SyntaxError::IllegalBodyPorts { head: ports.syntax().text_range(), body_ports })
+    }
+}
+
+fn validate_module_ports(ports: &ModulePorts, errors: &mut Vec<SyntaxError>) -> bool {
+    let mut names: Vec<Vec<ast::Name>> = Vec::new();
+    let mut has_decl = false;
+    for port in ports.ports() {
+        if let ModulePortKind::Name(name) = port.kind() {
+            if let Some(dst) = names.iter_mut().find(|locs| locs[0].text() == name.text()) {
+                dst.push(name.clone())
+            } else {
+                names.push(vec![name.clone()])
+            }
+        } else {
+            has_decl = true
+        }
+    }
+
+    if !names.is_empty() && has_decl {
+        errors.push(SyntaxError::MixedModuleHead { module_ports: AstPtr::new(ports) });
+        // Don't lint body ports when the head is ambigous
+        return false;
+    }
+
+    for locs in names {
+        if locs.len() == 1 {
+            continue;
+        }
+        let name = locs[0].text().to_owned();
+        errors.push(SyntaxError::DuplicatePort {
+            pos: locs.into_iter().map(|it| it.syntax().text_range()).collect(),
+            name,
+        })
+    }
+
+    has_decl
 }
 
 fn is_valid_inf_position(s: SyntaxNode) -> bool {
@@ -167,6 +218,40 @@ fn validate_function(fun: ast::Function, errors: &mut Vec<SyntaxError>) {
     }
 }
 
+fn validate_name(name: Name, errors: &mut Vec<SyntaxError>) {
+    if let Some(ident) = name.ident_token() {
+        let parent = name.syntax().parent();
+        let p = parent.as_ref();
+
+        let compat = match ident.text() {
+            kw::raw::units if p.map_or(false, |p| p.kind() == SyntaxKind::ATTR) => return,
+            kw::raw::units
+            | kw::raw::idt_nature
+            | kw::raw::ddt_nature
+            | kw::raw::abstol
+            | kw::raw::access
+                if p.map_or(false, |p| p.kind() == SyntaxKind::NATURE_ATTR) =>
+            {
+                return
+            }
+            kw::raw::domain | kw::raw::potential | kw::raw::flow
+                if p.map_or(false, |p| p.kind() == SyntaxKind::DISCIPLINE_ATTR) =>
+            {
+                return
+            }
+            ident if kw::is_reserved(ident) => false,
+            ident if kw_comp::is_reserved(ident) => true,
+            _ => return,
+        };
+
+        errors.push(SyntaxError::ReservedIdentifier {
+            src: SyntaxNodePtr::new(name.syntax()),
+            compat,
+            name: ident.text().to_owned(),
+        })
+    }
+}
+
 fn validate_branch_decl(decl: ast::BranchDecl, errors: &mut Vec<SyntaxError>) {
     if let Some(arg_list) = decl.arg_list() {
         match arg_list.args().count() {
@@ -208,10 +293,67 @@ fn validate_branch_decl(decl: ast::BranchDecl, errors: &mut Vec<SyntaxError>) {
     }
 }
 
+fn validate_nature_decl(nature: ast::NatureDecl, errors: &mut Vec<SyntaxError>) {
+    if let Some(parent) = nature.parent() {
+        check_nature_path(&parent, errors)
+    }
+    for attr in nature.attrs() {
+        if let (Some(name), Some(val)) = (attr.name(), attr.val()) {
+            let name_text = name.syntax().text();
+            if name_text == "ddt_nature" || name_text == "idt_nature" {
+                check_nature_ref_attr(&val, errors)
+            } else if name_text == "access" && val.as_raw_ident().is_none() {
+                errors.push(SyntaxError::IllegalAttriubte {
+                    attr: "access",
+                    expected: "an identifier",
+                    range: val.syntax().text_range(),
+                })
+            }
+        }
+    }
+}
+
+fn check_nature_path(path: &ast::Path, errors: &mut Vec<SyntaxError>) {
+    if let Some(segment) = path.segment_token() {
+        match path.qualifiers().count() {
+            0 => (),
+            1 if matches!(segment.text(), "ddt_nature" | "idt_nature") => (),
+            _ => errors.push(SyntaxError::IllegalNatureIdent { range: path.syntax().text_range() }),
+        }
+    }
+}
+
+fn check_nature_ref_attr(val: &Expr, errors: &mut Vec<SyntaxError>) {
+    if let Expr::PathExpr(path) = val {
+        if let Some(path) = path.path() {
+            check_nature_path(&path, errors)
+        }
+    } else if val.syntax().children_with_tokens().all(|t| t.kind() != SyntaxKind::ERROR) {
+        errors.push(SyntaxError::IllegalNatureIdent { range: val.syntax().text_range() })
+    }
+}
+
 fn validate_discipline_decl(discipline: ast::DisciplineDecl, errors: &mut Vec<SyntaxError>) {
     for attr in discipline.discipline_attrs() {
         if let Some(name) = attr.name() {
-            match &*name.syntax().text().to_string() {
+            let is_overwrite = match name.qualifier() {
+                Some(qual)
+                    if (qual.syntax().text() == "potential" || qual.syntax.text() == "flow")
+                        && qual.qualifier().is_none() =>
+                {
+                    true
+                }
+                None => false,
+                _ => {
+                    errors.push(SyntaxError::IllegalDisciplineAttrIdent {
+                        range: name.syntax().text_range(),
+                    });
+                    continue;
+                }
+            };
+
+            let name_text = name.syntax().text().to_string();
+            match &*name_text {
                 "domain" | "potential" | "flow" => {
                     if let Some(tok) = attr.eq_token() {
                         errors.push(SyntaxError::SurplusToken {
@@ -230,6 +372,28 @@ fn validate_discipline_decl(discipline: ast::DisciplineDecl, errors: &mut Vec<Sy
                     }
                 }
                 _ => (),
+            }
+
+            if let Some(val) = attr.val() {
+                match &*name_text {
+                    "potential" | "flow" => check_nature_ref_attr(&val, errors),
+                    "idt_nature" | "ddt_nature" if is_overwrite => {
+                        check_nature_ref_attr(&val, errors)
+                    }
+
+                    "domain" => {
+                        let src = val.syntax().text();
+                        if src != "continous" && src != "discrete" {
+                            errors.push(SyntaxError::IllegalAttriubte {
+                                attr: "domain",
+                                expected: "continous or discrete",
+                                range: val.syntax().text_range(),
+                            })
+                        }
+                    }
+
+                    _ => (),
+                }
             }
         }
     }

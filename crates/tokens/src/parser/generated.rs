@@ -125,6 +125,7 @@ pub enum SyntaxKind {
     LITERAL,
     MODULE_DECL,
     MODULE_PORT,
+    MODULE_PORTS,
     NAME,
     NAME_REF,
     SYS_FUN,
@@ -151,7 +152,6 @@ pub enum SyntaxKind {
     EXPR_STMT,
     PORT_FLOW,
     SOURCE_FILE,
-    FUNCTION_REF,
     #[doc(hidden)]
     __LAST,
 }

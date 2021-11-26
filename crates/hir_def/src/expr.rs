@@ -13,6 +13,7 @@
 //! See also a neighboring `body` module.
 
 use arena::Idx;
+use lasso::Spur;
 use std::{
     fmt::{Debug, Display},
     intrinsics::transmute,
@@ -25,7 +26,7 @@ pub type ExprId = Idx<Expr>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Literal {
-    String(String),
+    String(Spur),
     Int(i32),
     Float(BitewiseF64),
     Inf,
@@ -111,6 +112,7 @@ pub enum Expr {
 }
 
 impl Expr {
+    #[inline]
     pub fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
         match *self {
             Expr::Missing | Expr::Path { .. } | Expr::Literal(_) => {}
@@ -175,6 +177,7 @@ pub struct Case {
 }
 
 impl Stmt {
+    #[inline]
     pub fn walk_child_exprs(&self, mut f: impl FnMut(ExprId)) {
         match *self {
             Stmt::Empty | Stmt::Missing | Stmt::Block { .. } | Stmt::EventControl { .. } => (),
@@ -199,6 +202,7 @@ impl Stmt {
         }
     }
 
+    #[inline]
     pub fn walk_child_stmts(&self, mut f: impl FnMut(StmtId)) {
         match *self {
             Stmt::Expr(_) | Stmt::Assigment { .. } | Stmt::Missing | Stmt::Empty => (),

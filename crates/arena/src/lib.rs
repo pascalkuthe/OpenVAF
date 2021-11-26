@@ -128,6 +128,14 @@ impl<T> IdxRange<T> {
         Self { range: range.start.into()..range.end.into(), _p: PhantomData }
     }
 
+    pub fn start(&self) -> Idx<T> {
+        self.range.start.into()
+    }
+
+    pub fn end(&self) -> Idx<T> {
+        self.range.end.into()
+    }
+
     /// Creates a new index range
     /// inclusive of the start value and end value.
     ///

@@ -1,23 +1,25 @@
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 
-use crate::item_tree::Var;
 use crate::{
     builtin::{insert_builtin_scope, BuiltIn},
     db::HirDefDB,
-    item_tree::{self, ItemTreeId, Net, Port},
-    name::kw,
-    BlockId, BranchId, DisciplineAttrId, DisciplineId, FunctionArgId, FunctionId, ItemTree, Lookup,
-    ModuleId, Name, NatureAttrId, NatureId, NodeId, ParamId, ScopeId, VarId,
+    BlockId, BranchId, DisciplineId, FunctionArgId, FunctionId, Lookup, ModuleId, NatureAttrId,
+    NatureId, NodeId, ParamId, VarId,
 };
 use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx};
 use basedb::FileId;
 use once_cell::sync::Lazy;
 use stdx::{impl_from, impl_from_typed};
+use syntax::name::{kw, Name};
+
+use crate::nameres::diagnostics::PathResolveError;
+
+use self::diagnostics::DefDiagnostic;
 
 mod collect;
-mod diagnostics;
+pub mod diagnostics;
 mod pretty;
 
 #[cfg(test)]
@@ -35,7 +37,7 @@ pub struct DefMap {
     src: DefMapSource,
     scopes: Arena<Scope>,
     entry_scope: LocalScopeId,
-    args: Arena<FunctionArg>,
+    pub diagnostics: Vec<DefDiagnostic>,
 }
 
 impl Index<LocalScopeId> for DefMap {
@@ -64,16 +66,10 @@ impl DefMap {
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-pub struct NatureAccess(pub NatureId);
+pub struct NatureAccess(pub NatureAttrId);
 
-impl From<NatureAccess> for NatureId {
-    fn from(access: NatureAccess) -> Self {
-        access.0
-    }
-}
-
-impl From<NatureId> for NatureAccess {
-    fn from(id: NatureId) -> Self {
+impl From<NatureAttrId> for NatureAccess {
+    fn from(id: NatureAttrId) -> NatureAccess {
         NatureAccess(id)
     }
 }
@@ -90,11 +86,37 @@ pub enum ScopeDefItem {
     ParamId(ParamId),
     BranchId(BranchId),
     FunctionId(FunctionId),
-    NatureAttrId(NatureAttrId),
-    DisciplineAttrId(DisciplineAttrId),
     BuiltIn(BuiltIn),
     FunctionReturn(FunctionId),
     FunctionArgId(FunctionArgId),
+    NatureAttrId(NatureAttrId),
+}
+
+impl ScopeDefItem {
+    // pub fn ast_id(&self, db: &dyn HirDefDB) -> Option<ErasedAstId> {
+    //     let id: ErasedAstId = match self {
+    //         ScopeDefItem::ModuleId(module) => module.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::BlockId(block) => block.lookup(db).ast.into(),
+    //         ScopeDefItem::NatureId(nature) => nature.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::NatureAccess(access) => access.0.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::DisciplineId(discipline) => discipline.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::VarId(var) => var.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::ParamId(param) => param.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::BranchId(branch) => branch.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::FunctionReturn(fun) | ScopeDefItem::FunctionId(fun) => {
+    //             fun.lookup(db).ast_id(db).into()
+    //         }
+    //         ScopeDefItem::FunctionArgId(arg) => arg.lookup(db).ast_id(db).into(),
+    //         ScopeDefItem::NodeId(noe) => noe.lookup(db).ast_id(db),
+    //         ScopeDefItem::BuiltIn(_) => return None,
+    //     };
+    //     Some(id)
+    // }
+
+    // pub fn pos(&self, db: &dyn HirDefDB, root_file: FileId) -> Option<TextRange> {
+    //     let id = self.ast_id(db);
+    //     let id = db.ast_id_map(root_file).get_syntax(id);
+    // }
 }
 
 impl_from! {
@@ -109,7 +131,7 @@ impl_from! {
     BranchId,
     FunctionId,
     NatureAttrId,
-    DisciplineAttrId,
+    // DisciplineAttrId,
     FunctionArgId,
     BuiltIn
 
@@ -141,14 +163,13 @@ scope_item_kinds! {
     NatureId => "nature",
     DisciplineId => "discipline",
     NatureAccess => "nature access function",
+    NatureAttrId => "nature attribute",
     NodeId => "node",
     VarId => "variable",
     ParamId => "parameter",
     BranchId => "branch",
     FunctionId => "function",
     BuiltIn => "function",
-    NatureAttrId => "nature attribute",
-    DisciplineAttrId => "discipline attribute",
     FunctionArgId => "function argument"
 }
 
@@ -156,8 +177,8 @@ scope_item_kinds! {
 pub enum ScopeOrigin {
     Root,
     Module(ModuleId),
-    Nature(NatureId),
-    Discipline(DisciplineId),
+    // Nature(NatureId),
+    // Discipline(DisciplineId),
     Block(BlockId),
     Function(FunctionId),
 }
@@ -166,8 +187,8 @@ pub type LocalScopeId = Idx<Scope>;
 
 impl_from_typed! {
     Module(ModuleId),
-    Nature(NatureId),
-    Discipline(DisciplineId),
+    // Nature(NatureId),
+    // Discipline(DisciplineId),
     Block(BlockId),
     Function(FunctionId)
     for ScopeOrigin
@@ -185,14 +206,9 @@ pub struct Scope {
     parent: Option<LocalScopeId>,
     pub children: HashMap<Name, LocalScopeId>,
     pub declarations: HashMap<Name, ScopeDefItem>,
-    nodes: Arena<Node>,
 }
 
 impl DefMap {
-    pub fn node(&self, scope: LocalScopeId, id: LocalNodeId) -> &Node {
-        &self.scopes[scope].nodes[id]
-    }
-
     pub fn def_map_query(db: &dyn HirDefDB, root_file: FileId) -> Arc<DefMap> {
         collect::collect_root_def_map(db, root_file)
     }
@@ -231,7 +247,7 @@ impl DefMap {
         res.try_into().map_err(|_| PathResolveError::ExpectedItemKind {
             name: name.clone(),
             expected: T::NAME,
-            found: res,
+            found: res.into(),
         })
     }
 
@@ -241,11 +257,17 @@ impl DefMap {
         path: &[Name],
         db: &dyn HirDefDB,
     ) -> Result<T, PathResolveError> {
-        let res = self.resolve_normal_path_in_scope(scope, path, db)?;
-        res.try_into().map_err(|_| PathResolveError::ExpectedItemKind {
+        let resolved_path = self.resolve_normal_path_in_scope(scope, path, db)?;
+        let res: Result<ScopeDefItem, _> = resolved_path.clone().try_into();
+        if let Ok(res) = res {
+            if let Ok(res) = res.try_into() {
+                return Ok(res);
+            }
+        }
+        Err(PathResolveError::ExpectedItemKind {
             name: path.last().unwrap().clone(),
             expected: T::NAME,
-            found: res,
+            found: resolved_path,
         })
     }
 
@@ -254,7 +276,7 @@ impl DefMap {
         mut scope: LocalScopeId,
         path: &[Name],
         db: &dyn HirDefDB,
-    ) -> Result<ScopeDefItem, PathResolveError> {
+    ) -> Result<ResolvedPath, PathResolveError> {
         let mut arc;
         let mut current_map = self;
 
@@ -279,13 +301,14 @@ impl DefMap {
 
                         return Err(PathResolveError::NotFound { name: name.clone() });
                     }
-                    DefMapSource::Function(fun) => {
+                    DefMapSource::Function(_fun) => {
                         if let Some(builtin) = BUILTIN_SCOPE.get(name) {
                             break *builtin;
                         }
-                        let parent = fun.lookup(db).scope;
 
-                        parent.def_map(db).resolve_normal_path_in_scope(scope, path, db);
+                        // let parent = fun.lookup(db).scope;
+                        //parent.def_map(db).resolve_normal_path_in_scope(scope, path, db); TODO
+                        //give hint if found in full def map
 
                         return Err(PathResolveError::NotFound { name: name.clone() });
                     }
@@ -294,13 +317,11 @@ impl DefMap {
         };
 
         if path.len() == 1 {
-            return Ok(decl);
+            return Ok(decl.into());
         }
 
         scope = match decl {
             ScopeDefItem::ModuleId(module) => module.lookup(db).scope.local_scope,
-            ScopeDefItem::NatureId(nature) => nature.lookup(db).scope.local_scope,
-            ScopeDefItem::DisciplineId(discipline) => discipline.lookup(db).scope.local_scope,
 
             ScopeDefItem::BlockId(block) => match db.block_def_map(block) {
                 Some(block_map) => {
@@ -326,7 +347,7 @@ impl DefMap {
         &self,
         segments: &[Name],
         db: &dyn HirDefDB,
-    ) -> Result<ScopeDefItem, PathResolveError> {
+    ) -> Result<ResolvedPath, PathResolveError> {
         debug_assert!(matches!(self.src, DefMapSource::Function(_) | DefMapSource::Root));
         self.resolve_names_in(self.root(), &kw::root, segments, db)
     }
@@ -336,11 +357,17 @@ impl DefMap {
         segments: &[Name],
         db: &dyn HirDefDB,
     ) -> Result<T, PathResolveError> {
-        let res = self.resolve_root_path(segments, db)?;
-        res.try_into().map_err(|_| PathResolveError::ExpectedItemKind {
+        let resolved_path = self.resolve_root_path(segments, db)?;
+        let res: Result<ScopeDefItem, _> = resolved_path.clone().try_into();
+        if let Ok(res) = res {
+            if let Ok(res) = res.try_into() {
+                return Ok(res);
+            }
+        }
+        Err(PathResolveError::ExpectedItemKind {
             name: segments.last().unwrap().clone(),
             expected: T::NAME,
-            found: res,
+            found: resolved_path,
         })
     }
 
@@ -350,7 +377,7 @@ impl DefMap {
         mut scope_name: &'a Name,
         path: &'a [Name],
         db: &dyn HirDefDB,
-    ) -> Result<ScopeDefItem, PathResolveError> {
+    ) -> Result<ResolvedPath, PathResolveError> {
         let (segments, name) =
             if let [segments @ .., name] = path { (segments, name) } else { unreachable!() };
 
@@ -360,123 +387,82 @@ impl DefMap {
         for (i, segment) in segments.iter().enumerate() {
             match current_map.scopes[scope].children.get(segment) {
                 Some(child) => scope = *child,
-                None => {
-                    if let Some(found) = current_map.scopes[scope].declarations.get(segment) {
-                        if let ScopeDefItem::BlockId(block) = *found {
-                            match db.block_def_map(block) {
-                                Some(block_map) => {
-                                    arc = block_map;
-                                    current_map = &*arc;
-                                    scope = current_map.entry();
-                                }
-                                None => {
-                                    return Err(PathResolveError::NotFoundIn {
-                                        name: path[i + 1].clone(),
-                                        scope: segment.clone(),
-                                    })
-                                }
-                            }
+                None => match current_map.scopes[scope].declarations.get(segment) {
+                    Some(ScopeDefItem::BlockId(block)) => match db.block_def_map(*block) {
+                        Some(block_map) => {
+                            arc = block_map;
+                            current_map = &*arc;
+                            scope = current_map.entry();
+                        }
+                        None => {
+                            return Err(PathResolveError::NotFoundIn {
+                                name: path[i + 1].clone(),
+                                scope: segment.clone(),
+                            })
+                        }
+                    },
+                    Some(ScopeDefItem::BranchId(branch))
+                        if path.get(i + 1) == Some(&kw::potential) =>
+                    {
+                        let rem = &path[(i + 1)..];
+                        if let [name] = rem {
+                            return Ok(ResolvedPath::PotentialAttribute {
+                                branch: *branch,
+                                name: name.clone(),
+                            });
                         } else {
-                            return Err(PathResolveError::ExpectedScope {
-                                name: segment.clone(),
-                                found: *found,
+                            return Err(PathResolveError::ExpectedNatureAttributeIdent {
+                                found: rem.to_owned().into_boxed_slice(),
                             });
                         }
-                    } else {
+                    }
+
+                    Some(ScopeDefItem::BranchId(branch)) if path.get(i + 1) == Some(&kw::flow) => {
+                        let rem = &path[(i + 1)..];
+                        if let [name] = rem {
+                            return Ok(ResolvedPath::FlowAttriubte {
+                                branch: *branch,
+                                name: name.clone(),
+                            });
+                        } else {
+                            return Err(PathResolveError::ExpectedNatureAttributeIdent {
+                                found: rem.to_owned().into_boxed_slice(),
+                            });
+                        }
+                    }
+
+                    Some(found) => {
+                        return Err(PathResolveError::ExpectedScope {
+                            name: segment.clone(),
+                            found: *found,
+                        });
+                    }
+                    None => {
                         return Err(PathResolveError::NotFoundIn {
                             name: segment.clone(),
                             scope: scope_name.clone(),
-                        });
+                        })
                     }
-                }
+                },
             }
 
             scope_name = segment;
         }
 
-        self.scopes[scope].declarations.get(name).copied().ok_or_else(|| {
-            PathResolveError::NotFoundIn { name: name.clone(), scope: scope_name.clone() }
-        })
-    }
-}
-
-// TODO better errors / hints?
-#[derive(Debug, Clone)]
-pub enum PathResolveError {
-    NotFound { name: Name },
-    NotFoundIn { name: Name, scope: Name },
-    ExpectedScope { name: Name, found: ScopeDefItem },
-    ExpectedItemKind { name: Name, expected: &'static str, found: ScopeDefItem },
-}
-
-// TODO move this to the module lvl so that these ids are somewhat persistent when working with
-// multiple modules
-pub type LocalNodeId = Idx<Node>;
-
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
-pub enum NodeTypeDecl {
-    Net(ItemTreeId<Net>),
-    Port(ItemTreeId<Port>),
-}
-
-impl_from_typed!(
-    Net(ItemTreeId<Net>),
-    Port(ItemTreeId<Port>) for NodeTypeDecl
-);
-
-impl NodeTypeDecl {
-    pub fn name<'a>(&self, tree: &'a ItemTree) -> &'a Name {
-        match *self {
-            NodeTypeDecl::Net(net) => &tree[net].name,
-            NodeTypeDecl::Port(port) => &tree[port].name,
+        match self.scopes[scope].declarations.get(name) {
+            Some(res) => Ok(ResolvedPath::ScopeDefItem(*res)),
+            None => {
+                Err(PathResolveError::NotFoundIn { name: name.clone(), scope: scope_name.clone() })
+            }
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Node {
-    port: Option<ItemTreeId<Port>>,
-    discipline: Option<NodeTypeDecl>,
-    gnd_declaration: Option<NodeTypeDecl>,
-    scope: ScopeId,
+pub enum ResolvedPath {
+    FlowAttriubte { branch: BranchId, name: Name },
+    PotentialAttribute { branch: BranchId, name: Name },
+    ScopeDefItem(ScopeDefItem),
 }
 
-impl Node {
-    pub fn discipline<'a>(&self, tree: &'a ItemTree) -> Option<&'a Name> {
-        self.discipline.map(|d| d.name(tree))
-    }
-
-    pub fn is_input(&self, tree: &ItemTree) -> bool {
-        self.port.map_or(false, |port| tree[port].is_input)
-    }
-
-    pub fn is_output(&self, tree: &ItemTree) -> bool {
-        self.port.map_or(false, |port| tree[port].is_output)
-    }
-
-    pub fn is_port(&self) -> bool {
-        self.port.is_some()
-    }
-
-    pub fn is_gnd(&self) -> bool {
-        self.gnd_declaration.is_some()
-    }
-}
-
-pub type FunctionArgPos = Idx<FunctionArg>;
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct FunctionArg {
-    direction: ItemTreeId<item_tree::FunctionArg>,
-    var: Option<ItemTreeId<Var>>,
-}
-
-impl FunctionArg {
-    pub fn is_input(&self, tree: &ItemTree) -> bool {
-        tree[self.direction].is_input
-    }
-
-    pub fn is_output(&self, tree: &ItemTree) -> bool {
-        tree[self.direction].is_output
-    }
-}
+impl_from!(ScopeDefItem for ResolvedPath);

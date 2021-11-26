@@ -44,7 +44,6 @@ impl<'t> Parser<'t> {
         self.nth(0)
     }
 
-
     /// Lookahead operation: returns the kind of the next nth
     /// token.
     pub(crate) fn nth(&self, n: usize) -> SyntaxKind {
@@ -106,7 +105,7 @@ impl<'t> Parser<'t> {
 
     /// Consume the next token if `kind` matches.
     pub(crate) fn bump(&mut self, kind: SyntaxKind) {
-        assert!(self.eat(kind), "expected {} found {}",kind,self.current());
+        assert!(self.eat(kind), "expected {} found {}", kind, self.current());
     }
 
     /// Advances the parser by one token
@@ -160,17 +159,11 @@ impl<'t> Parser<'t> {
     }
 
     pub(crate) fn unexpected_token_msg(&self, kind: SyntaxKind) -> SyntaxError {
-        SyntaxError::UnexpectedToken {
-            expected: List::new(vec![kind]),
-            found: self.current(),
-        }
+        SyntaxError::UnexpectedToken { expected: List::new(vec![kind]), found: self.current() }
     }
 
     pub(crate) fn unexpected_tokens_msg(&self, kinds: Vec<SyntaxKind>) -> SyntaxError {
-        SyntaxError::UnexpectedToken {
-            expected: List::new(kinds),
-            found: self.current(),
-        }
+        SyntaxError::UnexpectedToken { expected: List::new(kinds), found: self.current() }
     }
 
     // Create an error node and consume the next token.

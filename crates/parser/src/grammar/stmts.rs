@@ -4,9 +4,12 @@ pub(super) const STMT_TS: TokenSet =
     TokenSet::new(&[IF_KW, WHILE_KW, FOR_KW, CASE_KW, BEGIN_KW, T![;], IDENT, SYSFUN, T![@]]);
 pub(super) const STMT_RECOVER: TokenSet = TokenSet::new(&[EOF, ENDMODULE_KW, T![;]]);
 
+pub(super) const STMT_ATTR_RECOVER: TokenSet =
+    TokenSet::new(&[IF_KW, WHILE_KW, FOR_KW, CASE_KW, BEGIN_KW, T![;]]).union(STMT_RECOVER);
+
 pub(super) fn stmt_with_attrs(p: &mut Parser) {
     let m = p.start();
-    attrs(p, STMT_RECOVER.union(STMT_TS));
+    attrs(p, STMT_ATTR_RECOVER);
     stmt(p, m, STMT_TS, STMT_RECOVER)
 }
 pub(super) fn stmt(p: &mut Parser, m: Marker, expected: TokenSet, recover: TokenSet) {
@@ -163,6 +166,8 @@ fn vals_or_default(p: &mut Parser) {
 
 const BLOCK_RECOVER: TokenSet = TokenSet::new(&[END_KW, EOF, ENDMODULE_KW]);
 const BLOCK_STMT_TS: TokenSet = STMT_TS.union(TYPE_TS).union(TokenSet::unique(PARAMETER_KW));
+const BLOCK_ATTR_RECOVER: TokenSet =
+    STMT_ATTR_RECOVER.union(TYPE_TS).union(TokenSet::unique(PARAMETER_KW));
 fn block_stmt(p: &mut Parser, m: Marker) {
     p.bump(BEGIN_KW);
     if p.at(T![:]) {
@@ -174,7 +179,7 @@ fn block_stmt(p: &mut Parser, m: Marker) {
 
     while !p.at_ts(BLOCK_RECOVER) {
         let m = p.start();
-        attrs(p, BLOCK_RECOVER.union(BLOCK_STMT_TS));
+        attrs(p, BLOCK_RECOVER.union(BLOCK_ATTR_RECOVER));
         if p.at_ts(TYPE_TS) {
             var_decl(p, m);
         } else if p.at(PARAMETER_KW) {

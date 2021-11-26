@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat, to_upper_snake_case};
 use stdx::iter::multiunzip;
 
-const BUILTINS: [&str; 134] = [
+const BUILTINS: [&str; 135] = [
     "analysis",
     "acos",
     "acosh",
@@ -141,6 +141,7 @@ const BUILTINS: [&str; 134] = [
     "$analog_node_alias",
     "$analog_port_alias",
     // "$table_model",
+    "$test$plusargs",
     "$value$plusargs",
     "$simparam$str",
     "abs",
@@ -169,11 +170,9 @@ fn generate_builtins() {
     let variants = variants.iter().map(|var| format_ident!("{}", var));
 
     let hir_def = quote! {
-        use crate::{
-            name::{kw, sysfun, Name},
-            nameres::ScopeDefItem,
-        };
+        use crate::nameres::ScopeDefItem;
         use ahash::AHashMap;
+        use syntax::name::{kw, sysfun, Name};
 
         #[derive(Eq,PartialEq,Copy,Clone, Hash,Debug)]
         #[allow(nonstandard_style,unreachable_pub)]
@@ -201,7 +200,7 @@ fn generate_builtins() {
 
         const BUILTIN_INFO: [BuiltinInfo; #const_cnt] = [#(#constants),*];
 
-        pub fn bultin_info(builtin: BuiltIn) -> BuiltinInfo{
+        pub(crate) fn bultin_info(builtin: BuiltIn) -> BuiltinInfo{
             BUILTIN_INFO[builtin as u8 as usize]
         }
     }

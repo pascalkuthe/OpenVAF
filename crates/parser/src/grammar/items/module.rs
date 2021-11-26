@@ -18,12 +18,15 @@ pub(super) const MODULE_ITEM_OR_ATTR_RECOVERY: TokenSet =
 pub(crate) fn module(p: &mut Parser, m: Marker) {
     p.bump(T![module]);
     name_r(p, TokenSet::new(&[T!['('], T![;]]));
-    if p.eat(T!['(']) {
-        module_ports(p)
+    if p.at(T!['(']) {
+        let m = p.start();
+        p.bump(T!['(']);
+        module_ports(p);
+        m.complete(p, MODULE_PORTS);
     }
     p.expect(T![;]);
     while !p.at_ts(ITEM_RECOVERY_SET.union(TokenSet::unique(ENDMODULE_KW))) {
-        module_item(p)
+        module_item(p);
     }
 
     p.expect(ENDMODULE_KW);

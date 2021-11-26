@@ -1,13 +1,14 @@
-use std::{
-    fmt::{self, Write},
-    iter::repeat,
-};
+use std::fmt::{self, Write};
 
-use stdx::iter::zip;
+use basedb::AstId;
+use syntax::ast;
 
 use crate::ItemTree;
 
-use super::{BlockScopeItem, Discipline, Function, Module, Nature};
+use super::{
+    BlockScopeItem, Discipline, Function, FunctionItem, ItemTreeId, Module, ModuleItem, Nature,
+    Param, Var,
+};
 
 macro_rules! wln {
     ($dst:expr) => {
@@ -73,7 +74,7 @@ impl<'a> Printer<'a> {
         wln!(self, "idt_nature = {:?}", nature.idt_nature);
         wln!(self, "access = {:?}", nature.access);
         for attr in nature.attrs.clone() {
-            wln!(self, "{}", self.tree[attr].name)
+            wln!(self, "attr{}: {}", u32::from(attr), self.tree[attr].name)
         }
     }
 
@@ -81,84 +82,92 @@ impl<'a> Printer<'a> {
         wln!(self, "potential = {:?}", discipline.potential);
         wln!(self, "flow = {:?}", discipline.flow);
         wln!(self, "domain = {:?}", discipline.domain);
-        for attr in discipline.attrs.clone() {
-            wln!(self, "{}", self.tree[attr].name)
+        for attr in discipline.extra_attrs.clone() {
+            wln!(
+                self,
+                "attr{}: {} ({:?})",
+                u32::from(attr),
+                self.tree[attr].name,
+                self.tree[attr].kind
+            )
         }
     }
 
     fn print_module(&mut self, module: &Module) {
-        wln!(self, "expected_ports = {:?}", module.exptected_ports);
-        for (port, port_kind) in zip(module.head_ports.clone(), repeat("head"))
-            .chain(zip(module.body_ports.clone(), repeat("body")))
-        {
-            let port = &self.tree[port];
-            wln!(
-                self,
-                "port ({}) {} = {{is_input: {}, is_output:{}, gnd: {} , discipline {:?}}}",
-                port_kind,
-                port.name,
-                port.is_input,
-                port.is_output,
-                port.is_gnd,
-                port.discipline,
-            );
+        for item in &module.items {
+            match *item {
+                ModuleItem::Scope(scope) => self.print_scope(scope),
+                ModuleItem::Parameter(param) => self.print_parameter(param),
+                ModuleItem::Variable(var) => self.print_var(var),
+                ModuleItem::Branch(branch) => {
+                    let branch = &self.tree[branch];
+                    wln!(self, "branch {} = {:?}", branch.name, branch.kind)
+                }
+                ModuleItem::Node(node) => {
+                    let node = &module.nodes[node];
+                    let (is_input, is_output) = node.direction(self.tree);
+                    wln!(
+                        self,
+                        "node {} = {{is_input: {}, is_output:{}, gnd: {} , discipline {:?}}}",
+                        node.name,
+                        is_input,
+                        is_output,
+                        node.is_gnd(self.tree),
+                        node.discipline(self.tree),
+                    );
+                }
+                ModuleItem::Function(function) => {
+                    let function = &self.tree[function];
+                    wln!(self, "function {}", function.name);
+                    self.indented(|s| s.print_function(function))
+                }
+            }
         }
-
-        for net in module.nets.clone() {
-            let net = &self.tree[net];
-            wln!(
-                self,
-                "net {} = {{gnd: {} , discipline {:?}}}",
-                net.name,
-                net.is_gnd,
-                net.discipline,
-            );
-        }
-
-        for branch in module.branches.clone() {
-            let branch = &self.tree[branch];
-            wln!(self, "branch {} = {:?}", branch.name, branch.kind)
-        }
-
-        for function in module.functions.clone() {
-            let function = &self.tree[function];
-            wln!(self, "function {}", function.name);
-            self.indented(|s| s.print_function(function))
-        }
-        self.print_scope_items(&module.scope_items)
     }
 
     fn print_function(&mut self, function: &Function) {
-        for arg in function.args.clone() {
-            let arg = &self.tree[arg];
-            wln!(
-                self,
-                "arg {} = {{ is_input = {}, is_output = {}}}",
-                arg.name,
-                arg.is_input,
-                arg.is_output
-            );
+        for item in &function.items {
+            match *item {
+                FunctionItem::Scope(block) => self.print_scope(block),
+                FunctionItem::Parameter(param) => self.print_parameter(param),
+                FunctionItem::Variable(var) => self.print_var(var),
+                FunctionItem::FunctionArg(arg) => {
+                    let arg = &function.args[arg];
+                    wln!(
+                        self,
+                        "arg {:?} {} = {{ is_input = {}, is_output = {}}}",
+                        arg.ty(self.tree),
+                        arg.name,
+                        arg.is_input,
+                        arg.is_output
+                    );
+                }
+            }
         }
+    }
 
-        self.print_scope_items(&function.scope_items)
+    fn print_scope(&mut self, block: AstId<ast::BlockStmt>) {
+        let block = self.tree.block_scope(block);
+        wln!(self, "block {:?}", block.name);
+        self.indented(|s| s.print_scope_items(&block.scope_items));
+    }
+
+    fn print_parameter(&mut self, param: ItemTreeId<Param>) {
+        let param = &self.tree[param];
+        wln!(self, "param {} {}", param.ty, param.name);
+    }
+
+    fn print_var(&mut self, var: ItemTreeId<Var>) {
+        let var = &self.tree[var];
+        wln!(self, "var {} {}", var.ty, var.name);
     }
 
     fn print_scope_items(&mut self, items: &[BlockScopeItem]) {
         for item in items {
             match *item {
-                BlockScopeItem::Scope(block) => {
-                    let block = self.tree.block_scope(block);
-                    wln!(self, "block {:?}", block.name);
-                    self.indented(|s| s.print_scope_items(&block.scope_items));
-                }
-                BlockScopeItem::Parameter(param) => {
-                    let param = &self.tree[param];
-                    wln!(self, "param {} {}", param.ty, param.name);
-                }
-                BlockScopeItem::Variable(var) => {
-                    let var = &self.tree[var];
-                    wln!(self, "var {} {}", var.ty, var.name);
-                }
+                BlockScopeItem::Scope(block) => self.print_scope(block),
+                BlockScopeItem::Parameter(param) => self.print_parameter(param),
+                BlockScopeItem::Variable(var) => self.print_var(var),
             }
         }
     }

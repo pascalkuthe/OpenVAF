@@ -94,14 +94,7 @@ pub(crate) const KINDS_SRC: KindsSrc = KindsSrc {
         "final_step",
     ],
     literals: &["INT_NUMBER", "STD_REAL_NUMBER", "SI_REAL_NUMBER", "STR_LIT"],
-    tokens: &[
-        "ERROR",
-        "IDENT",
-        "SYSFUN",
-        "NET_TYPE",
-        "WHITESPACE",
-        "COMMENT",
-    ],
+    tokens: &["ERROR", "IDENT", "SYSFUN", "NET_TYPE", "WHITESPACE", "COMMENT"],
     nodes: &[
         "ANALOG_BEHAVIOUR",
         "ARG",
@@ -131,6 +124,7 @@ pub(crate) const KINDS_SRC: KindsSrc = KindsSrc {
         "LITERAL",
         "MODULE_DECL",
         "MODULE_PORT",
+        "MODULE_PORTS",
         "NAME",
         "NAME_REF",
         "SYS_FUN",
@@ -157,7 +151,6 @@ pub(crate) const KINDS_SRC: KindsSrc = KindsSrc {
         "EXPR_STMT",
         "PORT_FLOW",
         "SOURCE_FILE",
-        "FUNCTION_REF",
     ],
 };
 

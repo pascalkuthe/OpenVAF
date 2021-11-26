@@ -21,7 +21,7 @@ basedb = {version = "0.0.0", path = "../basedb" }
 syntax = {version = "0.0.0", path = "../syntax"}
 stdx = {version = "0.0.0", path = "../stdx" }
 arena = {version = "0.0.0", path = "../arena" }
-bitset = {version = "0.0.0", path = "../bitset" }
+# bitset = {version = "0.0.0", path = "../bitset" }
 
 salsa = "0.17.0-pre.2"
 # tracing = "0.1.26"
@@ -32,16 +32,14 @@ text-size = "1.1"
 typed-index-collections = "3.0"
 
 # Performant collections
-# indexmap = "1.6"
 ahash = "0.7"
-smol_str = {version = "0.1.21",  default-features = false}
-# drop_bomb = "0.1.5"
+lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
 
 sourcegen = {version ="0.0.0", path ="../sourcegen"}
 parking_lot = "0.11"
-expect-test = "1.1.0"
+expect-test = "1.1"
 proc-macro2 = "1.0"
 quote = "1.0"
 indexmap = "1.6"

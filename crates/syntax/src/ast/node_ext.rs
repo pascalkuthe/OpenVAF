@@ -10,7 +10,7 @@ use std::iter::successors;
 
 use super::{
     AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, Constraint, EventStmt,
-    Expr, ForStmt, Function, ModulePort, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit,
+    Expr, ForStmt, Function, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit,
 };
 
 // impl ast::PathSegment {
@@ -149,11 +149,25 @@ impl ast::ModuleDecl {
     pub fn analog_behaviour(&self) -> impl Iterator<Item = Stmt> {
         support::children::<AnalogBehaviour>(self.syntax()).filter_map(|it| it.stmt())
     }
+
+    pub fn body_ports(&self) -> AstChildren<ast::BodyPortDecl> {
+        support::children(self.syntax())
+    }
 }
 
-impl ModulePort {
+impl ast::ModulePort {
     pub fn kind(&self) -> ModulePortKind {
         support::child(&self.syntax).unwrap()
+    }
+}
+
+impl ast::ModulePorts {
+    pub fn declarations(&self) -> AstChildren<ast::PortDecl> {
+        support::children(self.syntax())
+    }
+
+    pub fn names(&self) -> AstChildren<ast::Name> {
+        support::children(self.syntax())
     }
 }
 
@@ -270,5 +284,3 @@ impl Function {
         support::children(self.syntax())
     }
 }
-
-

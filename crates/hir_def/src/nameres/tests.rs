@@ -32,12 +32,6 @@ endmodule
 
     let expect = expect![[r#"
         test = ModuleId(ModuleId(0));
-
-            hypsmooth = FunctionId(FunctionId(0));
-
-                c = FunctionArgId(FunctionArgId(1));
-                hypsmooth = FunctionReturn(FunctionId(0));
-                x = FunctionArgId(FunctionArgId(0));
     "#]];
     check(src, expect)
 }
@@ -83,102 +77,39 @@ endmodule
 
 #[test]
 pub fn std() {
-
     let expect = expect![[r#"
-        Acc = NatureAccess(NatureAccess(NatureId(9)));
+        Acc = NatureAccess(NatureAccess(NatureAttrId(9)));
         Acceleration = NatureId(NatureId(9));
-
-            abstol = NatureAttrId(NatureAttrId(19));
-            ddt_nature = NatureId(NatureId(10));
-            idt_nature = NatureId(NatureId(8));
-            units = NatureAttrId(NatureAttrId(18));
-        Alpha = NatureAccess(NatureAccess(NatureId(14)));
+        Alpha = NatureAccess(NatureAccess(NatureAttrId(14)));
         Angle = NatureId(NatureId(12));
-
-            abstol = NatureAttrId(NatureAttrId(25));
-            ddt_nature = NatureId(NatureId(13));
-            units = NatureAttrId(NatureAttrId(24));
         Angular_Acceleration = NatureId(NatureId(14));
-
-            abstol = NatureAttrId(NatureAttrId(29));
-            idt_nature = NatureId(NatureId(13));
-            units = NatureAttrId(NatureAttrId(28));
         Angular_Force = NatureId(NatureId(15));
-
-            abstol = NatureAttrId(NatureAttrId(31));
-            units = NatureAttrId(NatureAttrId(30));
         Angular_Velocity = NatureId(NatureId(13));
-
-            abstol = NatureAttrId(NatureAttrId(27));
-            ddt_nature = NatureId(NatureId(14));
-            idt_nature = NatureId(NatureId(12));
-            units = NatureAttrId(NatureAttrId(26));
         Charge = NatureId(NatureId(1));
-
-            abstol = NatureAttrId(NatureAttrId(3));
-            ddt_nature = NatureId(NatureId(0));
-            units = NatureAttrId(NatureAttrId(2));
         Current = NatureId(NatureId(0));
-
-            abstol = NatureAttrId(NatureAttrId(1));
-            idt_nature = NatureId(NatureId(1));
-            units = NatureAttrId(NatureAttrId(0));
-        F = NatureAccess(NatureAccess(NatureId(11)));
+        F = NatureAccess(NatureAccess(NatureAttrId(11)));
         Flux = NatureId(NatureId(3));
-
-            abstol = NatureAttrId(NatureAttrId(7));
-            ddt_nature = NatureId(NatureId(2));
-            units = NatureAttrId(NatureAttrId(6));
         Force = NatureId(NatureId(11));
-
-            abstol = NatureAttrId(NatureAttrId(23));
-            units = NatureAttrId(NatureAttrId(22));
-        I = NatureAccess(NatureAccess(NatureId(0)));
-        Imp = NatureAccess(NatureAccess(NatureId(10)));
+        I = NatureAccess(NatureAccess(NatureAttrId(0)));
+        Imp = NatureAccess(NatureAccess(NatureAttrId(10)));
         Impulse = NatureId(NatureId(10));
-
-            abstol = NatureAttrId(NatureAttrId(21));
-            idt_nature = NatureId(NatureId(9));
-            units = NatureAttrId(NatureAttrId(20));
-        MMF = NatureAccess(NatureAccess(NatureId(4)));
+        MMF = NatureAccess(NatureAccess(NatureAttrId(4)));
         Magneto_Motive_Force = NatureId(NatureId(4));
-
-            abstol = NatureAttrId(NatureAttrId(9));
-            units = NatureAttrId(NatureAttrId(8));
-        Omega = NatureAccess(NatureAccess(NatureId(13)));
-        Phi = NatureAccess(NatureAccess(NatureId(3)));
-        Pos = NatureAccess(NatureAccess(NatureId(7)));
+        Omega = NatureAccess(NatureAccess(NatureAttrId(13)));
+        Phi = NatureAccess(NatureAccess(NatureAttrId(3)));
+        Pos = NatureAccess(NatureAccess(NatureAttrId(7)));
         Position = NatureId(NatureId(7));
-
-            abstol = NatureAttrId(NatureAttrId(15));
-            ddt_nature = NatureId(NatureId(8));
-            units = NatureAttrId(NatureAttrId(14));
         Power = NatureId(NatureId(6));
-
-            abstol = NatureAttrId(NatureAttrId(13));
-            units = NatureAttrId(NatureAttrId(12));
-        Pwr = NatureAccess(NatureAccess(NatureId(6)));
-        Q = NatureAccess(NatureAccess(NatureId(1)));
-        Tau = NatureAccess(NatureAccess(NatureId(15)));
-        Temp = NatureAccess(NatureAccess(NatureId(5)));
+        Pwr = NatureAccess(NatureAccess(NatureAttrId(6)));
+        Q = NatureAccess(NatureAccess(NatureAttrId(1)));
+        Tau = NatureAccess(NatureAccess(NatureAttrId(15)));
+        Temp = NatureAccess(NatureAccess(NatureAttrId(5)));
         Temperature = NatureId(NatureId(5));
-
-            abstol = NatureAttrId(NatureAttrId(11));
-            units = NatureAttrId(NatureAttrId(10));
-        Theta = NatureAccess(NatureAccess(NatureId(12)));
-        V = NatureAccess(NatureAccess(NatureId(2)));
-        Vel = NatureAccess(NatureAccess(NatureId(8)));
+        Theta = NatureAccess(NatureAccess(NatureAttrId(12)));
+        V = NatureAccess(NatureAccess(NatureAttrId(2)));
+        Vel = NatureAccess(NatureAccess(NatureAttrId(8)));
         Velocity = NatureId(NatureId(8));
-
-            abstol = NatureAttrId(NatureAttrId(17));
-            ddt_nature = NatureId(NatureId(9));
-            idt_nature = NatureId(NatureId(7));
-            units = NatureAttrId(NatureAttrId(16));
         Voltage = NatureId(NatureId(2));
-
-            abstol = NatureAttrId(NatureAttrId(5));
-            idt_nature = NatureId(NatureId(3));
-            units = NatureAttrId(NatureAttrId(4));
         current = DisciplineId(DisciplineId(4));
         ddiscrete = DisciplineId(DisciplineId(1));
         electrical = DisciplineId(DisciplineId(2));
@@ -190,6 +121,7 @@ pub fn std() {
         rotational_omega = DisciplineId(DisciplineId(10));
         thermal = DisciplineId(DisciplineId(6));
         voltage = DisciplineId(DisciplineId(3));
+
     "#]];
     check("`include \"disciplines.vams\"", expect)
 }

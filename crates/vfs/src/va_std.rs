@@ -387,12 +387,12 @@ enddiscipline
 `endif
 "#;
 
-
 pub const CONSTANTS_PATHS: [&str; 3] = ["constants.vams", "constants.va", "constants.h"];
-pub const DISCIPLINES_PATHS: [&str; 4] = ["disciplines.vams", "disciplines.va", "disciplines.h","discipline.h"];
+pub const DISCIPLINES_PATHS: [&str; 4] =
+    ["disciplines.vams", "disciplines.va", "disciplines.h", "discipline.h"];
 
-impl Vfs{
-    pub fn insert_std_lib(&mut self){
+impl Vfs {
+    pub fn insert_std_lib(&mut self) {
         for name in CONSTANTS_PATHS {
             self.add_virt_file(&format!("/std/{}", name), CONSTANTS_SRC);
         }

@@ -155,4 +155,3 @@ pub enum LiteralKind {
     Float { has_scale_char: bool },
     Str { terminated: bool },
 }
-

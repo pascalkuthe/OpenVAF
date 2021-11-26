@@ -82,13 +82,14 @@ impl<'a> Write for Printer<'a> {
                     _ => self.buf.push('\n'),
                 }
 
-                if line != "\n"{ // don't indent empty lines! required to play nice with expect_test
+                if line != "\n" {
+                    // don't indent empty lines! required to play nice with expect_test
                     self.buf.push_str(&"    ".repeat(self.indent_level));
                 }
                 self.needs_indent = false;
             }
 
-                self.buf.push_str(line);
+            self.buf.push_str(line);
             self.needs_indent = line.ends_with('\n');
         }
 
