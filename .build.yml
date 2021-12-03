@@ -1,0 +1,40 @@
+image: archlinux
+
+packages:
+  - rust
+  - llvm
+# sources:
+#  - https://git.sr.ht/~dspom/OpenVAF
+environment:
+  CI: 1
+  RUST_BACK_TRACE: 1
+shell: true
+
+tasks:
+  - build: |
+      cd OpenVAF
+      cargo test --no-run
+      echo "export BUILD_SUCCESS=1" >> ~/.buildenv
+
+  - check_fmt: |
+      cd OpenVAF
+      cargo fmt --all -- --check
+   
+  - clippy: |
+      if [ -z ${BUILD_SUCCESS+x} ]; then 
+        echo "build failed... skipping"; 
+        exit 0
+      fi
+
+      cd OpenVAF
+      cargo clippy -- -D warnings
+
+  - test: | 
+      if [ -z ${BUILD_SUCCESS+x} ]; then 
+        echo "build failed... skipping"; 
+        exit 0
+      fi
+
+      cd OpenVAF
+      cargo test
+

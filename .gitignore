@@ -1,6 +1,5 @@
 /target/
 **/target/
-**/*.yml
 !/crates/test/src/middle.rs
 .direnv
 .envrc

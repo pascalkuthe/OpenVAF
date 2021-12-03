@@ -5,6 +5,7 @@
 ![maintaince](https://img.shields.io/badge/maintenance-actively--developed-informational)
 <!-- ![documentation](https://img.shields.io/badge/maintenance-actively--developed-informational) -->
 <!-- [![dcoumentation](https://img.shields.io/badge/documentation-WIP-yellow)](https://dspom.gitlab.io/OpenVAF) -->
+[![builds.sr.ht status](https://builds.sr.ht/~dspom/OpenVAF.svg)](https://builds.sr.ht/~dspom/OpenVAF?)
 
 A framework that allows implementing compilers for VerilogA aimed predominantly at compact modelling written in Rust.
 The aim of this Project is to provide a high quality fully standard compliant compiler frontend for VerilogA.
