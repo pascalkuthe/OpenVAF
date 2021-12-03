@@ -111,7 +111,10 @@ pub fn generate_integration_tests() {
                     }
                 )*
                 let diagnostics = db.lower_and_check();
-                assert_eq!(&diagnostics,"")
+                assert_eq!(&diagnostics,"");
+                let def_map = db.def_map(db.root_file());
+                let actual = def_map.dump(&db);
+                expect_file![project_root().join("integration_tests").join(#test_name).join("def_map.txt")].assert_eq(&actual);
             }
         }
     });
@@ -120,6 +123,7 @@ pub fn generate_integration_tests() {
         use crate::{tests::TestDataBase, db::HirDefDB};
         use sourcegen::{skip_slow_tests,project_root};
         use std::{fs::read_to_string,path::PathBuf};
+        use expect_test::expect_file;
         #(#test_impl)*
     )
     .to_string();

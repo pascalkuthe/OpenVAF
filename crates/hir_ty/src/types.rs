@@ -8,6 +8,7 @@ use stdx::{impl_display, impl_idx_from};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TyRequirement {
     Val(Type),
+    Condition,
     AnyVal,
     ArrayAnyLength { ty: Type },
     Node,
@@ -24,6 +25,7 @@ pub enum TyRequirement {
 impl_display! {
     match TyRequirement{
         TyRequirement::Val(ty) => "{} value",ty;
+        TyRequirement::Condition => "{} value", Type::Bool;
         TyRequirement::AnyVal => "value";
         TyRequirement::ArrayAnyLength{ty} => "array ({})", ty;
         TyRequirement::Node => "net reference";
@@ -142,6 +144,15 @@ impl Ty {
                 }
             }
 
+            (
+                Ty::Val(ty)
+                | Ty::Var(ty, _)
+                | Ty::Param(ty, _)
+                | Ty::Literal(ty)
+                | Ty::FuntionVar { ty, .. },
+                TyRequirement::Condition,
+            ) => ty.is_assignable_to(&Type::Bool),
+
             // TODO merge these match arms when there are box/deref patterns (not any time soon)
             (
                 Ty::Val(Type::Array { ty: ref ty1, .. }),
@@ -204,6 +215,12 @@ impl SignatureData {
         args: Cow::Borrowed(&[TyRequirement::Val(Type::Bool), TyRequirement::Val(Type::Bool)]),
         return_ty: Type::Bool,
     };
+
+    pub const CONDITIONAL_BIN_OP: SignatureData = SignatureData {
+        args: Cow::Borrowed(&[TyRequirement::Condition, TyRequirement::Condition]),
+        return_ty: Type::Bool,
+    };
+
     pub const REAL_COMPARISON: SignatureData = SignatureData {
         args: Cow::Borrowed(&[TyRequirement::Val(Type::Real), TyRequirement::Val(Type::Real)]),
         return_ty: Type::Bool,
@@ -231,14 +248,14 @@ impl SignatureData {
     pub const NUMERIC_COMPARISON: &'static [SignatureData] =
         &[SignatureData::REAL_COMPARISON, SignatureData::INT_COMPARISON];
     pub const ANY_COMPARISON: &'static [SignatureData] = &[
-        SignatureData::REAL_COMPARISON,
-        SignatureData::INT_COMPARISON,
         SignatureData::BOOL_COMPARISON,
+        SignatureData::INT_COMPARISON,
+        SignatureData::REAL_COMPARISON,
         SignatureData::STR_COMPARISON,
     ];
 
     pub const SELECT: &'static [SignatureData] =
-        &[SignatureData::BOOL_BIN_OP, SignatureData::INT_BIN_OP, SignatureData::REAL_BIN_OP];
+        &[SignatureData::BOOL_BIN_OP, SignatureData::REAL_BIN_OP, SignatureData::INT_BIN_OP];
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -255,6 +272,6 @@ pub(crate) struct BuiltinInfo {
 }
 
 pub fn default_return_ty(signatures: &[SignatureData]) -> Option<Ty> {
-    let ty = &signatures[0].return_ty;
+    let ty = &signatures.get(0)?.return_ty;
     signatures.iter().all(|sig| &sig.return_ty == ty).then(|| Ty::Val(ty.clone()))
 }

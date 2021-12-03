@@ -380,7 +380,7 @@ impl TryFrom<ScopeDefItem> for DefWithBodyId {
             ScopeDefItem::VarId(var) => var.into(),
             ScopeDefItem::ParamId(param) => param.into(),
             ScopeDefItem::FunctionId(fun) => fun.into(),
-            // ScopeDefItem::NatureAttrId(attr) => attr.into(),
+            ScopeDefItem::NatureAttrId(attr) => attr.into(),
             // ScopeDefItem::DisciplineAttrId(attr) => attr.into(),
             _ => return Err(()),
         };

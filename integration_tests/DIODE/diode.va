@@ -55,7 +55,8 @@ module diode_va(A,C);
         vte = VT * N;
         vcrit = vte * log(vte / (`M_SQRT2 * Is));
 
-        Vd = $limit(V(br_a_ci), "pnjlim", VT, vcrit);
+        /* Vd = $limit(V(br_a_ci), "pnjlim", VT, vcrit); */
+        Vd = V(A,CI);
         Vr = V(br_ci_c);
 
         Id = Is * (exp(Vd / vte) - 1);

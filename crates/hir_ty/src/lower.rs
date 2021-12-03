@@ -153,7 +153,7 @@ impl DisciplineTy {
         Arc::new(DisciplineTy {
             flow: data.flow.as_ref().and_then(|flow| lookup_nature(&def_map, flow, db).ok()),
             potential: data
-                .flow
+                .potential
                 .as_ref()
                 .and_then(|potential| lookup_nature(&def_map, potential, db).ok()),
         })

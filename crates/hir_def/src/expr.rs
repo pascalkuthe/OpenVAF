@@ -18,18 +18,28 @@ use std::{
     fmt::{Debug, Display},
     intrinsics::transmute,
 };
+use stdx::impl_debug;
 use syntax::ast::{self, BinaryOp, UnaryOp};
 
 use crate::Path;
 
 pub type ExprId = Idx<Expr>;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Copy)]
 pub enum Literal {
     String(Spur),
     Int(i32),
     Float(BitewiseF64),
     Inf,
+}
+
+impl_debug! {
+    match Literal{
+        Literal::String(_) => "\"<literal>\"";
+        Literal::Int(val) => "{}",val;
+        Literal::Float(val) => "{}",f64::from(*val);
+        Literal::Inf => "inf";
+    }
 }
 
 /// Wrapper around f64 that implements

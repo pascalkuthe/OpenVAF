@@ -1,5 +1,7 @@
 //! Various extension methods to ast Expr Nodes, which are hard to code-generate.
 
+use stdx::impl_display;
+
 use crate::{
     ast::{self, support, AstChildren, AstNode, AstToken},
     SyntaxToken, T,
@@ -42,6 +44,15 @@ impl ast::PrefixExpr {
 
     pub fn op_token(&self) -> Option<SyntaxToken> {
         self.syntax().first_child_or_token()?.into_token()
+    }
+}
+
+impl_display! {
+    match UnaryOp{
+        UnaryOp::BitNegate => "~";
+        UnaryOp::Not => "!";
+        UnaryOp::Neg => "-";
+        UnaryOp::Identity => "+";
     }
 }
 
@@ -141,6 +152,31 @@ impl ast::BinExpr {
     //     let second = children.next();
     //     (first, second)
     // }
+}
+
+impl_display! {
+    match BinaryOp{
+        BinaryOp::BooleanOr => "||";
+        BinaryOp::BooleanAnd => "&&";
+        BinaryOp::EqualityTest => "==";
+        BinaryOp::NegatedEqualityTest => "!=";
+        BinaryOp::LesserEqualTest => "<=";
+        BinaryOp::GreaterEqualTest => ">=";
+        BinaryOp::LesserTest => "<";
+        BinaryOp::GreaterTest => ">";
+        BinaryOp::Addition => "+";
+        BinaryOp::Multiplication => "*";
+        BinaryOp::Subtraction => "-";
+        BinaryOp::Division => "/";
+        BinaryOp::Remainder => "%";
+        BinaryOp::LeftShift => "<<";
+        BinaryOp::RightShift => ">>";
+        BinaryOp::BitwiseXor => "^";
+        BinaryOp::BitwiseEq => "~^";
+        BinaryOp::BitwiseOr => "|";
+        BinaryOp::BitwiseAnd => "&";
+        BinaryOp::Power => "**";
+    }
 }
 
 pub enum ArrayExprKind {

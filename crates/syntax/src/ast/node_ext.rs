@@ -1,6 +1,8 @@
 //! Various extension methods to ast Nodes, which are hard to code-generate.
 //! Extensions for various expressions live in a sibling `expr_extensions` module.
 
+use stdx::impl_debug;
+
 use crate::SyntaxKind::{IDENT, ROOT_KW};
 use crate::{
     ast::{self, support, AstNode},
@@ -171,10 +173,17 @@ impl ast::ModulePorts {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum AssignOp {
     Contribute,
     Assign,
+}
+
+impl_debug! {
+    match AssignOp{
+        AssignOp::Contribute => "<+";
+        AssignOp::Assign => "=";
+    }
 }
 
 impl Assign {

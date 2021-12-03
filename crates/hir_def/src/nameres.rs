@@ -36,7 +36,7 @@ pub enum DefMapSource {
 pub struct DefMap {
     src: DefMapSource,
     scopes: Arena<Scope>,
-    entry_scope: LocalScopeId,
+    root_scope: LocalScopeId,
     pub diagnostics: Vec<DefDiagnostic>,
 }
 
@@ -57,11 +57,11 @@ impl IndexMut<LocalScopeId> for DefMap {
 impl DefMap {
     #[inline(always)]
     pub fn entry(&self) -> LocalScopeId {
-        self.entry_scope
+        LocalScopeId::from(0u32)
     }
     #[inline(always)]
     pub fn root(&self) -> LocalScopeId {
-        LocalScopeId::from(0u32)
+        self.root_scope
     }
 }
 
@@ -281,6 +281,7 @@ impl DefMap {
         let mut current_map = self;
 
         let name = &path[0];
+
         let decl = loop {
             if let Some(decl) = current_map.scopes[scope].declarations.get(name) {
                 break *decl;
@@ -288,11 +289,12 @@ impl DefMap {
 
             match current_map[scope].parent {
                 Some(parent) => scope = parent,
-                None => match self.src {
+                None => match current_map.src {
                     DefMapSource::Block(block) => {
                         let block = block.lookup(db);
                         arc = block.parent.def_map(db);
                         current_map = &*arc;
+                        scope = block.parent.local_scope;
                     }
                     DefMapSource::Root => {
                         if let Some(builtin) = BUILTIN_SCOPE.get(name) {

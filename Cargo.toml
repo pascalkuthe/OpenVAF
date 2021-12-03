@@ -17,6 +17,4 @@ ahash.opt-level = 3
 smol_str.opt-level = 3
 text-size.opt-level = 3
 # This speeds up `cargo xtask dist`.
-miniz_oxide.opt-level = 3
-[profile.dev.package.backtrace]
-opt-level = 3
+# miniz_oxide.opt-level = 3

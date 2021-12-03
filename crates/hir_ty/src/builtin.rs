@@ -165,13 +165,13 @@ bultins! {
     }
 
     MAX = {
-        fn MAX_REAL(Val(Real),Val(Real)) -> Real;
         fn MAX_INT(Val(Integer),Val(Integer)) -> Integer;
+        fn MAX_REAL(Val(Real),Val(Real)) -> Real;
     }
 
     ABS = const {
-        fn ABS_REAL(Val(Real)) -> Real;
         fn ABS_INT(Val(Integer)) -> Integer;
+        fn ABS_REAL(Val(Real)) -> Real;
     }
 
     ANALYSIS = const {

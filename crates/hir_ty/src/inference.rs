@@ -10,7 +10,7 @@ use hir_def::{
         diagnostics::PathResolveError, NatureAccess, ResolvedPath, ScopeDefItem, ScopeDefItemKind,
     },
     BranchId, BuiltIn, DefWithBehaviourId, DefWithExprId, Expr, ExprId, FunctionArgLoc, FunctionId,
-    LocalFunctionArgId, Lookup, NatureId, NodeId, ParamId, Path, StmtId, Type, VarId,
+    LocalFunctionArgId, Lookup, NatureId, NodeId, ParamId, Path, Stmt, StmtId, Type, VarId,
 };
 
 use stdx::{impl_from, iter::zip};
@@ -27,6 +27,10 @@ use crate::{
     lower::{BranchTy, DisciplineAccess},
     types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement},
 };
+
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ResolvedFun {
     User(FunctionId),
@@ -135,44 +139,18 @@ struct Ctx<'a> {
 impl Ctx<'_> {
     pub fn infere_stmt(&mut self, stmt: StmtId) {
         match self.body.stmts[stmt] {
-            hir_def::Stmt::Expr(expr) => {
+            Stmt::Expr(expr) => {
                 self.infere_expr(stmt, expr);
             }
-            hir_def::Stmt::Assigment { dst, val, ref assignment_kind } => {
+            Stmt::Assigment { dst, val, ref assignment_kind } => {
                 let dst_ty = self.infere_assigment_dst(stmt, dst, assignment_kind);
                 self.infere_assigment(stmt, val, dst_ty);
             }
-            hir_def::Stmt::If { cond, .. } => {
-                if let Some(ty) = self.infere_expr(stmt, cond) {
-                    self.expect::<false>(
-                        cond,
-                        None,
-                        ty,
-                        Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]),
-                    );
-                }
+            Stmt::ForLoop { cond, .. } | Stmt::If { cond, .. } | Stmt::WhileLoop { cond, .. } => {
+                self.infere_cond(stmt, cond)
             }
-            hir_def::Stmt::ForLoop { cond, .. } => {
-                if let Some(ty) = self.infere_expr(stmt, cond) {
-                    self.expect::<false>(
-                        cond,
-                        None,
-                        ty,
-                        Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]),
-                    );
-                }
-            }
-            hir_def::Stmt::WhileLoop { cond, .. } => {
-                if let Some(ty) = self.infere_expr(stmt, cond) {
-                    self.expect::<false>(
-                        cond,
-                        None,
-                        ty,
-                        Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]),
-                    );
-                }
-            }
-            hir_def::Stmt::Case { discr, ref case_arms } => {
+
+            Stmt::Case { discr, ref case_arms } => {
                 if let Some(ty) = self.infere_expr(stmt, discr) {
                     let req = ty.to_value().map_or(TyRequirement::AnyVal, TyRequirement::Val);
                     for case in case_arms {
@@ -237,6 +215,7 @@ impl Ctx<'_> {
         assigment_kind: &ast::AssignOp,
     ) -> Option<Type> {
         let e = self.infere_expr(stmt, expr);
+
         let (dst, ty) = match e? {
             Ty::Var(ty, var) => (AssignDst::Var(var), ty),
             Ty::FuntionVar { fun, ty, arg } => (AssignDst::FunVar { fun, arg }, ty),
@@ -308,13 +287,13 @@ impl Ctx<'_> {
 
     fn infere_cond(&mut self, stmt: StmtId, expr: ExprId) {
         if let Some(ty) = self.infere_expr(stmt, expr) {
-            self.expect::<false>(expr, None, ty, Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]));
+            self.expect::<false>(expr, None, ty, Cow::Borrowed(&[TyRequirement::Condition]));
         }
     }
 
     fn infere_expr(&mut self, stmt: StmtId, expr: ExprId) -> Option<Ty> {
         let ty = match self.body.exprs[expr] {
-            Expr::Missing | Expr::BinaryOp { op: None, .. } => return None,
+            Expr::Missing => return None,
             Expr::Path { ref path, port: true } => {
                 let port = self.resolve_item_path(stmt, expr, path)?;
                 Ty::PortFlow(port)
@@ -349,8 +328,14 @@ impl Ctx<'_> {
                 ScopeDefItem::NatureAttrId(attr) => self.db.nature_attr_ty(attr)?,
             },
 
+            Expr::BinaryOp { op: None, lhs, rhs } => {
+                self.infere_expr(stmt, lhs);
+                self.infere_expr(stmt, rhs);
+                return None;
+            }
+
             Expr::BinaryOp { lhs, rhs, op: Some(op) } => {
-                return self.infere_bin_op(stmt, expr, lhs, rhs, op)
+                self.infere_bin_op(stmt, expr, lhs, rhs, op)?
             }
 
             Expr::UnaryOp { expr: arg, op: UnaryOp::Identity | UnaryOp::Neg } => {
@@ -396,17 +381,17 @@ impl Ctx<'_> {
 
             Expr::Select { cond, then_val, else_val } => {
                 self.infere_cond(stmt, cond);
-                return self.resolve_function_args(
+                self.resolve_function_args(
                     stmt,
                     expr,
                     &[then_val, else_val],
                     Cow::Borrowed(TiSlice::from_ref(SignatureData::SELECT)),
                     None,
-                );
+                )?
             }
 
             Expr::Call { ref fun, ref args } => {
-                return self.infere_fun_call(stmt, expr, fun.as_ref()?, args);
+                self.infere_fun_call(stmt, expr, fun.as_ref()?, args)?
             }
             Expr::Array(ref args) if args.is_empty() => Ty::Val(Type::EmptyArray),
             Expr::Array(ref args) => return self.infere_array(stmt, args),
@@ -415,6 +400,7 @@ impl Ctx<'_> {
             Expr::Literal(Literal::Int(_)) => Ty::Literal(Type::Integer),
             Expr::Literal(Literal::String(_)) => Ty::Literal(Type::String),
         };
+
         self.result.expr_types.insert(expr, ty.clone());
 
         Some(ty)
@@ -434,7 +420,10 @@ impl Ctx<'_> {
                 Some(Ty::Val(Type::Real))
             }
             ScopeDefItem::FunctionId(fun) => self.infere_user_fun_call(stmt, expr, fun, args),
-            ScopeDefItem::BuiltIn(builtin) => self.infere_builtin(stmt, expr, builtin, args),
+            ScopeDefItem::BuiltIn(builtin) => {
+                self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(builtin));
+                self.infere_builtin(stmt, expr, builtin, args)
+            }
             found => {
                 self.result.diagnostics.push(InferenceDiagnostic::PathResolveError {
                     err: PathResolveError::ExpectedItemKind {
@@ -502,8 +491,16 @@ impl Ctx<'_> {
             self.infere_access_kind(acccess.0.lookup(self.db.upcast()).nature, expr, args[0]);
 
         // update resolved_calls in case this is actually a pot and not a flow access
-        if acccess == Some(DisciplineAccess::Potential) {
-            self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(BuiltIn::potential));
+        match acccess {
+            Some(DisciplineAccess::Potential) => {
+                self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(BuiltIn::potential));
+            }
+
+            Some(DisciplineAccess::Flow) => {
+                self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(BuiltIn::flow));
+            }
+
+            None => (),
         }
     }
 
@@ -513,10 +510,12 @@ impl Ctx<'_> {
         expr: ExprId,
         arg: ExprId,
     ) -> Option<DisciplineAccess> {
-        let node = match self.result.resolved_signatures[&expr] {
+        let signature = self.result.resolved_signatures.get(&expr);
+        let node = match *signature? {
             NATURE_ACCESS_BRANCH => {
                 let branch = self.result.expr_types[arg].unwrap_branch();
-                return self.db.branch_info(branch)?.access(nature, self.db);
+                let branch_info = self.db.branch_info(branch)?;
+                return branch_info.access(nature, self.db);
             }
 
             NATURE_ACCESS_NODES | NATURE_ACCESS_NODE_GND => {
@@ -536,6 +535,7 @@ impl Ctx<'_> {
         let def_map = self.db.def_map(nature.lookup(self.db.upcast()).root_file);
         let discipline =
             def_map.resolve_local_item_in_scope(def_map.root(), node.discipline.as_ref()?).ok()?;
+
         self.db.discipline_info(discipline).access(nature, self.db)
     }
 
@@ -546,8 +546,6 @@ impl Ctx<'_> {
         builtin: BuiltIn,
         args: &[ExprId],
     ) -> Option<Ty> {
-        self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(builtin));
-
         let info: BuiltinInfo = builtin.into();
 
         if builtin == BuiltIn::limit {
@@ -556,12 +554,13 @@ impl Ctx<'_> {
 
         let exact = Some(info.min_args) == info.max_args;
         if args.len() < info.min_args {
-            self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
+            let err = InferenceDiagnostic::ArgCntMissmatch {
                 expected: info.min_args,
                 found: args.len(),
                 expr,
                 exact,
-            });
+            };
+            self.result.diagnostics.push(err);
             return default_return_ty(info.signatures);
         }
 
@@ -589,6 +588,8 @@ impl Ctx<'_> {
             _ => Cow::Borrowed(TiSlice::from_ref(info.signatures)),
         };
 
+        debug_assert_ne!(&signature.raw, &[]);
+
         let ty = self.resolve_function_args(stmt, expr, args, signature, None)?;
 
         // if builtin == BuiltIn::potential TODO validation
@@ -607,14 +608,17 @@ impl Ctx<'_> {
             self.expect::<false>(expr, None, ty, Cow::Borrowed(&[TyRequirement::Val(Type::Real)]));
         }
 
-        if self.infere_expr(stmt, unkown).is_some() {
+        let ty = self.infere_expr(stmt, unkown);
+        if ty.is_some() {
             let (call, signature) = if let (Some(ResolvedFun::BuiltIn(fun)), Some(signature)) = (
                 self.result.resolved_calls.get(&unkown),
                 self.result.resolved_signatures.get(&unkown),
             ) {
                 (*fun, *signature)
             } else {
-                self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                if !matches!(&self.body.exprs[expr], Expr::Call { .. }) {
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                }
                 return;
             };
 
@@ -715,17 +719,20 @@ impl Ctx<'_> {
         op: BinaryOp,
     ) -> Option<Ty> {
         let signatures = match op {
-            BinaryOp::BooleanOr | BinaryOp::BooleanAnd => &[SignatureData::BOOL_BIN_OP],
+            BinaryOp::BooleanOr | BinaryOp::BooleanAnd => &[SignatureData::CONDITIONAL_BIN_OP],
+
             BinaryOp::LesserEqualTest
             | BinaryOp::GreaterEqualTest
             | BinaryOp::LesserTest
             | BinaryOp::GreaterTest => SignatureData::NUMERIC_COMPARISON,
+
             BinaryOp::Addition
             | BinaryOp::Multiplication
             | BinaryOp::Subtraction
-            | BinaryOp::Division => SignatureData::NUMERIC_BIN_OP,
-            BinaryOp::Remainder
-            | BinaryOp::LeftShift
+            | BinaryOp::Division
+            | BinaryOp::Remainder => SignatureData::NUMERIC_BIN_OP,
+
+            BinaryOp::LeftShift
             | BinaryOp::RightShift
             | BinaryOp::BitwiseXor
             | BinaryOp::BitwiseEq
@@ -782,7 +789,9 @@ impl Ctx<'_> {
             }
         }
 
-        if !errors.is_empty() {
+        canditates.retain(|sig| signatures[*sig].args.len() == args.len());
+
+        if !errors.is_empty() || canditates.is_empty() {
             self.result.diagnostics.push(
                 SignatureMissmatch {
                     type_missmatches: errors.into_boxed_slice(),
@@ -791,24 +800,42 @@ impl Ctx<'_> {
                 }
                 .into(),
             );
+            return default_return_ty(&signatures.raw);
         }
 
         let res = match canditates.as_slice() {
             [] => {
-                debug_assert!(false);
-                return None;
+                unreachable!()
             }
             [res] => *res,
+            _ if arg_types.iter().any(|ty| ty.is_none()) => {
+                return default_return_ty(&signatures.raw);
+            }
             _ => {
+                new_candidates.clone_from(&canditates);
                 canditates.retain(|candidate| {
                     zip(&arg_types, signatures[*candidate].args.as_ref())
                         .all(|(ty, req)| ty.as_ref().map_or(false, |ty| ty.satisfies_exact(req)))
                 });
-                if let [res] = canditates.as_slice() {
-                    *res
-                } else {
-                    return default_return_ty(&signatures.raw);
+
+                if cfg!(debug_assert) && canditates.len() != 1 {
+                    let sig: Vec<_> =
+                        canditates.iter().map(|canditate| &signatures[*canditate]).collect();
+                    eprintln!(
+                        "ambigous signature {:?} all match {:?} (using first variant)",
+                        sig, arg_types
+                    );
+                } else if canditates.is_empty() {
+                    let sig: Vec<_> =
+                        new_candidates.iter().map(|canditate| &signatures[*canditate]).collect();
+
+                    unreachable!(
+                        "ambigous signature {:#?} all match {:?} (nothing matches exactly...)",
+                        sig, arg_types
+                    );
                 }
+
+                canditates[0]
             }
         };
 

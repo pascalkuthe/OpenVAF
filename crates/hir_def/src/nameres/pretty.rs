@@ -7,7 +7,7 @@ use super::ScopeDefItem;
 impl DefMap {
     pub fn dump(&self, db: &dyn HirDefDB) -> String {
         let mut printer = Printer { db, buf: String::new(), indent_level: 0, needs_indent: true };
-        printer.print_def_map(self);
+        printer.print_def_map_root(self);
         printer.buf.push('\n');
         printer.buf
     }
@@ -21,6 +21,15 @@ macro_rules! wln {
         { let _ = writeln!($dst, $($arg)*); }
     };
 }
+
+// macro_rules! w {
+//     ($dst:expr) => {
+//         { let _ = write!($dst); }
+//     };
+//     ($dst:expr, $($arg:tt)*) => {
+//         { let _ = write!($dst, $($arg)*); }
+//     };
+// }
 
 struct Printer<'a> {
     db: &'a dyn HirDefDB,
@@ -38,6 +47,10 @@ impl<'a> Printer<'a> {
         self.buf = self.buf.trim_end_matches('\n').to_string();
     }
 
+    fn print_def_map_root(&mut self, map: &DefMap) {
+        self.print_scope(map, map.root())
+    }
+
     fn print_def_map(&mut self, map: &DefMap) {
         self.print_scope(map, map.entry())
     }
@@ -50,7 +63,7 @@ impl<'a> Printer<'a> {
             .collect();
         declarations.sort_unstable_by_key(|(name, _)| name.clone());
         for (name, def) in declarations {
-            wln!(self, "{} = {:?};", name, def);
+            wln!(self, "{} = {};", name, def.item_kind());
 
             match def {
                 ScopeDefItem::BlockId(block) => {

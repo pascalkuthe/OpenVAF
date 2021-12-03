@@ -464,7 +464,7 @@ endmodule
                   SEMICOLON@29..30 ";"
                 WHITESPACE@30..35 "\n    "
                 NET_DECL@35..48
-                  NAME@35..45
+                  NAME_REF@35..45
                     IDENT@35..45 "electrical"
                   WHITESPACE@45..46 " "
                   NAME@46..47
@@ -551,7 +551,7 @@ endmodule
                   SEMICOLON@62..63 ";"
                 WHITESPACE@63..68 "\n    "
                 NET_DECL@68..75
-                  NAME@68..71
+                  NAME_REF@68..71
                     IDENT@68..71 "int"
                   WHITESPACE@71..72 " "
                   NAME@72..74
@@ -580,6 +580,53 @@ endmodule
                 WHITESPACE@96..97 "\n"
                 ENDMODULE_KW@97..106 "endmodule"
               WHITESPACE@106..107 "\n"
+        "#]],
+    )
+}
+
+#[test]
+fn nets() {
+    check(
+        r#"
+module test();
+    electrical foo1;
+    electrical foo2,bar2;
+endmodule
+"#,
+        expect![[r#"
+            SOURCE_FILE@0..73
+              WHITESPACE@0..1 "\n"
+              MODULE_DECL@1..72
+                MODULE_KW@1..7 "module"
+                WHITESPACE@7..8 " "
+                NAME@8..12
+                  IDENT@8..12 "test"
+                MODULE_PORTS@12..14
+                  L_PAREN@12..13 "("
+                  R_PAREN@13..14 ")"
+                SEMICOLON@14..15 ";"
+                WHITESPACE@15..20 "\n    "
+                NET_DECL@20..36
+                  NAME_REF@20..30
+                    IDENT@20..30 "electrical"
+                  WHITESPACE@30..31 " "
+                  NAME@31..35
+                    IDENT@31..35 "foo1"
+                  SEMICOLON@35..36 ";"
+                WHITESPACE@36..41 "\n    "
+                NET_DECL@41..62
+                  NAME_REF@41..51
+                    IDENT@41..51 "electrical"
+                  WHITESPACE@51..52 " "
+                  NAME@52..56
+                    IDENT@52..56 "foo2"
+                  COMMA@56..57 ","
+                  NAME@57..61
+                    IDENT@57..61 "bar2"
+                  SEMICOLON@61..62 ";"
+                WHITESPACE@62..63 "\n"
+                ENDMODULE_KW@63..72 "endmodule"
+              WHITESPACE@72..73 "\n"
         "#]],
     )
 }

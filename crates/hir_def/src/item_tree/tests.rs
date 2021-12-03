@@ -270,7 +270,17 @@ module test();
 endmodule
 "#;
 
-    let expect = expect![[r#"module test"#]];
+    let expect = expect![[r#"
+        module test
+
+            function hypsmooth
+
+                arg Real x = { is_input = true, is_output = false}
+                arg Real c = { is_input = true, is_output = false}
+                arg String y = { is_input = false, is_output = true}
+                arg Integer z = { is_input = false, is_output = true}
+                arg Integer m = { is_input = true, is_output = true}
+                arg String l = { is_input = true, is_output = true}"#]];
     check(src, expect)
 }
 
@@ -309,5 +319,49 @@ endmodule
             block Some(Name("test2"))
 
                 var real bar"#]];
+    check(src, expect)
+}
+
+#[test]
+pub fn nodes() {
+    let src = r#"
+module test(foo,test);
+    electrical foo;
+    inout foo;
+    electrical bar;
+    gnd bar;
+    inout electrical test;
+endmodule
+"#;
+
+    let expect = expect![[r#"
+        module test
+
+            node foo = {is_input: true, is_output:true, gnd: false , discipline Some(Name("electrical"))}
+            node test = {is_input: true, is_output:true, gnd: false , discipline Some(Name("electrical"))}
+            node bar = {is_input: false, is_output:false, gnd: false , discipline Some(Name("electrical"))}"#]];
+    check(src, expect)
+}
+
+#[test]
+pub fn branches() {
+    let src = r#"
+module test(a);
+    electrical a;
+    inout a;
+    electrical c;
+    branch (a,c) br_ac;
+    branch (<a>) br_a_port;
+
+endmodule
+"#;
+
+    let expect = expect![[r#"
+        module test
+
+            node a = {is_input: true, is_output:true, gnd: false , discipline Some(Name("electrical"))}
+            node c = {is_input: false, is_output:false, gnd: false , discipline Some(Name("electrical"))}
+            branch br_ac = Nodes(a, c)
+            branch br_a_port = PortFlow(a)"#]];
     check(src, expect)
 }

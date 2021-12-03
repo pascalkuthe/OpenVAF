@@ -29,7 +29,7 @@ pub fn collect_root_def_map(db: &dyn HirDefDB, root_file: FileId) -> Arc<DefMap>
         map: DefMap {
             scopes: Arena::with_capacity(scope_cnt),
             // nodes: Arena::with_capacity(tree.data.nets.len()),
-            entry_scope: LocalScopeId::from(0u32),
+            root_scope: LocalScopeId::from(0u32),
             src: DefMapSource::Root,
             diagnostics: Vec::new(),
         },
@@ -52,7 +52,7 @@ pub fn collect_function_map(db: &dyn HirDefDB, function: FunctionId) -> Arc<DefM
             scopes: Arena::with_capacity(tree.data.modules.len() + 1),
             // nodes: Arena::with_capacity(tree.data.nets.len()),
             src: DefMapSource::Function(function),
-            entry_scope: LocalScopeId::from(0u32), // This will be changed once the scope has been created
+            root_scope: LocalScopeId::from(0u32), // This will be changed once the scope has been created
             diagnostics: Vec::new(),
         },
         tree,
@@ -79,7 +79,7 @@ pub fn collect_block_map(db: &dyn HirDefDB, block: BlockId) -> Option<Arc<DefMap
         map: DefMap {
             scopes: Arena::with_capacity(1),
             src: DefMapSource::Block(block),
-            entry_scope: LocalScopeId::from(0u32),
+            root_scope: LocalScopeId::from(0u32),
             diagnostics: Vec::new(),
         },
         tree,
@@ -110,50 +110,10 @@ impl DefCollector<'_> {
 
         let root_def_map = self.db.def_map(self.root_file);
 
-        let root = self.new_root_scope(ScopeOrigin::Root);
-        debug_assert_eq!(self.map.root(), root);
+        // parent is a placeholder here...
+        let scope = self.new_scope(ScopeOrigin::Function(id), LocalScopeId::from(0u32));
+        assert_eq!(scope, self.map.entry());
 
-        // First copy the modules and their parametes since these are the only declarations outside
-        // of the function itself that are accessible insdie an analog funciton
-        let main_root_scope = &root_def_map.scopes[root_def_map.root()];
-
-        let mut parent_module_ = None;
-
-        for (module_name, scope_id) in main_root_scope.children.iter() {
-            let scope = &root_def_map[*scope_id];
-
-            if let ScopeOrigin::Module(module) = scope.origin {
-                let declarations = scope
-                    .declarations
-                    .iter()
-                    .filter_map(|(name, decl)| {
-                        matches!(decl, ScopeDefItem::ParamId(_) | ScopeDefItem::FunctionId(_))
-                            .then(|| (name.clone(), *decl))
-                    })
-                    .collect();
-
-                let scope = Scope {
-                    origin: scope.origin,
-                    parent: scope.parent,
-                    children: HashMap::new(),
-                    declarations,
-                };
-
-                debug_assert_eq!(scope.parent, Some(root_def_map.root()));
-                debug_assert_eq!(scope.parent, Some(root));
-
-                if *scope_id == parent_module {
-                    parent_module_ = Some(parent_module);
-                }
-
-                let scope = self.map.scopes.push_and_get_key(scope);
-                self.map.scopes[root].children.insert(module_name.clone(), scope);
-                self.map.scopes[root].declarations.insert(module_name.clone(), module.into());
-            }
-        }
-
-        let parent_module = parent_module_.expect("parent module was not among the root modules");
-        let scope = self.new_scope(ScopeOrigin::Function(id), parent_module);
         self.map[scope]
             .declarations
             .insert(self.tree[item_tree].name.clone(), ScopeDefItem::FunctionReturn(id));
@@ -174,8 +134,53 @@ impl DefCollector<'_> {
                 }
             }
         }
-        self.map.entry_scope = scope;
-        debug_assert_eq!(self.map.entry(), scope);
+
+        let root = self.new_root_scope(ScopeOrigin::Root);
+        self.map.root_scope = root;
+        debug_assert_eq!(self.map.root(), root);
+
+        // Copy the modules and their parameters since these are the only declarations outside
+        // of the function itself that are accessible insdie an analog funciton
+        let main_root_scope = &root_def_map.scopes[root_def_map.root()];
+
+        let mut parent_module_ = None;
+
+        for (module_name, scope_id) in main_root_scope.children.iter() {
+            let scope = &root_def_map[*scope_id];
+
+            if let ScopeOrigin::Module(module) = scope.origin {
+                let declarations = scope
+                    .declarations
+                    .iter()
+                    .filter_map(|(name, decl)| {
+                        matches!(decl, ScopeDefItem::ParamId(_) | ScopeDefItem::FunctionId(_))
+                            .then(|| (name.clone(), *decl))
+                    })
+                    .collect();
+
+                debug_assert_eq!(scope.parent, Some(root_def_map.root()));
+
+                let scope = Scope {
+                    origin: scope.origin,
+                    parent: Some(root),
+                    children: HashMap::new(),
+                    declarations,
+                };
+
+                debug_assert_eq!(scope.parent, Some(root));
+                let scope = self.map.scopes.push_and_get_key(scope);
+
+                if *scope_id == parent_module {
+                    parent_module_ = Some(scope);
+                }
+
+                self.map.scopes[root].children.insert(module_name.clone(), scope);
+                self.map.scopes[root].declarations.insert(module_name.clone(), module.into());
+            }
+        }
+
+        assert!(parent_module_.is_some(), "parent module was not among the root modules");
+        self.map[scope].parent = parent_module_;
     }
 
     fn collect_block_map(&mut self, id: BlockId, items: &[BlockScopeItem]) {

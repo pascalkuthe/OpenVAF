@@ -12,7 +12,7 @@ use syntax::{
 use typed_index_collections::TiVec;
 // use tracing::trace;
 
-use crate::{db::HirDefDB, types::AsType, LocalFunctionArgId, Path, Type};
+use crate::{db::HirDefDB, types::AsType, LocalFunctionArgId, LocalNodeId, Path, Type};
 
 use super::{
     Block, Branch, BranchKind, Discipline, DisciplineAttr, DisciplineAttrKind, Domain, Function,
@@ -230,53 +230,53 @@ impl Ctx {
         let ast_id = self.source_ast_id_map.ast_id(&decl);
 
         let mut nodes = TiVec::new();
+        let mut items = Vec::new();
         if let Some(ports) = decl.module_ports() {
-            self.lower_module_ports(ports, &mut nodes.raw, ast_id);
+            self.lower_module_ports(ports, &mut nodes, &mut items, ast_id);
         }
 
-        let scope_items = self.lower_module_items(decl.module_items(), &mut nodes.raw);
+        self.lower_module_items(decl.module_items(), &mut nodes, &mut items);
 
-        let res = Module { name, nodes, items: scope_items, ast_id };
+        let res = Module { name, nodes, items, ast_id };
         Some(self.tree.data.modules.push_and_get_key(res))
     }
 
     fn lower_module_items(
         &mut self,
         items: ast::AstChildren<ast::ModuleItem>,
-        nodes: &mut Vec<Node>,
-    ) -> Vec<ModuleItem> {
-        let mut dst = Vec::new();
+        nodes: &mut TiVec<LocalNodeId, Node>,
+        dst: &mut Vec<ModuleItem>,
+    ) {
         for item in items {
             match item {
                 ast::ModuleItem::BodyPortDecl(decl) => {
                     if let Some(decl) = decl.port_decl() {
-                        self.lower_port_decl(decl, nodes);
+                        self.lower_port_decl(decl, nodes, dst);
                     }
                 }
                 ast::ModuleItem::NetDecl(decl) => {
-                    self.lower_net_decl(decl, nodes);
+                    self.lower_net_decl(decl, nodes, dst);
                 }
                 ast::ModuleItem::AnalogBehaviour(behaviour) => {
                     if let Some(stmt) = behaviour.stmt() {
-                        self.lower_stmt(stmt, &mut dst);
+                        self.lower_stmt(stmt, dst);
                     }
                 }
                 ast::ModuleItem::VarDecl(var) => {
-                    self.lower_var(var, &mut dst);
+                    self.lower_var(var, dst);
                 }
                 ast::ModuleItem::ParamDecl(param) => {
-                    self.lower_param(param, &mut dst);
+                    self.lower_param(param, dst);
                 }
                 ast::ModuleItem::Function(fun) => {
-                    self.lower_fun(fun);
+                    self.lower_fun(fun, dst);
                 }
-                ast::ModuleItem::BranchDecl(branch) => self.lower_branch(branch, &mut dst),
+                ast::ModuleItem::BranchDecl(branch) => self.lower_branch(branch, dst),
             };
         }
-        dst
     }
 
-    fn lower_fun(&mut self, fun: ast::Function) {
+    fn lower_fun(&mut self, fun: ast::Function, dst: &mut Vec<ModuleItem>) {
         let mut items = Vec::new();
         let mut args: TiVec<LocalFunctionArgId, FunctionArg> = TiVec::new();
         for item in fun.function_items() {
@@ -327,7 +327,8 @@ impl Ctx {
                 items,
                 ast_id: self.source_ast_id_map.ast_id(&fun),
             };
-            self.tree.data.functions.push(fun);
+            let fun = self.tree.data.functions.push_and_get_key(fun);
+            dst.push(fun.into())
         }
     }
 
@@ -358,7 +359,8 @@ impl Ctx {
     fn lower_module_ports(
         &mut self,
         ports: ast::ModulePorts,
-        nodes: &mut Vec<Node>,
+        nodes: &mut TiVec<LocalNodeId, Node>,
+        dst: &mut Vec<ModuleItem>,
         module: AstId<ast::ModuleDecl>,
     ) {
         for port in ports.ports() {
@@ -366,17 +368,27 @@ impl Ctx {
                 ast::ModulePortKind::Name(name) => {
                     let name = name.as_name();
                     if nodes.iter().all(|node| node.name != name) {
-                        nodes.push(Node { name, ast_id: module.into(), decls: Vec::new() })
+                        let node = nodes.push_and_get_key(Node {
+                            name,
+                            ast_id: module.into(),
+                            decls: Vec::new(),
+                        });
+                        dst.push(node.into())
                     }
                 }
                 ast::ModulePortKind::PortDecl(decl) => {
-                    self.lower_port_decl(decl, nodes);
+                    self.lower_port_decl(decl, nodes, dst);
                 }
             }
         }
     }
 
-    fn lower_port_decl(&mut self, decl: ast::PortDecl, nodes: &mut Vec<Node>) {
+    fn lower_port_decl(
+        &mut self,
+        decl: ast::PortDecl,
+        nodes: &mut TiVec<LocalNodeId, Node>,
+        dst: &mut Vec<ModuleItem>,
+    ) {
         let discipline = decl.discipline().map(|it| it.as_name());
         let direction = decl.direction();
 
@@ -396,12 +408,24 @@ impl Ctx {
 
             match nodes.iter_mut().find(|node| node.name == name) {
                 Some(node) => node.decls.push(id.into()),
-                None => nodes.push(Node { name, ast_id: ast_id.into(), decls: vec![id.into()] }),
+                None => {
+                    let node = nodes.push_and_get_key(Node {
+                        name,
+                        ast_id: ast_id.into(),
+                        decls: vec![id.into()],
+                    });
+                    dst.push(node.into())
+                }
             }
         }
     }
 
-    fn lower_net_decl(&mut self, decl: ast::NetDecl, nodes: &mut Vec<Node>) {
+    fn lower_net_decl(
+        &mut self,
+        decl: ast::NetDecl,
+        nodes: &mut TiVec<LocalNodeId, Node>,
+        dst: &mut Vec<ModuleItem>,
+    ) {
         let discipline = decl.discipline().map(|it| it.as_name());
         let ast_id = self.source_ast_id_map.ast_id(&decl);
 
@@ -418,7 +442,14 @@ impl Ctx {
 
             match nodes.iter_mut().find(|node| node.name == name) {
                 Some(node) => node.decls.push(id.into()),
-                None => nodes.push(Node { name, ast_id: ast_id.into(), decls: vec![id.into()] }),
+                None => {
+                    let node = nodes.push_and_get_key(Node {
+                        name,
+                        ast_id: ast_id.into(),
+                        decls: vec![id.into()],
+                    });
+                    dst.push(node.into());
+                }
             }
         }
     }

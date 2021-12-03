@@ -1,8 +1,9 @@
 use syntax::ast::{self, PathSegmentKind};
 
+use stdx::{impl_debug, pretty};
 use syntax::name::{AsIdent, AsName, Name};
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 pub struct Path {
     pub is_root_path: bool,
     pub segments: Vec<Name>,
@@ -41,3 +42,8 @@ impl AsIdent for Path {
         }
     }
 }
+
+impl_debug!(match Path{
+    Path{is_root_path: false, segments} => "{}",pretty::List{ data: segments.as_slice(), seperator:".", final_seperator: ".", prefix: "", postfix: "" };
+    Path{is_root_path: true, segments} => "$root.{}",pretty::List{ data: segments.as_slice(), seperator:".", final_seperator: ".", prefix: "", postfix: "" };
+});

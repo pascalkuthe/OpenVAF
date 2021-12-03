@@ -198,6 +198,8 @@ dependencies = [
  "hir_def",
  "indexmap",
  "parking_lot",
+ "proc-macro2",
+ "quote",
  "salsa",
  "sourcegen",
  "stdx",

@@ -40,11 +40,11 @@ impl Type {
         match (dst, self) {
             (Type::Real, Type::Integer | Type::Bool)
             | (Type::Integer, Type::Bool)
+            | (Type::Bool, Type::Integer)
             | (Type::Err, _)
             | (_, Type::Err)
             | (Type::EmptyArray, Type::Array { len: 0, .. })
-            | (Type::Array { len: 0, .. }, Type::EmptyArray)
-            | (Type::Bool, Type::Integer) => true,
+            | (Type::Array { len: 0, .. }, Type::EmptyArray) => true,
 
             (Type::Array { .. }, Type::Array { .. }) => {
                 self.dim() == dst.dim() && self.base_type().is_convertable_to(dst.base_type())
@@ -55,17 +55,17 @@ impl Type {
 
     pub fn is_semantically_equivalent(&self, dst: &Type) -> bool {
         match (dst, self) {
-            (Type::Real, Type::Integer | Type::Bool)
-            | (Type::Integer, Type::Bool)
+            (Type::Integer, Type::Bool)
             | (Type::EmptyArray, Type::Array { len: 0, .. })
             | (Type::Array { len: 0, .. }, Type::EmptyArray)
             | (Type::Bool, Type::Integer) => true,
 
-            _ => {
-                dst == self
-                    || self.dim() == dst.dim()
-                        && self.base_type().is_semantically_equivalent(dst.base_type())
+            (Type::Array { .. }, Type::Array { .. }) => {
+                self.dim() == dst.dim()
+                    && self.base_type().is_semantically_equivalent(dst.base_type())
             }
+
+            _ => dst == self,
         }
     }
 

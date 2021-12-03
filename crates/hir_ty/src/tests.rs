@@ -1,17 +1,17 @@
-use std::{fs::read_to_string, path::PathBuf};
-
 use crate::db::{HirTyDB, HirTyDatabase};
-use basedb::{
-    lints::{ErasedItemTreeId, Lint, LintLevel, LintResolver},
-    BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsStorage,
-};
+use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsStorage};
 use hir_def::{
     db::{HirDefDB, HirDefDatabase, InternDatabase},
     nameres::{DefMap, LocalScopeId},
 };
 use parking_lot::RwLock;
-use sourcegen::project_root;
+use quote::{format_ident, quote};
+use sourcegen::{
+    add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
+};
 use stdx::format_to;
+
+mod integration;
 
 #[salsa::database(BaseDatabase, InternDatabase, HirDefDatabase, HirTyDatabase)]
 pub struct TestDataBase {
@@ -47,7 +47,7 @@ impl TestDataBase {
         let root_file = self.root_file();
         let def_map = self.def_map(root_file);
         let mut dst = String::new();
-        let root_scope = def_map.entry();
+        let root_scope = def_map.root();
         self.lower_and_check_rec(root_scope, &def_map, &mut dst);
         dst
     }
@@ -57,7 +57,7 @@ impl TestDataBase {
             if let Ok(id) = (*declaration).try_into() {
                 let res = &self.inference_result(id);
                 if !res.diagnostics.is_empty() {
-                    format_to!(dst, "{:?}", res.diagnostics);
+                    format_to!(dst, "{:#?}", res.diagnostics);
                 }
             }
         }
@@ -75,150 +75,53 @@ impl VfsStorage for TestDataBase {
         self.vfs()
     }
 }
-impl LintResolver for TestDataBase {
-    fn lint_overwrite(
-        &self,
-        lint: Lint,
-        item_tree: ErasedItemTreeId,
-        root_file: FileId,
-    ) -> Option<LintLevel> {
-        self.item_tree(root_file).lint_lvl(item_tree, lint)
-    }
-}
 
 #[test]
-fn diode() {
-    let root_file = r#"
-`include "constants.vams"
-`include "disciplines.vams"
+pub fn generate_integration_tests() {
+    let tests = collect_integration_tests();
+    let file = project_root().join("crates/hir_ty/src/tests/integration.rs");
+    let test_impl = tests.map(|(test_name,files)|{
+        let root_file_path = project_root()
+            .join(format!("integration_tests/{}/{}.va", test_name, test_name.to_lowercase()))
+            .to_str().unwrap().to_owned();
+        let file_names = files
+            .iter()
+            .map(|file| format!("/{}", file))
+        ;
+        let test_case = format_ident!("{}",test_name.to_lowercase());
 
-`define OPP(nam,uni,des)               (*units=uni,                   desc=des*) parameter           real    nam = 0.0 ;
+        quote! {
 
-module diode_va(A,C);
-    inout A, C;
-    electrical A,C,CI;
+            #[test]
+            fn #test_case(){
+                if skip_slow_tests(){
+                    return
+                }
+                let root_file = read_to_string(PathBuf::from(#root_file_path)).unwrap();
+                let db = TestDataBase::new("/root.va",&root_file);
+                #(
+                    {
+                        let path = project_root().join("integration_tests").join(#test_name).join(#files);
+                        let file_contents =read_to_string(path).unwrap();
+                        db.vfs().write().add_virt_file(#file_names, &file_contents);
+                    }
+                )*
+                let actual = db.lower_and_check();
+                expect_file![project_root().join("integration_tests").join(#test_name).join("inference_diagnostics.log")].assert_eq(&actual);
+            }
+        }
+    });
 
-    branch (A,CI) br_a_ci;
-    branch (CI,C) br_ci_c;
+    let file_string = quote!(
+        use crate::{tests::TestDataBase};
+        use sourcegen::{skip_slow_tests,project_root};
+        use std::{fs::read_to_string,path::PathBuf};
+        use expect_test::expect_file;
+        #(#test_impl)*
+    )
+    .to_string();
 
-    (*desc= "Saturation current", units = "A"*) parameter real Is = 1e-14 from [0:inf];
+    let file_string = add_preamble("generate_integration_tests", reformat(file_string));
 
-    (*desc= "Ohmic res", units = "Ohm" *) parameter real Rs = 0.0 from [0:inf];
-
-    (*desc= "Emission coefficient"*) parameter real N = 1.0 from [0:inf];
-
-    (*desc= "Junction capacitance", units = "F"*) parameter real Cj0 = 0.0 from [0:inf];
-
-    (*desc= "Junction potential", units = "V"*) parameter real Vj = 1.0 from [0.2:2];
-
-    (*desc= "Grading coefficient"*) parameter real M = 0.5 from [0:inf];
-    `OPP(para,"uni","desc")
-
-
-    real Vd, Vr, Qd;
-
-    real Id;
-    real vte;
-    real vcrit;
-
-    real VT,x,y,vf;
-
-    analog begin
-
-
-        if (Rs < 1e-3) begin
-            V(br_ci_c) <+ 0;
-
-            VT = `P_K*$temperature /`P_Q;
-            if (Rs < 1e-3) begin
-                    vcrit = vte * log(vte / (`M_SQRT2 * Is));
-            end
-        end
-
-
-        if (Rs > 1e-3) begin
-            VT = `P_K*$temperature /`P_Q;
-            if (Rs < 1e-3) begin
-                    vcrit = vte * log(vte / (`M_SQRT2 * Is));
-            end
-        end
-
-        vte = VT * N;
-        vcrit = vte * log(vte / (`M_SQRT2 * Is));
-
-        Vd = $limit(V(br_a_ci), "pnjlim", VT, vcrit);
-        Vr = V(br_ci_c);
-
-        Id = Is * (exp(Vd / vte) - 1);
-
-        //junction capacitance
-        //smoothing of voltage over cap
-        vf   = Vj*(1 - pow(3, -1/M));
-        x    = (vf-Vd)/VT;
-        y    = sqrt(x*x + 1.92);
-        Vd   = vf-VT*(x + y)/(2);
-        Qd   = Cj0*Vj * (1-pow(1-Vd/Vj, 1-M))/(1-M);
-
-        I(br_a_ci) <+ Id + ddt(Qd);
-        I(br_ci_c) <+ Vr / Rs;
-    end
-endmodule
-    "#;
-    let db = TestDataBase::new("/root.va", &root_file);
-    {
-        let path = project_root().join("integration_tests").join("DIODE").join("diode.va");
-        let file_contents = read_to_string(path).unwrap();
-        db.vfs().write().add_virt_file("/diode.va", &file_contents);
-    }
-    let diagnostics = db.lower_and_check();
-    assert_eq!(&diagnostics, "")
+    ensure_file_contents(&file, &file_string);
 }
-
-// #[test]
-// pub fn generate_integration_tests() {
-//     let tests = collect_integration_tests();
-//     let file = project_root().join("crates/hir_def/src/tests/integration.rs");
-//     let test_impl = tests.map(|(test_name,files)|{
-//         let root_file_path = project_root()
-//             .join(format!("integration_tests/{}/{}.va", test_name, test_name.to_lowercase()))
-//             .to_str().unwrap().to_owned();
-//         let file_names = files
-//             .iter()
-//             .map(|file| format!("/{}", file))
-//         ;
-//         let test_case = format_ident!("{}",test_name.to_lowercase());
-
-//         quote! {
-
-//             #[test]
-//             fn #test_case(){
-//                 if skip_slow_tests(){
-//                     return
-//                 }
-//                 let root_file = read_to_string(PathBuf::from(#root_file_path)).unwrap();
-//                 let db = TestDataBase::new("/root.va",&root_file);
-//                 #(
-//                     {
-//                         let path = project_root().join("integration_tests").join(#test_name).join(#files);
-//                         let file_contents =read_to_string(path).unwrap();
-//                         db.vfs().write().add_virt_file(#file_names, &file_contents);
-//                     }
-//                 )*
-//                 let diagnostics = db.lower_and_check();
-//                 assert_eq!(&diagnostics,"")
-//             }
-//         }
-//     });
-
-//     let file_string = quote!(
-//         use crate::{tests::TestDataBase, db::HirDefDB};
-//         use sourcegen::{skip_slow_tests,project_root};
-//         use std::{fs::read_to_string,path::PathBuf};
-//         #(#test_impl)*
-//     )
-//     .to_string();
-
-//     let file_string = add_preamble("generate_integration_tests", reformat(file_string));
-
-//     ensure_file_contents(&file, &file_string);
-// }

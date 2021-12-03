@@ -11,6 +11,7 @@ use syntax::{ast, AstNode, AstPtr};
 use crate::{
     db::HirDefDB,
     item_tree::{DisciplineAttr, ItemTreeId, ItemTreeNode, NatureAttr},
+    nameres::{DefMapSource, LocalScopeId},
     DefWithBehaviourId, DefWithExprId, DisciplineAttrLoc, DisciplineLoc, Expr, ExprId, FunctionLoc,
     Lookup, ModuleLoc, NatureAttrLoc, NatureLoc, ParamId, ParamLoc, ScopeId, Stmt, StmtId, VarLoc,
 };
@@ -21,6 +22,10 @@ use lower::LowerCtx;
 pub use ast::ConstraintKind;
 
 mod lower;
+
+mod pretty;
+#[cfg(test)]
+mod tests;
 
 /// The body of an item (function, const etc.).
 #[derive(Debug, Eq, PartialEq, Default)]
@@ -78,7 +83,13 @@ impl AnalogBehaviour {
             }
 
             DefWithBehaviourId::FunctionId(id) => {
-                let FunctionLoc { scope, id: item_tree } = id.lookup(db);
+                let FunctionLoc { id: item_tree, .. } = id.lookup(db);
+                let scope = ScopeId {
+                    root_file,
+                    local_scope: LocalScopeId::from(0u32),
+                    src: DefMapSource::Function(id),
+                };
+                debug_assert_eq!(scope.local_scope, db.function_def_map(id).entry());
                 let ast_id = tree[item_tree].ast_id();
                 let ast = ast_id_map.get(ast_id).to_node(ast.syntax());
                 ((scope, ast_id.into()), ast.body().collect())
