@@ -4,3 +4,4 @@
 !/crates/test/src/middle.rs
 .direnv
 .envrc
+cargo-timing*.html
