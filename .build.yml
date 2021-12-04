@@ -3,38 +3,44 @@ image: archlinux
 packages:
   - rust
   - llvm
-# sources:
-#  - https://git.sr.ht/~dspom/OpenVAF
+  - s3cmd
+
+secrets:
+  - a7b78c60-966c-46c7-a584-4a9ba3738fa0
+
 environment:
   CI: 1
   RUST_BACK_TRACE: 1
-shell: true
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
 
 tasks:
+  - pull_cache: |
+        cd OpenVAF
+        source ./.vendor/pull.sh
+        cargo xtask cache fetch 
+
   - build: |
       cd OpenVAF
-      cargo test --no-run
-      echo "export BUILD_SUCCESS=1" >> ~/.buildenv
+      cargo test --no-run 
+
+  # immidietly push the cache so it gets saved even when the other tasks fail!
+  
+  - push_cache: |
+      cd OpenVAF
+      cargo xtask cache update
 
   - check_fmt: |
       cd OpenVAF
       cargo fmt --all -- --check
    
   - clippy: |
-      if [ -z ${BUILD_SUCCESS+x} ]; then 
-        echo "build failed... skipping"; 
-        exit 0
-      fi
-
       cd OpenVAF
       cargo clippy -- -D warnings
 
   - test: | 
-      if [ -z ${BUILD_SUCCESS+x} ]; then 
-        echo "build failed... skipping"; 
-        exit 0
-      fi
-
       cd OpenVAF
       cargo test
+
+
 

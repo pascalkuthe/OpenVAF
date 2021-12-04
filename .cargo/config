@@ -1,0 +1,7 @@
+[alias]
+xtask = "run --package xtask --bin xtask --"
+lint = "clippy --all-targets"
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+

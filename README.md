@@ -1,10 +1,7 @@
 # OpenVAF
 
-<!-- [![pipeline status](https://gitlab.com/DSPOM/OpenVAF/badges/master/pipeline.svg)](https://gitlab.com/DSPOM/OpenVAF/-/commits/master) -->
 [![license](https://img.shields.io/badge/license-GPL%203.0-brightgreen)](https://gitlab.com/DSPOM/OpenVAF/-/blob/master/LICENSE)
 ![maintaince](https://img.shields.io/badge/maintenance-actively--developed-informational)
-<!-- ![documentation](https://img.shields.io/badge/maintenance-actively--developed-informational) -->
-<!-- [![dcoumentation](https://img.shields.io/badge/documentation-WIP-yellow)](https://dspom.gitlab.io/OpenVAF) -->
 [![builds.sr.ht status](https://builds.sr.ht/~dspom/OpenVAF.svg)](https://builds.sr.ht/~dspom/OpenVAF?)
 
 A framework that allows implementing compilers for VerilogA aimed predominantly at compact modelling written in Rust.

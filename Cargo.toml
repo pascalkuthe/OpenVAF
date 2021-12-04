@@ -1,7 +1,7 @@
 
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*","xtask/"]
 exclude = ["crates/constants","crates/linker","crates/lld","crates/codegen_llvm","crates/pass","crates/middle","crates/targets","crates/const_eval","crates/data_flow"]
 
 # [profile.dev]
@@ -16,5 +16,3 @@ rustc-hash.opt-level = 3
 ahash.opt-level = 3
 smol_str.opt-level = 3
 text-size.opt-level = 3
-# This speeds up `cargo xtask dist`.
-# miniz_oxide.opt-level = 3
