@@ -1,11 +1,10 @@
-use std::{
-    fmt::{self, Display, Formatter},
-    sync::Arc,
-};
+use std::fmt::{self, Display, Formatter};
+use std::sync::Arc;
 
-use crate::{BaseDB, ErasedAstId};
 use indexmap::IndexMap;
 use stdx::{impl_debug_display, impl_idx_from};
+
+use crate::{BaseDB, ErasedAstId};
 
 /// Lints can be set to different levls
 /// This enum represents these levls

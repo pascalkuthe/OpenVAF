@@ -6,9 +6,10 @@
 //! The *real* implementation is in the (language-agnostic) `rowan` crate, this
 //! module just wraps its API.
 
-use crate::{SyntaxError, SyntaxKind};
 pub(crate) use rowan::GreenNode;
 use rowan::{GreenNodeBuilder, Language};
+
+use crate::{SyntaxError, SyntaxKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum VerilogALanguage {}

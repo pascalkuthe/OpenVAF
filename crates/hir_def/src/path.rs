@@ -1,6 +1,5 @@
-use syntax::ast::{self, PathSegmentKind};
-
 use stdx::{impl_debug, pretty};
+use syntax::ast::{self, PathSegmentKind};
 use syntax::name::{AsIdent, AsName, Name};
 
 #[derive(PartialEq, Eq, Clone, Hash)]

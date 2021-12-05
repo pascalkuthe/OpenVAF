@@ -1,15 +1,6 @@
 use std::iter::once;
 use std::sync::Arc;
 
-use crate::diagnostics::PreprocessorDiagnostic::{
-    self, MacroArgumentCountMissmatch, MacroNotFound, UnexpectedToken,
-};
-use crate::grammar::{parse_condition, parse_define, parse_include, parse_macro_call};
-
-use crate::parser::{CompilerDirective, Parser, PreprocessorToken};
-use crate::sourcemap::{CtxSpan, FileSpan, SourceContext, SourceMap};
-use crate::{Diagnostics, FileReadError, ScopedTextArea};
-use crate::{SourceProvider, Token};
 use ahash::AHashMap;
 use stdx::{impl_debug_display, impl_idx_from};
 use text_size::{TextRange, TextSize};
@@ -17,6 +8,14 @@ use tokens::parser::SyntaxKind;
 // use tracing::{debug, debug_span, trace};
 use typed_index_collections::{TiSlice, TiVec};
 use vfs::{FileId, VfsPath};
+
+use crate::diagnostics::PreprocessorDiagnostic::{
+    self, MacroArgumentCountMissmatch, MacroNotFound, UnexpectedToken,
+};
+use crate::grammar::{parse_condition, parse_define, parse_include, parse_macro_call};
+use crate::parser::{CompilerDirective, Parser, PreprocessorToken};
+use crate::sourcemap::{CtxSpan, FileSpan, SourceContext, SourceMap};
+use crate::{Diagnostics, FileReadError, ScopedTextArea, SourceProvider, Token};
 
 pub(crate) struct Processor<'a> {
     pub(crate) source_map: SourceMap,

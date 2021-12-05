@@ -1,13 +1,11 @@
-use crate::{
-    diagnostics::{text_ranges_to_unified_spans, Diagnostic, Label, LabelStyle, Report},
-    lints::{
-        builtin::{lint_level_owerwrite, lint_not_found},
-        Lint, LintSrc,
-    },
-    BaseDB, FileId,
-};
 use stdx::impl_display;
-use syntax::{sourcemap::FileSpan, TextRange};
+use syntax::sourcemap::FileSpan;
+use syntax::TextRange;
+
+use crate::diagnostics::{text_ranges_to_unified_spans, Diagnostic, Label, LabelStyle, Report};
+use crate::lints::builtin::{lint_level_owerwrite, lint_not_found};
+use crate::lints::{Lint, LintSrc};
+use crate::{BaseDB, FileId};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum AttrDiagnostic {

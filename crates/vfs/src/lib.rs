@@ -45,13 +45,11 @@ mod vfs_path;
 
 use std::{fmt, mem};
 
-use crate::path_interner::PathInterner;
-
-pub use crate::{
-    anchored_path::{AnchoredPath, AnchoredPathBuf},
-    vfs_path::VfsPath,
-};
 pub use paths::{AbsPath, AbsPathBuf};
+
+pub use crate::anchored_path::{AnchoredPath, AnchoredPathBuf};
+use crate::path_interner::PathInterner;
+pub use crate::vfs_path::VfsPath;
 
 /// Handle to a file in [`Vfs`]
 ///

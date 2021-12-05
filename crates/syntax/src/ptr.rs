@@ -19,11 +19,9 @@
 //! be cheaply stored, and which can be resolved to a real [`SyntaxNode`] when
 //! necessary.
 
-use std::{
-    hash::{Hash, Hasher},
-    iter::successors,
-    marker::PhantomData,
-};
+use std::hash::{Hash, Hasher};
+use std::iter::successors;
+use std::marker::PhantomData;
 
 use crate::{AstNode, SyntaxKind, SyntaxNode, SyntaxToken, TextRange};
 

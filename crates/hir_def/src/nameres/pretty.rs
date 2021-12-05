@@ -1,8 +1,8 @@
 use std::fmt::{self, Write};
 
-use crate::{db::HirDefDB, nameres::DefMap, nameres::LocalScopeId};
-
 use super::ScopeDefItem;
+use crate::db::HirDefDB;
+use crate::nameres::{DefMap, LocalScopeId};
 
 impl DefMap {
     pub fn dump(&self, db: &dyn HirDefDB) -> String {

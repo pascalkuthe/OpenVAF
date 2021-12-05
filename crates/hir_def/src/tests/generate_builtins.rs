@@ -170,10 +170,6 @@ fn generate_builtins() {
     let variants = variants.iter().map(|var| format_ident!("{}", var));
 
     let hir_def = quote! {
-        use crate::nameres::ScopeDefItem;
-        use ahash::AHashMap;
-        use syntax::name::{kw, sysfun, Name};
-
         #[derive(Eq,PartialEq,Copy,Clone, Hash,Debug)]
         #[allow(nonstandard_style,unreachable_pub)]
         #[repr(u8)]
@@ -184,28 +180,35 @@ fn generate_builtins() {
         pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>){
             #(dst.insert(#kw_types::#kws,BuiltIn::#variants.into());)*
         }
-    }
-    .to_string();
+    };
 
-    let const_cnt = constants.len();
+    let header = "use ahash::AHashMap;
+        use syntax::name::{kw, sysfun, Name};
+
+        use crate::nameres::ScopeDefItem;
+    ";
+
+    let hir_def = format!("{}\n{}", header, hir_def);
 
     let hir_def = add_preamble("generate_builtins", reformat(hir_def));
-
     let file = project_root().join("crates").join("hir_def").join("src").join("builtin.rs");
     ensure_file_contents(&file, &hir_def);
 
+    let const_cnt = constants.len();
     let hir_ty = quote! {
-        use super::*;
-        use hir_def::BuiltIn;
-
         const BUILTIN_INFO: [BuiltinInfo; #const_cnt] = [#(#constants),*];
 
         pub(crate) fn bultin_info(builtin: BuiltIn) -> BuiltinInfo{
             BUILTIN_INFO[builtin as u8 as usize]
         }
-    }
-    .to_string();
+    };
 
+    let header = "use hir_def::BuiltIn;
+
+        use crate::builtin::*;
+    ";
+
+    let hir_ty = format!("{}\n{}", header, hir_ty);
     let hir_ty = add_preamble("generate_builtins", reformat(hir_ty));
 
     let file = project_root()

@@ -1,5 +1,5 @@
 warning[L012]: reserved keyword 'nmos' was used as an identifier
-    ┌─ /root.va:100:55
+    ┌─ /ekv.va:100:55
     │
 100 │     (* desc="MOS, channel, type" *) parameter integer nmos=1 from [0:1];
     │                                                       ^^^^ 'nmos' is a keyword
@@ -9,7 +9,7 @@ warning[L012]: reserved keyword 'nmos' was used as an identifier
     = vams_keyword_compat is set to warn by default
 
 warning[L012]: reserved keyword 'pmos' was used as an identifier
-    ┌─ /root.va:101:55
+    ┌─ /ekv.va:101:55
     │
 101 │     (* desc="MOS, channel, type" *) parameter integer pmos=1 from [0:1];
     │                                                       ^^^^ 'pmos' is a keyword

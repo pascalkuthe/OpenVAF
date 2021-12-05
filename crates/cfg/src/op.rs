@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
-use crate::Callback;
 use stdx::impl_debug;
 use Op::*;
+
+use crate::Callback;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Op {

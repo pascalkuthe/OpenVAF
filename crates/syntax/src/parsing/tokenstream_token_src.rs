@@ -1,9 +1,9 @@
 //! See `TsTokenSource` docs.
 
-use crate::SyntaxKind::{self, EOF};
 use parser::TokenSource;
-
 use preprocessor::Token;
+
+use crate::SyntaxKind::{self, EOF};
 
 /// Implementation of `parser::TokenSource` that takes tokens from source code text.
 pub(crate) struct TsTokenSource {

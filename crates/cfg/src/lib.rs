@@ -21,28 +21,23 @@
 //!   simulator. These control flow graphs all have different inputs, outputs and the same
 //!   and some functions behave different (or are unavialble) in some of these cfgs.
 
-use std::{
-    iter::once,
-    ops::{Index, IndexMut},
-};
+use std::iter::once;
+use std::ops::{Index, IndexMut};
 
 use ahash::AHashMap;
 use arena::{Arena, Idx};
 use arrayvec::ArrayVec;
 use graph_cyclical_cache::GraphIsCyclicCache;
-
+pub use locations::{BlockLocations, IntLocation, InternedLocations, Location, LocationKind};
+pub use op::Op;
+use predecessors::PredecessorCache;
 use stdx::{impl_debug, impl_idx_from};
 use transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
     ReversePostorderIterMut,
 };
-use typed_index_collections::TiVec;
-
-use predecessors::PredecessorCache;
-
-pub use locations::{BlockLocations, IntLocation, InternedLocations, Location, LocationKind};
-pub use op::Op;
 pub use ty::{Const, Ty};
+use typed_index_collections::TiVec;
 
 mod graph_cyclical_cache;
 mod locations;

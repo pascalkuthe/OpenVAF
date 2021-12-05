@@ -3,12 +3,11 @@ mod cursor;
 #[cfg(test)]
 mod tests;
 
+use tokens::lexer::LiteralKind::{self, *};
+use tokens::lexer::Token;
+use tokens::lexer::TokenKind::{self, *};
+
 use crate::cursor::Cursor;
-use tokens::lexer::{
-    LiteralKind::{self, *},
-    Token,
-    TokenKind::{self, *},
-};
 
 /// Creates an iterator that produces tokens from the input string.
 pub fn tokenize(input: &str) -> Vec<Token> {

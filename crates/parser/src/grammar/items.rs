@@ -1,6 +1,5 @@
-use crate::grammar::paths::path;
-
 use super::*;
+use crate::grammar::paths::path;
 mod module;
 use module::{module, MODULE_ITEM_OR_ATTR_RECOVERY};
 

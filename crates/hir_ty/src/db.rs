@@ -1,16 +1,15 @@
 use std::sync::Arc;
 
 use basedb::Upcast;
+use hir_def::db::HirDefDB;
 use hir_def::{
-    db::HirDefDB, BranchId, DefWithBehaviourId, DefWithBodyId, DefWithExprId, DisciplineId,
-    NatureAttrId, NatureId, ParamId,
+    BranchId, DefWithBehaviourId, DefWithBodyId, DefWithExprId, DisciplineId, NatureAttrId,
+    NatureId, ParamId,
 };
 
-use crate::{
-    inference::InferenceResult,
-    lower::{BranchTy, DisciplineTy, NatureTy},
-    types::Ty,
-};
+use crate::inference::InferenceResult;
+use crate::lower::{BranchTy, DisciplineTy, NatureTy};
+use crate::types::Ty;
 
 #[salsa::query_group(HirTyDatabase)]
 pub trait HirTyDB: HirDefDB + Upcast<dyn HirDefDB> {

@@ -12,12 +12,11 @@
 //!
 //! See also a neighboring `body` module.
 
+use std::fmt::{Debug, Display};
+use std::intrinsics::transmute;
+
 use arena::Idx;
 use lasso::Spur;
-use std::{
-    fmt::{Debug, Display},
-    intrinsics::transmute,
-};
 use stdx::impl_debug;
 use syntax::ast::{self, BinaryOp, UnaryOp};
 

@@ -1,11 +1,10 @@
+use std::fmt::{self, Debug};
+use std::slice;
+
 use crate::sparse::SPARSE_MAX;
 use crate::{
     BitIter, BitSet, SparseBitSet, SubtractFromBitSet, SubtractFromHybridBitSet, UnionIntoBitSet,
     UnionIntoHybridBitSet,
-};
-use std::{
-    fmt::{self, Debug},
-    slice,
 };
 
 /// A fixed-size bitset type with a hybrid representation: sparse when there

@@ -7,16 +7,15 @@ mod syntax_node;
 mod token_text;
 mod validation;
 
-use preprocessor::sourcemap::{CtxSpan, FileSpan, SourceContext};
-use std::{cmp::Ordering, marker::PhantomData, sync::Arc};
-use vfs::FileId;
+use std::cmp::Ordering;
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 pub use ast::AstNode;
 pub use error::SyntaxError;
-pub use preprocessor::{
-    diagnostics::PreprocessorDiagnostic, preprocess, sourcemap, FileReadError, Preprocess,
-    SourceProvider,
-};
+pub use preprocessor::diagnostics::PreprocessorDiagnostic;
+use preprocessor::sourcemap::{CtxSpan, FileSpan, SourceContext};
+pub use preprocessor::{preprocess, sourcemap, FileReadError, Preprocess, SourceProvider};
 pub use ptr::{AstPtr, SyntaxNodePtr};
 pub use rowan::{
     Direction, GreenNode, NodeOrToken, SyntaxText, TextRange, TextSize, TokenAtOffset, WalkEvent,
@@ -24,6 +23,7 @@ pub use rowan::{
 pub use syntax_node::{SyntaxNode, SyntaxToken};
 pub use token_text::TokenText;
 pub use tokens::{SyntaxKind, T};
+use vfs::FileId;
 
 #[cfg(test)]
 mod tests;

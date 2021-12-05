@@ -2,24 +2,20 @@ use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
 use arena::{Arena, ArenaMap};
-use basedb::{
-    lints::{Lint, LintSrc},
-    AttrDiagnostic, LintAttrs,
-};
+pub use ast::ConstraintKind;
+use basedb::lints::{Lint, LintSrc};
+use basedb::{AttrDiagnostic, LintAttrs};
+use lasso::Rodeo;
+use lower::LowerCtx;
 use syntax::{ast, AstNode, AstPtr};
 
+use crate::db::HirDefDB;
+use crate::item_tree::{DisciplineAttr, ItemTreeId, ItemTreeNode, NatureAttr};
+use crate::nameres::{DefMapSource, LocalScopeId};
 use crate::{
-    db::HirDefDB,
-    item_tree::{DisciplineAttr, ItemTreeId, ItemTreeNode, NatureAttr},
-    nameres::{DefMapSource, LocalScopeId},
     DefWithBehaviourId, DefWithExprId, DisciplineAttrLoc, DisciplineLoc, Expr, ExprId, FunctionLoc,
     Lookup, ModuleLoc, NatureAttrLoc, NatureLoc, ParamId, ParamLoc, ScopeId, Stmt, StmtId, VarLoc,
 };
-
-use lasso::Rodeo;
-use lower::LowerCtx;
-
-pub use ast::ConstraintKind;
 
 mod lower;
 
@@ -27,7 +23,7 @@ mod pretty;
 #[cfg(test)]
 mod tests;
 
-/// The body of an item (function, const etc.).
+/// The body of an item
 #[derive(Debug, Eq, PartialEq, Default)]
 pub struct Body {
     pub exprs: Arena<Expr>,

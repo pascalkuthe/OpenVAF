@@ -1,6 +1,5 @@
-use crate::grammar::stmts::{STMT_RECOVER, STMT_TS};
-
 use super::*;
+use crate::grammar::stmts::{STMT_RECOVER, STMT_TS};
 
 const MODULE_ITEM_RECOVERY: TokenSet = DIRECTION_TS.union(TokenSet::new(&[
     NET_TYPE,

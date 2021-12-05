@@ -8,12 +8,10 @@
  *  *****************************************************************************************
  */
 
-use std::{
-    fmt,
-    hash::{Hash, Hasher},
-    marker::PhantomData,
-    ops::{Range, RangeInclusive},
-};
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::ops::{Range, RangeInclusive};
 
 use typed_index_collections::TiVec;
 

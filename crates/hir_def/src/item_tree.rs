@@ -16,22 +16,24 @@ mod pretty;
 #[cfg(test)]
 mod tests;
 
-use std::{fmt::Debug, hash::Hash, ops::Index, sync::Arc};
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::ops::Index;
+use std::sync::Arc;
 
-use crate::{
-    db::HirDefDB, LocalDisciplineAttrId, LocalFunctionArgId, LocalNatureAttrId, LocalNodeId, Path,
-    Type,
-};
 use ahash::AHashMap;
 use arena::{Arena, Idx, IdxRange};
 use basedb::{AstId, ErasedAstId, FileId};
 use stdx::impl_from_typed;
-use syntax::{
-    ast::{self, BlockStmt},
-    name::Name,
-    AstNode,
-};
+use syntax::ast::{self, BlockStmt};
+use syntax::name::Name;
+use syntax::AstNode;
 use typed_index_collections::TiVec;
+
+use crate::db::HirDefDB;
+use crate::{
+    LocalDisciplineAttrId, LocalFunctionArgId, LocalNatureAttrId, LocalNodeId, Path, Type,
+};
 
 /// The item tree of a source file.
 #[derive(Debug, Eq, PartialEq)]

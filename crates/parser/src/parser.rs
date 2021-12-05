@@ -5,13 +5,10 @@ use std::cell::Cell;
 use drop_bomb::DropBomb;
 use stdx::pretty::List;
 
+use crate::event::Event;
 use crate::token_set::TokenSet;
-use crate::{
-    event::Event,
-    SyntaxError,
-    SyntaxKind::{self, EOF, ERROR, TOMBSTONE},
-    TokenSource,
-};
+use crate::SyntaxKind::{self, EOF, ERROR, TOMBSTONE};
+use crate::{SyntaxError, TokenSource};
 
 /// `Parser` struct provides the low-level API for
 /// navigating through the stream of tokens and

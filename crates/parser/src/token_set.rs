@@ -1,6 +1,7 @@
 //! A bit-set of `SyntaxKind`s.
 
-use std::{convert::TryInto, u128};
+use std::convert::TryInto;
+use std::u128;
 
 use crate::SyntaxKind;
 

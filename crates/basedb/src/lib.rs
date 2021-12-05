@@ -7,20 +7,18 @@ pub mod lints;
 #[cfg(test)]
 mod tests;
 
+use std::intrinsics::transmute;
 use std::str::from_utf8;
-use std::{intrinsics::transmute, sync::Arc};
+use std::sync::Arc;
 
+pub use ast_id_map::{AstId, AstIdMap, ErasedAstId};
 use line_index::{Line, LineIndex};
 pub use lint_attrs::{AttrDiagnostic, LintAttrTree, LintAttrs};
 use lints::{Lint, LintData, LintLevel, LintRegistry};
 use parking_lot::RwLock;
 use salsa::Durability;
-use syntax::{
-    sourcemap::SourceMap, FileReadError, Parse, Preprocess, SourceFile, SourceProvider, TextRange,
-    TextSize,
-};
-
-pub use ast_id_map::{AstId, AstIdMap, ErasedAstId};
+use syntax::sourcemap::SourceMap;
+use syntax::{FileReadError, Parse, Preprocess, SourceFile, SourceProvider, TextRange, TextSize};
 use typed_index_collections::{TiSlice, TiVec};
 pub use vfs::{FileId, Vfs, VfsPath};
 

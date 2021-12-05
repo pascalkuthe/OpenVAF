@@ -1,7 +1,9 @@
-use crate::{BitSet, SubtractFromBitSet, UnionIntoBitSet};
-use arrayvec::ArrayVec;
 use std::fmt::{Debug, Formatter};
 use std::{fmt, slice};
+
+use arrayvec::ArrayVec;
+
+use crate::{BitSet, SubtractFromBitSet, UnionIntoBitSet};
 
 pub(super) const SPARSE_MAX: usize = 8;
 

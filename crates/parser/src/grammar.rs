@@ -18,20 +18,16 @@ mod items;
 mod paths;
 mod stmts;
 
-use tokens::T;
-
-use crate::{
-    parser::{CompletedMarker, Marker, Parser},
-    SyntaxKind::{self, *},
-    TokenSet,
-};
-
 use attributes::attrs;
 use call::arg_list;
 use expressions::expr;
 use items::{parameter_decl, var_decl};
-use stmts::stmt;
-use stmts::stmt_with_attrs;
+use stmts::{stmt, stmt_with_attrs};
+use tokens::T;
+
+use crate::parser::{CompletedMarker, Marker, Parser};
+use crate::SyntaxKind::{self, *};
+use crate::TokenSet;
 
 const TYPE_TS: TokenSet = TokenSet::new(&[REAL_KW, INTEGER_KW, STRING_KW]);
 

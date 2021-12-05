@@ -9,10 +9,8 @@
 //! this stream to a real tree.
 use std::mem;
 
-use crate::{
-    SyntaxKind::{self, *},
-    TreeSink,
-};
+use crate::SyntaxKind::{self, *};
+use crate::TreeSink;
 
 /// `Parser` produces a flat list of `Event`s.
 /// They are converted to a tree-structure in

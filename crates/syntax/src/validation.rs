@@ -1,16 +1,12 @@
-use crate::{
-    ast::{AttrsOwner, Expr, LiteralKind, ModulePortKind, ModulePorts, Name},
-    name::{kw, kw_comp},
-    SyntaxNodePtr, T,
-};
 use rowan::TextRange;
-
 use tokens::SyntaxKind;
 
-use crate::{
-    ast::{self, ArgListOwner, BlockItem, FunctionItem, PathSegmentKind},
-    match_ast, AstNode, AstPtr, SyntaxError, SyntaxNode,
+use crate::ast::{
+    self, ArgListOwner, AttrsOwner, BlockItem, Expr, FunctionItem, LiteralKind, ModulePortKind,
+    ModulePorts, Name, PathSegmentKind,
 };
+use crate::name::{kw, kw_comp};
+use crate::{match_ast, AstNode, AstPtr, SyntaxError, SyntaxNode, SyntaxNodePtr, T};
 
 pub(crate) fn validate(root: &SyntaxNode, errors: &mut Vec<SyntaxError>) {
     for node in root.descendants() {

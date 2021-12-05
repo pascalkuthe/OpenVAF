@@ -5,18 +5,17 @@
 //! item as an ID. That way, id's don't change unless the set of items itself
 //! changes.
 
-use std::{
-    any::type_name,
-    fmt,
-    hash::{Hash, Hasher},
-    iter::repeat,
-    marker::PhantomData,
-};
+use std::any::type_name;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::iter::repeat;
+use std::marker::PhantomData;
 
-use crate::BaseDB;
 use arena::{Arena, ArenaMap, Idx, RawIdx};
 use syntax::{ast, AstNode, AstPtr, SyntaxKind, SyntaxNode, SyntaxNodePtr};
 use vfs::FileId;
+
+use crate::BaseDB;
 
 /// `AstId` points to an AST node in a specific file.
 pub struct AstId<N: AstNode> {

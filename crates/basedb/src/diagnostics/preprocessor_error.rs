@@ -1,11 +1,9 @@
 use syntax::PreprocessorDiagnostic;
 use vfs::FileId;
 
-use crate::{
-    diagnostics::{to_unified_spans, Diagnostic, Label, LabelStyle, Report},
-    lints::{self, Lint, LintSrc},
-    BaseDB,
-};
+use crate::diagnostics::{to_unified_spans, Diagnostic, Label, LabelStyle, Report};
+use crate::lints::{self, Lint, LintSrc};
+use crate::BaseDB;
 
 impl Diagnostic for PreprocessorDiagnostic {
     fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {

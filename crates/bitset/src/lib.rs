@@ -1,8 +1,7 @@
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
-use std::mem;
 use std::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Range, Shl};
-use std::slice;
+use std::{mem, slice};
 
 #[cfg(test)]
 mod tests;
@@ -11,11 +10,10 @@ mod hybrid;
 pub mod matrix;
 mod sparse;
 
-use sparse::SPARSE_MAX;
-
 pub use hybrid::{HybridBitSet, HybridIter};
 pub use matrix::{BitMatrix, SparseBitMatrix};
 pub use sparse::SparseBitSet;
+use sparse::SPARSE_MAX;
 
 pub type Word = u64;
 pub const WORD_BYTES: usize = mem::size_of::<Word>();

@@ -1,12 +1,13 @@
-use crate::{
-    num_words, word_index_and_mask, BitIter, BitSet, HybridBitSet, UnionIntoHybridBitSet, Word,
-    WORD_BITS,
-};
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::{fmt, iter};
 
 use stdx::vec::{SliceExntesions, VecExtensions};
+
+use crate::{
+    num_words, word_index_and_mask, BitIter, BitSet, HybridBitSet, UnionIntoHybridBitSet, Word,
+    WORD_BITS,
+};
 
 /// A fixed-size 2D bit matrix type with a dense representation.
 ///

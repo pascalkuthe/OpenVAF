@@ -1,11 +1,11 @@
 use core::fmt;
 use std::fmt::Write;
 
-use crate::{
-    db::HirDefDB, expr::CaseCond, nameres::DefMapSource, Expr, ExprId, Lookup, Stmt, StmtId,
-};
-
 use super::{AnalogBehaviour, Body};
+use crate::db::HirDefDB;
+use crate::expr::CaseCond;
+use crate::nameres::DefMapSource;
+use crate::{Expr, ExprId, Lookup, Stmt, StmtId};
 
 macro_rules! wln {
     ($dst:expr) => {
@@ -35,7 +35,7 @@ impl AnalogBehaviour {
             needs_indent: true,
         };
 
-        for stmt in &self.root_stmts {
+        for stmt in &*self.root_stmts {
             w!(&mut printer, "analog ");
             printer.pretty_print_stmt(*stmt)
         }

@@ -1,7 +1,8 @@
+use std::mem::transmute;
+
 use bitset::BitSet;
 
 use crate::{BasicBlock, BasicBlockData, ControlFlowGraph, Successors};
-use std::mem::transmute;
 
 /// Postorder traversal of a graph.
 ///

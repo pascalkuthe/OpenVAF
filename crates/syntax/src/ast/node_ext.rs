@@ -1,19 +1,17 @@
 //! Various extension methods to ast Nodes, which are hard to code-generate.
 //! Extensions for various expressions live in a sibling `expr_extensions` module.
 
-use stdx::impl_debug;
-
-use crate::SyntaxKind::{IDENT, ROOT_KW};
-use crate::{
-    ast::{self, support, AstNode},
-    SyntaxToken, T,
-};
 use std::iter::successors;
+
+use stdx::impl_debug;
 
 use super::{
     AnalogBehaviour, ArgListOwner, Assign, AstChildTokens, AstChildren, Constraint, EventStmt,
     Expr, ForStmt, Function, ModulePortKind, Path, PortFlow, Range, Stmt, StrLit,
 };
+use crate::ast::{self, support, AstNode};
+use crate::SyntaxKind::{IDENT, ROOT_KW};
+use crate::{SyntaxToken, T};
 
 // impl ast::PathSegment {
 //     pub fn parent_path(&self) -> Option<Path> {
@@ -256,7 +254,7 @@ impl ast::BranchDecl {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ConstraintKind {
     Exclude,
     From,

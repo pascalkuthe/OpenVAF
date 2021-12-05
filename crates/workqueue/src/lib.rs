@@ -1,7 +1,8 @@
-use bitset::BitSet;
 use core::fmt::Formatter;
 use std::collections::VecDeque;
 use std::fmt::Debug;
+
+use bitset::BitSet;
 
 /// A work queue is a handy data structure for tracking work left to
 /// do. (For example, basic blocks left to process.) It is basically a

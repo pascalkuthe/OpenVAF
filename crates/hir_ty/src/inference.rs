@@ -1,32 +1,31 @@
-use std::{borrow::Cow, mem, sync::Arc};
+use std::borrow::Cow;
+use std::mem;
+use std::sync::Arc;
 
 use ahash::AHashMap;
 use arena::ArenaMap;
+use hir_def::body::{Body, ConstraintValue, Range};
+use hir_def::db::HirDefDB;
+use hir_def::expr::{CaseCond, Literal};
+use hir_def::nameres::diagnostics::PathResolveError;
+use hir_def::nameres::{NatureAccess, ResolvedPath, ScopeDefItem, ScopeDefItemKind};
 use hir_def::{
-    body::{Body, ConstraintValue, Range},
-    db::HirDefDB,
-    expr::{CaseCond, Literal},
-    nameres::{
-        diagnostics::PathResolveError, NatureAccess, ResolvedPath, ScopeDefItem, ScopeDefItemKind,
-    },
     BranchId, BuiltIn, DefWithBehaviourId, DefWithExprId, Expr, ExprId, FunctionArgLoc, FunctionId,
     LocalFunctionArgId, Lookup, NatureId, NodeId, ParamId, Path, Stmt, StmtId, Type, VarId,
 };
-
-use stdx::{impl_from, iter::zip};
+use stdx::impl_from;
+use stdx::iter::zip;
 use syntax::ast::{self, BinaryOp, UnaryOp};
 use typed_index_collections::{TiSlice, TiVec};
 
-use crate::{
-    builtin::{
-        DDX_FLOW, DDX_POT, DDX_POT_DIFF, DDX_TEMP, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
-        NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
-    },
-    db::HirTyDB,
-    diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch},
-    lower::{BranchTy, DisciplineAccess},
-    types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement},
+use crate::builtin::{
+    DDX_FLOW, DDX_POT, DDX_POT_DIFF, DDX_TEMP, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
+    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
 };
+use crate::db::HirTyDB;
+use crate::diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch};
+use crate::lower::{BranchTy, DisciplineAccess};
+use crate::types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement};
 
 #[cfg(test)]
 mod tests;

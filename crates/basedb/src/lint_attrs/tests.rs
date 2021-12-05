@@ -1,5 +1,6 @@
-use crate::tests::TestDataBase;
 use expect_test::expect;
+
+use crate::tests::TestDataBase;
 
 #[test]
 pub fn unkown_lint() {

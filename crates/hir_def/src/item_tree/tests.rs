@@ -1,6 +1,8 @@
-use crate::{db::HirDefDB, tests::TestDataBase};
 use basedb::BaseDB;
 use expect_test::{expect, Expect};
+
+use crate::db::HirDefDB;
+use crate::tests::TestDataBase;
 
 fn check_db(db: TestDataBase, expect: Expect) {
     assert_eq!(db.parse(db.root_file()).errors(), &[]);

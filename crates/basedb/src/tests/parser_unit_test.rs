@@ -1,8 +1,8 @@
-use crate::BaseDB;
 use expect_test::{expect, Expect};
 use syntax::AstNode;
 
 use crate::tests::TestDataBase;
+use crate::BaseDB;
 
 fn check(src: &str, expected: Expect) {
     let (parse, diagnostics) = TestDataBase::new("/root.va", src).parse_and_check();

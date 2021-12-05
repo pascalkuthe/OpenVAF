@@ -1,22 +1,19 @@
-use std::{cmp::min, ops::Range};
+use std::cmp::min;
+use std::ops::Range;
 
 use stdx::impl_idx_math_from;
 use text_size::{TextRange, TextSize};
-use tokens::{
-    lexer::{LiteralKind, Token, TokenKind},
-    parser::SyntaxKind,
-    LexerErrorKind,
-};
+use tokens::lexer::{LiteralKind, Token, TokenKind};
+use tokens::parser::SyntaxKind;
+use tokens::LexerErrorKind;
 // use tracing::debug;
 use typed_index_collections::{TiSlice, TiVec};
 use vfs::VfsPath;
 
-use crate::{
-    diagnostics::PreprocessorDiagnostic,
-    processor::ParsedToken,
-    sourcemap::{CtxSpan, SourceContext},
-    Diagnostics,
-};
+use crate::diagnostics::PreprocessorDiagnostic;
+use crate::processor::ParsedToken;
+use crate::sourcemap::{CtxSpan, SourceContext};
+use crate::Diagnostics;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub struct FullTokenIdx(u32);

@@ -1,6 +1,7 @@
 //! Yet another version of owned string, backed by a syntax tree token.
 
-use std::{cmp::Ordering, fmt, ops};
+use std::cmp::Ordering;
+use std::{fmt, ops};
 
 use rowan::GreenToken;
 

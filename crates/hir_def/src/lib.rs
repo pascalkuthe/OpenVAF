@@ -13,40 +13,29 @@ mod data;
 #[cfg(test)]
 mod tests;
 
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
+
 use arena::Idx;
+pub use basedb::impl_intern_key;
 use basedb::{AstId, ErasedAstId, FileId};
 use item_tree::Node;
-use nameres::{
-    diagnostics::PathResolveError, DefMap, DefMapSource, ResolvedPath, ScopeDefItemKind,
-};
+use nameres::diagnostics::PathResolveError;
+use nameres::{DefMap, DefMapSource, ResolvedPath, ScopeDefItemKind};
 use stdx::impl_from;
-use syntax::{
-    ast::{self, BlockStmt},
-    AstNode,
-};
+use syntax::ast::{self, BlockStmt};
+use syntax::AstNode;
 
-use std::{
-    hash::{Hash, Hasher},
-    sync::Arc,
+pub use crate::builtin::BuiltIn;
+use crate::db::HirDefDB;
+pub use crate::expr::{Case, Expr, ExprId, Literal, Stmt, StmtId};
+use crate::item_tree::{
+    Branch, Discipline, Function, ItemTreeId, ItemTreeNode, Module, Nature, Param, Var,
 };
-
-use crate::{
-    db::HirDefDB,
-    item_tree::{
-        Branch, Discipline, Function, ItemTreeId, ItemTreeNode, Module, Nature, Param, Var,
-    },
-    nameres::ScopeDefItem,
-};
-
-pub use crate::{
-    builtin::BuiltIn,
-    expr::{Case, Expr, ExprId, Literal, Stmt, StmtId},
-    item_tree::{BranchKind, ItemTree, NatureRef, NatureRefKind},
-    path::Path,
-    types::Type,
-};
-
-pub use basedb::impl_intern_key;
+pub use crate::item_tree::{BranchKind, ItemTree, NatureRef, NatureRefKind};
+use crate::nameres::ScopeDefItem;
+pub use crate::path::Path;
+pub use crate::types::Type;
 
 pub trait Intern {
     type ID;

@@ -1,9 +1,7 @@
-use crate::{
-    lints::{Lint, LintData, LintLevel, LintSrc},
-    BaseDB, FileId,
-};
-
 pub use sink::{print_all, ConsoleSink, DiagnosticSink};
+
+use crate::lints::{Lint, LintData, LintLevel, LintSrc};
+use crate::{BaseDB, FileId};
 
 mod preprocessor_error;
 pub mod sink;
@@ -16,14 +14,10 @@ mod syntax_error;
 pub type Report = codespan_reporting::diagnostic::Diagnostic<FileId>;
 pub type Label = codespan_reporting::diagnostic::Label<FileId>;
 
-pub use codespan_reporting::{
-    diagnostic::{LabelStyle, Severity},
-    term::Config,
-};
-use syntax::{
-    sourcemap::{CtxSpan, FileSpan, SourceMap},
-    Parse, SourceFile, TextRange,
-};
+pub use codespan_reporting::diagnostic::{LabelStyle, Severity};
+pub use codespan_reporting::term::Config;
+use syntax::sourcemap::{CtxSpan, FileSpan, SourceMap};
+use syntax::{Parse, SourceFile, TextRange};
 
 pub trait Diagnostic {
     fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {

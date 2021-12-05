@@ -1,10 +1,10 @@
-use std::{fmt::Display, ops::Deref};
+use std::fmt::Display;
+use std::ops::Deref;
 
-use crate::{
-    ast::{self, SysFun},
-    SyntaxToken,
-};
 use smol_str::SmolStr;
+
+use crate::ast::{self, SysFun};
+use crate::SyntaxToken;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Name(SmolStr);

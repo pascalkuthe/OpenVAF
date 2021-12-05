@@ -1,22 +1,18 @@
 use std::mem;
 
-use crate::{
-    db::HirDefDB,
-    expr::{CaseCond, Event, GlobalEvent},
-    nameres::DefMapSource,
-    BlockLoc, Case, Expr, ExprId, Intern, Literal, Path, ScopeId, Stmt, StmtId,
-};
-
-use basedb::{lints::LintRegistry, AstIdMap, ErasedAstId, LintAttrs};
+use basedb::lints::LintRegistry;
+use basedb::{AstIdMap, ErasedAstId, LintAttrs};
 use lasso::Rodeo;
-use syntax::{
-    ast::{self, ArgListOwner, AttrIter, AttrsOwner, FunctionRef},
-    name::AsName,
-    AstPtr,
-};
-// use tracing::debug;
+use syntax::ast::{self, ArgListOwner, AttrIter, AttrsOwner, FunctionRef};
+use syntax::name::AsName;
+use syntax::AstPtr;
 
+// use tracing::debug;
 use super::{Body, BodySourceMap};
+use crate::db::HirDefDB;
+use crate::expr::{CaseCond, Event, GlobalEvent};
+use crate::nameres::DefMapSource;
+use crate::{BlockLoc, Case, Expr, ExprId, Intern, Literal, Path, ScopeId, Stmt, StmtId};
 
 pub(super) struct LowerCtx<'a> {
     pub(super) db: &'a dyn HirDefDB,

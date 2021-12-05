@@ -1,17 +1,15 @@
 //! See [`TextTreeSink`].
 
-use crate::{
-    syntax_node::{GreenNode, SyntaxTreeBuilder},
-    SyntaxError, SyntaxKind, TextRange, TextSize, T,
-};
+use std::mem;
+use std::sync::Arc;
+
 use parser::TreeSink;
-use preprocessor::Token;
-use preprocessor::{
-    sourcemap::{CtxSpan, SourceContext, SourceMap},
-    SourceProvider,
-};
-use std::{mem, sync::Arc};
+use preprocessor::sourcemap::{CtxSpan, SourceContext, SourceMap};
+use preprocessor::{SourceProvider, Token};
 use vfs::FileId;
+
+use crate::syntax_node::{GreenNode, SyntaxTreeBuilder};
+use crate::{SyntaxError, SyntaxKind, TextRange, TextSize, T};
 
 /// Bridges the parser with our specific syntax tree representation.
 ///

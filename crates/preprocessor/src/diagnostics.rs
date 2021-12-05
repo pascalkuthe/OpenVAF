@@ -10,9 +10,10 @@
 
 use std::io;
 
-use crate::sourcemap::CtxSpan;
 use stdx::impl_display;
 use vfs::VfsPath;
+
+use crate::sourcemap::CtxSpan;
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum PreprocessorDiagnostic {

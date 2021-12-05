@@ -1,14 +1,15 @@
 mod text_tree_sink;
 mod tokenstream_token_src;
 
-use ::preprocessor::{preprocess, sourcemap::SourceContext, Preprocess, SourceProvider};
+use ::preprocessor::sourcemap::SourceContext;
+use ::preprocessor::{preprocess, Preprocess, SourceProvider};
 use rowan::{TextRange, TextSize};
 use text_tree_sink::TextTreeSink;
 use vfs::FileId;
 
-use crate::{syntax_node::GreenNode, SyntaxError};
-
 use self::tokenstream_token_src::TsTokenSource;
+use crate::syntax_node::GreenNode;
+use crate::SyntaxError;
 
 pub(crate) fn parse_text(
     sources: &dyn SourceProvider,

@@ -3,19 +3,16 @@
 //! Specifically, it generates the `SyntaxKind` enum and a number of newtype
 //! wrappers around `SyntaxNode` which implement `syntax::AstNode`.
 
-use std::{
-    collections::{BTreeSet, HashSet},
-    fmt::Write,
-};
+use std::collections::{BTreeSet, HashSet};
+use std::fmt::Write;
 
 use proc_macro2::{Punct, Spacing};
 use quote::{format_ident, quote};
-use ungrammar::{Grammar, Rule};
-
 use sourcegen::{
     add_preamble, ensure_file_contents, pluralize, project_root, reformat, to_lower_snake_case,
     to_pascal_case, to_upper_snake_case,
 };
+use ungrammar::{Grammar, Rule};
 
 use crate::tests::ast_src::{
     AstEnumSrc, AstEnumVariant, AstNodeSrc, AstSrc, Cardinality, Field, KindsSrc, KINDS_SRC,
@@ -69,7 +66,9 @@ fn generate_tokens(grammar: &AstSrc) -> String {
         "sourcegen_ast",
         reformat(
             quote! {
-                use crate::{SyntaxKind::{self, *}, SyntaxToken, ast::AstToken};
+                use crate::SyntaxKind::{self, *};
+                use crate::SyntaxToken;
+                use crate::ast::AstToken;
                 #(#tokens)*
             }
             .to_string(),
@@ -270,11 +269,9 @@ fn generate_nodes(kinds: KindsSrc<'_>, grammar: &AstSrc) -> String {
     }
 
     let ast = quote! {
-        use crate::{
-            SyntaxNode, SyntaxToken, SyntaxKind::{self, *},
-            ast::{self, AstNode, AstChildren, support},
-            T,
-        };
+        use crate::ast::{self, AstNode, AstChildren, support};
+        use crate::SyntaxKind::{self, *};
+        use crate::{SyntaxNode, SyntaxToken, T};
 
         #(#node_defs)*
         #(#enum_defs)*

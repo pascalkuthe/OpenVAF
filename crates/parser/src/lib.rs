@@ -16,12 +16,9 @@ mod error;
 mod event;
 mod grammar;
 mod parser;
-pub(crate) use token_set::TokenSet;
-
 pub use error::SyntaxError;
-
+pub(crate) use token_set::TokenSet;
 //pub(crate) use token_set::TokenSet;
-
 pub(crate) use tokens::parser::SyntaxKind;
 
 /// `TokenSource` abstracts the source of the tokens parser operates on.

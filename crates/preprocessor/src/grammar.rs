@@ -8,14 +8,15 @@
  *  *****************************************************************************************
  */
 
-use crate::diagnostics::PreprocessorDiagnostic::{self, UnexpectedEof};
-use crate::parser::{CompilerDirective, FullTokenIdx, PreprocessorToken};
-use crate::processor::{Macro, MacroArg, MacroCall, ParsedToken, ParsedTokenKind};
-use crate::sourcemap::{CtxSpan, SourceMap};
-use crate::{parser::Parser, processor::Processor, Diagnostics};
 use text_size::TextRange;
 // use tracing::{debug, trace, trace_span};
 use typed_index_collections::TiVec;
+
+use crate::diagnostics::PreprocessorDiagnostic::{self, UnexpectedEof};
+use crate::parser::{CompilerDirective, FullTokenIdx, Parser, PreprocessorToken};
+use crate::processor::{Macro, MacroArg, MacroCall, ParsedToken, ParsedTokenKind, Processor};
+use crate::sourcemap::{CtxSpan, SourceMap};
+use crate::Diagnostics;
 
 pub(crate) fn parse_condition<'a>(
     p: &mut Parser<'a, '_>,

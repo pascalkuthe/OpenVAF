@@ -1,6 +1,7 @@
-use crate::{BasicBlock, ControlFlowGraph};
 use bitset::BitSet;
 use once_cell::sync::OnceCell;
+
+use crate::{BasicBlock, ControlFlowGraph};
 
 /// Helper type to cache the result of `graph::is_cyclic`.
 #[derive(Clone, Debug, Default)]

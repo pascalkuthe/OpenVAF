@@ -3,19 +3,17 @@ mod generated;
 mod node_ext;
 mod traits;
 
-pub use self::{
-    expr_ext::{ArrayExprKind, BinaryOp, LiteralKind, UnaryOp},
-    generated::{nodes::*, tokens::*},
-    node_ext::{
-        AssignOp, BranchKind, ConstraintKind, ConstraintValue, PathSegment, PathSegmentKind,
-    },
-    traits::*,
-};
-use crate::{
-    syntax_node::{SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken},
-    SyntaxKind,
-};
 use std::marker::PhantomData;
+
+pub use self::expr_ext::{ArrayExprKind, BinaryOp, LiteralKind, UnaryOp};
+pub use self::generated::nodes::*;
+pub use self::generated::tokens::*;
+pub use self::node_ext::{
+    AssignOp, BranchKind, ConstraintKind, ConstraintValue, PathSegment, PathSegmentKind,
+};
+pub use self::traits::*;
+use crate::syntax_node::{SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
+use crate::SyntaxKind;
 
 /// The main trait to go from untyped `SyntaxNode`  to a typed ast. The
 /// conversion itself has zero runtime cost: ast and syntax nodes have exactly

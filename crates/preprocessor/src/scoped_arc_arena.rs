@@ -4,8 +4,9 @@ use sealed::Container;
 pub struct ScopedArea<T: Container>(UnsafeCell<Vec<T>>);
 
 mod sealed {
+    use std::ops::Deref;
+    use std::rc::Rc;
     use std::sync::Arc;
-    use std::{ops::Deref, rc::Rc};
 
     pub trait Container: Deref + Clone {
         fn as_ptr(&self) -> *const Self::Target;

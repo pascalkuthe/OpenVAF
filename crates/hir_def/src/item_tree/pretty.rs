@@ -3,12 +3,11 @@ use std::fmt::{self, Write};
 use basedb::AstId;
 use syntax::ast;
 
-use crate::ItemTree;
-
 use super::{
     BlockScopeItem, Discipline, Function, FunctionItem, ItemTreeId, Module, ModuleItem, Nature,
     Param, Var,
 };
+use crate::ItemTree;
 
 macro_rules! wln {
     ($dst:expr) => {

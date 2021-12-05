@@ -1,8 +1,10 @@
+#[rustfmt::skip]
 mod generated;
 
-use crate::types::{BuiltinInfo, Signature, SignatureData, TyRequirement};
 use generated::bultin_info;
 use hir_def::{BuiltIn, Type};
+
+use crate::types::{BuiltinInfo, Signature, SignatureData, TyRequirement};
 
 impl BuiltinInfo {
     const fn new(signatures: &'static [SignatureData], has_side_effects: bool) -> BuiltinInfo {
@@ -81,6 +83,7 @@ impl From<BuiltIn> for BuiltinInfo {
 }
 
 use std::borrow::Cow;
+
 use TyRequirement::*;
 use Type::*;
 

@@ -1,10 +1,11 @@
-use std::{io, sync::Arc};
+use std::io;
+use std::sync::Arc;
 
+use diagnostics::PreprocessorDiagnostic;
 use sourcemap::{CtxSpan, SourceMap};
 use vfs::{FileId, VfsPath};
 
 use crate::processor::Processor;
-use diagnostics::PreprocessorDiagnostic;
 // use tracing::trace_span;
 
 pub mod diagnostics;

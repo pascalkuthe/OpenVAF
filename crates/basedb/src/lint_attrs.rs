@@ -1,17 +1,13 @@
 use std::sync::Arc;
 
-use crate::{
-    lints::{Lint, LintLevel, LintRegistry, LintSrc},
-    AstIdMap, BaseDB, ErasedAstId,
-};
 use ahash::AHashMap;
-use syntax::{
-    ast::{self, attrs, AstToken, AttrIter, LiteralKind},
-    AstNode, TextRange,
-};
-
 pub use diagnostics::AttrDiagnostic;
+use syntax::ast::{self, attrs, AstToken, AttrIter, LiteralKind};
+use syntax::{AstNode, TextRange};
 use vfs::FileId;
+
+use crate::lints::{Lint, LintLevel, LintRegistry, LintSrc};
+use crate::{AstIdMap, BaseDB, ErasedAstId};
 
 mod diagnostics;
 

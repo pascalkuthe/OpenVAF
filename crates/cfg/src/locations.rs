@@ -1,7 +1,5 @@
-use std::{
-    fmt::{self, Formatter},
-    ops::Index,
-};
+use std::fmt::{self, Formatter};
+use std::ops::Index;
 
 use stdx::{impl_debug, impl_idx_from, impl_idx_math};
 use typed_index_collections::TiVec;

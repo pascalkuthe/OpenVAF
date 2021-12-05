@@ -1,7 +1,5 @@
-use std::{
-    convert::{TryFrom, TryInto},
-    sync::Arc,
-};
+use std::convert::{TryFrom, TryInto};
+use std::sync::Arc;
 
 use ahash::AHashMap;
 use stdx::{impl_debug_display, impl_idx_from};

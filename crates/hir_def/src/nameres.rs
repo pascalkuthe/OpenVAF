@@ -1,12 +1,6 @@
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 
-use crate::{
-    builtin::{insert_builtin_scope, BuiltIn},
-    db::HirDefDB,
-    BlockId, BranchId, DisciplineId, FunctionArgId, FunctionId, Lookup, ModuleId, NatureAttrId,
-    NatureId, NodeId, ParamId, VarId,
-};
 use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx};
 use basedb::FileId;
@@ -14,9 +8,14 @@ use once_cell::sync::Lazy;
 use stdx::{impl_from, impl_from_typed};
 use syntax::name::{kw, Name};
 
-use crate::nameres::diagnostics::PathResolveError;
-
 use self::diagnostics::DefDiagnostic;
+use crate::builtin::{insert_builtin_scope, BuiltIn};
+use crate::db::HirDefDB;
+use crate::nameres::diagnostics::PathResolveError;
+use crate::{
+    BlockId, BranchId, DisciplineId, FunctionArgId, FunctionId, Lookup, ModuleId, NatureAttrId,
+    NatureId, NodeId, ParamId, VarId,
+};
 
 mod collect;
 pub mod diagnostics;

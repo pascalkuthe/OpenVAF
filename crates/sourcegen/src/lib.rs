@@ -1,7 +1,6 @@
-use std::{
-    fmt, fs, mem,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+use std::{fmt, fs, mem};
+
 use xshell::cmd;
 
 pub fn list_rust_files(dir: &Path) -> Vec<PathBuf> {
@@ -251,14 +250,14 @@ pub fn skip_slow_tests() -> bool {
     should_skip
 }
 
-pub fn collect_integration_tests() -> impl Iterator<Item = (String, Vec<String>)> {
+pub fn collect_integration_tests() -> Vec<(String, Vec<String>)> {
     const ERR: &str = "failed to read integration_tests directory";
     let dir = project_root().join("integration_tests");
-    fs::read_dir(dir).expect(ERR).map(|entry|{
+    let mut res: Vec<_> = fs::read_dir(dir).expect(ERR).map(|entry|{
         let entry = entry.expect(ERR);
         assert!(entry.file_type().expect(ERR).is_dir());
         let name = entry.path().file_name().expect(ERR).to_str().expect("intergation test names must be valid UTF-8").to_owned();
-        let children = fs::read_dir(entry.path()).expect(ERR).filter_map(|entry|{
+        let mut children: Vec<_> = fs::read_dir(entry.path()).expect(ERR).filter_map(|entry|{
             let entry = entry.expect(ERR);
             let include =  entry.path().extension().and_then(|ex|ex.to_str()).map_or(false, |ex|matches!(ex,"va"|"vams"|"include"));
             if !include{
@@ -266,7 +265,10 @@ pub fn collect_integration_tests() -> impl Iterator<Item = (String, Vec<String>)
             }
             include.then(||entry.file_name().to_str().unwrap().to_owned())
         }).collect();
+        children.sort_unstable();
         assert!(entry.path().join(format!("{}.va",name.to_lowercase())).exists());
         (name, children)
-    })
+    }).collect();
+    res.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    res
 }

@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use basedb::{BaseDB, FileId};
 
+use crate::body::{AnalogBehaviour, BodySourceMap, ExprBody, ParamBody};
+use crate::data::{
+    BranchData, DisciplineData, FunctionData, NatureData, NodeData, ParamData, VarData,
+};
+use crate::item_tree::ItemTree;
+use crate::nameres::DefMap;
 use crate::{
-    body::{AnalogBehaviour, BodySourceMap, ExprBody, ParamBody},
-    data::{BranchData, DisciplineData, FunctionData, NatureData, NodeData, ParamData, VarData},
-    item_tree::ItemTree,
-    nameres::DefMap,
     BlockId, BlockLoc, BranchId, BranchLoc, DefWithBehaviourId, DefWithBodyId, DefWithExprId,
     DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionArgId,
     FunctionArgLoc, FunctionId, FunctionLoc, ModuleId, ModuleLoc, NatureAttrId, NatureAttrLoc,

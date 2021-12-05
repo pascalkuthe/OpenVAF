@@ -1,18 +1,17 @@
 use std::iter::once;
 
 use stdx::iter::zip;
-use syntax::{
-    sourcemap::FileSpan, AstNode, SyntaxError, SyntaxKind::BLOCK_STMT, TextRange, TextSize,
-};
+use syntax::sourcemap::FileSpan;
+use syntax::SyntaxKind::BLOCK_STMT;
+use syntax::{AstNode, SyntaxError, TextRange, TextSize};
 
-use crate::{
-    diagnostics::{
-        text_range_list_to_unified_spans, text_ranges_to_unified_spans, Diagnostic, Label,
-        LabelStyle, Report,
-    },
-    lints::{builtin::vams_keyword_compat, Lint, LintSrc},
-    BaseDB, FileId,
+use crate::diagnostics::{
+    text_range_list_to_unified_spans, text_ranges_to_unified_spans, Diagnostic, Label, LabelStyle,
+    Report,
 };
+use crate::lints::builtin::vams_keyword_compat;
+use crate::lints::{Lint, LintSrc};
+use crate::{BaseDB, FileId};
 
 fn syntax_err_report(missing_delimeter: bool) -> Report {
     if missing_delimeter {

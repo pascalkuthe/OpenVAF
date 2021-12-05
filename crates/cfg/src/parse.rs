@@ -1,12 +1,16 @@
-use std::{any::type_name, fmt::Display, hash::Hash, str::FromStr};
+use std::any::type_name;
+use std::fmt::Display;
+use std::hash::Hash;
+use std::str::FromStr;
 
 use ahash::AHashMap;
 use lasso::{MiniSpur, Rodeo};
 use typed_index_collections::TiVec;
 
+use crate::ty::Array;
 use crate::{
-    ty::Array, BasicBlock, BasicBlockData, CfgParam, Const, ControlFlowGraph, Instruction, Local,
-    Op, Operand, Phi, Terminator,
+    BasicBlock, BasicBlockData, CfgParam, Const, ControlFlowGraph, Instruction, Local, Op, Operand,
+    Phi, Terminator,
 };
 
 pub(crate) struct CfgParser {

@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
-use crate::db::HirTyDB;
+use hir_def::nameres::diagnostics::PathResolveError;
+use hir_def::nameres::DefMap;
 use hir_def::{
-    nameres::{diagnostics::PathResolveError, DefMap},
     BranchId, DisciplineId, Intern, Lookup, NatureAttrId, NatureAttrLoc, NatureId, NatureRef,
     NatureRefKind, NodeId, Path, ScopeId,
 };
 use syntax::name::{kw, Name};
+
+use crate::db::HirTyDB;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NatureTy {

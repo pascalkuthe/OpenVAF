@@ -1,7 +1,8 @@
 pub mod lexer;
 pub mod parser;
 
-use lexer::{LiteralKind, TokenKind::*};
+use lexer::LiteralKind;
+use lexer::TokenKind::*;
 pub use parser::SyntaxKind;
 
 pub enum LexerErrorKind {

@@ -1,22 +1,15 @@
-use std::{io, sync::Arc};
+use std::io;
+use std::sync::Arc;
 
-use codespan_reporting::{
-    diagnostic::Severity,
-    files::Files,
-    term::{
-        emit,
-        termcolor::{StandardStream, WriteColor},
-        Config,
-    },
-};
-
+use codespan_reporting::diagnostic::Severity;
+use codespan_reporting::files::Files;
 pub use codespan_reporting::term::termcolor::{Ansi, Buffer, ColorChoice, NoColor};
+use codespan_reporting::term::termcolor::{StandardStream, WriteColor};
+use codespan_reporting::term::{emit, Config};
 use vfs::VfsPath;
 
-use crate::{
-    diagnostics::{Diagnostic, Report},
-    BaseDB, FileId,
-};
+use crate::diagnostics::{Diagnostic, Report};
+use crate::{BaseDB, FileId};
 
 pub trait DiagnosticSink {
     fn add_report(&mut self, report: Report);

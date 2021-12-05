@@ -3,22 +3,19 @@ use std::sync::Arc;
 use ahash::AHashMap as HashMap;
 use arena::Arena;
 use basedb::{AstId, FileId};
-use syntax::{ast, name::Name};
+use syntax::ast;
+use syntax::name::Name;
 
+use super::diagnostics::DefDiagnostic;
+use super::{DefMap, DefMapSource, LocalScopeId, Scope, ScopeDefItem, ScopeOrigin};
+use crate::db::HirDefDB;
+use crate::item_tree::{
+    BlockScopeItem, Function, FunctionItem, ItemTree, ItemTreeId, ItemTreeNode, Module, ModuleItem,
+    RootItem,
+};
 use crate::{
-    db::HirDefDB,
-    item_tree::Function,
-    item_tree::{
-        BlockScopeItem, FunctionItem, ItemTree, ItemTreeId, ItemTreeNode, Module, ModuleItem,
-        RootItem,
-    },
     BlockId, BlockLoc, DisciplineLoc, FunctionArgLoc, FunctionId, FunctionLoc, Intern, ItemLoc,
     Lookup, ModuleLoc, NatureAttrLoc, NatureLoc, NodeLoc, ScopeId,
-};
-
-use super::{
-    diagnostics::DefDiagnostic, DefMap, DefMapSource, LocalScopeId, Scope, ScopeDefItem,
-    ScopeOrigin,
 };
 
 pub fn collect_root_def_map(db: &dyn HirDefDB, root_file: FileId) -> Arc<DefMap> {

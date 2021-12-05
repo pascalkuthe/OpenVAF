@@ -1,24 +1,22 @@
-use std::{mem, sync::Arc};
+use std::mem;
+use std::sync::Arc;
 
 use arena::IdxRange;
 use basedb::{AstId, AstIdMap, FileId};
-
-use syntax::{
-    ast::{self, PathSegmentKind},
-    match_ast,
-    name::{kw, AsIdent, AsName},
-    AstNode, WalkEvent,
-};
+use syntax::ast::{self, PathSegmentKind};
+use syntax::name::{kw, AsIdent, AsName};
+use syntax::{match_ast, AstNode, WalkEvent};
 use typed_index_collections::TiVec;
-// use tracing::trace;
-
-use crate::{db::HirDefDB, types::AsType, LocalFunctionArgId, LocalNodeId, Path, Type};
 
 use super::{
     Block, Branch, BranchKind, Discipline, DisciplineAttr, DisciplineAttrKind, Domain, Function,
     FunctionArg, FunctionItem, ItemTree, ItemTreeId, Module, ModuleItem, Nature, NatureAttr,
     NatureRef, NatureRefKind, Net, Node, Param, Port, RootItem, Var,
 };
+// use tracing::trace;
+use crate::db::HirDefDB;
+use crate::types::AsType;
+use crate::{LocalFunctionArgId, LocalNodeId, Path, Type};
 
 fn is_input(direction: &Option<ast::Direction>) -> bool {
     direction.as_ref().map_or(false, |it| it.input_token().is_some() || it.inout_token().is_some())

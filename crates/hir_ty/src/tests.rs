@@ -1,15 +1,14 @@
-use crate::db::{HirTyDB, HirTyDatabase};
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsStorage};
-use hir_def::{
-    db::{HirDefDB, HirDefDatabase, InternDatabase},
-    nameres::{DefMap, LocalScopeId},
-};
+use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
+use hir_def::nameres::{DefMap, LocalScopeId};
 use parking_lot::RwLock;
 use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
 use stdx::format_to;
+
+use crate::db::{HirTyDB, HirTyDatabase};
 
 mod integration;
 
@@ -80,10 +79,8 @@ impl VfsStorage for TestDataBase {
 pub fn generate_integration_tests() {
     let tests = collect_integration_tests();
     let file = project_root().join("crates/hir_ty/src/tests/integration.rs");
-    let test_impl = tests.map(|(test_name,files)|{
-        let root_file_path = project_root()
-            .join(format!("integration_tests/{}/{}.va", test_name, test_name.to_lowercase()))
-            .to_str().unwrap().to_owned();
+    let test_impl = tests.into_iter().map(|(test_name,files)|{
+        let root_file = format!("/{}.va",test_name.to_lowercase());
         let file_names = files
             .iter()
             .map(|file| format!("/{}", file))
@@ -97,8 +94,7 @@ pub fn generate_integration_tests() {
                 if skip_slow_tests(){
                     return
                 }
-                let root_file = read_to_string(PathBuf::from(#root_file_path)).unwrap();
-                let db = TestDataBase::new("/root.va",&root_file);
+                let db = TestDataBase::new(#root_file,"");
                 #(
                     {
                         let path = project_root().join("integration_tests").join(#test_name).join(#files);
@@ -112,16 +108,18 @@ pub fn generate_integration_tests() {
         }
     });
 
-    let file_string = quote!(
-        use crate::{tests::TestDataBase};
-        use sourcegen::{skip_slow_tests,project_root};
-        use std::{fs::read_to_string,path::PathBuf};
+    let header = "use std::fs::read_to_string;
+
         use expect_test::expect_file;
+        use sourcegen::{skip_slow_tests,project_root};
+
+        use crate::tests::TestDataBase;
+    ";
+
+    let file_string = quote!(
         #(#test_impl)*
-    )
-    .to_string();
-
+    );
+    let file_string = format!("{}\n{}", header, file_string);
     let file_string = add_preamble("generate_integration_tests", reformat(file_string));
-
     ensure_file_contents(&file, &file_string);
 }

@@ -1,9 +1,10 @@
+use std::borrow::Cow;
+use std::iter::FlatMap;
+
 use rowan::{GreenNodeData, GreenTokenData, NodeOrToken};
 
 use crate::ast::{support, AstChildren};
 use crate::{ast, AstNode, SyntaxNode, TokenText};
-use std::borrow::Cow;
-use std::iter::FlatMap;
 
 pub trait ArgListOwner: AstNode {
     fn arg_list(&self) -> Option<ast::ArgList> {

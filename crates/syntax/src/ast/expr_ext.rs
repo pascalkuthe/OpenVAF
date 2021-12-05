@@ -2,12 +2,9 @@
 
 use stdx::impl_display;
 
-use crate::{
-    ast::{self, support, AstChildren, AstNode, AstToken},
-    SyntaxToken, T,
-};
-
 use super::Stmt;
+use crate::ast::{self, support, AstChildren, AstNode, AstToken};
+use crate::{SyntaxToken, T};
 
 impl ast::Expr {
     pub fn as_literal(&self) -> Option<LiteralKind> {

@@ -1,7 +1,7 @@
-use crate::{ast, AstPtr};
-use crate::{SyntaxKind, SyntaxNodePtr};
 use stdx::{impl_display, pretty};
 use text_size::TextRange;
+
+use crate::{ast, AstPtr, SyntaxKind, SyntaxNodePtr};
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum SyntaxError {

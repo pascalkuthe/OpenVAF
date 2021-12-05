@@ -4,9 +4,9 @@ use arena::Arena;
 use syntax::name::Name;
 use typed_index_collections::TiSlice;
 
+use crate::db::HirDefDB;
+use crate::item_tree::{self, BranchKind, DisciplineAttrKind, Domain, NatureRef};
 use crate::{
-    db::HirDefDB,
-    item_tree::{self, BranchKind, DisciplineAttrKind, Domain, NatureRef},
     BranchId, DisciplineId, FunctionId, ItemTree, LocalFunctionArgId, LocalNatureAttrId, Lookup,
     NatureId, NodeId, ParamId, Type, VarId,
 };
@@ -158,6 +158,16 @@ impl NodeData {
     #[inline]
     pub fn is_port(&self) -> bool {
         self.is_input | self.is_output
+    }
+
+    #[inline]
+    pub fn read_only(&self) -> bool {
+        self.is_input & !self.is_output
+    }
+
+    #[inline]
+    pub fn write_only(&self) -> bool {
+        self.is_output & !self.is_input
     }
 }
 
