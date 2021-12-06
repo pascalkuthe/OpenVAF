@@ -320,37 +320,6 @@ impl NatureAttrLoc {
 impl_intern!(NatureAttrId, NatureAttrLoc, intern_nature_attr, lookup_intern_nature_attr);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DefWithExprId {
-    VarId(VarId),
-    NatureAttrId(NatureAttrId),
-    DisciplineAttrId(DisciplineAttrId),
-}
-
-impl DefWithExprId {
-    pub fn ty(&self, db: &dyn HirDefDB) -> Option<Type> {
-        match self {
-            DefWithExprId::VarId(var) => Some(db.var_data(*var).ty.clone()),
-            // TODO different types?
-            DefWithExprId::NatureAttrId(_) | DefWithExprId::DisciplineAttrId(_) => None,
-        }
-    }
-}
-
-impl DefWithExprId {
-    pub fn file(&self, db: &dyn HirDefDB) -> FileId {
-        match self {
-            DefWithExprId::VarId(var) => var.lookup(db).scope.root_file,
-            DefWithExprId::NatureAttrId(attr) => attr.lookup(db).nature.lookup(db).root_file,
-            DefWithExprId::DisciplineAttrId(attr) => {
-                attr.lookup(db).discipline.lookup(db).root_file
-            }
-        }
-    }
-}
-
-impl_from!(VarId, NatureAttrId,DisciplineAttrId for DefWithExprId);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithBodyId {
     ParamId(ParamId),
     ModuleId(ModuleId),
@@ -358,6 +327,19 @@ pub enum DefWithBodyId {
     VarId(VarId),
     NatureAttrId(NatureAttrId),
     DisciplineAttrId(DisciplineAttrId),
+}
+
+impl DefWithBodyId {
+    pub fn file(self, db: &dyn HirDefDB) -> FileId {
+        match self {
+            DefWithBodyId::ParamId(id) => id.lookup(db).scope.root_file,
+            DefWithBodyId::ModuleId(id) => id.lookup(db).scope.root_file,
+            DefWithBodyId::FunctionId(id) => id.lookup(db).scope.root_file,
+            DefWithBodyId::VarId(id) => id.lookup(db).scope.root_file,
+            DefWithBodyId::NatureAttrId(id) => id.lookup(db).nature.lookup(db).root_file,
+            DefWithBodyId::DisciplineAttrId(id) => id.lookup(db).discipline.lookup(db).root_file,
+        }
+    }
 }
 
 impl_from!(ParamId, ModuleId,FunctionId,VarId,NatureAttrId,DisciplineAttrId for DefWithBodyId);
@@ -374,47 +356,5 @@ impl TryFrom<ScopeDefItem> for DefWithBodyId {
             _ => return Err(()),
         };
         Ok(res)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DefWithBehaviourId {
-    ModuleId(ModuleId),
-    FunctionId(FunctionId),
-}
-
-impl DefWithBehaviourId {
-    pub fn file(&self, db: &dyn HirDefDB) -> FileId {
-        match self {
-            DefWithBehaviourId::ModuleId(module) => module.lookup(db).scope.root_file,
-            DefWithBehaviourId::FunctionId(function) => function.lookup(db).scope.root_file,
-        }
-    }
-}
-
-impl_from!( ModuleId,FunctionId for DefWithBehaviourId);
-
-impl TryFrom<ScopeDefItem> for DefWithExprId {
-    type Error = ();
-
-    fn try_from(item: ScopeDefItem) -> Result<Self, Self::Error> {
-        match item {
-            ScopeDefItem::VarId(var) => Ok(var.into()),
-            // ScopeDefItem::NatureAttrId(attr) => Ok(attr.into()),
-            // ScopeDefItem::DisciplineAttrId(attr) => Ok(attr.into()),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<ScopeDefItem> for DefWithBehaviourId {
-    type Error = ();
-
-    fn try_from(item: ScopeDefItem) -> Result<Self, Self::Error> {
-        match item {
-            ScopeDefItem::ModuleId(module) => Ok(module.into()),
-            ScopeDefItem::FunctionId(fun) => Ok(fun.into()),
-            _ => Err(()),
-        }
     }
 }

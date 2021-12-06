@@ -8,7 +8,6 @@
 //!    attached separately via id-based side map.
 //! 3. Unresolved. Paths are stored as sequences of names, and not as defs the
 //!    names refer to.
-//! 4. Desugared. There's no `if let`.
 //!
 //! See also a neighboring `body` module.
 
@@ -235,6 +234,15 @@ impl Stmt {
                     f(*stmt)
                 }
             }
+        }
+    }
+
+    #[inline]
+    pub fn unwrap_expr(&self) -> ExprId {
+        if let Stmt::Expr(e) = self {
+            *e
+        } else {
+            unreachable!("Called unwrap_expr on {:?}", self)
         }
     }
 }

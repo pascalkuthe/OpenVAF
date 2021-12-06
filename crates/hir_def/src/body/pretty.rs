@@ -1,7 +1,7 @@
 use core::fmt;
 use std::fmt::Write;
 
-use super::{AnalogBehaviour, Body};
+use super::Body;
 use crate::db::HirDefDB;
 use crate::expr::CaseCond;
 use crate::nameres::DefMapSource;
@@ -25,17 +25,12 @@ macro_rules! w {
     };
 }
 
-impl AnalogBehaviour {
+impl Body {
     pub fn dump(&self, db: &dyn HirDefDB) -> String {
-        let mut printer = Printer {
-            body: &self.body,
-            db,
-            buf: String::new(),
-            indent_level: 0,
-            needs_indent: true,
-        };
+        let mut printer =
+            Printer { body: self, db, buf: String::new(), indent_level: 0, needs_indent: true };
 
-        for stmt in &*self.root_stmts {
+        for stmt in &*self.entry_stmts {
             w!(&mut printer, "analog ");
             printer.pretty_print_stmt(*stmt)
         }

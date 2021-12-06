@@ -250,9 +250,9 @@ impl LowerCtx<'_> {
         id
     }
 
-    // desugared exprs don't have ptr, that's wrong and should be fixed
+    // desugared stmts don't have ptr, that's wrong and should be fixed
     // somehow.
-    fn alloc_stmt_desugared(&mut self, stmt: Stmt) -> StmtId {
+    pub(super) fn alloc_stmt_desugared(&mut self, stmt: Stmt) -> StmtId {
         self.make_stmt(stmt, None, LintAttrs::empty(self.curr_scope.1))
     }
 

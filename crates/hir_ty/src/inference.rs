@@ -4,14 +4,14 @@ use std::sync::Arc;
 
 use ahash::AHashMap;
 use arena::ArenaMap;
-use hir_def::body::{Body, ConstraintValue, Range};
+use hir_def::body::Body;
 use hir_def::db::HirDefDB;
 use hir_def::expr::{CaseCond, Literal};
 use hir_def::nameres::diagnostics::PathResolveError;
 use hir_def::nameres::{NatureAccess, ResolvedPath, ScopeDefItem, ScopeDefItemKind};
 use hir_def::{
-    BranchId, BuiltIn, DefWithBehaviourId, DefWithExprId, Expr, ExprId, FunctionArgLoc, FunctionId,
-    LocalFunctionArgId, Lookup, NatureId, NodeId, ParamId, Path, Stmt, StmtId, Type, VarId,
+    BranchId, BuiltIn, DefWithBodyId, Expr, ExprId, FunctionArgLoc, FunctionId, LocalFunctionArgId,
+    Lookup, NatureId, NodeId, Path, Stmt, StmtId, Type, VarId,
 };
 use stdx::impl_from;
 use stdx::iter::zip;
@@ -73,57 +73,23 @@ pub struct InferenceResult {
 }
 
 impl InferenceResult {
-    fn new(body: &Body) -> InferenceResult {
-        InferenceResult {
+    pub fn infere_body_query(db: &dyn HirTyDB, id: DefWithBodyId) -> Arc<InferenceResult> {
+        let body = db.body(id);
+        let result = InferenceResult {
             expr_types: ArenaMap::from(vec![Ty::Val(Type::Err); body.exprs.len()]),
             ..Default::default()
+        };
+
+        let expr_stmt_ty = match id {
+            DefWithBodyId::ParamId(param) => Some(db.param_data(param).ty.clone()),
+            DefWithBodyId::VarId(var) => Some(db.var_data(var).ty.clone()),
+            _ => None,
+        };
+        let mut ctx = Ctx { result, body: &body, db, expr_stmt_ty };
+
+        for stmt in &*body.entry_stmts {
+            ctx.infere_stmt(*stmt);
         }
-    }
-
-    pub fn infere_analog_behaviour_query(
-        db: &dyn HirTyDB,
-        id: DefWithBehaviourId,
-    ) -> Arc<InferenceResult> {
-        let behaviour = db.analog_behaviour(id);
-        let mut ctx =
-            Ctx { result: InferenceResult::new(&behaviour.body), body: &behaviour.body, db };
-        for root_stmt in &behaviour.root_stmts {
-            ctx.infere_stmt(*root_stmt);
-        }
-        Arc::new(ctx.result)
-    }
-
-    pub fn infere_param_body_query(db: &dyn HirTyDB, param: ParamId) -> Arc<InferenceResult> {
-        let body = db.param_body(param);
-        let mut ctx = Ctx { result: InferenceResult::new(&body.body), body: &body.body, db };
-        let ty = &db.param_data(param).ty;
-
-        // A dummy stmt is used
-        let stmt = StmtId::from(0u32);
-
-        ctx.infere_assigment(stmt, body.default, Some(ty.clone()));
-
-        for bound in &body.bounds {
-            match bound.val {
-                ConstraintValue::Value(val) => ctx.infere_assigment(stmt, val, Some(ty.clone())),
-                ConstraintValue::Range(Range { start, end, .. }) => {
-                    ctx.infere_assigment(stmt, start, Some(ty.clone()));
-                    ctx.infere_assigment(stmt, end, Some(ty.clone()));
-                }
-            }
-        }
-
-        Arc::new(ctx.result)
-    }
-
-    pub fn infere_expr_body_query(db: &dyn HirTyDB, id: DefWithExprId) -> Arc<InferenceResult> {
-        let body = db.expr_body(id);
-        let mut ctx = Ctx { result: InferenceResult::new(&body.body), body: &body.body, db };
-
-        // A dummy stmt is used
-        let stmt = StmtId::from(0u32);
-
-        ctx.infere_assigment(stmt, body.val, id.ty(db.upcast()));
 
         Arc::new(ctx.result)
     }
@@ -133,13 +99,19 @@ struct Ctx<'a> {
     result: InferenceResult,
     body: &'a Body,
     db: &'a dyn HirTyDB,
+    /// A Body that only represent expressions have expr stmts as entry_stmts.
+    /// These need to be type checked properly.
+    /// For behavioural (anlog body and function) and untype (nature attr)
+    /// bodys this is simply none
+    expr_stmt_ty: Option<Type>,
 }
 
 impl Ctx<'_> {
     pub fn infere_stmt(&mut self, stmt: StmtId) {
         match self.body.stmts[stmt] {
             Stmt::Expr(expr) => {
-                self.infere_expr(stmt, expr);
+                // TODO lint for side effect free expressions
+                self.infere_assigment(stmt, expr, self.expr_stmt_ty.clone());
             }
             Stmt::Assigment { dst, val, ref assignment_kind } => {
                 let dst_ty = self.infere_assigment_dst(stmt, dst, assignment_kind);
@@ -456,8 +428,18 @@ impl Ctx<'_> {
             return Some(Ty::Val(fun_info.return_ty.clone()));
         }
 
-        let signature =
-            fun_info.args.iter().map(|arg| TyRequirement::Val(arg.ty.clone())).collect();
+        let signature = fun_info
+            .args
+            .iter()
+            .map(|arg| {
+                if arg.is_output {
+                    // Output arguments must be variables
+                    TyRequirement::Var(arg.ty.clone())
+                } else {
+                    TyRequirement::Val(arg.ty.clone())
+                }
+            })
+            .collect();
 
         self.resolve_function_args(
             stmt,
@@ -518,14 +500,10 @@ impl Ctx<'_> {
             }
 
             NATURE_ACCESS_NODES | NATURE_ACCESS_NODE_GND => {
-                // TOOD validation check compatability for two nodes
                 self.result.expr_types[arg].unwrap_node()
             }
 
-            NATURE_ACCESS_PORT_FLOW => {
-                // TODO validation check that this is actually a port
-                self.result.expr_types[arg].unwrap_port_flow()
-            }
+            NATURE_ACCESS_PORT_FLOW => self.result.expr_types[arg].unwrap_port_flow(),
             var => unreachable!("{:?}", var),
         };
 
@@ -590,14 +568,6 @@ impl Ctx<'_> {
         debug_assert_ne!(&signature.raw, &[]);
 
         let ty = self.resolve_function_args(stmt, expr, args, signature, None)?;
-
-        // if builtin == BuiltIn::potential TODO validation
-        //     && self.result.resolved_signatures.get(expr) == Some(&NATURE_ACCESS_PORT_FLOW)
-        // {
-        //     self.result
-        //         .diagnostics
-        //         .push(InferenceDiagnostic::PotentialOfPortFlow { expr, port_flow: args[0] })
-        // }
 
         Some(ty)
     }
@@ -954,7 +924,6 @@ pub enum InferenceDiagnostic {
     ArrayTypeMissmatch(ArrayTypeMissmatch),
     InvalidUnkown { e: ExprId },
     NonStandardUnkown { e: ExprId, stmt: StmtId },
-    // PotentialOfPortFlow { expr: ExprId, port_flow: ExprId }, TODO validation
 }
 
 impl_from!(TypeMissmatch,SignatureMissmatch, ArrayTypeMissmatch for InferenceDiagnostic);

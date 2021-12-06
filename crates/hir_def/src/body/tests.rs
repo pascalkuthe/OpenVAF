@@ -9,7 +9,7 @@ fn check_db(db: TestDataBase, expect: Expect) {
     assert_eq!(db.parse(db.root_file()).errors(), &[]);
     let actual = db.lower_and_check();
     assert_eq!(actual, "");
-    let actual = db.analog_behaviour(ModuleId(0u32.into()).into()).dump(&db);
+    let actual = db.body(ModuleId(0u32.into()).into()).dump(&db);
     expect.assert_eq(&actual);
 }
 
@@ -22,7 +22,7 @@ fn check_db_fun(db: TestDataBase, expect: Expect) {
     assert_eq!(db.parse(db.root_file()).errors(), &[]);
     let actual = db.lower_and_check();
     assert_eq!(actual, "");
-    let actual = db.analog_behaviour(FunctionId(0u32.into()).into()).dump(&db);
+    let actual = db.body(FunctionId(0u32.into()).into()).dump(&db);
     expect.assert_eq(&actual);
 }
 
