@@ -551,13 +551,13 @@ impl Ctx<'_> {
             return default_return_ty(info.signatures);
         }
 
-        let signature = match builtin {
+        let signatures = match builtin {
             BuiltIn::ddx => {
                 self.infere_ddx(stmt, expr, args[0], args[1]);
                 return Some(Ty::Val(Type::Real));
             }
             _ if info.max_args.is_none() => {
-                debug_assert_eq!(info.signatures.len(), 1);
+                debug_assert_eq!(info.signatures.len(), 1, "{:?}", builtin);
                 let mut signature = info.signatures[0].clone();
                 signature.args.to_mut().resize_with(args.len(), || TyRequirement::AnyVal);
                 Cow::Owned(TiVec::from(vec![signature]))
@@ -565,9 +565,9 @@ impl Ctx<'_> {
             _ => Cow::Borrowed(TiSlice::from_ref(info.signatures)),
         };
 
-        debug_assert_ne!(&signature.raw, &[]);
+        debug_assert_ne!(&signatures.raw, &[]);
 
-        let ty = self.resolve_function_args(stmt, expr, args, signature, None)?;
+        let ty = self.resolve_function_args(stmt, expr, args, signatures, None)?;
 
         Some(ty)
     }

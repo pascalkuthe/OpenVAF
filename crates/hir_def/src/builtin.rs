@@ -9,128 +9,170 @@ use crate::nameres::ScopeDefItem;
 #[allow(nonstandard_style, unreachable_pub)]
 #[repr(u8)]
 pub enum BuiltIn {
-    analysis = 0u8,
+    abs = 0u8,
     acos = 1u8,
     acosh = 2u8,
-    ac_stim = 3u8,
-    asin = 4u8,
-    asinh = 5u8,
-    atan = 6u8,
-    atan2 = 7u8,
-    atanh = 8u8,
-    cos = 9u8,
-    cosh = 10u8,
-    ddt = 11u8,
-    ddx = 12u8,
-    exp = 13u8,
-    flicker_noise = 14u8,
-    floor = 15u8,
-    flow = 16u8,
-    potential = 17u8,
-    hypot = 18u8,
-    idt = 19u8,
-    idtmod = 20u8,
-    laplace_nd = 21u8,
-    laplace_np = 22u8,
-    laplace_zd = 23u8,
-    laplace_zp = 24u8,
-    limexp = 25u8,
-    ln = 26u8,
-    log = 27u8,
-    max = 28u8,
-    min = 29u8,
-    noise_table = 30u8,
-    noise_table_log = 31u8,
-    pow = 32u8,
-    sin = 33u8,
-    sinh = 34u8,
-    sqrt = 35u8,
-    tan = 36u8,
-    tanh = 37u8,
-    last_crossing = 38u8,
-    slew = 39u8,
-    white_noise = 40u8,
-    absdelay = 41u8,
-    zi_nd = 42u8,
-    zi_np = 43u8,
-    zi_zd = 44u8,
-    zi_zp = 45u8,
-    display = 46u8,
-    strobe = 47u8,
-    write = 48u8,
-    monitor = 49u8,
-    debug = 50u8,
-    fclose = 51u8,
-    fopen = 52u8,
-    fdisplay = 53u8,
-    fwrite = 54u8,
-    fstrobe = 55u8,
-    fmonitor = 56u8,
-    fgets = 57u8,
-    fscanf = 58u8,
-    swrite = 59u8,
-    sformat = 60u8,
-    sscanf = 61u8,
-    rewind = 62u8,
-    fseek = 63u8,
-    ftell = 64u8,
-    fflush = 65u8,
-    ferror = 66u8,
-    feof = 67u8,
-    fdebug = 68u8,
-    finish = 69u8,
-    stop = 70u8,
-    fatal = 71u8,
-    warning = 72u8,
-    error = 73u8,
-    info = 74u8,
-    abstime = 75u8,
-    dist_chi_square = 76u8,
-    dist_exponential = 77u8,
-    dist_poisson = 78u8,
-    dist_uniform = 79u8,
-    dist_erlang = 80u8,
-    dist_normal = 81u8,
-    dist_t = 82u8,
-    random = 83u8,
-    arandom = 84u8,
-    rdist_chi_square = 85u8,
-    rdist_exponential = 86u8,
-    rdist_poisson = 87u8,
-    rdist_uniform = 88u8,
-    rdist_erlang = 89u8,
-    rdist_normal = 90u8,
-    rdist_t = 91u8,
-    clog2 = 92u8,
-    log10 = 93u8,
-    ceil = 94u8,
-    temperature = 95u8,
-    vt = 96u8,
-    simparam = 97u8,
-    simprobe = 98u8,
-    discontinuity = 99u8,
-    limit = 100u8,
-    bound_step = 101u8,
-    mfactor = 102u8,
-    xposition = 103u8,
-    yposition = 104u8,
-    angle = 105u8,
-    hflip = 106u8,
-    vflip = 107u8,
-    param_given = 108u8,
-    port_connected = 109u8,
-    analog_node_alias = 110u8,
-    analog_port_alias = 111u8,
-    test_plusargs = 112u8,
-    value_plusargs = 113u8,
-    simparam_str = 114u8,
-    abs = 115u8,
+    asin = 3u8,
+    asinh = 4u8,
+    atan = 5u8,
+    atan2 = 6u8,
+    atanh = 7u8,
+    cos = 8u8,
+    cosh = 9u8,
+    exp = 10u8,
+    floor = 11u8,
+    flow = 12u8,
+    potential = 13u8,
+    hypot = 14u8,
+    ln = 15u8,
+    log = 16u8,
+    max = 17u8,
+    min = 18u8,
+    pow = 19u8,
+    sin = 20u8,
+    sinh = 21u8,
+    sqrt = 22u8,
+    tan = 23u8,
+    tanh = 24u8,
+    display = 25u8,
+    strobe = 26u8,
+    write = 27u8,
+    monitor = 28u8,
+    debug = 29u8,
+    fclose = 30u8,
+    fopen = 31u8,
+    fdisplay = 32u8,
+    fwrite = 33u8,
+    fstrobe = 34u8,
+    fmonitor = 35u8,
+    fgets = 36u8,
+    fscanf = 37u8,
+    swrite = 38u8,
+    sformat = 39u8,
+    sscanf = 40u8,
+    rewind = 41u8,
+    fseek = 42u8,
+    ftell = 43u8,
+    fflush = 44u8,
+    ferror = 45u8,
+    feof = 46u8,
+    fdebug = 47u8,
+    finish = 48u8,
+    stop = 49u8,
+    fatal = 50u8,
+    warning = 51u8,
+    error = 52u8,
+    info = 53u8,
+    abstime = 54u8,
+    dist_chi_square = 55u8,
+    dist_exponential = 56u8,
+    dist_poisson = 57u8,
+    dist_uniform = 58u8,
+    dist_erlang = 59u8,
+    dist_normal = 60u8,
+    dist_t = 61u8,
+    random = 62u8,
+    arandom = 63u8,
+    rdist_chi_square = 64u8,
+    rdist_exponential = 65u8,
+    rdist_poisson = 66u8,
+    rdist_uniform = 67u8,
+    rdist_erlang = 68u8,
+    rdist_normal = 69u8,
+    rdist_t = 70u8,
+    clog2 = 71u8,
+    log10 = 72u8,
+    ceil = 73u8,
+    temperature = 74u8,
+    vt = 75u8,
+    simparam = 76u8,
+    simparam_str = 77u8,
+    simprobe = 78u8,
+    discontinuity = 79u8,
+    mfactor = 80u8,
+    xposition = 81u8,
+    yposition = 82u8,
+    angle = 83u8,
+    hflip = 84u8,
+    vflip = 85u8,
+    param_given = 86u8,
+    port_connected = 87u8,
+    analog_node_alias = 88u8,
+    analog_port_alias = 89u8,
+    test_plusargs = 90u8,
+    value_plusargs = 91u8,
+    analysis = 92u8,
+    ac_stim = 93u8,
+    noise_table = 94u8,
+    noise_table_log = 95u8,
+    white_noise = 96u8,
+    flicker_noise = 97u8,
+    limit = 98u8,
+    bound_step = 99u8,
+    absdelay = 100u8,
+    ddt = 101u8,
+    idt = 102u8,
+    idtmod = 103u8,
+    ddx = 104u8,
+    zi_nd = 105u8,
+    zi_np = 106u8,
+    zi_zd = 107u8,
+    zi_zp = 108u8,
+    laplace_nd = 109u8,
+    laplace_np = 110u8,
+    laplace_zd = 111u8,
+    laplace_zp = 112u8,
+    limexp = 113u8,
+    last_crossing = 114u8,
+    slew = 115u8,
+}
+impl BuiltIn {
+    #[allow(clippy::match_like_matches_macro)]
+    pub fn is_analog_operator(self) -> bool {
+        match self {
+            BuiltIn::absdelay
+            | BuiltIn::ddt
+            | BuiltIn::idt
+            | BuiltIn::idtmod
+            | BuiltIn::ddx
+            | BuiltIn::zi_nd
+            | BuiltIn::zi_np
+            | BuiltIn::zi_zd
+            | BuiltIn::zi_zp
+            | BuiltIn::laplace_nd
+            | BuiltIn::laplace_np
+            | BuiltIn::laplace_zd
+            | BuiltIn::laplace_zp
+            | BuiltIn::limexp
+            | BuiltIn::last_crossing
+            | BuiltIn::slew => true,
+            _ => false,
+        }
+    }
+    #[allow(clippy::match_like_matches_macro)]
+    pub fn is_analog_operator_sysfun(self) -> bool {
+        match self {
+            BuiltIn::limit | BuiltIn::bound_step => true,
+            _ => false,
+        }
+    }
+    #[allow(clippy::match_like_matches_macro)]
+    pub fn is_analysis_var(self) -> bool {
+        match self {
+            BuiltIn::analysis
+            | BuiltIn::ac_stim
+            | BuiltIn::noise_table
+            | BuiltIn::noise_table_log
+            | BuiltIn::white_noise
+            | BuiltIn::flicker_noise => true,
+            _ => false,
+        }
+    }
 }
 pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>) {
-    dst.insert(kw::analysis, BuiltIn::analysis.into());
+    dst.insert(kw::abs, BuiltIn::abs.into());
     dst.insert(kw::acos, BuiltIn::acos.into());
     dst.insert(kw::acosh, BuiltIn::acosh.into());
-    dst.insert(kw::ac_stim, BuiltIn::ac_stim.into());
     dst.insert(kw::asin, BuiltIn::asin.into());
     dst.insert(kw::asinh, BuiltIn::asinh.into());
     dst.insert(kw::atan, BuiltIn::atan.into());
@@ -138,41 +180,21 @@ pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>) {
     dst.insert(kw::atanh, BuiltIn::atanh.into());
     dst.insert(kw::cos, BuiltIn::cos.into());
     dst.insert(kw::cosh, BuiltIn::cosh.into());
-    dst.insert(kw::ddt, BuiltIn::ddt.into());
-    dst.insert(kw::ddx, BuiltIn::ddx.into());
     dst.insert(kw::exp, BuiltIn::exp.into());
-    dst.insert(kw::flicker_noise, BuiltIn::flicker_noise.into());
     dst.insert(kw::floor, BuiltIn::floor.into());
     dst.insert(kw::flow, BuiltIn::flow.into());
     dst.insert(kw::potential, BuiltIn::potential.into());
     dst.insert(kw::hypot, BuiltIn::hypot.into());
-    dst.insert(kw::idt, BuiltIn::idt.into());
-    dst.insert(kw::idtmod, BuiltIn::idtmod.into());
-    dst.insert(kw::laplace_nd, BuiltIn::laplace_nd.into());
-    dst.insert(kw::laplace_np, BuiltIn::laplace_np.into());
-    dst.insert(kw::laplace_zd, BuiltIn::laplace_zd.into());
-    dst.insert(kw::laplace_zp, BuiltIn::laplace_zp.into());
-    dst.insert(kw::limexp, BuiltIn::limexp.into());
     dst.insert(kw::ln, BuiltIn::ln.into());
     dst.insert(kw::log, BuiltIn::log.into());
     dst.insert(kw::max, BuiltIn::max.into());
     dst.insert(kw::min, BuiltIn::min.into());
-    dst.insert(kw::noise_table, BuiltIn::noise_table.into());
-    dst.insert(kw::noise_table_log, BuiltIn::noise_table_log.into());
     dst.insert(kw::pow, BuiltIn::pow.into());
     dst.insert(kw::sin, BuiltIn::sin.into());
     dst.insert(kw::sinh, BuiltIn::sinh.into());
     dst.insert(kw::sqrt, BuiltIn::sqrt.into());
     dst.insert(kw::tan, BuiltIn::tan.into());
     dst.insert(kw::tanh, BuiltIn::tanh.into());
-    dst.insert(kw::last_crossing, BuiltIn::last_crossing.into());
-    dst.insert(kw::slew, BuiltIn::slew.into());
-    dst.insert(kw::white_noise, BuiltIn::white_noise.into());
-    dst.insert(kw::absdelay, BuiltIn::absdelay.into());
-    dst.insert(kw::zi_nd, BuiltIn::zi_nd.into());
-    dst.insert(kw::zi_np, BuiltIn::zi_np.into());
-    dst.insert(kw::zi_zd, BuiltIn::zi_zd.into());
-    dst.insert(kw::zi_zp, BuiltIn::zi_zp.into());
     dst.insert(sysfun::display, BuiltIn::display.into());
     dst.insert(sysfun::strobe, BuiltIn::strobe.into());
     dst.insert(sysfun::write, BuiltIn::write.into());
@@ -244,10 +266,9 @@ pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>) {
     dst.insert(sysfun::temperature, BuiltIn::temperature.into());
     dst.insert(sysfun::vt, BuiltIn::vt.into());
     dst.insert(sysfun::simparam, BuiltIn::simparam.into());
+    dst.insert(sysfun::simparam_str, BuiltIn::simparam_str.into());
     dst.insert(sysfun::simprobe, BuiltIn::simprobe.into());
     dst.insert(sysfun::discontinuity, BuiltIn::discontinuity.into());
-    dst.insert(sysfun::limit, BuiltIn::limit.into());
-    dst.insert(sysfun::bound_step, BuiltIn::bound_step.into());
     dst.insert(sysfun::mfactor, BuiltIn::mfactor.into());
     dst.insert(sysfun::xposition, BuiltIn::xposition.into());
     dst.insert(sysfun::yposition, BuiltIn::yposition.into());
@@ -260,6 +281,28 @@ pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>) {
     dst.insert(sysfun::analog_port_alias, BuiltIn::analog_port_alias.into());
     dst.insert(sysfun::test_plusargs, BuiltIn::test_plusargs.into());
     dst.insert(sysfun::value_plusargs, BuiltIn::value_plusargs.into());
-    dst.insert(sysfun::simparam_str, BuiltIn::simparam_str.into());
-    dst.insert(kw::abs, BuiltIn::abs.into());
+    dst.insert(kw::analysis, BuiltIn::analysis.into());
+    dst.insert(kw::ac_stim, BuiltIn::ac_stim.into());
+    dst.insert(kw::noise_table, BuiltIn::noise_table.into());
+    dst.insert(kw::noise_table_log, BuiltIn::noise_table_log.into());
+    dst.insert(kw::white_noise, BuiltIn::white_noise.into());
+    dst.insert(kw::flicker_noise, BuiltIn::flicker_noise.into());
+    dst.insert(sysfun::limit, BuiltIn::limit.into());
+    dst.insert(sysfun::bound_step, BuiltIn::bound_step.into());
+    dst.insert(kw::absdelay, BuiltIn::absdelay.into());
+    dst.insert(kw::ddt, BuiltIn::ddt.into());
+    dst.insert(kw::idt, BuiltIn::idt.into());
+    dst.insert(kw::idtmod, BuiltIn::idtmod.into());
+    dst.insert(kw::ddx, BuiltIn::ddx.into());
+    dst.insert(kw::zi_nd, BuiltIn::zi_nd.into());
+    dst.insert(kw::zi_np, BuiltIn::zi_np.into());
+    dst.insert(kw::zi_zd, BuiltIn::zi_zd.into());
+    dst.insert(kw::zi_zp, BuiltIn::zi_zp.into());
+    dst.insert(kw::laplace_nd, BuiltIn::laplace_nd.into());
+    dst.insert(kw::laplace_np, BuiltIn::laplace_np.into());
+    dst.insert(kw::laplace_zd, BuiltIn::laplace_zd.into());
+    dst.insert(kw::laplace_zp, BuiltIn::laplace_zp.into());
+    dst.insert(kw::limexp, BuiltIn::limexp.into());
+    dst.insert(kw::last_crossing, BuiltIn::last_crossing.into());
+    dst.insert(kw::slew, BuiltIn::slew.into());
 }

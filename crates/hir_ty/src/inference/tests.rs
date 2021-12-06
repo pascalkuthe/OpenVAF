@@ -60,6 +60,11 @@ fn ddx() {
             InvalidUnkown {
                 e: Idx::<Expr>(44),
             },
+        ][
+            PotentialOfPortFlow {
+                expr: Idx::<Expr>(44),
+                branch: None,
+            },
         ]"#]]
     .assert_eq(&actual);
 }
@@ -69,7 +74,7 @@ fn function() {
     let db = TestDataBase::new(
         "/root.va",
         r#"
-        module diode(a, c);
+        module diode;
             analog function real test;
                 input x,y;
                 real x,y;

@@ -436,6 +436,13 @@ impl NodeTypeDecl {
             NodeTypeDecl::Net(_) => None,
         }
     }
+
+    pub fn ast_id(&self, tree: &ItemTree) -> ErasedAstId {
+        match *self {
+            NodeTypeDecl::Net(net) => tree[net].ast_id.into(),
+            NodeTypeDecl::Port(port) => tree[port].ast_id.into(),
+        }
+    }
 }
 
 impl_from_typed!(

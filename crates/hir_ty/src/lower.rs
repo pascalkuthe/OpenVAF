@@ -48,9 +48,6 @@ impl NatureTy {
             .or_else(|| parent_info.as_ref().map(|parent| parent.idt_nature))
             .unwrap_or(nature);
 
-        // TODO check idt_nature.base_nature == base_nature.idt_nature.base_nature
-        // TODO check ddt_nature.base_nature == base_nature.ddt_nature.base_nature
-
         let units = base_nature
             .and_then(|nature| db.nature_info(nature).units.clone())
             .or_else(|| data.units.clone());
@@ -76,6 +73,12 @@ impl NatureTy {
         let nature1_info = db.nature_info(nature1);
         let nature2_info = db.nature_info(nature2);
         nature1_info.units == nature2_info.units
+    }
+
+    pub fn related(db: &dyn HirTyDB, nature1: NatureId, nature2: NatureId) -> bool {
+        let nature1_info = db.nature_info(nature1);
+        let nature2_info = db.nature_info(nature2);
+        nature1_info.base_nature == nature2_info.base_nature
     }
 
     pub fn lookup_attr(
@@ -185,16 +188,30 @@ pub enum BranchKind {
 impl BranchKind {
     pub fn discipline(&self, db: &dyn HirTyDB, scope: ScopeId) -> Option<DisciplineId> {
         match self {
-            // standard dictates that the dicisplines of the two nodes need to be compatible
-            // compatible disciplines behave idential during type checking
+            // standard dictates that the disciplines of the two nodes need to be compatible
+            // compatible disciplines behave identical during type checking
             // so we just use the discipline of the first node here
-            // TODO check that discipline are compatible
             BranchKind::PortFlow(node) | BranchKind::NodeGnd(node) | BranchKind::Nodes(node, _) => {
                 let node = db.node_data(*node);
                 scope
                     .resolve_item_path(db.upcast(), &Path::new_ident(node.discipline.clone()?))
                     .ok()
             }
+        }
+    }
+
+    pub fn unwrap_hi_node(self) -> NodeId {
+        match self {
+            BranchKind::NodeGnd(hi) => hi,
+            BranchKind::Nodes(hi, _) => hi,
+            BranchKind::PortFlow(_) => unreachable!(),
+        }
+    }
+
+    pub fn lo_node(self) -> Option<NodeId> {
+        match self {
+            BranchKind::Nodes(_, lo) => Some(lo),
+            _ => None,
         }
     }
 }
@@ -210,7 +227,6 @@ impl BranchTy {
         let scope = branch.lookup(db.upcast()).scope;
         let kind = match kind {
             hir_def::BranchKind::PortFlow(port) => {
-                // TODO check that this is actually a port in verification
                 BranchKind::PortFlow(scope.resolve_item_path(db.upcast(), port).ok()?)
             }
             hir_def::BranchKind::NodeGnd(node) => {

@@ -9,6 +9,7 @@ use sourcegen::{
 use stdx::format_to;
 
 use crate::db::{HirTyDB, HirTyDatabase};
+use crate::validation;
 
 mod integration;
 
@@ -46,6 +47,12 @@ impl TestDataBase {
         let root_file = self.root_file();
         let def_map = self.def_map(root_file);
         let mut dst = String::new();
+
+        let diagnostics = validation::TypeValidationDiagnostic::collect(self, root_file);
+        if !diagnostics.is_empty() {
+            format_to!(dst, "{:#?}", diagnostics);
+        }
+
         let root_scope = def_map.root();
         self.lower_and_check_rec(root_scope, &def_map, &mut dst);
         dst
@@ -57,6 +64,10 @@ impl TestDataBase {
                 let res = &self.inference_result(id);
                 if !res.diagnostics.is_empty() {
                     format_to!(dst, "{:#?}", res.diagnostics);
+                }
+                let diagnostics = validation::BodyValidationDiagnostic::collect(self, id);
+                if !diagnostics.is_empty() {
+                    format_to!(dst, "{:#?}", diagnostics);
                 }
             }
         }

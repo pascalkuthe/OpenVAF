@@ -1,9 +1,12 @@
 pub mod builtin;
 pub mod db;
-mod diagnostics;
-mod inference;
+pub mod diagnostics;
+pub mod inference;
 mod lower;
-mod types;
+pub mod types;
+pub mod validation;
+
+pub use lower::{BranchTy, DisciplineTy, NatureTy};
 
 #[cfg(test)]
 mod tests;

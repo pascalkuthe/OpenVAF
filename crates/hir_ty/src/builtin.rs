@@ -345,7 +345,7 @@ bultins! {
 
     const fn PARAM_GIVEN(AnyParam) -> Bool;
 
-    const fn PORT_CONNECTED(Port) -> Bool;
+    const fn PORT_CONNECTED(Node) -> Bool;
 
     DISCONTINUITY = {
         fn DISCONTINUITY_NO_DEGREE() -> Void;
@@ -363,7 +363,10 @@ pub const DDX_POT_DIFF: Signature = Signature(1);
 pub const DDX_POT: Signature = Signature(2);
 pub const DDX_FLOW: Signature = Signature(3);
 
-const DISPLAY_FUN: BuiltinInfo = BuiltinInfo::varargs(&[], true);
+const DISPLAY_FUN: BuiltinInfo = BuiltinInfo::varargs(
+    &[SignatureData { args: Cow::Borrowed(&[]), return_ty: Type::Void }],
+    true,
+);
 const FDISPLAY_FUN: BuiltinInfo = BuiltinInfo::varargs(
     &[SignatureData { args: Cow::Borrowed(&[Val(Integer)]), return_ty: Type::Void }],
     true,

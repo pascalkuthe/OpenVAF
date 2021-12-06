@@ -32,7 +32,7 @@ pub use crate::expr::{Case, Expr, ExprId, Literal, Stmt, StmtId};
 use crate::item_tree::{
     Branch, Discipline, Function, ItemTreeId, ItemTreeNode, Module, Nature, Param, Var,
 };
-pub use crate::item_tree::{BranchKind, ItemTree, NatureRef, NatureRefKind};
+pub use crate::item_tree::{BranchKind, ItemTree, NatureRef, NatureRefKind, NodeTypeDecl};
 use crate::nameres::ScopeDefItem;
 pub use crate::path::Path;
 pub use crate::types::Type;

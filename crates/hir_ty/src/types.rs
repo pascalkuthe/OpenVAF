@@ -12,7 +12,6 @@ pub enum TyRequirement {
     AnyVal,
     ArrayAnyLength { ty: Type },
     Node,
-    Port,
     PortFlow,
     Nature,
     Var(Type),
@@ -29,7 +28,6 @@ impl_display! {
         TyRequirement::AnyVal => "value";
         TyRequirement::ArrayAnyLength{ty} => "array ({})", ty;
         TyRequirement::Node => "net reference";
-        TyRequirement::Port => "port reference";
         TyRequirement:: Nature => "nature reference";
         TyRequirement::Var(ty) => "{} variable reference", ty;
         TyRequirement::Param(ty) => "{} parameter ref", ty;
@@ -44,7 +42,6 @@ impl_display! {
 pub enum Ty {
     Val(Type),
     Node(NodeId),
-    Port(NodeId),
     PortFlow(NodeId),
     Nature(NatureId),
     Discipline(DisciplineId),
@@ -64,7 +61,6 @@ impl_display! {
     match Ty{
         Ty::Val(ty) => "{} value",ty;
         Ty::Node(_) => "net reference";
-        Ty::Port(_) => "port reference";
         Ty::PortFlow(_) => "port-flow reference";
         Ty::Nature(_) => "nature reference";
         Ty::Discipline(_) => "discipline reference";
@@ -97,6 +93,14 @@ impl Ty {
     }
     pub fn unwrap_node(&self) -> NodeId {
         if let Ty::Node(id) = *self {
+            id
+        } else {
+            unreachable!("expected node found {:?}", self)
+        }
+    }
+
+    pub fn unwrap_param(&self) -> ParamId {
+        if let Ty::Param(_, id) = *self {
             id
         } else {
             unreachable!("expected node found {:?}", self)
@@ -169,9 +173,8 @@ impl Ty {
             (Ty::Var(ty1, _) | Ty::FuntionVar { ty: ty1, .. }, TyRequirement::Var(ty2))
             | (Ty::Param(ty1, _), TyRequirement::Param(ty2)) => ty1 == ty2,
 
-            (Ty::Node(_) | Ty::Port(_), TyRequirement::Node)
+            (Ty::Node(_), TyRequirement::Node)
             | (Ty::PortFlow(_), TyRequirement::PortFlow)
-            | (Ty::Port(_), TyRequirement::Port)
             | (Ty::Nature(_), TyRequirement::Nature)
             | (Ty::Param(_, _), TyRequirement::AnyParam)
             | (Ty::Branch(_), TyRequirement::Branch) => true,
@@ -257,6 +260,14 @@ impl SignatureData {
     pub const SELECT: &'static [SignatureData] =
         &[SignatureData::BOOL_BIN_OP, SignatureData::REAL_BIN_OP, SignatureData::INT_BIN_OP];
 }
+
+pub const BOOL_EQ: Signature = Signature(0);
+pub const INT_EQ: Signature = Signature(1);
+pub const REAL_EQ: Signature = Signature(2);
+pub const STR_EQ: Signature = Signature(3);
+
+pub const REAL_OP: Signature = Signature(0);
+pub const INT_OP: Signature = Signature(1);
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Signature(pub u32);

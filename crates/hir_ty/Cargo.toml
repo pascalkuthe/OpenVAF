@@ -32,6 +32,7 @@ text-size = "1.1"
 
 ahash = "0.7"
 indexmap = "1.6"
+arrayvec = "0.7"
 
 [dev-dependencies]
 
