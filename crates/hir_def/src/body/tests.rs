@@ -1,5 +1,8 @@
+use std::fs::read_to_string;
+
 use basedb::BaseDB;
 use expect_test::{expect, Expect};
+use sourcegen::project_root;
 
 use crate::db::HirDefDB;
 use crate::tests::TestDataBase;
@@ -105,4 +108,58 @@ endmodule
         analog test=x * y;
     "#]];
     check_fun(src, expect)
+}
+
+#[test]
+pub fn diode() {
+    let path = project_root().join("integration_tests").join("DIODE").join("diode.va");
+    let src = read_to_string(path).unwrap();
+
+    let expect = expect![[r#"
+        analog begin: (Root)
+
+            if Rs < 0.001
+            begin: (Root)
+
+                V(br_ci_c, )<+0;
+                VT=0.000000000000000000000013806503 * $temperature() / 0.0000000000000000001602176462;
+                if Rs < 0.001
+                begin: (Root)
+
+                    vcrit=vte * log(vte / 1.4142135623730951 * Is, );
+                end
+                else
+                <missing>;
+            end
+            else
+            <missing>;
+            if Rs > 0.001
+            begin: (Root)
+
+                VT=0.000000000000000000000013806503 * $temperature() / 0.0000000000000000001602176462;
+                if Rs < 0.001
+                begin: (Root)
+
+                    vcrit=vte * log(vte / 1.4142135623730951 * Is, );
+                end
+                else
+                <missing>;
+            end
+            else
+            <missing>;
+            vte=VT * N;
+            vcrit=vte * log(vte / 1.4142135623730951 * Is, );
+            Vd=V(A, CI, );
+            Vr=V(br_ci_c, );
+            Id=Is * exp(Vd / vte, ) - 1;
+            vf=Vj * 1 - pow(3, -1 / M, );
+            x=vf - Vd / VT;
+            y=sqrt(x * x + 1.92, );
+            Vd=vf - VT * x + y / 2;
+            Qd=Cj0 * Vj * 1 - pow(1 - Vd / Vj, 1 - M, ) / 1 - M;
+            I(br_a_ci, )<+Id + ddt(Qd, );
+            I(br_ci_c, )<+Vr / Rs;
+        end
+    "#]];
+    check(&src, expect)
 }
