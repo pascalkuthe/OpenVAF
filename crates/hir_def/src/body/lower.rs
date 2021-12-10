@@ -223,7 +223,7 @@ impl LowerCtx<'_> {
     }
     // desugared exprs don't have ptr, that's wrong and should be fixed
     // somehow.
-    fn alloc_expr_desugared(&mut self, expr: Expr) -> ExprId {
+    pub(super) fn alloc_expr_desugared(&mut self, expr: Expr) -> ExprId {
         self.make_expr(expr, None)
     }
 

@@ -13,8 +13,8 @@ use crate::db::HirDefDB;
 use crate::item_tree::{DisciplineAttr, ItemTreeId, ItemTreeNode, NatureAttr};
 use crate::nameres::{DefMapSource, LocalScopeId};
 use crate::{
-    DefWithBodyId, DisciplineAttrLoc, DisciplineLoc, Expr, ExprId, FunctionLoc, Lookup, ModuleLoc,
-    NatureAttrLoc, NatureLoc, ParamId, ParamLoc, ScopeId, Stmt, StmtId, VarLoc,
+    DefWithBodyId, DisciplineAttrLoc, DisciplineLoc, Expr, ExprId, FunctionLoc, Literal, Lookup,
+    ModuleLoc, NatureAttrLoc, NatureLoc, ParamId, ParamLoc, ScopeId, Stmt, StmtId, Type, VarLoc,
 };
 
 mod lower;
@@ -129,7 +129,17 @@ impl Body {
                     curr_scope,
                     registry: &registry,
                 };
-                let expr = ctx.collect_opt_expr(ast.default());
+
+                let expr = if let Some(expr) = ast.default() {
+                    ctx.collect_expr(expr)
+                } else {
+                    let default_val = match db.var_data(var).ty {
+                        Type::Real => Literal::Float(0.0.into()),
+                        Type::Integer => Literal::Int(0),
+                        _ => unreachable!("invalid var type (TODO arrays)"),
+                    };
+                    ctx.alloc_expr_desugared(Expr::Literal(default_val))
+                };
                 let stmt = ctx.alloc_stmt_desugared(Stmt::Expr(expr));
                 body.entry_stmts = vec![stmt].into_boxed_slice();
             }
