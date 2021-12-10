@@ -248,6 +248,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "hir_lower"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "basedb",
+ "cfg",
+ "expect-test",
+ "hir_def",
+ "hir_ty",
+ "indexmap",
+ "parking_lot",
+ "proc-macro2",
+ "quote",
+ "salsa",
+ "sourcegen",
+ "stdx",
+ "syntax",
+ "triomphe",
+ "ty_index_set",
+ "typed-index-collections",
+]
+
+[[package]]
 name = "hir_ty"
 version = "0.0.0"
 dependencies = [
@@ -577,6 +600,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46bddb80ec09585c58022a2c55e6e7c11e713d9bb26895f1b56cd945c4040c54"
 dependencies = [
  "memoffset",
+]
+
+[[package]]
+name = "ty_index_set"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "indexmap",
 ]
 
 [[package]]

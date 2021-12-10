@@ -1,0 +1,34 @@
+[package]
+name = "hir_lower"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+
+
+[dependencies]
+stdx = { version = "0.0.0", path = "../stdx" }
+cfg = { version = "0.0.0", path = "../cfg" }
+hir_ty = { version = "0.0.0", path = "../hir_ty" }
+hir_def = { version = "0.0.0", path = "../hir_def" }
+syntax = {version = "0.0.0", path = "../syntax"}
+ty_index_set = {version = "0.0.0", path = "../ty_index_set"}
+
+ahash = "0.7"
+typed-index-collections = "3.0"
+
+triomphe = { version = "0.1", default_features = false, features = ["std"] }
+indexmap = "1.6"
+
+[dev-dependencies]
+
+sourcegen = {version ="0.0.0", path ="../sourcegen"}
+parking_lot = "0.11"
+expect-test = "1.1"
+proc-macro2 = "1.0"
+quote = "1.0"
+basedb = { version = "0.0.0", path = "../basedb" }
+salsa = "0.17.0-pre.2"
