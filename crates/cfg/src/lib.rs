@@ -1,80 +1,87 @@
-//! The `ControlFlowGraph` represents the central struct of the OpenVAF middle end.
+//! The `ControlFlowGraph` represents the central data structure of the OpenVAF middle end.
 //! A control flow graph is a standard structure in compiler design
-//! (see [here](https://en.wikipedia.org/wiki/Control-flow_graph) for an intruction).
+//! (see [here](https://en.wikipedia.org/wiki/Control-flow_graph) for an instruction).
 //!
-//! The implementation in this crate is completly independent from the frontend of the compiler.
-//! Instead of associating elemts of the Cfg directly with language elements abstract ids are
-//! used to represent info that does not strictly pretain to the control flow graph.
+//! The implementation in this crate is completely independent from the front-end (Ast/HIR) of the compiler.
+//! Instead of associating elements of the CFG directly with language elements abstract ids are
+//! used to represent info that does not strictly pertain to the control flow graph.
 //! There are multiple reasons for this:
 //!
-//! * MUCH faster compile times (middleend and frontend can compile in parallel)
+//! * MUCH faster compile times (middle-end and front-end can compile in parallel)
 //!
-//! * Decoupled compoenents allow refactoring the middle and frontend independently. A close
-//!   coupling between middleend and frontend has caused problems in the past (essentially changing
-//!   the AST requires in the entire compiler)
+//! * Decoupled components allow refactoring the middle and front-end independently. The tight coupling
+//!   between middle-end and front-end has caused problems in the past (changing
+//!   the AST required changes in the entire compiler)
 //!
-//! * There are multiple applications built upon OpenVAF (primarly osdic and verilogae).
+//! * There are multiple applications built upon OpenVAF (OSDIc and VerilogAE).
 //!   These implementations have different requirements which past implementations that were
-//!   coupled to the frontend have failed to adequatly meet.
+//!   coupled to the front-end have failed to adequately meet.
 //!
-//! * osdic splits the primary cfg into multiple cfgs that correspond to different stages in the
+//! * osdic splits the primary CFG into multiple CFGs that correspond to different stages in the
 //!   simulator. These control flow graphs all have different inputs, outputs and the same
-//!   and some functions behave different (or are unavialble) in some of these cfgs.
+//!   and some functions behave different (or are unavailable) in some of these CFGs.
 
+use std::hash::Hash;
 use std::iter::once;
 use std::ops::{Index, IndexMut};
 
 use ahash::AHashMap;
 use arena::{Arena, Idx};
 use arrayvec::ArrayVec;
-use graph_cyclical_cache::GraphIsCyclicCache;
-pub use locations::{BlockLocations, IntLocation, InternedLocations, Location, LocationKind};
-pub use op::Op;
-use predecessors::PredecessorCache;
-use stdx::{impl_debug, impl_idx_from};
-use transversal::{
+pub use builder::CfgBuilder;
+use lasso::Spur;
+use stdx::{impl_debug, impl_from, impl_idx_from};
+use typed_index_collections::TiVec;
+
+use crate::graph_cyclical_cache::GraphIsCyclicCache;
+pub use crate::locations::{
+    BlockLocations, IntLocation, InternedLocations, Location, LocationKind,
+};
+pub use crate::op::Op;
+use crate::predecessors::PredecessorCache;
+use crate::transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
     ReversePostorderIterMut,
 };
-pub use ty::{Const, Ty};
-use typed_index_collections::TiVec;
-
-mod graph_cyclical_cache;
-mod locations;
-mod predecessors;
-mod ty;
-
-mod op;
-mod parse;
-mod pretty;
-pub mod transversal;
+// use crate::ty::Array;
+pub use crate::ty::Const;
 
 #[cfg(test)]
 mod tests;
 
-/// Cfg Parameters represent immutable input to a Cfg
-/// If the cfg compiled to a function these usually make up the parameters of that resulting
+mod builder;
+mod graph_cyclical_cache;
+mod locations;
+mod op;
+mod parse;
+mod predecessors;
+mod pretty;
+pub mod transversal;
+mod ty;
+
+/// CFG Parameters represent immutable input to a CFG
+/// If the CFG compiled to a function these usually make up the parameters of that resulting
 /// functions
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct CfgParam(u32);
 impl_idx_from!(CfgParam(u32));
-impl_debug!(match CfgParam{param => "p{}",param.0;});
+impl_debug!(match CfgParam{param => "#{}",param.0;});
 
 /// Callbacks allow the CFG to call external function (for example belonging to the circuit
 /// simulator). Furthermore these callbacks may be used to abstractly represent functions
 /// That are later resolved to actual instructions based upon how the CFG is further processed
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Callback(u32);
+pub struct Callback(pub u32);
 impl_idx_from!(Callback(u32));
 impl_debug!(match Callback{input => "cb{}",input.0;});
 
 /// A Place represents a region of memory that can be accessed by the CFG
 /// Usually these correspond to the variables and (branches) defined by the user.
-/// However more places are also added when deriavtives are calculated
+/// However more places are also added when derivatives are calculated
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Place(u32);
 impl_idx_from!(Place(u32));
-impl_debug!(match Place{local => "place{}",local.0;});
+impl_debug!(match Place{local => "p{}",local.0;});
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Local(u32);
@@ -86,7 +93,7 @@ pub struct BasicBlock(u32);
 impl_idx_from!(BasicBlock(u32));
 impl_debug!(match BasicBlock{input => "bb{}",input.0;});
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BasicBlockData {
     pub phis: Arena<Phi>,
     pub instructions: Arena<Instruction>,
@@ -146,7 +153,7 @@ impl BasicBlockData {
         }
         if let Some(term) = &self.terminator {
             term.visit_operands(|op| {
-                if let Operand::Copy(local) = op {
+                if let Operand::Local(local) = op {
                     f(*local)
                 }
             })
@@ -162,7 +169,7 @@ impl BasicBlockData {
         }
         if let Some(term) = &mut self.terminator {
             term.visit_operands_mut(|op| {
-                if let Operand::Copy(local) = op {
+                if let Operand::Local(local) = op {
                     f(local)
                 }
             })
@@ -196,11 +203,28 @@ impl Phi {
     }
 }
 
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum InstrDst {
+    Local(Local),
+    Place(Place),
+    Ignore,
+}
+
+impl_debug! {
+    match InstrDst{
+        InstrDst::Local(local) => "{:?}", local;
+        InstrDst::Place(place) => "{:?}", place;
+        InstrDst::Ignore => "_";
+    }
+}
+
+impl_from!(Local,Place for InstrDst);
+
 pub type InstIdx = Idx<Instruction>;
 
 #[derive(Clone, Debug)]
 pub struct Instruction {
-    pub dst: Option<Local>,
+    pub dst: InstrDst,
     pub op: Op,
     pub args: Box<[Operand]>,
     pub src: u32,
@@ -220,22 +244,22 @@ impl Instruction {
     }
 
     pub fn visit_locals(&self, mut f: impl FnMut(Local)) {
-        if let Some(dst) = self.dst {
+        if let InstrDst::Local(dst) = self.dst {
             f(dst)
         }
         self.visit_operands(|op| {
-            if let Operand::Copy(local) = op {
+            if let Operand::Local(local) = op {
                 f(*local)
             }
         })
     }
 
     pub fn visit_locals_mut(&mut self, mut f: impl FnMut(&mut Local)) {
-        if let Some(dst) = &mut self.dst {
+        if let InstrDst::Local(dst) = &mut self.dst {
             f(dst)
         }
         self.visit_operands_mut(|op| {
-            if let Operand::Copy(local) = op {
+            if let Operand::Local(local) = op {
                 f(local)
             }
         })
@@ -245,17 +269,79 @@ impl Instruction {
 #[derive(Clone, PartialEq)]
 pub enum Operand {
     Const(Const),
-    Copy(Local),
-    Read(CfgParam),
+    Local(Local),
+    Place(Place),
+    CfgParam(CfgParam),
+}
+
+impl Operand {
+    pub fn unwrap_cfg_param(self) -> CfgParam {
+        match self {
+            Operand::CfgParam(param) => param,
+            _ => unreachable!("called unwrap_cfg_param on {:?}", self),
+        }
+    }
+
+    pub fn unwrap_place(self) -> Place {
+        match self {
+            Operand::Place(place) => place,
+            _ => unreachable!("called unwrap_place on {:?}", self),
+        }
+    }
 }
 
 impl_debug! {
     match Operand{
         Operand::Const(con) => "{:?}", con;
-        Operand::Copy(local) => "{:?}", local;
-        Operand::Read(param) => "{:?}", param;
+        Operand::Local(local) => "{:?}", local;
+        Operand::CfgParam(param) => "{:?}", param;
+        Operand::Place(place) => "{:?}",place;
     }
 }
+
+impl_from!(Const,Local,CfgParam,Place for Operand);
+
+impl From<bool> for Operand {
+    fn from(val: bool) -> Self {
+        Operand::Const(val.into())
+    }
+}
+
+impl From<f64> for Operand {
+    fn from(val: f64) -> Self {
+        Operand::Const(val.into())
+    }
+}
+
+impl From<i32> for Operand {
+    fn from(val: i32) -> Self {
+        Operand::Const(val.into())
+    }
+}
+
+impl From<Spur> for Operand {
+    fn from(val: Spur) -> Self {
+        Operand::Const(val.into())
+    }
+}
+
+// impl From<Array<f64>> for Operand {
+//     fn from(val: Array<f64>) -> Self {
+//         Operand::Const(val.into())
+//     }
+// }
+
+// impl From<Array<i32>> for Operand {
+//     fn from(val: Array<i32>) -> Self {
+//         Operand::Const(val.into())
+//     }
+// }
+
+// impl From<Array<Spur>> for Operand {
+//     fn from(val: Array<Spur>) -> Self {
+//         Operand::Const(val.into())
+//     }
+// }
 
 #[derive(Clone, PartialEq)]
 pub enum Terminator {
@@ -354,8 +440,6 @@ impl Terminator {
 
 #[derive(Clone, Debug)]
 pub struct ControlFlowGraph {
-    pub mut_locals: AHashMap<Local, Place>,
-    pub places: TiVec<Place, Local>,
     next_local: Local,
     pub blocks: TiVec<BasicBlock, BasicBlockData>,
     pub predecessor_cache: PredecessorCache,
@@ -365,8 +449,6 @@ pub struct ControlFlowGraph {
 impl Default for ControlFlowGraph {
     fn default() -> Self {
         Self {
-            mut_locals: Default::default(),
-            places: Default::default(),
             next_local: Local(0),
             blocks: Default::default(),
             predecessor_cache: Default::default(),
@@ -436,17 +518,10 @@ impl ControlFlowGraph {
         }
     }
 
-    pub fn new_temporary(&mut self) -> Local {
+    pub fn new_local(&mut self) -> Local {
         let next = self.next_local;
         self.next_local.0 += 1u32;
         next
-    }
-
-    pub fn new_place(&mut self) -> (Place, Local) {
-        let local = self.next_local;
-        let place = self.places.push_and_get_key(local);
-        self.mut_locals.insert(local, place);
-        (place, local)
     }
 
     // transversals

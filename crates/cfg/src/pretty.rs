@@ -1,11 +1,11 @@
 use std::fmt::{self, Write};
 
-use lasso::MiniSpur;
+use lasso::Spur;
 
-use crate::{BasicBlockData, Const, ControlFlowGraph, Instruction, Operand, Terminator};
+use crate::{BasicBlockData, Const, ControlFlowGraph, InstrDst, Instruction, Operand, Terminator};
 
 impl ControlFlowGraph {
-    pub fn print(&self, lit: &lasso::Rodeo<MiniSpur>) -> String {
+    pub fn print(&self, lit: &lasso::Rodeo<Spur>) -> String {
         let mut print =
             Printer { cfg: self, lit, buf: String::new(), indent_level: 0, needs_indent: true };
         print.print();
@@ -30,7 +30,7 @@ macro_rules! w {
 
 struct Printer<'a> {
     cfg: &'a ControlFlowGraph,
-    lit: &'a lasso::Rodeo<MiniSpur>,
+    lit: &'a lasso::Rodeo<Spur>,
     buf: String,
     indent_level: usize,
     needs_indent: bool,
@@ -47,7 +47,6 @@ impl<'a> Printer<'a> {
 
     pub fn print(&mut self) {
         wln!(self, "{{");
-        wln!(self, "mut {:?};", self.cfg.places.raw);
         wln!(self, "next_local {:?};", self.cfg.next_local);
         for (id, bb) in self.cfg.blocks.iter_enumerated() {
             wln!(self, "{:?}:", id);
@@ -71,8 +70,8 @@ impl<'a> Printer<'a> {
     }
 
     pub fn print_instr(&mut self, instr: &Instruction) {
-        if let Some(dst) = instr.dst {
-            w!(self, "let {:?} := ", dst)
+        if matches!(instr.dst, InstrDst::Local(_) | InstrDst::Place(_)) {
+            w!(self, "let {:?} := ", instr.dst)
         }
 
         if instr.args.is_empty() {
@@ -115,10 +114,10 @@ impl<'a> Printer<'a> {
     pub fn print_constant(&mut self, constant: &Const) {
         match constant {
             Const::String(val) => w!(self, "str {:?}", self.lit.resolve(val)),
-            Const::StringArray(data) => {
-                let slice: Vec<_> = data.slice.iter().map(|s| self.lit.resolve(s)).collect();
-                w!(self, "str[] {:?}", slice)
-            }
+            // Const::StringArray(data) => {
+            //     let slice: Vec<_> = data.slice.iter().map(|s| self.lit.resolve(s)).collect();
+            //     w!(self, "str[] {:?}", slice)
+            // }
             _ => w!(self, "{:?}", constant),
         }
     }

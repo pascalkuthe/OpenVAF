@@ -4,19 +4,19 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use ahash::AHashMap;
-use lasso::{MiniSpur, Rodeo};
+use lasso::{Rodeo, Spur};
 use typed_index_collections::TiVec;
 
-use crate::ty::Array;
+// use crate::ty::Array;
 use crate::{
-    BasicBlock, BasicBlockData, CfgParam, Const, ControlFlowGraph, Instruction, Local, Op, Operand,
-    Phi, Terminator,
+    BasicBlock, BasicBlockData, CfgParam, Const, ControlFlowGraph, InstrDst, Instruction, Local,
+    Op, Operand, Phi, Place, Terminator,
 };
 
 pub(crate) struct CfgParser {
     pub pos: usize,
     pub src: String,
-    pub literals: lasso::Rodeo<MiniSpur>,
+    pub literals: lasso::Rodeo<Spur>,
 }
 
 impl CfgParser {
@@ -125,9 +125,11 @@ where
 impl Parse for Operand {
     fn parse(p: &mut CfgParser) -> Result<Self, String> {
         let res = if p.at("_") {
-            Operand::Copy(p.parse()?)
+            Operand::Local(p.parse()?)
+        } else if p.at("#") {
+            Operand::CfgParam(p.parse()?)
         } else if p.at("p") {
-            Operand::Read(p.parse()?)
+            Operand::Place(p.parse()?)
         } else {
             Operand::Const(p.parse()?)
         };
@@ -150,8 +152,15 @@ impl Parse for BasicBlock {
 
 impl Parse for CfgParam {
     fn parse(p: &mut CfgParser) -> Result<Self, String> {
-        p.expect("p")?;
+        p.expect("#")?;
         Ok(CfgParam(ParseFromStr::parse(p)?.0))
+    }
+}
+
+impl Parse for Place {
+    fn parse(p: &mut CfgParser) -> Result<Self, String> {
+        p.expect("p")?;
+        Ok(Place(ParseFromStr::parse(p)?.0))
     }
 }
 
@@ -164,6 +173,10 @@ impl Parse for Const {
         if p.eat("false") == Ok(true) {
             return Ok(Self::Bool(false));
         }
+        if p.eat("[]") == Ok(true) {
+            return Ok(Self::Zst);
+        }
+
         let src = &p.src[p.pos..];
         let ty = &src[..3];
         let is_arr = &src[3..5] == "[]";
@@ -174,16 +187,16 @@ impl Parse for Const {
         }
 
         let res = match ty {
-            "f64" if is_arr => Const::RealArray(p.parse()?),
+            // "f64" if is_arr => Const::RealArray(p.parse()?),
             "f64" => Const::Real(ParseFromStr::<f64>::parse(p)?.0),
 
-            "i32" if is_arr => Const::IntArray(p.parse()?),
+            // "i32" if is_arr => Const::IntArray(p.parse()?),
             "i32" => Const::Int(ParseFromStr::<i32>::parse(p)?.0),
 
-            "c64" if is_arr => Const::ComplexArray(p.parse()?),
+            // "c64" if is_arr => Const::ComplexArray(p.parse()?),
             "c64" => Const::Complex(Box::new(p.parse()?)),
 
-            "str" if is_arr => Const::StringArray(p.parse()?),
+            // "str" if is_arr => Const::StringArray(p.parse()?),
             "str" => Const::String(p.parse()?),
 
             _ => return Err(format!("{:?} is not a valid const type", src)),
@@ -193,14 +206,14 @@ impl Parse for Const {
     }
 }
 
-impl Parse for Array<f64> {
-    fn parse(p: &mut CfgParser) -> Result<Self, String> {
-        let p: Vec<ParseFromStr<f64>> = Vec::parse(p)?;
-        Ok(Array::from_header_and_iter((), p.into_iter().map(|f| f.0)))
-    }
-}
+// impl Parse for Array<f64> {
+//     fn parse(p: &mut CfgParser) -> Result<Self, String> {
+//         let p: Vec<ParseFromStr<f64>> = Vec::parse(p)?;
+//         Ok(Array::from_header_and_iter((), p.into_iter().map(|f| f.0)))
+//     }
+// }
 
-impl Parse for MiniSpur {
+impl Parse for Spur {
     fn parse(p: &mut CfgParser) -> Result<Self, String> {
         p.expect("\"")?;
         let pos = p.pos;
@@ -220,29 +233,29 @@ impl Parse for MiniSpur {
     }
 }
 
-impl<T: Parse> Parse for Array<T> {
-    fn parse(p: &mut CfgParser) -> Result<Self, String> {
-        let res = Vec::parse(p)?;
-        Ok(Array::from_header_and_iter((), res.into_iter()))
-    }
-}
+// impl<T: Parse> Parse for Array<T> {
+//     fn parse(p: &mut CfgParser) -> Result<Self, String> {
+//         let res = Vec::parse(p)?;
+//         Ok(Array::from_header_and_iter((), res.into_iter()))
+//     }
+// }
 
-impl Parse for Array<i32> {
-    fn parse(p: &mut CfgParser) -> Result<Self, String> {
-        let p: Vec<ParseFromStr<i32>> = Vec::parse(p)?;
-        Ok(Array::from_header_and_iter((), p.into_iter().map(|f| f.0)))
-    }
-}
+// impl Parse for Array<i32> {
+//     fn parse(p: &mut CfgParser) -> Result<Self, String> {
+//         let p: Vec<ParseFromStr<i32>> = Vec::parse(p)?;
+//         Ok(Array::from_header_and_iter((), p.into_iter().map(|f| f.0)))
+//     }
+// }
 
 impl Parse for Instruction {
     fn parse(p: &mut CfgParser) -> Result<Self, String> {
         let dst = if &p.src[p.pos..][..3] == "let" {
             p.pos += 3;
-            let local = p.parse()?;
+            let dst = p.parse()?;
             p.expect(":=")?;
-            Some(local)
+            dst
         } else {
-            None
+            InstrDst::Ignore
         };
 
         let op: Op = ParseFromStr::parse(p)?.0;
@@ -258,6 +271,18 @@ impl Parse for Instruction {
 
         let res = Instruction { dst, op, args: args.into_boxed_slice(), src };
         Ok(res)
+    }
+}
+
+impl Parse for InstrDst {
+    fn parse(p: &mut CfgParser) -> Result<Self, String> {
+        if p.at("_") {
+            Ok(Self::Local(p.parse()?))
+        } else if p.at("p") {
+            Ok(Self::Place(p.parse()?))
+        } else {
+            Err("Invalid InstrDst expected 'p' (place) or '_' (local) ".to_owned())
+        }
     }
 }
 
@@ -329,15 +354,10 @@ impl Parse for ControlFlowGraph {
         p.expect("{")?;
 
         let mut res = ControlFlowGraph::default();
-        p.expect("mut")?;
-        let places: Vec<_> = p.parse()?;
-        p.expect(";")?;
-
         p.expect("next_local")?;
         res.next_local = p.parse()?;
         p.expect(";")?;
 
-        res.places = TiVec::from(places);
         while !p.eat("}")? {
             let bb: BasicBlock = p.parse()?;
             assert_eq!(bb, res.blocks.next_key());
@@ -351,7 +371,7 @@ impl Parse for ControlFlowGraph {
 }
 
 impl ControlFlowGraph {
-    pub fn parse(src: &str) -> Result<(ControlFlowGraph, Rodeo<MiniSpur>), String> {
+    pub fn parse(src: &str) -> Result<(ControlFlowGraph, Rodeo<Spur>), String> {
         let mut parser = CfgParser::new(src);
         Ok((parser.parse()?, parser.literals))
     }

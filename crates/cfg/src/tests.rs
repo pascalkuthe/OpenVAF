@@ -6,8 +6,7 @@ use crate::ControlFlowGraph;
 pub fn roundtrip() {
     let src = expect![[r#"
         {
-        mut [_6];
-        next_local _7;
+        next_local _6;
         bb0:
 
             let _0 := f64.* [f64 3.141, f64 2.0];
@@ -16,13 +15,13 @@ pub fn roundtrip() {
             if _2 { bb1 } else { bb2 } 
         bb1:
 
-            let _3 := move [_1];
-            let _6 := move [str "bar"];
+            let _3 := copy [_1];
+            let p0 := copy [str "bar"];
             goto bb3;
         bb2:
 
-            let _4 := move [f64 2.0];
-            let _6 := move [str "foo"];
+            let _4 := copy [f64 2.0];
+            let p0 := copy [#0];
             goto bb3;
         bb3:
 

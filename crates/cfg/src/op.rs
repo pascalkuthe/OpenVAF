@@ -5,10 +5,10 @@ use Op::*;
 
 use crate::Callback;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Copy, Hash)]
 pub enum Op {
     // unary op
-    Mov,
+    Copy,
 
     IntBitNegate,
     BoolBitNegate,
@@ -19,16 +19,23 @@ pub enum Op {
     // casts (also unary)
     RealToInt,
     IntToReal,
+    BoolToReal,
     BoolToInt,
     IntToBool,
+
+    ArrRealToInt,
+    ArrIntToReal,
+    ArrBoolToReal,
+    ArrBoolToInt,
+    ArrIntToBool,
 
     RealToComplex,
     RealComponent,
     ImagComponent,
 
     // Bin Op
-    IntPlus,
-    IntMinus,
+    IntAdd,
+    IntSub,
     IntMul,
     IntDiv,
     IntRem,
@@ -42,10 +49,11 @@ pub enum Op {
     IntAnd,
     IntOr,
 
-    RealPlus,
-    RealMinus,
+    RealAdd,
+    RealSub,
     RealMul,
     RealDiv,
+    RealRem,
 
     CmplxPlus,
     CmplxMinus,
@@ -61,21 +69,32 @@ pub enum Op {
     RealLessEqual,
     RealGreaterEqual,
 
-    // ternery op
-    // TODO seperate op for each type?
-    Select,
+    IntEq,
+    RealEq,
+    StringEq,
+    BoolEq,
+
+    IntNeq,
+    RealNeq,
+    StringNeq,
+    BoolNeq,
 
     // VarArgs
-    CreateRealArray,
-    CreateIntArray,
-    CreateStringArray,
-    CreateComplexArray,
+    // CreateRealArray,
+    // CreateIntArray,
+    // CreateStringArray,
+    // CreateComplexArray,
 
+    // ConcatRealArray,
+    // ConactIntArray,
+    // ConactStringArray,
+    // ConactComplexArray,
     Sqrt,
     Exp,
     LimExp,
     Ln,
     Log,
+    Clog2,
     Floor,
     Ceil,
 
@@ -114,7 +133,7 @@ impl_debug! {
     match Op{
 
         // unary op
-        Mov                 => "move";
+        Copy                 => "copy";
 
         IntBitNegate        => "i32~";
         BoolBitNegate       => "bool~";
@@ -126,14 +145,26 @@ impl_debug! {
         IntToReal           => "cast_i32_f64";
         BoolToInt           => "cast_bool_i32";
         IntToBool           => "cast_i32_bool";
+        BoolToReal          => "cast_bool_real";
+
+
+        ArrRealToInt           => "arr_cast_f64_i32";
+        ArrIntToReal           => "arr_cast_i32_f64";
+        ArrBoolToInt           => "arr_cast_bool_i32";
+        ArrIntToBool           => "arr_cast_i32_bool";
+        ArrBoolToReal          => "arr_cast_bool_real";
+
+
+
+
 
         RealToComplex       => "cast_f64_c64";
         RealComponent       => "c_real";
         ImagComponent       => "c_imag";
 
         // Bin Op
-        IntPlus             => "i32.+";
-        IntMinus            => "i32.-";
+        IntAdd              => "i32.+";
+        IntSub              => "i32.-";
         IntMul              => "i32.*";
         IntDiv              => "i32./";
         IntRem              => "i32.%";
@@ -147,10 +178,11 @@ impl_debug! {
         IntAnd              => "i32.&";
         IntOr               => "i32.|";
 
-        RealPlus            => "f64.+";
-        RealMinus           => "f64.-";
+        RealAdd             => "f64.+";
+        RealSub             => "f64.-";
         RealMul             => "f64.*";
         RealDiv             => "f64./";
+        RealRem             => "f64.%";
 
         CmplxPlus           => "c64.+";
         CmplxMinus          => "c64.-";
@@ -166,20 +198,34 @@ impl_debug! {
         RealLessEqual       => "f64.<=";
         RealGreaterEqual    => "f64.>=";
 
-        // ternery op
-        Select              => "select";
+
+        IntEq               => "i32.==";
+        RealEq              => "f64.==";
+        StringEq            => "str.==";
+        BoolEq              => "bool.==";
+
+        IntNeq               => "i32.!=";
+        RealNeq              => "f64.!=";
+        StringNeq            => "str.!=";
+        BoolNeq              => "bool.!=";
+
 
         // // VarArgs
-        CreateRealArray     => "f64.arr";
-        CreateIntArray      => "i32.arr";
-        CreateStringArray   => "str.arr";
-        CreateComplexArray  => "c64.arr";
+        // CreateRealArray     => "f64.arr";
+        // CreateIntArray      => "i32.arr";
+        // CreateStringArray   => "str.arr";
+        // CreateComplexArray  => "c64.arr";
+        // ConcatRealArray     => "f64.arr_concat";
+        // ConactIntArray      => "i32.arr_concat";
+        // ConactStringArray   => "str.arr_concat";
+        // ConactComplexArray  => "c64.arr_concat";
 
         Sqrt                => "sqrt";
         Exp                 => "exp";
         LimExp              => "limexp";
         Ln                  => "ln";
         Log                 => "log";
+        Clog2               => "clog2";
         Floor               => "flor";
         Ceil                => "ceil";
 
@@ -222,7 +268,7 @@ impl FromStr for Op {
 
     fn from_str(s: &str) -> Result<Self, String> {
         let res = match s {
-            "move" => Mov,
+            "copy" => Copy,
 
             "i32~" => IntBitNegate,
             "bool~" => BoolBitNegate,
@@ -234,14 +280,21 @@ impl FromStr for Op {
             "cast_i32_f64" => IntToReal,
             "cast_bool_i32" => BoolToInt,
             "cast_i32_bool" => IntToBool,
+            "cast_bool_real" => BoolToReal,
+
+            "arr_cast_f64_i32" => ArrRealToInt,
+            "arr_cast_i32_f64" => ArrIntToReal,
+            "arr_cast_bool_i32" => ArrBoolToInt,
+            "arr_cast_i32_bool" => ArrIntToBool,
+            "arr_cast_bool_real" => ArrBoolToReal,
 
             "cast_f64_c64" => RealToComplex,
             "c_real" => RealComponent,
             "c_imag" => ImagComponent,
 
             // Bin Op
-            "i32.+" => IntPlus,
-            "i32.-" => IntMinus,
+            "i32.+" => IntAdd,
+            "i32.-" => IntSub,
             "i32.*" => IntMul,
             "i32./" => IntDiv,
             "i32.%" => IntRem,
@@ -255,10 +308,11 @@ impl FromStr for Op {
             "i32.&" => IntAnd,
             "i32.|" => IntOr,
 
-            "f64.+" => RealPlus,
-            "f64.-" => RealMinus,
+            "f64.+" => RealAdd,
+            "f64.-" => RealSub,
             "f64.*" => RealMul,
             "f64./" => RealDiv,
+            "f64.%" => RealRem,
 
             "c64.+" => CmplxPlus,
             "c64.-" => CmplxMinus,
@@ -274,20 +328,32 @@ impl FromStr for Op {
             "f64.<=" => RealLessEqual,
             "f64.>=" => RealGreaterEqual,
 
-            // ternery op
-            "select" => Select,
+            "i32.==" => IntEq,
+            "f64.==" => RealEq,
+            "str.==" => StringEq,
+            "bool.==" => BoolEq,
+
+            "i32.!=" => IntNeq,
+            "f64.!=" => RealNeq,
+            "str.!=" => StringNeq,
+            "bool.!=" => BoolNeq,
 
             // // VarArgs
-            "f64.arr" => CreateRealArray,
-            "i32.arr" => CreateIntArray,
-            "str.arr" => CreateStringArray,
-            "c64.arr" => CreateComplexArray,
+            // "f64.arr" => CreateRealArray,
+            // "i32.arr" => CreateIntArray,
+            // "str.arr" => CreateStringArray,
+            // "c64.arr" => CreateComplexArray,
 
+            // "f64.arr_concat" => ConcatRealArray,
+            // "i32.arr_concat" => ConactIntArray,
+            // "str.arr_concat" => ConactStringArray,
+            // "c64.arr_concat" => ConactComplexArray,
             "sqrt" => Sqrt,
             "exp" => Exp,
             "limexp" => LimExp,
             "ln" => Ln,
             "log" => Log,
+            "clog2" => Clog2,
             "flor" => Floor,
             "ceil" => Ceil,
 

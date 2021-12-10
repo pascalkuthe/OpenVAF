@@ -3,10 +3,10 @@
 //! not semantically equivalent to Verilog types:
 //!
 //! * Nested Arrays are represented as a simple flattened array to allow for faster/easier codegen
-//! * Complex numbers are added to allow efficently generating code for small signal analysis
+//! * Complex numbers are added to allow efficiently generating code for small signal analysis
 //! * Unsized types (empty arrays) are not represented
 //!
-//! CFG instructions are strictly typed. That means that based upon the Op code alone uniqule
+//! CFG instructions are strictly typed. That means that based upon the Op code alone uniquely
 //! determines the following properties
 //!
 //! * the number of operands
@@ -16,29 +16,17 @@
 //! As a result Ty is not used in Instructions. Instead it is only in local declarations.
 //! However each operand could be a constant and therefore is possibly represented in any values of
 //! the CFG. Furthermore a huge amount of constants is usually cloned and stored during const propagation.
-//! As a result `Const` is heavily optimzed for size and should be cheap to clone.
+//! As a result `Const` is heavily optimized for size and should be cheap to clone.
 //!
-//! This is achieved by using interned strings (lasso::MiniSpur) to represent strings, thin arcs
+//! This is achieved by using interned strings (lasso::Spur) to represent strings, thin arcs
 //! (triomphe::ThinArc) for arrays and boxing complex numbers (to cut their size in half when not
 //! used)
 
-use lasso::MiniSpur;
-use stdx::impl_debug;
-use triomphe::ThinArc;
+use lasso::Spur;
+use stdx::{impl_debug, impl_from_typed};
 
+// use triomphe::ThinArc;
 use crate::parse::{CfgParser, Parse, ParseFromStr};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Ty {
-    Real,    // f64
-    Int,     // i32
-    Complex, // [f64,f64]
-    String,  // *const c_str
-    RealArray(u32),
-    IntArray(u32),
-    ComplexArray(u32),
-    StringArray(u32),
-}
 
 #[derive(Clone, PartialEq, Copy)]
 pub struct Complex64 {
@@ -67,11 +55,13 @@ pub enum Const {
     Bool(bool),
     // TODO benchmark: Is this worth it?
     Complex(Box<Complex64>),
-    String(MiniSpur),
-    RealArray(Array<f64>),
-    IntArray(Array<i32>),
-    ComplexArray(Array<Complex64>),
-    StringArray(Array<MiniSpur>),
+    String(Spur),
+    // RealArray(Array<f64>),
+    // IntArray(Array<i32>),
+    // ComplexArray(Array<Complex64>),
+    // StringArray(Array<Spur>),
+    // Zero sized type (currently only used for empty array)
+    Zst,
 }
 
 impl_debug! {
@@ -81,11 +71,25 @@ impl_debug! {
         Const::Bool(val) => "{:?}", val;
         Const::Complex(val) => "c64 {:?}", val;
         Const::String(val) => "str {:?}", val;
-        Const::RealArray(data) => "f64[] {:?}", &data.slice;
-        Const::IntArray(data) => "i32[] {:?}", &data.slice;
-        Const::ComplexArray(data) => "c64 {:?}", &data.slice;
-        Const::StringArray(data) => "str[] {:?}", &data.slice;
+        // Const::RealArray(data) => "f64[] {:?}", &data.slice;
+        // Const::IntArray(data) => "i32[] {:?}", &data.slice;
+        // Const::ComplexArray(data) => "c64 {:?}", &data.slice;
+        // Const::StringArray(data) => "str[] {:?}", &data.slice;
+        Const::Zst => "[]";
     }
 }
 
-pub type Array<T> = ThinArc<(), T>;
+impl_from_typed!(
+    Real(f64),
+    Int(i32),
+    Bool(bool),
+    Complex(Box<Complex64>),
+    String(Spur)
+    // RealArray(Array<f64>),
+    // IntArray(Array<i32>),
+    // ComplexArray(Array<Complex64>),
+    // StringArray(Array<Spur>)
+    for Const
+);
+
+// pub type Array<T> = ThinArc<(), T>;
