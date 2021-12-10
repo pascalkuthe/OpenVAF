@@ -7,3 +7,5 @@ cargo-timing*.html
 vendor
 .maintainer
 .commit
+flake.nix
+flake.lock
