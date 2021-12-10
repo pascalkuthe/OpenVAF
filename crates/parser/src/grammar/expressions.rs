@@ -103,7 +103,7 @@ fn atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
 
     let done = match p.current() {
         T!['('] => paren_expr(p),
-        T!["'{"] => array_expr(p),
+        // T!["'{"] => array_expr(p), TODO properly implement arrays
         T![~] | T![!] | T![-] | T![+] => {
             let m = p.start();
             p.bump_ts(TokenSet::new(&[T![~], T![!], T![-], T![+]]));
@@ -161,21 +161,21 @@ fn paren_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, PAREN_EXPR)
 }
 
-fn array_expr(p: &mut Parser) -> CompletedMarker {
-    let m = p.start();
-    p.bump(T!["'{"]);
-    while !p.at(EOF) && !p.at(T![']']) {
-        // test array_attrs
-        // const A: &[i64] = &[1, #[cfg(test)] 2];
-        if expr(p).is_none() {
-            break;
-        }
+// fn array_expr(p: &mut Parser) -> CompletedMarker {
+//     let m = p.start();
+//     p.bump(T!["'{"]);
+//     while !p.at(EOF) && !p.at(T![']']) {
+//         // test array_attrs
+//         // const A: &[i64] = &[1, #[cfg(test)] 2];
+//         if expr(p).is_none() {
+//             break;
+//         }
 
-        if !p.at(T!['}']) && !p.expect(T![,]) {
-            break;
-        }
-    }
-    p.expect(T!['}']);
+//         if !p.at(T!['}']) && !p.expect(T![,]) {
+//             break;
+//         }
+//     }
+//     p.expect(T!['}']);
 
-    m.complete(p, ARRAY_EXPR)
-}
+//     m.complete(p, ARRAY_EXPR)
+// }
