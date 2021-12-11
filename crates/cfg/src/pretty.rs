@@ -5,7 +5,7 @@ use lasso::Spur;
 use crate::{BasicBlockData, Const, ControlFlowGraph, InstrDst, Instruction, Operand, Terminator};
 
 impl ControlFlowGraph {
-    pub fn print(&self, lit: &lasso::Rodeo<Spur>) -> String {
+    pub fn dump(&self, lit: &lasso::Rodeo<Spur>) -> String {
         let mut print =
             Printer { cfg: self, lit, buf: String::new(), indent_level: 0, needs_indent: true };
         print.print();
@@ -49,7 +49,7 @@ impl<'a> Printer<'a> {
         wln!(self, "{{");
         wln!(self, "next_local {:?};", self.cfg.next_local);
         for (id, bb) in self.cfg.blocks.iter_enumerated() {
-            wln!(self, "{:?}:", id);
+            w!(self, "{:?}:", id);
             self.indented(|s| s.print_bb(bb))
         }
         w!(self, "}}")
@@ -66,7 +66,7 @@ impl<'a> Printer<'a> {
         if let Some(terminator) = &bb.terminator {
             self.print_terminator(terminator);
         }
-        wln!(self)
+        wln!(self);
     }
 
     pub fn print_instr(&mut self, instr: &Instruction) {
