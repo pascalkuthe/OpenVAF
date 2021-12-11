@@ -72,7 +72,7 @@ pub trait HirDefDB: InternDB {
     fn body_source_map(&self, def: DefWithBodyId) -> Arc<BodySourceMap>;
 
     #[salsa::invoke(DisciplineData::discipline_data_query)]
-    fn disipline_data(&self, discipline: DisciplineId) -> Arc<DisciplineData>;
+    fn discipline_data(&self, discipline: DisciplineId) -> Arc<DisciplineData>;
 
     #[salsa::invoke(NatureData::nature_data_query)]
     fn nature_data(&self, nature: NatureId) -> Arc<NatureData>;

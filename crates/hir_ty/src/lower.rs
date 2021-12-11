@@ -150,7 +150,7 @@ pub enum DisciplineAccess {
 
 impl DisciplineTy {
     pub fn discipline_info_query(db: &dyn HirTyDB, discipline: DisciplineId) -> Arc<DisciplineTy> {
-        let data = db.disipline_data(discipline);
+        let data = db.discipline_data(discipline);
         let def_map = db.def_map(discipline.lookup(db.upcast()).root_file);
         Arc::new(DisciplineTy {
             flow: data.flow.as_ref().and_then(|flow| lookup_nature(&def_map, flow, db).ok()),
@@ -241,7 +241,7 @@ impl BranchTy {
             Some(nature) => Some(NatureTy::lookup_attr(db, nature, name)),
             None => Some(Err(PathResolveError::NotFoundIn {
                 name: kw::flow,
-                scope: db.disipline_data(discipline).name.clone(),
+                scope: db.discipline_data(discipline).name.clone(),
             })),
         }
     }
@@ -256,7 +256,7 @@ impl BranchTy {
             Some(nature) => Some(NatureTy::lookup_attr(db, nature, name)),
             None => Some(Err(PathResolveError::NotFoundIn {
                 name: kw::potential,
-                scope: db.disipline_data(discipline).name.clone(),
+                scope: db.discipline_data(discipline).name.clone(),
             })),
         }
     }
