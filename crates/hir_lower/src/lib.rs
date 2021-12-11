@@ -120,6 +120,7 @@ impl LoweringResult {
         ctx_data.cfg.terminate(Terminator::Goto(ctx_data.cfg.cfg.blocks.len().into()));
         ctx_data.cfg.enter_new_block();
         ctx_data.cfg.terminate(Terminator::End);
+        ctx_data.cfg.cfg.next_place = ctx_data.places.len().into();
 
         LoweringResult {
             derivatives: ctx_data.finish_derivatives(),
@@ -448,16 +449,17 @@ impl LoweringCtx<'_, '_> {
             (Type::Array { .. }, Type::EmptyArray) | (Type::EmptyArray, Type::Array { .. }) => {
                 return val
             }
-            (dst @ Type::Array { .. }, src @ Type::Array { .. }) => {
-                match (dst.base_type(), src.base_type()) {
-                    (Type::Real, Type::Integer) => Op::ArrIntToReal,
-                    (Type::Integer, Type::Real) => Op::ArrRealToInt,
-                    (Type::Real, Type::Bool) => Op::ArrBoolToReal,
-                    (Type::Integer, Type::Bool) => Op::ArrBoolToInt,
-                    (Type::Bool, Type::Integer) => Op::ArrIntToBool,
-                    _ => unreachable!(),
-                }
-            }
+            // TODO Arrays
+            // (dst @ Type::Array { .. }, src @ Type::Array { .. }) => {
+            //     match (dst.base_type(), src.base_type()) {
+            //         (Type::Real, Type::Integer) => Op::ArrIntToReal,
+            //         (Type::Integer, Type::Real) => Op::ArrRealToInt,
+            //         (Type::Real, Type::Bool) => Op::ArrBoolToReal,
+            //         (Type::Integer, Type::Bool) => Op::ArrBoolToInt,
+            //         (Type::Bool, Type::Integer) => Op::ArrIntToBool,
+            //         _ => unreachable!(),
+            //     }
+            // }
             _ => unreachable!(),
         };
         self.data.cfg.build_val(op, vec![val], expr.into()).into()
@@ -615,9 +617,7 @@ impl LoweringCtx<'_, '_> {
             BinaryOp::Remainder => {
                 match_signature!(signature: INT_OP => Op::IntRem, REAL_OP => Op::RealRem)
             }
-            BinaryOp::Power => {
-                match_signature!(signature: REAL_OP => Op::RealPow, INT_OP => Op::IntPow)
-            }
+            BinaryOp::Power => Op::RealPow,
 
             BinaryOp::LeftShift => Op::IntShl,
             BinaryOp::RightShift => Op::IntShr,
@@ -712,8 +712,6 @@ impl LoweringCtx<'_, '_> {
             BuiltIn::min => {
                 match_signature!(signature: MAX_REAL => Op::RealMin, MAX_INT => Op::RealMin)
             }
-
-            // TODO check standard
             BuiltIn::pow => Op::RealPow,
 
             // TODO implement properly

@@ -22,6 +22,8 @@
 //! (triomphe::ThinArc) for arrays and boxing complex numbers (to cut their size in half when not
 //! used)
 
+use std::ops::{Add, Div, Mul, Sub};
+
 use lasso::Spur;
 use stdx::{impl_debug, impl_from_typed};
 
@@ -33,6 +35,52 @@ pub struct Complex64 {
     pub real: f64,
     pub imag: f64,
 }
+
+impl Complex64 {
+    pub fn abs2(self) -> f64 {
+        self.real * self.real + self.imag + self.imag
+    }
+}
+
+impl Add for Complex64 {
+    type Output = Complex64;
+
+    fn add(self, rhs: Complex64) -> Complex64 {
+        Complex64 { real: self.real + rhs.real, imag: self.imag + rhs.imag }
+    }
+}
+
+impl Sub for Complex64 {
+    type Output = Complex64;
+
+    fn sub(self, rhs: Complex64) -> Complex64 {
+        Complex64 { real: self.real - rhs.real, imag: self.imag - rhs.imag }
+    }
+}
+
+impl Mul for Complex64 {
+    type Output = Complex64;
+
+    fn mul(self, rhs: Complex64) -> Complex64 {
+        Complex64 {
+            real: self.real * rhs.real - self.imag * rhs.imag,
+            imag: self.real * rhs.imag + self.imag * rhs.real,
+        }
+    }
+}
+
+impl Div for Complex64 {
+    type Output = Complex64;
+
+    fn div(self, rhs: Complex64) -> Complex64 {
+        let rhs_abs2 = rhs.abs2();
+        Complex64 {
+            real: (self.real * rhs.real + self.imag * rhs.imag) / rhs_abs2,
+            imag: (self.imag * rhs.real - self.real * rhs.imag) / rhs_abs2,
+        }
+    }
+}
+
 impl_debug! {
     match Complex64{
         Complex64{real,imag} => "{}, {}", real,imag;
@@ -48,13 +96,12 @@ impl Parse for Complex64 {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub enum Const {
     Real(f64),
     Int(i32),
     Bool(bool),
-    // TODO benchmark: Is this worth it?
-    Complex(Box<Complex64>),
+    Complex(Complex64),
     String(Spur),
     // RealArray(Array<f64>),
     // IntArray(Array<i32>),
@@ -62,6 +109,46 @@ pub enum Const {
     // StringArray(Array<Spur>),
     // Zero sized type (currently only used for empty array)
     Zst,
+}
+
+impl PartialEq for Const {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            // Manual eq implementation: Two constants are identical if they are bitwise identical!
+            (Self::Real(l0), Self::Real(r0)) => l0.to_bits() == r0.to_bits(),
+            (Self::Int(l0), Self::Int(r0)) => l0 == r0,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::Complex(l0), Self::Complex(r0)) => l0 == r0,
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Const {
+    pub fn unwrap_real(&self) -> f64 {
+        if let Const::Real(val) = self {
+            *val
+        } else {
+            unreachable!("called unwrap_real on {:?}", self)
+        }
+    }
+
+    pub fn unwrap_int(&self) -> i32 {
+        if let Const::Int(val) = self {
+            *val
+        } else {
+            unreachable!("called unwrap_int on {:?}", self)
+        }
+    }
+
+    pub fn unwrap_bool(&self) -> bool {
+        if let Const::Bool(val) = self {
+            *val
+        } else {
+            unreachable!("called unwrap_bool on {:?}", self)
+        }
+    }
 }
 
 impl_debug! {
@@ -83,7 +170,7 @@ impl_from_typed!(
     Real(f64),
     Int(i32),
     Bool(bool),
-    Complex(Box<Complex64>),
+    Complex(Complex64),
     String(Spur)
     // RealArray(Array<f64>),
     // IntArray(Array<i32>),

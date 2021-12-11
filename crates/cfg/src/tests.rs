@@ -7,6 +7,7 @@ pub fn roundtrip() {
     let src = expect![[r##"
         {
         next_local _6;
+        next_place p2;
         bb0:
             let _0 := f64.* [f64 3.141, f64 2.0];
             let _1 := f64.+ [p1, _0];

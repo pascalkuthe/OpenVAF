@@ -191,6 +191,7 @@ bultins! {
     const fn REAL_INFO() -> Real;
     const fn REAL_MATH_1(Val(Real)) -> Real;
     const fn REAL_MATH_2(Val(Real),Val(Real)) -> Real;
+    const fn INT_MATH_2(Val(Integer),Val(Integer)) -> Integer;
 
 
     VT = const {
@@ -404,7 +405,7 @@ copied_builtins! {
     FLOOR = REAL_MATH_1
     LN = REAL_MATH_1
     LOG = REAL_MATH_1
-    CLOG2 = REAL_MATH_2
+    CLOG2 = INT_MATH_2
     LOG10 = REAL_MATH_1
     CEIL = REAL_MATH_1
     LIMEXP = REAL_MATH_1

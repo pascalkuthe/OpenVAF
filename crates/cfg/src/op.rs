@@ -23,12 +23,12 @@ pub enum Op {
     BoolToInt,
     IntToBool,
 
-    ArrRealToInt,
-    ArrIntToReal,
-    ArrBoolToReal,
-    ArrBoolToInt,
-    ArrIntToBool,
-
+    // TOODO ARRAYS
+    //     ArrRealToInt,
+    //     ArrIntToReal,
+    //     ArrBoolToReal,
+    //     ArrBoolToInt,
+    //     ArrIntToBool,
     RealToComplex,
     RealComponent,
     ImagComponent,
@@ -89,7 +89,6 @@ pub enum Op {
     // ConactComplexArray,
     Sqrt,
     Exp,
-    LimExp,
     Ln,
     Log,
     Clog2,
@@ -120,7 +119,6 @@ pub enum Op {
     RealPow,
 
     IntAbs,
-    IntPow,
     IntMin,
     IntMax,
 
@@ -145,16 +143,12 @@ impl_debug! {
         IntToBool           => "cast_i32_bool";
         BoolToReal          => "cast_bool_real";
 
-
-        ArrRealToInt           => "arr_cast_f64_i32";
-        ArrIntToReal           => "arr_cast_i32_f64";
-        ArrBoolToInt           => "arr_cast_bool_i32";
-        ArrIntToBool           => "arr_cast_i32_bool";
-        ArrBoolToReal          => "arr_cast_bool_real";
-
-
-
-
+        // TODO arrays
+        // ArrRealToInt           => "arr_cast_f64_i32";
+        // ArrIntToReal           => "arr_cast_i32_f64";
+        // ArrBoolToInt           => "arr_cast_bool_i32";
+        // ArrIntToBool           => "arr_cast_i32_bool";
+        // ArrBoolToReal          => "arr_cast_bool_real";
 
         RealToComplex       => "cast_f64_c64";
         RealComponent       => "c_real";
@@ -218,7 +212,6 @@ impl_debug! {
 
         Sqrt                => "sqrt";
         Exp                 => "exp";
-        LimExp              => "limexp";
         Ln                  => "ln";
         Log                 => "log";
         Clog2               => "clog2";
@@ -249,7 +242,6 @@ impl_debug! {
         RealPow             => "f64.pow";
 
         IntAbs              => "i32.abs";
-        IntPow              => "i32.pow";
         IntMin              => "i32.min";
         IntMax              => "i32.max";
 
@@ -278,12 +270,12 @@ impl FromStr for Op {
             "cast_i32_bool" => IntToBool,
             "cast_bool_real" => BoolToReal,
 
-            "arr_cast_f64_i32" => ArrRealToInt,
-            "arr_cast_i32_f64" => ArrIntToReal,
-            "arr_cast_bool_i32" => ArrBoolToInt,
-            "arr_cast_i32_bool" => ArrIntToBool,
-            "arr_cast_bool_real" => ArrBoolToReal,
-
+            // TODO arrays
+            // "arr_cast_f64_i32" => ArrRealToInt,
+            // "arr_cast_i32_f64" => ArrIntToReal,
+            // "arr_cast_bool_i32" => ArrBoolToInt,
+            // "arr_cast_i32_bool" => ArrIntToBool,
+            // "arr_cast_bool_real" => ArrBoolToReal,
             "cast_f64_c64" => RealToComplex,
             "c_real" => RealComponent,
             "c_imag" => ImagComponent,
@@ -313,8 +305,8 @@ impl FromStr for Op {
             "c64.*" => CmplxMul,
             "c64./" => CmplxDiv,
 
-            "i64.<" => IntLessThen,
-            "i64.>" => IntGreaterThen,
+            "i32.<" => IntLessThen,
+            "i32.>" => IntGreaterThen,
             "f64.<" => RealLessThen,
             "f64.>" => RealGreaterThen,
             "i32.<=" => IntLessEqual,
@@ -344,7 +336,6 @@ impl FromStr for Op {
             // "c64.arr_concat" => ConactComplexArray,
             "sqrt" => Sqrt,
             "exp" => Exp,
-            "limexp" => LimExp,
             "ln" => Ln,
             "log" => Log,
             "clog2" => Clog2,
@@ -375,7 +366,6 @@ impl FromStr for Op {
             "f64.pow" => RealPow,
 
             "i32.abs" => IntAbs,
-            "i32.pow" => IntPow,
             "i32.min" => IntMin,
             "i32.max" => IntMax,
 

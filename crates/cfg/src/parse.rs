@@ -194,7 +194,7 @@ impl Parse for Const {
             "i32" => Const::Int(ParseFromStr::<i32>::parse(p)?.0),
 
             // "c64" if is_arr => Const::ComplexArray(p.parse()?),
-            "c64" => Const::Complex(Box::new(p.parse()?)),
+            "c64" => Const::Complex(p.parse()?),
 
             // "str" if is_arr => Const::StringArray(p.parse()?),
             "str" => Const::String(p.parse()?),
@@ -336,7 +336,7 @@ impl Parse for Terminator {
             p.expect("}else{")?;
             let false_block = p.parse()?;
             p.expect("}")?;
-            let loop_head = p.eat("(loop_head)")?;
+            let loop_head = p.eat("(loop)")?;
 
             return Ok(Terminator::Split { condition, true_block, false_block, loop_head });
         }
@@ -356,6 +356,10 @@ impl Parse for ControlFlowGraph {
         let mut res = ControlFlowGraph::default();
         p.expect("next_local")?;
         res.next_local = p.parse()?;
+        p.expect(";")?;
+
+        p.expect("next_place")?;
+        res.next_place = p.parse()?;
         p.expect(";")?;
 
         while !p.eat("}")? {

@@ -74,6 +74,7 @@ endmodule
     let cfg = expect![[r##"
         {
         next_local _10;
+        next_place p2;
         bb0:
             let _0 := i32.abs [#0];
             let _1 := i32.+ [_0, #1];

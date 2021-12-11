@@ -23,5 +23,4 @@ triomphe = {version = "0.1", default_features = false, features=["std"]}
 lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
-
-expect-test = "1.1.0"
+expect-test = "1.1"

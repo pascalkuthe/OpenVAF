@@ -48,6 +48,7 @@ impl<'a> Printer<'a> {
     pub fn print(&mut self) {
         wln!(self, "{{");
         wln!(self, "next_local {:?};", self.cfg.next_local);
+        wln!(self, "next_place {:?};", self.cfg.next_place);
         for (id, bb) in self.cfg.blocks.iter_enumerated() {
             w!(self, "{:?}:", id);
             self.indented(|s| s.print_bb(bb))

@@ -29,7 +29,7 @@ impl<'a> CfgBuilder<'a> {
             dst: InstrDst::Local(dst),
             op,
             args: operands.into_boxed_slice(),
-            src,
+            src: src as i32,
         });
         dst
     }
@@ -46,7 +46,7 @@ impl<'a> CfgBuilder<'a> {
             dst: InstrDst::Place(dst),
             op: Op::Copy,
             args: vec![val].into_boxed_slice(),
-            src,
+            src: src as i32,
         });
     }
 
@@ -55,7 +55,7 @@ impl<'a> CfgBuilder<'a> {
             dst,
             op,
             args: operands.into_boxed_slice(),
-            src,
+            src: src as i32,
         });
     }
 
@@ -64,7 +64,7 @@ impl<'a> CfgBuilder<'a> {
             dst: InstrDst::Ignore,
             op,
             args: operands.into_boxed_slice(),
-            src,
+            src: src as i32,
         });
     }
 

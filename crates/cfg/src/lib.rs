@@ -22,14 +22,13 @@
 //!   and some functions behave different (or are unavailable) in some of these CFGs.
 
 use std::hash::Hash;
-use std::iter::once;
 use std::ops::{Index, IndexMut};
 
 use ahash::AHashMap;
 use arena::{Arena, Idx};
 use arrayvec::ArrayVec;
 pub use builder::CfgBuilder;
-use lasso::Spur;
+pub use lasso::Spur;
 use stdx::{impl_debug, impl_from, impl_idx_from};
 use typed_index_collections::TiVec;
 
@@ -43,8 +42,7 @@ use crate::transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
     ReversePostorderIterMut,
 };
-// use crate::ty::Array;
-pub use crate::ty::Const;
+pub use crate::ty::{Complex64, Const};
 
 #[cfg(test)]
 mod tests;
@@ -227,7 +225,7 @@ pub struct Instruction {
     pub dst: InstrDst,
     pub op: Op,
     pub args: Box<[Operand]>,
-    pub src: u32,
+    pub src: i32,
 }
 
 impl Instruction {
@@ -440,7 +438,8 @@ impl Terminator {
 
 #[derive(Clone, Debug)]
 pub struct ControlFlowGraph {
-    next_local: Local,
+    pub next_local: Local,
+    pub next_place: Place,
     pub blocks: TiVec<BasicBlock, BasicBlockData>,
     pub predecessor_cache: PredecessorCache,
     pub is_cyclic: GraphIsCyclicCache,
@@ -453,6 +452,7 @@ impl Default for ControlFlowGraph {
             blocks: Default::default(),
             predecessor_cache: Default::default(),
             is_cyclic: Default::default(),
+            next_place: Place(0),
         }
     }
 }
@@ -468,6 +468,12 @@ impl ControlFlowGraph {
     #[must_use]
     pub fn exit(&self) -> BasicBlock {
         self.blocks.last_key().unwrap()
+    }
+
+    pub fn new_place(&mut self) -> Place {
+        let res = self.next_place;
+        self.next_place.0 += 1;
+        res
     }
 
     pub fn is_cyclic(&self) -> bool {
@@ -548,41 +554,6 @@ impl ControlFlowGraph {
 
     pub fn reverse_postorder_itermut(&mut self) -> ReversePostorderIterMut<'_> {
         ReversePostorderIterMut::new(self, self.entry())
-    }
-
-    pub fn locations(&self) -> impl Iterator<Item = Location> + '_ {
-        self.blocks.iter_enumerated().flat_map(|(id, block)| {
-            let phi_locations = block
-                .phis
-                .keys()
-                .map(move |phi| Location { block: id, kind: LocationKind::Phi(phi) });
-
-            let stmnt_locations = block
-                .instructions
-                .keys()
-                .map(move |instr| Location { block: id, kind: LocationKind::Instruction(instr) });
-
-            phi_locations
-                .chain(stmnt_locations)
-                .chain(once(Location { block: id, kind: LocationKind::Terminator }))
-        })
-    }
-
-    pub fn intern_locations(&mut self) -> InternedLocations {
-        let locations: TiVec<_, _> = self.locations().collect();
-        let mut blocks: TiVec<BasicBlock, BlockLocations> = TiVec::with_capacity(self.blocks.len());
-        let mut start = IntLocation::from(0u32);
-        for (id, location) in locations.iter_enumerated() {
-            if location.block != blocks.next_key() {
-                blocks.push(BlockLocations {
-                    phi_start: start,
-                    instr_start: start + self.blocks[blocks.next_key()].phis.len(),
-                    terminator: id - 1u32,
-                });
-                start = id;
-            }
-        }
-        InternedLocations { locations, blocks }
     }
 }
 
