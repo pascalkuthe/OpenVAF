@@ -121,6 +121,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "const_eval"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "cfg",
+ "data_flow",
+ "expect-test",
+]
+
+[[package]]
 name = "countme"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
