@@ -1,7 +1,8 @@
-use super::{Analysis, Direction, Results};
 use cfg::{
     BasicBlock, BasicBlockData, ControlFlowGraph, InstIdx, Instruction, Phi, PhiIdx, Terminator,
 };
+
+use super::{Analysis, Direction, Results};
 
 /// Calls the corresponding method in `ResultsVisitor` for every location in a ControlFlow Graph with the
 /// dataflow state at that location.
@@ -153,7 +154,7 @@ pub trait ResultsVisitorMut {
     fn visit_instruction_before_effect(
         &mut self,
         _state: &Self::FlowState,
-        _stmnt: &mut Instruction,
+        _instr: &mut Instruction,
         _block: BasicBlock,
         _id: InstIdx,
     ) {
@@ -163,7 +164,7 @@ pub trait ResultsVisitorMut {
     fn visit_instruction_after_effect(
         &mut self,
         _state: &Self::FlowState,
-        _stmnt: &mut Instruction,
+        _instr: &mut Instruction,
         _block: BasicBlock,
         _id: InstIdx,
     ) {
@@ -200,7 +201,6 @@ pub trait ResultsVisitorMut {
 /// Things that can be visited by a `ResultsVisitor`.
 ///
 /// This trait exists so that we can visit the results of multiple dataflow analyses simultaneously.
-/// DO NOT IMPLEMENT MANUALLY. Instead, use the `impl_visitable` macro below.
 pub trait ResultsVisitable {
     type Direction: Direction;
     type FlowState;
@@ -216,7 +216,7 @@ pub trait ResultsVisitable {
         cfg: &ControlFlowGraph,
         state: &mut Self::FlowState,
         block: BasicBlock,
-    );
+    ) -> bool;
 
     fn reconstruct_phi_effect(
         &self,
@@ -262,8 +262,8 @@ where
         cfg: &ControlFlowGraph,
         state: &mut Self::FlowState,
         block: BasicBlock,
-    ) {
-        state.clone_from(&self.entry_set_for_block(block));
+    ) -> bool {
+        state.clone_from(self.entry_set_for_block(block));
         self.analysis.init_block(cfg, state)
     }
 
@@ -286,7 +286,7 @@ where
         bb: BasicBlock,
         id: InstIdx,
     ) {
-        self.analysis.apply_statement_effect(cfg, state, statement, id, bb);
+        self.analysis.apply_instr_effect(cfg, state, statement, id, bb);
     }
 
     fn reconstruct_terminator_effect(
@@ -299,95 +299,3 @@ where
         self.analysis.apply_terminator_effect(cfg, state, terminator, bb);
     }
 }
-//
-// /// A tuple with named fields that can hold either the results or the transient state of the
-// /// dataflow analyses used by the borrow checker.
-// #[derive(Debug)]
-// pub struct BorrowckAnalyses<B, U, E> {
-//     pub borrows: B,
-//     pub uninits: U,
-//     pub ever_inits: E,
-// }
-//
-// /// The results of the dataflow analyses used by the borrow checker.
-// pub type BorrowckResults<'mir, 'tcx> = BorrowckAnalyses<
-//     Results<'tcx, Borrows<'mir, 'tcx>>,
-//     Results<'tcx, MaybeUninitializedPlaces<'mir, 'tcx>>,
-//     Results<'tcx, EverInitializedPlaces<'mir, 'tcx>>,
-// >;
-//
-// /// The transient state of the dataflow analyses used by the borrow checker.
-// pub type BorrowckFlowState<'mir, 'tcx> =
-// <BorrowckResults<'mir, 'tcx> as ResultsVisitable<'tcx>>::FlowState;
-//
-// macro_rules! impl_visitable {
-//     ( $(
-//         $T:ident { $( $field:ident : $A:ident ),* $(,)? }
-//     )* ) => { $(
-//         impl<'tcx, $($A),*, D: Direction> ResultsVisitable<'tcx> for $T<$( Results<'tcx, $A> ),*>
-//         where
-//             $( $A: Analysis<'tcx, Direction = D>, )*
-//         {
-//             type Direction = D;
-//             type FlowState = $T<$( $A::Domain ),*>;
-//
-//             fn new_flow_state(&self, body: &mir::Body<'tcx>) -> Self::FlowState {
-//                 $T {
-//                     $( $field: self.$field.analysis.bottom_value(body) ),*
-//                 }
-//             }
-//
-//             fn reset_to_block_entry(
-//                 &self,
-//                 state: &mut Self::FlowState,
-//                 block: BasicBlock,
-//             ) {
-//                 $( state.$field.clone_from(&self.$field.entry_set_for_block(block)); )*
-//             }
-//
-//             fn reconstruct_before_statement_effect(
-//                 &self,
-//                 state: &mut Self::FlowState,
-//                 stmt: &mir::Statement<'tcx>,
-//                 loc: Location,
-//             ) {
-//                 $( self.$field.analysis
-//                     .apply_before_statement_effect(&mut state.$field, stmt, loc); )*
-//             }
-//
-//             fn reconstruct_statement_effect(
-//                 &self,
-//                 state: &mut Self::FlowState,
-//                 stmt: &mir::Statement<'tcx>,
-//                 loc: Location,
-//             ) {
-//                 $( self.$field.analysis
-//                     .apply_statement_effect(&mut state.$field, stmt, loc); )*
-//             }
-//
-//             fn reconstruct_before_terminator_effect(
-//                 &self,
-//                 state: &mut Self::FlowState,
-//                 term: &mir::Terminator<'tcx>,
-//                 loc: Location,
-//             ) {
-//                 $( self.$field.analysis
-//                     .apply_before_terminator_effect(&mut state.$field, term, loc); )*
-//             }
-//
-//             fn reconstruct_terminator_effect(
-//                 &self,
-//                 state: &mut Self::FlowState,
-//                 term: &mir::Terminator<'tcx>,
-//                 loc: Location,
-//             ) {
-//                 $( self.$field.analysis
-//                     .apply_terminator_effect(&mut state.$field, term, loc); )*
-//             }
-//         }
-//     )* }
-// }
-//
-// impl_visitable! {
-//     BorrowckAnalyses { borrows: B, uninits: U, ever_inits: E }
-// }

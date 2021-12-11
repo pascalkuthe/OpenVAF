@@ -1,12 +1,11 @@
-use super::Analysis;
-use crate::{
-    visitor::{ResultsVisitable, ResultsVisitor, ResultsVisitorMut},
-    Effect, EffectIndex, GenKillAnalysis, GenKillSet,
-};
+use std::cmp::min;
+use std::ops::RangeInclusive;
+
 use cfg::{BasicBlock, BasicBlockData, ControlFlowGraph, InstIdx, PhiIdx, Terminator};
 
-use std::cmp::max;
-use std::ops::RangeInclusive;
+use super::Analysis;
+use crate::visitor::{ResultsVisitable, ResultsVisitor, ResultsVisitorMut};
+use crate::{Effect, EffectIndex, GenKillAnalysis, GenKillSet};
 
 pub trait Direction {
     const IS_FORWARD: bool;
@@ -124,7 +123,7 @@ impl Direction for Backward {
             for (idx, stmnt) in
                 block_data.instructions[stmnt_start..stmnt_end].iter_enumerated().rev()
             {
-                analysis.apply_statement_effect(cfg, state, stmnt, idx, block);
+                analysis.apply_instr_effect(cfg, state, stmnt, idx, block);
             }
             end = block_data.phis.len()
         }
@@ -148,12 +147,14 @@ impl Direction for Backward {
     ) where
         A: Analysis,
     {
-        analysis.init_block(cfg, state);
+        if !analysis.init_block(cfg, state) {
+            return;
+        }
         let terminator = block_data.terminator();
         analysis.apply_terminator_effect(cfg, state, terminator, block);
 
         for (statement_index, stmnt) in block_data.instructions.iter_enumerated().rev() {
-            analysis.apply_statement_effect(cfg, state, stmnt, statement_index, block);
+            analysis.apply_instr_effect(cfg, state, stmnt, statement_index, block);
         }
 
         for (statement_index, phi) in block_data.phis.iter_enumerated().rev() {
@@ -340,7 +341,7 @@ impl Direction for Forward {
 
         if start < block_data.phis.len() {
             let phi_start = PhiIdx::from(start);
-            let phi_end = max(PhiIdx::from(end), block_data.phis.next_key());
+            let phi_end = min(PhiIdx::from(end), block_data.phis.next_key());
             // Handle all phis
             for (phi, phi_data) in block_data.phis[phi_start..phi_end].iter_enumerated() {
                 analysis.apply_phi_effect(cfg, state, phi_data, block, phi);
@@ -354,7 +355,7 @@ impl Direction for Forward {
             let end = InstIdx::from(end - block_data.phis.len());
             // Handle all statements
             for (idx, stmnt) in block_data.instructions[start..end].iter_enumerated() {
-                analysis.apply_statement_effect(cfg, state, stmnt, idx, block);
+                analysis.apply_instr_effect(cfg, state, stmnt, idx, block);
             }
         }
 
@@ -372,13 +373,15 @@ impl Direction for Forward {
     ) where
         A: Analysis,
     {
-        analysis.init_block(cfg, state);
+        if !analysis.init_block(cfg, state) {
+            return;
+        }
         for (statement_index, phi) in block_data.phis.iter_enumerated() {
             analysis.apply_phi_effect(cfg, state, phi, block, statement_index);
         }
 
         for (statement_index, stmnt) in block_data.instructions.iter_enumerated() {
-            analysis.apply_statement_effect(cfg, state, stmnt, statement_index, block);
+            analysis.apply_instr_effect(cfg, state, stmnt, statement_index, block);
         }
 
         let terminator = block_data.terminator();
@@ -418,7 +421,9 @@ impl Direction for Forward {
     {
         assert!(block < cfg.blocks.next_key());
 
-        results.reset_to_block_entry(cfg, state, block);
+        if !results.reset_to_block_entry(cfg, state, block) {
+            return;
+        }
 
         vis.visit_block_start(state, block_data, block);
 
@@ -452,7 +457,9 @@ impl Direction for Forward {
     {
         assert!(block < cfg.blocks.next_key());
 
-        results.reset_to_block_entry(cfg, state, block);
+        if !results.reset_to_block_entry(cfg, state, block) {
+            return;
+        }
         vis.visit_block_start(state, &mut cfg.blocks[block], block);
 
         for phi in cfg.blocks[block].phis.keys() {
@@ -573,7 +580,7 @@ where
             (self.propagate)(self.true_block, &tmp);
         }
 
-        tmp.clone_from(&self.exit_state);
+        tmp.clone_from(self.exit_state);
         if apply_edge_effect(&mut tmp, self.false_block, false) {
             (self.propagate)(self.false_block, &tmp);
         }

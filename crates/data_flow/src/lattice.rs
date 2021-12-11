@@ -38,11 +38,12 @@
 //! [Hasse diagram]: https://en.wikipedia.org/wiki/Hasse_diagram
 //! [poset]: https://en.wikipedia.org/wiki/Partially_ordered_set
 
-use ahash::AHashMap;
-use bitset::BitSet;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::option::Option::Some;
+
+use ahash::AHashMap;
+use bitset::BitSet;
 use stdx::iter;
 use typed_index_collections::TiVec;
 
@@ -149,15 +150,54 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> MeetSemiLattice fo
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct FlatSetMap<K: Hash + Eq, V: PartialEq>(AHashMap<K, FlatSet<V>>);
+#[derive(Debug, PartialEq)]
+pub struct SparseFlatSetMap<
+    K: Hash + Eq + From<usize> + Into<usize> + Copy + PartialEq + Debug,
+    V: PartialEq + Clone,
+> {
+    pub element_sets: AHashMap<K, V>,
+    pub top_sets: BitSet<K>,
+}
 
-impl<K: Hash + Eq, V: PartialEq> FlatSetMap<K, V> {
-    pub fn new_empty() -> Self {
-        FlatSetMap(AHashMap::new())
+impl<K, V> Clone for SparseFlatSetMap<K, V>
+where
+    K: Hash + Eq + From<usize> + Into<usize> + Copy + PartialEq + Debug,
+    V: PartialEq + Clone,
+{
+    fn clone(&self) -> Self {
+        Self { element_sets: self.element_sets.clone(), top_sets: self.top_sets.clone() }
     }
-    pub fn get_flat_set(&self, key: K) -> &FlatSet<V> {
-        &self.0.get(key)
+
+    fn clone_from(&mut self, source: &Self) {
+        self.element_sets.clone_from(&source.element_sets);
+        self.top_sets.clone_from(&source.top_sets);
+    }
+}
+
+impl<K: Hash + Eq + From<usize> + Into<usize> + Copy + PartialEq + Debug, V: PartialEq + Clone>
+    SparseFlatSetMap<K, V>
+{
+    pub fn new_empty(domain_size: usize) -> Self {
+        Self { element_sets: AHashMap::new(), top_sets: BitSet::new_empty(domain_size) }
+    }
+    pub fn get_flat_set(&self, key: K) -> FlatSet<&V> {
+        if self.top_sets.contains(key) {
+            FlatSet::Top
+        } else if let Some(val) = self.element_sets.get(&key) {
+            FlatSet::Elem(val)
+        } else {
+            FlatSet::Bottom
+        }
+    }
+
+    pub fn get_cloned_flat_set(&self, key: K) -> FlatSet<V> {
+        if self.top_sets.contains(key) {
+            FlatSet::Top
+        } else if let Some(val) = self.element_sets.get(&key) {
+            FlatSet::Elem(val.clone())
+        } else {
+            FlatSet::Bottom
+        }
     }
 
     pub fn set_flat_set(&mut self, key: K, val: FlatSet<V>) -> bool {
@@ -364,15 +404,6 @@ impl<T: PartialEq> FlatSet<T> {
             Self::Bottom => FlatSet::Bottom,
         }
     }
-
-    pub fn apply_binary_op(self, other: Self, f: impl FnOnce(T, T) -> T) -> Self {
-        match (self, other) {
-            (Self::Elem(arg1), Self::Elem(arg2)) => FlatSet::Elem(f(arg1, arg2)),
-            (Self::Top, _) | (_, Self::Top) => FlatSet::Top,
-            _ => FlatSet::Bottom,
-        }
-    }
-
     pub fn map_bottom(self, f: impl FnOnce() -> Self) -> Self {
         match self {
             Self::Bottom => f(),

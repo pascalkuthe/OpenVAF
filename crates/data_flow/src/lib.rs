@@ -1,19 +1,21 @@
 //! This module impliments a general data flow framework that allows to easily implement multiple data flow analysis
 
-use crate::{direction::Direction, engine::Engine, lattice::JoinSemiLattice};
+use std::borrow::BorrowMut;
+use std::cmp::Ordering;
+use std::fmt::Debug;
+
 use bitset::{BitSet, FullBitSetOperations, HybridBitSet};
 use cfg::{
     BasicBlock, ControlFlowGraph, InstIdx, Instruction, Location, LocationKind, Operand, Phi,
     PhiIdx, Terminator,
 };
-
-use std::borrow::BorrowMut;
-use std::cmp::Ordering;
-
 pub use cursors::{GenKillResultsCursor, GenKillResultsRefCursor, ResultsCursor, ResultsRefCursor};
 pub use engine::{GenKillResults, Results};
-use std::fmt::Debug;
 pub use visitor::{ResultsVisitable, ResultsVisitor, ResultsVisitorMut};
+
+use crate::direction::Direction;
+use crate::engine::Engine;
+use crate::lattice::JoinSemiLattice;
 
 mod cursors;
 pub mod direction;
@@ -97,8 +99,12 @@ pub trait GenKillAnalysisDomain {
 /// point in the program may or may not be greater than the state at any preceding point.
 pub trait Analysis: AnalysisDomain {
     /// Init the state of block before the other analysis functions are called.
+    /// # Returns
+    /// whether the analysis should run for this body
     #[inline(always)]
-    fn init_block(&self, _cfg: &ControlFlowGraph, _state: &mut Self::Domain) {}
+    fn init_block(&self, _cfg: &ControlFlowGraph, _state: &mut Self::Domain) -> bool {
+        true
+    }
 
     /// Updates the current dataflow state with the effect of evaluating a phi.
     #[inline(always)]
@@ -114,7 +120,7 @@ pub trait Analysis: AnalysisDomain {
 
     /// Updates the current dataflow state with the effect of evaluating a statement.
     #[inline(always)]
-    fn apply_statement_effect(
+    fn apply_instr_effect(
         &self,
         _cfg: &ControlFlowGraph,
         _state: &mut Self::Domain,
@@ -282,7 +288,7 @@ where
 
     #[inline(always)]
     /// Updates the current dataflow state with the effect of evaluating a statement.
-    fn apply_statement_effect(
+    fn apply_instr_effect(
         &self,
         cfg: &ControlFlowGraph,
         state: &mut Self::Domain,

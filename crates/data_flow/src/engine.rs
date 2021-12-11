@@ -1,19 +1,17 @@
 //! A solver for dataflow problems.
 
-use std::{
-    borrow::BorrowMut,
-    fmt::{self, Debug, Formatter},
-};
+use std::borrow::BorrowMut;
+use std::fmt::{self, Debug, Formatter};
 
 use cfg::{BasicBlock, BasicBlockData, ControlFlowGraph};
 use stdx::iter::zip;
 use typed_index_collections::TiVec;
 use workqueue::WorkQueue;
 
+use crate::direction::Direction;
+use crate::lattice::JoinSemiLattice;
+use crate::visitor::{visit_results, visit_results_mut};
 use crate::{
-    direction::Direction,
-    lattice::JoinSemiLattice,
-    visitor::{visit_results, visit_results_mut},
     Analysis, GenKillAnalysis, GenKillAnalysisImpl, GenKillSet, ResultsCursor, ResultsRefCursor,
     ResultsVisitable, ResultsVisitor, ResultsVisitorMut,
 };
@@ -40,7 +38,7 @@ where
 
     /// Creates a `ResultsCursor` that can inspect these `Results`.
     pub fn as_results_cursor(&self, cfg: &ControlFlowGraph) -> ResultsRefCursor<A> {
-        ResultsRefCursor::new(cfg, &self)
+        ResultsRefCursor::new(cfg, self)
     }
 
     /// Gets the dataflow state for the given block.
@@ -161,6 +159,7 @@ where
         Self::new(cfg, analysis, None)
     }
 
+    #[allow(clippy::type_complexity)]
     fn new(
         cfg: &'a ControlFlowGraph,
         analysis: A,

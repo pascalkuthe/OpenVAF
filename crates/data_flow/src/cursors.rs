@@ -3,8 +3,9 @@
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 
-use crate::{Analysis, Direction, Effect, EffectIndex, GenKillAnalysisImpl, Results};
 use cfg::{BasicBlock, ControlFlowGraph, Location, LocationKind};
+
+use crate::{Analysis, Direction, Effect, EffectIndex, GenKillAnalysisImpl, Results};
 
 /// A `ResultsCursor` that borrows the underlying `Results`.
 pub type ResultsRefCursor<'a, A> = ResultsCursor<A, &'a Results<A>>;
@@ -60,7 +61,7 @@ where
 
     /// Returns the underlying `Results`.
     pub fn results(&self) -> &Results<A> {
-        &self.results.borrow()
+        self.results.borrow()
     }
 
     /// Returns the `Analysis` used to generate the underlying `Results`.
@@ -83,7 +84,7 @@ where
     ///
     /// For backward dataflow analyses, this is the dataflow state after the terminator.
     pub(super) fn seek_to_block_entry(&mut self, block: BasicBlock, cfg: &ControlFlowGraph) {
-        self.state.clone_from(&self.results.borrow().entry_set_for_block(block));
+        self.state.clone_from(self.results.borrow().entry_set_for_block(block));
         self.results.borrow().analysis.init_block(cfg, &mut self.state);
         self.pos = CursorPosition::block_entry(block);
         self.state_needs_reset = false;
