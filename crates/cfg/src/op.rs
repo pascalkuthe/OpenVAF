@@ -42,8 +42,6 @@ pub enum Op {
 
     IntShl,
     IntShr,
-    IntAShl,
-    IntAShr,
     IntXor,
     IntNXor,
     IntAnd,
@@ -171,8 +169,6 @@ impl_debug! {
 
         IntShl              => "i32.<<";
         IntShr              => "i32.>>";
-        IntAShl             => "i32.<<<";
-        IntAShr             => "i32.>>>";
         IntXor              => "i32.^";
         IntNXor             => "i32.=";
         IntAnd              => "i32.&";
@@ -301,8 +297,6 @@ impl FromStr for Op {
 
             "i32.<<" => IntShl,
             "i32.>>" => IntShr,
-            "i32.<<<" => IntAShl,
-            "i32.>>>" => IntAShr,
             "i32.^" => IntXor,
             "i32.=" => IntNXor,
             "i32.&" => IntAnd,

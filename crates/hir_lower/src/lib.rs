@@ -620,10 +620,7 @@ impl LoweringCtx<'_, '_> {
             }
 
             BinaryOp::LeftShift => Op::IntShl,
-            BinaryOp::ArithmaticLeftShift => Op::IntAShl,
-
             BinaryOp::RightShift => Op::IntShr,
-            BinaryOp::ArithmaticRightShift => Op::IntAShr,
 
             BinaryOp::BitwiseXor => Op::IntXor,
             BinaryOp::BitwiseEq => Op::IntNXor,
