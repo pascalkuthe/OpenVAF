@@ -1,9 +1,10 @@
 use rowan::TextRange;
 use tokens::SyntaxKind;
+use tokens::SyntaxKind::NET_TYPE;
 
 use crate::ast::{
-    self, ArgListOwner, AttrsOwner, BlockItem, Expr, FunctionItem, LiteralKind, ModulePortKind,
-    ModulePorts, Name, PathSegmentKind,
+    self, support, ArgListOwner, AttrsOwner, BlockItem, Expr, FunctionItem, LiteralKind,
+    ModulePortKind, ModulePorts, Name, PathSegmentKind,
 };
 use crate::name::{kw, kw_comp};
 use crate::{match_ast, AstNode, AstPtr, SyntaxError, SyntaxNode, SyntaxNodePtr, T};
@@ -22,7 +23,20 @@ pub(crate) fn validate(root: &SyntaxNode, errors: &mut Vec<SyntaxError>) {
                 ast::Literal(decl) => validate_literal(decl, errors),
                 ast::Name(name) => validate_name(name,errors),
                 ast::ModuleDecl(module) => validate_module(module,errors),
-                _ => ()
+                _ => validate_net_type_token(node,errors)
+            }
+        }
+    }
+}
+
+fn validate_net_type_token(node: SyntaxNode, errors: &mut Vec<SyntaxError>) {
+    if matches!(node.kind(), SyntaxKind::NET_DECL | SyntaxKind::PORT_DECL) {
+        if let Some(token) = support::token(&node, NET_TYPE) {
+            if token.text() != kw::raw::ground {
+                errors.push(SyntaxError::IllegalNetType {
+                    found: token.text().to_owned(),
+                    range: token.text_range(),
+                })
             }
         }
     }

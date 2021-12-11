@@ -493,6 +493,15 @@ impl Diagnostic for SyntaxError {
                     "or palce all port declarations in the body ".to_owned(),
                 ])
             }
+            SyntaxError::IllegalNetType { range, .. } => {
+                let FileSpan { range, file: file_id } = parse.to_file_span(range, &sm);
+                Report::error().with_labels(vec![Label {
+                    style: LabelStyle::Primary,
+                    file_id,
+                    range: range.into(),
+                    message: "unsupported net type".to_owned(),
+                }])
+            }
         };
 
         report.with_message(self.to_string())

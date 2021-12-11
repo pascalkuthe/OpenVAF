@@ -90,6 +90,10 @@ pub enum SyntaxError {
         head: TextRange,
         body_ports: Vec<TextRange>,
     },
+    IllegalNetType {
+        found: String,
+        range: TextRange,
+    },
 }
 
 use SyntaxError::*;
@@ -116,5 +120,6 @@ impl_display! {
         DuplicatePort{name,..} => "port '{}' was declared multiple times!",name;
         MixedModuleHead{..} => "module header contains mix of port references and port declarations";
         IllegalBodyPorts{..} => "ports declared in module head and body";
+        IllegalNetType{found,..} => "{} nets are currently not supported!",found;
     }
 }
