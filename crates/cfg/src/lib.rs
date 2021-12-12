@@ -142,35 +142,67 @@ impl BasicBlockData {
         }
     }
 
-    pub fn visit_locals(&self, mut f: impl FnMut(Local)) {
+    pub fn visit_data(
+        &self,
+        mut f_local: impl FnMut(Local),
+        mut f_place: impl FnMut(Place),
+        mut f_param: impl FnMut(CfgParam),
+    ) {
         for phi in &*self.phis {
-            phi.visit_locals(&mut f)
+            phi.visit_locals(&mut f_local)
         }
         for instruction in &*self.instructions {
-            instruction.visit_locals(&mut f)
+            instruction.visit_operands(|operand| match operand {
+                Operand::Local(local) => f_local(*local),
+                Operand::Place(place) => f_place(*place),
+                Operand::CfgParam(param) => f_param(*param),
+                Operand::Const(_) => (),
+            });
+            match instruction.dst {
+                InstrDst::Local(local) => f_local(local),
+                InstrDst::Place(place) => f_place(place),
+                InstrDst::Ignore => (),
+            }
         }
         if let Some(term) = &self.terminator {
-            term.visit_operands(|op| {
-                if let Operand::Local(local) = op {
-                    f(*local)
-                }
-            })
+            term.visit_operands(|operand| match operand {
+                Operand::Local(local) => f_local(*local),
+                Operand::Place(place) => f_place(*place),
+                Operand::CfgParam(param) => f_param(*param),
+                Operand::Const(_) => (),
+            });
         }
     }
 
-    pub fn visit_locals_mut(&mut self, mut f: impl FnMut(&mut Local)) {
+    pub fn visit_data_mut(
+        &mut self,
+        mut f_local: impl FnMut(&mut Local),
+        mut f_place: impl FnMut(&mut Place),
+        mut f_param: impl FnMut(&mut CfgParam),
+    ) {
         for phi in &mut *self.phis {
-            phi.visit_locals_mut(&mut f)
+            phi.visit_locals_mut(&mut f_local)
         }
         for instruction in &mut *self.instructions {
-            instruction.visit_locals_mut(&mut f)
+            instruction.visit_operands_mut(|operand| match operand {
+                Operand::Local(local) => f_local(local),
+                Operand::Place(place) => f_place(place),
+                Operand::CfgParam(param) => f_param(param),
+                Operand::Const(_) => (),
+            });
+            match &mut instruction.dst {
+                InstrDst::Local(local) => f_local(local),
+                InstrDst::Place(place) => f_place(place),
+                InstrDst::Ignore => (),
+            }
         }
         if let Some(term) = &mut self.terminator {
-            term.visit_operands_mut(|op| {
-                if let Operand::Local(local) = op {
-                    f(local)
-                }
-            })
+            term.visit_operands_mut(|operand| match operand {
+                Operand::Local(local) => f_local(local),
+                Operand::Place(place) => f_place(place),
+                Operand::CfgParam(param) => f_param(param),
+                Operand::Const(_) => (),
+            });
         }
     }
 }
@@ -500,6 +532,28 @@ impl ControlFlowGraph {
         self.blocks[bb].successors_mut()
     }
 
+    pub fn visit_data(
+        &self,
+        mut f_local: impl FnMut(Local),
+        mut f_place: impl FnMut(Place),
+        mut f_param: impl FnMut(CfgParam),
+    ) {
+        for block in &self.blocks {
+            block.visit_data(&mut f_local, &mut f_place, &mut f_param)
+        }
+    }
+
+    pub fn visit_data_mut(
+        &mut self,
+        mut f_local: impl FnMut(&mut Local),
+        mut f_place: impl FnMut(&mut Place),
+        mut f_param: impl FnMut(&mut CfgParam),
+    ) {
+        for block in &mut self.blocks {
+            block.visit_data_mut(&mut f_local, &mut f_place, &mut f_param)
+        }
+    }
+
     pub fn visit_operands(&self, mut f: impl FnMut(&Operand)) {
         for block in &self.blocks {
             block.visit_operands(&mut f)
@@ -514,13 +568,13 @@ impl ControlFlowGraph {
 
     pub fn visit_locals(&self, mut f: impl FnMut(Local)) {
         for block in &self.blocks {
-            block.visit_locals(&mut f)
+            block.visit_data(&mut f, |_| (), |_| ())
         }
     }
 
     pub fn visit_locals_mut(&mut self, mut f: impl FnMut(&mut Local)) {
         for block in &mut self.blocks {
-            block.visit_locals_mut(&mut f)
+            block.visit_data_mut(&mut f, |_| (), |_| ())
         }
     }
 

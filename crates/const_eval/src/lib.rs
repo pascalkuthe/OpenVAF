@@ -122,6 +122,7 @@ impl EvalCtx<'_> {
             Op::IntMax => self.op_2(i32::max, args),
             // TODO const eval call?
             Op::Call(_) => FlatSet::Top,
+            Op::NoOp => FlatSet::Top,
         }
     }
 

@@ -7,6 +7,7 @@ use crate::Callback;
 
 #[derive(Clone, PartialEq, Eq, Copy, Hash)]
 pub enum Op {
+    NoOp,
     // unary op
     Copy,
 
@@ -127,6 +128,7 @@ pub enum Op {
 
 impl_debug! {
     match Op{
+        NoOp => "noop";
 
         // unary op
         Copy                 => "copy";
@@ -256,6 +258,7 @@ impl FromStr for Op {
 
     fn from_str(s: &str) -> Result<Self, String> {
         let res = match s {
+            "noop" => NoOp,
             "copy" => Copy,
 
             "i32~" => IntBitNegate,

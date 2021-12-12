@@ -1,0 +1,22 @@
+[package]
+name = "cfg_simplify"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+
+
+[dependencies]
+cfg = { version = "0.0.0", path = "../cfg" }
+
+bitset = { version = "0.0.0", path = "../bitset" }
+ty_index_set = {version = "0.0.0", path = "../ty_index_set"}
+
+typed-index-collections = "3.0"
+
+
+[dev-dependencies]
+expect-test = "1.1"
