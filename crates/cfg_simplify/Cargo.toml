@@ -13,7 +13,6 @@ doctest = false
 cfg = { version = "0.0.0", path = "../cfg" }
 
 bitset = { version = "0.0.0", path = "../bitset" }
-ty_index_set = {version = "0.0.0", path = "../ty_index_set"}
 
 typed-index-collections = "3.0"
 
