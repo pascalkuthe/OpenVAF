@@ -60,7 +60,7 @@ mod ty;
 /// CFG Parameters represent immutable input to a CFG
 /// If the CFG compiled to a function these usually make up the parameters of that resulting
 /// functions
-#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct CfgParam(u32);
 impl_idx_from!(CfgParam(u32));
 impl_debug!(match CfgParam{param => "#{}",param.0;});
@@ -68,7 +68,7 @@ impl_debug!(match CfgParam{param => "#{}",param.0;});
 /// Callbacks allow the CFG to call external function (for example belonging to the circuit
 /// simulator). Furthermore these callbacks may be used to abstractly represent functions
 /// That are later resolved to actual instructions based upon how the CFG is further processed
-#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct Callback(pub u32);
 impl_idx_from!(Callback(u32));
 impl_debug!(match Callback{input => "cb{}",input.0;});
@@ -76,12 +76,12 @@ impl_debug!(match Callback{input => "cb{}",input.0;});
 /// A Place represents a region of memory that can be accessed by the CFG
 /// Usually these correspond to the variables and (branches) defined by the user.
 /// However more places are also added when derivatives are calculated
-#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct Place(u32);
 impl_idx_from!(Place(u32));
 impl_debug!(match Place{local => "p{}",local.0;});
 
-#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct Local(u32);
 impl_idx_from!(Local(u32));
 impl_debug!(match Local{local => "_{}",local.0;});
@@ -233,7 +233,7 @@ impl Phi {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub enum InstrDst {
     Local(Local),
     Place(Place),
@@ -245,6 +245,18 @@ impl_debug! {
         InstrDst::Local(local) => "{:?}", local;
         InstrDst::Place(place) => "{:?}", place;
         InstrDst::Ignore => "_";
+    }
+}
+
+impl TryFrom<InstrDst> for Operand {
+    type Error = ();
+
+    fn try_from(value: InstrDst) -> Result<Self, Self::Error> {
+        match value {
+            InstrDst::Local(local) => Ok(local.into()),
+            InstrDst::Place(place) => Ok(place.into()),
+            InstrDst::Ignore => Err(()),
+        }
     }
 }
 

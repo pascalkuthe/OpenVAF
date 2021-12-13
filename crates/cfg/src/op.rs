@@ -374,7 +374,7 @@ impl FromStr for Op {
 
             _ => {
                 if s.len() > 2 && &s[0..2] == "cb" {
-                    let c = u32::from_str(&s[3..]).map_err(|e| e.to_string())?;
+                    let c = u32::from_str(&s[2..]).map_err(|e| e.to_string())?;
                     Call(Callback(c))
                 } else {
                     return Err(format!("unkown op {}", s));

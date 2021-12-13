@@ -2,7 +2,8 @@
 //! Therefore a builder is provided here to make that task more ergnomic.
 
 use crate::{
-    BasicBlock, BasicBlockData, ControlFlowGraph, InstrDst, Local, Op, Operand, Place, Terminator,
+    BasicBlock, BasicBlockData, ControlFlowGraph, InstrDst, Instruction, Local, Op, Operand, Place,
+    Terminator,
 };
 
 pub struct CfgBuilder<'a> {
@@ -66,6 +67,10 @@ impl<'a> CfgBuilder<'a> {
             args: operands.into_boxed_slice(),
             src: src as i32,
         });
+    }
+
+    pub fn add_instr(&mut self, instr: Instruction) {
+        self.cfg.blocks[self.current].instructions.push(instr);
     }
 
     pub fn terminate_bb(&mut self, block: BasicBlock, term: Terminator) {
