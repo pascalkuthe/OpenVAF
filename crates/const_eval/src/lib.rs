@@ -12,7 +12,6 @@ use data_flow::{Analysis, Results};
 use crate::propagation::{ConditionalConstPropagation, WriteBackConsts};
 use crate::ssa_constants::SsaConstants;
 
-pub mod ops;
 pub mod propagation;
 pub mod ssa_constants;
 

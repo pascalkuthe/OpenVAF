@@ -228,7 +228,6 @@ pub fn cond() {
 
 #[test]
 pub fn non_const_loop() {
-    // only short circuit for src < 1 (auto generated code)
     let raw = r##"
         {
         next_local _2;
@@ -274,7 +273,6 @@ pub fn non_const_loop() {
 
 #[test]
 pub fn const_loop() {
-    // only short circuit for src < 1 (auto generated code)
     let raw = r##"
         {
         next_local _2;

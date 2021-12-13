@@ -9,11 +9,27 @@ use data_flow::{direction, Analysis, AnalysisDomain, ResultsVisitorMut, SplitEdg
 use crate::ssa_constants::SsaConstants;
 use crate::{ConstPlaces, EvalCtx};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct BasicBlockConstants {
     pub reachable: bool,
     pub constants: ConstPlaces,
     temporaries_changed: bool,
+}
+
+impl Clone for BasicBlockConstants {
+    fn clone(&self) -> Self {
+        Self {
+            reachable: self.reachable,
+            constants: self.constants.clone(),
+            temporaries_changed: self.temporaries_changed,
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.constants.clone_from(&source.constants);
+        self.reachable = source.reachable;
+        self.temporaries_changed = source.temporaries_changed
+    }
 }
 
 impl JoinSemiLattice for BasicBlockConstants {
