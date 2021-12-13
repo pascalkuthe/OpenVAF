@@ -24,7 +24,7 @@ where
     A: Analysis,
 {
     pub analysis: A,
-    pub(crate) entry_sets: TiVec<BasicBlock, A::Domain>,
+    pub entry_sets: TiVec<BasicBlock, A::Domain>,
 }
 
 impl<A> Results<A>
@@ -186,8 +186,8 @@ where
         let mut dirty_queue: WorkQueue<BasicBlock> = WorkQueue::with_none(cfg.blocks.len());
 
         // Iterating the whole graph garuntees nice iteration order.
-        // However it also forces DFA to run over the whole graph even for analysis modes where it could be avoided (eg COndition Constants where unreachable sets may never be visited at all)
-        // TODO determine if improving this might be worthwhile (I wouldd guess not but CC is very slow)
+        // However it also forces DFA to run over the whole graph even for analysis modes where it could be avoided (eg Condition Constants where unreachable sets may never be visited at all)
+        // TODO determine if improving this might be worthwhile (I would guess not but CC is very slow)
         if A::Direction::IS_FORWARD {
             dirty_queue.extend(cfg.reverse_postorder())
         } else {

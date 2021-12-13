@@ -33,6 +33,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
 
 [[package]]
+name = "auto_diff"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "bitset",
+ "cfg",
+ "data_flow",
+ "expect-test",
+ "indexmap",
+ "stdx",
+ "typed-index-collections",
+ "typed_indexmap",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -117,7 +132,6 @@ dependencies = [
  "bitset",
  "cfg",
  "expect-test",
- "ty_index_set",
  "typed-index-collections",
 ]
 
@@ -143,9 +157,9 @@ dependencies = [
 
 [[package]]
 name = "countme"
-version = "2.0.4"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "328b822bdcba4d4e402be8d9adb6eebf269f969f8eadef977a553ff3c4fbcb58"
+checksum = "03746e0c6dd9b5d2d9132ffe0bede35fb5f815604fd371bb42599fd37bc8e483"
 
 [[package]]
 name = "cpufeatures"
@@ -300,8 +314,8 @@ dependencies = [
  "stdx",
  "syntax",
  "triomphe",
- "ty_index_set",
  "typed-index-collections",
+ "typed_indexmap",
 ]
 
 [[package]]
@@ -366,9 +380,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.109"
+version = "0.2.112"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f98a04dce437184842841303488f70d0188c5f51437d2a834dc097eafa909a01"
+checksum = "1b03d17f364a3a042d5e5d46b053bbbf82c92c9430c592dd4c064dc6ee997125"
 
 [[package]]
 name = "lock_api"
@@ -490,9 +504,9 @@ dependencies = [
 
 [[package]]
 name = "rowan"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b56a6d003a35b97fa7cef362de9c5b5f89c4e7ae7bd55c8893a070153357cce"
+checksum = "104e4d36da6a2a0c9485ebf1b2dfc628036c7cc9b38bd1b14fa785f1f1bdf5f0"
 dependencies = [
  "countme",
  "hashbrown",
@@ -637,18 +651,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "ty_index_set"
+name = "typed-index-collections"
+version = "3.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed2198514940bb6574216fde5d5c349c3f578fa719b225352f0eaaf45983c930"
+
+[[package]]
+name = "typed_indexmap"
 version = "0.0.0"
 dependencies = [
  "ahash",
  "indexmap",
 ]
-
-[[package]]
-name = "typed-index-collections"
-version = "3.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed2198514940bb6574216fde5d5c349c3f578fa719b225352f0eaaf45983c930"
 
 [[package]]
 name = "typenum"

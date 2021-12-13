@@ -68,10 +68,16 @@ impl<K, V> TiSet<K, V> {
 
 impl<K, V> TiSet<K, V>
 where
+    K: Into<usize>,
     V: Eq + Hash,
 {
     pub fn insert(&mut self, val: V) -> bool {
         self.raw.insert(val)
+    }
+
+    pub fn replace(&mut self, index: K, new_val: V) -> V {
+        assert!(self.insert(new_val));
+        self.raw.swap_remove_index(index.into()).unwrap()
     }
 }
 

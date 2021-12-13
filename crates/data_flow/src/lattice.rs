@@ -43,7 +43,7 @@ use std::hash::Hash;
 use std::option::Option::Some;
 
 use ahash::AHashMap;
-use bitset::BitSet;
+use bitset::{BitSet, GrowableSparseBitMatrix, SparseBitMatrix};
 use stdx::iter;
 use typed_index_collections::TiVec;
 
@@ -132,6 +132,28 @@ impl<I: From<usize> + Into<usize>, T: MeetSemiLattice> MeetSemiLattice for TiVec
             changed |= a.meet(b);
         }
         changed
+    }
+}
+
+// SparseBitMatrix does not have an intersect implementation at the moment
+impl<R, C> JoinSemiLattice for SparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug + PartialEq,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    fn join(&mut self, other: &Self) -> bool {
+        self.union(other)
+    }
+}
+
+// SparseBitMatrix does not have an intersect implementation at the moment
+impl<R, C> JoinSemiLattice for GrowableSparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug + PartialEq,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    fn join(&mut self, other: &Self) -> bool {
+        self.union(other)
     }
 }
 

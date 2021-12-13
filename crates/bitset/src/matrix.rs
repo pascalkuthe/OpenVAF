@@ -1,7 +1,9 @@
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
+use std::mem::take;
 use std::{fmt, iter};
 
+use stdx::iter::zip;
 use stdx::vec::{SliceExntesions, VecExtensions};
 
 use crate::{
@@ -263,10 +265,10 @@ where
     _row_ty: PhantomData<fn() -> R>,
 }
 
-impl<
-        R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
-        C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
-    > Clone for SparseBitMatrix<R, C>
+impl<R, C> Clone for SparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
 {
     fn clone_from(&mut self, source: &Self) {
         self.rows.clone_from(&source.rows);
@@ -320,6 +322,7 @@ where
         res
     }
 
+    #[inline]
     pub fn ensure_row(&mut self, row: R) -> &mut HybridBitSet<C> {
         // Instantiate any missing rows up to and including row `row` with an empty HybridBitSet.
         self.rows.ensure_contains_elem(row.into(), HybridBitSet::new_empty);
@@ -335,15 +338,27 @@ where
         self.ensure_row(row).insert(column, num_columns)
     }
 
+    #[inline]
+    pub fn num_columns(&self) -> usize {
+        self.num_columns
+    }
+
+    #[inline]
+    pub fn num_rows(&self) -> usize {
+        self.num_rows
+    }
+
     /// Do the bits from `row` contain `column`? Put another way, is
     /// the matrix cell at `(row, column)` true?  Put yet another way,
     /// if the matrix represents (transitive) reachability, can
     /// `row` reach `column`?
+    #[inline]
     pub fn contains(&self, row: R, column: C) -> bool {
         self.row(row).map_or(false, |r| r.contains(column))
     }
 
     /// Union a row, `from`, into the `into` row.
+    #[inline]
     pub fn union_into_row(&mut self, into: R, from: &impl UnionIntoHybridBitSet<C>) -> bool {
         let col = self.num_columns;
         self.ensure_row(into).union(from, col)
@@ -361,12 +376,17 @@ where
 
     /// Iterates through all the columns set to true in a given row of
     /// the matrix.
+    #[inline]
     pub fn iter(&self, row: R) -> impl Iterator<Item = C> + '_ {
         self.row(row).into_iter().flat_map(|r| r.iter())
     }
 
     pub fn row(&self, row: R) -> Option<&HybridBitSet<C>> {
         self.rows.get(row.into())
+    }
+
+    pub fn take_row(&mut self, row: R) -> Option<HybridBitSet<C>> {
+        self.rows.get_mut(row.into()).map(take)
     }
 }
 
@@ -390,5 +410,155 @@ where
         self.ensure_row(write);
         let (read_row, write_row) = self.rows.pick2_mut(read.into(), write.into());
         write_row.union(read_row, self.num_columns)
+    }
+
+    pub fn union(&mut self, other: &Self) -> bool {
+        if other.rows.is_empty() {
+            return false;
+        }
+        self.ensure_row((other.rows.len() - 1).into());
+        let mut changed = false;
+        for (dst, src) in zip(&mut self.rows, &other.rows) {
+            changed |= dst.union(src, self.num_columns);
+        }
+        changed
+    }
+}
+
+/// A `SparseBitMatrix` that grows whenever required
+/// See documentation for `SparseBitMatrix`
+#[derive(PartialEq, Eq)]
+pub struct GrowableSparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    pub matrix: SparseBitMatrix<R, C>,
+}
+
+impl<R, C> Clone for GrowableSparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    fn clone(&self) -> Self {
+        Self { matrix: self.matrix.clone() }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.matrix.clone_from(&source.matrix)
+    }
+}
+
+impl<R, C> Debug for GrowableSparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.matrix.fmt(f)
+    }
+}
+
+impl<R, C> GrowableSparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    pub fn new(num_rows: usize, num_columns: usize) -> Self {
+        Self { matrix: SparseBitMatrix::new(num_rows, num_columns) }
+    }
+
+    /// Adds the bits from row `read` to the bits from row `write`, and
+    /// returns `true` if anything changed.
+
+    pub fn union_rows(&mut self, read: R, write: R) -> bool {
+        if read == write || self.matrix.row(read).is_none() {
+            return false;
+        }
+
+        self.matrix.ensure_row(write);
+        let num_columns = self.matrix.num_columns;
+        let (read_row, write_row) = self.matrix.rows.pick2_mut(read.into(), write.into());
+        if let HybridBitSet::Dense(dst) = write_row {
+            dst.ensure(num_columns)
+        }
+        write_row.union(read_row, num_columns)
+    }
+
+    /// Adds the bits from row `read` to the bits from row `write`, and
+    /// returns `true` if anything changed.
+    #[inline]
+    pub fn union_with(&mut self, src: &HybridBitSet<C>, domain_size: usize, dst: R) -> bool {
+        if self.matrix.num_columns < domain_size {
+            self.matrix.num_columns = domain_size
+        }
+
+        let dst = self.matrix.ensure_row(dst);
+        if let HybridBitSet::Dense(dst) = dst {
+            dst.ensure(domain_size)
+        }
+        dst.union(src, domain_size)
+    }
+
+    /// Adds the bits from row `read` to the bits from row `write`, and
+    /// returns `true` if anything changed.
+    pub fn union_rows_with<I>(
+        &mut self,
+        other: &GrowableSparseBitMatrix<I, C>,
+        read: I,
+        write: R,
+    ) -> bool
+    where
+        I: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    {
+        let src = match other.matrix.row(read) {
+            Some(src) => src,
+            None => return false,
+        };
+
+        if self.matrix.num_columns < other.matrix.num_columns {
+            self.matrix.num_columns = other.matrix.num_columns
+        }
+
+        let num_columns = self.matrix.num_columns;
+
+        let dst = self.matrix.ensure_row(write);
+        if let HybridBitSet::Dense(dst) = dst {
+            dst.ensure(num_columns)
+        }
+        dst.union(src, num_columns)
+    }
+
+    pub fn union(&mut self, other: &Self) -> bool {
+        if other.matrix.rows.is_empty() {
+            return false;
+        }
+        self.matrix.ensure_row((other.matrix.rows.len() - 1).into());
+        let mut changed = false;
+        if self.matrix.num_columns < other.matrix.num_columns {
+            self.matrix.num_columns = other.matrix.num_columns
+        }
+
+        for (dst, src) in zip(&mut self.matrix.rows, &other.matrix.rows) {
+            if let HybridBitSet::Dense(bit_set) = dst {
+                bit_set.ensure(self.matrix.num_columns)
+            }
+            changed |= dst.union(src, self.matrix.num_columns);
+        }
+        changed
+    }
+
+    /// Sets the cell at `(row, column)` to true. Put another way, insert
+    /// `column` to the bitset for `row`.
+    ///
+    /// Returns `true` if this changed the matrix.
+    pub fn insert(&mut self, row: R, column: C) -> bool {
+        let num_columns = self.matrix.num_columns;
+        let dst = self.matrix.ensure_row(row);
+        if let HybridBitSet::Dense(dst) = dst {
+            dst.ensure(column.into() + 1)
+        }
+        dst.insert(column, num_columns)
     }
 }

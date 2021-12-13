@@ -1,0 +1,26 @@
+[package]
+name = "auto_diff"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+
+
+[dependencies]
+cfg = { version = "0.0.0", path = "../cfg" }
+data_flow = { version = "0.0.0", path = "../data_flow/" }
+
+bitset = { version = "0.0.0", path = "../bitset" }
+typed_indexmap = { version = "0.0.0", path = "../typed_indexmap" }
+stdx = { version = "0.0.0", path = "../stdx" }
+
+typed-index-collections = "3.0"
+indexmap = "1.6"
+ahash = "0.7"
+
+
+[dev-dependencies]
+expect-test = "1.1"

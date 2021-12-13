@@ -1,6 +1,5 @@
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
-use std::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Range, Shl};
 use std::{mem, slice};
 
 #[cfg(test)]
@@ -11,7 +10,7 @@ pub mod matrix;
 mod sparse;
 
 pub use hybrid::{HybridBitSet, HybridIter};
-pub use matrix::{BitMatrix, SparseBitMatrix};
+pub use matrix::{BitMatrix, GrowableSparseBitMatrix, SparseBitMatrix};
 pub use sparse::SparseBitSet;
 use sparse::SPARSE_MAX;
 
@@ -219,6 +218,18 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
         not_already |= self.words[current_index + 1..].iter().any(|&x| x != 0);
 
         not_already
+    }
+
+    /// Ensure that the set can hold at least `min_domain_size` elements.
+    pub fn ensure(&mut self, min_domain_size: usize) {
+        if self.domain_size < min_domain_size {
+            self.domain_size = min_domain_size;
+        }
+
+        let min_num_words = num_words(min_domain_size);
+        if self.words.len() < min_num_words {
+            self.words.resize(min_num_words, 0)
+        }
     }
 }
 
@@ -458,20 +469,12 @@ pub struct GrowableBitSet<T: From<usize> + Into<usize> + Copy + PartialEq + Debu
 }
 
 impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> GrowableBitSet<T> {
-    /// Ensure that the set can hold at least `min_domain_size` elements.
-    pub fn ensure(&mut self, min_domain_size: usize) {
-        if self.bit_set.domain_size < min_domain_size {
-            self.bit_set.domain_size = min_domain_size;
-        }
-
-        let min_num_words = num_words(min_domain_size);
-        if self.bit_set.words.len() < min_num_words {
-            self.bit_set.words.resize(min_num_words, 0)
-        }
-    }
-
     pub fn new_empty() -> GrowableBitSet<T> {
         GrowableBitSet { bit_set: BitSet::new_empty(0) }
+    }
+
+    pub fn ensure(&mut self, size: usize) {
+        self.bit_set.ensure(size)
     }
 
     pub fn with_capacity(capacity: usize) -> GrowableBitSet<T> {
@@ -481,14 +484,14 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> GrowableBitSet<T> 
     /// Returns `true` if the set has changed.
     #[inline]
     pub fn insert(&mut self, elem: T) -> bool {
-        self.ensure(elem.into() + 1);
+        self.bit_set.ensure(elem.into() + 1);
         self.bit_set.insert(elem)
     }
 
     /// Returns `true` if the set has changed.
     #[inline]
     pub fn remove(&mut self, elem: T) -> bool {
-        self.ensure(elem.into() + 1);
+        self.bit_set.ensure(elem.into() + 1);
         self.bit_set.remove(elem)
     }
 
@@ -521,160 +524,160 @@ fn word_index_and_mask<T: Into<usize>>(elem: T) -> (usize, Word) {
     (word_index, mask)
 }
 
-/// Integral type used to represent the bit set.
-pub trait FiniteBitSetTy:
-    BitAnd<Output = Self>
-    + BitAndAssign
-    + BitOrAssign
-    + Clone
-    + Copy
-    + Shl
-    + Not<Output = Self>
-    + PartialEq
-    + Sized
-{
-    /// Size of the domain representable by this type, e.g. 64 for `u64`.
-    const DOMAIN_SIZE: u32;
+// /// Integral type used to represent the bit set.
+// pub trait FiniteBitSetTy:
+//     BitAnd<Output = Self>
+//     + BitAndAssign
+//     + BitOrAssign
+//     + Clone
+//     + Copy
+//     + Shl
+//     + Not<Output = Self>
+//     + PartialEq
+//     + Sized
+// {
+//     /// Size of the domain representable by this type, e.g. 64 for `u64`.
+//     const DOMAIN_SIZE: u32;
 
-    /// Value which represents the `FiniteBitSet` having every bit set.
-    const FILLED: Self;
-    /// Value which represents the `FiniteBitSet` having no bits set.
-    const EMPTY: Self;
+//     /// Value which represents the `FiniteBitSet` having every bit set.
+//     const FILLED: Self;
+//     /// Value which represents the `FiniteBitSet` having no bits set.
+//     const EMPTY: Self;
 
-    /// Value for one as the integral type.
-    const ONE: Self;
-    /// Value for zero as the integral type.
-    const ZERO: Self;
+//     /// Value for one as the integral type.
+//     const ONE: Self;
+//     /// Value for zero as the integral type.
+//     const ZERO: Self;
 
-    /// Perform a checked left shift on the integral type.
-    fn checked_shl(self, rhs: u32) -> Option<Self>;
-    /// Perform a checked right shift on the integral type.
-    fn checked_shr(self, rhs: u32) -> Option<Self>;
-}
+//     /// Perform a checked left shift on the integral type.
+//     fn checked_shl(self, rhs: u32) -> Option<Self>;
+//     /// Perform a checked right shift on the integral type.
+//     fn checked_shr(self, rhs: u32) -> Option<Self>;
+// }
 
-impl FiniteBitSetTy for u32 {
-    const DOMAIN_SIZE: u32 = 32;
+// impl FiniteBitSetTy for u32 {
+//     const DOMAIN_SIZE: u32 = 32;
 
-    const FILLED: Self = Self::MAX;
-    const EMPTY: Self = Self::MIN;
+//     const FILLED: Self = Self::MAX;
+//     const EMPTY: Self = Self::MIN;
 
-    const ONE: Self = 1u32;
-    const ZERO: Self = 0u32;
+//     const ONE: Self = 1u32;
+//     const ZERO: Self = 0u32;
 
-    fn checked_shl(self, rhs: u32) -> Option<Self> {
-        self.checked_shl(rhs)
-    }
+//     fn checked_shl(self, rhs: u32) -> Option<Self> {
+//         self.checked_shl(rhs)
+//     }
 
-    fn checked_shr(self, rhs: u32) -> Option<Self> {
-        self.checked_shr(rhs)
-    }
-}
+//     fn checked_shr(self, rhs: u32) -> Option<Self> {
+//         self.checked_shr(rhs)
+//     }
+// }
 
-impl std::fmt::Debug for FiniteBitSet<u32> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:032b}", self.0)
-    }
-}
+// impl std::fmt::Debug for FiniteBitSet<u32> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "{:032b}", self.0)
+//     }
+// }
 
-impl FiniteBitSetTy for u64 {
-    const DOMAIN_SIZE: u32 = 64;
+// impl FiniteBitSetTy for u64 {
+//     const DOMAIN_SIZE: u32 = 64;
 
-    const FILLED: Self = Self::MAX;
-    const EMPTY: Self = Self::MIN;
+//     const FILLED: Self = Self::MAX;
+//     const EMPTY: Self = Self::MIN;
 
-    const ONE: Self = 1u64;
-    const ZERO: Self = 0u64;
+//     const ONE: Self = 1u64;
+//     const ZERO: Self = 0u64;
 
-    fn checked_shl(self, rhs: u32) -> Option<Self> {
-        self.checked_shl(rhs)
-    }
+//     fn checked_shl(self, rhs: u32) -> Option<Self> {
+//         self.checked_shl(rhs)
+//     }
 
-    fn checked_shr(self, rhs: u32) -> Option<Self> {
-        self.checked_shr(rhs)
-    }
-}
+//     fn checked_shr(self, rhs: u32) -> Option<Self> {
+//         self.checked_shr(rhs)
+//     }
+// }
 
-impl std::fmt::Debug for FiniteBitSet<u64> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:064b}", self.0)
-    }
-}
+// impl std::fmt::Debug for FiniteBitSet<u64> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "{:064b}", self.0)
+//     }
+// }
 
-impl FiniteBitSetTy for u128 {
-    const DOMAIN_SIZE: u32 = 128;
+// impl FiniteBitSetTy for u128 {
+//     const DOMAIN_SIZE: u32 = 128;
 
-    const FILLED: Self = Self::MAX;
-    const EMPTY: Self = Self::MIN;
+//     const FILLED: Self = Self::MAX;
+//     const EMPTY: Self = Self::MIN;
 
-    const ONE: Self = 1u128;
-    const ZERO: Self = 0u128;
+//     const ONE: Self = 1u128;
+//     const ZERO: Self = 0u128;
 
-    fn checked_shl(self, rhs: u32) -> Option<Self> {
-        self.checked_shl(rhs)
-    }
+//     fn checked_shl(self, rhs: u32) -> Option<Self> {
+//         self.checked_shl(rhs)
+//     }
 
-    fn checked_shr(self, rhs: u32) -> Option<Self> {
-        self.checked_shr(rhs)
-    }
-}
+//     fn checked_shr(self, rhs: u32) -> Option<Self> {
+//         self.checked_shr(rhs)
+//     }
+// }
 
-impl std::fmt::Debug for FiniteBitSet<u128> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:0128b}", self.0)
-    }
-}
+// impl std::fmt::Debug for FiniteBitSet<u128> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "{:0128b}", self.0)
+//     }
+// }
 
-/// A fixed-sized bitset type represented by an integer type. Indices outwith than the range
-/// representable by `T` are considered set.
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub struct FiniteBitSet<T: FiniteBitSetTy>(pub T);
+// /// A fixed-sized bitset type represented by an integer type. Indices outwith than the range
+// /// representable by `T` are considered set.
+// #[derive(Copy, Clone, Eq, PartialEq)]
+// pub struct FiniteBitSet<T: FiniteBitSetTy>(pub T);
 
-impl<T: FiniteBitSetTy> FiniteBitSet<T> {
-    /// Creates a new, empty bitset.
-    pub fn new_empty() -> Self {
-        Self(T::EMPTY)
-    }
+// impl<T: FiniteBitSetTy> FiniteBitSet<T> {
+//     /// Creates a new, empty bitset.
+//     pub fn new_empty() -> Self {
+//         Self(T::EMPTY)
+//     }
 
-    /// Sets the `index`th bit.
-    pub fn set(&mut self, index: u32) {
-        self.0 |= T::ONE.checked_shl(index).unwrap_or(T::ZERO);
-    }
+//     /// Sets the `index`th bit.
+//     pub fn set(&mut self, index: u32) {
+//         self.0 |= T::ONE.checked_shl(index).unwrap_or(T::ZERO);
+//     }
 
-    /// Unsets the `index`th bit.
-    pub fn clear(&mut self, index: u32) {
-        self.0 &= !T::ONE.checked_shl(index).unwrap_or(T::ZERO);
-    }
+//     /// Unsets the `index`th bit.
+//     pub fn clear(&mut self, index: u32) {
+//         self.0 &= !T::ONE.checked_shl(index).unwrap_or(T::ZERO);
+//     }
 
-    /// Sets the `i`th to `j`th bits.
-    pub fn set_range(&mut self, range: Range<u32>) {
-        let bits = T::FILLED
-            .checked_shl(range.end - range.start)
-            .unwrap_or(T::ZERO)
-            .not()
-            .checked_shl(range.start)
-            .unwrap_or(T::ZERO);
-        self.0 |= bits;
-    }
+//     /// Sets the `i`th to `j`th bits.
+//     pub fn set_range(&mut self, range: Range<u32>) {
+//         let bits = T::FILLED
+//             .checked_shl(range.end - range.start)
+//             .unwrap_or(T::ZERO)
+//             .not()
+//             .checked_shl(range.start)
+//             .unwrap_or(T::ZERO);
+//         self.0 |= bits;
+//     }
 
-    /// Is the set empty?
-    pub fn is_empty(&self) -> bool {
-        self.0 == T::EMPTY
-    }
+//     /// Is the set empty?
+//     pub fn is_empty(&self) -> bool {
+//         self.0 == T::EMPTY
+//     }
 
-    /// Returns the domain size of the bitset.
-    pub fn within_domain(&self, index: u32) -> bool {
-        index < T::DOMAIN_SIZE
-    }
+//     /// Returns the domain size of the bitset.
+//     pub fn within_domain(&self, index: u32) -> bool {
+//         index < T::DOMAIN_SIZE
+//     }
 
-    /// Returns if the `index`th bit is set.
-    pub fn contains(&self, index: u32) -> Option<bool> {
-        self.within_domain(index)
-            .then(|| ((self.0.checked_shr(index).unwrap_or(T::ONE)) & T::ONE) == T::ONE)
-    }
-}
+//     /// Returns if the `index`th bit is set.
+//     pub fn contains(&self, index: u32) -> Option<bool> {
+//         self.within_domain(index)
+//             .then(|| ((self.0.checked_shr(index).unwrap_or(T::ONE)) & T::ONE) == T::ONE)
+//     }
+// }
 
-impl<T: FiniteBitSetTy> Default for FiniteBitSet<T> {
-    fn default() -> Self {
-        Self::new_empty()
-    }
-}
+// impl<T: FiniteBitSetTy> Default for FiniteBitSet<T> {
+//     fn default() -> Self {
+//         Self::new_empty()
+//     }
+// }

@@ -1,8 +1,7 @@
 use std::vec;
 
-use ahash::AHashMap;
 use cfg::{
-    BasicBlock, CfgBuilder, CfgParam, Const, ControlFlowGraph, Local, Op, Operand, Place,
+    BasicBlock, Callback, CfgBuilder, CfgParam, Const, ControlFlowGraph, Local, Op, Operand, Place,
     Terminator,
 };
 use hir_def::body::Body;
@@ -21,8 +20,8 @@ use hir_ty::inference::{AssignDst, BranchWrite, InferenceResult, ResolvedFun};
 use hir_ty::types::{Ty as HirTy, BOOL_EQ, INT_EQ, INT_OP, REAL_EQ, REAL_OP, STR_EQ};
 use stdx::{impl_debug, impl_idx_from};
 use syntax::ast::{AssignOp, BinaryOp, UnaryOp};
-use ty_index_set::TiSet;
 use typed_index_collections::{TiSlice, TiVec};
+use typed_indexmap::TiSet;
 
 #[cfg(test)]
 mod tests;
@@ -36,13 +35,6 @@ macro_rules! match_signature {
 
     };
 }
-
-enum Unkown {
-    Simple(CfgParam),
-    NodePot(NodeId),
-}
-
-pub type RequestedDerivatives = AHashMap<Local, (Operand, Vec<(CfgParam, f64)>)>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ParamKind {
@@ -75,12 +67,14 @@ pub enum PlaceKind {
     ImplicitBranchCurrent { hi: NodeId, lo: Option<NodeId> },
 }
 
-pub mod callbacks {
-    use cfg::Callback;
-
-    pub const SIM_PARAM: Callback = Callback(0);
-    pub const SIM_PARAM_OPT: Callback = Callback(1);
-    pub const SIM_PARAM_STR: Callback = Callback(2);
+#[non_exhaustive]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum CallBackKind {
+    SimParam,
+    SimParamOpt,
+    SimParamStr,
+    Derivative(CfgParam),
+    NodeDerivative(NodeId),
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
@@ -92,7 +86,7 @@ pub struct LoweringResult {
     pub cfg: ControlFlowGraph,
     pub params: TiSet<CfgParam, ParamKind>,
     pub places: TiSet<Place, PlaceKind>,
-    pub derivatives: RequestedDerivatives,
+    pub callbacks: TiSet<Callback, CallBackKind>,
 }
 
 impl LoweringResult {
@@ -103,10 +97,10 @@ impl LoweringResult {
 
         let mut ctx_data = LoweringCtxData {
             cfg: CfgBuilder::new_cfg(&mut cfg),
+            db,
+            callbacks: TiSet::default(),
             params: TiSet::default(),
             places: TiSet::default(),
-            db,
-            derivatives: AHashMap::new(),
         };
 
         let mut ctx = LoweringCtx {
@@ -123,11 +117,37 @@ impl LoweringResult {
         ctx_data.cfg.cfg.next_place = ctx_data.places.len().into();
 
         LoweringResult {
-            derivatives: ctx_data.finish_derivatives(),
+            // derivatives: ctx_data.finish_derivatives(),
             places: ctx_data.places,
             params: ctx_data.params,
+            callbacks: ctx_data.callbacks,
             cfg,
         }
+    }
+}
+
+impl LoweringResult {
+    pub fn derivatives(&self) -> impl Iterator<Item = (Callback, Box<[(CfgParam, u64)]>)> + '_ {
+        self.callbacks.iter_enumerated().filter_map(|(callback, kind)| {
+            let vals = match kind {
+                CallBackKind::Derivative(param) => vec![(*param, 1f64.to_bits())],
+                CallBackKind::NodeDerivative(node) => self
+                    .params
+                    .iter_enumerated()
+                    .filter_map(|(param, kind)| match kind {
+                        ParamKind::Voltage { hi, .. } if hi == node => {
+                            Some((param, 1f64.to_bits()))
+                        }
+                        ParamKind::Voltage { lo: Some(lo), .. } if lo == node => {
+                            Some((param, (-1f64).to_bits()))
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => return None,
+            };
+            Some((callback, vals.into_boxed_slice()))
+        })
     }
 }
 
@@ -136,33 +156,7 @@ pub struct LoweringCtxData<'a> {
     pub cfg: CfgBuilder<'a>,
     pub params: TiSet<CfgParam, ParamKind>,
     pub places: TiSet<Place, PlaceKind>,
-    derivatives: AHashMap<Local, (Operand, Unkown)>,
-}
-
-impl LoweringCtxData<'_> {
-    pub fn finish_derivatives(&self) -> RequestedDerivatives {
-        self.derivatives
-            .iter()
-            .map(|(local, (operand, unkown))| {
-                let vals = match unkown {
-                    Unkown::Simple(param) => vec![(*param, 1.0)],
-                    Unkown::NodePot(node) => self
-                        .params
-                        .iter_enumerated()
-                        .filter_map(|(param, kind)| match kind {
-                            ParamKind::Voltage { hi, .. } if hi == node => Some((param, 1.0)),
-                            ParamKind::Voltage { lo: Some(lo), .. } if lo == node => {
-                                Some((param, -1.0))
-                            }
-                            _ => None,
-                        })
-                        .collect(),
-                };
-
-                (*local, (operand.clone(), vals))
-            })
-            .collect()
-    }
+    pub callbacks: TiSet<Callback, CallBackKind>,
 }
 
 pub struct LoweringCtx<'a, 'c> {
@@ -394,6 +388,10 @@ impl LoweringCtx<'_, '_> {
 
     fn param(&mut self, kind: ParamKind) -> CfgParam {
         self.data.params.ensure(kind).0
+    }
+
+    fn callback(&mut self, kind: CallBackKind) -> Callback {
+        self.data.callbacks.ensure(kind).0
     }
 
     pub fn lower_expr(&mut self, expr: ExprId) -> Operand {
@@ -781,24 +779,24 @@ impl LoweringCtx<'_, '_> {
             BuiltIn::ddx => {
                 let val = self.lower_expr(args[0]);
                 let cfg_param = self.lower_expr(args[1]).unwrap_cfg_param();
-                let unkown = if *signature.unwrap() == DDX_POT {
+                let call = if *signature.unwrap() == DDX_POT {
                     // TODO how to handle gnd nodes?
                     let node = self.data.params[cfg_param].unwrap_pot_node();
-                    Unkown::NodePot(node)
+                    CallBackKind::NodeDerivative(node)
                 } else {
-                    // TODO how to handle gnd nodes?
-                    Unkown::Simple(cfg_param)
+                    CallBackKind::Derivative(cfg_param)
                 };
-                let dst = self.data.cfg.cfg.new_local();
-                self.data.derivatives.insert(dst, (val, unkown));
+                let call = self.callback(call);
+                let dst = self.data.cfg.build_val(Op::Call(call), vec![val], expr.into());
+                // self.data.derivatives.insert(dst, unkown);
                 return dst.into();
             }
             BuiltIn::temperature => return self.param(ParamKind::Temperature).into(),
             BuiltIn::simparam => {
-                let call = match_signature!(signature: SIMPARAM_NO_DEFAULT => callbacks::SIM_PARAM,SIMPARAM_DEFAULT => callbacks::SIM_PARAM_OPT);
-                Op::Call(call)
+                let call = match_signature!(signature: SIMPARAM_NO_DEFAULT => CallBackKind::SimParam,SIMPARAM_DEFAULT => CallBackKind::SimParamOpt);
+                Op::Call(self.callback(call))
             }
-            BuiltIn::simparam_str => Op::Call(callbacks::SIM_PARAM_STR),
+            BuiltIn::simparam_str => Op::Call(self.callback(CallBackKind::SimParamStr)),
             BuiltIn::param_given => {
                 return self
                     .param(ParamKind::ParamGiven {

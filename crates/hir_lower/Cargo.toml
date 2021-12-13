@@ -15,7 +15,7 @@ cfg = { version = "0.0.0", path = "../cfg" }
 hir_ty = { version = "0.0.0", path = "../hir_ty" }
 hir_def = { version = "0.0.0", path = "../hir_def" }
 syntax = {version = "0.0.0", path = "../syntax"}
-ty_index_set = {version = "0.0.0", path = "../ty_index_set"}
+typed_indexmap = {version = "0.0.0", path = "../typed_indexmap"}
 
 ahash = "0.7"
 typed-index-collections = "3.0"
