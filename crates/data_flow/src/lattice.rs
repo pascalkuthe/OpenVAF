@@ -426,6 +426,8 @@ impl<T: PartialEq> FlatSet<T> {
             Self::Bottom => FlatSet::Bottom,
         }
     }
+
+    #[must_use]
     pub fn map_bottom(self, f: impl FnOnce() -> Self) -> Self {
         match self {
             Self::Bottom => f(),

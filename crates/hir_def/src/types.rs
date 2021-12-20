@@ -101,6 +101,7 @@ impl Type {
         curr
     }
 
+    #[must_use]
     pub fn to_dim(self, dim: &[u32]) -> Type {
         let mut ty = self;
         for len in dim.iter().rev().copied() {

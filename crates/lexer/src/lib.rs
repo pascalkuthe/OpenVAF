@@ -267,7 +267,7 @@ impl Cursor<'_> {
             };
         }
         debug_assert!(!(self.prev() == '\\' && self.first() == '\n'));
-        debug_assert!(!(self.prev() == '\n'));
+        debug_assert!(self.prev() != '\n');
         LineComment
     }
 

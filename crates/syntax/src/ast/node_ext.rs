@@ -24,6 +24,7 @@ impl ast::Path {
         self.syntax().parent().and_then(ast::Path::cast)
     }
 
+    #[must_use]
     pub fn first_qualifier(&self) -> ast::Path {
         successors(Some(self.clone()), ast::Path::qualifier).last().unwrap()
     }
@@ -46,6 +47,7 @@ impl ast::Path {
         successors(self.qualifier(), |p| p.qualifier())
     }
 
+    #[must_use]
     pub fn top_path(&self) -> ast::Path {
         successors(Some(self.clone()), ast::Path::parent_path).last().unwrap()
     }

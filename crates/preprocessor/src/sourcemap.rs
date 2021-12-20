@@ -19,17 +19,21 @@ pub struct FileSpan {
 }
 
 impl FileSpan {
+    #[must_use]
     pub fn with_file(self, file: FileId) -> FileSpan {
         FileSpan { range: self.range, file }
     }
 
+    #[must_use]
     pub fn with_range(self, range: TextRange) -> FileSpan {
         FileSpan { range, file: self.file }
     }
+    #[must_use]
     pub fn with_len(self, len: TextSize) -> FileSpan {
         FileSpan { range: TextRange::at(self.range.start(), len), file: self.file }
     }
 
+    #[must_use]
     pub fn with_subrange(self, relative_range: TextRange) -> FileSpan {
         let range = relative_range + self.range.start();
         assert!(
@@ -81,17 +85,21 @@ pub struct CtxSpan {
 }
 
 impl CtxSpan {
+    #[must_use]
     pub fn with_ctx(self, ctx: SourceContext) -> CtxSpan {
         CtxSpan { range: self.range, ctx }
     }
+    #[must_use]
     pub fn with_range(self, range: TextRange) -> CtxSpan {
         CtxSpan { range, ctx: self.ctx }
     }
 
+    #[must_use]
     pub fn cover(self, range: TextRange) -> CtxSpan {
         CtxSpan { range: self.range.cover(range), ctx: self.ctx }
     }
 
+    #[must_use]
     pub fn with_len(self, len: TextSize) -> CtxSpan {
         CtxSpan { range: TextRange::at(self.range.start(), len), ctx: self.ctx }
     }
