@@ -291,13 +291,18 @@ where
     R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug + Debug,
     C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for (row, columns) in self.rows.iter().enumerate() {
-            if !columns.is_empty() {
-                writeln!(f, "{:?}: {:?}", R::from(row), columns)?
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        /// Forces its contents to print in regular mode instead of alternate mode.
+        struct OneLinePrinter<R: Debug, C: Debug>((R, C));
+        impl<R: Debug, C: Debug> fmt::Debug for OneLinePrinter<R, C> {
+            fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(fmt, "{:?}: {:?}", (self.0).0, (self.0).1)
             }
         }
-        Ok(())
+
+        write!(fmt, "SparseBitMatrix({}x{}) ", self.num_rows, self.num_columns)?;
+        let items = self.rows().flat_map(|r| self.iter(r).map(move |c| (r, c)));
+        fmt.debug_set().entries(items.map(OneLinePrinter)).finish()
     }
 }
 
@@ -553,12 +558,13 @@ where
     /// `column` to the bitset for `row`.
     ///
     /// Returns `true` if this changed the matrix.
+    #[inline]
     pub fn insert(&mut self, row: R, column: C) -> bool {
         let num_columns = self.matrix.num_columns;
-        let dst = self.matrix.ensure_row(row);
-        if let HybridBitSet::Dense(dst) = dst {
-            dst.ensure(column.into() + 1)
+        if num_columns < column.into() {
+            self.matrix.num_columns = column.into() + 1;
         }
-        dst.insert(column, num_columns)
+        let dst = self.matrix.ensure_row(row);
+        dst.insert_growable(column, num_columns)
     }
 }

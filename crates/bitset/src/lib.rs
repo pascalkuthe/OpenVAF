@@ -36,6 +36,12 @@ pub struct BitSet<T> {
     marker: PhantomData<T>,
 }
 
+impl<T> Default for BitSet<T> {
+    fn default() -> Self {
+        Self { domain_size: 0, words: Vec::new(), marker: PhantomData }
+    }
+}
+
 impl<T> BitSet<T> {
     /// Gets the domain size.
     pub fn domain_size(&self) -> usize {

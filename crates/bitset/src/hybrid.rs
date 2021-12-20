@@ -22,10 +22,27 @@ use crate::{
 /// will panic if the bitsets have differing domain sizes.
 
 // TODO check if implementing clone_from here improves performance
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum HybridBitSet<T> {
     Sparse(SparseBitSet<T>),
     Dense(BitSet<T>),
+}
+
+impl<T: Clone> Clone for HybridBitSet<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Sparse(arg0) => Self::Sparse(arg0.clone()),
+            Self::Dense(arg0) => Self::Dense(arg0.clone()),
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        if let (HybridBitSet::Dense(dst), HybridBitSet::Dense(source)) = (&mut *self, source) {
+            dst.clone_from(source)
+        } else {
+            *self = source.clone()
+        }
+    }
 }
 
 impl<T> Default for HybridBitSet<T>
@@ -91,6 +108,13 @@ where
             HybridBitSet::Sparse(sparse) => sparse.is_empty(),
             HybridBitSet::Dense(dense) => dense.is_empty(),
         }
+    }
+
+    pub fn insert_growable(&mut self, elem: T, domain_size: usize) -> bool {
+        if let HybridBitSet::Dense(dense) = self {
+            dense.ensure(elem.into() + 1)
+        }
+        self.insert(elem, domain_size)
     }
 
     pub fn insert(&mut self, elem: T, domain_size: usize) -> bool {

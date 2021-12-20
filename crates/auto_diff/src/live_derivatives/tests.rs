@@ -1,26 +1,22 @@
-use bitset::GrowableSparseBitMatrix;
 use cfg::ControlFlowGraph;
-use data_flow::Analysis;
 use expect_test::{expect, Expect};
 
-use crate::{LiveDerivativeAnalysis, LiveDerivatives, Unkowns};
+use crate::live_derivatives;
 
 fn check(src: &str, data_flow_result: Expect) {
     let (cfg, _) = ControlFlowGraph::parse(src).unwrap();
-    let unkowns = Unkowns::new([
-        (0u32.into(), vec![(0u32.into(), 1f64.to_bits())].into_boxed_slice()),
-        (1u32.into(), vec![(1u32.into(), 1f64.to_bits())].into_boxed_slice()),
-    ]);
 
-    let bottom = LiveDerivatives {
-        required_places: GrowableSparseBitMatrix::new(cfg.next_place.into(), unkowns.len()),
-        required_locals: GrowableSparseBitMatrix::new(cfg.next_local.into(), unkowns.len()),
-    };
+    let res = live_derivatives(
+        &cfg,
+        [
+            (0u32.into(), vec![(0u32.into(), 1f64.to_bits())].into_boxed_slice()),
+            (1u32.into(), vec![(1u32.into(), 1f64.to_bits())].into_boxed_slice()),
+        ],
+        None,
+    );
 
-    let analysis = LiveDerivativeAnalysis { unkowns, bottom };
-
-    let res = analysis.into_engine(&cfg).iterate_to_fixpoint();
-    let actual = format!("{:#?}", res.entry_sets);
+    let actual =
+        format!("{:#?}\n{:#?}", res.analysis.live_local_derivatives.borrow(), res.entry_sets);
     data_flow_result.assert_eq(&actual);
 }
 
@@ -32,7 +28,7 @@ fn smoke_test() {
         next_place p2;
         bb0:
             let p0 := copy [f64 0.0];
-            let _0 := f64.abs [#0];
+            let _0 := f64.- [#0];
             let _1 := cb2 [#1, f64 3.141];
             let _2 := f64./ [#2, f64 3.141];
             let _3 := sin [#3];
@@ -54,35 +50,37 @@ fn smoke_test() {
         }"##;
 
     let data_flow_result = expect![[r#"
+        SparseBitMatrix(11x2) {
+            _1: unkown0,
+            _1: unkown1,
+            _1: unkown2,
+            _2: unkown1,
+            _3: unkown0,
+            _3: unkown1,
+            _3: unkown2,
+            _5: unkown0,
+            _5: unkown1,
+            _5: unkown2,
+            _6: unkown0,
+            _6: unkown1,
+            _6: unkown2,
+            _7: unkown0,
+            _7: unkown1,
+            _7: unkown2,
+            _8: unkown1,
+            _9: unkown1,
+        }
         {
-            bb0: LiveDerivatives {
-                required_places: p0: [Unkown(1)]
-                ,
-                required_locals: _1: [Unkown(0), Unkown(1), Unkown(2)]
-                _2: [Unkown(1)]
-                _3: [Unkown(0), Unkown(1), Unkown(2)]
-                _5: [Unkown(0), Unkown(1), Unkown(2)]
-                _6: [Unkown(0), Unkown(1), Unkown(2)]
-                ,
+            bb0: SparseBitMatrix(2x2) {
+                p0: unkown1,
             },
-            bb1: LiveDerivatives {
-                required_places: p0: [Unkown(1)]
-                ,
-                required_locals: _5: [Unkown(0), Unkown(1), Unkown(2)]
-                _6: [Unkown(0), Unkown(1), Unkown(2)]
-                ,
+            bb1: SparseBitMatrix(2x2) {
+                p0: unkown1,
             },
-            bb2: LiveDerivatives {
-                required_places: p0: [Unkown(1)]
-                ,
-                required_locals: _5: [Unkown(0), Unkown(1), Unkown(2)]
-                _6: [Unkown(0), Unkown(1), Unkown(2)]
-                ,
+            bb2: SparseBitMatrix(2x2) {
+                p0: unkown1,
             },
-            bb3: LiveDerivatives {
-                required_places: ,
-                required_locals: ,
-            },
+            bb3: SparseBitMatrix(2x2) {},
         }"#]];
 
     check(src, data_flow_result)
@@ -115,39 +113,55 @@ fn loop_with_backwards_dependency() {
         }"##;
 
     let data_flow_result = expect![[r#"
+        SparseBitMatrix(4x2) {
+            _1: unkown0,
+            _2: unkown0,
+        }
         {
-            bb0: LiveDerivatives {
-                required_places: p0: [Unkown(0)]
-                p1: [Unkown(0)]
-                ,
-                required_locals: _1: [Unkown(0)]
-                ,
+            bb0: SparseBitMatrix(1x2) {
+                p0: unkown0,
+                p1: unkown0,
             },
-            bb1: LiveDerivatives {
-                required_places: p0: [Unkown(0)]
-                p1: [Unkown(0)]
-                ,
-                required_locals: _1: [Unkown(0)]
-                ,
+            bb1: SparseBitMatrix(1x2) {
+                p0: unkown0,
+                p1: unkown0,
             },
-            bb2: LiveDerivatives {
-                required_places: p0: [Unkown(0)]
-                p1: [Unkown(0)]
-                ,
-                required_locals: _1: [Unkown(0)]
-                ,
+            bb2: SparseBitMatrix(1x2) {
+                p0: unkown0,
+                p1: unkown0,
             },
-            bb3: LiveDerivatives {
-                required_places: p0: [Unkown(0)]
-                p1: [Unkown(0)]
-                ,
-                required_locals: _1: [Unkown(0)]
-                ,
+            bb3: SparseBitMatrix(1x2) {
+                p0: unkown0,
+                p1: unkown0,
             },
-            bb4: LiveDerivatives {
-                required_places: ,
-                required_locals: ,
+            bb4: SparseBitMatrix(1x2) {},
+        }"#]];
+
+    check(src, data_flow_result)
+}
+
+#[test]
+fn self_assign() {
+    let src = r##"
+        {
+        next_local _4;
+        next_place p1;
+        bb0:
+            let p0 := copy [#1];
+            goto bb1;
+        bb1:
+            let p0 := exp [p0];
+            let p0 := cb1 [p0];
+            end
+        }"##;
+
+    let data_flow_result = expect![[r#"
+        SparseBitMatrix(4x2) {}
+        {
+            bb0: SparseBitMatrix(1x2) {
+                p0: unkown1,
             },
+            bb1: SparseBitMatrix(1x2) {},
         }"#]];
 
     check(src, data_flow_result)

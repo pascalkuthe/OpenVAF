@@ -10,57 +10,55 @@
 //! * Higher Order Derivatives may introduce additional unkowns which can not be known ahead of
 //! time so the domain may grow -> `GrowableSparseBitMatrix`
 
+use std::cell::{Cell, RefCell};
+
 use bitset::matrix::GrowableSparseBitMatrix;
-use cfg::{ControlFlowGraph, InstrDst, Local, Op, Operand, Place};
-use data_flow::lattice::JoinSemiLattice;
+use bitset::{BitSet, HybridBitSet};
+use cfg::{Callback, ControlFlowGraph, InstrDst, Local, Op, Operand, Place};
 use data_flow::{direction, Analysis, AnalysisDomain};
 
-use crate::unkowns::{Unkown, Unkowns};
+use crate::unkowns::{FirstOrderUnkownInfo, Unkown, Unkowns};
 
 #[cfg(test)]
 mod tests;
 
 pub struct LiveDerivativeAnalysis {
     pub unkowns: Unkowns,
-    pub bottom: LiveDerivatives,
+    pub bottom: GrowableSparseBitMatrix<Place, Unkown>,
+    pub live_local_derivatives: RefCell<GrowableSparseBitMatrix<Local, Unkown>>,
+    tmp_dense: Cell<BitSet<Unkown>>,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct LiveDerivatives {
-    pub required_places: GrowableSparseBitMatrix<Place, Unkown>,
-    pub required_locals: GrowableSparseBitMatrix<Local, Unkown>,
-}
-
-impl Clone for LiveDerivatives {
-    fn clone(&self) -> Self {
-        Self {
-            required_places: self.required_places.clone(),
-            required_locals: self.required_locals.clone(),
+impl LiveDerivativeAnalysis {
+    pub fn new(
+        cfg: &ControlFlowGraph,
+        unkowns: impl IntoIterator<Item = (Callback, FirstOrderUnkownInfo)>,
+        bottom: Option<GrowableSparseBitMatrix<Place, Unkown>>,
+    ) -> LiveDerivativeAnalysis {
+        let unkowns = Unkowns::new(unkowns);
+        let bottom = bottom
+            .unwrap_or_else(|| GrowableSparseBitMatrix::new(cfg.next_place.into(), unkowns.len()));
+        LiveDerivativeAnalysis {
+            tmp_dense: Cell::new(BitSet::new_empty(0)),
+            live_local_derivatives: RefCell::new(GrowableSparseBitMatrix::new(
+                cfg.next_local.into(),
+                unkowns.len(),
+            )),
+            unkowns,
+            bottom,
         }
-    }
-
-    fn clone_from(&mut self, source: &Self) {
-        self.required_places.clone_from(&source.required_places);
-        self.required_locals.clone_from(&source.required_locals);
-    }
-}
-
-impl JoinSemiLattice for LiveDerivatives {
-    fn join(&mut self, other: &Self) -> bool {
-        self.required_places.join(&other.required_places)
-            | self.required_locals.join(&other.required_locals)
     }
 }
 
 impl AnalysisDomain for LiveDerivativeAnalysis {
-    type Domain = LiveDerivatives;
+    type Domain = GrowableSparseBitMatrix<Place, Unkown>;
     type Direction = direction::Backward;
 
     /// A descriptive name for this analysis. Used only for debugging.
     const NAME: &'static str = "Live Derivatives";
 
     /// The initial value of the dataflow state upon entry to each basic block.
-    fn bottom_value(&self, _cfg: &ControlFlowGraph) -> LiveDerivatives {
+    fn bottom_value(&self, _cfg: &ControlFlowGraph) -> GrowableSparseBitMatrix<Place, Unkown> {
         self.bottom.clone()
     }
 
@@ -71,18 +69,15 @@ impl Analysis for LiveDerivativeAnalysis {
     fn apply_phi_effect(
         &self,
         _cfg: &ControlFlowGraph,
-        state: &mut Self::Domain,
+        _state: &mut Self::Domain,
         phi: &cfg::Phi,
         _bb: cfg::BasicBlock,
         _idx: cfg::PhiIdx,
     ) {
-        let unkowns = state.required_locals.matrix.take_row(phi.dst);
-
-        if let Some(unkowns) = unkowns {
-            let domain_size = state.required_locals.matrix.num_columns();
+        if self.live_local_derivatives.borrow().matrix.row(phi.dst).is_some() {
             // Propagate require dependencies from dst to all sources
             for (_, local) in &phi.sources {
-                state.required_locals.union_with(&unkowns, domain_size, *local);
+                self.live_local_derivatives.borrow_mut().union_rows(phi.dst, *local);
             }
         }
     }
@@ -97,36 +92,44 @@ impl Analysis for LiveDerivativeAnalysis {
     ) {
         let (propgated, propgated_domain_size) = match instr.dst {
             InstrDst::Local(local) => (
-                state.required_locals.matrix.take_row(local),
-                state.required_locals.matrix.num_columns(),
+                match self.live_local_derivatives.borrow().matrix.row(local) {
+                    Some(HybridBitSet::Sparse(sparse)) => {
+                        Some(HybridBitSet::Sparse(sparse.clone()))
+                    }
+                    Some(HybridBitSet::Dense(dense)) => {
+                        let mut dst = self.tmp_dense.take();
+                        dst.clone_from(dense);
+                        Some(HybridBitSet::Dense(dst))
+                    }
+                    None => None,
+                },
+                self.live_local_derivatives.borrow().matrix.num_columns(),
             ),
-            InstrDst::Place(place) => (
-                state.required_places.matrix.take_row(place),
-                state.required_places.matrix.num_columns(),
-            ),
+            InstrDst::Place(place) => (state.matrix.take_row(place), state.matrix.num_columns()),
             InstrDst::Ignore => (None, 0),
         };
 
         if let Op::Call(callback) = instr.op {
             if let Some(unkown) = self.unkowns.callback_unkown(callback) {
                 // A derivative operator (ddx)!
-                // We need to be derive the argument by the main unkown...
-                let mut unkowns = vec![unkown.into()];
-
-                // and any higher order derivatives of already required derivatives
-                if let Some(propgated) = &propgated {
-                    self.unkowns.raise_order(propgated, &mut unkowns, unkown)
-                }
-
                 match instr.args[0] {
                     Operand::Local(local) => {
-                        for unkown in unkowns {
-                            state.required_locals.insert(local, unkown);
+                        let mut live_local_derivatives = self.live_local_derivatives.borrow_mut();
+                        live_local_derivatives.insert(local, unkown.into());
+                        if let Some(propgated) = &propgated {
+                            for previous_order in propgated.iter() {
+                                let unkown = self.unkowns.raise_order(previous_order, unkown);
+                                live_local_derivatives.insert(local, unkown);
+                            }
                         }
                     }
                     Operand::Place(place) => {
-                        for unkown in unkowns {
-                            state.required_places.insert(place, unkown);
+                        state.insert(place, unkown.into());
+                        if let Some(propgated) = &propgated {
+                            for previous_order in propgated.iter() {
+                                let unkown = self.unkowns.raise_order(previous_order, unkown);
+                                state.insert(place, unkown);
+                            }
                         }
                     }
                     _ => (), // technically not well optimized but doesn't matter because who write ddx(<const>)
@@ -137,17 +140,25 @@ impl Analysis for LiveDerivativeAnalysis {
             }
         }
 
-        if let Some(propgated) = propgated.as_ref() {
+        if let Some(propgated) = propgated {
             for arg in &*instr.args {
                 match *arg {
                     Operand::Local(local) => {
-                        state.required_locals.union_with(propgated, propgated_domain_size, local);
+                        self.live_local_derivatives.borrow_mut().union_with(
+                            &propgated,
+                            propgated_domain_size,
+                            local,
+                        );
                     }
                     Operand::Place(place) => {
-                        state.required_places.union_with(propgated, propgated_domain_size, place);
+                        state.union_with(&propgated, propgated_domain_size, place);
                     }
                     _ => (),
                 }
+            }
+
+            if let HybridBitSet::Dense(dense) = propgated {
+                self.tmp_dense.set(dense)
             }
         }
     }
