@@ -272,6 +272,12 @@ pub struct Instruction {
     pub src: i32,
 }
 
+impl Default for Instruction {
+    fn default() -> Self {
+        Self { dst: InstrDst::Ignore, op: Op::NoOp, args: Vec::new().into_boxed_slice(), src: 0 }
+    }
+}
+
 impl Instruction {
     pub fn visit_operands(&self, mut f: impl FnMut(&Operand)) {
         for arg in &*self.args {

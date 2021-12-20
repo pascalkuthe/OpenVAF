@@ -37,6 +37,8 @@ name = "auto_diff"
 version = "0.0.0"
 dependencies = [
  "ahash",
+ "arena",
+ "arrayvec",
  "bitset",
  "cfg",
  "data_flow",

@@ -1,13 +1,3 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -155,6 +145,7 @@ impl<T> IdxRange<T> {
 
     /// Merges two ranges so that the result covers both range (plus all idecies
     /// between these two ranges)
+    #[must_use]
     pub fn cover(&self, other: &Self) -> Self {
         Self { range: self.range.start..other.range.end, _p: PhantomData }
     }
@@ -207,6 +198,12 @@ impl<T> PartialEq for IdxRange<T> {
 }
 
 impl<T> Eq for IdxRange<T> {}
+
+impl<T> Hash for IdxRange<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.range.hash(state);
+    }
+}
 
 /// Index based Arena that automatically provides an Index Type for convenience
 pub type Arena<T> = TiVec<Idx<T>, T>;
