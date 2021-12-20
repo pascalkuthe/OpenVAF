@@ -18,7 +18,7 @@ pub fn smoke_test() {
         next_local _10;
         next_place p2;
         bb0:
-            let _0 := i32.abs [#0];
+            let _0 := copy [#0];
             let _1 := i32.+ [_0, #1];
             let _2 := i32.== [i32 0, _1];
             if _2 { bb2 } else { bb3 } 
@@ -55,7 +55,7 @@ pub fn smoke_test() {
         next_local _10;
         next_place p2;
         bb0:
-            let _0 := i32.abs [#0];
+            let _0 := copy [#0];
             let _1 := i32.+ [_0, #1];
             let _2 := i32.== [i32 0, _1];
             if _2 { bb2 } else { bb3 } 

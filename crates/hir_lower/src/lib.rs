@@ -225,10 +225,15 @@ impl LoweringCtx<'_, '_> {
                         place.into(),
                         op,
                         vec![place.into(), val_],
-                        val.into(),
+                        u32::from(val) as i32,
                     );
                 } else {
-                    self.data.cfg.build_assign(place.into(), Op::Copy, vec![val_], val.into());
+                    self.data.cfg.build_assign(
+                        place.into(),
+                        Op::Copy,
+                        vec![val_],
+                        u32::from(val) as i32,
+                    );
                 }
             }
             Stmt::Block { ref body } => {
@@ -237,6 +242,7 @@ impl LoweringCtx<'_, '_> {
                 }
             }
             Stmt::If { cond, then_branch, else_branch } => {
+                let cond = self.lower_expr(cond);
                 self.lower_cond(cond, |s| s.lower_stmt(then_branch), |s| s.lower_stmt(else_branch));
             }
             Stmt::ForLoop { init, cond, incr, body } => {
@@ -290,8 +296,11 @@ impl LoweringCtx<'_, '_> {
             for val in vals {
                 // Lower the condition (val == discriminant)
                 let val_ = self.lower_expr(*val);
-                let cond =
-                    self.data.cfg.build_val(discr_op, vec![val_, discr.clone()], (*val).into());
+                let cond = self.data.cfg.build_val(
+                    discr_op,
+                    vec![val_, discr.clone()],
+                    u32::from(*val) as i32,
+                );
 
                 // Create the next block (either the next condition or another arm)
 
@@ -350,11 +359,10 @@ impl LoweringCtx<'_, '_> {
 
     fn lower_cond<T>(
         &mut self,
-        cond: ExprId,
+        cond: Operand,
         lower_then: impl FnOnce(&mut Self) -> T,
         lower_else: impl FnOnce(&mut Self) -> T,
     ) -> ((BasicBlock, T), (BasicBlock, T)) {
-        let cond = self.lower_expr(cond);
         let start = self.data.cfg.current;
 
         let then_head_bb = self.data.cfg.enter_new_block();
@@ -460,7 +468,7 @@ impl LoweringCtx<'_, '_> {
             // }
             _ => unreachable!(),
         };
-        self.data.cfg.build_val(op, vec![val], expr.into()).into()
+        self.data.cfg.build_val(op, vec![val], u32::from(expr) as i32).into()
     }
 
     fn lower_unary_op(&mut self, expr: ExprId, arg: ExprId, op: UnaryOp) -> Operand {
@@ -476,7 +484,7 @@ impl LoweringCtx<'_, '_> {
             UnaryOp::Identity => return arg,
         };
 
-        self.data.cfg.build_val(op, vec![arg], expr.into()).into()
+        self.data.cfg.build_val(op, vec![arg], u32::from(expr) as i32).into()
     }
 
     fn lower_array(&mut self, _expr: ExprId, _args: &[ExprId]) -> Operand {
@@ -515,14 +523,17 @@ impl LoweringCtx<'_, '_> {
             (Some(hi), None) => self.param(kind(hi, None)).into(),
             (None, Some(lo)) => {
                 let lo = self.param(kind(lo, None));
-                self.data.cfg.build_val(Op::RealArtihNeg, vec![lo.into()], expr.into()).into()
+                self.data
+                    .cfg
+                    .build_val(Op::RealArtihNeg, vec![lo.into()], u32::from(expr) as i32)
+                    .into()
             }
             // TODO refactor to nice if let binding when stable
             (Some(hi), Some(lo)) => {
                 if let Some(inverted) = self.data.params.index(&kind(lo, Some(hi))) {
                     self.data
                         .cfg
-                        .build_val(Op::RealArtihNeg, vec![inverted.into()], expr.into())
+                        .build_val(Op::RealArtihNeg, vec![inverted.into()], u32::from(expr) as i32)
                         .into()
                 } else {
                     self.param(kind(hi, Some(lo))).into()
@@ -628,18 +639,29 @@ impl LoweringCtx<'_, '_> {
 
         let lhs = self.lower_expr(lhs);
         let rhs = self.lower_expr(rhs);
-        self.data.cfg.build_val(op, vec![lhs, rhs], expr.into())
+        self.data.cfg.build_val(op, vec![lhs, rhs], u32::from(expr) as i32)
     }
 
     fn lower_to_local(&mut self, expr: ExprId, f: impl FnOnce(&mut Self) -> Operand) -> Local {
         let val = f(self);
-        self.data.cfg.to_local(val, expr.into())
+        self.data.cfg.to_local(val, u32::from(expr) as i32)
     }
 
     fn lower_select(
         &mut self,
         expr: ExprId,
         cond: ExprId,
+        lower_then_val: impl FnOnce(&mut Self) -> Operand,
+        lower_else_val: impl FnOnce(&mut Self) -> Operand,
+    ) -> Local {
+        let cond = self.lower_expr(cond);
+        self.lower_select_with(expr, cond, lower_then_val, lower_else_val)
+    }
+
+    fn lower_select_with(
+        &mut self,
+        expr: ExprId,
+        cond: Operand,
         lower_then_val: impl FnOnce(&mut Self) -> Operand,
         lower_else_val: impl FnOnce(&mut Self) -> Operand,
     ) -> Local {
@@ -665,7 +687,7 @@ impl LoweringCtx<'_, '_> {
             Type::Integer => 0.into(),
             ty => unreachable!("invalid function return type {:?}", ty),
         };
-        self.data.cfg.build_assign(return_var.into(), Op::Copy, vec![init], expr.into());
+        self.data.cfg.build_assign(return_var.into(), Op::Copy, vec![init], u32::from(expr) as i32);
 
         let mut ctx = LoweringCtx { data: self.data, body: &body, infere: &infere, args };
 
@@ -675,10 +697,24 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn lower_builtin(&mut self, expr: ExprId, builtin: BuiltIn, args: &[ExprId]) -> Operand {
+        let src = u32::from(expr) as i32;
         let signature = self.infere.resolved_signatures.get(&expr);
         let op = match builtin {
             BuiltIn::abs => {
-                match_signature!(signature: ABS_REAL => Op::RealAbs, ABS_INT => Op::IntAbs)
+                let (negate, comparison, zero) = match_signature!(signature:
+                    ABS_REAL => (Op::RealArtihNeg,Op::RealLessThen,0f64.into()),
+                    ABS_INT => (Op::IntArithNeg,Op::IntLessThen,0.into())
+                );
+                let val = self.lower_expr(args[0]);
+                let cond = self.data.cfg.build_val(comparison, vec![val.clone(), zero], src);
+                return self
+                    .lower_select_with(
+                        expr,
+                        cond.into(),
+                        |sel| sel.data.cfg.build_val(negate, vec![val.clone()], src).into(),
+                        |_| val.clone(),
+                    )
+                    .into();
             }
             BuiltIn::acos => Op::ArcCos,
             BuiltIn::acosh => Op::ArcCosH,
@@ -705,10 +741,22 @@ impl LoweringCtx<'_, '_> {
             BuiltIn::ceil => Op::Ceil,
 
             BuiltIn::max => {
-                match_signature!(signature: MAX_REAL => Op::RealMax, MAX_INT => Op::RealMax)
+                let comparison = match_signature!(signature: MAX_REAL => Op::RealGreaterThen, MAX_INT => Op::IntGreaterThen);
+                let lhs = self.lower_expr(args[0]);
+                let rhs = self.lower_expr(args[1]);
+                let cond = self.data.cfg.build_val(comparison, vec![lhs.clone(), rhs.clone()], src);
+                return self
+                    .lower_select_with(expr, cond.into(), |_| lhs.clone(), |_| rhs.clone())
+                    .into();
             }
             BuiltIn::min => {
-                match_signature!(signature: MAX_REAL => Op::RealMin, MAX_INT => Op::RealMin)
+                let comparison = match_signature!(signature: MAX_REAL => Op::RealLessThen, MAX_INT => Op::IntLessThen);
+                let lhs = self.lower_expr(args[0]);
+                let rhs = self.lower_expr(args[1]);
+                let cond = self.data.cfg.build_val(comparison, vec![lhs.clone(), rhs.clone()], src);
+                return self
+                    .lower_select_with(expr, cond.into(), |_| lhs.clone(), |_| rhs.clone())
+                    .into();
             }
             BuiltIn::pow => Op::RealPow,
 
@@ -772,7 +820,7 @@ impl LoweringCtx<'_, '_> {
                 return self
                     .data
                     .cfg
-                    .build_val(Op::RealMul, vec![(KB / Q).into(), temp], expr.into())
+                    .build_val(Op::RealMul, vec![(KB / Q).into(), temp], src)
                     .into();
             }
 
@@ -787,7 +835,7 @@ impl LoweringCtx<'_, '_> {
                     CallBackKind::Derivative(cfg_param)
                 };
                 let call = self.callback(call);
-                let dst = self.data.cfg.build_val(Op::Call(call), vec![val], expr.into());
+                let dst = self.data.cfg.build_val(Op::Call(call), vec![val], src);
                 // self.data.derivatives.insert(dst, unkown);
                 return dst.into();
             }
@@ -816,6 +864,6 @@ impl LoweringCtx<'_, '_> {
         };
 
         let operands = args.iter().map(|arg| self.lower_expr(*arg)).collect();
-        self.data.cfg.build_val(op, operands, expr.into()).into()
+        self.data.cfg.build_val(op, operands, src).into()
     }
 }

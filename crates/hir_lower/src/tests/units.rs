@@ -73,39 +73,48 @@ endmodule
     "#;
     let cfg = expect![[r##"
         {
-        next_local _10;
+        next_local _13;
         next_place p2;
         bb0:
-            let _0 := i32.abs [#0];
-            let _1 := i32.+ [_0, #1];
-            let _2 := i32.== [i32 0, _1];
-            if _2 { bb2 } else { bb3 } 
+            let _0 := i32.< [#0, i32 0];
+            if _0 { bb1 } else { bb2 } 
         bb1:
-            goto bb8;
+            let _1 := i32- [#0];
+            goto bb3;
         bb2:
-            let p0 := copy [f64 3.141];
-            goto bb1;
+            let _2 := copy [#0];
+            goto bb3;
         bb3:
-            let _6 := i32.== [i32 1, _1];
-            if _6 { bb4 } else { bb5 } 
+            phi _3 := [(bb1, _1), (bb2, _2)];
+            let _4 := i32.+ [_3, #1];
+            let _5 := i32.== [i32 0, _4];
+            if _5 { bb5 } else { bb6 } 
         bb4:
-            let _3 := cast_i32_f64 [#0];
-            let _4 := f64./ [_3, f64 3.141];
-            let p0 := copy [_4];
-            let _5 := sin [p0];
-            let p1 := copy [_5];
-            goto bb1;
+            goto bb11;
         bb5:
-            let _7 := i32.== [i32 2, _1];
-            if _7 { bb4 } else { bb6 } 
+            let p0 := copy [f64 3.141];
+            goto bb4;
         bb6:
-            let _8 := i32.== [i32 3, _1];
-            if _8 { bb4 } else { bb7 } 
+            let _9 := i32.== [i32 1, _4];
+            if _9 { bb7 } else { bb8 } 
         bb7:
-            let _9 := cast_i32_f64 [i32 0];
-            let p0 := copy [_9];
-            goto bb1;
+            let _6 := cast_i32_f64 [#0];
+            let _7 := f64./ [_6, f64 3.141];
+            let p0 := copy [_7];
+            let _8 := sin [p0];
+            let p1 := copy [_8];
+            goto bb4;
         bb8:
+            let _10 := i32.== [i32 2, _4];
+            if _10 { bb7 } else { bb9 } 
+        bb9:
+            let _11 := i32.== [i32 3, _4];
+            if _11 { bb7 } else { bb10 } 
+        bb10:
+            let _12 := cast_i32_f64 [i32 0];
+            let p0 := copy [_12];
+            goto bb4;
+        bb11:
             end
         }"##]];
     check(src, cfg)

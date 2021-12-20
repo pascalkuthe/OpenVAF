@@ -1,6 +1,8 @@
 //! Editing/Constructing a ControlFlowGraph can be cumbersome.
 //! Therefore a builder is provided here to make that task more ergnomic.
 
+use ahash::AHashMap;
+
 use crate::{
     BasicBlock, BasicBlockData, ControlFlowGraph, InstrDst, Instruction, Local, Op, Operand, Place,
     Terminator,
@@ -18,31 +20,36 @@ impl<'a> CfgBuilder<'a> {
     }
     pub fn build_phi(&mut self, sources: impl IntoIterator<Item = (BasicBlock, Local)>) -> Local {
         let dst = self.cfg.new_local();
+        self.add_phi(dst, sources.into_iter().collect());
+        dst
+    }
+
+    pub fn add_phi(&mut self, dst: Local, sources: AHashMap<BasicBlock, Local>) -> Local {
         self.cfg.blocks[self.current]
             .phis
             .push(crate::Phi { dst, sources: sources.into_iter().collect() });
         dst
     }
 
-    pub fn build_val(&mut self, op: Op, operands: Vec<Operand>, src: u32) -> Local {
+    pub fn build_val(&mut self, op: Op, operands: Vec<Operand>, src: i32) -> Local {
         let dst = self.cfg.new_local();
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst: InstrDst::Local(dst),
             op,
             args: operands.into_boxed_slice(),
-            src: src as i32,
+            src,
         });
         dst
     }
 
-    pub fn to_local(&mut self, val: Operand, src: u32) -> Local {
+    pub fn to_local(&mut self, val: Operand, src: i32) -> Local {
         match val {
             Operand::Local(local) => local,
             _ => self.build_val(Op::Copy, vec![val], src),
         }
     }
 
-    pub fn build_write(&mut self, dst: Place, src: u32, val: Operand) {
+    pub fn build_write(&mut self, dst: Place, src: i32, val: Operand) {
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst: InstrDst::Place(dst),
             op: Op::Copy,
@@ -51,7 +58,7 @@ impl<'a> CfgBuilder<'a> {
         });
     }
 
-    pub fn build_assign(&mut self, dst: InstrDst, op: Op, operands: Vec<Operand>, src: u32) {
+    pub fn build_assign(&mut self, dst: InstrDst, op: Op, operands: Vec<Operand>, src: i32) {
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst,
             op,
@@ -60,7 +67,7 @@ impl<'a> CfgBuilder<'a> {
         });
     }
 
-    pub fn build_stmt(&mut self, op: Op, operands: Vec<Operand>, src: u32) {
+    pub fn build_stmt(&mut self, op: Op, operands: Vec<Operand>, src: i32) {
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst: InstrDst::Ignore,
             op,
@@ -96,5 +103,13 @@ impl<'a> CfgBuilder<'a> {
         let bb = self.cfg.blocks.push_and_get_key(BasicBlockData::default());
         self.current = bb;
         bb
+    }
+
+    pub fn current_block_mut(&mut self) -> &mut BasicBlockData {
+        &mut self.cfg[self.current]
+    }
+
+    pub fn current_block(&self) -> &BasicBlockData {
+        &self.cfg[self.current]
     }
 }

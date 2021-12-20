@@ -114,14 +114,7 @@ pub enum Op {
     ArcCosH,
     ArcTanH,
 
-    RealMin,
-    RealMax,
-    RealAbs,
     RealPow,
-
-    IntAbs,
-    IntMin,
-    IntMax,
 
     Call(Callback),
 }
@@ -238,14 +231,7 @@ impl_debug! {
         ArcCosH             => "acosh";
         ArcTanH             => "atanh";
 
-        RealMin             => "f64.min";
-        RealMax             => "f64.max";
-        RealAbs             => "f64.abs";
         RealPow             => "f64.pow";
-
-        IntAbs              => "i32.abs";
-        IntMin              => "i32.min";
-        IntMax              => "i32.max";
 
         Call(c)             => "{:?}",c;
 
@@ -363,14 +349,7 @@ impl FromStr for Op {
             "acosh" => ArcCosH,
             "atanh" => ArcTanH,
 
-            "f64.min" => RealMin,
-            "f64.max" => RealMax,
-            "f64.abs" => RealAbs,
             "f64.pow" => RealPow,
-
-            "i32.abs" => IntAbs,
-            "i32.min" => IntMin,
-            "i32.max" => IntMax,
 
             _ => {
                 if s.len() > 2 && &s[0..2] == "cb" {
