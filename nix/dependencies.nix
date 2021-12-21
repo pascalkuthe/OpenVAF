@@ -32,7 +32,6 @@ let llvmPackages = pkgs.llvmPackages_13; in
       llvmPackages.libclang
     ];
 
-  LLVM_SYS_130_PREFIX = "${llvmPackages.llvm.dev}";
   LIBCLANG_PATH = "${llvmPackages.libclang}/lib";
   LLD_LIB_DIR = "${llvmPackages.lld.dev}/lib";
 }
