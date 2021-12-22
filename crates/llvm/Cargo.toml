@@ -1,0 +1,23 @@
+[package]
+name = "llvm"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+links = "llvm-13"
+build = "build.rs"
+
+[lib]
+doctest = false
+
+
+[features]
+static-libstdcpp = []
+
+[dependencies]
+libc = "0.2"
+ahash = "0.7"
+
+[build-dependencies]
+cc = "1.0"
