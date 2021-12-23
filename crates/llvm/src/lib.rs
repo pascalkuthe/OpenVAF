@@ -13,10 +13,10 @@
 //! The buildscript from llvm-sys is replaced with the one from rustc_llvm to allow for faster
 //! compile times (no regex/lazy static), cross compilation and dynamic linking
 //!
-//! Furthermore the types exported here are reduced to only those actually used in OpenVAF to
+//! Furthermore the types/functions exported here are reduced to only those actually used in OpenVAF to
 //! further imporve compile times
 
-use libc::{c_uint, c_void};
+use libc::{c_char, c_uint, c_void};
 
 use crate::util::InvariantOpaque;
 
@@ -28,8 +28,19 @@ pub mod context;
 pub mod initialization;
 pub mod module;
 pub mod pass_manager;
+pub mod support;
+pub mod targets;
 pub mod types;
 pub mod values;
+
+pub use basic_block::*;
+pub use builder::*;
+pub use context::*;
+pub use initialization::*;
+pub use module::*;
+pub use targets::*;
+pub use types::*;
+pub use values::*;
 
 pub type Bool = c_uint;
 pub const True: Bool = 1;
@@ -70,7 +81,54 @@ pub enum PassRegistry {}
 pub enum PassManagerBuilder {}
 
 #[derive(Debug)]
-pub enum OpaqueAttributeRef {}
+pub enum Target {}
+
+#[derive(Debug)]
+pub enum TargetMachine {}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CodeGenOptLevel {
+    None = 0,
+    Less = 1,
+    Default = 2,
+    Aggressive = 3,
+}
+
+// Only allow default CodeModel/RelocMode
+// If we allow different modes we might need to change
+// this for each module as done in rustc
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RelocMode {
+    Default = 0,
+    // Static = 1,
+    // PIC = 2,
+    // DynamicNoPic = 3,
+    // ROPI = 4,
+    // RWPI = 5,
+    // ROPI_RWPI = 6,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CodeModel {
+    Default = 0,
+    // JITDefault = 1,
+    // Tiny = 2,
+    // Small = 3,
+    // Kernel = 4,
+    // Medium = 5,
+    // Large = 6,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CodeGenFileType {
+    AssemblyFile = 0,
+    ObjectFile = 1,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,13 +156,13 @@ pub enum Visibility {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum LLVMUnnamedAddr {
+pub enum UnnamedAddr {
     /// Address of the GV is significant.
-    LLVMNoUnnamedAddr,
+    No,
     /// Address of the GV is locally insignificant.
-    LLVMLocalUnnamedAddr,
+    Local,
     /// Address of the GV is globally insignificant.
-    LLVMGlobalUnnamedAddr,
+    Global,
 }
 
 #[repr(C)]
@@ -191,3 +249,8 @@ pub fn get_version() -> (u32, u32, u32) {
         env!("LLVM_VERSION_PATCH").parse().unwrap(),
     )
 }
+
+/// Empty string, to be used where LLVM expects an instruction name, indicating
+/// that the instruction is to be left unnamed (i.e. numbered, in textual IR).
+// FIXME(eddyb) pass `&CStr` directly to FFI once it's a thin pointer.
+pub const UNNAMED: *const c_char = b"\0".as_ptr() as *const c_char;

@@ -1,6 +1,8 @@
 use libc::{c_char, c_double, c_uint, c_ulonglong};
 
-use crate::{Bool, Context, Type, Value};
+use crate::{
+    BasicBlock, Bool, CallConv, Context, Linkage, Module, Type, UnnamedAddr, Value, Visibility,
+};
 
 // Core->Values
 extern "C" {
@@ -35,9 +37,9 @@ extern "C" {
     // pub fn LLVMGetNumOperands(Val: &'a Value) -> ::libc::c_int;
 
     // Core->Values->Constants
-    pub fn LLVMConstNul(ty: &Type) -> &Value;
+    pub fn LLVMConstNull(ty: &Type) -> &Value;
     pub fn LLVMConstAllOnes(ty: &Type) -> &Value;
-    // pub fn LLVMGetUndef(Ty: TypeRef) -> &'a Value;
+    pub fn LLVMGetUndef(ty: &Type) -> &Value;
     /// Obtain a constant value referring to a poison value of a type.
     // pub fn LLVMGetPoison(Ty: TypeRef) -> &'a Value;
     // pub fn LLVMIsNull(Val: &'a Value) -> LLVMBool;
@@ -150,11 +152,11 @@ extern "C" {
     // pub fn LLVMConstShl(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
     // pub fn LLVMConstLShr(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
     // pub fn LLVMConstAShr(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
-    pub fn LLVMConstGEP<'a>(
-        ConstantVal: &'a Value,
-        ConstantIndices: *mut &'a Value,
-        NumIndices: c_uint,
-    ) -> &'a Value;
+    // pub fn LLVMConstGEP<'a>(
+    //     ConstantVal: &'a Value,
+    //     ConstantIndices: *mut &'a Value,
+    //     NumIndices: c_uint,
+    // ) -> &'a Value;
     // pub fn LLVMConstGEP2(
     //     Ty: TypeRef,
     //     ConstantVal: &'a Value,
@@ -188,7 +190,7 @@ extern "C" {
     // pub fn LLVMConstZExtOrBitCast(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
     // pub fn LLVMConstSExtOrBitCast(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
     // pub fn LLVMConstTruncOrBitCast(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
-    // pub fn LLVMConstPointerCast(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
+    pub fn LLVMConstPointerCast<'a>(const_val: &'a Value, ty: &'a Type) -> &'a Value;
     // pub fn LLVMConstIntCast<'a>(
     //     ConstantVal: &'a Value,
     //     ToType: &'a Type,
@@ -229,22 +231,22 @@ extern "C" {
 
     // Core->Values->Constants->Global Values
     // pub fn LLVMGetGlobalParent(global: &'a Value) -> ModuleRef;
-    // pub fn LLVMIsDeclaration(global: &'a Value) -> LLVMBool;
-    // pub fn LLVMGetLinkage(global: &'a Value) -> Linkage;
-    // pub fn LLVMSetLinkage(global: &'a Value, Linkage: Linkage);
+    pub fn LLVMIsDeclaration(global: &Value) -> Bool;
+    // pub fn LLVMGetLinkage(global: &Value) -> Linkage;
+    pub fn LLVMSetLinkage(global: &Value, Linkage: Linkage);
     // pub fn LLVMGetSection(global: &'a Value) -> *const ::libc::c_char;
     // pub fn LLVMSetSection(global: &'a Value, Section: *const ::libc::c_char);
     // pub fn LLVMGetVisibility(global: &'a Value) -> Visibility;
-    // pub fn LLVMSetVisibility(global: &'a Value, Viz: Visibility);
+    pub fn LLVMSetVisibility(global: &Value, viz: Visibility);
     // pub fn LLVMGetDLLStorageClass(global: &'a Value) -> LLVMDLLStorageClass;
     // pub fn LLVMSetDLLStorageClass(global: &'a Value, Class: LLVMDLLStorageClass);
 
     // pub fn LLVMGetUnnamedAddress(global: &'a Value) -> LLVMUnnamedAddr;
-    // pub fn LLVMSetUnnamedAddress(global: &'a Value, UnnamedAddr: LLVMUnnamedAddr);
+    pub fn LLVMSetUnnamedAddress(global: &Value, UnnamedAddr: UnnamedAddr);
     // pub fn LLVMGlobalGetValueType(global: &'a Value) -> TypeRef;
 
     // pub fn LLVMGetAlignment(V: &'a Value) -> ::libc::c_uint;
-    // pub fn LLVMSetAlignment(V: &'a Value, Bytes: ::libc::c_uint);
+    pub fn LLVMSetAlignment(val: &Value, align: c_uint);
 
     // pub fn LLVMGlobalSetMetadata(global: &'a Value, Kind: ::libc::c_uint, MD: &'a Metadata);
     // pub fn LLVMGlobalEraseMetadata(global: &'a Value, Kind: ::libc::c_uint);
@@ -264,25 +266,25 @@ extern "C" {
     // ) -> &'a Metadata;
 
     // // Core->Values->Constants->Global Variables
-    // pub fn LLVMAddGlobal(M: ModuleRef, Ty: TypeRef, Name: *const ::libc::c_char) -> &'a Value;
+    pub fn LLVMAddGlobal<'a>(module: &'a Module, ty: &'a Type, name: *const c_char) -> &'a Value;
     // pub fn LLVMAddGlobalInAddressSpace(
     //     M: ModuleRef,
     //     Ty: TypeRef,
     //     Name: *const ::libc::c_char,
     //     AddressSpace: ::libc::c_uint,
     // ) -> &'a Value;
-    // pub fn LLVMGetNamedGlobal(M: ModuleRef, Name: *const ::libc::c_char) -> &'a Value;
+    pub fn LLVMGetNamedGlobal(module: &Module, name: *const c_char) -> Option<&Value>;
     // pub fn LLVMGetFirstGlobal(M: ModuleRef) -> &'a Value;
     // pub fn LLVMGetLastGlobal(M: ModuleRef) -> &'a Value;
     // pub fn LLVMGetNextGlobal(GlobalVar: &'a Value) -> &'a Value;
     // pub fn LLVMGetPreviousGlobal(GlobalVar: &'a Value) -> &'a Value;
     // pub fn LLVMDeleteGlobal(GlobalVar: &'a Value);
     // pub fn LLVMGetInitializer(GlobalVar: &'a Value) -> &'a Value;
-    // pub fn LLVMSetInitializer(GlobalVar: &'a Value, ConstantVal: &'a Value);
+    pub fn LLVMSetInitializer<'a>(global: &'a Value, const_val: &'a Value);
     // pub fn LLVMIsThreadLocal(GlobalVar: &'a Value) -> LLVMBool;
     // pub fn LLVMSetThreadLocal(GlobalVar: &'a Value, IsThreadLocal: LLVMBool);
     // pub fn LLVMIsGlobalConstant(GlobalVar: &'a Value) -> LLVMBool;
-    // pub fn LLVMSetGlobalConstant(GlobalVar: &'a Value, IsConstant: LLVMBool);
+    pub fn LLVMSetGlobalConstant<'a>(GlobalVar: &'a Value, IsConstant: Bool);
     // pub fn LLVMGetThreadLocalMode(GlobalVar: &'a Value) -> LLVMThreadLocalMode;
     // pub fn LLVMSetThreadLocalMode(GlobalVar: &'a Value, Mode: LLVMThreadLocalMode);
     // pub fn LLVMIsExternallyInitialized(GlobalVar: &'a Value) -> LLVMBool;
@@ -364,7 +366,7 @@ extern "C" {
     //) -> *const ::libc::c_char;
     //pub fn LLVMIntrinsicIsOverloaded(ID: ::libc::c_uint) -> LLVMBool;
     //pub fn LLVMGetFunctionCallConv(Fn: &'a Value) -> ::libc::c_uint;
-    //pub fn LLVMSetFunctionCallConv(Fn: &'a Value, CC: ::libc::c_uint);
+    pub fn LLVMSetFunctionCallConv(fun: &Value, cc: CallConv);
     //pub fn LLVMGetGC(Fn: &'a Value) -> *const ::libc::c_char;
     //pub fn LLVMSetGC(Fn: &'a Value, Name: *const ::libc::c_char);
     //pub fn LLVMAddAttributeAtIndex(F: &'a Value, Idx: LLVMAttributeIndex, A: LLVMAttributeRef);
@@ -405,11 +407,22 @@ extern "C" {
     // ..->Function Values->Function Parameters
     // pub fn LLVMCountParams(Fn: &'a Value) -> ::libc::c_uint;
     // pub fn LLVMGetParams(Fn: &'a Value, Params: *mut &'a Value);
-    // pub fn LLVMGetParam(Fn: &'a Value, Index: ::libc::c_uint) -> &'a Value;
+    pub fn LLVMGetParam(fun: &Value, index: c_uint) -> &Value;
+
     // pub fn LLVMGetParamParent(Inst: &'a Value) -> &'a Value;
     // pub fn LLVMGetFirstParam(Fn: &'a Value) -> &'a Value;
     // pub fn LLVMGetLastParam(Fn: &'a Value) -> &'a Value;
     // pub fn LLVMGetNextParam(Arg: &'a Value) -> &'a Value;
     // pub fn LLVMGetPreviousParam(Arg: &'a Value) -> &'a Value;
     // pub fn LLVMSetParamAlignment(Arg: &'a Value, Align: ::libc::c_uint);
+    pub fn LLVMSetPartialFastMath(val: &Value);
+    pub fn LLVMSetFastMath(val: &Value);
+
+    // Instruction->PHI Nodes
+    pub fn LLVMAddIncoming<'a>(
+        PhiNode: &'a Value,
+        IncomingValues: *const &'a Value,
+        IncomingBlocks: *const &'a BasicBlock,
+        Count: c_uint,
+    );
 }

@@ -31,20 +31,4 @@ extern "C" {
         fun: &'a Value,
         Name: *const c_char,
     ) -> &'a BasicBlock;
-    // pub fn LLVMAppendBasicBlock(Fn: &'a Value, Name: *const ::libc::c_char) -> & BasicBlock;
-    // pub fn LLVMInsertBasicBlockInContext(
-    //     C: ContextRef,
-    //     BB: & BasicBlock,
-    //     Name: *const ::libc::c_char,
-    // ) -> & BasicBlock;
-    // pub fn LLVMInsertBasicBlock(
-    //     InsertBeforeBB: & BasicBlock,
-    //     Name: *const ::libc::c_char,
-    // ) -> & BasicBlock;
-    // pub fn LLVMDeleteBasicBlock(BB: & BasicBlock);
-    // pub fn LLVMRemoveBasicBlockFromParent(BB: & BasicBlock);
-    // pub fn LLVMMoveBasicBlockBefore(BB: & BasicBlock, MovePos: & BasicBlock);
-    // pub fn LLVMMoveBasicBlockAfter(BB: & BasicBlock, MovePos: & BasicBlock);
-    // pub fn LLVMGetFirstInstruction(BB: & BasicBlock) -> &'a Value;
-    // pub fn LLVMGetLastInstruction(BB: & BasicBlock) -> &'a Value;
 }

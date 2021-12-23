@@ -22,86 +22,86 @@
 //! (triomphe::ThinArc) for arrays and boxing complex numbers (to cut their size in half when not
 //! used)
 
-use std::ops::{Add, Div, Mul, Sub};
+// use std::ops::{Add, Div, Mul, Sub};
 
 use lasso::Spur;
 use stdx::{impl_debug, impl_from_typed};
 
 // use triomphe::ThinArc;
-use crate::parse::{CfgParser, Parse, ParseFromStr};
+// use crate::parse::{CfgParser, Parse, ParseFromStr};
 
-#[derive(Clone, PartialEq, Copy)]
-pub struct Complex64 {
-    pub real: f64,
-    pub imag: f64,
-}
+// #[derive(Clone, PartialEq, Copy)]
+// pub struct Complex64 {
+//     pub real: f64,
+//     pub imag: f64,
+// }
 
-impl Complex64 {
-    pub fn abs2(self) -> f64 {
-        self.real * self.real + self.imag + self.imag
-    }
-}
+// impl Complex64 {
+//     pub fn abs2(self) -> f64 {
+//         self.real * self.real + self.imag + self.imag
+//     }
+// }
 
-impl Add for Complex64 {
-    type Output = Complex64;
+// impl Add for Complex64 {
+//     type Output = Complex64;
 
-    fn add(self, rhs: Complex64) -> Complex64 {
-        Complex64 { real: self.real + rhs.real, imag: self.imag + rhs.imag }
-    }
-}
+//     fn add(self, rhs: Complex64) -> Complex64 {
+//         Complex64 { real: self.real + rhs.real, imag: self.imag + rhs.imag }
+//     }
+// }
 
-impl Sub for Complex64 {
-    type Output = Complex64;
+// impl Sub for Complex64 {
+//     type Output = Complex64;
 
-    fn sub(self, rhs: Complex64) -> Complex64 {
-        Complex64 { real: self.real - rhs.real, imag: self.imag - rhs.imag }
-    }
-}
+//     fn sub(self, rhs: Complex64) -> Complex64 {
+//         Complex64 { real: self.real - rhs.real, imag: self.imag - rhs.imag }
+//     }
+// }
 
-impl Mul for Complex64 {
-    type Output = Complex64;
+// impl Mul for Complex64 {
+//     type Output = Complex64;
 
-    fn mul(self, rhs: Complex64) -> Complex64 {
-        Complex64 {
-            real: self.real * rhs.real - self.imag * rhs.imag,
-            imag: self.real * rhs.imag + self.imag * rhs.real,
-        }
-    }
-}
+//     fn mul(self, rhs: Complex64) -> Complex64 {
+//         Complex64 {
+//             real: self.real * rhs.real - self.imag * rhs.imag,
+//             imag: self.real * rhs.imag + self.imag * rhs.real,
+//         }
+//     }
+// }
 
-impl Div for Complex64 {
-    type Output = Complex64;
+// impl Div for Complex64 {
+//     type Output = Complex64;
 
-    fn div(self, rhs: Complex64) -> Complex64 {
-        let rhs_abs2 = rhs.abs2();
-        Complex64 {
-            real: (self.real * rhs.real + self.imag * rhs.imag) / rhs_abs2,
-            imag: (self.imag * rhs.real - self.real * rhs.imag) / rhs_abs2,
-        }
-    }
-}
+//     fn div(self, rhs: Complex64) -> Complex64 {
+//         let rhs_abs2 = rhs.abs2();
+//         Complex64 {
+//             real: (self.real * rhs.real + self.imag * rhs.imag) / rhs_abs2,
+//             imag: (self.imag * rhs.real - self.real * rhs.imag) / rhs_abs2,
+//         }
+//     }
+// }
 
-impl_debug! {
-    match Complex64{
-        Complex64{real,imag} => "{}, {}", real,imag;
-    }
-}
+// impl_debug! {
+//     match Complex64{
+//         Complex64{real,imag} => "{}, {}", real,imag;
+//     }
+// }
 
-impl Parse for Complex64 {
-    fn parse(p: &mut CfgParser) -> Result<Self, String> {
-        let real: ParseFromStr<f64> = p.parse()?;
-        p.expect(",")?;
-        let imag: ParseFromStr<f64> = p.parse()?;
-        Ok(Complex64 { real: real.0, imag: imag.0 })
-    }
-}
+// impl Parse for Complex64 {
+//     fn parse(p: &mut CfgParser) -> Result<Self, String> {
+//         let real: ParseFromStr<f64> = p.parse()?;
+//         p.expect(",")?;
+//         let imag: ParseFromStr<f64> = p.parse()?;
+//         Ok(Complex64 { real: real.0, imag: imag.0 })
+//     }
+// }
 
 #[derive(Clone)]
 pub enum Const {
     Real(f64),
     Int(i32),
     Bool(bool),
-    Complex(Complex64),
+    // Complex(Complex64),
     String(Spur),
     // RealArray(Array<f64>),
     // IntArray(Array<i32>),
@@ -118,7 +118,7 @@ impl PartialEq for Const {
             (Self::Real(l0), Self::Real(r0)) => l0.to_bits() == r0.to_bits(),
             (Self::Int(l0), Self::Int(r0)) => l0 == r0,
             (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
-            (Self::Complex(l0), Self::Complex(r0)) => l0 == r0,
+            // (Self::Complex(l0), Self::Complex(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
@@ -156,7 +156,7 @@ impl_debug! {
         Const::Real(val) => "f64 {:?}", val;
         Const::Int(val) => "i32 {:?}", val;
         Const::Bool(val) => "{:?}", val;
-        Const::Complex(val) => "c64 {:?}", val;
+        // Const::Complex(val) => "c64 {:?}", val;
         Const::String(val) => "str {:?}", val;
         // Const::RealArray(data) => "f64[] {:?}", &data.slice;
         // Const::IntArray(data) => "i32[] {:?}", &data.slice;
@@ -170,7 +170,7 @@ impl_from_typed!(
     Real(f64),
     Int(i32),
     Bool(bool),
-    Complex(Complex64),
+    // Complex(Complex64),
     String(Spur)
     // RealArray(Array<f64>),
     // IntArray(Array<i32>),

@@ -1,3 +1,4 @@
+pub mod base_n;
 pub mod iter;
 mod macros;
 pub mod pretty;

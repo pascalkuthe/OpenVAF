@@ -1,65 +1,31 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
 mod apple_base;
-//mod linux_musl_base;
 mod linux_base;
 mod windows_msvc_base;
-//mod android_base;
-//mod crt_objects;
 
 use crate::host_triple;
-use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialOrd, PartialEq, Hash)]
-pub enum LinkerFlavor {
-    Ld,
-    Ld64,
-    Msvc,
-}
+// #[derive(Debug, Clone, Copy, Eq, Ord, PartialOrd, PartialEq, Hash)]
+// pub enum LinkerFlavor {
+//     Ld,
+//     Ld64,
+//     Msvc,
+// }
 
-/// Everything Mun knows about a target.
-/// Every field must be specified, there are no default values.
+/// Everything `rustc` knows about how to compile for a specific target.
+///
+/// Every field here must be specified, and has no default value.
 #[derive(PartialEq, Clone, Debug)]
 pub struct Target {
-    /// Target triple to pass to LLVM
+    /// Target triple to pass to LLVM.
     pub llvm_target: String,
 
-    /// String to use as the `target_endian` `cfg` variable.
-    pub target_endian: String,
-
-    /// String to use as the `target_pointer_width` `cfg` variable.
-    pub target_pointer_width: String,
-
-    /// Width of c_int type
-    pub target_c_int_width: String,
-
-    /// The name of the OS
-    pub target_os: String,
-
-    /// The name of the environment
-    pub target_env: String,
-
-    /// The name of the vendor
-    pub target_vendor: String,
-
-    /// The name of the architecture. For example "x86" or "x86_64"
+    pub pointer_width: u32,
+    /// Architecture to use for ABI considerations. Valid options include: "x86",
+    /// "x86_64", "arm", "aarch64", "mips", "powerpc", "powerpc64", and others.
     pub arch: String,
-
-    /// [Data layout](http://llvm.org/docs/LangRef.html#data-layout) to pass to LLVM.
+    /// [Data layout](https://llvm.org/docs/LangRef.html#data-layout) to pass to LLVM.
     pub data_layout: String,
-
-    /// Linker flavor
-    pub linker_flavor: LinkerFlavor,
-
-    /// Optional settings
+    /// Optional settings with defaults.
     pub options: TargetOptions,
 }
 
@@ -92,12 +58,9 @@ impl Default for TargetOptions {
         }
     }
 }
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum LoadTargetError {
-    #[error("target not found: {0}")]
     BuiltinTargetNotFound(String),
-
-    #[error("{0}")]
     Other(String),
 }
 
@@ -118,7 +81,6 @@ macro_rules! supported_targets {
                             .map_err(LoadTargetError::Other)?;
                         t.options.is_builtin = true;
 
-                        tracing::debug!("got builtin target: {:?}", t);
                         Ok(t)
                     },
                 )+
@@ -141,7 +103,7 @@ supported_targets!(
     ("x86_64-apple-darwin", x86_64_apple_darwin),
     ("x86_64-pc-windows-msvc", x86_64_pc_windows_msvc),
     ("x86_64-unknown-linux-gnu", x86_64_unknown_linux_gnu),
-    //   ("x86_64-unknown-linux-musl", x86_64_unknown_linux_musl), TODO MUSL SUPPORT
+    ("x86_64-unknown-linux-musl", x86_64_unknown_linux_musl),
 );
 
 impl Target {

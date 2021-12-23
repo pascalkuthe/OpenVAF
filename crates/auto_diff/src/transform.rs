@@ -380,9 +380,9 @@ impl CfgTransform<'_> {
             Op::RealDiv => {
                 self.cfg.build_val(Op::RealMul, vec![args[1].clone(), args[1].clone()], src).into()
             }
-            Op::CmplxDiv => {
-                self.cfg.build_val(Op::CmplxDiv, vec![args[1].clone(), args[1].clone()], src).into()
-            }
+            // Op::CmplxDiv => {
+            //     self.cfg.build_val(Op::CmplxDiv, vec![args[1].clone(), args[1].clone()], src).into()
+            // }
 
             // Technically not required but makes code look nicer..
             // exp(x) -> exp(x)
@@ -604,16 +604,14 @@ impl CfgTransform<'_> {
         let (op, args) = match op {
             Op::NoOp => return,
             Op::Call(_) => return, // TODO handle calls?
-            Op::Copy
-            | Op::RealArtihNeg
-            | Op::RealToComplex
-            | Op::RealComponent
-            | Op::ImagComponent => (op, vec![arg_derivatrive(self, 0)]),
+            
+            Op::RealArtihNeg
+                => (Op::RealArtihNeg, vec![arg_derivatrive(self, 0)]),
 
             Op::IntArithNeg => (Op::RealArtihNeg, vec![arg_derivatrive(self, 0)]),
 
             // All derivatives are REAL to all casts are essentially just copies
-            Op::IntToReal | Op::RealToInt | Op::BoolToInt | Op::IntToBool | Op::BoolToReal => {
+            Op::Copy | Op::IntToReal | Op::RealToInt | Op::BoolToInt | Op::IntToBool | Op::BoolToReal => {
                 (Op::Copy, vec![arg_derivatrive(self, 0)])
             }
 
@@ -654,14 +652,16 @@ impl CfgTransform<'_> {
             | Op::IntSub
             | Op::RealAdd
             | Op::RealSub
-            | Op::CmplxPlus
-            | Op::CmplxMinus => (op, vec![arg_derivatrive(self, 0), arg_derivatrive(self, 1)]),
+            // | Op::CmplxPlus
+            // | Op::CmplxMinus
+                => (op, vec![arg_derivatrive(self, 0), arg_derivatrive(self, 1)]),
 
             Op::IntMul => gen_mul_derivative(self, Op::RealAdd, true),
             Op::RealMul => gen_mul_derivative(self, Op::RealAdd, false),
-            Op::CmplxMul => gen_mul_derivative(self, Op::CmplxPlus, false),
+            // Op::CmplxMul
+                // => gen_mul_derivative(self, Op::CmplxPlus, false),
 
-            Op::CmplxDiv => gen_div_derivative(self, Op::CmplxMinus, Op::CmplxMul, false),
+            // Op::CmplxDiv => gen_div_derivative(self, Op::CmplxMinus, Op::CmplxMul, false),
             Op::IntDiv => gen_div_derivative(self, Op::RealSub, Op::IntMul, true),
             Op::RealDiv => gen_div_derivative(self,  Op::RealSub, Op::RealMul, false),
 

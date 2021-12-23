@@ -30,9 +30,9 @@ pub enum Op {
     //     ArrBoolToReal,
     //     ArrBoolToInt,
     //     ArrIntToBool,
-    RealToComplex,
-    RealComponent,
-    ImagComponent,
+    // RealToComplex,
+    // RealComponent,
+    // ImagComponent,
 
     // Bin Op
     IntAdd,
@@ -54,11 +54,10 @@ pub enum Op {
     RealDiv,
     RealRem,
 
-    CmplxPlus,
-    CmplxMinus,
-    CmplxMul,
-    CmplxDiv,
-
+    // CmplxPlus,
+    // CmplxMinus,
+    // CmplxMul,
+    // CmplxDiv,
     IntLessThen,
     IntGreaterThen,
     RealLessThen,
@@ -145,9 +144,9 @@ impl_debug! {
         // ArrIntToBool           => "arr_cast_i32_bool";
         // ArrBoolToReal          => "arr_cast_bool_real";
 
-        RealToComplex       => "cast_f64_c64";
-        RealComponent       => "c_real";
-        ImagComponent       => "c_imag";
+        // RealToComplex       => "cast_f64_c64";
+        // RealComponent       => "c_real";
+        // ImagComponent       => "c_imag";
 
         // Bin Op
         IntAdd              => "i32.+";
@@ -169,10 +168,10 @@ impl_debug! {
         RealDiv             => "f64./";
         RealRem             => "f64.%";
 
-        CmplxPlus           => "c64.+";
-        CmplxMinus          => "c64.-";
-        CmplxMul            => "c64.*";
-        CmplxDiv            => "c64./";
+        // CmplxPlus           => "c64.+";
+        // CmplxMinus          => "c64.-";
+        // CmplxMul            => "c64.*";
+        // CmplxDiv            => "c64./";
 
         IntLessThen         => "i32.<";
         IntGreaterThen      => "i32.>";
@@ -265,9 +264,9 @@ impl FromStr for Op {
             // "arr_cast_bool_i32" => ArrBoolToInt,
             // "arr_cast_i32_bool" => ArrIntToBool,
             // "arr_cast_bool_real" => ArrBoolToReal,
-            "cast_f64_c64" => RealToComplex,
-            "c_real" => RealComponent,
-            "c_imag" => ImagComponent,
+            // "cast_f64_c64" => RealToComplex,
+            // "c_real" => RealComponent,
+            // "c_imag" => ImagComponent,
 
             // Bin Op
             "i32.+" => IntAdd,
@@ -289,11 +288,10 @@ impl FromStr for Op {
             "f64./" => RealDiv,
             "f64.%" => RealRem,
 
-            "c64.+" => CmplxPlus,
-            "c64.-" => CmplxMinus,
-            "c64.*" => CmplxMul,
-            "c64./" => CmplxDiv,
-
+            // "c64.+" => CmplxPlus,
+            // "c64.-" => CmplxMinus,
+            // "c64.*" => CmplxMul,
+            // "c64./" => CmplxDiv,
             "i32.<" => IntLessThen,
             "i32.>" => IntGreaterThen,
             "f64.<" => RealLessThen,

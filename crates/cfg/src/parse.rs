@@ -194,7 +194,7 @@ impl Parse for Const {
             "i32" => Const::Int(ParseFromStr::<i32>::parse(p)?.0),
 
             // "c64" if is_arr => Const::ComplexArray(p.parse()?),
-            "c64" => Const::Complex(p.parse()?),
+            // "c64" => Const::Complex(p.parse()?),
 
             // "str" if is_arr => Const::StringArray(p.parse()?),
             "str" => Const::String(p.parse()?),

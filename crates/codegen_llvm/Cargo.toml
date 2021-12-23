@@ -10,5 +10,14 @@ doctest = false
 
 
 [dependencies]
-stdx = {version = "0.0.0", path = "../stdx" }
-llvm = {version = "0.0.0", path = "../llvm" }
+stdx = { version = "0.0.0", path = "../stdx" }
+llvm = { version = "0.0.0", path = "../llvm" }
+cfg = { version = "0.0.0", path = "../cfg" }
+target = { version = "0.0.0", path = "../target" }
+
+
+typed-index-collections = "3.0"
+arrayvec = "0.7"
+ahash = "0.7"
+lasso = { version = "0.6", features = ["ahash"] }
+libc = "0.2"

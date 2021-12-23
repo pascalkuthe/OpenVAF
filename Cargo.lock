@@ -147,8 +147,14 @@ dependencies = [
 name = "codegen_llvm"
 version = "0.0.0"
 dependencies = [
+ "ahash",
+ "cfg",
+ "lasso",
+ "libc",
  "llvm",
  "stdx",
+ "target",
+ "typed-index-collections",
 ]
 
 [[package]]
@@ -643,6 +649,10 @@ dependencies = [
  "ungrammar",
  "vfs",
 ]
+
+[[package]]
+name = "target"
+version = "0.0.0"
 
 [[package]]
 name = "termcolor"

@@ -42,7 +42,7 @@ use crate::transversal::{
     Postorder, PostorderIter, PostorderIterMut, ReversePostorder, ReversePostorderIter,
     ReversePostorderIterMut,
 };
-pub use crate::ty::{Complex64, Const};
+pub use crate::ty::Const;
 
 #[cfg(test)]
 mod tests;

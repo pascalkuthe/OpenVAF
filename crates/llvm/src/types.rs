@@ -12,12 +12,12 @@ extern "C" {
     // Core->Types->Integer
     pub fn LLVMInt1TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
     pub fn LLVMInt8TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
-    pub fn LLVMInt16TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
+    // pub fn LLVMInt16TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
     pub fn LLVMInt32TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
-    pub fn LLVMInt64TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
-    pub fn LLVMInt128TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
-    pub fn LLVMIntTypeInContext<'a>(ctx: &'a Context, NumBits: c_uint) -> &'a Type;
-    pub fn LLVMGetIntTypeWidth<'a>(ty: &Type) -> c_uint;
+    // pub fn LLVMInt64TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
+    // pub fn LLVMInt128TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
+    pub fn LLVMIntTypeInContext<'a>(ctx: &'a Context, num_bits: c_uint) -> &'a Type;
+    // pub fn LLVMGetIntTypeWidth<'a>(ty: &Type) -> c_uint;
 
     // Core->Types->Floating-Point
     // pub fn LLVMHalfTypeInContext<'a>(ctx: &'a Context) -> &'a Type;
@@ -31,7 +31,7 @@ extern "C" {
     // Core->Types->Function
     pub fn LLVMFunctionType<'a>(
         ReturnType: &'a Type,
-        ParamTypes: *mut &'a Type,
+        ParamTypes: *const &'a Type,
         ParamCount: c_uint,
         IsVarArg: Bool,
     ) -> &'a Type;

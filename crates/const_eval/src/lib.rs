@@ -2,10 +2,10 @@
 
 use std::fmt::Debug;
 use std::mem::size_of_val;
-use std::ops::{Add, Div, Mul, Neg, Not, RangeInclusive, Sub};
+use std::ops::{Neg, Not, RangeInclusive};
 
 use ahash::AHashMap;
-use cfg::{CfgParam, Complex64, Const, ControlFlowGraph, Op, Operand, Place, Spur};
+use cfg::{CfgParam, Const, ControlFlowGraph, Op, Operand, Place, Spur};
 use data_flow::lattice::{FlatSet, SparseFlatSetMap};
 use data_flow::{Analysis, Results};
 
@@ -49,9 +49,9 @@ impl EvalCtx<'_> {
             Op::BoolToReal => self.op_1(|val: bool| val as i32 as f64, args),
             Op::BoolToInt => self.op_1(|val: bool| val as i32, args),
             Op::IntToBool => self.op_1(|val: i32| val != 0, args),
-            Op::RealToComplex => self.op_1(|val| Complex64 { real: val, imag: 0.0 }, args),
-            Op::RealComponent => self.op_1(|val: Complex64| val.real, args),
-            Op::ImagComponent => self.op_1(|val: Complex64| val.imag, args),
+            // Op::RealToComplex => self.op_1(|val| Complex64 { real: val, imag: 0.0 }, args),
+            // Op::RealComponent => self.op_1(|val: Complex64| val.real, args),
+            // Op::ImagComponent => self.op_1(|val: Complex64| val.imag, args),
             Op::IntAdd => self.op_2_checked(i32::checked_add, args),
             Op::IntSub if args[0] == args[1] => FlatSet::Elem(0i32.into()),
             Op::IntSub => self.op_2_checked(i32::checked_sub, args),
@@ -72,10 +72,10 @@ impl EvalCtx<'_> {
             Op::RealDiv if args[0] == args[1] && src < 0 => FlatSet::Elem(1f64.into()),
             Op::RealDiv => self.f64_div_short_cricuit(args, src),
             Op::RealRem => self.op_2(|lhs: f64, rhs: f64| lhs % rhs, args),
-            Op::CmplxPlus => self.op_2(Complex64::add, args),
-            Op::CmplxMinus => self.op_2(Complex64::sub, args),
-            Op::CmplxMul => self.op_2(Complex64::mul, args),
-            Op::CmplxDiv => self.op_2(Complex64::div, args),
+            // Op::CmplxPlus => self.op_2(Complex64::add, args),
+            // Op::CmplxMinus => self.op_2(Complex64::sub, args),
+            // Op::CmplxMul => self.op_2(Complex64::mul, args),
+            // Op::CmplxDiv => self.op_2(Complex64::div, args),
             Op::IntLessThen => self.op_2(|lhs: i32, rhs: i32| lhs < rhs, args),
             Op::IntGreaterThen => self.op_2(|lhs: i32, rhs: i32| lhs > rhs, args),
             Op::RealLessThen => self.op_2(|lhs: f64, rhs: f64| lhs < rhs, args),

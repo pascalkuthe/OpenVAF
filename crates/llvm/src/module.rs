@@ -15,7 +15,6 @@ extern "C" {
     pub fn LLVMSetSourceFileName(module: &Module, name: *const c_char, len: size_t);
 
     pub fn LLVMSetDataLayout(module: &Module, DataLayoutStr: *const c_char);
-    pub fn LLVMSetTarget(module: &Module, Triple: *const c_char);
 
     // /// Returns the module flags as an array of flag-key-value triples.  The caller is responsible for freeing this array by calling LLVMDisposeModuleFlagsMetadata.
     // pub fn LLVMCopyModuleFlagsMetadata(

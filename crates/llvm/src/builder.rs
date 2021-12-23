@@ -1,4 +1,4 @@
-use ::libc::c_char;
+use ::libc::{c_char, c_uint};
 
 use crate::{BasicBlock, Bool, Builder, Context, IntPredicate, RealPredicate, Type, Value};
 
@@ -226,18 +226,27 @@ extern "C" {
     //     Destty: &'a Type,
     //     Name: *const c_char,
     // ) -> &'a Value;
-    // pub fn LLVMBuildUIToFP(
-    //     builder: &Builder<'a>,
-    //     Val: &'a Value,
-    //     Destty: &'a Type,
-    //     Name: *const c_char,
-    // ) -> &'a Value;
-    // pub fn LLVMBuildSIToFP(
-    //     builder: &Builder<'a>,
-    //     Val: &'a Value,
-    //     Destty: &'a Type,
-    //     Name: *const c_char,
-    // ) -> &'a Value;
+    pub fn LLVMBuildUIToFP<'a>(
+        builder: &Builder<'a>,
+        Val: &'a Value,
+        Destty: &'a Type,
+        Name: *const c_char,
+    ) -> &'a Value;
+    pub fn LLVMBuildSIToFP<'a>(
+        builder: &Builder<'a>,
+        Val: &'a Value,
+        Destty: &'a Type,
+        Name: *const c_char,
+    ) -> &'a Value;
+
+    pub fn LLVMBuildGEP2<'a>(
+        B: &Builder<'a>,
+        Ty: &'a Type,
+        Pointer: &'a Value,
+        Indices: *const &'a Value,
+        NumIndices: c_uint,
+        Name: *const c_char,
+    ) -> &'a Value;
     // pub fn LLVMBuildFPTrunc(
     //     builder: &Builder<'a>,
     //     Val: &'a Value,
@@ -341,8 +350,8 @@ extern "C" {
         builder: &Builder<'a>,
         ty: &'a Type,
         Fn: &'a Value,
-        Args: *mut &'a Value,
-        NumArgs: ::libc::c_uint,
+        Args: *const &'a Value,
+        NumArgs: c_uint,
         Name: *const c_char,
     ) -> &'a Value;
 
