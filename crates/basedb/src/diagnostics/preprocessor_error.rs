@@ -38,20 +38,6 @@ impl Diagnostic for PreprocessorDiagnostic {
                 }])
             }
             PreprocessorDiagnostic::MacroRecursion { .. } => todo!(),
-            PreprocessorDiagnostic::IoError { span, .. } => {
-                let labels = if let Some(span) = span {
-                    let span = span.to_file_span(&sm);
-                    vec![Label {
-                        style: LabelStyle::Primary,
-                        file_id: span.file,
-                        range: span.range.into(),
-                        message: "failed to read file".to_owned(),
-                    }]
-                } else {
-                    vec![]
-                };
-                Report::error().with_labels(labels)
-            }
             PreprocessorDiagnostic::FileNotFound { span, .. } => {
                 let labels = if let Some(span) = span {
                     let span = span.to_file_span(&sm);
@@ -59,28 +45,39 @@ impl Diagnostic for PreprocessorDiagnostic {
                         style: LabelStyle::Primary,
                         file_id: span.file,
                         range: span.range.into(),
-                        message: "file not found".to_owned(),
+                        message: "failed to read file".to_owned(),
                     }]
                 } else {
                     vec![]
                 };
                 Report::error().with_labels(labels)
             }
-            PreprocessorDiagnostic::InvalidTextFormat { span, .. } => {
-                let labels = if let Some(span) = span {
-                    let span = span.to_file_span(&sm);
-                    vec![Label {
+            PreprocessorDiagnostic::InvalidTextFormat { span, ref file, ref err, .. } => {
+                let file = db.vfs().read().file_id(file).unwrap();
+                let mut labels: Vec<_> = err
+                    .pos
+                    .iter()
+                    .map(|span| Label {
                         style: LabelStyle::Primary,
+                        file_id: file,
+                        range: span.clone(),
+                        message: "invalid text format!".to_owned(),
+                    })
+                    .collect();
+
+                if let Some(span) = span {
+                    let span = span.to_file_span(&sm);
+                    labels.push(Label {
+                        style: LabelStyle::Secondary,
                         file_id: span.file,
                         range: span.range.into(),
-                        message: "failed to read file".to_owned(),
-                    }]
-                } else {
-                    vec![]
+                        message: "file was read here".to_owned(),
+                    })
                 };
                 Report::error()
                     .with_labels(labels)
-                    .with_notes(vec!["only UTF-8 and UTF-16 files are accepted".to_owned()])
+                    .with_notes(vec!["only UTF-8 files are accepted".to_owned()])
+                    .with_notes(vec!["help: use --encode-lossy to use the file as-is".to_owned()])
             }
             PreprocessorDiagnostic::UnexpectedEof { expected, span } => {
                 let span = span.to_file_span(&sm);
@@ -140,126 +137,3 @@ impl Diagnostic for PreprocessorDiagnostic {
         report.with_message(self.to_string())
     }
 }
-
-// impl Diagnostic for PreprocessorDiagnostic {
-//     #[inline(always)]
-//     fn annotation_type(&self, db: &dyn BaseDB, root_file: FileId) -> Option<AnnotationType> {
-//         match self {
-//             Self::MacroOverwritten(lint) => lint.annotation_type(db, root_file),
-//             _ => Some(AnnotationType::Error),
-//         }
-//     }
-
-//     fn slices(&self, db: &dyn BaseDB, root_file: FileId) -> Vec<DiagnosticSlice> {
-//         match *self {
-//             PreprocessorDiagnostic::UnexpectedToken(span) => vec![DiagnosticSlice {
-//                 slice_span: span,
-//                 messages: vec![(AnnotationType::Error, Text::const_str("unexpected token"), span)],
-//                 fold: false,
-//             }],
-
-//             PreprocessorDiagnostic::MacroNotFound(_, span) => vec![DiagnosticSlice {
-//                 slice_span: span,
-//                 messages: vec![(AnnotationType::Error, Text::const_str("macro not found"), span)],
-//                 fold: false,
-//             }],
-//             PreprocessorDiagnostic::MacroRecursion(_, span) => vec![DiagnosticSlice {
-//                 slice_span: span,
-//                 messages: vec![(
-//                     AnnotationType::Error,
-//                     Text::const_str("recursion occurred here"),
-//                     span,
-//                 )],
-//                 fold: false,
-//             }],
-
-//             PreprocessorDiagnostic::IoError(span)
-//             | PreprocessorDiagnostic::InvalidTextFormat(span) => {
-
-//                 vec![DiagnosticSlice {
-//                     slice_span: span,
-//                     messages: vec![(
-//                         AnnotationType::Error,
-//                         Text::const_str("failed to read file"),
-//                         span,
-//                     )],
-//                     fold: false,
-//                 }]
-//             }
-
-//             PreprocessorDiagnostic::IoErrorRoot(_)
-//             | PreprocessorDiagnostic::InvalidTextFormatRoot(_) => {
-//                 vec![]
-//             }
-
-//             PreprocessorDiagnostic::MacroOverwritten(ref lint) => {
-//                 Diagnostic::slices(lint, db, root_file)
-//             }
-
-//             PreprocessorDiagnostic::MissingOrUnexpectedToken { expected, expected_at, span } => {
-//                 let mut expected_at = expected_at;
-//                 expected_at.range = TextRange::at(expected_at.range.start(), 0.into());
-//                 vec![DiagnosticSlice {
-//                     slice_span: expected_at.extend(span, &db.sourcemap(root_file)),
-//                     messages: vec![
-//                         (AnnotationType::Error, Text::const_str("unexpected token"), span),
-//                         (
-//                             AnnotationType::Info,
-//                             Text::owned(format!("expected {}", expected)),
-//                             expected_at,
-//                         ),
-//                     ],
-//                     fold: false,
-//                 }]
-//             }
-
-//             PreprocessorDiagnostic::MacroArgumentCountMissmatch { expected, span, .. } => {
-//                 vec![DiagnosticSlice {
-//                     slice_span: span,
-//                     messages: vec![(
-//                         AnnotationType::Error,
-//                         Text::owned(format!("expected {} arguments", expected)),
-//                         span,
-//                     )],
-//                     fold: false,
-//                 }]
-//             }
-//             PreprocessorDiagnostic::UnexpectedEof { expected: _, span } => vec![DiagnosticSlice {
-//                 slice_span: span,
-//                 messages: vec![(AnnotationType::Error, Text::const_str("unexpected EOF"), span)],
-//                 fold: false,
-//             }],
-//         }
-//     }
-// }
-
-// impl LintDiagnostic for MacroOverwritten {
-//     #[inline(always)]
-//     fn lint(&self) -> Lint {
-//         builtin::macro_overwritten
-//     }
-
-//     fn sctx(&self) -> Option<SyntaxCtx> {
-//         None
-//     }
-
-//     fn slices(&self, main_type: AnnotationType) -> Vec<DiagnosticSlice> {
-//         let old = DiagnosticSlice {
-//             slice_span: self.old,
-//             messages: vec![(
-//                 AnnotationType::Info,
-//                 Text::const_str("First declared here"),
-//                 self.old,
-//             )],
-//             fold: false,
-//         };
-
-//         let new = DiagnosticSlice {
-//             slice_span: self.new,
-//             messages: vec![(main_type, Text::const_str("Later overwritten here"), self.new)],
-//             fold: false,
-//         };
-
-//         vec![old, new]
-//     }
-// }

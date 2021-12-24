@@ -8,6 +8,7 @@ use syntax::name::Name;
 
 use super::diagnostics::DefDiagnostic;
 use super::{DefMap, DefMapSource, LocalScopeId, Scope, ScopeDefItem, ScopeOrigin};
+use crate::builtin::insert_modulle_builtin_scope;
 use crate::db::HirDefDB;
 use crate::item_tree::{
     BlockScopeItem, Function, FunctionItem, ItemTree, ItemTreeId, ItemTreeNode, Module, ModuleItem,
@@ -255,6 +256,7 @@ impl DefCollector<'_> {
         let module = &self.tree[item_tree];
 
         self.insert_scope(parent_scope, scope, module.name.clone(), module_id);
+        insert_modulle_builtin_scope(&mut self.map.scopes[scope].declarations);
 
         for item in &module.items {
             match *item {
@@ -275,6 +277,9 @@ impl DefCollector<'_> {
                     self.insert_item_decl(scope, self.tree[id].name.clone(), id)
                 }
                 ModuleItem::Function(id) => {
+                    self.insert_item_decl(scope, self.tree[id].name.clone(), id)
+                }
+                ModuleItem::AliasParameter(id) => {
                     self.insert_item_decl(scope, self.tree[id].name.clone(), id)
                 }
             }

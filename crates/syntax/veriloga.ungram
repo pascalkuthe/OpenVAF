@@ -194,6 +194,7 @@ ModuleItem =
 | BranchDecl
 | VarDecl
 | ParamDecl
+| AliasParam
 
 ModulePorts = '('ports: (ModulePort (',' ModulePort)*)? ')'
 ModulePort = kind: ModulePortKind
@@ -211,7 +212,13 @@ Var =
 
 
 ParamDecl =
-  AttrList* 'parameter' Type paras:(Param (',' Param)*) ';'
+  AttrList* ('parameter'|'localparam') Type paras:(Param (',' Param)*) ';'
+
+AliasParam =
+  AttrList* 'aliasparam' name: Name '=' src: ParamRef ';'
+
+ParamRef =
+  Path | SysFun
 
 Param = Name '=' default:Expr Constraint*
 

@@ -1,0 +1,1232 @@
+/* ASM HEMT Model Version 101.0.0 released by Sourabh Khandelwal on 03-16-2018
+Copyright 2018 Sourabh Khandelwal and Indian Institute of Technology Kanpur
+Copyright 2014 Sourabh Khandelwal and Indian Institute of Technology Kanpur
+Copyright 2013 Norwegian University of Science and Technology Trondheim and Indian Institute of Technology Kanpur
+Copyright 2012 Norwegian University of Science and Technology Trondheim
+ 
+Authors: Sourabh Khandelwal, Tor A Fjeldly, Yogesh Singh Chauhan, Sudip Ghosh, Avirup Dasgupta, Sheikh Aamir Ahsan, Ahtisham Pampori, Raghvendra Dangi
+Contact: sourabh.khandelwal@mq.edu.au, sourabhkhandelwal@gmail.com, chauhan@iitk.ac.in
+Project Directors and Developers: Sourabh Khandelwal (Macquarie University) and Yogesh Singh Chauhan (IIT Kanpur)
+*/
+/*
+Licensed under Educational Community License, Version 2.0 (the "License"); you may
+not use this file except in compliance with the License. You may obtain a copy of the license at
+http://opensource.org/licenses/ECL-2.0
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT 
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations
+under the License.
+
+ASM HEMT model is supported by the memebrs of Silicon Integration Initiative's Compact Model Coalition. A link to the most recent version of this
+standard can be found at: http://www.si2.org/cmc 
+*/
+`include "discipline.h"
+`include "constants.h"
+
+////////// Numerical and Physical Constants //////////
+`define DOS 3.240e17           //Density of states, Reference M. Shur Plenum Press 1987, GaAs Device and Circuits
+`define ep_psi 0.3             //Smoothing Constant
+`define Oneby3 0.33333333333333333
+`define Twoby3 0.66666666666666667
+`define EXPL_THRESHOLD 80.0
+`define MAX_EXPL 5.540622384e+34
+`define MIN_EXPL 1.804851387e-35
+`define KboQ 8.617087e-5       // J/deg
+////////// Macros for the model/instance parameters //////////
+/*
+ MPRxx    model    parameter real
+ MPIxx    model    parameter integer
+ IPRxx    instance parameter real
+ IPIxx    instance parameter integer
+    ||
+    cc    closed lower bound, closed upper bound
+    oo    open   lower bound, open   upper bound
+    co    closed lower bound, open   upper bound
+    oc    open   lower bound, closed upper bound
+    cz    closed lower bound=0, open upper bound=inf
+    oz    open   lower bound=0, open upper bound=inf
+    nb    no bounds
+    ex    no bounds with exclude
+    sw    switch(integer only, values  0=false  and  1=true)
+    ty    switch(integer only, values -1=p-type and +1=n-type)
+
+ IPM   instance parameter mFactor(multiplicity, implicit for LRM2.2)
+ OPP   operating point parameter, includes units and description for printing
+ */
+
+`define OPP(nam,uni,des)               (*units=uni,                   desc=des*)           real    nam ;
+`define MPRnb(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter real    nam=def ;
+`define MPRex(nam,def,uni,exc,    des) (*units=uni,                   desc=des*) parameter real    nam=def exclude exc ;
+`define MPRcc(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter real    nam=def from[lwr:upr] ;
+`define MPRoo(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter real    nam=def from(lwr:upr) ;
+`define MPRco(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter real    nam=def from[lwr:upr) ;
+`define MPRoc(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter real    nam=def from(lwr:upr] ;
+`define MPRcz(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter real    nam=def from[  0:inf);
+`define MPRoz(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter real    nam=def from(  0:inf);
+`define MPInb(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter integer nam=def ;
+`define MPIex(nam,def,uni,exc,    des) (*units=uni,                   desc=des*) parameter integer nam=def exclude exc ;
+`define MPIcc(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter integer nam=def from[lwr:upr] ;
+`define MPIoo(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter integer nam=def from(lwr:upr) ;
+`define MPIco(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter integer nam=def from[lwr:upr) ;
+`define MPIoc(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter integer nam=def from(lwr:upr] ;
+`define MPIcz(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter integer nam=def from[  0:inf);
+`define MPIoz(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter integer nam=def from(  0:inf);
+`define MPIsw(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter integer nam=def from[  0:  1] ;
+`define MPIty(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter integer nam=def from[ -1:  1] exclude 0 ;
+`define IPRnb(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def ;
+`define IPRex(nam,def,uni,exc,    des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def exclude exc ;
+`define IPRcc(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def from[lwr:upr] ;
+`define IPRoo(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def from(lwr:upr) ;
+`define IPRco(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def from[lwr:upr) ;
+`define IPRoc(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def from(lwr:upr] ;
+`define IPRcz(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def from[  0:inf);
+`define IPRoz(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def from(  0:inf);
+`define IPInb(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def ;
+`define IPIex(nam,def,uni,exc,    des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def exclude exc ;
+`define IPIcc(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def from[lwr:upr] ;
+`define IPIoo(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def from(lwr:upr) ;
+`define IPIco(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def from[lwr:upr) ;
+`define IPIoc(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def from(lwr:upr] ;
+`define IPIcz(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def from[  0:inf);
+`define IPIoz(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def from(  0:inf);
+
+/*
+Not all Verilog-A compilers are able to properly collapse internal nodes. To ensure minimal node
+count, comment out the following lines:
+*/
+
+`define __FP1MOD__
+`define __FP2MOD__
+`define __FP3MOD__
+`define __FP4MOD__
+
+////////// Function for VG0 Calculation //////////
+`define VG0(l,w,Voff_dibl_temp,imin,Vgs,Vtv,Vg0) \
+t0     = l/(2.0*w*`P_Q*`DOS*Vtv*Vtv); \
+vgmin  = Voff_dibl_temp + Vtv*ln(t0*imin); \
+vggmin = 0.5*((Vgs-vgmin) + sqrt((Vgs-vgmin)*(Vgs-vgmin) + 1.0e-4)) + vgmin; \
+Vg0    = vggmin - Voff_dibl_temp;
+
+////////// Function for PSIS Calculation //////////
+`define PSIS(Cg,Vg0,GAMMA0Ival,GAMMA1Ival,Vtv,   beta,ALPHAN,ALPHAD,Cch,psis) \
+beta   = Cg/(`P_Q*`DOS*Vtv); \
+ALPHAN = `M_E/beta; \
+ALPHAD = 1.0/beta; \
+Cch    = Cg/`P_Q; \
+vgop   = 0.5*Vg0 + 0.5*sqrt(Vg0*Vg0 + 4.0*`ep_psi*`ep_psi); \
+vgopacc = vgop ; \
+vgon   = vgop*ALPHAN/(sqrt(vgop*vgop + ALPHAN*ALPHAN)); \
+vgod   = vgop*ALPHAD/(sqrt(vgop*vgop + ALPHAD*ALPHAD)); \
+Hx     = (vgop + Vtv*(1.0-ln(beta*vgon)) - (GAMMA0Ival/3.0)*pow(Cch*vgop,`Twoby3))/(vgop*(1.0+(Vtv/vgod)) + ((2.0*GAMMA0Ival)/3.0)*pow(Cch*vgop,`Twoby3)); \
+t0     = (Vg0/(2.0*Vtv)); \
+if (t0 < 200.0) begin  \
+    t1  = lexp(t0/4.0); \
+    t2  = lexp(-3.0*t0/4.0); \
+    nsx = (2.0*Vtv*(Cch)*((3.0*t0/4.0)+ln(t1 + t2)))/((1.0/Hx) + (Cch/`DOS)*lexp((-1.0*Vg0)/(2.0*Vtv))); \
+end else begin  \
+    nsx = (2.0*Vtv*(Cch)*((1.0*t0/1.0)))/((1.0/Hx) + (Cch/`DOS)*lexp((-1.0*Vg0)/(2.0*Vtv))); \
+end \
+ ef1 = Vg0 - nsx/Cch; \
+if (abs(ef1-Vg0) > 1.0e-19) begin \
+    vgef1    = Vg0 - ef1; \
+    vgef1    = 0.5*vgef1 + 0.5*sqrt(vgef1*vgef1 + 4.0*1.0e-9*1.0e-9); \
+    t0       = pow(Cch,`Twoby3); \
+    t1       = pow(vgef1,`Twoby3); \
+    t2       = pow(vgef1,-`Oneby3); \
+    vgef23g0 = GAMMA0Ival*t0*t1; \
+    vgef23g1 = GAMMA1Ival*t0*t1; \
+    tg0      = (ef1/Vtv) - (vgef23g0/Vtv); \
+    tg1      = (ef1/Vtv) - (vgef23g1/Vtv); \
+    t4       = Cch*vgef1 - `DOS*Vtv*ln(lexp(tg0) + 1.0) - `DOS*Vtv*ln(lexp(tg1) + 1.0); \
+    vgefm13g0 = GAMMA0Ival*t0*t2; \
+    vgefm13g1 = GAMMA1Ival*t0*t2; \
+    t5ng0     = lexp(tg0)*`DOS*(1.0 + `Twoby3*vgefm13g0); \
+    t5dg0     = 1.0 + lexp(tg0); \
+    t5ng1     = lexp(tg1)*`DOS*(1.0 + `Twoby3*vgefm13g1); \
+    t5dg1     = 1.0 + lexp(tg1); \
+    t5        = -1.0*Cch - (t5ng0/t5dg0) - (t5ng1/t5dg1); \
+    ef2       = ef1 - (t4/t5); \
+    vgef2     = Vg0 - ef2; \
+    vgef2     = 0.5*vgef2 + 0.5*sqrt(vgef2*vgef2 + 4.0*1.0e-9*1.0e-9); \
+    t3        = pow(vgef2,-`Oneby3); \
+    vgef223g0 = GAMMA0Ival*t0*pow(vgef2,`Twoby3); \
+    vgef223g1 = GAMMA1Ival*t0*pow(vgef2,`Twoby3); \
+    tg02      = (ef2/Vtv) - (vgef223g0/Vtv); \
+    tg12      = (ef2/Vtv) - (vgef223g1/Vtv); \
+    t42       = Cch*vgef2 - `DOS*Vtv*ln(lexp(tg02) + 1.0) - `DOS*Vtv*ln(lexp(tg12) + 1.0); \
+    vgefm213g0 = GAMMA0Ival*t0*t3; \
+    vgefm213g1 = GAMMA1Ival*t0*t3; \
+    t5ng02     = lexp(tg02)*`DOS*(1.0 + `Twoby3*vgefm213g0); \
+    t5dg02     = 1.0 + lexp(tg02); \
+    t5ng12     = lexp(tg12)*`DOS*(1.0 + `Twoby3*vgefm213g1); \
+    t5dg12     = 1.0 + lexp(tg12); \
+    t52        = -1.0*Cch - (t5ng02/t5dg02) - (t5ng12/t5dg12); \
+    ef3        = ef2 - (t42/t52); \
+    psis       = ef3 ; \
+end else begin \
+    psis       = ef1 ; \
+end
+
+////////// Function for PSID Calculation //////////
+`define PSID(Tdev,Tnom,epsilon,delta,beta,ALPHAN,ALPHAD,Vtv,Cch,U0val,ute,VSATval,at,Cg,psis,Vg0,ua,ub,l,Vds,GAMMA0Ival, GAMMA1Ival,   mulf_tdev,Vdeff,psid) \
+mulf_tdev = U0val*pow((Tdev/Tnom),ute); \
+vsat_tdev = VSATval*pow((Tdev/Tnom),at); \
+t0        = (Cg/epsilon)*abs(Vg0 - psis); \
+mu_eff    = mulf_tdev/(1.0 + ua*(t0) + ub*t0*t0); \
+t0        = 2.0*vsat_tdev/mu_eff; \
+t1        = 0.5*Vg0 + 0.5*sqrt(Vg0*Vg0 + 4.0*`ep_psi*`ep_psi); \
+Vdsat     = t0*l*t1/(t0*l + t1 ); \
+t0        = pow(Vds/Vdsat, delta); \
+t1        = pow(1.0 + t0,-1.0/delta); \
+Vdeff     = Vds * t1; \
+Vgdeff    = Vg0 - Vdeff; \
+vgod      = Vgdeff; \
+vgodp     = 0.5*vgod + 0.5*sqrt(vgod*vgod + 4.0*`ep_psi*`ep_psi); \
+vgop      = vgodp ; \
+dvgon     = vgop*ALPHAN/(sqrt(vgop*vgop + ALPHAN*ALPHAN)); \
+dvgod     = vgop*ALPHAD/(sqrt(vgop*vgop + ALPHAD*ALPHAD)); \
+Hx        = (vgop + Vtv*(1.0-ln(beta*dvgon)) - (GAMMA0Ival/3.0)*pow(Cch*vgop,`Twoby3))/(vgop*(1.0+(Vtv/dvgod)) + ((2.0*GAMMA0Ival)/3.0)*pow(Cch*vgop,`Twoby3)); \
+t0        = (vgod/(2.0*Vtv)); \
+if (t0 < 200.0) begin  \
+    t1 = lexp(t0/4.0); \
+    t2 = lexp(-3.0*t0/4.0); \
+    ndx = (2.0*Vtv*(Cch)*((3.0*t0/4.0)+ln(t1 + t2)))/((1.0/Hx) + (Cch/`DOS)*lexp((-1.0*vgod)/(2.0*Vtv))); \
+end else begin  \
+    ndx = (2.0*Vtv*(Cch)*((1.0*t0/1.0)))/((1.0/Hx) + (Cch/`DOS)*lexp((-1.0*vgod)/(2.0*Vtv))); \
+end \
+ ef1 = vgod - ndx/Cch; \
+if (abs(ef1-vgod)>1.0e-19) begin \
+    vgef1 = vgod - ef1; \
+    vgef1 = 0.5*vgef1 + 0.5*sqrt(vgef1*vgef1 + 4.0*1.0e-9*1.0e-9); \
+    t0    = pow(Cch,`Twoby3) ; \
+    t1    = pow(vgef1,`Twoby3) ; \
+    t2    = pow(vgef1,-`Oneby3) ; \
+    vgef23g0 = GAMMA0Ival*t0*t1; \
+    vgef23g1 = GAMMA1Ival*t0*t1; \
+    tg0      = (ef1/Vtv) - (vgef23g0/Vtv); \
+    tg1      = (ef1/Vtv) - (vgef23g1/Vtv); \
+    t4       = Cch*vgef1 - `DOS*Vtv*ln(lexp(tg0) + 1.0) - `DOS*Vtv*ln(lexp(tg1) + 1.0); \
+    vgefm13g0 = GAMMA0Ival*t0*t2; \
+    vgefm13g1 = GAMMA1Ival*t0*t2; \
+    t5ng0     = lexp(tg0)*`DOS*(1.0 + `Twoby3*vgefm13g0); \
+    t5dg0     = 1.0 + lexp(tg0); \
+    t5ng1     = lexp(tg1)*`DOS*(1.0 + `Twoby3*vgefm13g1); \
+    t5dg1     = 1.0 + lexp(tg1); \
+    t5        = -1.0*Cch - (t5ng0/t5dg0) - (t5ng1/t5dg1); \
+    ef2       = ef1 - (t4/t5); \
+    vgef2     = vgod - ef2; \
+    vgef2     = 0.5*vgef2 + 0.5*sqrt(vgef2*vgef2 + 4.0*1.0e-9*1.0e-9); \
+    vgef223g0 = GAMMA0Ival*t0*pow(vgef2,`Twoby3); \
+    vgef223g1 = GAMMA1Ival*t0*pow(vgef2,`Twoby3); \
+    tg02      = (ef2/Vtv) - (vgef223g0/Vtv); \
+    tg12      = (ef2/Vtv) - (vgef223g1/Vtv); \
+    t42       = Cch*vgef2 - `DOS*Vtv*ln(lexp(tg02) + 1.0) - `DOS*Vtv*ln(lexp(tg12) + 1.0); \
+    vgefm213g0 = GAMMA0Ival*t0*pow(vgef2,-`Oneby3); \
+    vgefm213g1 = GAMMA1Ival*t0*pow(vgef2,-`Oneby3); \
+    t5ng02     = lexp(tg02)*`DOS*(1.0 + `Twoby3*vgefm213g0); \
+    t5dg02     = 1.0 + lexp(tg02); \
+    t5ng12     = lexp(tg12)*`DOS*(1.0 + `Twoby3*vgefm213g1); \
+    t5dg12     = 1.0 + lexp(tg12); \
+    t52        = -1.0*Cch - (t5ng02/t5dg02) - (t5ng12/t5dg12); \
+    ef3        = ef2 - (t42/t52); \
+    psid       = ef3 + Vdeff ; \
+end else begin \
+    psid       = ef1 + Vdeff ; \
+end
+
+////////// Function for IDS Calculation //////////
+`define IDS(Vg0,psim,psisd,Cg,l,Vdsx,w,nf,Vtv,mulf_tdev,Vdeff,   Ids) \
+ids0   = (Vg0 - psim + Vtv)*(psisd); \
+t0     = (Cg/epsilon)*abs(Vg0 - psim); \
+mu_eff = mulf_tdev/(1.0 + ua*(t0) + ub*t0*t0) ; \
+Geff   = (mu_eff*Cg*w*nf)/(l); \
+Geff_clm = Geff*(1.0 + lambda*(Vdsx-Vdeff)); \
+vf       = sqrt(1.0 + thesat*thesat*psisd*psisd) ; \
+G_vf     = Geff_clm/vf; \
+Ids      = G_vf*(ids0);
+
+////////// Function for QGI Calculation //////////
+`define QGI(Vg0,psis,psid,psim,Cg,l,QM0Ival,BDOSIval,ADOSIval,TBARval,Vtv,w,nf,   Cg_qme,qgint) \
+t0 = Vg0 + Vtv ; \
+t1 = psid - psis; \
+t2 = Vg0 + Vtv - psim; \
+t3 = (Cg*w*nf*l)*(Vg0 - psim + 0.5*t1*t1/(6.0*t2)); \
+T0 = 1.0e+26 * (t3/QM0Ival); \
+T1 = 1.0 + pow(T0, BDOSIval); \
+XDCinv = ADOSIval / T1; \
+Cg_qme = epsilon/(TBARval + XDCinv); \
+qgint = (Cg_qme*w*nf*l)*(Vg0 - psim + 0.5*t1*t1/(6.0*t2));
+
+////////// Function for QDI Calculation //////////
+`define QDI(Vg0,psim,psis,psid,psisd,l,Vtv,w,nf,Cg_qme,   qdint) \
+t0 = Vg0 + Vtv - psim ; \
+t1 = (psis + 2.0*psid)/3.0 ; \
+t2 = (1.0/12.0)*(psisd*psisd)/t0 ; \
+t3 = (1.0/120.0)*(psisd*psisd*psisd)/(t0*t0) ; \
+qdint = -(Cg_qme*w*l*nf*0.5)*(Vg0 - t1 + t2 + t3) ;
+
+/*
+Model Schematic:
+
+
+                                                               O (g) Gate
+                                                               |
+                                                           Gate Resistor
+                                                               |
+                                                               O (gi)           Source (s) connected
+                                                               |                        O
+                                                        |---------------|               |
+                                                        |               |               |
+                                                    |-------|       |-------|       |-------|
+                                                    |       |       |       |       |       |
+                          O--------/\/\/\/\----O----|       |---O---|       |---O---|       |---O------/\/\/\/\----------O
+                  Source (s)       S ACC RES  (si)  MAIN HEMT  (di)    FP1    (fp1)    FP2    (fp2)   D ACC RES         (d) Drain
+
+
+
+
+*/
+
+module asmhemt(d,g,s,b,dt);
+    inout d,g,s,b,dt;
+    electrical d,g,s,b;
+    electrical trap1, trap2;
+    electrical di, si, gi;
+    thermal dt;
+
+
+////////// Node Conditioning For Field-plates //////////
+    `ifdef __FP1MOD__
+        electrical fp1;
+    `endif
+
+    `ifdef __FP1MOD__
+        `define IntrinsicDrain_fp1 fp1
+    `else
+        `define IntrinsicDrain_fp1 di
+    `endif
+///////////////////////////////
+    `ifdef __FP2MOD__
+        electrical fp2;
+    `endif
+
+    `ifdef __FP2MOD__
+        `define IntrinsicDrain_fp2 fp2
+    `else
+        `define IntrinsicDrain_fp2 `IntrinsicDrain_fp1
+    `endif
+//////////////////////////////
+    `ifdef __FP3MOD__
+        electrical fp3;
+    `endif
+
+    `ifdef __FP3MOD__
+        `define IntrinsicDrain_fp3 fp3
+    `else
+        `define IntrinsicDrain_fp3 `IntrinsicDrain_fp2
+    `endif
+//////////////////////////////
+    `ifdef __FP4MOD__
+        electrical fp4;
+    `endif
+
+    `ifdef __FP4MOD__
+        `define IntrinsicDrain_fp4 fp4
+    `else
+        `define IntrinsicDrain_fp4 `IntrinsicDrain_fp3
+    `endif
+/////////////////////////////////////////////////////
+
+
+////////// Clamped Exponential Function //////////
+    analog function real lexp;
+        input x;
+        real x;
+        begin
+            if(x > `EXPL_THRESHOLD) begin
+                lexp = `MAX_EXPL * (1.0+(x)-`EXPL_THRESHOLD);
+            end else if(x < -`EXPL_THRESHOLD) begin
+                lexp = `MIN_EXPL;
+            end else begin
+                lexp = exp(x);
+            end
+        end
+    endfunction
+
+////////// Hyperbolic Smoothing Functions (max) //////////
+    analog function real hypmax;
+        input x , xmin, c;
+        real x , xmin, c;
+        begin
+            hypmax  = xmin + x - 0.5 * (xmin + x - sqrt((x-xmin)*(x-xmin)+c));
+        end
+    endfunction
+
+////////// Smoothing Function To Fix A Minimum Value //////////
+    analog function real smoothminx;
+        input x, x0, dx;
+        real x, x0, dx;
+        begin
+            smoothminx = 0.5*(x + x0 + sqrt((x - x0)*(x - x0) + 0.25*dx*dx));
+        end
+    endfunction
+
+////////// Branches Self-heating //////////
+    branch (dt) rth;
+    branch (dt) ith;
+
+////////// List Of Model Parameters //////////
+    `MPRco( tnom           ,27.0           ,"K"           ,-`P_CELSIUS0,inf         ," Nominal Temperature in degree Celsius" )
+    `MPRco( tbar           ,2.5e-8         ,"m"           ,0.1e-9      ,inf         ," Barrier layer thickness" )
+    `IPRco( l              ,0.25e-6        ,"m"           ,20e-9       ,inf         ," Channel Length" )
+    `IPRco( w              ,200.0e-6       ,"m"           ,20e-9       ,inf         ," Channel Width" )
+    `IPIco( nf             ,1              ,""            ,1.0         ,inf         ," Number of fingers" )
+    `MPRoo( epsilon        ,10.66e-11      ,"F/m"         ,0.0         ,inf         ," Dielectric Permittivity of AlGaN layer" )
+    `MPRcc( voff           ,-2.0           ,"V"           ,-100.0      ,5           ," Cut-off voltage" )
+    `MPRco( u0             ,170.0e-3       ,"m^2/(V * s)" ,0.0         ,inf         ," Low field mobility" )
+    `MPRco( ua             ,0.0e-9         ,"V^-1"        ,0.0         ,inf         ," Mobility Degradation coefficient first order" )
+    `MPRco( ub             ,0.0e-18        ,"V^-2"        ,0.0         ,inf         ," Mobility Degradation coefficient second order" )
+    `MPRco( vsat           ,1.9e5          ,"m/s"         ,1.0e3       ,inf         ," Saturation Velocity" )
+    `MPRco( delta          ,2.0            ,""            ,2.0         ,inf         ," Exponent for Vdeff" )
+    `MPRoo( at             ,0.0            ,""            ,-inf        ,inf         ," Temperature Dependence for saturation velocity" )
+    `MPRcc( ute            ,-0.5           ,""            ,-10.0       ,0           ," Temperature dependence of mobility" )
+    `MPRco( lambda         ,0.0            ,"V^-1"        ,0.0         ,inf         ," Channel Length Modulation Coefficient" )
+    `MPRco( eta0           ,1.0e-9         ,""            ,0.0         ,inf         ," DIBL Parameter" )
+    `MPRoo( vdscale        ,5.0            ,"V"           ,0.0         ,inf         ," DIBL Scaling VDS" )
+    `MPRoo( kt1            ,0.0e-3         ,""            ,-inf        ,inf         ," Temperature Dependence for Voff" )
+    `MPRco( thesat         ,1.0            ,"V^-2"        ,1.0         ,inf         ," Velocity Saturation Parameter" )
+    `MPRco( nfactor        ,0.5            ,""            ,0.0         ,inf         ," Sub-voff Slope parameters" )
+    `MPRco( cdscd          ,1.0e-3         ,""            ,0.0         ,inf         ," Sub-voff Slope Change due to Drain Voltage" )
+    `MPRcc( gamma0i        ,2.12e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter" )
+    `MPRcc( gamma1i        ,3.73e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter" )
+    `MPRoo( imin           ,1.0e-15        ,"A"           ,0.0         ,inf         ," Minimum Drain Current" )
+////////// Self Heating Model Parameters //////////
+    `MPIsw( shmod          ,1              ,""            ," Switch to turn on and off self-heating model" )
+    `MPRco( rth0           ,5.0            ,"K/w"         ,0.0         ,inf         ," Thermal Resistance" )
+    `MPRco( cth0           ,1.0e-9         ,"s*w/K"       ,0.0         ,inf         ," Thermal Capacitance" )
+////////// Access Region Resistance Model Parameters //////////
+    `MPIsw( rdsmod         ,0              ,""            ," Switch for external source and drain resistances" )
+    `MPRoo( vsataccs       ,50.0e3         ,"cm/s"        ,0.0         ,inf         ," Saturation Velocity for access region: Source Side" )
+    `MPRco( ns0accs        ,5.0e17         ,"C/m^-2"      ,1.0e5       ,inf         ," 2-DEG Charge Density in per square meter in Source access region" )
+    `MPRco( ns0accd        ,5.0e17         ,"C/m^-2"      ,1.0e5       ,inf         ," 2-DEG Charge Density in per square meter in Drain access region" )
+    `MPRco( k0accs         ,0.0            ,""            ,0.0         ,inf         ," Vg dependence parameter of source side access region 2-DEG charge density" )
+    `MPRco( k0accd         ,0.0            ,""            ,0.0         ,inf         ," Vg dependence parameter of drain side access region 2-DEG charge density" )
+    `MPRoo( u0accs         ,155e-3         ,"m^2/(V * s)" ,0.0         ,inf         ," Access region mobility source-side" )
+    `MPRoo( u0accd         ,155e-3         ,"m^2/(V * s)" ,0.0         ,inf         ," Access region mobility drain-side" )
+    `MPRoo( mexpaccs       ,2.0            ,""            ,0.0         ,inf         ," Exponent for access region resistance model" )
+    `MPRoo( mexpaccd       ,2.0            ,""            ,0.0         ,inf         ," Exponent for access region resistance model" )
+    `MPRco( lsg            ,1.0e-6         ,"m"           ,0.0         ,inf         ," Length of Source-Gate Access Region" )
+    `MPRco( ldg            ,1.0e-6         ,"m"           ,0.0         ,inf         ," Length of Drain-Gate Access Region or Length of drain side access region" )
+    `MPRco( rsc            ,1.0e-4         ,"ohm*m"       ,0.0         ,inf         ," Source Contact Resistance" )
+    `MPRco( rdc            ,1.0e-4         ,"ohm*m"       ,0.0         ,inf         ," Drain Contact Resistance" )
+    `MPRco( kns0           ,0.0            ,""            ,0.0         ,inf         ," Temperature Dependence for 2-DEG charge density at access region" )
+    `MPRoo( ats            ,0.0            ,""            ,-inf        ,inf         ," Temperature Dependence for saturation velocity at access region" )
+    `MPRoo( utes           ,0.0            ,""            ,-inf        ,inf         ," Temperature dependence of mobility at access region: Source Side" )
+    `MPRoo( uted           ,0.0            ,""            ,-inf        ,inf         ," Temperature dependence of mobility at access region: Drain Side" )
+    `MPRco( krsc           ,0.0            ,""            ,0.0         ,inf         ," Temperature dependence of Source Contact Resistance" )
+    `MPRco( krdc           ,0.0            ,""            ,0.0         ,inf         ," Temperature dependence of Drain Contact Resistance" )
+    `MPIsw( gatemod        ,0              ,""            ," Gate current model flag [0: No gate current; 1: Basic model]" )
+////////// Gate current Model Parameters (MOD1) //////////
+    `MPRoo( njgs           ,2.5            ,""            ,0.0         ,50.0        ," Gate-source junction diode current ideality factor" )
+    `MPRoo( njgd           ,2.5            ,""            ,0.0         ,50.0        ," Gate-drain junction diode current ideality factor" )
+    `MPRco( igsdio         ,1.0            ,"A/m^2"       ,0.0         ,inf         ," Gate-source junction diode saturation current" )
+    `MPRco( igddio         ,1.0            ,"A/m^2"       ,0.0         ,inf         ," Gate-drain junction diode saturation current" )
+    `MPRoo( ktgs           ,0.0            ,""            ,-inf        ,inf         ," Temperature co-efficient of gate-source junction diode current" )
+    `MPRoo( ktgd           ,0.0            ,""            ,-inf        ,inf         ," Temperature coefficient of gate-drain junction diode current" )
+    `MPIcc( trapmod        ,0              ,""            ,0           ,3           ," Model Switch to turn on and off the dynamic trapping effects" )
+////////// Trap Model For RF trapmod=1 //////////
+    `MPRoo( cdlag          ,1.0e-6         ,""            ,0.0         ,inf         ," Trap Network capacitance" )
+    `MPRoo( rdlag          ,1.0e6          ,""            ,0.0         ,inf         ," Trap Network resistance" )
+    `MPRoo( idio           ,1.0e0          ,"A"           ,0.0         ,inf         ," Saturation Current parameter for trap model" )
+    `MPRoo( atrapvoff      ,0.1            ,""            ,-inf        ,inf         ," Voff change due to trapping effects" )
+    `MPRoo( btrapvoff      ,0.3            ,""            ,-inf        ,inf         ," Voff change with input power due to trapping effects" )
+    `MPRoo( atrapeta0      ,0              ,""            ,-inf        ,inf         ," DIBL change due to trapping effects" )
+    `MPRoo( btrapeta0      ,0.05           ,""            ,-inf        ,inf         ," DIBL change with input power due to trapping effects" )
+    `MPRoo( atraprs        ,0.1            ,""            ,-inf        ,inf         ," Rs change due to trapping effects" )
+    `MPRoo( btraprs        ,0.6            ,""            ,-inf        ,inf         ," Rs change with input power due to trapping effects" )
+    `MPRoo( atraprd        ,0.5            ,""            ,-inf        ,inf         ," Rd change due to trapping effects" )
+    `MPRoo( btraprd        ,0.6            ,""            ,-inf        ,inf         ," Rd change with input power due to trapping effects" )
+////////// Trap Model Parameters for Pulse IV trapmod=2 //////////
+    `MPRoo( rtrap1         ,1.0            ,"ohm"         ,0.0         ,inf         ," Trap Network1 Resistance" )
+    `MPRoo( rtrap2         ,1.0            ,"ohm"         ,0.0         ,inf         ," Trap Network2 Resistance" )
+    `MPRco( ctrap1         ,10.0e-6        ,"F"           ,0.0         ,inf         ," Trap Network1 Capacitance" )
+    `MPRco( ctrap2         ,1.0e-6         ,"F"           ,0.0         ,inf         ," Trap Network2 Capacitance" )
+    `MPRoo( a1             ,0.1            ,""            ,-inf        ,inf         ," Multiplication factor [1st network]" )
+    `MPRoo( vofftr         ,1.0e-9         ,""            ,-inf        ,inf         ," Trap contribution to voff [2nd network]" )
+    `MPRoo( cdscdtr        ,1.0e-15        ,""            ,-inf        ,inf         ," Trap contribution to cdscd [2nd network]" )
+    `MPRoo( eta0tr         ,1.0e-15        ,""            ,-inf        ,inf         ," Trap contribution to DIBL [2nd network]" )
+    `MPRoo( rontr1         ,1.0e-12        ,""            ,-inf        ,inf         ," Trap contribution to RON [1st network]" )
+    `MPRoo( rontr2         ,1.0e-13        ,""            ,-inf        ,inf         ," Trap contribution to RON [2nd network]" )
+    `MPRoo( rontr3         ,1.0e-13        ,""            ,-inf        ,inf         ," Trap contribution to RON" )
+////////// Trap Model Parameters Dynamic On Resistance For Power Devices trapmod=3 //////////
+    `MPRoo( rtrap3         ,1.0            ,"ohm"         ,0.0         ,inf         ," Trap Network Resistance" )
+    `MPRco( ctrap3         ,1.0e-4         ,"F"           ,0.0         ,inf         ," Trap Network Capacitance" )
+    `MPRoo( vatrap         ,10.0           ,""            ,0.0         ,inf         ," Division factor for V[trap1]" )
+    `MPRoo( wd             ,0.016          ,""            ,-inf        ,inf         ," Weak dependence of vdlr1 on Vdg" )
+    `MPRoo( vdlr1          ,2.0            ,""            ,-inf        ,inf         ," Slope for region one" )
+    `MPRoo( vdlr2          ,20.0           ,""            ,-inf        ,inf         ," Slope for region two" )
+    `MPRoo( talpha         ,1.0            ,""            ,-inf        ,inf         ," Temperature dependence Coefficient" )
+    `MPRco( vtb            ,250.0          ,"V"           ,0.0         ,inf         ," Break Point for Vdg effect on Von" )
+    `MPRco( deltax         ,0.01           ,""            ,0.0         ,inf         ," Smoothing parameter" )
+////////// Field Plate Region Parameters //////////
+    `MPIcc( fp1mod         ,0              ,""            ,0           ,2           ," Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]" )
+    `MPIcc( fp2mod         ,0              ,""            ,0           ,2           ," Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]" )
+    `MPIcc( fp3mod         ,0              ,""            ,0           ,2           ," Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]" )
+    `MPIcc( fp4mod         ,0              ,""            ,0           ,2           ," Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]" )
+    `MPRoo( iminfp1        ,1.0e-15        ,"A"           ,0.0         ,inf         ," Minimum Drain Current FP1 region" )
+    `MPRcc( vofffp1        ,-25.0          ,"V"           ,-500.0      ,5           ," voff for FP1" )
+    `IPRco( dfp1           ,50.0e-9        ,"m"           ,0.1e-9      ,inf         ," Distance of FP1 from 2-DEG Charge" )
+    `IPRoo( lfp1           ,1.0e-6         ,"m"           ,0.0         ,inf         ," Length of FP1" )
+    `MPRoo( ktfp1          ,50.0e-3        ,""            ,-inf        ,inf         ," Temperature Dependence for vofffp1" )
+    `MPRco( u0fp1          ,100e-3         ,"m^2/(V * s)" ,0.0         ,inf         ," FP1 region mobility" )
+    `MPRco( vsatfp1        ,100e+3         ,"m/s"         ,0.0         ,inf         ," Saturation Velocity of FP1 region" )
+    `MPRco( nfactorfp1     ,0.5            ,""            ,0.0         ,inf         ," Sub-voff Slope parameters for FP1" )
+    `MPRco( cdscdfp1       ,0.0            ,""            ,0.0         ,inf         ," Sub-voff Slope Change due to Drain Voltage for FP1" )
+    `MPRco( eta0fp1        ,1.0e-9         ,""            ,0.0         ,inf         ," DIBL Parameter for FP1" )
+    `MPRoo( vdscalefp1     ,10.0           ,"V"           ,0.0         ,inf         ," DIBL Scaling VDS for FP1" )
+    `MPRcc( gamma0fp1      ,2.12e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP1" )
+    `MPRcc( gamma1fp1      ,3.73e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP1" )
+    `MPRoo( iminfp2        ,1.0e-15        ,"A"           ,0.0         ,inf         ," Minimum Drain Current FP2 region" )
+    `MPRcc( vofffp2        ,-50.0          ,"V"           ,-100.0      ,5           ," voff for FP2" )
+    `IPRco( dfp2           ,100.0e-9       ,"m"           ,0.1e-9      ,inf         ," Distance of FP2 from 2-DEG Charge" )
+    `IPRoo( lfp2           ,1.0e-6         ,"m"           ,0.0         ,inf         ," Length of FP2" )
+    `MPRoo( ktfp2          ,50.0e-3        ,""            ,-inf        ,inf         ," Temperature Dependence for vofffp2" )
+    `MPRco( u0fp2          ,100e-3         ,"m^2/(V * s)" ,0.0         ,inf         ," Carrier mobility of FP2 region" )
+    `MPRco( vsatfp2        ,100e+3         ,"m/s"         ,0.0         ,inf         ," Saturation velocity of FP2 region" )
+    `MPRco( nfactorfp2     ,0.5            ,""            ,0.0         ,inf         ," Sub-voff Slope parameters for FP2" )
+    `MPRco( cdscdfp2       ,0.0            ,""            ,0.0         ,inf         ," Sub-voff Slope Change due to Drain Voltage for FP2" )
+    `MPRco( eta0fp2        ,1.0e-9         ,""            ,0.0         ,inf         ," DIBL Parameter for FP2" )
+    `MPRoo( vdscalefp2     ,10.0           ,"V"           ,0.0         ,inf         ," DIBL Scaling VDS for FP2" )
+    `MPRcc( gamma0fp2      ,2.12e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP2" )
+    `MPRcc( gamma1fp2      ,3.73e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP2" )
+    `MPRoo( iminfp3        ,1.0e-15        ,"A"           ,0.0         ,inf         ," Minimum Drain Current FP3 region" )
+    `MPRcc( vofffp3        ,-75.0          ,"V"           ,-500.0      ,5           ," voff for FP3" )
+    `IPRco( dfp3           ,150.0e-9       ,"m"           ,0.1e-9      ,inf         ," Distance of FP3 from 2-DEG Charge" )
+    `IPRoo( lfp3           ,1.0e-6         ,"m"           ,0.0         ,inf         ," Length of FP3" )
+    `MPRoo( ktfp3          ,50.0e-3        ,""            ,-inf        ,inf         ," Temperature Dependence for vofffp3" )
+    `MPRco( u0fp3          ,100e-3         ,"m^2/(V * s)" ,0.0         ,inf         ," FP3 region mobility" )
+    `MPRco( vsatfp3        ,100e+3         ,"m/s"         ,0.0         ,inf         ," Saturation Velocity of FP3 region" )
+    `MPRco( nfactorfp3     ,0.5            ,""            ,0.0         ,inf         ," Sub-voff Slope parameters for FP3" )
+    `MPRco( cdscdfp3       ,0.0            ,""            ,0.0         ,inf         ," Sub-voff Slope Change due to Drain Voltage for FP3" )
+    `MPRco( eta0fp3        ,1.0e-9         ,""            ,0.0         ,inf         ," DIBL Parameter for FP3" )
+    `MPRoo( vdscalefp3     ,10.0           ,"V"           ,0.0         ,inf         ," DIBL Scaling VDS for FP3" )
+    `MPRcc( gamma0fp3      ,2.12e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP3" )
+    `MPRcc( gamma1fp3      ,3.73e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP3" )
+    `MPRoo( iminfp4        ,1.0e-15        ,"A"           ,0.0         ,inf         ," Minimum Drain Current FP4 region" )
+    `MPRcc( vofffp4        ,-100.0         ,"V"           ,-500.0      ,5           ," voff for FP4" )
+    `IPRco( dfp4           ,200.0e-9       ,"m"           ,0.1e-9      ,inf         ," Distance of FP4 from 2-DEG Charge" )
+    `IPRoo( lfp4           ,1.0e-6         ,"m"           ,0.0         ,inf         ," Length of FP4" )
+    `MPRoo( ktfp4          ,50.0e-3        ,""            ,-inf        ,inf         ," Temperature Dependence for vofffp4" )
+    `MPRco( u0fp4          ,100e-3         ,"m^2/(V * s)" ,0.0         ,inf         ," FP4 region mobility" )
+    `MPRco( vsatfp4        ,100e+3         ,"m/s"         ,0.0         ,inf         ," Saturation Velocity of FP4 region" )
+    `MPRco( nfactorfp4     ,0.5            ,""            ,0.0         ,inf         ," Sub-voff Slope parameters for FP4" )
+    `MPRco( cdscdfp4       ,0.0            ,""            ,0.0         ,inf         ," Sub-voff Slope Change due to Drain Voltage for FP4" )
+    `MPRco( eta0fp4        ,1.0e-9         ,""            ,0.0         ,inf         ," DIBL Parameter for FP4" )
+    `MPRoo( vdscalefp4     ,10.0           ,"V"           ,0.0         ,inf         ," DIBL Scaling VDS for FP4" )
+    `MPRcc( gamma0fp4      ,2.12e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP4" )
+    `MPRcc( gamma1fp4      ,3.73e-12       ,""            ,0.0         ,1.0         ," Schrodinger-Poisson solution parameter for FP4" )
+////////// Capacitance Parameters //////////
+    `MPRco( cgso           ,0.0e-18        ,"F"           ,0.0         ,inf         ," Gate-source overlap capacitance" )
+    `MPRco( cgdo           ,0.0e-18        ,"F"           ,0.0         ,inf         ," Gate-drain overlap capacitance" )
+    `MPRco( cdso           ,0.0e-18        ,"F"           ,0.0         ,inf         ," Cds capacitance parameter" )
+    `MPRco( cgdl           ,0.0e-15        ,"F"           ,0.0         ,inf         ," Vds bias dependence of parasitic gate drain overlap capacitance" )
+    `MPRoo( vdsatcv        ,100.0          ,"V"           ,0.0         ,inf         ," Saturation voltage on drain side in CV Model" )
+    `MPRco( cbdo           ,0.0e-15        ,"F"           ,0.0         ,inf         ," Substrate capacitance parameter" )
+    `MPRco( cbso           ,0.0e-15        ,"F"           ,0.0         ,inf         ," Substrate capacitance parameter" )
+    `MPRco( cbgo           ,0.0e-15        ,"F"           ,0.0         ,inf         ," Substrate capacitance parameter" )
+    `MPRco( cfg            ,0.0e-18        ,"F"           ,0.0         ,inf         ," Fringing capacitance parameter" )
+    `MPRco( cfd            ,0.0e-18        ,"F"           ,0.0         ,inf         ," Fringing capacitance parameter" )
+    `MPRco( cfgd           ,0.0e-13        ,"F"           ,0.0         ,inf         ," Fringing capacitance parameter" )
+    `MPRco( cfgdsm         ,1.0e-24        ,"F"           ,0.0         ,inf         ," Capacitance smoothing parameter" )
+    `MPRco( cfgd0          ,0.0e-12        ,"F"           ,0.0         ,inf         ," Fringing capacitance parameter" )
+    `MPRco( cj0            ,0.0e-15        ,"F"           ,0.0         ,inf         ," Zero bias depletion capacitance" )
+    `MPRoo( vbi            ,0.9            ,"V"           ,0.0         ,inf         ," Built in potential" )
+    `MPRco( ktvbi          ,0.0            ,""            ,0.0         ,inf         ," Temperature dependence of built in potential" )
+    `MPRco( ktcfg          ,0.0e-3         ,""            ,0.0         ,inf         ," Temperature dependence of Fringing capacitance" )
+    `MPRco( ktcfgd         ,0.0e-3         ,""            ,0.0         ,inf         ," Temperature dependence of Fringing capacitance" )
+    `MPRoo( mz             ,0.5            ,""            ,0.0         ,1.0         ," Grading factor of depletion capacitance" )
+    `MPRco( aj             ,100.0e-3       ,""            ,0.0         ,inf         ," Limiting factor of depletion capacitance in forward bias region" )
+    `MPRco( dj             ,1.0            ,""            ,0.0         ,inf         ," Fitting parameter " )
+////////// Quantum Mechanical Effects //////////
+    `MPRco( adosi          ,0.0            ,""            ,0           ,inf         ," Quantum mechanical effect pre-factor cum switch in inversion" )
+    `MPRco( bdosi          ,1.0            ,""            ,0           ,inf         ," Charge centroid parameter - slope of CV curve under QME in inversion" )
+    `MPRoo( qm0i           ,1.0e-3         ,""            ,0           ,inf         ," Charge centroid parameter - starting point for QME in inversion" )
+    `MPRco( adosfp1        ,0.0            ,""            ,0           ,inf         ," Quantum mechanical effect pre-factor cum switch in inversion" )
+    `MPRco( bdosfp1        ,1.0            ,""            ,0           ,inf         ," Charge centroid parameter - slope of CV curve under QME in inversion" )
+    `MPRoo( qm0fp1         ,1.0e-3         ,""            ,0           ,inf         ," Charge centroid parameter - starting point for QME in inversion" )
+    `MPRco( adosfp2        ,0.0            ,""            ,0           ,inf         ," Quantum mechanical effect pre-factor cum switch in inversion" )
+    `MPRco( bdosfp2        ,1.0            ,""            ,0           ,inf         ," Charge centroid parameter - slope of CV curve under QME in inversion" )
+    `MPRoo( qm0fp2         ,1.0e-3         ,""            ,0           ,inf         ," Charge centroid parameter - starting point for QME in inversion" )
+    `MPRco( adosfp3        ,0.0            ,""            ,0           ,inf         ," Quantum mechanical effect pre-factor cum switch in inversion" )
+    `MPRco( bdosfp3        ,1.0            ,""            ,0           ,inf         ," Charge centroid parameter - slope of CV curve under QME in inversion" )
+    `MPRoo( qm0fp3         ,1.0e-3         ,""            ,0           ,inf         ," Charge centroid parameter - starting point for QME in inversion" )
+    `MPRco( adosfp4        ,0.0            ,""            ,0           ,inf         ," Quantum mechanical effect pre-factor cum switch in inversion" )
+    `MPRco( bdosfp4        ,1.0            ,""            ,0           ,inf         ," Charge centroid parameter - slope of CV curve under QME in inversion" )
+    `MPRoo( qm0fp4         ,1.0e-3         ,""            ,0           ,inf         ," Charge centroid parameter - starting point for QME in inversion" )
+////////// Cross Coupling Capacitance Parameters //////////
+    `MPRco( cfp1scale      ,0.0            ,""            ,0           ,inf         ," Coupling of charge under FP1" )
+    `MPRco( cfp2scale      ,0.0            ,""            ,0           ,inf         ," Coupling of charge under FP2" )
+    `MPRco( cfp3scale      ,0.0            ,""            ,0           ,inf         ," Coupling of charge under FP3" )
+    `MPRco( cfp4scale      ,0.0            ,""            ,0           ,inf         ," Coupling of charge under FP4" )
+    `MPRco( csubscalei     ,0.0            ,""            ,0           ,inf         ," Sub Capacitance scaling parameter" )
+    `MPRco( csubscale1     ,0.0            ,""            ,0           ,inf         ," Sub Capacitance scaling parameter" )
+    `MPRco( csubscale2     ,0.0            ,""            ,0           ,inf         ," Sub Capacitance scaling parameter" )
+    `MPRco( csubscale3     ,0.0            ,""            ,0           ,inf         ," Sub Capacitance scaling parameter" )
+    `MPRco( csubscale4     ,0.0            ,""            ,0           ,inf         ," Sub Capacitance scaling parameter" )
+////////// Gate Resistance Parameters //////////
+    `MPIsw( rgatemod       ,0              ,""            ," Switch to turn on/off gate Resistance" )
+    `MPRco( xgw            ,0.0            ,"m"           ,0           ,inf         ," Distance from gate contact centre to dev edge" )
+    `IPIcc( ngcon          ,1              ,""            ,1           ,2           ," Number of gate contacts" )
+    `MPRco( rshg           ,1.0e-3         ,"ohm/square"  ,1e-3        ,inf         ," Gate sheet resistance" )
+////////// Noise Model Parameters //////////
+    `MPIsw( fnmod          ,0              ,""            ," Switch to turn Flicker Noise Model  ON [fnmod=1] or OFF [fnmod=0]" )
+    `MPIsw( tnmod          ,0              ,""            ," Switch to turn Thermal Noise Model  ON [tnmod=1] or OFF [tnmod=0]" )
+    `MPRoo( noia           ,15.0e-12       ,""            ,-inf        ,inf         ," Flicker Noise parameter" )
+    `MPRco( noib           ,0.0            ,""            ,0           ,inf         ," Flicker Noise parameter" )
+    `MPRco( noic           ,0.0            ,""            ,0           ,inf         ," Flicker Noise parameter" )
+    `MPRoo( ef             ,1              ,""            ,0           ,inf         ," Exponent of frequency---Determines slope in log plot" )
+    `MPRoo( tnsc           ,1.0e27         ,""            ,0           ,inf         ," Thermal noise scaling parameter" )
+////////// gdsmin For Convergence //////////
+    `MPRoo( gdsmin         ,1.0e-12        ,"S"           ,0           ,inf         ," Convergence Parameter" )
+
+////////// Operating Point Variables //////////
+    (* desc="idisi" *) real idisi;
+    (* desc="vdisi" *) real vdisi;
+    (* desc="vgisi" *) real vgisi;
+    (* desc="gmi"   *) real gmi;
+    (* desc="gdsi"  *) real gdsi;
+    (* desc="gmbi"  *) real gmbi;
+    (* desc="igs"   *) real igs;
+    (* desc="igd"   *) real igd;
+    (* desc="qgi"   *) real qgi;
+    (* desc="qdi"   *) real qdi;
+    (* desc="qsi"   *) real qsi;
+    (* desc="qbi"   *) real qbi;
+    (* desc="cggi"   *) real cggi;
+    (* desc="cgsi"   *) real cgsi;
+    (* desc="cgdi"   *) real cgdi;
+    (* desc="cgbi"   *) real cgbi;
+    (* desc="cddi"   *) real cddi;
+    (* desc="cdgi"   *) real cdgi;
+    (* desc="cdsi"   *) real cdsi;
+    (* desc="cdbi"   *) real cdbi;
+    (* desc="cssi"   *) real cssi;
+    (* desc="csgi"   *) real csgi;
+    (* desc="csdi"   *) real csdi;
+    (* desc="csbi"   *) real csbi;
+    (* desc="cbbi"   *) real cbbi;
+    (* desc="cbsi"   *) real cbsi;
+    (* desc="cbdi"   *) real cbdi;
+    (* desc="cbgi"   *) real cbgi;
+    (* desc="t_total_k"   *) real t_total_k;
+    (* desc="t_total_c"   *) real t_total_c;
+    (* desc="t_delta_sh"  *) real t_delta_sh;
+    (* desc="rd"  *) real rd;
+    (* desc="rs"  *) real rs;
+    (* desc="cgs" *) real cgs;
+    (* desc="cgd" *) real cgd;
+///////////////////////////////////////////////////////////////////
+
+    analog begin
+        begin : voltages
+            real Tnom, Vth;
+            real Vg0, Vds, Vgdeff, Vgs, sigvds, Vds_noswap, Vgs_noswap, Vgd_noswap;
+            real sigvdsfp1, Vds_noswapfp1, Vgs_noswapfp1, Vgd_noswapfp1;
+            real sigvdsfp2, Vds_noswapfp2, Vgs_noswapfp2, Vgd_noswapfp2;
+            real sigvdsfp3, Vds_noswapfp3, Vgs_noswapfp3, Vgd_noswapfp3;
+            real sigvdsfp4, Vds_noswapfp4, Vgs_noswapfp4, Vgd_noswapfp4;
+            real Cg, Tdev, Vtv, beta, Vdsat, Vdeff, Voff_dibl, Voff_dibl_temp, vsat_tdev ;
+            real t1, t2, vf, G_vf, Ids, mu_eff, Geff, mulf_tdev, Geff_clm;
+            real Cch, ef1, vgef1, vgef23g0, vgef23g1, tg0, tg1;
+            real t4, vgefm13g0, vgefm13g1, t5ng0,t5dg0, t5ng1, t5dg1, t5, ef2, vgef2, vgef223g0, vgef223g1, tg02, tg12, t42, vgefm213g0, vgefm213g1;
+            real t5ng02, t5dg02, t5ng12, t5dg12, t52, ef3, psis, vgod, vgodp, psid, psim, psisd, ids0;
+            real t0, t3, qd, qs, Vdsx, gdpr, gspr, Rdrain, Rsource, cdsc;
+            real vdg, vdgeff, ct;
+            real ALPHAN, ALPHAD, Hx, nsx, vgop, vgon, ndx, dvgon, dvgod ;
+            real vgmin, vggmin ;
+            real qgint, qsov, qdov, qdsov, qdint, qsint, cgdvar, VdseffCV;
+            real rsbias, rdbias, qsacc, isatacc, rd0, rs0 ;
+            real vsataccs_t, ns0_t, rsc_t, rdc_t, u0accs_t, u0accd_t;
+            real Rtrap, Rtrap_t, vcap, vgopacc;
+            real T0, T1, XDCinv, Cg_qme, t6, t8, Qdep, qfr, qfr2, qfr3;
+            real Pf, Kr, FNint1, FNint2, FNint3, FNint4, FNat1Hz;
+            real ThSid;
+            real Igs, Igd;
+            real vdgeff1, voff_trap, ron_trap, cdscd_trap, eta0_trap;
+            real voff_cap, rs_cap, rd_cap, eta0_cap;
+            real qgp, qdp, qsp, qbdov, qbsov, qbgov;
+            real Vg0_fp1, Cg_fp1, psis_fp1, psid_fp1, psim_fp1, psisd_fp1, qg_fp1, qd_fp1, Vgs_fp1, Vds_fp1, Vdsx_fp1, qs_fp1, Ids_fp1;
+            real Vg0_fp2, Cg_fp2, psis_fp2, psid_fp2, psim_fp2, psisd_fp2, qg_fp2, qd_fp2, Vgs_fp2, Vds_fp2, Vdsx_fp2, qs_fp2, Ids_fp2;
+            real Vg0_fp3, Cg_fp3, psis_fp3, psid_fp3, psim_fp3, psisd_fp3, qg_fp3, qd_fp3, Vgs_fp3, Vds_fp3, Vdsx_fp3, qs_fp3, Ids_fp3;
+            real Vg0_fp4, Cg_fp4, psis_fp4, psid_fp4, psim_fp4, psisd_fp4, qg_fp4, qd_fp4, Vgs_fp4, Vds_fp4, Vdsx_fp4, qs_fp4, Ids_fp4;
+            real Grgeltd;
+
+////////// Variable initialization //////////
+            t6 = 0.0; t8 = 0.0; Qdep = 0.0; qfr = 0.0; qfr2 = 0.0; qfr3 = 0.0;
+            vcap = 1.0; voff_cap = 0.0; rs_cap = 0.0; rd_cap = 0.0; eta0_cap = 0.0; Ids = 0.0;
+            voff_trap = 0.0; ron_trap= 0.0; cdscd_trap=0.0; eta0_trap=0.0; Rtrap_t = 0.0 ;
+            Vg0_fp1 = 0.0; Cg_fp1 = 0.0; psis_fp1 = 0.0; psid_fp1 = 0.0; psim_fp1 = 0.0; psisd_fp1 = 0.0; qg_fp1 = 0.0; qd_fp1 = 0.0;
+            qs_fp1 = 0.0; Vgs_fp1 = 0.0; Vds_fp1 = 0.0; Ids_fp1 = 0.0;
+            Vg0_fp2 = 0.0; Cg_fp2 = 0.0; psis_fp2 = 0.0; psid_fp2 = 0.0; psim_fp2 = 0.0; psisd_fp2 = 0.0; qg_fp2 = 0.0; qd_fp2 = 0.0;
+            qs_fp2 = 0.0; Vgs_fp2 = 0.0; Vds_fp2 = 0.0; Ids_fp2 = 0.0;
+            Vg0_fp3 = 0.0; Cg_fp3 = 0.0; psis_fp3 = 0.0; psid_fp3 = 0.0; psim_fp3 = 0.0; psisd_fp3 = 0.0; qg_fp3 = 0.0; qd_fp3 = 0.0;
+            qs_fp3 = 0.0; Vgs_fp3 = 0.0; Vds_fp3 = 0.0; Ids_fp3 = 0.0;
+            Vg0_fp4 = 0.0; Cg_fp4 = 0.0; psis_fp4 = 0.0; psid_fp4 = 0.0; psim_fp4 = 0.0; psisd_fp4 = 0.0; qg_fp4 = 0.0; qd_fp4 = 0.0;
+            qs_fp4 = 0.0; Vgs_fp4 = 0.0; Vds_fp4 = 0.0; Ids_fp4 = 0.0;
+            Igs = 0.0; Igd = 0.0;
+            Rdrain = 0.0; Rsource = 0.0; gdpr = 0.0; gspr = 0.0;
+            sigvdsfp1 = 1.0; sigvdsfp2 = 1.0; sigvdsfp3 = 1.0; sigvdsfp4 = 1.0;
+
+            if ($port_connected(dt) == 0) begin
+                if (shmod == 0 || rth0 == 0.0) begin
+                    Temp(dt) <+ 0.0;
+                end else begin
+                    $strobe("5 terminal Module, while 't' node is not connected, SH is activated.");
+                end
+            end
+////////// Temperature Conversion From Celsius To Kelvin //////////
+            Tnom = tnom + `P_CELSIUS0;
+
+////////// Terminal Voltage Conditioning //////////
+            Vds_noswap = V(di,si);
+            Vgs_noswap = V(gi,si);
+            Vgd_noswap = V(gi,di);
+            sigvds = 1.0;
+            if (Vds_noswap < 0.0) begin
+                sigvds = -1.0;
+                Vds = sigvds*Vds_noswap ;
+                Vgs = Vgd_noswap ;
+            end else begin
+                Vds = Vds_noswap ;
+                Vgs = Vgs_noswap ;
+            end
+            Vdsx = sqrt(Vds*Vds + 0.01) - 0.1;
+            Tdev = $temperature + Temp(rth);
+            Vth  = `KboQ * Tdev ;
+////////// Trap Models //////////
+            case (trapmod)
+                0:begin
+                    V(trap1) <+ 0.0;  V(trap2) <+ 0.0;
+                end
+                1:begin
+                    V(trap2) <+ Vds*Ids;
+                    I(trap2,trap1) <+ idio*(lexp(V(trap2,trap1)/10.0) - 1.0);
+                    I(trap1) <+ cdlag*ddt(V(trap1));
+                    I(trap1) <+ V(trap1)/rdlag;
+                    vcap = V(trap1);
+                    vcap = smoothminx(vcap,Vth,deltax);
+                    voff_cap = atrapvoff + btrapvoff*lexp(-1.0/vcap);
+                    rs_cap = atraprs + btraprs*lexp(-1.0/vcap);
+                    rd_cap = atraprd + btraprd*lexp(-1.0/vcap);
+                    eta0_cap = atrapeta0 + btrapeta0*lexp(-1.0/vcap);
+                end
+                2:begin
+                    vdgeff1 = lexp(a1*(-V(g,s)));
+                    I(trap1) <+ V(trap1)/rtrap1;
+                    I(trap1) <+ -1.0*vdgeff1;
+                    I(trap1) <+ ctrap1*ddt(V(trap1));
+                    I(trap2) <+ V(trap2)/rtrap2;
+                    I(trap2) <+ -1.0*V(d,s);
+                    I(trap2) <+ ctrap2*ddt(V(trap2));
+                    voff_trap = vofftr*V(trap2);
+                    ron_trap = -rontr1 * V(trap1)+rontr2 * V(trap2) + rontr3;
+                    cdscd_trap = cdscdtr*V(trap2);
+                    eta0_trap = eta0tr*V(trap2);
+                end
+                3:begin
+                    vdg = V(d,g);
+                    t1 = (vdlr1/(1.0 + vdg*wd))*vdg;
+                    t2 = vdlr2*(vdg - vtb);                                                   //vtb for break between two linear regions
+                    vdgeff = 0.5*(t1+t2 + sqrt((t1-t2)*(t1-t2) + 0.25*deltax*deltax));        //Max function for t1 or t2
+                    if (V(g) > voff) begin                                                    //Charge-Discharge Condition
+                        ct = ctrap3;
+                    end else begin
+                        ct = 1.0e-09;
+                    end
+                    I(trap1) <+ V(trap1)/rtrap3;
+                    I(trap1) <+ -1.0*vdgeff;
+                    I(trap1) <+ ct*ddt(V(trap1));
+                    Rtrap = V(trap1)/vatrap;
+                    Rtrap_t = Rtrap*pow((Tdev/Tnom),talpha);                                   //Temperature Dependence
+                    V(trap2) <+ 0.0;
+                end
+            endcase
+////////// End of Trap Models //////////
+
+////////// Calculation For Physical Quantities Required In SP Calculation //////////
+            cdsc = 1.0 + nfactor + (cdscd+cdscd_trap)*Vdsx; //Sub-threshold Slope
+            Vtv = `KboQ*Tdev*cdsc;
+            Voff_dibl = voff - (eta0 + eta0_trap - eta0_cap)*(Vdsx*vdscale)/sqrt(Vdsx*Vdsx + vdscale*vdscale);
+            Voff_dibl_temp = Voff_dibl - (Tdev/Tnom - 1.0)*kt1 + voff_trap + voff_cap;
+            Cg = epsilon/tbar;
+
+////////// VGMin and VG0 Calculation //////////
+            `VG0(l,w,Voff_dibl_temp,imin,Vgs,Vtv,Vg0)
+
+////////// Surface Potential Calculation Source Side //////////
+            `PSIS(Cg,Vg0,gamma0i,gamma1i,Vtv,  beta,ALPHAN,ALPHAD,Cch,psis)
+
+////////// Surface Potential Drain Side //////////
+            `PSID(Tdev,Tnom,epsilon,delta,beta,ALPHAN,ALPHAD,Vtv,Cch,u0,ute,vsat,at,Cg,psis,Vg0,ua,ub,l,Vds,gamma0i,gamma1i,   mulf_tdev,Vdeff,psid)
+            psim = 0.5*(psis + psid);
+            psisd = psid - psis ;
+            `IDS(Vg0,psim,psisd,Cg,l,Vdsx,w,nf,Vtv,mulf_tdev,Vdeff,   Ids)
+            I(di,si) <+ sigvds*Ids + gdsmin*V(di,si);
+
+////////// Terminal Charge Equations //////////
+            `QGI(Vg0,psis,psid,psim,Cg,l,qm0i,bdosi,adosi,tbar,Vtv,w,nf,   Cg_qme,qgint)
+            `QDI(Vg0,psim,psis,psid,psisd,l,Vtv,w,nf,Cg_qme,   qdint)
+            qsint = -1.0*qgint -1.0*qdint; //Source Charge
+            if(sigvds < 0.0) begin
+                t1 = qsint;
+                qsint = qdint;
+                qdint = t1;
+            end
+
+////////// Parasitic Charges //////////
+            qsov = cgso*V(g,s);
+            VdseffCV = V(d,s)*vdsatcv/sqrt(V(d,s)*V(d,s) + vdsatcv*vdsatcv);
+            cgdvar  = cgdo - cgdl*VdseffCV;
+            qdov = cgdvar*V(g,d);
+            qdsov = cdso*V(d,s);
+            qgp = qsov + qdov;
+            qdp = - qdov + qdsov;
+            qsp = - qsov - qdsov;
+            qd = qdint + qdp;
+            qs = qsint + qsp;
+            qbdov = cbdo * V(b,d);
+            qbsov = cbso * V(b,s);
+            qbgov = cbgo * V(b,g);
+
+////////// Gate Current Model //////////
+            if (gatemod == 1) begin
+                t0 = V(gi, si)/(njgs*`KboQ*Tdev);
+                t3 = igsdio + (Tdev/Tnom - 1.0)* ktgs;
+                Igs = w*l*nf*abs(t3)*(lexp(t0)-1.0);
+                t0 = V(gi, di)/(njgd*`KboQ*Tdev);
+                t3 = igddio + (Tdev/Tnom - 1.0)* ktgd;
+                Igd = w*l*nf*abs(t3)*(lexp(t0)-1.0);
+                I(gi, si) <+ Igs;
+                I(gi, di)  <+ Igd;
+            end
+
+////////// Access Region Non-linear Resistance Model //////////
+
+            if (rdsmod == 1) begin
+                ns0_t = ns0accs*(1.0 - kns0*(Tdev/Tnom-1.0));
+                ns0_t = hypmax(ns0_t, 1.0, 1.0e-3);
+                qsacc = `P_Q*ns0_t*(1.0 + k0accs*vgopacc);
+                vsataccs_t = vsataccs*pow((Tdev/Tnom),ats); //Vsat Temperature Dependence
+                isatacc = w*nf*qsacc*vsataccs_t;
+                u0accs_t = u0accs*pow((Tdev/Tnom),utes);    //Mobility Temperature Dependence
+                rs0 = lsg/(w*nf*qsacc*u0accs_t);
+                t0 = pow(abs(Ids/isatacc),mexpaccs);
+                t1 = 1.0 - t0;
+                t2 = pow(t1,1.0/mexpaccs);
+                rsbias = rs0/t2;
+                rsc_t = rsc*(1.0+krsc*(Tdev/Tnom-1.0));
+                Rsource = rsc_t/(w*nf) + rsbias + rs_cap;
+                ns0_t = ns0accd*(1.0 - kns0*(Tdev/Tnom-1.0));
+                ns0_t = hypmax(ns0_t, 1.0, 1.0e-3);
+                qsacc = `P_Q*ns0_t*(1.0 + k0accd*vgopacc);
+                isatacc = w*nf*qsacc*vsataccs_t;
+                u0accd_t = u0accd*pow((Tdev/Tnom),uted);    //Mobility Temperature Dependence
+                rd0 = ldg/(w*nf*qsacc*u0accd_t);
+                t0 = pow(abs(Ids/isatacc),mexpaccd);
+                t1 = 1.0 - t0;
+                t2 = pow(t1,1.0/mexpaccd);
+                rdbias = rd0/t2;
+                rdc_t = rdc*(1.0+krdc*(Tdev/Tnom-1.0));
+                Rdrain = rdc_t/(w*nf) + rdbias + Rtrap_t + ron_trap + rd_cap;
+                gdpr = 1.0 / Rdrain;
+                gspr = 1.0 / Rsource;
+                I(d, `IntrinsicDrain_fp4) <+ gdpr*V(d, `IntrinsicDrain_fp4);
+                I(si,s) <+ gspr*V(si,s);
+            end else begin
+                V(d, `IntrinsicDrain_fp4) <+ 0.0;
+                V(s,si) <+ 0.0;
+            end
+
+//////////  Noise Modeling  //////////
+
+////////// Flicker Noise Model //////////
+            if (fnmod==1) begin
+                Kr  =  l/((Vg0-psim+Vtv)*max(psisd,1.0e-12));
+                Pf  =  Vtv*`P_Q*`P_Q*`P_Q/(w*nf*l*l);
+                FNint1  = noia*Vtv*Cg*(1.0/(max(qd,1.0e-22)))*(1.0-(qd/(max(qs,1.0e-22))));
+                FNint2  = (noia+noib*Vtv*Cg)*ln(max(qd,1.0e-22)/max(qs,1.0e-22));
+                FNint3  = (noib+noic*Vtv*Cg)*(qs-qd);
+                FNint4  = (noic/2.0)*(qd*qd-qs*qs);
+                FNat1Hz = Pf*(Ids*Ids)*(Kr/(Cg*Cg))*(FNint1+FNint2+FNint3+FNint4); //PSD of the flicker noise without the frequency component
+                I(di,si) <+ flicker_noise(FNat1Hz, ef, "flicker");
+            end
+
+////////// Thermal Noise Model //////////
+            if (tnmod==1) begin
+                ThSid = (tnsc/(max(Ids,1e-10)*l*l))*(4.0*`KboQ*`P_Q*Tdev*`P_Q*w*nf*Cg*`P_Q*w*nf*Cg)*((mu_eff/vf)*(mu_eff/vf))*(Vg0*Vg0*psisd+((psid*psid*psid-psis*psis*psis)/3)-Vg0*(psid*psid-psis*psis)); //Channel Thermal Noise PSD
+                I(di, si) <+ white_noise(ThSid, "thermal");
+                if (rdsmod==1) begin
+                    I(d, `IntrinsicDrain_fp4) <+ white_noise(4.0 * Vth * `P_Q * gdpr, "thermal");
+                    I(s, si) <+ white_noise(4.0 * Vth * `P_Q * gspr, "thermal");
+                end
+            end
+////////// Shot Noise Model ///////////
+            if (gatemod == 1) begin
+                I(gi, si) <+ white_noise(2.0 * `P_Q * abs(Igs), "shot");
+                I(gi, di) <+ white_noise(2.0 * `P_Q * abs(Igd), "shot");
+            end
+////////// FP1 Current Model //////////
+            `ifdef __FP1MOD__
+                if(fp1mod != 0) begin
+                    Vds_noswapfp1 = V(fp1,di);
+                    if (fp1mod == 1) begin
+                        Vgs_noswapfp1 = V(gi,di);
+                        Vgd_noswapfp1 = V(gi,fp1);
+                    end else begin 
+                        Vgs_noswapfp1 = V(s,di);
+                        Vgd_noswapfp1 = V(s,fp1);
+                    end
+                    sigvdsfp1 = 1.0;
+                    if (Vds_noswapfp1 < 0.0) begin
+                        sigvdsfp1 = -1.0;
+                        Vds_fp1 = sigvdsfp1*Vds_noswapfp1 ;
+                        Vgs_fp1 = Vgd_noswapfp1 ;
+                    end else begin
+                        Vds_fp1 = Vds_noswapfp1 ;
+                        Vgs_fp1 = Vgs_noswapfp1 ;
+                    end
+                    
+                    Vdsx_fp1 = sqrt(Vds_fp1*Vds_fp1 + 0.01) - 0.1;
+                    cdsc = 1.0 + nfactorfp1 + cdscdfp1*Vdsx_fp1; //Sub-threshold Slope
+                    Vtv = `KboQ*Tdev*cdsc;
+                    Voff_dibl_temp = vofffp1 + (Tdev/Tnom - 1.0)*ktfp1 - (eta0fp1)*(Vdsx_fp1*vdscalefp1)/sqrt(Vdsx_fp1*Vdsx_fp1 + vdscalefp1*vdscalefp1);
+                    Cg_fp1 = epsilon/dfp1;
+                    `VG0(lfp1,w,Voff_dibl_temp,iminfp1,Vgs_fp1,Vtv,Vg0_fp1)
+                    `PSIS(Cg_fp1,Vg0_fp1,gamma0fp1,gamma1fp1,Vtv,   beta,ALPHAN,ALPHAD,Cch,psis_fp1)
+                    `PSID(Tdev,Tnom,epsilon,delta,beta,ALPHAN,ALPHAD,Vtv,Cch,u0fp1,ute,vsatfp1,at,Cg_fp1,psis_fp1,Vg0_fp1,ua,ub,lfp1,Vds_fp1,gamma0fp1,gamma1fp1,   mulf_tdev,Vdeff,psid_fp1)
+                    psim_fp1 = 0.5*(psis_fp1 + psid_fp1);
+                    psisd_fp1 = psid_fp1 - psis_fp1;
+                    `IDS(Vg0_fp1,psim_fp1,psisd_fp1,Cg_fp1,lfp1,Vdsx_fp1,w,nf,Vtv,mulf_tdev,Vdeff,   Ids_fp1)
+                    I(fp1,di) <+ sigvdsfp1*Ids_fp1 + gdsmin*V(fp1,di);
+                end else begin
+                    V(fp1,di) <+ 0.0;
+                end
+
+////////// FP1 Charge //////////
+                if(fp1mod != 0) begin
+                    `QGI(Vg0_fp1,psis_fp1,psid_fp1,psim_fp1,Cg_fp1,lfp1,qm0fp1,bdosfp1,adosfp1,dfp1,Vtv,w,nf,   Cg_qme,qg_fp1)
+                    `QDI(Vg0_fp1,psim_fp1,psis_fp1,psid_fp1,psisd_fp1,lfp1,Vtv,w,nf,Cg_qme,   qd_fp1)
+                end else begin
+                    qg_fp1 = 0;
+                    qd_fp1 = 0;
+                end
+                qs_fp1 = -1.0*qg_fp1 -1.0*qd_fp1;
+                if(sigvdsfp1 < 0.0) begin
+                    t1 = qs_fp1;
+                    qs_fp1 = qd_fp1;
+                    qd_fp1 = t1;
+                end
+            `endif
+
+////////// FP2 Current Model //////////
+            `ifdef __FP2MOD__
+                if(fp2mod != 0) begin
+                    Vds_noswapfp2 = V(fp2,`IntrinsicDrain_fp1);
+                    if (fp2mod == 1) begin
+                        Vgs_noswapfp2 = V(gi,`IntrinsicDrain_fp1);
+                        Vgd_noswapfp2 = V(gi,fp2);
+                    end else begin 
+                        Vgs_noswapfp2 = V(s,`IntrinsicDrain_fp1);
+                        Vgd_noswapfp2 = V(s,fp2);
+                    end
+                    sigvdsfp2 = 1.0;
+                    if (Vds_noswapfp2 < 0.0) begin
+                        sigvdsfp2 = -1.0;
+                        Vds_fp2 = sigvdsfp2*Vds_noswapfp2 ;
+                        Vgs_fp2 = Vgd_noswapfp2 ;
+                    end else begin
+                        Vds_fp2 = Vds_noswapfp2 ;
+                        Vgs_fp2 = Vgs_noswapfp2 ;
+                    end
+                    
+                    Vdsx_fp2 = sqrt(Vds_fp2*Vds_fp2 + 0.01) - 0.1;
+                    cdsc = 1.0 + nfactorfp2 + cdscdfp2*Vdsx_fp2; //Sub-threshold Slope
+                    Vtv = `KboQ*Tdev*cdsc;
+                    Voff_dibl_temp = vofffp2 - (Tdev/Tnom - 1.0)*ktfp2 - (eta0fp2)*(Vdsx_fp2*vdscalefp2)/sqrt(Vdsx_fp2*Vdsx_fp2 + vdscalefp2*vdscalefp2);
+                    Cg_fp2 = epsilon/(dfp2);
+                    `VG0(lfp2,w,Voff_dibl_temp,iminfp2,Vgs_fp2,Vtv,Vg0_fp2)
+                    `PSIS(Cg_fp2,Vg0_fp2,gamma0fp2,gamma1fp2,Vtv,   beta,ALPHAN,ALPHAD,Cch,psis_fp2)
+                    `PSID(Tdev,Tnom,epsilon,delta,beta,ALPHAN,ALPHAD,Vtv,Cch,u0fp2,ute,vsatfp2,at,Cg_fp2,psis_fp2,Vg0_fp2,ua,ub,lfp2,Vds_fp2,gamma0fp2,gamma1fp2,   mulf_tdev,Vdeff,psid_fp2)
+                    psim_fp2 = 0.5*(psis_fp2 + psid_fp2);
+                    psisd_fp2 = psid_fp2 - psis_fp2 ;
+                    `IDS(Vg0_fp2,psim_fp2,psisd_fp2,Cg_fp2,lfp2,Vdsx_fp2,w,nf,Vtv,mulf_tdev,Vdeff,   Ids_fp2)
+                    I(fp2,`IntrinsicDrain_fp1) <+ sigvdsfp2*Ids_fp2 + gdsmin*V(fp2,`IntrinsicDrain_fp1);
+                end else begin
+                    V(fp2,`IntrinsicDrain_fp1) <+ 0.0;
+                end
+////////// FP2 Charge Model //////////
+                if(fp2mod != 0) begin
+                    `QGI(Vg0_fp2,psis_fp2,psid_fp2,psim_fp2,Cg_fp2,lfp2,qm0fp2,bdosfp2,adosfp2,dfp2,Vtv,w,nf,   Cg_qme,qg_fp2)
+                    `QDI(Vg0_fp2,psim_fp2,psis_fp2,psid_fp2,psisd_fp2,lfp2,Vtv,w,nf,Cg_qme,   qd_fp2)
+                end else begin
+                    qg_fp2 = 0;
+                    qd_fp2 = 0;
+                end
+                qs_fp2 = -1.0*qg_fp2 -1.0*qd_fp2;
+                if(sigvdsfp2 < 0.0) begin
+                    t1 = qs_fp2;
+                    qs_fp2 = qd_fp2;
+                    qd_fp2 = t1;
+                end
+            `endif
+
+////////// FP3 Current Model //////////
+            `ifdef __FP3MOD__
+                if(fp3mod != 0) begin
+                    Vds_noswapfp3 = V(fp3,`IntrinsicDrain_fp2);
+                    if (fp3mod == 1) begin
+                        Vgs_noswapfp3 = V(gi,`IntrinsicDrain_fp2);
+                        Vgd_noswapfp3 = V(gi,fp3);
+                    end else begin 
+                        Vgs_noswapfp3 = V(s,`IntrinsicDrain_fp2);
+                        Vgd_noswapfp3 = V(s,fp3);
+                    end
+                    sigvdsfp3 = 1.0;
+                    if (Vds_noswapfp3 < 0.0) begin
+                        sigvdsfp3 = -1.0;
+                        Vds_fp3 = sigvdsfp3*Vds_noswapfp3 ;
+                        Vgs_fp3 = Vgd_noswapfp3 ;
+                    end else begin
+                        Vds_fp3 = Vds_noswapfp3 ;
+                        Vgs_fp3 = Vgs_noswapfp3 ;
+                    end
+
+                    Vdsx_fp3 = sqrt(Vds_fp3*Vds_fp3 + 0.01) - 0.1;
+                    cdsc = 1.0 + nfactorfp3 + cdscdfp3*Vdsx_fp3; //Sub-threshold Slope
+                    Vtv = `KboQ*Tdev*cdsc;
+                    Voff_dibl_temp = vofffp3 - (Tdev/Tnom - 1.0)*ktfp3 - (eta0fp3)*(Vdsx_fp3*vdscalefp3)/sqrt(Vdsx_fp3*Vdsx_fp3 + vdscalefp3*vdscalefp3);
+                    Cg_fp3 = epsilon/(dfp3);
+                    `VG0(lfp3,w,Voff_dibl_temp,iminfp3,Vgs_fp3,Vtv,Vg0_fp3)
+                    `PSIS(Cg_fp3,Vg0_fp3,gamma0fp3,gamma1fp3,Vtv,   beta,ALPHAN,ALPHAD,Cch,psis_fp3)
+                    `PSID(Tdev,Tnom,epsilon,delta,beta,ALPHAN,ALPHAD,Vtv,Cch,u0fp3,ute,vsatfp3,at,Cg_fp3,psis_fp3,Vg0_fp3,ua,ub,lfp3,Vds_fp3,gamma0fp3,gamma1fp3,    mulf_tdev,Vdeff,psid_fp3)
+                    psim_fp3 = 0.5*(psis_fp3 + psid_fp3);
+                    psisd_fp3 = psid_fp3 - psis_fp3 ;
+                    `IDS(Vg0_fp3,psim_fp3,psisd_fp3,Cg_fp3,lfp3,Vdsx_fp3,w,nf,Vtv,mulf_tdev,Vdeff,   Ids_fp3)
+                    I(fp3,`IntrinsicDrain_fp2) <+ sigvdsfp3*Ids_fp3 + gdsmin*V(fp3,`IntrinsicDrain_fp2);
+                end else begin
+                    V(fp3,`IntrinsicDrain_fp2) <+ 0.0;
+                end
+
+////////// FP3 Charge Model //////////
+                if(fp3mod != 0) begin
+                    `QGI(Vg0_fp3,psis_fp3,psid_fp3,psim_fp3,Cg_fp3,lfp3,qm0fp3,bdosfp3,adosfp3,dfp3,Vtv,w,nf,   Cg_qme,qg_fp3)
+                    `QDI(Vg0_fp3,psim_fp3,psis_fp3,psid_fp3,psisd_fp3,lfp3,Vtv,w,nf,Cg_qme,   qd_fp3)
+                end else begin
+                    qg_fp3 = 0;
+                    qd_fp3 = 0;
+                end
+                qs_fp3 = -1.0*qg_fp3 -1.0*qd_fp3;
+                if(sigvdsfp3 < 0.0) begin
+                    t1 = qs_fp3;
+                    qs_fp3 = qd_fp3;
+                    qd_fp3 = t1;
+                end
+            `endif
+
+////////// FP4 Current Model //////////
+            `ifdef __FP4MOD__
+                if(fp4mod != 0) begin
+                    Vds_noswapfp4 = V(fp4,`IntrinsicDrain_fp3);
+                    if (fp4mod == 1) begin
+                        Vgs_noswapfp4 = V(gi,`IntrinsicDrain_fp3);
+                        Vgd_noswapfp4 = V(gi,fp4);
+                    end else begin 
+                        Vgs_noswapfp4 = V(s,`IntrinsicDrain_fp3);
+                        Vgd_noswapfp4 = V(s,fp4);
+                    end
+                    sigvdsfp4 = 1.0;
+                    if (Vds_noswapfp4 < 0.0) begin
+                        sigvdsfp4 = -1.0;
+                        Vds_fp4 = sigvdsfp4*Vds_noswapfp4 ;
+                        Vgs_fp4 = Vgd_noswapfp4 ;
+                    end else begin
+                        Vds_fp4 = Vds_noswapfp4 ;
+                        Vgs_fp4 = Vgs_noswapfp4 ;
+                    end
+                    
+                    Vdsx_fp4 = sqrt(Vds_fp4*Vds_fp4 + 0.01) - 0.1;
+                    cdsc = 1.0 + nfactorfp4 + cdscdfp4*Vdsx_fp4; //Sub-threshold Slope
+                    Vtv = `KboQ*Tdev*cdsc;
+                    Voff_dibl_temp = vofffp4 - (Tdev/Tnom - 1.0)*ktfp4 - (eta0fp4)*(Vdsx_fp4*vdscalefp4)/sqrt(Vdsx_fp4*Vdsx_fp4 + vdscalefp4*vdscalefp4);
+                    Cg_fp4 = epsilon/(dfp4);
+                    `VG0(lfp4,w,Voff_dibl_temp,iminfp4,Vgs_fp4,Vtv,Vg0_fp4)
+                    `PSIS(Cg_fp4,Vg0_fp4,gamma0fp4,gamma1fp4,Vtv,   beta,ALPHAN,ALPHAD,Cch,psis_fp4)
+                    `PSID(Tdev,Tnom,epsilon,delta,beta,ALPHAN,ALPHAD,Vtv,Cch,u0fp4,ute,vsatfp4,at,Cg_fp4,psis_fp4,Vg0_fp4,ua,ub,lfp4,Vds_fp4,gamma0fp4,gamma1fp4,   mulf_tdev,Vdeff,psid_fp4)
+                    psim_fp4 = 0.5*(psis_fp4 + psid_fp4);
+                    psisd_fp4 = psid_fp4 - psis_fp4;
+                    `IDS(Vg0_fp4,psim_fp4,psisd_fp4,Cg_fp4,lfp4,Vdsx_fp4,w,nf,Vtv,mulf_tdev,Vdeff,  Ids_fp4)
+                    I(fp4,`IntrinsicDrain_fp3) <+ sigvdsfp4*Ids_fp4 + gdsmin*V(fp4,`IntrinsicDrain_fp3);
+                end else begin
+                    V(fp4,`IntrinsicDrain_fp3) <+ 0.0;
+                end
+
+////////// FP4 Charge Model //////////
+                if(fp4mod != 0) begin
+                    `QGI(Vg0_fp4,psis_fp4,psid_fp4,psim_fp4,Cg_fp4,lfp4,qm0fp4,bdosfp4,adosfp4,dfp4,Vtv,w,nf,   Cg_qme,qg_fp4)
+                    `QDI(Vg0_fp4,psim_fp4,psis_fp4,psid_fp4,psisd_fp4,lfp4,Vtv,w,nf,Cg_qme,   qd_fp4)
+                end else begin
+                    qg_fp4 = 0;
+                    qd_fp4 = 0;
+                end
+                qs_fp4 = -1.0*qg_fp4 -1.0*qd_fp4;
+                if(sigvdsfp4 < 0.0) begin
+                    t1 = qs_fp4;
+                    qs_fp4 = qd_fp4;
+                    qd_fp4 = t1;
+                end
+            `endif
+
+////////// Gate Resistance //////////
+            if (rgatemod!=0) begin
+                Grgeltd = rshg * (xgw + w / 3.0 / ngcon)/ ( ngcon * nf * (l));
+                if (Grgeltd > 0.0) begin
+                    Grgeltd = 1.0 / Grgeltd;
+                end else begin
+                    Grgeltd = 1.0e3;
+                end
+                I(g,gi) <+ Grgeltd * V(g,gi);
+            end else begin
+                V(g,gi) <+ 0.0;
+            end
+
+////////// Capacitance Contributions //////////
+            I(di,si) <+ ddt(qdint);
+            I(gi, si) <+ ddt(qgint);
+            I(g,s) <+ ddt(qsov);
+            I(g,d) <+ ddt(qdov);
+            I(d,s) <+ ddt(qdsov);
+            I(b,d) <+ ddt (qbdov);
+            I(b,s) <+ ddt (qbsov);
+            I(b,g) <+ ddt (qbgov);
+            I(b,si) <+ ddt(csubscalei*qgint);
+            `ifdef __FP1MOD__
+                if (fp1mod!=0) begin
+                    I(fp1,di) <+ddt(qd_fp1);
+                    if (fp1mod == 1) begin
+                        I(gi, di) <+ ddt(qg_fp1) ;
+                        I(s,di) <+ ddt(qg_fp1)*cfp1scale ;
+                    end else begin
+                        I(s,di) <+ ddt(qg_fp1) ;
+                        I(gi, di) <+ ddt(qg_fp1)*cfp1scale ;
+                    end
+                    I(b,di) <+ ddt(csubscale1*qg_fp1);
+                end
+            `endif
+            `ifdef __FP2MOD__
+                if (fp2mod!=0) begin
+                    I(fp2, `IntrinsicDrain_fp1) <+ddt(qd_fp2);
+                    if (fp2mod == 1) begin
+                        I(gi,`IntrinsicDrain_fp1)<+ ddt(qg_fp2);
+                        I(s,`IntrinsicDrain_fp1)<+ cfp2scale*ddt(qg_fp2) ;
+                    end else begin
+                        I(s,`IntrinsicDrain_fp1)<+ ddt(qg_fp2);
+                        I(gi,`IntrinsicDrain_fp1) <+  cfp2scale*ddt(qg_fp2) ;
+                    end
+                    I(b,fp1) <+ ddt(csubscale2*qg_fp2);
+                end
+            `endif
+            `ifdef __FP3MOD__
+                if (fp3mod!=0) begin
+                    I(fp3, `IntrinsicDrain_fp2) <+ddt(qd_fp3);
+                    if (fp3mod == 1) begin
+                        I(gi,`IntrinsicDrain_fp2)<+ ddt(qg_fp3);
+                        I(s,`IntrinsicDrain_fp2)<+ ddt(qg_fp3)*cfp3scale;
+                    end else begin
+                        I(s,`IntrinsicDrain_fp2)<+ ddt(qg_fp3);
+                        I(gi,`IntrinsicDrain_fp2)<+ ddt(qg_fp3)*cfp3scale;
+                    end
+                    I(b,fp2) <+ ddt(csubscale3*qg_fp3);
+                end
+            `endif
+            `ifdef __FP4MOD__
+                if (fp4mod!=0) begin
+                    I(fp4, `IntrinsicDrain_fp3) <+ddt(qd_fp4);
+                    if (fp4mod == 1) begin
+                        I(gi,`IntrinsicDrain_fp3)<+ ddt(qg_fp4);
+                        I(s,`IntrinsicDrain_fp3)<+ ddt(qg_fp4)*cfp4scale;
+                    end else begin
+                        I(s,`IntrinsicDrain_fp3)<+ ddt(qg_fp4);
+                        I(gi,`IntrinsicDrain_fp3)<+ ddt(qg_fp4)*cfp4scale;
+                    end
+                    I(b,fp3) <+ ddt(csubscale4*qg_fp4);
+                end
+            `endif
+
+////////// Fringe Capacitance For Additional Tuning //////////
+            qfr = cfgd0 - (cfgd + (Tdev/Tnom - 1.0)* ktcfgd) * V(d,s);
+            qfr = hypmax(qfr,1.0e-25,cfgdsm);
+            I(g,d) <+ddt(qfr); //
+            I(g,s) <+ ddt(cfgd*V(g,s)); //
+            qfr2 = (cfg-((Tdev/Tnom - 1.0)*ktcfg))*V(gi, s);
+            I(gi, s) <+ ddt(qfr2); //
+            qfr3 = cfd*V(s,d);
+            I(s,d) <+ ddt(qfr3); //
+
+////////// Depletion Capacitance Model //////////
+            t0 = (vbi - (Tdev/Tnom - 1.0)*ktvbi)*(1.0-lexp(-ln(aj)/mz));
+            t1 = (t0-V(s,d))/Vth;
+            t2 = sqrt(dj*t1*t1+ 1.92);
+            t3 = (t1+t2)*0.5;
+            t4 = t0-Vth*t3;
+            t5 = t3/t2;
+            t6 = ln(1.0-t4/vbi);
+            t8 = cj0*(vbi - (Tdev/Tnom - 1.0)*ktvbi)*(1.0-lexp(t6*(1.0-mz)))/(1.0-mz);
+            Qdep = t8+aj*cj0*(V(s,d)-t4);
+            I(s,d) <+ ddt(Qdep);  //
+
+////////// Self-Heating Effect //////////
+            if (shmod == 1 && rth0>0) begin
+                Pwr(ith) <+ -1.0*Ids*Vds-1.0*Ids_fp1*Vds_fp1-1.0*Ids_fp2*Vds_fp2-1.0*Ids_fp3*Vds_fp3-1.0*Ids_fp4*Vds_fp4;
+                Pwr(rth) <+ Temp(rth)/rth0;
+                Pwr(rth) <+ ddt(Temp(rth)*cth0);
+            end else begin
+                Temp(dt) <+ 0.0 ;
+            end
+/////////  Output info variables
+            idisi = I(di,si);
+            vdisi = V(di,si);
+            vgisi = V(gi,si);
+            gmi   = sigvds * ddx(Ids,V(gi));
+            gmbi  = sigvds * ddx(Ids,V(b));
+            gdsi  = sigvds * ddx(Ids,V(di));
+            igs   = Igs;
+            igd   = Igd;
+            qgi   = qgint;
+            qdi   = qdint;
+            qsi   = qsint;
+            qbi   = csubscalei*qgint;
+            cggi  = ddx(qgi,V(gi));
+            cgsi  = -ddx(qgi,V(si));
+            cgdi  = -ddx(qgi,V(di));
+            cgbi  = -ddx(qgi,V(b));
+            cddi  = ddx(qdi,V(di));
+            cdgi  = -ddx(qdi,V(gi));
+            cdsi  = -ddx(qdi,V(si));
+            cdbi  = -ddx(qdi,V(b));
+            cssi  = ddx(qsi,V(si));
+            csgi  = -ddx(qsi,V(gi));
+            csdi  = -ddx(qsi,V(di));
+            csbi  = -ddx(qsi,V(b));
+            cbbi  = ddx(qbi,V(b));
+            cbgi  = -ddx(qbi,V(gi));
+            cbdi  = -ddx(qbi,V(di));
+            cbsi  = -ddx(qbi,V(si));
+            t_total_k  = Tdev;
+            t_total_c  = Tdev - `P_CELSIUS0;
+            t_delta_sh = Temp(dt);
+            rd         = Rdrain;
+            rs         = Rsource;
+            cgs        = -ddx(qgint+qsov,V(s));
+            cgd        = -ddx(qgint+qdov,V(d));
+        end
+    end
+endmodule

@@ -1,8 +1,9 @@
 use std::ffi::CString;
+use std::mem::MaybeUninit;
 
-use lasso::RodeoResolver;
+use lasso::Rodeo;
 use llvm::support::LLVMString;
-use llvm::CodeGenOptLevel;
+pub use llvm::CodeGenOptLevel;
 use target::spec::Target;
 
 mod builder;
@@ -11,7 +12,12 @@ mod declarations;
 mod intrinsics;
 mod types;
 
+mod callbacks;
+#[cfg(test)]
+mod tests;
+
 pub use builder::Builder;
+pub use callbacks::CallbackFun;
 pub use context::CodegenCx;
 
 pub struct LLVMBackend<'t> {
@@ -32,6 +38,7 @@ impl<'t> LLVMBackend<'t> {
     }
 
     /// # Safety
+    ///
     /// This function calls the LLVM-C Api which may not be entirely safe.
     /// Exercise caution!
     pub unsafe fn new_module(&self, name: &str) -> Result<ModuleLlvm, LLVMString> {
@@ -39,11 +46,12 @@ impl<'t> LLVMBackend<'t> {
     }
 
     /// # Safety
+    ///
     /// This function calls the LLVM-C Api which may not be entirely safe.
     /// Exercise caution!
     pub unsafe fn new_ctx<'a, 'll>(
         &'a self,
-        literals: &'a RodeoResolver,
+        literals: &'a mut Rodeo,
         module: &'ll ModuleLlvm,
     ) -> CodegenCx<'a, 'll> {
         CodegenCx::new(literals, module, self.target)
@@ -88,6 +96,37 @@ impl ModuleLlvm {
 
     pub fn llmod(&self) -> &llvm::Module {
         unsafe { &*self.llmod_raw }
+    }
+
+    /// Verifies this module and prints out  any errors
+    ///
+    /// # Returns
+    /// Whether this module is valid (ture if valid)
+    pub fn verify_and_print(&self) -> bool {
+        unsafe {
+            llvm::LLVMVerifyModule(self.llmod(), llvm::VerifierFailureAction::PrintMessage, None)
+                == llvm::False
+        }
+    }
+
+    /// Verifies this module and prints out an error for any errors
+    ///
+    /// # Returns
+    /// An error messages in case the module invalid
+    pub fn verify(&self) -> Option<LLVMString> {
+        unsafe {
+            let mut res = MaybeUninit::uninit();
+            if llvm::LLVMVerifyModule(
+                self.llmod(),
+                llvm::VerifierFailureAction::ReturnStatus,
+                Some(&mut res),
+            ) == llvm::True
+            {
+                Some(res.assume_init())
+            } else {
+                None
+            }
+        }
     }
 }
 

@@ -203,6 +203,9 @@ impl ParamDecl {
     pub fn parameter_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, T![parameter])
     }
+    pub fn localparam_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, T![localparam])
+    }
     pub fn ty(&self) -> Option<Type> { support::child(&self.syntax) }
     pub fn paras(&self) -> AstChildren<Param> { support::children(&self.syntax) }
     pub fn semicolon_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![;]) }
@@ -441,6 +444,20 @@ impl BranchDecl {
     pub fn semicolon_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![;]) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AliasParam {
+    pub(crate) syntax: SyntaxNode,
+}
+impl ast::AttrsOwner for AliasParam {}
+impl AliasParam {
+    pub fn aliasparam_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, T![aliasparam])
+    }
+    pub fn name(&self) -> Option<Name> { support::child(&self.syntax) }
+    pub fn eq_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![=]) }
+    pub fn src(&self) -> Option<ParamRef> { support::child(&self.syntax) }
+    pub fn semicolon_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![;]) }
+}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModulePort {
     pub(crate) syntax: SyntaxNode,
 }
@@ -570,11 +587,17 @@ pub enum ModuleItem {
     BranchDecl(BranchDecl),
     VarDecl(VarDecl),
     ParamDecl(ParamDecl),
+    AliasParam(AliasParam),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ModulePortKind {
     PortDecl(PortDecl),
     Name(Name),
+}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ParamRef {
+    Path(Path),
+    SysFun(SysFun),
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FunctionItem {
@@ -1057,6 +1080,17 @@ impl AstNode for BranchDecl {
     }
     fn syntax(&self) -> &SyntaxNode { &self.syntax }
 }
+impl AstNode for AliasParam {
+    fn can_cast(kind: SyntaxKind) -> bool { kind == ALIAS_PARAM }
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        if Self::can_cast(syntax.kind()) {
+            Some(Self { syntax })
+        } else {
+            None
+        }
+    }
+    fn syntax(&self) -> &SyntaxNode { &self.syntax }
+}
 impl AstNode for ModulePort {
     fn can_cast(kind: SyntaxKind) -> bool { kind == MODULE_PORT }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
@@ -1386,11 +1420,14 @@ impl From<VarDecl> for ModuleItem {
 impl From<ParamDecl> for ModuleItem {
     fn from(node: ParamDecl) -> ModuleItem { ModuleItem::ParamDecl(node) }
 }
+impl From<AliasParam> for ModuleItem {
+    fn from(node: AliasParam) -> ModuleItem { ModuleItem::AliasParam(node) }
+}
 impl AstNode for ModuleItem {
     fn can_cast(kind: SyntaxKind) -> bool {
         match kind {
             BODY_PORT_DECL | NET_DECL | ANALOG_BEHAVIOUR | FUNCTION | BRANCH_DECL | VAR_DECL
-            | PARAM_DECL => true,
+            | PARAM_DECL | ALIAS_PARAM => true,
             _ => false,
         }
     }
@@ -1403,6 +1440,7 @@ impl AstNode for ModuleItem {
             BRANCH_DECL => ModuleItem::BranchDecl(BranchDecl { syntax }),
             VAR_DECL => ModuleItem::VarDecl(VarDecl { syntax }),
             PARAM_DECL => ModuleItem::ParamDecl(ParamDecl { syntax }),
+            ALIAS_PARAM => ModuleItem::AliasParam(AliasParam { syntax }),
             _ => return None,
         };
         Some(res)
@@ -1416,6 +1454,7 @@ impl AstNode for ModuleItem {
             ModuleItem::BranchDecl(it) => &it.syntax,
             ModuleItem::VarDecl(it) => &it.syntax,
             ModuleItem::ParamDecl(it) => &it.syntax,
+            ModuleItem::AliasParam(it) => &it.syntax,
         }
     }
 }
@@ -1444,6 +1483,34 @@ impl AstNode for ModulePortKind {
         match self {
             ModulePortKind::PortDecl(it) => &it.syntax,
             ModulePortKind::Name(it) => &it.syntax,
+        }
+    }
+}
+impl From<Path> for ParamRef {
+    fn from(node: Path) -> ParamRef { ParamRef::Path(node) }
+}
+impl From<SysFun> for ParamRef {
+    fn from(node: SysFun) -> ParamRef { ParamRef::SysFun(node) }
+}
+impl AstNode for ParamRef {
+    fn can_cast(kind: SyntaxKind) -> bool {
+        match kind {
+            PATH | SYS_FUN => true,
+            _ => false,
+        }
+    }
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        let res = match syntax.kind() {
+            PATH => ParamRef::Path(Path { syntax }),
+            SYS_FUN => ParamRef::SysFun(SysFun { syntax }),
+            _ => return None,
+        };
+        Some(res)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            ParamRef::Path(it) => &it.syntax,
+            ParamRef::SysFun(it) => &it.syntax,
         }
     }
 }
@@ -1515,6 +1582,11 @@ impl std::fmt::Display for ModuleItem {
     }
 }
 impl std::fmt::Display for ModulePortKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.syntax(), f)
+    }
+}
+impl std::fmt::Display for ParamRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }
@@ -1735,6 +1807,11 @@ impl std::fmt::Display for Function {
     }
 }
 impl std::fmt::Display for BranchDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.syntax(), f)
+    }
+}
+impl std::fmt::Display for AliasParam {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }

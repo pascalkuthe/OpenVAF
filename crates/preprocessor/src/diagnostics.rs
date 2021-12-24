@@ -1,17 +1,7 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
 use std::io;
 
 use stdx::impl_display;
-use vfs::VfsPath;
+use vfs::{InvalidTextFormatErr, VfsPath};
 
 use crate::sourcemap::CtxSpan;
 
@@ -20,9 +10,8 @@ pub enum PreprocessorDiagnostic {
     MacroArgumentCountMissmatch { expected: usize, found: usize, span: CtxSpan },
     MacroNotFound { name: String, span: CtxSpan },
     MacroRecursion { name: String, span: CtxSpan },
-    IoError { file: VfsPath, error: io::ErrorKind, span: Option<CtxSpan> },
-    FileNotFound { span: Option<CtxSpan>, file: String },
-    InvalidTextFormat { span: Option<CtxSpan>, file: VfsPath },
+    FileNotFound { file: VfsPath, error: io::ErrorKind, span: Option<CtxSpan> },
+    InvalidTextFormat { span: Option<CtxSpan>, file: VfsPath, err: InvalidTextFormatErr },
     UnexpectedEof { expected: &'static str, span: CtxSpan },
     MissingOrUnexpectedToken { expected: &'static str, expected_at: CtxSpan, span: CtxSpan },
     UnexpectedToken(CtxSpan),
@@ -35,8 +24,7 @@ impl_display! {
         MacroArgumentCountMissmatch { expected, found, ..} => "argument mismatch expected {} but found {}!", expected, found;
         MacroNotFound{name,..} =>  "macro '`{}' has not been declared", name;
         MacroRecursion { name,..} => "macro '`{}' was called recursively",name;
-        IoError { file, error, .. } => "failed to read '{}': {}", file, std::io::Error::from(*error);
-        FileNotFound {  file, ..} => "failed to read '{}': file not found", file;
+        FileNotFound { file, error, .. } => "failed to read '{}': {}", file, std::io::Error::from(*error);
         InvalidTextFormat {  file, ..} => "failed to read {}: file contents are not valid text", file;
         UnexpectedEof { expected ,..} => "unexpected EOF, expected {}",expected;
         MissingOrUnexpectedToken { expected, ..} => "unexpected token, expected '{}'", expected;

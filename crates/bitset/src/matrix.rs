@@ -73,7 +73,7 @@ impl<
         BitMatrix {
             num_rows,
             num_columns,
-            words: iter::repeat(row.words()).take(num_rows).flatten().cloned().collect(),
+            words: iter::repeat(row.words()).take(num_rows).flatten().copied().collect(),
             marker: PhantomData,
         }
     }
@@ -383,7 +383,7 @@ where
     /// the matrix.
     #[inline]
     pub fn iter(&self, row: R) -> impl Iterator<Item = C> + '_ {
-        self.row(row).into_iter().flat_map(|r| r.iter())
+        self.row(row).into_iter().flat_map(HybridBitSet::iter)
     }
 
     pub fn row(&self, row: R) -> Option<&HybridBitSet<C>> {

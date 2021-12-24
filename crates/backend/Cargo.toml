@@ -1,0 +1,49 @@
+[package]
+name = "backend"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+
+[dependencies]
+
+stdx = { version = "0.0.0", path = "../stdx" }
+
+syntax = {version = "0.0.0", path = "../syntax"}
+basedb = { version = "0.0.0", path = "../basedb" }
+hir_def = { version = "0.0.0", path = "../hir_def" }
+hir_lower = {version ="0.0.0", path ="../hir_lower"}
+hir_ty = { version = "0.0.0", path = "../hir_ty" }
+
+cfg = { version = "0.0.0", path = "../cfg" }
+codegen_llvm = { version = "0.0.0", path = "../codegen_llvm" }
+llvm = { version = "0.0.0", path = "../llvm" }
+cfg_opt = { version = "0.0.0", path = "../cfg_opt" }
+auto_diff = { version = "0.0.0", path = "../auto_diff" }
+const_eval = { version = "0.0.0", path = "../const_eval" }
+target = { version = "0.0.0", path = "../target" }
+typed_indexmap = {version = "0.0.0", path = "../typed_indexmap"}
+bitset = {version = "0.0.0", path = "../bitset"}
+
+typed-index-collections = "3.0"
+ahash = "0.7"
+arrayvec = "0.7"
+
+[dev-dependencies]
+
+
+sourcegen = {version ="0.0.0", path ="../sourcegen"}
+proc-macro2 = "1.0"
+quote = "1.0"
+
+salsa = "0.17.0-pre.2"
+
+parking_lot = "0.11"
+
+expect-test = "1.1"
+float-cmp = {version = "0.9"}
+
+

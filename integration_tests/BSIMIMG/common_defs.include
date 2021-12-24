@@ -1,82 +1,52 @@
 // ****************************************************************************
-// *  BSIM-IMG 102.9.1 released by Pragya Kushwaha on 11/21/2017              *
+// *  BSIM-IMG 103.0.0 released by Pragya Kushwaha on 1/2/2020                *
 // *  BSIM Independent Multi-Gate Model (Verilog-A)                           *
 // ****************************************************************************
 
 // ****************************************************************************
-// *  Copyright 2017 Regents of the University of California                  *
-// *  All rights reserved.                                                    *
+// *  Copyright © 2020 University of California                               *
 // *                                                                          *
 // *  Project director: Prof. Chenming Hu                                     *
 // *                                                                          *
-// *  Current developers: Dr. Pragya Kushwaha (Postdoc, UC Berkeley)          *
-// *                      Yen-Kai Lin (Ph.D. student, UC Berkeley)            *
-// *                      Juan Duarte (Ph.D. student, UC Berkeley)            *
-// *                      Dr. Harshit Agarwal (Postdoc, UC Berkeley)          *
-// *                      Dr. Huan-Lin Chang (Postdoc, UC Berkeley)           *
+// *  Current developers: Pragya Kushwaha (Postdoc, UC Berkeley)              *
+// *                      Harshit Agarwal (Postdoc, UC Berkeley)              *
+// *                      Avirup Dasgupta (Postdoc, UC Berkeley)              *
+// *                      Girish Pahwa    (Postdoc, UC Berkeley)              *
+// *                      Chetan K. Dabhi (Ph.D., IIT Kanpur)                 *
 // ****************************************************************************
 
-// ****************************************************************************
-// *  Software is distributed as is, completely without warranty or service   *
-// *  support. The University of California and its employees are not liable  *
-// *  for the condition or performance of the software.                       *
-// *                                                                          *
-// *  The University of California owns the copyright and grants users a      *
-// *  perpetual, irrevocable, worldwide, non-exclusive, royalty-free license  *
-// *  with respect to the software as set forth below.                        *
-// *                                                                          *
-// *  The University of California hereby disclaims all implied warranties.   *
-// *                                                                          *
-// *  The University of California grants the users the right to modify,      *
-// *  copy, and redistribute the software and documentation, both within      *
-// *  the user's organization and externally, subject to the following        *
-// *  restrictions:                                                           *
-// *                                                                          *
-// *  1. The users agree not to charge for the University of California code  *
-// *     itself but may charge for additions, extensions, or support.         *
-// *                                                                          *
-// *  2. In any product based on the software, the users agree to             *
-// *     acknowledge the University of California that developed the          *
-// *     software. This acknowledgment shall appear in the product            *
-// *     documentation.                                                       *
-// *                                                                          *
-// *  3. Redistributions to others of source code and documentation must      *
-// *     retain the copyright notice, disclaimer, and list of conditions.     *
-// *                                                                          *
-// *  4. Redistributions to others in binary form must reproduce the          *
-// *     copyright notice, disclaimer, and list of conditions in the          *
-// *     documentation and/or other materials provided with the               *
-// *     distribution.                                                        *
-// *                                                                          *
-// *  Agreed to on _________Nov. 21, 2017__________                           *
-// *                                                                          *
-// *  By: ____University of California, Berkeley___                           *
-// *      ____Chenming Hu__________________________                           *
-// *      ____Professor in Graduate School ________                           *
-// ****************************************************************************
+/*
+Licensed under Educational Community License, Version 2.0 (the "License"); you may
+not use this file except in compliance with the License. You may obtain a copy of the license at
+http://opensource.org/licenses/ECL-2.0
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT 
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations
+under the License.
+
+BSIM-IMG model is supported by the members of Silicon Integration Initiative's Compact Model Coalition. A link to the most recent version of this
+standard can be found at: http://www.si2.org/cmc 
+*/
 
 // Numerical Constants
 `define EXPL_THRESHOLD  80.0
 `define MAX_EXPL        5.540622384e34
 `define MIN_EXPL        1.804851387e-35
 `define N_MINLOG        1.0e-38
-`define LN_N_MINLOG    -87.498233534
 `define DELTA_1         0.02
-`define REFTEMP         300.15
+`define REFTEMP         300.15  // 27 C
 
 // Model type definitions
-`define ntype           1
-`define ptype          -1
+`define ntype   1
+`define ptype  -1
 
 // Physical Constants
-`define q               1.60219e-19     // Unit: C
-`define EPS0            8.85418e-12     // Unit: F/m
-`define KboQ            8.61708e-5      // Unit: J/deg
+`define q       1.60219e-19  // Coulombs
+`define EPS0    8.85418e-12  // F/m
+`define KboQ    8.61708e-5   // Joule/degree
 
 //  Macros for the model/instance parameters
-//
-//  MPRxx    model parameter real
-//  MPIxx    model parameter integer
+//  MPRxx    model    parameter real
+//  MPIxx    model    parameter integer
 //  IPRxx    instance parameter real
 //  IPIxx    instance parameter integer
 //     ||
@@ -84,48 +54,54 @@
 //     oo    open   lower bound, open   upper bound
 //     co    closed lower bound, open   upper bound
 //     oc    open   lower bound, closed upper bound
-//     cz    closed lower bound = 0, open upper bound = inf
-//     oz    open   lower bound = 0, open upper bound = inf
+//     cz    closed lower bound=0, open upper bound=inf
+//     oz    open   lower bound=0, open upper bound=inf
 //     nb    no bounds
 //     ex    no bounds with exclude
-//     sw    switch (integer only, values  0 = false  and  1 = true)
-//     ty    switch (integer only, values -1 = p-type and +1 = n-type)
-//
-//  IPM   instance parameter mFactor (multiplicity, implicit for LRM2.2)
+//     sw    switch(integer only, values  0=false  and  1=true)
+//     ty    switch(integer only, values -1=p-type and +1=n-type)
+//  IPM   instance parameter mFactor(multiplicity, implicit for LRM2.2)
 //  OPP   operating point parameter, includes units and description for printing
-//
-`define OPP(nam, uni, des)                  (* units = uni,                    desc = des *)           real    nam;
-`define MPRnb(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter real    nam = def;
-`define MPRex(nam, def, uni, exc,      des) (* units = uni,                    desc = des *) parameter real    nam = def exclude exc;
-`define MPRcc(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter real    nam = def from[lwr : upr];
-`define MPRoo(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter real    nam = def from(lwr : upr);
-`define MPRco(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter real    nam = def from[lwr : upr);
-`define MPRoc(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter real    nam = def from(lwr : upr];
-`define MPRcz(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter real    nam = def from[0.0 : inf);
-`define MPRoz(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter real    nam = def from(0.0 : inf);
-`define MPInb(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter integer nam = def;
-`define MPIex(nam, def, uni, exc,      des) (* units = uni,                    desc = des *) parameter integer nam = def exclude exc;
-`define MPIcc(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter integer nam = def from[lwr : upr];
-`define MPIoo(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter integer nam = def from(lwr : upr);
-`define MPIco(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter integer nam = def from[lwr : upr);
-`define MPIoc(nam, def, uni, lwr, upr, des) (* units = uni,                    desc = des *) parameter integer nam = def from(lwr : upr];
-`define MPIcz(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter integer nam = def from[0 : inf);
-`define MPIoz(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter integer nam = def from(0 : inf);
-`define MPIsw(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter integer nam = def from[0 : 1];
-`define MPIty(nam, def, uni,           des) (* units = uni,                    desc = des *) parameter integer nam = def from[-1: 1] exclude 0;
-`define IPRnb(nam, def, uni,           des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def;
-`define IPRex(nam, def, uni, exc,      des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def exclude exc;
-`define IPRcc(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def from[lwr : upr];
-`define IPRoo(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def from(lwr : upr);
-`define IPRco(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def from[lwr : upr);
-`define IPRoc(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def from(lwr : upr];
-`define IPRcz(nam, def, uni,           des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def from[0.0 : inf);
-`define IPRoz(nam, def, uni,           des) (* units = uni, type = "instance", desc = des *) parameter real    nam = def from(0.0 : inf);
-`define IPInb(nam, def, uni,           des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def;
-`define IPIex(nam, def, uni, exc,      des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def exclude exc;
-`define IPIcc(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def from[lwr : upr];
-`define IPIoo(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def from(lwr : upr);
-`define IPIco(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def from[lwr : upr);
-`define IPIoc(nam, def, uni, lwr, upr, des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def from(lwr : upr];
-`define IPIcz(nam, def, uni,           des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def from[0 : inf);
-`define IPIoz(nam, def, uni,           des) (* units = uni, type = "instance", desc = des *) parameter integer nam = def from(0 : inf);
+
+`define OPP(nam,uni,des)               (* units=uni, desc=des *)           real    nam;
+`define OPM(nam,uni,des)               (* units=uni, desc=des, multiplicity="multiply" *)  real    nam;
+`define OPD(nam,uni,des)               (* units=uni, desc=des, multiplicity="divide"   *)  real    nam;
+
+`define MPRnb(nam,def,uni,        des) (* units=uni, desc=des *) parameter real    nam=def;
+`define MPRex(nam,def,uni,exc,    des) (* units=uni, desc=des *) parameter real    nam=def exclude exc;
+`define MPRcc(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter real    nam=def from[lwr:upr];
+`define MPRoo(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter real    nam=def from(lwr:upr);
+`define MPRco(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter real    nam=def from[lwr:upr);
+`define MPRoc(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter real    nam=def from(lwr:upr];
+`define MPRcz(nam,def,uni,        des) (* units=uni, desc=des *) parameter real    nam=def from[  0:inf);
+`define MPRoz(nam,def,uni,        des) (* units=uni, desc=des *) parameter real    nam=def from(  0:inf);
+
+`define MPInb(nam,def,uni,        des) (* units=uni, desc=des *) parameter integer nam=def;
+`define MPIex(nam,def,uni,exc,    des) (* units=uni, desc=des *) parameter integer nam=def exclude exc;
+`define MPIcc(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter integer nam=def from[lwr:upr];
+`define MPIoo(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter integer nam=def from(lwr:upr);
+`define MPIco(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter integer nam=def from[lwr:upr);
+`define MPIoc(nam,def,uni,lwr,upr,des) (* units=uni, desc=des *) parameter integer nam=def from(lwr:upr];
+`define MPIcz(nam,def,uni,        des) (* units=uni, desc=des *) parameter integer nam=def from[  0:inf);
+`define MPIoz(nam,def,uni,        des) (* units=uni, desc=des *) parameter integer nam=def from(  0:inf);
+
+`define MPIsw(nam,def,uni,        des) (* units=uni, desc=des *) parameter integer nam=def from[  0:  1];
+`define MPIty(nam,def,uni,        des) (* units=uni, desc=des *) parameter integer nam=def from[ -1:  1] exclude 0;
+
+`define IPRnb(nam,def,uni,        des) (* units=uni, type="instance", desc=des *) parameter real    nam=def;
+`define IPRex(nam,def,uni,exc,    des) (* units=uni, type="instance", desc=des *) parameter real    nam=def exclude exc;
+`define IPRcc(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter real    nam=def from[lwr:upr];
+`define IPRoo(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter real    nam=def from(lwr:upr);
+`define IPRco(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter real    nam=def from[lwr:upr);
+`define IPRoc(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter real    nam=def from(lwr:upr];
+`define IPRcz(nam,def,uni,        des) (* units=uni, type="instance", desc=des *) parameter real    nam=def from[  0:inf);
+`define IPRoz(nam,def,uni,        des) (* units=uni, type="instance", desc=des *) parameter real    nam=def from(  0:inf);
+
+`define IPInb(nam,def,uni,        des) (* units=uni, type="instance", desc=des *) parameter integer nam=def;
+`define IPIex(nam,def,uni,exc,    des) (* units=uni, type="instance", desc=des *) parameter integer nam=def exclude exc;
+`define IPIcc(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter integer nam=def from[lwr:upr];
+`define IPIoo(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter integer nam=def from(lwr:upr);
+`define IPIco(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter integer nam=def from[lwr:upr);
+`define IPIoc(nam,def,uni,lwr,upr,des) (* units=uni, type="instance", desc=des *) parameter integer nam=def from(lwr:upr];
+`define IPIcz(nam,def,uni,        des) (* units=uni, type="instance", desc=des *) parameter integer nam=def from[  0:inf);
+`define IPIoz(nam,def,uni,        des) (* units=uni, type="instance", desc=des *) parameter integer nam=def from(  0:inf);

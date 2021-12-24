@@ -394,10 +394,10 @@ pub const DISCIPLINES_PATHS: [&str; 4] =
 impl Vfs {
     pub fn insert_std_lib(&mut self) {
         for name in CONSTANTS_PATHS {
-            self.add_virt_file(&format!("/std/{}", name), CONSTANTS_SRC);
+            self.add_virt_file(&format!("/std/{}", name), CONSTANTS_SRC.to_owned().into());
         }
         for name in DISCIPLINES_PATHS {
-            self.add_virt_file(&format!("/std/{}", name), DISCIPLINCES_SRC);
+            self.add_virt_file(&format!("/std/{}", name), DISCIPLINCES_SRC.to_owned().into());
         }
     }
 }

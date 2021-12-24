@@ -1,0 +1,167 @@
+//======================================================================================
+//======================================================================================
+// Filename: DIODE_CMC_parlist.include
+//======================================================================================
+//
+//    
+//                        Silicon Integration Initiative (Si2)
+//                      Compact Model Coalition In-Code Statement
+//    
+//    Software is distributed as is, completely without warranty or service support.  NXP
+//    Semiconductors, Hiroshima University, and Silicon Integration Initiative, Inc. (Si2),
+//    along with their employees are not liable for the condition or performance of the software.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 own the copyright and grant users
+//    a perpetual, irrevocable, worldwide, non-exclusive, royalty-free license with respect to the
+//    software as set forth below.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 hereby disclaim all implied
+//    warranties.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 grant the users the right to modify,
+//    copy, and redistribute the software and documentation, both within the user's organization
+//    and externally, subject to the following restrictions
+//    
+//      1. The users agree not to charge for the NXP Semiconductors, Hiroshima University,
+//      and Si2 -developed code itself but may charge for additions, extensions, or support.
+//    
+//      2. In any product based on the software, the users agree to acknowledge NXP
+//      Semiconductors, Hiroshima University, and Si2 that developed the software.  This
+//      acknowledgment shall appear in the product documentation.
+//    
+//      3. Redistributions to others of source code and documentation must retain the copyright
+//      notice, disclaimer, and list of conditions.
+//    
+//      4. Redistributions to others in binary form must reproduce the copyright notice,
+//      disclaimer, and list of conditions in the documentation and/or other materials provided
+//      with the distribution.
+//    
+//                                                     CMC In-Code Statement Revision 1.1 6/9/2016
+//
+//
+//
+// The diode_cmc is based on Juncap2 200.3.3 (test) from NXP Semiconductors. 
+//
+// Portions commented as diode_cmc code: additional models since 2009.
+//
+// Portions commented as diode_cmc recovery and high-injection equations code: recovery model by Hiroshima University.
+//
+// All other parts are taken from Juncap2 200.3.3. Copyright 2008 NXP Semiconductors, All Rights Reserved.
+//======================================================================================
+//
+//
+
+    //////////////////////////////////////////
+    //
+    // DIODE_CMC - Reduced parameterlist
+    //
+    //////////////////////////////////////////
+
+    parameter real IMAX       = 1000   `from(`IMAX_cliplow     ,inf         ) `P(info="Maximum current up to which forward current behaves exponentially" unit="A");
+    parameter real TRJ        = 21     `from(`TRJ_cliplow , inf ) `P(info="Reference temperature" unit="C");
+
+    parameter real CJORBOT    = 1E-3   `from(`CJORBOT_cliplow  ,inf         ) `P(info="Zero-bias capacitance per unit-of-area of bottom component" unit="Fm^-2");
+    parameter real CJORSTI    = 1E-9   `from(`CJORSTI_cliplow  ,inf         ) `P(info="Zero-bias capacitance per unit-of-length of STI-edge component" unit="Fm^-1");
+    parameter real CJORGAT    = 1E-9   `from(`CJORGAT_cliplow  ,inf         ) `P(info="Zero-bias capacitance per unit-of-length of gate-edge component" unit="Fm^-1");
+    parameter real VBIRBOT    = 1      `from(`VBIR_cliplow     ,inf         ) `P(info="Built-in voltage at the reference temperature of bottom component" unit="V");
+    parameter real VBIRSTI    = 1      `from(`VBIR_cliplow     ,inf         ) `P(info="Built-in voltage at the reference temperature of STI-edge component" unit="V");
+    parameter real VBIRGAT    = 1      `from(`VBIR_cliplow     ,inf         ) `P(info="Built-in voltage at the reference temperature of gate-edge component" unit="V");
+    parameter real PBOT       = 0.5    `from(`P_cliplow        ,`P_cliphigh ) `P(info="Grading coefficient of bottom component" unit="");
+    parameter real PSTI       = 0.5    `from(`P_cliplow        ,`P_cliphigh ) `P(info="Grading coefficient of STI-edge component" unit="");
+    parameter real PGAT       = 0.5    `from(`P_cliplow        ,`P_cliphigh ) `P(info="Grading coefficient of gate-edge component" unit="");
+    parameter real PHIGBOT    = 1.16                                          `P(info="Zero-temperature bandgap voltage of bottom component" unit="V");
+    parameter real PHIGSTI    = 1.16                                          `P(info="Zero-temperature bandgap voltage of STI-edge component" unit="V");
+    parameter real PHIGGAT    = 1.16                                          `P(info="Zero-temperature bandgap voltage of gate-edge component" unit="V");
+    parameter real IDSATRBOT  = 1E-12  `from(`IDSATR_cliplow   ,inf         ) `P(info="Saturation current density at the reference temperature of bottom component" unit="Am^-2");
+    parameter real IDSATRSTI  = 1E-18  `from(`IDSATR_cliplow   ,inf         ) `P(info="Saturation current density at the reference temperature of STI-edge component" unit="Am^-1");
+    parameter real IDSATRGAT  = 1E-18  `from(`IDSATR_cliplow   ,inf         ) `P(info="Saturation current density at the reference temperature of gate-edge component" unit="Am^-1");
+    parameter real CSRHBOT    = 1E2    `from(`CSRH_cliplow     ,inf         ) `P(info="Shockley-Read-Hall prefactor of bottom component" unit="Am^-3");
+    parameter real CSRHSTI    = 1E-4   `from(`CSRH_cliplow     ,inf         ) `P(info="Shockley-Read-Hall prefactor of STI-edge component" unit="Am^-2");
+    parameter real CSRHGAT    = 1E-4   `from(`CSRH_cliplow     ,inf         ) `P(info="Shockley-Read-Hall prefactor of gate-edge component" unit="Am^-2");
+    parameter real XJUNSTI    = 100E-9 `from(`XJUN_cliplow     ,inf         ) `P(info="Junction depth of STI-edge component" unit="m");
+    parameter real XJUNGAT    = 100E-9 `from(`XJUN_cliplow     ,inf         ) `P(info="Junction depth of gate-edge component" unit="m");
+    parameter real CTATBOT    = 1E2    `from(`CTAT_cliplow     ,inf         ) `P(info="Trap-assisted tunneling prefactor of bottom component" unit="Am^-3");
+    parameter real CTATSTI    = 1E-4   `from(`CTAT_cliplow     ,inf         ) `P(info="Trap-assisted tunneling prefactor of STI-edge component" unit="Am^-2");
+    parameter real CTATGAT    = 1E-4   `from(`CTAT_cliplow     ,inf         ) `P(info="Trap-assisted tunneling prefactor of gate-edge component" unit="Am^-2");
+    parameter real MEFFTATBOT = 0.25   `from(`MEFFTAT_cliplow  ,inf         ) `P(info="Effective mass (in units of m0) for trap-assisted tunneling of bottom component" unit="");
+    parameter real MEFFTATSTI = 0.25   `from(`MEFFTAT_cliplow  ,inf         ) `P(info="Effective mass (in units of m0) for trap-assisted tunneling of STI-edge component" unit="");
+    parameter real MEFFTATGAT = 0.25   `from(`MEFFTAT_cliplow  ,inf         ) `P(info="Effective mass (in units of m0) for trap-assisted tunneling of gate-edge component" unit="");
+    parameter real CBBTBOT    = 1E-12  `from(`CBBT_cliplow     ,inf         ) `P(info="Band-to-band tunneling prefactor of bottom component" unit="AV^-3");
+    parameter real CBBTSTI    = 1E-18  `from(`CBBT_cliplow     ,inf         ) `P(info="Band-to-band tunneling prefactor of STI-edge component" unit="AV^-3m");
+    parameter real CBBTGAT    = 1E-18  `from(`CBBT_cliplow     ,inf         ) `P(info="Band-to-band tunneling prefactor of gate-edge component" unit="AV^-3m");
+    parameter real FBBTRBOT   = 1E9                                           `P(info="Normalization field at the reference temperature for band-to-band tunneling of bottom component" unit="Vm^-1");
+    parameter real FBBTRSTI   = 1E9                                           `P(info="Normalization field at the reference temperature for band-to-band tunneling of STI-edge component" unit="Vm^-1");
+    parameter real FBBTRGAT   = 1E9                                           `P(info="Normalization field at the reference temperature for band-to-band tunneling of gate-edge component" unit="Vm^-1");
+    parameter real STFBBTBOT  = -1E-3                                         `P(info="Temperature scaling parameter for band-to-band tunneling of bottom component" unit="K^-1");
+    parameter real STFBBTSTI  = -1E-3                                         `P(info="Temperature scaling parameter for band-to-band tunneling of STI-edge component" unit="K^-1");
+    parameter real STFBBTGAT  = -1E-3                                         `P(info="Temperature scaling parameter for band-to-band tunneling of gate-edge component" unit="K^-1");
+    parameter real VBRBOT     = 10     `from(`VBR_cliplow      ,inf         ) `P(info="Breakdown voltage of bottom component" unit="V");
+    parameter real VBRSTI     = 10     `from(`VBR_cliplow      ,inf         ) `P(info="Breakdown voltage of STI-edge component" unit="V");
+    parameter real VBRGAT     = 10     `from(`VBR_cliplow      ,inf         ) `P(info="Breakdown voltage of gate-edge component" unit="V");
+    parameter real PBRBOT     = 4      `from(`PBR_cliplow      ,inf         ) `P(info="Breakdown onset tuning parameter of bottom component" unit="V");
+    parameter real PBRSTI     = 4      `from(`PBR_cliplow      ,inf         ) `P(info="Breakdown onset tuning parameter of STI-edge component" unit="V");
+    parameter real PBRGAT     = 4      `from(`PBR_cliplow      ,inf         ) `P(info="Breakdown onset tuning parameter of gate-edge component" unit="V");
+    parameter real FREV       = 1E3    `from(1E3               ,1E10        ) `P(info="Additional parameter for current after breakdown" unit="");
+
+    //Diode_cmc code
+    parameter real RSBOT      = 0.0    `from(`RS_cliplow       ,inf         ) `P(info="Series resistance per unit-of-area of bottom component" unit="VA^-1m^2");
+    parameter real RSSTI      = 0.0    `from(`RS_cliplow       ,inf         ) `P(info="Series resistance per unit-of-length of STI-edge component" unit="VA^-1m");
+    parameter real RSGAT      = 0.0    `from(`RS_cliplow       ,inf         ) `P(info="Series resistance per unit-of-length of gate-edge component" unit="VA^-1m");
+    parameter real RSCOM      = 0.0    `from(`RS_cliplow       ,inf         ) `P(info="Common series resistance, no scaling " unit="ohm");
+    parameter real STRS       = 0      `from(`RS_cliplow       ,inf         ) `P(info="Temperature scaling parameter for series resistance" unit="");
+    parameter real KF         = 0      `from(`KF_cliplow       ,inf         ) `P(info="KF parameter for flicker noise" unit="");
+    parameter real AF         = 1.0    `from(`AF_cliplow       ,inf         ) `P(info="AF parameter for flicker noise" unit="");
+    parameter real TT         = 0      `from(`TT_cliplow       ,inf         ) `P(info="Transit time" unit="s");
+    parameter real STVBRBOT1  = 0                                             `P(info="Temp. co of breakdown voltage bottom component" unit="1/K");
+    parameter real STVBRBOT2  = 0                                             `P(info="Temp. co of breakdown voltage bottom component" unit="1/K^2");
+    parameter real STVBRSTI1  = 0                                             `P(info="Temp. co of breakdown voltage STI-edge component" unit="1/K");
+    parameter real STVBRSTI2  = 0                                             `P(info="Temp. co of breakdown voltage STI-edge component" unit="1/K^2");
+    parameter real STVBRGAT1  = 0                                             `P(info="Temp. co of breakdown voltage gate-edge component" unit="1/K");
+    parameter real STVBRGAT2  = 0                                             `P(info="Temp. co of breakdown voltage gate-edge component" unit="1/K^2");
+    parameter real NFABOT     = 1.0    `from(`NFA_cliplow      ,inf         ) `P(info="ideality factor bottom component" unit="");
+    parameter real NFASTI     = 1.0    `from(`NFA_cliplow      ,inf         ) `P(info="ideality factor STI-edge component" unit="");
+    parameter real NFAGAT     = 1.0    `from(`NFA_cliplow      ,inf         ) `P(info="ideality factor gate-edge component" unit="");
+
+    parameter real ABMIN      = 0.0    `from(`AB_cliplow       ,inf         ) `P(info="minimum allowed junction area" unit="m^2");
+    parameter real ABMAX      = 1.0    `from(`AB_cliplow       ,inf         ) `P(info="maximum allowed junction area" unit="m^2");
+    parameter real LSMIN      = 0.0    `from(`LS_cliplow       ,inf         ) `P(info="minimum allowed junction STI-edge" unit="m");
+    parameter real LSMAX      = 1.0    `from(`LS_cliplow       ,inf         ) `P(info="maximum allowed junction STI-edge" unit="m");
+    parameter real LGMIN      = 0.0    `from(`LG_cliplow       ,inf         ) `P(info="minimum allowed junction gate-edge" unit="m");
+    parameter real LGMAX      = 1.0    `from(`LG_cliplow       ,inf         ) `P(info="maximum allowed junction gate-edge" unit="m");
+    parameter real TEMPMIN    = -55    `from(`TRJ_cliplow      ,inf         ) `P(info="minimum allowed junction temp" unit="C");
+    parameter real TEMPMAX    = 155    `from(`TRJ_cliplow      ,inf         ) `P(info="maximum allowed junction temp" unit="C");
+
+    parameter real VFMAX      = 0.0    `from(`VOLT_cliplow     ,inf         ) `P(info="maximum allowed forward junction bias" unit="V");
+    parameter real VRMAX      = 0.0    `from(`VOLT_cliplow     ,inf         ) `P(info="maximum allowed reverse junction bias" unit="V");
+    parameter real XTI        = 3      `from(`XTI_cliplow      ,inf         ) `P(info="Temp. co of saturation current" unit="");
+    parameter real SCALE      = 1.0    `from(`SCALE_cliplow    ,1.0         ) `P(info="Scale parameter" unit="");
+    parameter real SHRINK     = 0      `from(`SHRINK_cliplow   ,`SHRINK_cliphigh         ) `P(info="Scale parameter" unit="");
+    //End of Diode_cmc code
+
+    // JUNCAP2-express parameters
+    parameter real SWJUNEXP   = 0.0    `from(               0.0,1.0         ) `P(info="Flag for JUNCAP-express; 0=full model, 1=express model" unit="");
+
+    parameter real VJUNREF    = 2.5    `from(`VJUNREF_cliplow  ,inf         ) `P(info="Typical maximum junction voltage; usually about 2*VSUP" unit="");
+    parameter real FJUNQ      = 0.03   `from(`FJUNQ_cliplow    ,inf         ) `P(info="Fraction below which junction capacitance components are considered negligible" unit="");
+
+    //Diode_cmc recovery and high-injection equations code
+    parameter real CORECOVERY = 0.0    `from(0.0,1.0)                         `P(info="Flag for recovery equations; 0=original, 1=Hiroshima" unit="");
+//    parameter real EG0        = 1.1785 `from(0.5    , 5 )                     `P(info="Bandgap for temperature dependence" unit="eV");
+//    parameter real BGTMP1     = 90.25e-6 `from(5E-5 , 1E-3 )                  `P(info="For temperature dependence" unit="eV/K");
+//    parameter real BGTMP2     = 1.0e-7 `from(-1E-6  , 1E-6 )                  `P(info="For temperature dependence" unit="eV/K^2");
+//    parameter real NJL        = 1.0    `from(0.5    , 5 )                     `P(info="Low-injection emission coefficient" unit="");
+    parameter real NJH        = 1.0    `from(0.5    , 5 )                     `P(info="High-injection emission coefficient" unit="");
+    parameter real NJDV       = 0.1    `from(0      , 1e6 )                   `P(info="Transition slope of emission coefficient" unit="1/V");
+    parameter real NDIBOT     = 1e16   `from(1      , 1e23 )                  `P(info="Doping concentration of drift region" unit="cm^-3");
+    parameter real NDIGAT     = 1e16   `from(1      , 1e23 )                  `P(info="Doping concentration of drift region" unit="cm^-3");
+    parameter real NDISTI     = 1e16   `from(1      , 1e23 )                  `P(info="Doping concentration of drift region" unit="cm^-3");
+    parameter real INJ1       = 1.0    `from(0      , 3 )                     `P(info="For carrier density" unit="");
+    parameter real INJ2       = 10.0   `from(0      , 20 )                    `P(info="For carrier density in high-injection condition" unit="");
+    parameter real NQS        = 5e-9   `from(0      , 1e-3 )                  `P(info="Carrier delay time" unit="sec");
+    parameter real TAU        = 2e-7   `from(0      , 1e-3 )                  `P(info="Carrier lifetime" unit="sec");
+    parameter real WI         = 5e-6   `from(0      , 1.0 )                   `P(info="Length of drift region" unit="m");
+    parameter real DEPNQS     = 0.0    `from(0      , 1e-3 )                  `P(info="Depletion delay time" unit="sec");
+    parameter real TNOM       = 21     `from(`TRJ_cliplow , inf )             `P(info="Alias reference temperature" unit="C");
+    parameter real TAUT       = 0.0    `from(0.0    , 1.0e2 )                 `P(info="Temp. co of carrier lifetime" unit="");
+    parameter real INJT       = 0.0    `from(0      , 20 )                    `P(info="Temp. co of carrier density in high-injection condition" unit="");
+    //End of Diode_cmc recovery and high-injection equations code

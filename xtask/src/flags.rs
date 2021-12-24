@@ -11,6 +11,7 @@ xflags::xflags! {
         cmd vendor{
             optional --force
             optional --no_upload
+            optional --check
         }
 
         cmd cache {
@@ -47,6 +48,7 @@ pub struct Help {
 pub struct Vendor {
     pub force: bool,
     pub no_upload: bool,
+    pub check: bool,
 }
 
 #[derive(Debug)]

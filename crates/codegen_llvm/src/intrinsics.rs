@@ -63,7 +63,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         }
 
         ifn!("strcmp", fn(t_str, t_str) -> t_bool);
-        ifn!("llvm.llround.i64.f64", fn(t_f64) -> t_i32);
+        ifn!("llvm.llround.i32.f64", fn(t_f64) -> t_i32);
 
         // ifn!("llvm.lifetime.start.p0i8", fn(t_i64, i8p) -> void);
         // ifn!("llvm.lifetime.end.p0i8", fn(t_i64, i8p) -> void);

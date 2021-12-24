@@ -43,7 +43,11 @@ mod path_interner;
 pub mod va_std;
 mod vfs_path;
 
-use std::{fmt, mem};
+use std::borrow::Cow;
+use std::char::REPLACEMENT_CHARACTER;
+use std::ops::Range;
+use std::rc::Rc;
+use std::{fmt, io, mem};
 
 pub use paths::{AbsPath, AbsPathBuf};
 
@@ -57,13 +61,64 @@ pub use crate::vfs_path::VfsPath;
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct FileId(pub u16);
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct VfsEntry {
+    contents: Box<str>,
+    err: Option<FileReadError>,
+}
+
+impl Default for VfsEntry {
+    fn default() -> Self {
+        Self { contents: Default::default(), err: Some(FileReadError::Io(io::ErrorKind::NotFound)) }
+    }
+}
+
+impl From<Result<Vec<u8>, io::ErrorKind>> for VfsEntry {
+    fn from(src: Result<Vec<u8>, io::ErrorKind>) -> Self {
+        let contents = match src {
+            Err(err) => {
+                return VfsEntry { contents: Box::from(""), err: Some(FileReadError::Io(err)) }
+            }
+            Ok(contents) => contents,
+        };
+
+        let (contents, err) = if let Cow::Owned(src) = String::from_utf8_lossy(&contents) {
+            let err =
+                Some(FileReadError::InvalidTextFormat(InvalidTextFormatErr::from_lossy(&src)));
+            (src, err)
+        } else {
+            (unsafe { String::from_utf8_unchecked(contents) }, None)
+        };
+
+        VfsEntry { contents: contents.into_boxed_str(), err }
+    }
+}
+
+impl From<io::Result<Vec<u8>>> for VfsEntry {
+    fn from(src: io::Result<Vec<u8>>) -> Self {
+        src.map_err(|err| err.kind()).into()
+    }
+}
+
+impl From<String> for VfsEntry {
+    fn from(contents: String) -> Self {
+        VfsEntry { contents: contents.into_boxed_str(), err: None }
+    }
+}
+
+impl From<Box<str>> for VfsEntry {
+    fn from(contents: Box<str>) -> Self {
+        VfsEntry { contents, err: None }
+    }
+}
+
 /// Storage for all files read by rust-analyzer.
 ///
 /// For more informations see the [crate-level](crate) documentation.
 #[derive(Default)]
 pub struct Vfs {
     interner: PathInterner,
-    data: Vec<Option<Vec<u8>>>,
+    data: Vec<VfsEntry>,
     changes: Vec<ChangedFile>,
 }
 
@@ -113,7 +168,7 @@ impl Vfs {
 
     /// Id of the given path if it exists in the `Vfs` and is not deleted.
     pub fn file_id(&self, path: &VfsPath) -> Option<FileId> {
-        self.interner.get(path).filter(|&it| self.get(it).is_some())
+        self.interner.get(path)
     }
 
     /// File path corresponding to the given `file_id`.
@@ -126,22 +181,27 @@ impl Vfs {
     }
 
     /// File content corresponding to the given `file_id`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the id is not present in the `Vfs`, or if the corresponding file is
-    /// deleted.
-    pub fn file_contents(&self, file_id: FileId) -> Option<&[u8]> {
-        self.get(file_id).as_deref()
+    pub fn file_contents_unchecked(&self, file_id: FileId) -> &str {
+        &self.get(file_id).contents
+    }
+
+    /// File content corresponding to the given `file_id`.
+    pub fn file_contents(&self, file_id: FileId) -> Result<&str, FileReadError> {
+        let entry = self.get(file_id);
+        if let Some(err) = &entry.err {
+            Err(err.clone())
+        } else {
+            Ok(&entry.contents)
+        }
     }
 
     /// Returns an iterator over the stored ids and their corresponding paths.
     ///
-    /// This will skip deleted files.
+    /// This will skip deleted/invalid files.
     pub fn iter(&self) -> impl Iterator<Item = (FileId, &VfsPath)> + '_ {
         (0..self.data.len())
             .map(|it| FileId(it as u16))
-            .filter(move |&file_id| self.get(file_id).is_some())
+            .filter(move |&file_id| self.get(file_id).err.is_none())
             .map(move |file_id| {
                 let path = self.interner.lookup(file_id);
                 (file_id, path)
@@ -154,14 +214,18 @@ impl Vfs {
     ///
     /// If the path does not currently exists in the `Vfs`, allocates a new
     /// [`FileId`] for it.
-    pub fn set_file_contents(&mut self, path: VfsPath, contents: Option<Vec<u8>>) -> bool {
+    pub fn set_file_contents(&mut self, path: VfsPath, contents: VfsEntry) -> bool {
         let file_id = self.ensure_file_id(path);
-        let change_kind = match (&self.get(file_id), &contents) {
-            (None, None) => return false,
-            (None, Some(_)) => ChangeKind::Create,
-            (Some(_), None) => ChangeKind::Delete,
-            (Some(old), Some(new)) if old == new => return false,
-            (Some(_), Some(_)) => ChangeKind::Modify,
+        let old = self.get(file_id);
+        if old == &contents {
+            return false;
+        }
+        let change_kind = if old.err.as_ref().map_or(false, |err| err.is_io()) {
+            ChangeKind::Create
+        } else if contents.err.as_ref().map_or(false, |err| err.is_io()) {
+            ChangeKind::Delete
+        } else {
+            ChangeKind::Modify
         };
 
         *self.get_mut(file_id) = contents;
@@ -169,9 +233,9 @@ impl Vfs {
         true
     }
 
-    pub fn add_virt_file(&mut self, name: &str, src: &str) -> FileId {
+    pub fn add_virt_file(&mut self, name: &str, src: VfsEntry) -> FileId {
         let path = VfsPath::new_virtual_path(name.to_owned());
-        self.set_file_contents(path.clone(), Some(src.as_bytes().to_owned()));
+        self.set_file_contents(path.clone(), src);
         self.file_id(&path).unwrap()
     }
 
@@ -196,7 +260,7 @@ impl Vfs {
         let file_id = self.interner.intern(path);
         let idx = file_id.0 as usize;
         let len = self.data.len().max(idx + 1);
-        self.data.resize_with(len, || None);
+        self.data.resize_with(len, VfsEntry::default);
         file_id
     }
 
@@ -205,7 +269,7 @@ impl Vfs {
     /// # Panics
     ///
     /// Panics if no file is associated to that id.
-    fn get(&self, file_id: FileId) -> &Option<Vec<u8>> {
+    fn get(&self, file_id: FileId) -> &VfsEntry {
         &self.data[file_id.0 as usize]
     }
 
@@ -214,7 +278,7 @@ impl Vfs {
     /// # Panics
     ///
     /// Panics if no file is associated to that id.
-    fn get_mut(&mut self, file_id: FileId) -> &mut Option<Vec<u8>> {
+    fn get_mut(&mut self, file_id: FileId) -> &mut VfsEntry {
         &mut self.data[file_id.0 as usize]
     }
 }
@@ -222,5 +286,49 @@ impl Vfs {
 impl fmt::Debug for Vfs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Vfs").field("n_files", &self.data.len()).finish()
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+pub struct InvalidTextFormatErr {
+    pub pos: Rc<[Range<usize>]>,
+}
+
+impl InvalidTextFormatErr {
+    pub fn from_lossy(src: &str) -> InvalidTextFormatErr {
+        let mut start = None;
+        let mut pos = 0;
+        let mut spans = Vec::new();
+        for it in src.chars() {
+            #[allow(clippy::match_same_arms)]
+            match (start, it) {
+                (None, REPLACEMENT_CHARACTER) => start = Some(pos),
+                (Some(_), REPLACEMENT_CHARACTER) => (),
+                (Some(old), _) => {
+                    spans.push(old..pos);
+                    start = None
+                }
+                _ => (),
+            }
+            pos += it.len_utf8();
+        }
+
+        if let Some(start) = start {
+            spans.push(start..src.len());
+        }
+
+        InvalidTextFormatErr { pos: Rc::from(spans.into_boxed_slice()) }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+pub enum FileReadError {
+    Io(io::ErrorKind),
+    InvalidTextFormat(InvalidTextFormatErr),
+}
+
+impl FileReadError {
+    pub fn is_io(&self) -> bool {
+        matches!(self, FileReadError::Io(_))
     }
 }

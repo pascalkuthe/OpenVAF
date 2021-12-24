@@ -4,15 +4,16 @@ use basedb::{BaseDB, FileId};
 
 use crate::body::{Body, BodySourceMap, ParamExprs};
 use crate::data::{
-    BranchData, DisciplineData, FunctionData, NatureData, NodeData, ParamData, VarData,
+    AliasParamData, BranchData, DisciplineData, FunctionData, NatureData, NodeData, ParamData,
+    VarData,
 };
 use crate::item_tree::ItemTree;
 use crate::nameres::DefMap;
 use crate::{
-    BlockId, BlockLoc, BranchId, BranchLoc, DefWithBodyId, DisciplineAttrId, DisciplineAttrLoc,
-    DisciplineId, DisciplineLoc, FunctionArgId, FunctionArgLoc, FunctionId, FunctionLoc, ModuleId,
-    ModuleLoc, NatureAttrId, NatureAttrLoc, NatureId, NatureLoc, NodeId, NodeLoc, ParamId,
-    ParamLoc, VarId, VarLoc,
+    AliasParamId, AliasParamLoc, BlockId, BlockLoc, BranchId, BranchLoc, DefWithBodyId,
+    DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionArgId,
+    FunctionArgLoc, FunctionId, FunctionLoc, ModuleId, ModuleLoc, NatureAttrId, NatureAttrLoc,
+    NatureId, NatureLoc, NodeId, NodeLoc, ParamId, ParamLoc, VarId, VarLoc,
 };
 
 #[salsa::query_group(InternDatabase)]
@@ -41,6 +42,8 @@ pub trait InternDB: BaseDB {
     fn intern_node(&self, loc: NodeLoc) -> NodeId;
     #[salsa::interned]
     fn intern_function_arg(&self, loc: FunctionArgLoc) -> FunctionArgId;
+    #[salsa::interned]
+    fn intern_alias_param(&self, loc: AliasParamLoc) -> AliasParamId;
 }
 
 #[salsa::query_group(HirDefDatabase)]
@@ -91,6 +94,9 @@ pub trait HirDefDB: InternDB {
 
     #[salsa::invoke(FunctionData::function_data_query)]
     fn function_data(&self, node: FunctionId) -> Arc<FunctionData>;
+
+    #[salsa::invoke(AliasParamData::alias_data_query)]
+    fn alias_data(&self, param: AliasParamId) -> Arc<AliasParamData>;
 }
 
 fn body_source_map(db: &dyn HirDefDB, def: DefWithBodyId) -> Arc<BodySourceMap> {

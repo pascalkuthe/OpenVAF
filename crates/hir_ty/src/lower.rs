@@ -61,6 +61,7 @@ impl NatureTy {
         })
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn nature_info_recover(
         db: &dyn HirTyDB,
         _cycle: &[String],
@@ -202,8 +203,7 @@ impl BranchKind {
 
     pub fn unwrap_hi_node(self) -> NodeId {
         match self {
-            BranchKind::NodeGnd(hi) => hi,
-            BranchKind::Nodes(hi, _) => hi,
+            BranchKind::NodeGnd(hi) | BranchKind::Nodes(hi, _) => hi,
             BranchKind::PortFlow(_) => unreachable!(),
         }
     }

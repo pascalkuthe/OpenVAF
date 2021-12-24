@@ -84,6 +84,24 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
         }
     }
 
+    pub fn copy_from(&mut self, other: &Self) {
+        self.words.copy_from_slice(&other.words)
+    }
+
+    pub fn copy_from_hybrid<const CLEAR: bool>(&mut self, other: &HybridBitSet<T>) {
+        match other {
+            HybridBitSet::Sparse(src) => {
+                if CLEAR {
+                    self.clear()
+                }
+                for i in src.iter() {
+                    self.insert(*i);
+                }
+            }
+            HybridBitSet::Dense(other) => self.copy_from(other),
+        }
+    }
+
     /// Count the number of set bits in the set.
     pub fn count(&self) -> usize {
         self.words.iter().map(|e| e.count_ones() as usize).sum()
@@ -230,12 +248,38 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
     pub fn ensure(&mut self, min_domain_size: usize) {
         if self.domain_size < min_domain_size {
             self.domain_size = min_domain_size;
+        } else {
+            return;
         }
 
         let min_num_words = num_words(min_domain_size);
         if self.words.len() < min_num_words {
             self.words.resize(min_num_words, 0)
         }
+    }
+
+    pub fn ensure_enabled(&mut self, min_domain_size: usize) {
+        if self.domain_size < min_domain_size {
+            let last_pos = self.words.len() - 1;
+            if let Some(last) = self.words.last_mut() {
+                for i in self.domain_size..min_domain_size {
+                    let (pos, word) = word_index_and_mask(i);
+                    if pos != last_pos {
+                        break;
+                    }
+                    *last |= word;
+                }
+            }
+            self.domain_size = min_domain_size;
+        } else {
+            return;
+        }
+
+        let min_num_words = num_words(min_domain_size);
+        if self.words.len() < min_num_words {
+            self.words.resize(min_num_words, u64::MAX)
+        }
+        self.clear_excess_bits()
     }
 }
 

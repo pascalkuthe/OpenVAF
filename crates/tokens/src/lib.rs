@@ -35,9 +35,7 @@ impl lexer::TokenKind {
             Literal { kind: LiteralKind::Str { terminated: false } } => {
                 return (Some(SyntaxKind::STR_LIT), Some(LexerErrorKind::UnterminatedStr))
             }
-            CompilerDirective => return (None, None),
-            Define { .. } => return (None, None),
-            IllegalDefine => return (None, None),
+            CompilerDirective | Define { .. } | IllegalDefine => return (None, None),
             Semi => T![;],
             Comma => T![,],
             Dot => T![.],

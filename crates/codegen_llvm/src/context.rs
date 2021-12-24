@@ -1,9 +1,8 @@
 use ahash::AHashMap;
 use cfg::Spur;
-use lasso::RodeoResolver;
+use lasso::Rodeo;
 use libc::{c_char, c_uint};
 use llvm::{Type, Value};
-use stdx::base_n;
 use target::spec::Target;
 
 pub struct CodegenCx<'a, 'll> {
@@ -12,15 +11,15 @@ pub struct CodegenCx<'a, 'll> {
 
     // ty_isize: &'ll Type,
     pub target: &'a Target,
-    literals: &'a RodeoResolver,
+    pub literals: &'a mut Rodeo,
     str_lit_cache: AHashMap<Spur, &'ll Value>,
     pub(crate) intrinsics: AHashMap<&'static str, (&'ll Type, &'ll Value)>,
-    local_gen_sym_counter: usize,
+    pub(crate) local_gen_sym_counter: usize,
 }
 
 impl<'a, 'll> CodegenCx<'a, 'll> {
     pub(crate) fn new(
-        literals: &'a RodeoResolver,
+        literals: &'a mut Rodeo,
         llvm_module: &'ll crate::ModuleLlvm,
         target: &'a Target,
     ) -> CodegenCx<'a, 'll> {
@@ -63,7 +62,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             llvm::LLVMSetGlobalConstant(global, llvm::True);
             llvm::LLVMSetLinkage(global, llvm::Linkage::InternalLinkage);
         }
-        self.ptrcast(val, self.ty_str())
+        self.ptrcast(global, self.ty_str())
     }
 
     pub fn ptrcast(&self, val: &'ll Value, ty: &'ll Type) -> &'ll Value {

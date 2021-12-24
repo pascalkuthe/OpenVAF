@@ -11,7 +11,7 @@ use syntax::name::{AsIdent, Name};
 
 use crate::builtin::{
     ABSDELAY_MAX, DDT_TOL, IDT_IC_ASSERT_TOL, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
-    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
+    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, TRANSITION_DELAY_RISET_FALLT_TOL,
 };
 use crate::db::HirTyDB;
 use crate::inference::{InferenceResult, ResolvedFun};
@@ -121,23 +121,23 @@ pub enum BodyCtx {
 }
 
 impl BodyCtx {
-    fn allow_nature_access(&self) -> bool {
+    fn allow_nature_access(self) -> bool {
         matches!(self, Self::AnalogBlock | Self::Conditional | Self::EventControl)
     }
 
-    fn allow_contribute(&self) -> bool {
+    fn allow_contribute(self) -> bool {
         matches!(self, Self::AnalogBlock | Self::Conditional)
     }
 
-    fn allow_analog_operator(&self) -> bool {
+    fn allow_analog_operator(self) -> bool {
         matches!(self, Self::AnalogBlock)
     }
 
-    fn allow_analysis_fun(&self) -> bool {
+    fn allow_analysis_fun(self) -> bool {
         !matches!(self, Self::Const)
     }
 
-    fn allow_var_ref(&self) -> bool {
+    fn allow_var_ref(self) -> bool {
         !matches!(self, Self::Const | Self::ConstOrAnalysis)
     }
 }
@@ -259,17 +259,12 @@ impl ExprValidator<'_, '_> {
     fn validate_expr(&mut self, expr: ExprId) {
         match self.parent.body.exprs[expr] {
             Expr::Call { ref fun, ref args, .. } => {
-                if let Some(call) = self.parent.infer.resolved_calls.get(&expr) {
-                    match call {
-                        ResolvedFun::BuiltIn(builtin) => {
-                            let signature = self.parent.infer.resolved_signatures.get(&expr);
-                            self.validate_builtin(fun, expr, args, *builtin, signature.cloned());
-                            return;
-                        }
-                        ResolvedFun::User(_fun) => {
-                            // TODO anything to validate here?
-                        }
-                    }
+                if let Some(ResolvedFun::BuiltIn(builtin)) =
+                    self.parent.infer.resolved_calls.get(&expr)
+                {
+                    let signature = self.parent.infer.resolved_signatures.get(&expr);
+                    self.validate_builtin(fun, expr, args, *builtin, signature.cloned());
+                    return;
                 }
             }
 
@@ -295,7 +290,7 @@ impl ExprValidator<'_, '_> {
                 match self.parent.infer.expr_types[expr] {
                     Ty::FuntionVar { arg: Some(arg), fun, .. } => {
                         let arg = &self.parent.db.function_data(fun).args[arg];
-                        if self.write && !arg.is_output || !self.write && !arg.is_input {
+                        if self.write && !arg.is_output {
                             self.parent.diagnostics.push(
                                 BodyValidationDiagnostic::InvalidArgDirectionForAccess {
                                     expr,
@@ -438,6 +433,7 @@ impl ExprValidator<'_, '_> {
                 }
             }
             (BuiltIn::absdelay, Some(ABSDELAY_MAX))
+            | (BuiltIn::transition, Some(TRANSITION_DELAY_RISET_FALLT_TOL))
             | (BuiltIn::ddt, Some(DDT_TOL))
             | (BuiltIn::idt | BuiltIn::idtmod, Some(IDT_IC_ASSERT_TOL)) => {
                 if let [other_args @ .., const_expr] = args {

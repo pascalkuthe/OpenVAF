@@ -1,9 +1,9 @@
-use std::{cell::RefCell, path::PathBuf, str::from_utf8, sync::Arc};
+use std::{cell::RefCell, path::PathBuf, sync::Arc};
 
 use expect_test::expect_file;
 use vfs::{FileId, Vfs, VfsPath};
 
-use crate::{preprocess, FileReadError, Preprocess, SourceProvider};
+use crate::{preprocess, Preprocess, SourceProvider};
 
 struct TestSourceProvider {
     vfs: RefCell<Vfs>,
@@ -30,9 +30,7 @@ impl SourceProvider for TestSourceProvider {
 
     fn file_text(&self, file: FileId) -> Result<Arc<str>, crate::FileReadError> {
         let vfs = self.vfs.borrow();
-        let contents = vfs.file_contents(file).ok_or(FileReadError::NotFound)?;
-        let contents = from_utf8(contents).map_err(|_| FileReadError::InvalidTextFormat)?;
-        Ok(Arc::from(contents))
+        vfs.file_contents(file).map(Arc::from)
     }
 
     fn file_path(&self, file: FileId) -> VfsPath {
@@ -51,13 +49,12 @@ fn check_prepocessor(sources: TestSourceProvider, root_file: FileId, test_name: 
     let expected = PathBuf::from(".").join("test_data").join(format!("{}.tokens", test_name));
     expect_file![expected].assert_eq(&actual_tokens);
 
-
     let vfs = sources.vfs.borrow();
     let actual_content: String = ts
         .iter()
         .map(|token| {
             let filespan = token.span.to_file_span(&sm);
-            let src = from_utf8(vfs.file_contents(filespan.file).unwrap()).unwrap();
+            let src = vfs.file_contents(filespan.file).unwrap();
             &src[filespan.range]
         })
         .collect();
@@ -68,7 +65,8 @@ fn check_prepocessor(sources: TestSourceProvider, root_file: FileId, test_name: 
 
 fn check_prepocessor_single_file(src: &str, test_name: &'static str) {
     let sources = TestSourceProvider::new(vec![]);
-    let file = sources.vfs.borrow_mut().add_virt_file("/macro_expansion_test.va", src);
+    let file =
+        sources.vfs.borrow_mut().add_virt_file("/macro_expansion_test.va", src.to_owned().into());
     check_prepocessor(sources, file, test_name)
 }
 
@@ -168,8 +166,8 @@ fn condition_disabled() {
 }
 
 #[test]
-fn source_map_triple_replacement(){
-check_prepocessor_single_file(
+fn source_map_triple_replacement() {
+    check_prepocessor_single_file(
         r#"
 `include "constants.va"
 

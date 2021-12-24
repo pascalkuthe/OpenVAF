@@ -7,10 +7,6 @@ mod preprocessor_error;
 pub mod sink;
 mod syntax_error;
 
-// pub use ariadne::{Label, ReportKind};
-// pub type ReportBuilder = ariadne::ReportBuilder<FileSpan>;
-// pub type Report = ariadne::Report<FileSpan>;
-
 pub type Report = codespan_reporting::diagnostic::Diagnostic<FileId>;
 pub type Label = codespan_reporting::diagnostic::Label<FileId>;
 

@@ -105,7 +105,7 @@ pub(crate) fn parse_include<'a>(
     p.bump();
     let path = p.current_text();
     if p.expect(PreprocessorToken::StrLit, "a string literal", err) {
-        Some((&path[1..path.len() - 1], TextRange::new(start, p.current_range().start())))
+        Some((&path[1..path.len() - 1], TextRange::new(start, p.previous_range().end())))
     } else {
         None
     }

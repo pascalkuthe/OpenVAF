@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use cfg::Const;
 use libc::c_uint;
 use llvm::{False, True, Type, Value};
@@ -15,6 +17,10 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn ty_int(&self) -> &'ll Type {
         unsafe { llvm::LLVMInt32TypeInContext(self.llcx) }
+    }
+
+    pub fn ty_isize(&self) -> &'ll Type {
+        unsafe { llvm::LLVMIntTypeInContext(self.llcx, self.target.pointer_width) }
     }
 
     pub fn ty_bool(&self) -> &'ll Type {
@@ -48,6 +54,10 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { llvm::LLVMIntTypeInContext(self.llcx, 0) }
     }
 
+    pub fn ptr_ty(&self, elem: &'ll Type) -> &'ll Type {
+        unsafe { llvm::LLVMPointerType(elem, llvm::AddressSpace::DATA) }
+    }
+
     pub fn const_val(&mut self, val: &Const) -> &'ll Value {
         match *val {
             Const::Real(val) => self.const_real(val),
@@ -65,6 +75,14 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn const_int(&self, val: i32) -> &'ll Value {
         unsafe { llvm::LLVMConstInt(self.ty_int(), val as u64, True) }
+    }
+
+    pub fn const_isize(&self, val: isize) -> &'ll Value {
+        unsafe { llvm::LLVMConstInt(self.ty_isize(), val as u64, True) }
+    }
+
+    pub fn const_usize(&self, val: usize) -> &'ll Value {
+        unsafe { llvm::LLVMConstInt(self.ty_isize(), val as u64, False) }
     }
 
     pub fn const_bool(&self, val: bool) -> &'ll Value {
@@ -92,5 +110,14 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn val_ty(&self, v: &'ll Value) -> &'ll Type {
         unsafe { llvm::LLVMTypeOf(v) }
+    }
+
+    pub fn struct_ty(&self, name: &str, elements: &[&'ll Type]) -> &'ll Type {
+        let name = CString::new(name).unwrap();
+        unsafe {
+            let ty = llvm::LLVMStructCreateNamed(self.llcx, name.as_ptr());
+            llvm::LLVMStructSetBody(ty, elements.as_ptr(), elements.len() as u32, False);
+            ty
+        }
     }
 }

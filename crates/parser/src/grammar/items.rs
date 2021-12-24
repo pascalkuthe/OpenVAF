@@ -109,7 +109,7 @@ fn var(p: &mut Parser) -> bool {
 }
 
 pub(super) fn parameter_decl(p: &mut Parser, m: Marker) {
-    p.bump(PARAMETER_KW);
+    p.bump_any();
     ty(p);
     decl_list(p, T![;], parameter, MODULE_ITEM_OR_ATTR_RECOVERY);
     p.eat(T![;]);

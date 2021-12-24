@@ -43,6 +43,12 @@ endmodule
     let expect = expect![[r#"
         test = module;
 
+            $angle = hierarchical parameter system function;
+            $hflip = hierarchical parameter system function;
+            $mfactor = hierarchical parameter system function;
+            $vflip = hierarchical parameter system function;
+            $xposition = hierarchical parameter system function;
+            $yposition = hierarchical parameter system function;
             hypsmooth = function;
 
                 c = function argument;
@@ -138,6 +144,12 @@ endmodule
     let expect = expect![[r#"
         test = module;
 
+            $angle = hierarchical parameter system function;
+            $hflip = hierarchical parameter system function;
+            $mfactor = hierarchical parameter system function;
+            $vflip = hierarchical parameter system function;
+            $xposition = hierarchical parameter system function;
+            $yposition = hierarchical parameter system function;
             bar = parameter;
             foo = parameter;
             test = block scope;
@@ -169,6 +181,12 @@ endmodule
     let expect = expect![[r#"
         test = module;
 
+            $angle = hierarchical parameter system function;
+            $hflip = hierarchical parameter system function;
+            $mfactor = hierarchical parameter system function;
+            $vflip = hierarchical parameter system function;
+            $xposition = hierarchical parameter system function;
+            $yposition = hierarchical parameter system function;
             a = node;
             br_a_port = branch;
             br_ac = branch;

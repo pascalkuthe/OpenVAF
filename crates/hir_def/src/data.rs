@@ -7,9 +7,23 @@ use typed_index_collections::TiSlice;
 use crate::db::HirDefDB;
 use crate::item_tree::{self, BranchKind, DisciplineAttrKind, Domain, NatureRef};
 use crate::{
-    BranchId, DisciplineId, FunctionId, ItemTree, LocalFunctionArgId, LocalNatureAttrId, Lookup,
-    NatureId, NodeId, ParamId, Type, VarId,
+    AliasParamId, BranchId, DisciplineId, FunctionId, ItemTree, LocalFunctionArgId,
+    LocalNatureAttrId, Lookup, NatureId, NodeId, ParamId, Path, Type, VarId,
 };
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub struct AliasParamData {
+    pub name: Name,
+    pub src: Option<Path>,
+}
+
+impl AliasParamData {
+    pub fn alias_data_query(db: &dyn HirDefDB, param: AliasParamId) -> Arc<AliasParamData> {
+        let loc = param.lookup(db);
+        let tree = &loc.item_tree(db)[loc.id];
+        Arc::new(AliasParamData { name: tree.name.clone(), src: tree.src.clone() })
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct DisciplineAttrData {

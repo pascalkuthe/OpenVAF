@@ -1,0 +1,246 @@
+// ****************************************************************************
+// *  BSIM-IMG 103.0.0 released by Pragya Kushwaha on 1/2/2020                *
+// *  BSIM Independent Multi-Gate Model (Verilog-A)                           *
+// ****************************************************************************
+
+// ****************************************************************************
+// *  Copyright © 2020 University of California                               *
+// *                                                                          *
+// *  Project director: Prof. Chenming Hu                                     *
+// *                                                                          *
+// *  Current developers: Pragya Kushwaha (Postdoc, UC Berkeley)              *
+// *                      Harshit Agarwal (Postdoc, UC Berkeley)              *
+// *                      Avirup Dasgupta (Postdoc, UC Berkeley)              *
+// *                      Girish Pahwa    (Postdoc, UC Berkeley)              *
+// *                      Chetan K. Dabhi (Ph.D., IIT Kanpur)                 *
+// ****************************************************************************
+
+/*
+Licensed under Educational Community License, Version 2.0 (the "License"); you may
+not use this file except in compliance with the License. You may obtain a copy of the license at
+http://opensource.org/licenses/ECL-2.0
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT 
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations
+under the License.
+
+BSIM-IMG model is supported by the members of Silicon Integration Initiative's Compact Model Coalition. A link to the most recent version of this
+standard can be found at: http://www.si2.org/cmc 
+*/
+
+q1    = xg1-phi1; 
+auxb1 = k1 * q1; 
+
+aaux  = -A0 * exp(phi1); 
+qsqrt = auxb1 * auxb1 + aaux; 
+
+if (qsqrt < 0.0) begin 
+    q             = sqrt(-qsqrt); 
+    csc1          = 1.0/sin(0.5 * q); 
+    T1            = csc1 * csc1; 
+    coth1         = cos(0.5 * q) * csc1;
+    T0            = -0.5*coth1/q;
+    dqcothqdqsqrt = 0.25 * T1 + T0; 
+end else begin 
+    q             = sqrt(qsqrt); 
+    csc1          = 1.0/sinh(0.5 * q); 
+    T1            = csc1 * csc1;
+    coth1         = sqrt(1.0+T1);//cosh(0.5 * q) * csc1; 
+    T0            = 0.5*coth1/q;
+    dqcothqdqsqrt = -0.25 * T1 + T0; 
+end 
+
+qcoth = q * coth1;
+T2 = auxb1 + qcoth;
+T3 = 1.0/T2;
+q2 =xg2 - xg1 + q1 - ln(abs(qsqrt * T1*T3*T3)) ; 
+
+f   = aaux + (auxb1 + qcoth) * (k2 * q2 + auxb1); 
+
+dlogsinhqsqdqsqrt = 1.0 / qsqrt - T0; 
+dqsqrt  = -2.0 * k1 * auxb1 + aaux; 
+dqcoth  = dqcothqdqsqrt * dqsqrt; 
+dq2     = -1.0 + 2.0 * ((-k1 + dqcoth) * T3) - dlogsinhqsqdqsqrt * dqsqrt; 
+df  = aaux - k1*(auxb1 + T2) + auxb1 * dqcoth + k2*(dq2*T2+ q2*(dqcoth-k1)); 
+
+delta = -f / df;
+//delta = max(delta,-0.5);
+//delta = min(delta,0.5);
+phi1 = phi1 + delta; 
+
+// ****************************************************************************
+q1    = xg1-phi1; 
+auxb1 = k1 * q1; 
+
+aaux  = -A0 * exp(phi1); 
+qsqrt = auxb1 * auxb1 + aaux; 
+
+if (qsqrt < 0.0) begin 
+    q             = sqrt(-qsqrt); 
+    csc1          = 1.0/sin(0.5 * q); 
+    T1            = csc1 * csc1; 
+    coth1         = cos(0.5 * q) * csc1;
+    T0            = -0.5*coth1/q;
+    dqcothqdqsqrt = 0.25 * T1 + T0; 
+end else begin 
+    q             = sqrt(qsqrt); 
+    csc1          = 1.0/sinh(0.5 * q); 
+    T1            = csc1 * csc1;
+    coth1         = sqrt(1.0+T1);//cosh(0.5 * q) * csc1; 
+    T0            = 0.5*coth1/q;
+    dqcothqdqsqrt = -0.25 * T1 + T0; 
+end 
+
+qcoth = q * coth1;
+T2 = auxb1 + qcoth;
+T3 = 1.0/T2;
+q2 =xg2 - xg1 + q1 - ln(abs(qsqrt * T1*T3*T3)) ; 
+
+f   = aaux + (auxb1 + qcoth) * (k2 * q2 + auxb1); 
+
+dlogsinhqsqdqsqrt = 1.0 / qsqrt - T0; 
+dqsqrt  = -2.0 * k1 * auxb1 + aaux; 
+dqcoth  = dqcothqdqsqrt * dqsqrt; 
+dq2     = -1.0 + 2.0 * ((-k1 + dqcoth) * T3) - dlogsinhqsqdqsqrt * dqsqrt; 
+df  = aaux - k1*(auxb1 + T2) + auxb1 * dqcoth + k2*(dq2*T2+ q2*(dqcoth-k1)); 
+
+delta = -f / df;
+//delta = max(delta,-1.0);
+//delta = min(delta,1.0);
+phi1 = phi1 + delta;  
+
+
+// ****************************************************************************
+
+q1    = xg1-phi1; 
+auxb1 = k1 * q1; 
+
+aaux  = -A0 * exp(phi1); 
+qsqrt = auxb1 * auxb1 + aaux; 
+if (qsqrt < 0.0) begin 
+    q             = sqrt(-qsqrt); 
+    csc1          = 1.0/sin(0.5 * q); 
+    T1            = csc1 * csc1; 
+    coth1         = cos(0.5 * q) * csc1;
+    T0            = -0.5*coth1/q;
+    dqcothqdqsqrt = 0.25 * T1 + T0;
+end else begin 
+    q             = sqrt(qsqrt); 
+    csc1          = 1.0/sinh(0.5 * q); 
+    T1            = csc1 * csc1;
+    coth1         = sqrt(1.0+T1);//cosh(0.5 * q) * csc1; 
+    T0            = 0.5*coth1/q;
+    dqcothqdqsqrt = -0.25 * T1 + T0; 
+end 
+
+qcoth = q * coth1;
+T2 = auxb1 + qcoth;
+T3 = 1.0/T2;
+q2 =xg2 - xg1 + q1 - ln(abs(qsqrt*T1*T3*T3)) ; 
+
+f   = aaux + (auxb1 + qcoth) * (k2 * q2 + auxb1); 
+
+
+  dlogsinhqsqdqsqrt = 1.0 / qsqrt - T0; 
+  dqsqrt  = -2.0 * k1 * auxb1 + aaux; 
+  dqcoth  = dqcothqdqsqrt * dqsqrt; 
+  dq2     = -1.0 + 2.0 * ((-k1 + dqcoth) * T3) - dlogsinhqsqdqsqrt * dqsqrt; 
+  df  = aaux - k1*(auxb1 + T2) + auxb1 * dqcoth + k2*(dq2*T2+ q2*(dqcoth-k1)); 
+
+
+delta = -f / df;
+
+//delta = max(delta,-1.0);
+//delta = min(delta,1.0);
+
+phi1 = phi1 + delta;  
+
+// ****************************************************************************
+
+q1    = xg1-phi1; 
+auxb1 = k1 * q1; 
+
+aaux  = -A0 * exp(phi1); 
+qsqrt = auxb1 * auxb1 + aaux; 
+if (qsqrt < 0.0) begin 
+    q             = sqrt(-qsqrt); 
+    csc1          = 1.0/sin(0.5 * q); 
+    T1            = csc1 * csc1; 
+    coth1         = cos(0.5 * q) * csc1;
+    T0            = -0.5*coth1/q;
+    dqcothqdqsqrt = 0.25 * T1 + T0;
+end else begin 
+    q             = sqrt(qsqrt); 
+    csc1          = 1.0/sinh(0.5 * q); 
+    T1            = csc1 * csc1;
+    coth1         = sqrt(1.0+T1);//cosh(0.5 * q) * csc1; 
+    T0            = 0.5*coth1/q;
+    dqcothqdqsqrt = -0.25 * T1 + T0; 
+end 
+
+qcoth = q * coth1;
+T2 = auxb1 + qcoth;
+T3 = 1.0/T2;
+q2 =xg2 - xg1 + q1 - ln(abs(qsqrt*T1*T3*T3)) ; 
+
+f   = aaux + (auxb1 + qcoth) * (k2 * q2 + auxb1); 
+
+
+  dlogsinhqsqdqsqrt = 1.0 / qsqrt - T0; 
+  dqsqrt  = -2.0 * k1 * auxb1 + aaux; 
+  dqcoth  = dqcothqdqsqrt * dqsqrt; 
+  dq2     = -1.0 + 2.0 * ((-k1 + dqcoth) * T3) - dlogsinhqsqdqsqrt * dqsqrt; 
+  df  = aaux - k1*(auxb1 + T2) + auxb1 * dqcoth + k2*(dq2*T2+ q2*(dqcoth-k1)); 
+
+
+delta = -f / df;
+
+//delta = max(delta,-1.0);
+//delta = min(delta,1.0);
+
+phi1 = phi1 + delta;  
+
+// ****************************************************************************
+
+q1    = xg1-phi1; 
+auxb1 = k1 * q1; 
+
+aaux  = -A0 * exp(phi1); 
+qsqrt = auxb1 * auxb1 + aaux; 
+if (qsqrt < 0.0) begin 
+    q             = sqrt(-qsqrt); 
+    csc1          = 1.0/sin(0.5 * q); 
+    T1            = csc1 * csc1; 
+    coth1         = cos(0.5 * q) * csc1;
+    T0            = -0.5*coth1/q;
+    dqcothqdqsqrt = 0.25 * T1 + T0;
+end else begin 
+    q             = sqrt(qsqrt); 
+    csc1          = 1.0/sinh(0.5 * q); 
+    T1            = csc1 * csc1;
+    coth1         = sqrt(1.0+T1);//cosh(0.5 * q) * csc1; 
+    T0            = 0.5*coth1/q;
+    dqcothqdqsqrt = -0.25 * T1 + T0; 
+end 
+
+qcoth = q * coth1;
+T2 = auxb1 + qcoth;
+T3 = 1.0/T2;
+q2 =xg2 - xg1 + q1 - ln(abs(qsqrt*T1*T3*T3)) ; 
+
+f   = aaux + (auxb1 + qcoth) * (k2 * q2 + auxb1); 
+
+
+  dlogsinhqsqdqsqrt = 1.0 / qsqrt - T0; 
+  dqsqrt  = -2.0 * k1 * auxb1 + aaux; 
+  dqcoth  = dqcothqdqsqrt * dqsqrt; 
+  dq2     = -1.0 + 2.0 * ((-k1 + dqcoth) * T3) - dlogsinhqsqdqsqrt * dqsqrt; 
+  df  = aaux - k1*(auxb1 + T2) + auxb1 * dqcoth + k2*(dq2*T2+ q2*(dqcoth-k1)); 
+
+
+delta = -f / df;
+
+//delta = max(delta,-1.0);
+//delta = min(delta,1.0);
+
+phi1 = phi1 + delta;  
+

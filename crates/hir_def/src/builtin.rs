@@ -89,42 +89,47 @@ pub enum BuiltIn {
     simparam_str = 77u8,
     simprobe = 78u8,
     discontinuity = 79u8,
-    mfactor = 80u8,
-    xposition = 81u8,
-    yposition = 82u8,
-    angle = 83u8,
-    hflip = 84u8,
-    vflip = 85u8,
-    param_given = 86u8,
-    port_connected = 87u8,
-    analog_node_alias = 88u8,
-    analog_port_alias = 89u8,
-    test_plusargs = 90u8,
-    value_plusargs = 91u8,
-    analysis = 92u8,
-    ac_stim = 93u8,
-    noise_table = 94u8,
-    noise_table_log = 95u8,
-    white_noise = 96u8,
-    flicker_noise = 97u8,
-    limit = 98u8,
-    bound_step = 99u8,
-    absdelay = 100u8,
-    ddt = 101u8,
-    idt = 102u8,
-    idtmod = 103u8,
-    ddx = 104u8,
-    zi_nd = 105u8,
-    zi_np = 106u8,
-    zi_zd = 107u8,
-    zi_zp = 108u8,
-    laplace_nd = 109u8,
-    laplace_np = 110u8,
-    laplace_zd = 111u8,
-    laplace_zp = 112u8,
-    limexp = 113u8,
-    last_crossing = 114u8,
-    slew = 115u8,
+    param_given = 80u8,
+    port_connected = 81u8,
+    analog_node_alias = 82u8,
+    analog_port_alias = 83u8,
+    test_plusargs = 84u8,
+    value_plusargs = 85u8,
+    analysis = 86u8,
+    ac_stim = 87u8,
+    noise_table = 88u8,
+    noise_table_log = 89u8,
+    white_noise = 90u8,
+    flicker_noise = 91u8,
+    limit = 92u8,
+    bound_step = 93u8,
+    absdelay = 94u8,
+    ddt = 95u8,
+    idt = 96u8,
+    idtmod = 97u8,
+    ddx = 98u8,
+    zi_nd = 99u8,
+    zi_np = 100u8,
+    zi_zd = 101u8,
+    zi_zp = 102u8,
+    laplace_nd = 103u8,
+    laplace_np = 104u8,
+    laplace_zd = 105u8,
+    laplace_zp = 106u8,
+    limexp = 107u8,
+    last_crossing = 108u8,
+    slew = 109u8,
+    transition = 110u8,
+}
+#[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[allow(nonstandard_style, unreachable_pub)]
+pub enum ParamSysFun {
+    mfactor,
+    xposition,
+    yposition,
+    angle,
+    hflip,
+    vflip,
 }
 impl BuiltIn {
     #[allow(clippy::match_like_matches_macro)]
@@ -145,7 +150,8 @@ impl BuiltIn {
             | BuiltIn::laplace_zp
             | BuiltIn::limexp
             | BuiltIn::last_crossing
-            | BuiltIn::slew => true,
+            | BuiltIn::slew
+            | BuiltIn::transition => true,
             _ => false,
         }
     }
@@ -269,12 +275,6 @@ pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>) {
     dst.insert(sysfun::simparam_str, BuiltIn::simparam_str.into());
     dst.insert(sysfun::simprobe, BuiltIn::simprobe.into());
     dst.insert(sysfun::discontinuity, BuiltIn::discontinuity.into());
-    dst.insert(sysfun::mfactor, BuiltIn::mfactor.into());
-    dst.insert(sysfun::xposition, BuiltIn::xposition.into());
-    dst.insert(sysfun::yposition, BuiltIn::yposition.into());
-    dst.insert(sysfun::angle, BuiltIn::angle.into());
-    dst.insert(sysfun::hflip, BuiltIn::hflip.into());
-    dst.insert(sysfun::vflip, BuiltIn::vflip.into());
     dst.insert(sysfun::param_given, BuiltIn::param_given.into());
     dst.insert(sysfun::port_connected, BuiltIn::port_connected.into());
     dst.insert(sysfun::analog_node_alias, BuiltIn::analog_node_alias.into());
@@ -305,4 +305,13 @@ pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>) {
     dst.insert(kw::limexp, BuiltIn::limexp.into());
     dst.insert(kw::last_crossing, BuiltIn::last_crossing.into());
     dst.insert(kw::slew, BuiltIn::slew.into());
+    dst.insert(kw::transition, BuiltIn::transition.into());
+}
+pub fn insert_modulle_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>) {
+    dst.insert(sysfun::mfactor, ParamSysFun::mfactor.into());
+    dst.insert(sysfun::xposition, ParamSysFun::xposition.into());
+    dst.insert(sysfun::yposition, ParamSysFun::yposition.into());
+    dst.insert(sysfun::angle, ParamSysFun::angle.into());
+    dst.insert(sysfun::hflip, ParamSysFun::hflip.into());
+    dst.insert(sysfun::vflip, ParamSysFun::vflip.into());
 }

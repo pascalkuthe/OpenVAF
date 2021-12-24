@@ -1,13 +1,20 @@
 
 [workspace]
 resolver = "2"
-members = ["crates/*","xtask/"]
-exclude = ["crates/linker","crates/lld","crates/codegen_llvm_old","crates/pass","crates/middle"]
+members = ["crates/*","xtask/", "lib/*"]
+exclude = ["crates/linker","crates/lld","crates/pass"]
+
+[profile.benchmark]
+inherits = "release"
+lto = "thin"
+incremental = true
+
+
 
 [profile.dev]
 # Disabling debug info speeds up builds a bunch,
 # and we don't rely on it for debugging that much.
-debug = 0
+debug = 2
 
 [profile.dev.package]
 # These speed up local tests.
@@ -16,3 +23,7 @@ rustc-hash.opt-level = 3
 ahash.opt-level = 3
 smol_str.opt-level = 3
 text-size.opt-level = 3
+
+
+[patch.crates-io]
+salsa = { git = 'https://github.com/DSPOM2/salsa' , branch = 'patch-1'}

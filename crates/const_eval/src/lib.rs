@@ -49,6 +49,7 @@ impl EvalCtx<'_> {
             Op::BoolToReal => self.op_1(|val: bool| val as i32 as f64, args),
             Op::BoolToInt => self.op_1(|val: bool| val as i32, args),
             Op::IntToBool => self.op_1(|val: i32| val != 0, args),
+            Op::RealToBool => self.op_1(|val: f64| val != 0f64, args),
             // Op::RealToComplex => self.op_1(|val| Complex64 { real: val, imag: 0.0 }, args),
             // Op::RealComponent => self.op_1(|val: Complex64| val.real, args),
             // Op::ImagComponent => self.op_1(|val: Complex64| val.imag, args),
@@ -108,7 +109,7 @@ impl EvalCtx<'_> {
             Op::ArcCos => self.op_1(f64::acos, args),
             Op::ArcTan => self.op_1(f64::atan, args),
             Op::ArcTan2 => self.op_2(f64::atan2, args),
-            Op::SinH => self.op_1(f64::acos, args),
+            Op::SinH => self.op_1(f64::sinh, args),
             Op::CosH => self.op_1(f64::cosh, args),
             Op::TanH => self.op_1(f64::tanh, args),
             Op::ArcSinH => self.op_1(f64::asinh, args),
@@ -116,14 +117,13 @@ impl EvalCtx<'_> {
             Op::ArcTanH => self.op_1(f64::atanh, args),
             Op::RealPow => self.op_2(f64::powf, args),
             // TODO const eval call?
-            Op::Call(_) => FlatSet::Top,
-            Op::NoOp => FlatSet::Top,
+            Op::Call(_) | Op::NoOp => FlatSet::Top,
         }
     }
 
     fn get_operand(&self, op: &Operand) -> FlatSet<Const> {
         match *op {
-            Operand::Const(ref c) => FlatSet::Elem(c.clone()),
+            Operand::Const(c) => FlatSet::Elem(c),
             // TOOD avoid clones?
             Operand::Local(local) => self.ssa_consts.get(local),
             Operand::Place(place) => self.const_places.get_cloned_flat_set(place),
@@ -176,7 +176,12 @@ impl EvalCtx<'_> {
     {
         match (self.get_operand(&args[0]), self.get_operand(&args[1])) {
             (FlatSet::Elem(arg1), FlatSet::Elem(arg2)) => {
-                match f(arg1.try_into().unwrap(), arg2.try_into().unwrap()) {
+                let arg1 = arg1.try_into();
+                let arg2 = arg2.try_into();
+                if arg1.is_err() || arg2.is_err() {
+                    eprintln!("{:?}", args);
+                }
+                match f(arg1.unwrap(), arg2.unwrap()) {
                     Some(c) => FlatSet::Elem(c.into()),
                     None => {
                         // TODO repor this somewhere

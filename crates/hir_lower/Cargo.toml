@@ -19,9 +19,8 @@ typed_indexmap = {version = "0.0.0", path = "../typed_indexmap"}
 
 ahash = "0.7"
 typed-index-collections = "3.0"
-
-triomphe = { version = "0.1", default_features = false, features = ["std"] }
 indexmap = "1.6"
+lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
 

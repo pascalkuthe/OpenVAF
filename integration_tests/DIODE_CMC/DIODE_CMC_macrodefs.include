@@ -1,0 +1,773 @@
+//======================================================================================
+//======================================================================================
+// Filename: DIODE_CMC_macrodefs.include
+//======================================================================================
+//======================================================================================
+//
+//    
+//                        Silicon Integration Initiative (Si2)
+//                      Compact Model Coalition In-Code Statement
+//    
+//    Software is distributed as is, completely without warranty or service support.  NXP
+//    Semiconductors, Hiroshima University, and Silicon Integration Initiative, Inc. (Si2),
+//    along with their employees are not liable for the condition or performance of the software.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 own the copyright and grant users
+//    a perpetual, irrevocable, worldwide, non-exclusive, royalty-free license with respect to the
+//    software as set forth below.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 hereby disclaim all implied
+//    warranties.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 grant the users the right to modify,
+//    copy, and redistribute the software and documentation, both within the user's organization
+//    and externally, subject to the following restrictions
+//    
+//      1. The users agree not to charge for the NXP Semiconductors, Hiroshima University,
+//      and Si2 -developed code itself but may charge for additions, extensions, or support.
+//    
+//      2. In any product based on the software, the users agree to acknowledge NXP
+//      Semiconductors, Hiroshima University, and Si2 that developed the software.  This
+//      acknowledgment shall appear in the product documentation.
+//    
+//      3. Redistributions to others of source code and documentation must retain the copyright
+//      notice, disclaimer, and list of conditions.
+//    
+//      4. Redistributions to others in binary form must reproduce the copyright notice,
+//      disclaimer, and list of conditions in the documentation and/or other materials provided
+//      with the distribution.
+//    
+//                                                     CMC In-Code Statement Revision 1.1 6/9/2016
+//
+//
+//
+// The diode_cmc is based on Juncap2 200.3.3 (test) from NXP Semiconductors. 
+//
+// Portions commented as diode_cmc code: additional models since 2009.
+//
+// Portions commented as diode_cmc recovery and high-injection equations code: recovery model by Hiroshima University.
+//
+// All other parts are taken from Juncap2 200.3.3. Copyright 2008 NXP Semiconductors, All Rights Reserved.
+//======================================================================================
+//======================================================================================
+//
+//
+
+///////////////////////////////////////////
+//
+// Macros and constants used in diode_cmc
+//
+///////////////////////////////////////////
+
+// Other constants
+`define MINTEMP          -250
+`define vbilow            0.050
+`define a                 2
+`define epsch             0.1
+`define dvbi              0.050
+`define epsav             1E-6
+`define vbrmax            1000
+`define vmaxlarge         1E8
+`define aerfc             0.29214664
+`define twothirds         0.666666666666667
+
+
+// Clipping values
+`define levelnumber        200
+`define AB_cliplow         0
+`define LS_cliplow         0
+`define LG_cliplow         0
+`define MULT_cliplow       0
+`define TRJ_cliplow        `MINTEMP
+`define IMAX_cliplow       1E-12
+`define CJORBOT_cliplow    1E-12
+`define CJORSTI_cliplow    1E-18
+`define CJORGAT_cliplow    1E-18
+`define VBIR_cliplow       `vbilow
+`define P_cliplow          0.05
+`define P_cliphigh         0.95
+`define IDSATR_cliplow     0
+`define CSRH_cliplow       0
+`define XJUN_cliplow       1E-9
+`define CTAT_cliplow       0
+`define MEFFTAT_cliplow    0.01
+`define CBBT_cliplow       0
+`define VBR_cliplow        0.1
+`define PBR_cliplow        0.1
+`define VJUNREF_cliplow    0.5
+`define FJUNQ_cliplow      0.0
+
+// Diode_cmc code
+`define RS_cliplow         0.0
+`define KF_cliplow         0.0
+`define AF_cliplow         0.1
+`define TT_cliplow         0
+`define STVBR_cliplow      0
+`define NFA_cliplow        0.1
+`define VOLT_cliplow       0.0
+`define MINRES             1.0e-13
+`define XTI_cliplow        0.1
+`define SCALE_cliplow      0
+`define SHRINK_cliplow     0
+`define SHRINK_cliphigh    100
+// End of Diode_cmc code
+
+/////////////////////////////////////////////////////////////////////////////
+//
+//  Macro definitions.
+//
+//  Note that because at present locally scoped variables
+//  can only be in named blocks, the intermediate variables
+//  used in the macros below must be explicitly declared
+//  as variables.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+// Variable declarations of variables that need to be *local* in juncap-express initialization
+
+`define LocalGlobalVars \
+/* declaration of variables needed in macro "calcerfcexpmtat" */ \
+real ysq, terfc, erfcpos; \
+ \
+/* declaration of variables needed in hypfunction 5 */ \
+real h1, h2, h2d, h3, h4, h5; \
+ \
+/* declaration of variables calculated outside macro "juncapfunction", voltage-dependent part */ \
+real vj, z, zinv, two_psistar, vjlim, vjsrh, vbbt, vav; \
+ \
+/* declaration of variables used within macro "juncapfunction" */ \
+real tmp, id; \
+real isrh, vbi_minus_vjsrh, wsrhstep, dwsrh, wsrh, wdep, asrh; \
+real itat, btat, twoatatoverthreebtat, umaxbeforelimiting, umax, sqrtumax, umaxpoweronepointfive; \
+real wgamma, wtat, ktat, ltat, mtat, xerfc, erfctimesexpmtat, gammamax; \
+real ibbt, Fmaxr; \
+real fbreakdown; \
+
+// Instance parameter dependent initialization
+
+`define JuncapInitInstance \
+/*  Diode_cmc code */ \
+if (idsatbot * AB_i > 0) begin \
+    vmaxbot = phitd * ln(IMAX_i / (idsatbot * AB_i) + 1) * NFABOT_i; \
+end else begin \
+    vmaxbot = `vmaxlarge; \
+end \
+if (idsatsti * LS_i > 0) begin \
+    vmaxsti = phitd * ln(IMAX_i / (idsatsti * LS_i) + 1) * NFASTI_i;  \
+end else begin \
+    vmaxsti = `vmaxlarge; \
+end \
+if (idsatgat * LG_i > 0) begin \
+    vmaxgat = phitd * ln(IMAX_i / (idsatgat * LG_i) + 1) * NFAGAT_i; \
+end else begin \
+    vmaxgat = `vmaxlarge; \
+end \
+VMAX = min(min(vmaxbot, vmaxsti), vmaxgat); \
+/* End of Diode_cmc code */ \
+`expl(VMAX * phitdinv, exp_VMAX_over_phitd) \
+\
+/* determination of minimum value of the relevant built-in voltages */ \
+/* and determination of limiting value of conditioned voltage for BBT calculation */ \
+vbibot2 = vbibot; \
+vbisti2 = vbisti; \
+vbigat2 = vbigat; \
+pbot2 = PBOT_i; \
+psti2 = PSTI_i; \
+pgat2 = PGAT_i; \
+vbibot2r = VBIRBOT_i; \
+vbisti2r = VBIRSTI_i; \
+vbigat2r = VBIRGAT_i; \
+if (AB_i == 0) begin \
+    vbibot2  = vbisti + vbigat; \
+    pbot2    = 0.9 * min(PSTI_i, PGAT_i); \
+    vbibot2r = VBIRSTI_i + VBIRGAT_i; \
+end \
+if (LS_i == 0) begin \
+    vbisti2  = vbibot + vbigat; \
+    psti2    = 0.9 * min(PBOT_i, PGAT_i); \
+    vbisti2r = VBIRBOT_i + VBIRGAT_i; \
+end \
+if (LG_i == 0) begin \
+    vbigat2  = vbibot + vbisti; \
+    pgat2    = 0.9 * min(PBOT_i, PSTI_i); \
+    vbigat2r = VBIRBOT_i + VBIRSTI_i; \
+end \
+vbimin  = min(min(vbibot2, vbisti2), vbigat2); \
+vch     = vbimin * `epsch; \
+pmax    = max(max(pbot2, psti2), pgat2); \
+vfmin   = vbimin * (1 - (pow(`a, (-1.0 / (pmax))))); \
+vbbtlim = min(min(vbibot2r, vbisti2r), vbigat2r) - `dvbi;
+
+//  Diode_cmc code
+//  Resistance definition
+//  If resistance < `MINRES*1.4, node collapse will happen, 
+//  AND rnode = 0
+`define Junresistor \
+if (AB_i * resbot > 0) begin \
+   conducts = AB_i / resbot ;\
+end \
+if (LS_i * ressti > 0) begin \
+   conducts = LS_i / ressti+ conducts;\
+end \
+if (LG_i * resgat > 0) begin \
+   conducts = LG_i / resgat+ conducts;\
+end \
+restotal = 1.0/conducts + rescom; \
+if (restotal >`MINRES*1.4) begin \
+conducts = 1.0/restotal; \
+rnode    = 1; \
+end else begin \
+rnode    = 0; \
+end \
+if (((AB_i > 0 && resbot/AB_i <`MINRES) || (LS_i >0 && ressti/LS_i < `MINRES) || (LG_i >0 && resgat/LG_i < `MINRES)) && rescom < `MINRES) begin \
+   rnode = 0 ;\
+end
+// End of Diode_cmc code
+
+// Special power-functions
+
+`define mypower(x,power,result) \
+if (power == 0.5) begin \
+    result = sqrt(x); \
+end else begin \
+    result = pow(x, power); \
+end
+
+`define mypower2(x,power,result) \
+if (power == -1) begin \
+    result = 1 / (x); \
+end else begin \
+    result = pow(x, power); \
+end
+
+`define mypower3(x,power,result) \
+if (power == 4) begin \
+    result = (x) * (x) * (x) * (x); \
+end else begin \
+    result = pow(x, power); \
+end
+
+
+// Smoothing functions
+
+`define hypfunction2(x,x0,eps,hyp2) \
+hyp2 = 0.5 * ((x) + (x0) - sqrt(((x) - (x0)) * ((x) - (x0)) + 4 * (eps) * (eps)));
+
+`define hypfunction5(x,x0,eps,hyp5) \
+h1   = 4.0 * (eps) * (eps); \
+h2   = (eps) / (x0); \
+h2d  = (x) + (eps) * h2; \
+h3   = (x0) + h2d; \
+h4   = (x0) - h2d; \
+h5   = sqrt(h4 * h4 + h1); \
+hyp5 = 2.0 * ((x) * (x0) / (h3 + h5));
+
+
+// A special function used to calculate TAT-currents,
+// including an approximation of the erfc-function
+
+`define calcerfcexpmtat(y,m,result) \
+ysq = y * y; \
+if (y > 0) begin \
+    terfc = 1 / (1 + perfc * y); \
+end else begin \
+    terfc = 1 / (1 - perfc * y); \
+end \
+`expl_low(-ysq + m, tmp) \
+erfcpos = (`aerfc * terfc + berfc * (terfc * terfc) + cerfc * (terfc * terfc * terfc)) * tmp; \
+if (y > 0) begin \
+    result = erfcpos; \
+end else begin \
+    `expl_low(m, tmp) \
+    result = 2 * tmp - erfcpos; \
+end
+
+
+
+//Diode_cmc code
+//Juncap parameter check
+`define Juncapparametercheck \
+if (AB_i > ABMAX_i && ABMAX_i > 1e-18) begin \
+    $strobe("WARNING: Diode area is larger than maximum allowed value \n"); \
+end \
+if (AB_i < ABMIN_i ) begin \
+    $strobe("WARNING: Diode area is less than minimum allowed value \n"); \
+end \
+if (LS_i > LSMAX_i && LSMAX_i > 1e-12) begin \
+    $strobe("WARNING: Diode STI-edge perimeter is larger than maximum allowed value \n"); \
+end \
+if (LS_i < LSMIN_i ) begin \
+    $strobe("WARNING: Diode STI-edge perimeter is less than minimum allowed value \n"); \
+end \
+if (LG_i > LGMAX_i && LGMAX_i > 1e-12) begin \
+    $strobe("WARNING: Diode gate-edge perimeter is larger than maximum allowed value \n"); \
+end \
+if (LG_i < LGMIN_i ) begin \
+    $strobe("WARNING: Diode gate-edge perimeter is less than minimum allowed value \n"); \
+end \
+if (tkd > (TEMPMAX_i + `KELVINCONVERSION)) begin \
+   $strobe("WARNING: Junction temperature is higher than maximum allowed value \n"); \
+end \
+if (tkd < (TEMPMIN_i + `KELVINCONVERSION)) begin \
+   $strobe("WARNING: Junction temperature is lower than minimum allowed value \n"); \
+end
+
+`define Juncapcheckop(Vtotal) \
+if (Vtotal > VFMAX_i && VFMAX_i > 1e-12) begin \
+   $strobe("WARNING: Diode forward bias voltage is larger than maximum allowed value \n"); \
+end \
+if (Vtotal < (-1.0 * VRMAX_i) && VRMAX_i > 1e-12) begin \
+   $strobe("WARNING: Diode reverse bias voltage is less than maximum allowed value \n"); \
+end
+
+//End of Diode_cmc code
+
+
+
+
+// This is the main function of the JUNCAP2-model. It returns the current and charge
+// for a single diode
+
+
+`define juncapfunction(VAK,idmult,qpref,qpref2,vbiinv,one_minus_P,idsat,CSRH,CTAT,vbi,wdepnulr,VBIRinv,P,ftd,btatpart,atat,one_over_one_minus_P,CBBT,VBIR,wdepnulrinv,fbbt,VBR,VBRinv,PBR,fstop,slope,Ijprime,Qjprime,Ijnon) \
+`mypower((1 - vj * vbiinv), one_minus_P, tmp) \
+Qjprime = qpref * (1 - tmp) + qpref2 * (VAK - vj); \
+id    = idsat * idmult; \
+if ((CSRH == 0) && (CTAT == 0)) begin \
+    vbi_minus_vjsrh = 0; \
+    wsrh = 0; \
+    wdep = 0; \
+    asrh = 0; \
+    isrh = 0; \
+end else begin \
+    vbi_minus_vjsrh = vbi-vjsrh; \
+    wsrhstep = 1 - sqrt(1 - two_psistar / vbi_minus_vjsrh); \
+    if (P == 0.5) begin \
+        dwsrh = 0; \
+    end else begin \
+        dwsrh = ((wsrhstep * wsrhstep * ln(wsrhstep) / (1 - wsrhstep)) + wsrhstep) * (1 - 2 * P); \
+    end \
+    wsrh  = wsrhstep + dwsrh; \
+    `mypower(vbi_minus_vjsrh * VBIRinv, P, tmp) \
+    wdep  = wdepnulr * tmp; \
+    asrh  = ftd * ((zinv - 1) * wdep); \
+    isrh  = CSRH * (asrh * wsrh); \
+end \
+if (CTAT == 0) begin \
+    itat = 0; \
+end else begin \
+    btat  = btatpart * ((wdep * one_minus_P) / vbi_minus_vjsrh); \
+    twoatatoverthreebtat = (`twothirds * atat) / btat; \
+    umaxbeforelimiting = twoatatoverthreebtat * twoatatoverthreebtat; \
+    umax  = sqrt(umaxbeforelimiting * umaxbeforelimiting / (umaxbeforelimiting * umaxbeforelimiting + 1)); \
+    sqrtumax = sqrt(abs(umax)); \
+    umaxpoweronepointfive = umax * sqrtumax; \
+    `mypower2((1 + btat * umaxpoweronepointfive), (-P * one_over_one_minus_P), wgamma) \
+    wtat  = wsrh * wgamma / (wsrh + wgamma); \
+    ktat  = sqrt(0.375 * (btat / sqrtumax)); \
+    ltat  = 2 * (twoatatoverthreebtat * sqrtumax) - umax; \
+    mtat  = atat * twoatatoverthreebtat * sqrtumax - atat * umax + 0.5 * (btat * umaxpoweronepointfive); \
+    xerfc = (ltat - 1) * ktat; \
+    `calcerfcexpmtat(xerfc, mtat, erfctimesexpmtat) \
+    gammamax = `SQRTPI * 0.5 * (atat * erfctimesexpmtat  / ktat); \
+    itat  = CTAT * (asrh * gammamax * wtat); \
+end \
+if (CBBT == 0) begin \
+   ibbt = 0; \
+end else begin \
+   `mypower(((VBIR - vbbt) * VBIRinv), P, tmp) \
+   Fmaxr = one_over_one_minus_P * ((VBIR - vbbt) * wdepnulrinv / tmp); \
+   `expl(-fbbt / Fmaxr, tmp) \
+   ibbt  = CBBT * (VAK * Fmaxr * Fmaxr * tmp); \
+end \
+if (VBR > `vbrmax) begin \
+   fbreakdown = 1; \
+end else begin \
+   if (vav > -alphaav * VBR) begin \
+      `mypower3(abs(vav * VBRinv), PBR, tmp) \
+      fbreakdown = 1 / (1 - tmp); \
+   end else begin \
+      fbreakdown = fstop + (vav + alphaav * VBR) * slope; \
+   end \
+end \
+Ijprime = (id + isrh + itat + ibbt) * fbreakdown; \
+Ijnon = (isrh + itat + ibbt) * fbreakdown;
+
+
+
+
+
+
+//Diode_cmc recovery and high-injection equations code
+
+//--- smoothUpper ---//
+`define Fn_SU( y , x , xmax , delta ) begin \
+   TMF1 = ( xmax ) - ( x ) - ( delta ) ; \
+   TMF2 = 4.0 * ( xmax ) * ( delta) ; \
+   TMF2 = TMF2 > 0.0 ?  TMF2 : - ( TMF2 ) ; \
+   TMF2 = sqrt ( TMF1 * TMF1 + TMF2 ) ; \
+   y = ( xmax ) - 0.5 * ( TMF1 + TMF2 ) ; \
+end
+`define Fn_SU_dx( y , x , xmax , delta , dx ) begin \
+   TMF1 = ( xmax ) - ( x ) - ( delta ) ; \
+   TMF2 = 4.0 * ( xmax ) * ( delta) ; \
+   TMF2 = TMF2 > 0.0 ?  TMF2 : - ( TMF2 ) ; \
+   TMF2 = sqrt ( TMF1 * TMF1 + TMF2 ) ; \
+   dx = 0.5 * ( 1.0 + TMF1 / TMF2 ) ; \
+   y = ( xmax ) - 0.5 * ( TMF1 + TMF2 ) ; \
+end
+
+//--- smoothLower ---//
+`define Fn_SL( y , x , xmin , delta ) begin \
+   TMF1 = ( x ) - ( xmin ) - ( delta ) ; \
+   TMF2 = 4.0 * ( xmin ) * ( delta ) ; \
+   TMF2 = TMF2 > 0.0 ?  TMF2 : - ( TMF2 ) ; \
+   TMF2 = sqrt ( TMF1 * TMF1 + TMF2 ) ; \
+   y = ( xmin ) + 0.5 * ( TMF1 + TMF2 ) ; \
+end
+`define Fn_SL_dx( y , x , xmin , delta , dx ) begin \
+   TMF1 = ( x ) - ( xmin ) - ( delta ) ; \
+   TMF2 = 4.0 * ( xmin ) * ( delta ) ; \
+   TMF2 = TMF2 > 0.0 ?  TMF2 : - ( TMF2 ) ; \
+   TMF2 = sqrt ( TMF1 * TMF1 + TMF2 ) ; \
+   dx = 0.5 * ( 1.0 + TMF1 / TMF2 ) ; \
+   y = ( xmin ) + 0.5 * ( TMF1 + TMF2 ) ; \
+end
+
+//--- smoothZero ---//
+`define Fn_SZ( y , x , delta ) begin \
+   TMF2 = sqrt ( ( x ) *  ( x ) + 4.0 * ( delta ) * ( delta) ) ; \
+   y = 0.5 * ( ( x ) + TMF2 ) ; \
+   if( y < 0.0 ) begin y=0.0; end \
+end
+
+
+`define C_ESI        (1.034943e-10)             // Permittivity of semiconductor (F/m)
+//`define C_Nin0       (1.04e+16)                 // Intrinsic carrier density at 300K (m^-3)
+`define C_Nin0       (1.45e+16)                 // Intrinsic carrier density at 300K (m^-3)
+`define C_MUEP       (500)                      // Hole mobility (cm^2/V/sec)
+`define C_MUEN       (1450)                     // Electron mob. (cm^2/V/sec)
+`define C_CONC       (1.0e6)                    // [cm-3] -> [m-3] 
+`define C_cm2m_p2    (1.0e-4)                   // [cm2] -> [m2]
+`define C_NJDLT      (1.0e-2)                   // Delta for smoothing of nj
+`define C_EXPCEIL    (1e20)                     // safety valve against carrier conc explosion (-)
+`define C_PUNCH      (1.0e-7)                   // Delta for punch-through effect of depletion (m)
+`define QN_INJ_SCALING   (NQS)                  // pre/post-scaling for node voltages of charge_A and charge_K
+`define NQS_CAPACITOR    (NQS)                  // scaling for charge_A and charge_K
+`define DEP_SCALING      (DEPNQS)               // pre/post-scaling for node voltage of depl_A
+`define DEPNQS_CAPACITOR (DEPNQS)               // scaling for depl_A
+`define C_MUETMP     (1.5)                      // temperature dependence of phonon scattering (-)
+
+//End of Diode_cmc recovery and high-injection equations code
+
+
+`define nja( voltage, njl, njh, ndi, nja1, vha ) begin \
+/* Minority Carrier Density: */ \
+pnn0 = Nin * Nin / ndi; \
+/* High-Injection Threshold Voltages: */ \
+vha = (njl / phitdinv) * ln( ndi / pnn0 ); \
+/* High-Injection Coefficient for the P+/N- Junction: */ \
+if (njl < njh) begin \
+    nja10 = NJDV * (voltage - vha) + njl; \
+    /* nj_A0 = NJDV * (VAK - vha) + (NJH + NJL)/2; //improved code but results will change */ \
+    `Fn_SU( nja11, nja10, njh, `C_NJDLT ) \
+    `Fn_SL( nja1,  nja11, njl, `C_NJDLT ) \
+\
+end else begin  \
+    nja1 = njl; \
+end \
+end
+
+
+`define nja_dx( voltage, njl, njh, ndi, nja1, vha, dnja1_dv ) begin \
+/* Minority Carrier Density: */ \
+pnn0 = Nin * Nin / ndi; \
+/* High-Injection Threshold Voltages: */ \
+vha = (njl / phitdinv) * ln( ndi / pnn0 ); \
+/* High-Injection Coefficient for the P+/N- Junction: */ \
+if (njl < njh) begin \
+    nja10 = NJDV * (voltage - vha) + njl; \
+    /* nj_A0 = NJDV * (VAK - vha) + (NJH + NJL)/2; //improved code but results will change */ \
+    `Fn_SU_dx( nja11, nja10, njh, `C_NJDLT, dFn_SU ) \
+    `Fn_SL_dx( nja1,  nja11, njl, `C_NJDLT, dFn_SL ) \
+    dnja1_dv = NJDV * dFn_SU * dFn_SL; \
+\
+end else begin  \
+    nja1 = njl; \
+    dnja1_dv = 0.0; \
+end \
+end
+
+
+// The following code is written as a macro because the naming of the instance parameters is
+// different for JUNCAP2 stand-alone and JUNCAP2-in-PSP: AB, LS, LG for JUNCAP2 stand-alone,
+// ABSOURCE, LSSOURCE, LGSOURCE for source junction in PSP and ABDRAIN, LSDRAIN, LGDRAIN for
+// drain junction in PSP
+`define juncapcommon(V) \
+if ( !( ((AB_i) == 0) && ((LS_i) == 0) && ((LG_i) == 0) ) ) begin \
+    `hypfunction5(V, vfmin, vch, vj) \
+/* Diode_cmc code */ \
+    if (V < VMAX) begin \
+        `expl(0.5 * (V * phitdinv), zinv) \
+/*  BOT scaling */	\
+        `nja(V, NFABOT_i, NJH, NDIBOT_i, nj1, vha1) \
+        `expl((phitdinv * ( V / nj1 + vha1 * (nj1-NFABOT_i) / (NFABOT_i*NJH))), idmultbot) \
+/*  STI scaling */	\
+        `nja(V, NFASTI_i, NJH, NDISTI_i, nj1, vha1) \
+        `expl((phitdinv * ( V / nj1 + vha1 * (nj1-NFASTI_i) / (NFASTI_i*NJH))), idmultsti) \
+/*  GAT scaling */	\
+        `nja(V, NFAGAT_i, NJH, NDIGAT_i, nj1, vha1) \
+        `expl((phitdinv * ( V / nj1 + vha1 * (nj1-NFAGAT_i) / (NFAGAT_i*NJH))), idmultgat) \
+    end else begin \
+        zinv = sqrt((1 + (V - VMAX) * phitdinv) * exp_VMAX_over_phitd); \
+/*  BOT scaling */	\
+        `nja_dx(VMAX, NFABOT_i, NJH, NDIBOT_i, nj1, vha1, dnj1_dV) \
+        `expl((phitdinv * ( VMAX / nj1 + vha1 * (nj1-NFABOT_i) / (NFABOT_i*NJH))), exp_VMAX_over_phitd_bot) \
+        dVMAX_over_phitd_dV = phitdinv * ( (nj1 - VMAX * dnj1_dV) / (nj1*nj1) + vha1 * dnj1_dV / (NFABOT_i*NJH) ); \
+	idmultbot = (1 + (V - VMAX) * dVMAX_over_phitd_dV) * exp_VMAX_over_phitd_bot; \
+/*  STI scaling */	\
+        `nja_dx(VMAX, NFASTI_i, NJH, NDISTI_i, nj1, vha1, dnj1_dV) \
+	`expl((phitdinv * ( VMAX / nj1 + vha1 * (nj1-NFASTI_i) / (NFASTI_i*NJH))), exp_VMAX_over_phitd_sti) \
+        dVMAX_over_phitd_dV = phitdinv * ( (nj1 - VMAX * dnj1_dV) / (nj1*nj1) + vha1 * dnj1_dV / (NFASTI_i*NJH) ); \
+	idmultsti = (1 + (V - VMAX) * dVMAX_over_phitd_dV) * exp_VMAX_over_phitd_sti; \
+/*  GAT scaling */	\
+        `nja_dx(VMAX, NFAGAT_i, NJH, NDIGAT_i, nj1, vha1, dnj1_dV) \
+	`expl((phitdinv * ( VMAX / nj1 + vha1 * (nj1-NFAGAT_i) / (NFAGAT_i*NJH))), exp_VMAX_over_phitd_gat) \
+        dVMAX_over_phitd_dV = phitdinv * ( (nj1 - VMAX * dnj1_dV) / (nj1*nj1) + vha1 * dnj1_dV / (NFAGAT_i*NJH) ); \
+	idmultgat = (1 + (V - VMAX) * dVMAX_over_phitd_dV) * exp_VMAX_over_phitd_gat; \
+    end \
+    idmultbot = idmultbot - 1.0 ;\
+    idmultsti = idmultsti - 1.0 ;\
+    idmultgat = idmultgat - 1.0 ;\
+/* End of Diode_cmc code */ \
+    z      = 1 / zinv; \
+    if (V > 0) begin \
+        two_psistar = 2.0 * (phitd * ln(2.0 + z + sqrt((z + 1.0) * (z + 3.0)))); \
+    end else begin \
+        two_psistar = -V + 2.0 * (phitd * ln(2 * zinv + 1 + sqrt((1 + zinv) * (1 + 3 * zinv)))); \
+    end \
+    vjlim = vbimin - two_psistar; \
+    `hypfunction2(V, vjlim, phitd, vjsrh) \
+    `hypfunction2(V, vbbtlim, phitr, vbbt) \
+    `hypfunction2(V, 0, `epsav, vav) \
+end else begin \
+    idmultbot   = 0; \
+    idmultsti   = 0; \
+    idmultgat   = 0; \
+    two_psistar = 0; \
+    vj    = 0; \
+    zinv  = 0; \
+    vjsrh = 0; \
+    vbbt  = 0; \
+    vav   = 0; \
+end \
+if ((AB_i) == 0) begin \
+    ijunbot = 0; \
+    ijnonbot = 0; \
+    qjunbot = 0; \
+end else begin \
+    `juncapfunction(V, idmultbot, qprefbot, qpref2bot, vbiinvbot, one_minus_PBOT, idsatbot, CSRHBOT_i, CTATBOT_i, vbibot, wdepnulrbot, VBIRBOTinv, PBOT_i, ftdbot, btatpartbot, atatbot, one_over_one_minus_PBOT, CBBTBOT_i, VBIRBOT_i, wdepnulrinvbot, fbbtbot, VBRBOT_i, VBRinvbot, PBRBOT_i, fstopbot, slopebot, ijunbot, qjunbot, ijnonbot) \
+end \
+if ((LS_i) == 0) begin \
+    ijunsti = 0; \
+    ijnonsti = 0; \
+    qjunsti = 0; \
+end else begin \
+    `juncapfunction(V, idmultsti, qprefsti, qpref2sti, vbiinvsti, one_minus_PSTI, idsatsti, CSRHSTI_i, CTATSTI_i, vbisti, wdepnulrsti, VBIRSTIinv, PSTI_i, ftdsti, btatpartsti, atatsti, one_over_one_minus_PSTI, CBBTSTI_i, VBIRSTI_i, wdepnulrinvsti, fbbtsti, VBRSTI_i, VBRinvsti, PBRSTI_i, fstopsti, slopesti, ijunsti, qjunsti, ijnonsti) \
+end \
+if ((LG_i) == 0) begin \
+    ijungat = 0; \
+    ijnongat = 0; \
+    qjungat = 0; \
+end else begin \
+    `juncapfunction(V, idmultgat, qprefgat, qpref2gat, vbiinvgat, one_minus_PGAT, idsatgat, CSRHGAT_i, CTATGAT_i, vbigat, wdepnulrgat, VBIRGATinv, PGAT_i, ftdgat, btatpartgat, atatgat, one_over_one_minus_PGAT, CBBTGAT_i, VBIRGAT_i, wdepnulrinvgat, fbbtgat, VBRGAT_i, VBRinvgat, PBRGAT_i, fstopgat, slopegat, ijungat, qjungat, ijnongat) \
+end
+
+
+//============================================================================================================
+//  JUNCAP-express
+//
+//  The macros below are used in the express-version of JUNCAP2
+//============================================================================================================
+
+`define relerr 0.001
+`define abserr 1.0e-6
+
+`define P1(x) ((x) + 1)
+
+`define expll(x, xlow, expxlow, xhigh, expxhigh) \
+((x) < (xlow)) ? (expxlow) / `P1((xlow) - (x)) : (((x) > (xhigh)) ? (expxhigh) * `P1((x) - (xhigh)) : exp(x))
+
+
+// The last warning message in this macro could be put out by simulator on every time/voltage step if JUNCAP
+// Express is turned on. User can comment it out to avoid excessive messages. 
+
+`define ExpressCodeValidation \
+if(SWJUNEXP_i > 0.9) begin \
+   if ((abs(NFABOT_i -NFAGAT_i) > `abserr && AB_i > 0 && LG_i >0) || (abs(NFABOT_i - NFASTI_i) > `abserr && AB_i >0 && LS_i >0) ||(abs(NFAGAT_i - NFASTI_i) > `abserr && LG_i >0 && LS_i >0) ) begin \
+      $strobe("WARNING: The ideality factors are not the same. JUNCAP Express will not be used \n"); \
+      $strobe("WARNING: The full diode_cmc is executed. \n"); \
+      SWJUNEXP_i = 0; \
+   end else begin \
+       if (AB_i >0) begin \
+          MFOR1=NFABOT_i; \
+       end \
+       if (LG_i >0) begin \
+          MFOR1=NFAGAT_i; \
+       end \
+       if (LS_i >0) begin \
+          MFOR1=NFASTI_i; \
+       end \
+       $strobe("WARNING: JUNCAP Express will not simulate breakdown behavior of diode. \n"); \
+   end \
+end
+
+
+
+// The "JuncapExpressInit"-macro below is split into four parts, as some verilog-A compilers cannot handle
+// macros beyond a certain size. Moreover, it is useful to limit the list of input and output variables.
+// note that the Part 1 in juncap2 is broken into two parts for the exact same reason.
+
+// Part 1
+`define JuncapExpressInit1 \
+FRACNA = 0.4; \
+FRACNB = 0.65; \
+FRACI = 0.8; \
+/* Sample voltages */ \
+V1 = -FRACNA * VJUNREF_i; \
+V2 = -FRACNB * VJUNREF_i; \
+V3 = -FRACI * VJUNREF_i; \
+V4 = 0.1; \
+V5 = 0.2; \
+/* evaluate full JUNCAP-model at five voltages */ \
+`juncapcommon(V1) \
+I1 = AB_i * ijunbot + LS_i * ijunsti + LG_i * ijungat; \
+`juncapcommon(V2) \
+I2 = AB_i * ijunbot + LS_i * ijunsti + LG_i * ijungat;
+
+//Diode_cmc code
+`define JuncapExpressInit12 \
+`juncapcommon(V3) \
+I3 = AB_i * ijunbot + LS_i * ijunsti + LG_i * ijungat;
+//End of Diode_cmc code
+
+// Part 2
+`define JuncapExpressInit2 \
+/* forward currents */ \
+`juncapcommon(V4) \
+I4 = AB_i * ijunbot + LS_i * ijunsti + LG_i * ijungat; \
+`juncapcommon(V5) \
+I5 = AB_i * ijunbot + LS_i * ijunsti + LG_i * ijungat;
+
+// Part 3
+`define JuncapExpressInit3 \
+/* compute internal parameters from these five (I,V)-values */ \
+ISATFOR1   = isattotal; \
+I4_cor     = I4 - ISATFOR1 * (exp(V4 * phitdinv * MFOR1) - 1.0); \
+I5_cor     = I5 - ISATFOR1 * (exp(V5 * phitdinv * MFOR1) - 1.0); \
+if ( !( ((AB_i) == 0) && ((LS_i) == 0) && ((LG_i) == 0) ) ) begin \
+    if ((I4 > 0) && (I5 > 0)) begin \
+        if ((((I4_cor / I4) > `relerr) || ((I5_cor / I5) > `relerr)) && (I4_cor > 0) && (I5_cor > 0)) begin \
+            alphaje   = I4_cor / I5_cor; \
+            MFOR2    = phitd * ln(alphaje) / (V4 - V5); \
+            ISATFOR2 =  I4_cor / (exp(V4 * phitdinv * MFOR2) - 1); \
+        end \
+    end \
+    I1_cor    = I1 - ISATFOR1 * (exp(V1 * phitdinv * MFOR1) - 1.0) - ISATFOR2 * (exp(V1 * phitdinv * MFOR2) - 1.0); \
+    I2_cor    = I2 - ISATFOR1 * (exp(V2 * phitdinv * MFOR1) - 1.0) - ISATFOR2 * (exp(V2 * phitdinv * MFOR2) - 1.0); \
+    I3_cor    = I3 - ISATFOR1 * (exp(V3 * phitdinv * MFOR1) - 1.0) - ISATFOR2 * (exp(V3 * phitdinv * MFOR2) - 1.0); \
+    if ((I1 < 0) && (I2 < 0) && (I3 < 0)) begin \
+        if ((((I1_cor / I1) > `relerr) || ((I2_cor / I2) > `relerr) || ((I3_cor / I3) > `relerr)) \
+             && (I1_cor < 0) && (I2_cor < 0) && (I3_cor < 0)) begin \
+            alphaje   = I1_cor / I2_cor; \
+            m0_rev    = -phitd * ln(alphaje) / (V1 - V2); /* zeroth order approximation */ \
+            tt0       = V2 / (V2 - V1); \
+            tt1       = phitd * (alphaje - 1) * (pow(alphaje, tt0) - 1); \
+            tt0       = V1 / (V1 - V2); \
+            tt2       = pow(alphaje, tt0) * (V2 - V1) + alphaje * V1 - V2; \
+            mcor_rev  = tt1 / tt2; /* first order Newton correction */ \
+            MREV     = m0_rev + mcor_rev; \
+            if (abs(V3 * phitdinv * MREV) < 1e-6) begin \
+                /* Taylor approximation needed */ \
+                /* Note: ISATREV and MREV have different meaning in this situation!! */ \
+                m0flag = 1.0; \
+                ISATREV = I3_cor * (1 / V3 + 0.5 * phitdinv * MREV); \
+                MREV = -0.5 * I3_cor * MREV * phitdinv / V3; \
+            end else begin \
+                m0flag = 0.0; \
+                ISATREV  = -I3_cor / (exp(-V3 * phitdinv * MREV) - 1); \
+            end \
+        end \
+    end \
+end
+
+// Part 4
+`define JuncapExpressInit4 \
+/* charge model initialization */ \
+zfrac  = FJUNQ_i * (AB_i * cjobot + LS_i * cjosti + LG_i * cjogat); \
+if ((AB_i * cjobot) <= zfrac) begin \
+   zflagbot = 0.0; \
+end \
+if ((LS_i * cjosti) <= zfrac) begin \
+   zflagsti = 0.0; \
+end \
+if ((LG_i * cjogat) <= zfrac) begin \
+   zflaggat = 0.0; \
+end
+
+// Part 5
+`define JuncapExpressInit5 \
+/* calculate limits beyond which exponentials are linearly extrapolated */ \
+if ( !( ((AB_i) == 0) && ((LS_i) == 0) && ((LG_i) == 0) ) ) begin \
+    xhighf1    = ln(0.5 * IMAX_i / (ISATFOR1 + 1e-21)); \
+    xhighf2    = ln(0.5 * IMAX_i / (ISATFOR2 + 1e-21)); \
+    xhighr     = ln(0.5 * IMAX_i / (abs(ISATREV) + 1e-21)); \
+end \
+xhighf1    = min(xhighf1, `se05); \
+expxhf1    = exp(xhighf1); \
+xhighf2    = min(xhighf2, `se05); \
+expxhf2    = exp(xhighf2); \
+xhighr     = min(xhighr, `se05); \
+expxhr     = exp(xhighr);
+
+`define JuncapExpressCurrent(V) \
+tm0 = V * phitdinv * MFOR1; \
+tm1 = `expll(tm0, -`se05, `ke05, xhighf1, expxhf1); \
+ijunfor1 = ISATFOR1 * (tm1 - 1.0); \
+tm0 = V * phitdinv * MFOR2; \
+tm1 = `expll(tm0, -`se05, `ke05, xhighf2, expxhf2); \
+ijunfor2 = ISATFOR2 * (tm1 - 1.0); \
+ijunrev = 0.0; \
+if (m0flag > 0) begin \
+    ijunrev = V * (ISATREV + V * MREV); \
+end else begin \
+    tm0 = -V * phitdinv * MREV; \
+    tm1 = `expll(tm0, -`se05, `ke05, xhighr, expxhr); \
+    ijunrev  = -ISATREV * (tm1 - 1.0); \
+end \
+ijun =  ijunfor1 + ijunfor2 + ijunrev; \
+ijnon = ijunfor2 + ijunrev;
+
+
+`define JuncapExpressCharge(V) \
+`hypfunction5(V, vfmin, vch, vjv) \
+if (zflagbot > 0.5) begin \
+    `mypower((1 - vjv * vbiinvbot), one_minus_PBOT, tmpv) \
+    qjunbot = qprefbot * (1 - tmpv) + qpref2bot * (V - vjv); \
+end else begin \
+    qjunbot = 0; \
+end \
+if (zflagsti > 0.5) begin \
+    `mypower((1 - vjv * vbiinvsti), one_minus_PSTI, tmpv) \
+    qjunsti = qprefsti * (1 - tmpv) + qpref2sti * (V - vjv); \
+end else begin \
+    qjunsti = 0; \
+end \
+if (zflaggat > 0.5) begin \
+    `mypower((1 - vjv * vbiinvgat), one_minus_PGAT, tmpv) \
+    qjungat = qprefgat * (1 - tmpv) + qpref2gat * (V - vjv); \
+end else begin \
+    qjungat = 0; \
+end
+
+

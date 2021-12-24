@@ -29,13 +29,12 @@ use arena::{Arena, Idx};
 use arrayvec::ArrayVec;
 pub use builder::CfgBuilder;
 pub use lasso::Spur;
-use stdx::{impl_debug, impl_from, impl_idx_from};
+use smallvec::SmallVec;
+use stdx::{impl_debug, impl_from, impl_idx_from, impl_idx_math};
 use typed_index_collections::TiVec;
 
 use crate::graph_cyclical_cache::GraphIsCyclicCache;
-pub use crate::locations::{
-    BlockLocations, IntLocation, InternedLocations, Location, LocationKind,
-};
+pub use crate::locations::{Location, LocationKind};
 pub use crate::op::Op;
 use crate::predecessors::PredecessorCache;
 use crate::transversal::{
@@ -43,6 +42,9 @@ use crate::transversal::{
     ReversePostorderIterMut,
 };
 pub use crate::ty::Const;
+pub use smallvec::{smallvec, smallvec_inline};
+
+pub type Operands = SmallVec<[Operand; 2]>;
 
 #[cfg(test)]
 mod tests;
@@ -56,6 +58,7 @@ mod predecessors;
 mod pretty;
 pub mod transversal;
 mod ty;
+mod verify;
 
 /// CFG Parameters represent immutable input to a CFG
 /// If the CFG compiled to a function these usually make up the parameters of that resulting
@@ -79,11 +82,13 @@ impl_debug!(match Callback{input => "cb{}",input.0;});
 #[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct Place(u32);
 impl_idx_from!(Place(u32));
+impl_idx_math!(Place(u32));
 impl_debug!(match Place{local => "p{}",local.0;});
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
 pub struct Local(u32);
 impl_idx_from!(Local(u32));
+impl_idx_math!(Local(u32));
 impl_debug!(match Local{local => "_{}",local.0;});
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
@@ -147,6 +152,7 @@ impl BasicBlockData {
         mut f_local: impl FnMut(Local),
         mut f_place: impl FnMut(Place),
         mut f_param: impl FnMut(CfgParam),
+        mut f_callback: impl FnMut(Callback),
     ) {
         for phi in &*self.phis {
             phi.visit_locals(&mut f_local)
@@ -162,6 +168,9 @@ impl BasicBlockData {
                 InstrDst::Local(local) => f_local(local),
                 InstrDst::Place(place) => f_place(place),
                 InstrDst::Ignore => (),
+            }
+            if let Op::Call(call) = instruction.op {
+                f_callback(call)
             }
         }
         if let Some(term) = &self.terminator {
@@ -179,6 +188,7 @@ impl BasicBlockData {
         mut f_local: impl FnMut(&mut Local),
         mut f_place: impl FnMut(&mut Place),
         mut f_param: impl FnMut(&mut CfgParam),
+        mut f_callback: impl FnMut(&mut Callback),
     ) {
         for phi in &mut *self.phis {
             phi.visit_locals_mut(&mut f_local)
@@ -195,6 +205,10 @@ impl BasicBlockData {
                 InstrDst::Place(place) => f_place(place),
                 InstrDst::Ignore => (),
             }
+
+            if let Op::Call(call) = &mut instruction.op {
+                f_callback(call)
+            }
         }
         if let Some(term) = &mut self.terminator {
             term.visit_operands_mut(|operand| match operand {
@@ -209,7 +223,7 @@ impl BasicBlockData {
 
 pub type PhiIdx = Idx<Phi>;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Phi {
     pub dst: Local,
     pub sources: AHashMap<BasicBlock, Local>,
@@ -264,17 +278,17 @@ impl_from!(Local,Place for InstrDst);
 
 pub type InstIdx = Idx<Instruction>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Instruction {
     pub dst: InstrDst,
     pub op: Op,
-    pub args: Box<[Operand]>,
+    pub args: Operands,
     pub src: i32,
 }
 
 impl Default for Instruction {
     fn default() -> Self {
-        Self { dst: InstrDst::Ignore, op: Op::NoOp, args: Vec::new().into_boxed_slice(), src: 0 }
+        Self { dst: InstrDst::Ignore, op: Op::NoOp, args: Operands::new(), src: 0 }
     }
 }
 
@@ -314,7 +328,7 @@ impl Instruction {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Copy)]
 pub enum Operand {
     Const(Const),
     Local(Local),
@@ -395,13 +409,13 @@ impl From<Spur> for Operand {
 pub enum Terminator {
     Goto(BasicBlock),
     Split { condition: Operand, true_block: BasicBlock, false_block: BasicBlock, loop_head: bool },
-    End,
+    Ret,
 }
 
 impl_debug! {
     match Terminator{
         Terminator::Goto(dst) => "goto {:?};", dst;
-        Terminator::End => "end";
+        Terminator::Ret => "end";
         Terminator::Split{condition,true_block,false_block,loop_head}
             => "if {:?} {{ {:?} }} else {{ {:?} }} {}", condition, true_block, false_block, if *loop_head { "(loop)" } else { "" };
     }
@@ -416,7 +430,7 @@ impl Terminator {
     pub fn successors(&self) -> Successors {
         let mut res = ArrayVec::new();
         match *self {
-            Self::End => (),
+            Self::Ret => (),
             Self::Goto(dst) => res.push(dst),
             Self::Split { true_block, false_block, .. } => {
                 res.push(true_block);
@@ -431,7 +445,7 @@ impl Terminator {
     pub fn successors_mut(&mut self) -> SuccessorsMut {
         let mut res = ArrayVec::new();
         match self {
-            Self::End => (),
+            Self::Ret => (),
             Self::Goto(dst) => res.push(dst),
             Self::Split { true_block, false_block, .. } => {
                 res.push(true_block);
@@ -450,7 +464,7 @@ impl Terminator {
                 f(*false_block);
             }
 
-            Self::End => (),
+            Self::Ret => (),
         }
     }
 
@@ -463,7 +477,7 @@ impl Terminator {
                 f(false_block);
             }
 
-            Self::End => (),
+            Self::Ret => (),
         }
     }
 
@@ -490,7 +504,10 @@ impl Terminator {
 pub struct ControlFlowGraph {
     pub next_local: Local,
     pub next_place: Place,
+
     pub blocks: TiVec<BasicBlock, BasicBlockData>,
+    pub entry: BasicBlock,
+
     pub predecessor_cache: PredecessorCache,
     pub is_cyclic: GraphIsCyclicCache,
 }
@@ -503,6 +520,7 @@ impl Default for ControlFlowGraph {
             predecessor_cache: Default::default(),
             is_cyclic: Default::default(),
             next_place: Place(0),
+            entry: BasicBlock(0),
         }
     }
 }
@@ -511,13 +529,7 @@ impl ControlFlowGraph {
     #[inline(always)]
     #[must_use]
     pub const fn entry(&self) -> BasicBlock {
-        BasicBlock(0)
-    }
-
-    #[inline(always)]
-    #[must_use]
-    pub fn exit(&self) -> BasicBlock {
-        self.blocks.last_key().unwrap()
+        self.entry
     }
 
     pub fn new_place(&mut self) -> Place {
@@ -555,9 +567,10 @@ impl ControlFlowGraph {
         mut f_local: impl FnMut(Local),
         mut f_place: impl FnMut(Place),
         mut f_param: impl FnMut(CfgParam),
+        mut f_callback: impl FnMut(Callback),
     ) {
         for block in &self.blocks {
-            block.visit_data(&mut f_local, &mut f_place, &mut f_param)
+            block.visit_data(&mut f_local, &mut f_place, &mut f_param, &mut f_callback)
         }
     }
 
@@ -566,9 +579,10 @@ impl ControlFlowGraph {
         mut f_local: impl FnMut(&mut Local),
         mut f_place: impl FnMut(&mut Place),
         mut f_param: impl FnMut(&mut CfgParam),
+        mut f_callback: impl FnMut(&mut Callback),
     ) {
         for block in &mut self.blocks {
-            block.visit_data_mut(&mut f_local, &mut f_place, &mut f_param)
+            block.visit_data_mut(&mut f_local, &mut f_place, &mut f_param, &mut f_callback)
         }
     }
 
@@ -586,13 +600,13 @@ impl ControlFlowGraph {
 
     pub fn visit_locals(&self, mut f: impl FnMut(Local)) {
         for block in &self.blocks {
-            block.visit_data(&mut f, |_| (), |_| ())
+            block.visit_data(&mut f, |_| (), |_| (), |_| ())
         }
     }
 
     pub fn visit_locals_mut(&mut self, mut f: impl FnMut(&mut Local)) {
         for block in &mut self.blocks {
-            block.visit_data_mut(&mut f, |_| (), |_| ())
+            block.visit_data_mut(&mut f, |_| (), |_| (), |_| ())
         }
     }
 
@@ -626,6 +640,43 @@ impl ControlFlowGraph {
 
     pub fn reverse_postorder_itermut(&mut self) -> ReversePostorderIterMut<'_> {
         ReversePostorderIterMut::new(self, self.entry())
+    }
+
+    /// The ret terminator marks the end of the controlflow (aka function return)
+    /// This function transforms the control flow graph so that there is only one final return (in
+    /// the last empty BB). All ret terminators are replaced with gotos to this final block.
+    ///
+    /// # Returns
+    ///
+    /// The newly created `BasicBlock` which now contains the (only) return terminator (and nothing
+    /// else)
+    pub fn cannonicalize_ret(&mut self) -> BasicBlock {
+        let final_bb = self.blocks.push_and_get_key(BasicBlockData {
+            terminator: Some(Terminator::Ret),
+            ..BasicBlockData::default()
+        });
+        for bb in &mut self.blocks[..final_bb] {
+            if bb.terminator == Some(Terminator::Ret) {
+                bb.terminator = Some(Terminator::Goto(final_bb))
+            }
+        }
+        self.predecessor_cache.invalidate();
+        final_bb
+    }
+
+    /// Inverse of `cannonicalize_ret`
+    pub fn de_cannonicalize_ret(&mut self) {
+        let (final_bb, block_data) = self.blocks.pop_key_value().unwrap();
+        debug_assert_eq!(&*block_data.phis.raw, &[]);
+        debug_assert_eq!(&*block_data.instructions.raw, &[]);
+
+        for bb in &mut self.blocks {
+            if bb.terminator == Some(Terminator::Goto(final_bb)) {
+                bb.terminator = Some(Terminator::Ret)
+            }
+        }
+
+        self.predecessor_cache.invalidate();
     }
 }
 

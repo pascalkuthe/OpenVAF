@@ -183,7 +183,7 @@ impl Printer<'_> {
                 }
                 w!(self, "}}");
             }
-            Expr::Literal(lit) => w!(self, "{:?}", lit),
+            Expr::Literal(ref lit) => w!(self, "{:?}", lit),
         }
     }
 }

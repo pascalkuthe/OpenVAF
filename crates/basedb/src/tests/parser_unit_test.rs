@@ -5,7 +5,8 @@ use crate::tests::TestDataBase;
 use crate::BaseDB;
 
 fn check(src: &str, expected: Expect) {
-    let (parse, diagnostics) = TestDataBase::new("/root.va", src).parse_and_check();
+    let (parse, diagnostics) =
+        TestDataBase::new("/root.va", src.to_owned().into()).parse_and_check();
     if !diagnostics.is_empty() {
         eprintln!("{}", diagnostics);
         panic!("encountered unexpected diagnostics")
@@ -25,7 +26,7 @@ fn source_mapping() {
 
 foo
     "#;
-    let db = TestDataBase::new("/root.va", src);
+    let db = TestDataBase::new("/root.va", src.to_owned().into());
     eprintln!("{:?}", db.preprocess(db.root_file()).ts);
     let (parse, diagnostics) = db.parse_and_check();
     eprintln!("{:?}", parse.errors());

@@ -9,7 +9,7 @@ use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
 use syntax::{Parse, SourceFile};
-use vfs::{FileId, Vfs};
+use vfs::{FileId, Vfs, VfsEntry};
 
 use crate::diagnostics::{ConsoleSink, DiagnosticSink};
 use crate::{BaseDB, BaseDatabase, VfsStorage};
@@ -22,7 +22,7 @@ pub struct TestDataBase {
 }
 
 impl TestDataBase {
-    pub fn new(root_file_name: &str, root_file: &str) -> Self {
+    pub fn new(root_file_name: &str, root_file: VfsEntry) -> Self {
         let mut res = Self { storage: salsa::Storage::default(), vfs: None, root_file: None };
         let vfs = RwLock::new(Vfs::default());
         let foo: &mut dyn BaseDB = &mut res;
@@ -56,7 +56,6 @@ impl TestDataBase {
             sink.add_diagnostics(parse.errors(), root_file, self);
             sink.add_diagnostics(&*attr_tree.diagnostics, root_file, self);
         }
-
         let data = buf.into_inner();
         let diagnostics = String::from_utf8(data).unwrap();
         (parse, diagnostics)
@@ -90,21 +89,20 @@ pub fn generate_integration_tests() {
                 if skip_slow_tests(){
                     return
                 }
-                let db = TestDataBase::new(#root_file,"");
+                let db = TestDataBase::new(#root_file,Default::default());
+                let mut vfs = db.vfs().write();
                 #(
-                    {
-                        let path = project_root().join("integration_tests").join(#test_name).join(#files);
-                        let file_contents =read_to_string(path).unwrap();
-                        db.vfs().write().add_virt_file(#file_names, &file_contents);
-                    }
+                    let path = project_root().join("integration_tests").join(#test_name).join(#files);
+                    vfs.add_virt_file(#file_names, read(path).into());
                 )*
-                let (_,actual) = db.parse_and_check();
+                drop(vfs);
+                let (_, actual) = db.parse_and_check();
                 expect_file![project_root().join("integration_tests").join(#test_name).join("parser_diagnostics.log")].assert_eq(&actual);
             }
         }
     });
 
-    let header = "use std::fs::read_to_string;
+    let header = "use std::fs::read;
 
         use expect_test::expect_file;
         use sourcegen::{skip_slow_tests,project_root};

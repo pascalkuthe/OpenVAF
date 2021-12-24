@@ -7,7 +7,7 @@ use hir_ty::validation::{BodyValidationDiagnostic, TypeValidationDiagnostic};
 use stdx::format_to;
 
 use crate::tests::TestDataBase;
-use crate::LoweringResult;
+use crate::HirInterner;
 
 fn check_with_diagnostics(src: &str, diagnostics: Expect, cfg: Expect) {
     let db = TestDataBase::new("/root.va", src);
@@ -43,9 +43,8 @@ fn check_with_diagnostics(src: &str, diagnostics: Expect, cfg: Expect) {
 
     diagnostics.assert_eq(&actual);
 
-    let res = LoweringResult::lower_body(&db, def);
-    let lits = &db.body_source_map(def).str_lit_interner;
-    cfg.assert_eq(&res.cfg.dump(lits));
+    let res = HirInterner::lower_body(&db, def);
+    cfg.assert_eq(&res.0.dump(Some(&res.1.literals)));
 }
 
 fn check(src: &str, cfg: Expect) {
@@ -90,7 +89,7 @@ endmodule
             let _5 := i32.== [i32 0, _4];
             if _5 { bb5 } else { bb6 } 
         bb4:
-            goto bb11;
+            end
         bb5:
             let p0 := copy [f64 3.141];
             goto bb4;
@@ -114,8 +113,6 @@ endmodule
             let _12 := cast_i32_f64 [i32 0];
             let p0 := copy [_12];
             goto bb4;
-        bb11:
-            end
         }"##]];
     check(src, cfg)
 }

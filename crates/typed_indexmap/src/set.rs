@@ -33,6 +33,15 @@ impl<K, V> Default for TiSet<K, V> {
     }
 }
 
+impl<K, V> TiSet<K, V> {
+    pub fn with_capacity(cap: usize) -> TiSet<K, V> {
+        TiSet {
+            raw: IndexSet::with_capacity_and_hasher(cap, ahash::RandomState::default()),
+            _marker: PhantomData,
+        }
+    }
+}
+
 impl<K, V> Eq for TiSet<K, V> where V: Hash + Eq {}
 
 impl<K, V> PartialEq for TiSet<K, V>
@@ -104,6 +113,15 @@ where
     pub fn contains(&self, val: &V) -> bool {
         self.raw.contains(val)
     }
+
+    pub fn retain(&mut self, mut f: impl FnMut(K, &V) -> bool) {
+        let mut i = 0;
+        self.raw.retain(|val| {
+            let res = f(i.into(), val);
+            i += 1;
+            res
+        })
+    }
 }
 
 impl<K, V> Index<K> for TiSet<K, V>
@@ -115,5 +133,14 @@ where
 
     fn index(&self, index: K) -> &Self::Output {
         self.raw.get_index(index.into()).unwrap()
+    }
+}
+
+impl<K, V> FromIterator<V> for TiSet<K, V>
+where
+    V: Eq + Hash,
+{
+    fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
+        Self { raw: iter.into_iter().collect(), _marker: PhantomData }
     }
 }

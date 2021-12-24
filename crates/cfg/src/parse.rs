@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use ahash::AHashMap;
 use lasso::{Rodeo, Spur};
+use smallvec::SmallVec;
 use typed_index_collections::TiVec;
 
 // use crate::ty::Array;
@@ -269,7 +270,7 @@ impl Parse for Instruction {
             0 // no src found optional as not actually required for the CFG
         };
 
-        let res = Instruction { dst, op, args: args.into_boxed_slice(), src };
+        let res = Instruction { dst, op, args: SmallVec::from_vec(args), src };
         Ok(res)
     }
 }
@@ -342,7 +343,7 @@ impl Parse for Terminator {
         }
 
         if p.eat("end")? {
-            return Ok(Terminator::End);
+            return Ok(Terminator::Ret);
         }
 
         Err(format!("unkown terminator: {}", &p.src[p.pos..]))

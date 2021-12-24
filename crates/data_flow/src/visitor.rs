@@ -172,7 +172,7 @@ pub trait ResultsVisitorMut {
 
     #[inline(always)]
     fn visit_terminator_before_effect(
-        &self,
+        &mut self,
         _state: &Self::FlowState,
         _term: &mut Terminator,
         _block: BasicBlock,
@@ -181,7 +181,7 @@ pub trait ResultsVisitorMut {
 
     #[inline(always)]
     fn visit_terminator_after_effect(
-        &self,
+        &mut self,
         _state: &Self::FlowState,
         _term: &mut Terminator,
         _block: BasicBlock,

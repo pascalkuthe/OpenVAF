@@ -24,6 +24,7 @@ pub type GenKillResultsRefCursor<'a, A> =
 ///
 /// A `ResultsCursor` can either own (the default) or borrow the dataflow results it inspects. The
 /// type of ownership is determined by `R` (see `ResultsRefCursor` above).
+#[derive(Debug, Clone)]
 pub struct ResultsCursor<A, R = Results<A>>
 where
     A: Analysis,
@@ -118,10 +119,10 @@ where
         }
     }
 
-    /// Resets the cursor to hold the state after the terminator at the exit block of the cfg.
-    pub fn seek_to_exit_block_end(&mut self, cfg: &ControlFlowGraph) {
-        self.seek_to_block_end(cfg.exit(), cfg)
-    }
+    // /// Resets the cursor to hold the state after the terminator at the exit block of the cfg.
+    // pub fn seek_to_exit_block_end(&mut self, cfg: &ControlFlowGraph) {
+    //     self.seek_to_block_end(cfg.exit(), cfg)
+    // }
 
     /// Advances the cursor to hold the dataflow state at `target` after its effect is
     /// applied.

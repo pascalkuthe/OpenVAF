@@ -259,7 +259,7 @@ pub fn collect_integration_tests() -> Vec<(String, Vec<String>)> {
         let name = entry.path().file_name().expect(ERR).to_str().expect("intergation test names must be valid UTF-8").to_owned();
         let mut children: Vec<_> = fs::read_dir(entry.path()).expect(ERR).filter_map(|entry|{
             let entry = entry.expect(ERR);
-            let include =  entry.path().extension().and_then(|ex|ex.to_str()).map_or(false, |ex|matches!(ex,"va"|"vams"|"include"));
+            let include =  entry.path().extension().and_then(|ex|ex.to_str()).map_or(false, |ex|matches!(ex,"va"|"vams"|"include"|"inc"));
             if !include{
                 eprintln!("\n\x1b[33;1mwarning\x1b[0m: {} will not be includeded in the integration test {}!\n Only files with the extensions .va and .include are included",entry.path().display(), &name)
             }

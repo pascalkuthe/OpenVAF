@@ -1,0 +1,4381 @@
+// AUTOMATICALLY GENERATED TEST TEMPLATES
+
+// TESTS for T = 27 C
+
+// *** I-Vg Tests ***
+
+test                        idvg0_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvg0_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvg0_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvg0_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvgh_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvgh_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvgh_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvgh_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swigate1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swigate1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+test                        idvg0_swigate1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+test                        idvg0_swigate1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_stistress_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvg0_stistress_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvg0_stistress_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvg0_stistress_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+
+// *** I-Vd Tests ***
+
+test                        idvd0_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_stistress_Id_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvd0_stistress_Ig_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvd0_stistress_Is_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvd0_stistress_Ib_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+// *** AC G & C Tests vs. Vd ***
+
+test                        acvd0_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acvdh_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acvd0_stistress_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        acvdh_stistress_T27
+temperature                 27
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+// *** AC C Tests vs. Freq. ***
+
+test                        acfreq0_Cgg_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0 V(d)=1.0 V(g)=1.0
+freq                        dec 10 1e3 1e8
+outputs                     C(g,g)
+instanceParameters          W=10.0e-6 L=1.0e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acfreq0_Cgs_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0 V(d)=1.0 V(g)=1.0
+freq                        dec 10 1e3 1e8
+outputs                     C(g,s)
+instanceParameters          W=10.0e-6 L=1.0e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acfreq0_Cgd_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0 V(d)=1.0 V(g)=1.0
+freq                        dec 10 1e3 1e8
+outputs                     C(g,d)
+instanceParameters          W=10.0e-6 L=1.0e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+
+// *** Noise Tests ***
+
+test                        noise1_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0 V(d)=1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+freq                        dec 10 1e2 1e8
+outputs                     N(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        noise2_T27
+temperature                 27
+biases                      V(s)=0 V(b)=0 V(d)=1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+freq                        dec 10 1e2 1e8
+outputs                     N(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+// TESTS for T = 100 C
+
+// *** I-Vg Tests ***
+
+test                        idvg0_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvg0_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvg0_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvg0_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3
+`include set_junsym.inc
+
+test                        idvgh_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvgh_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvgh_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvgh_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_allsw0_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_allsw0_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swigate1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swigate1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+test                        idvg0_swigate1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+test                        idvg0_swigate1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swigate1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swimpact1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swimpact1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swgidl1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvgh_swgidl1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncap3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvgh_swjuncap3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_swjuncapexp3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvgh_swjuncapexp3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvg0_stistress_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvg0_stistress_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvg0_stistress_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvg0_stistress_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvgh_stistress_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(d)=0.05,1.0
+biasSweep                   V(g)=-1.0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+
+// *** I-Vd Tests ***
+
+test                        idvd0_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvdh_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_allsw0_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_allsw0_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swigate1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swigate1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swimpact1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swimpact1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIMPACT=1 SWIGATE=0 SWGIDL=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swgidl1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvdh_swgidl1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWGIDL=1 SWIGATE=0 SWIMPACT=0 SWJUNCAP=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncap3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvdh_swjuncap3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp1_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 ABSOURCE=5e-12 ABDRAIN=5e-12 LSSOURCE=11e-6 LGSOURCE=10e-6 LSDRAIN=11e-6 LGDRAIN=10e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=1 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp2_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=11e-6 PD=11e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=2 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_swjuncapexp3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvdh_swjuncapexp3_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWJUNCAP=3 SWIGATE=0 SWIMPACT=0 SWGIDL=0 SWJUNEXP=1 
+`include set_junsym.inc
+
+test                        idvd0_stistress_Id_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvd0_stistress_Ig_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvd0_stistress_Is_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(s)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        idvd0_stistress_Ib_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.15,0.25,0.5,0.75,1.0
+biasSweep                   V(d)=0,1.2,0.01
+outputs                     I(b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+// *** AC G & C Tests vs. Vd ***
+
+test                        acvd0_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acvdh_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acvd0_stistress_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+test                        acvdh_stistress_T100
+temperature                 100
+biases                      V(s)=0 V(b)=-1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+biasSweep                   V(d)=-0.2,1.2,0.05
+outputs                     G(d,d) C(g,s) C(s,g) C(d,s) C(s,d) C(g,d) C(d,g) C(d,b) C(b,d) C(g,b) C(b,g) C(b,s) C(s,b)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6 SA=0.5e-6 SB=0.5e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+modelParameters             SAREF=3.0e-6 SBREF=3.0e-6 KUO=2e-8 KVSAT=0.1 KVTHO=2.5e-9
+
+// *** AC C Tests vs. Freq. ***
+
+test                        acfreq0_Cgg_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0 V(d)=1.0 V(g)=1.0
+freq                        dec 10 1e3 1e8
+outputs                     C(g,g)
+instanceParameters          W=10.0e-6 L=1.0e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acfreq0_Cgs_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0 V(d)=1.0 V(g)=1.0
+freq                        dec 10 1e3 1e8
+outputs                     C(g,s)
+instanceParameters          W=10.0e-6 L=1.0e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        acfreq0_Cgd_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0 V(d)=1.0 V(g)=1.0
+freq                        dec 10 1e3 1e8
+outputs                     C(g,d)
+instanceParameters          W=10.0e-6 L=1.0e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+
+// *** Noise Tests ***
+
+test                        noise1_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0 V(d)=1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+freq                        dec 10 1e2 1e8
+outputs                     N(g)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc
+
+test                        noise2_T100
+temperature                 100
+biases                      V(s)=0 V(b)=0 V(d)=1.0
+biasList                    V(g)=0.25,0.5,0.75,1.0
+freq                        dec 10 1e2 1e8
+outputs                     N(d)
+instanceParameters          W=10.0e-6 L=0.1e-6 AS=5e-12 AD=5e-12 PS=21e-6 PD=21e-6
+modelParameters             parameters/test_params
+modelParameters             SWIGATE=1 SWIMPACT=1 SWGIDL=1 SWJUNCAP=3 
+`include set_junsym.inc

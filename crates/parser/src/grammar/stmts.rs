@@ -165,9 +165,10 @@ fn vals_or_default(p: &mut Parser) {
 }
 
 const BLOCK_RECOVER: TokenSet = TokenSet::new(&[END_KW, EOF, ENDMODULE_KW]);
-const BLOCK_STMT_TS: TokenSet = STMT_TS.union(TYPE_TS).union(TokenSet::unique(PARAMETER_KW));
+const BLOCK_STMT_TS: TokenSet =
+    STMT_TS.union(TYPE_TS).union(TokenSet::new(&[PARAMETER_KW, LOCALPARAM_KW]));
 const BLOCK_ATTR_RECOVER: TokenSet =
-    STMT_ATTR_RECOVER.union(TYPE_TS).union(TokenSet::unique(PARAMETER_KW));
+    STMT_ATTR_RECOVER.union(TYPE_TS).union(TokenSet::new(&[PARAMETER_KW, LOCALPARAM_KW]));
 fn block_stmt(p: &mut Parser, m: Marker) {
     p.bump(BEGIN_KW);
     if p.at(T![:]) {
@@ -182,7 +183,7 @@ fn block_stmt(p: &mut Parser, m: Marker) {
         attrs(p, BLOCK_RECOVER.union(BLOCK_ATTR_RECOVER));
         if p.at_ts(TYPE_TS) {
             var_decl(p, m);
-        } else if p.at(PARAMETER_KW) {
+        } else if p.at_ts(TokenSet::new(&[PARAMETER_KW, LOCALPARAM_KW])) {
             parameter_decl(p, m);
         } else {
             stmt(p, m, BLOCK_STMT_TS, BLOCK_RECOVER)

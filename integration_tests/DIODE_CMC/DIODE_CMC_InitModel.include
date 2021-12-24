@@ -1,0 +1,363 @@
+//======================================================================================
+//======================================================================================
+// Filename: DIODE_CMC_InitModel.include
+//======================================================================================
+//
+//    
+//                        Silicon Integration Initiative (Si2)
+//                      Compact Model Coalition In-Code Statement
+//    
+//    Software is distributed as is, completely without warranty or service support.  NXP
+//    Semiconductors, Hiroshima University, and Silicon Integration Initiative, Inc. (Si2),
+//    along with their employees are not liable for the condition or performance of the software.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 own the copyright and grant users
+//    a perpetual, irrevocable, worldwide, non-exclusive, royalty-free license with respect to the
+//    software as set forth below.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 hereby disclaim all implied
+//    warranties.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 grant the users the right to modify,
+//    copy, and redistribute the software and documentation, both within the user's organization
+//    and externally, subject to the following restrictions
+//    
+//      1. The users agree not to charge for the NXP Semiconductors, Hiroshima University,
+//      and Si2 -developed code itself but may charge for additions, extensions, or support.
+//    
+//      2. In any product based on the software, the users agree to acknowledge NXP
+//      Semiconductors, Hiroshima University, and Si2 that developed the software.  This
+//      acknowledgment shall appear in the product documentation.
+//    
+//      3. Redistributions to others of source code and documentation must retain the copyright
+//      notice, disclaimer, and list of conditions.
+//    
+//      4. Redistributions to others in binary form must reproduce the copyright notice,
+//      disclaimer, and list of conditions in the documentation and/or other materials provided
+//      with the distribution.
+//    
+//                                                     CMC In-Code Statement Revision 1.1 6/9/2016
+//
+//
+//
+// The diode_cmc is based on Juncap2 200.3.3 (test) from NXP Semiconductors. 
+//
+// Portions commented as diode_cmc code: additional models since 2009.
+//
+// Portions commented as diode_cmc recovery and high-injection equations code: recovery model by Hiroshima University.
+//
+// All other parts are taken from Juncap2 200.3.3. Copyright 2008 NXP Semiconductors, All Rights Reserved.
+//======================================================================================
+//
+//
+
+         //////////////////////////////////////////////////////////////
+         //
+         // Calculation of internal parameters which are independent
+         // on instance parameters
+         //
+         //////////////////////////////////////////////////////////////
+
+         TRJ_i        = `CLIP_LOW( TRJ        , `TRJ_cliplow);
+         //Diode_cmc recovery and high-injection equations code
+         if ( (!$param_given(TRJ)) && ($param_given(TNOM)) ) begin
+            TRJ_i     = `CLIP_LOW( TNOM       , `TRJ_cliplow);
+         end
+         //End of Diode_cmc recovery and high-injection equations code
+         IMAX_i       = `CLIP_LOW( IMAX       , `IMAX_cliplow);
+
+         CJORBOT_i    = `CLIP_LOW( CJORBOT    , `CJORBOT_cliplow);
+         CJORSTI_i    = `CLIP_LOW( CJORSTI    , `CJORSTI_cliplow);
+         CJORGAT_i    = `CLIP_LOW( CJORGAT    , `CJORGAT_cliplow);
+         VBIRBOT_i    = `CLIP_LOW( VBIRBOT    , `VBIR_cliplow);
+         VBIRSTI_i    = `CLIP_LOW( VBIRSTI    , `VBIR_cliplow);
+         VBIRGAT_i    = `CLIP_LOW( VBIRGAT    , `VBIR_cliplow);
+         PBOT_i       = `CLIP_BOTH(PBOT       , `P_cliplow,`P_cliphigh);
+         PSTI_i       = `CLIP_BOTH(PSTI       , `P_cliplow,`P_cliphigh);
+         PGAT_i       = `CLIP_BOTH(PGAT       , `P_cliplow,`P_cliphigh);
+         PHIGBOT_i    =  PHIGBOT;
+         PHIGSTI_i    =  PHIGSTI;
+         PHIGGAT_i    =  PHIGGAT;
+         IDSATRBOT_i  = `CLIP_LOW( IDSATRBOT  , `IDSATR_cliplow);
+         IDSATRSTI_i  = `CLIP_LOW( IDSATRSTI  , `IDSATR_cliplow);
+         IDSATRGAT_i  = `CLIP_LOW( IDSATRGAT  , `IDSATR_cliplow);
+         CSRHBOT_i    = `CLIP_LOW( CSRHBOT    , `CSRH_cliplow);
+         CSRHSTI_i    = `CLIP_LOW( CSRHSTI    , `CSRH_cliplow);
+         CSRHGAT_i    = `CLIP_LOW( CSRHGAT    , `CSRH_cliplow);
+         XJUNSTI_i    = `CLIP_LOW( XJUNSTI    , `XJUN_cliplow);
+         XJUNGAT_i    = `CLIP_LOW( XJUNGAT    , `XJUN_cliplow);
+         CTATBOT_i    = `CLIP_LOW( CTATBOT    , `CTAT_cliplow);
+         CTATSTI_i    = `CLIP_LOW( CTATSTI    , `CTAT_cliplow);
+         CTATGAT_i    = `CLIP_LOW( CTATGAT    , `CTAT_cliplow);
+         MEFFTATBOT_i = `CLIP_LOW( MEFFTATBOT , `MEFFTAT_cliplow);
+         MEFFTATSTI_i = `CLIP_LOW( MEFFTATSTI , `MEFFTAT_cliplow);
+         MEFFTATGAT_i = `CLIP_LOW( MEFFTATGAT , `MEFFTAT_cliplow);
+         CBBTBOT_i    = `CLIP_LOW( CBBTBOT    , `CBBT_cliplow);
+         CBBTSTI_i    = `CLIP_LOW( CBBTSTI    , `CBBT_cliplow);
+         CBBTGAT_i    = `CLIP_LOW( CBBTGAT    , `CBBT_cliplow);
+         FBBTRBOT_i   =  FBBTRBOT;
+         FBBTRSTI_i   =  FBBTRSTI;
+         FBBTRGAT_i   =  FBBTRGAT;
+         STFBBTBOT_i  =  STFBBTBOT;
+         STFBBTSTI_i  =  STFBBTSTI;
+         STFBBTGAT_i  =  STFBBTGAT;
+         VBRBOT_i     = `CLIP_LOW( VBRBOT     , `VBR_cliplow);
+         VBRSTI_i     = `CLIP_LOW( VBRSTI     , `VBR_cliplow);
+         VBRGAT_i     = `CLIP_LOW( VBRGAT     , `VBR_cliplow);
+         PBRBOT_i     = `CLIP_LOW( PBRBOT     , `PBR_cliplow);
+         PBRSTI_i     = `CLIP_LOW( PBRSTI     , `PBR_cliplow);
+         PBRGAT_i     = `CLIP_LOW( PBRGAT     , `PBR_cliplow);
+         FREV_i       =  FREV;
+
+         // Diode_cmc code
+         RSBOT_i      = `CLIP_LOW( RSBOT      , `RS_cliplow);
+         RSSTI_i      = `CLIP_LOW( RSSTI      , `RS_cliplow);
+         RSGAT_i      = `CLIP_LOW( RSGAT      , `RS_cliplow);
+         RSCOM_i      = `CLIP_LOW( RSCOM      , `RS_cliplow);
+         STRS_i       = `CLIP_LOW( STRS       , `RS_cliplow);
+         AF_i         = `CLIP_LOW( AF         , `AF_cliplow);
+         KF_i         = `CLIP_LOW( KF         , `KF_cliplow);
+         TT_i         = `CLIP_LOW( TT         , `TT_cliplow);
+         STVBRBOT1_i  = STVBRBOT1;
+         STVBRBOT2_i  = STVBRBOT2;
+         STVBRSTI1_i  = STVBRSTI1;
+         STVBRSTI2_i  = STVBRSTI2;
+         STVBRGAT1_i  = STVBRGAT1;
+         STVBRGAT2_i  = STVBRGAT2;
+         NFABOT_i     = `CLIP_LOW( NFABOT     , `NFA_cliplow);
+         NFASTI_i     = `CLIP_LOW( NFASTI     , `NFA_cliplow);
+         NFAGAT_i     = `CLIP_LOW( NFAGAT     , `NFA_cliplow);
+         ABMIN_i      = `CLIP_LOW( ABMIN      , `AB_cliplow);
+         ABMAX_i      = `CLIP_LOW( ABMAX      , `AB_cliplow);
+         LSMIN_i      = `CLIP_LOW( LSMIN      , `LS_cliplow);
+         LSMAX_i      = `CLIP_LOW( LSMAX      , `LS_cliplow);
+         LGMIN_i      = `CLIP_LOW( LGMIN      , `LG_cliplow);
+         LGMAX_i      = `CLIP_LOW( LGMAX      , `LG_cliplow);
+         TEMPMIN_i    = `CLIP_LOW( TEMPMIN    , `TRJ_cliplow);
+         TEMPMAX_i    = `CLIP_LOW( TEMPMAX    , `TRJ_cliplow);
+         VFMAX_i      = `CLIP_LOW( VFMAX      , `VOLT_cliplow);
+         VRMAX_i      = `CLIP_LOW( VRMAX      , `VOLT_cliplow);
+         XTI_i        = `CLIP_LOW( XTI        , `XTI_cliplow);
+         SCALE_i      = `CLIP_LOW( SCALE      , `SCALE_cliplow);
+         SHRINK_i     = `CLIP_LOW( SHRINK     , `SHRINK_cliplow);
+         //End of Diode_cmc code
+
+
+
+
+         SWJUNEXP_i   = 0.0;
+         if (SWJUNEXP > 0.5) begin
+            SWJUNEXP_i = 1.0;
+         end else begin
+            SWJUNEXP_i = 0.0;
+         end
+
+         VJUNREF_i    = `CLIP_LOW( VJUNREF   , `VJUNREF_cliplow);
+         FJUNQ_i      = `CLIP_LOW( FJUNQ     , `FJUNQ_cliplow);
+
+
+         tkr            = `KELVINCONVERSION + TRJ_i;
+         tkd            = max($temperature + DTA, `KELVINCONVERSION + `MINTEMP);
+         auxt           = tkd / tkr;
+         KBOL_over_QELE = `KBOL / `QELE;
+         phitr          = KBOL_over_QELE * tkr;
+         phitrinv       = 1.0 / phitr;
+         phitd          = KBOL_over_QELE * tkd;
+         phitdinv       = 1.0 / phitd;
+
+         // bandgap voltages at reference temperature
+         deltaphigr      = -(7.02e-4 * tkr * tkr) / (1108.0 + tkr);
+         phigrbot      = PHIGBOT_i + deltaphigr;
+         phigrsti      = PHIGSTI_i + deltaphigr;
+         phigrgat      = PHIGGAT_i + deltaphigr;
+
+         // bandgap voltages at device temperature
+         deltaphigd      = -(7.02e-4 * tkd * tkd) / (1108.0 + tkd);
+         phigdbot      = PHIGBOT_i + deltaphigd;
+         phigdsti      = PHIGSTI_i + deltaphigd;
+         phigdgat      = PHIGGAT_i + deltaphigd;
+
+         // factors ftd for ideal-current model
+         ftdbot        = (pow(auxt, XTI_i/2.0)) * exp(0.5 * ((phigrbot * phitrinv) - (phigdbot * phitdinv)));
+         ftdsti        = (pow(auxt, XTI_i/2.0)) * exp(0.5 * ((phigrsti * phitrinv) - (phigdsti * phitdinv)));
+         ftdgat        = (pow(auxt, XTI_i/2.0)) * exp(0.5 * ((phigrgat * phitrinv) - (phigdgat * phitdinv)));
+ 
+         // factors ftd for ideal-current with ideality factor != 1 
+
+         ftdbot2        = (pow(auxt, XTI_i/2.0/NFABOT_i)) * exp(0.5 * ((phigrbot * phitrinv) - (phigdbot * phitdinv))/NFABOT_i);
+         ftdsti2        = (pow(auxt, XTI_i/2.0/NFASTI_i)) * exp(0.5 * ((phigrsti * phitrinv) - (phigdsti * phitdinv))/NFASTI_i);
+         ftdgat2        = (pow(auxt, XTI_i/2.0/NFAGAT_i)) * exp(0.5 * ((phigrgat * phitrinv) - (phigdgat * phitdinv))/NFAGAT_i);
+
+         // temperature-scaled saturation current for ideal-current model
+         idsatbot      = IDSATRBOT_i * ftdbot2 * ftdbot2;
+         idsatsti      = IDSATRSTI_i * ftdsti2 * ftdsti2;
+         idsatgat      = IDSATRGAT_i * ftdgat2 * ftdgat2;
+
+
+         // built-in voltages before limiting
+         ubibot        = VBIRBOT_i * auxt - 2 * phitd * ln(ftdbot);
+         ubisti        = VBIRSTI_i * auxt - 2 * phitd * ln(ftdsti);
+         ubigat        = VBIRGAT_i * auxt - 2 * phitd * ln(ftdgat);
+
+         // built-in voltages limited to phitd
+         vbibot        = ubibot + phitd * ln(1 + exp((`vbilow - ubibot) * phitdinv));
+         vbisti        = ubisti + phitd * ln(1 + exp((`vbilow - ubisti) * phitdinv));
+         vbigat        = ubigat + phitd * ln(1 + exp((`vbilow - ubigat) * phitdinv));
+
+         // inverse values of built-in voltages
+         vbiinvbot     = 1.0 / vbibot;
+         vbiinvsti     = 1.0 / vbisti;
+         vbiinvgat     = 1.0 / vbigat;
+
+         // one minus the grading coefficient
+         one_minus_PBOT = 1 - PBOT_i;
+         one_minus_PSTI = 1 - PSTI_i;
+         one_minus_PGAT = 1 - PGAT_i;
+
+         // one over "one minus the grading coefficient"
+         one_over_one_minus_PBOT = 1 / one_minus_PBOT;
+         one_over_one_minus_PSTI = 1 / one_minus_PSTI;
+         one_over_one_minus_PGAT = 1 / one_minus_PGAT;
+
+         // temperature-scaled zero-bias capacitance
+         cjobot        = CJORBOT_i * pow((VBIRBOT_i * vbiinvbot), PBOT_i);
+         cjosti        = CJORSTI_i * pow((VBIRSTI_i * vbiinvsti), PSTI_i);
+         cjogat        = CJORGAT_i * pow((VBIRGAT_i * vbiinvgat), PGAT_i);
+
+         // prefactor in physical part of charge model
+         qprefbot      = cjobot * vbibot * one_over_one_minus_PBOT;
+         qprefsti      = cjosti * vbisti * one_over_one_minus_PSTI;
+         qprefgat      = cjogat * vbigat * one_over_one_minus_PGAT;
+
+         // prefactor in mathematical extension of charge model
+         qpref2bot     = `a * cjobot;
+         qpref2sti     = `a * cjosti;
+         qpref2gat     = `a * cjogat;
+
+         // zero-bias depletion widths at reference temperature, needed in SRH and TAT model
+         wdepnulrbot   = EPSSI / CJORBOT_i;
+         wdepnulrsti   = XJUNSTI_i * EPSSI / CJORSTI_i;
+         wdepnulrgat   = XJUNGAT_i * EPSSI / CJORGAT_i;
+
+         // inverse values of "wdepnulr", used in BBT model
+         wdepnulrinvbot = 1 / wdepnulrbot;
+         wdepnulrinvsti = 1 / wdepnulrsti;
+         wdepnulrinvgat = 1 / wdepnulrgat;
+
+         // inverse values of built-in voltages at reference temperature, needed in SRH and BBT model
+         VBIRBOTinv    = 1 / VBIRBOT_i;
+         VBIRSTIinv    = 1 / VBIRSTI_i;
+         VBIRGATinv    = 1 / VBIRGAT_i;
+
+         // some constants needed in erfc-approximation, needed in TAT model
+         perfc         = (`SQRTPI * `aerfc);
+         berfc         = ((-5 * (`aerfc) + 6 - pow((perfc), -2)) / 3);
+         cerfc         = (1.0 - (`aerfc) - (berfc));
+
+         // half the bandgap energy, limited to values > phitd, needed in TAT model
+         deltaEbot     = max(0.5 * phigdbot, phitd);
+         deltaEsti     = max(0.5 * phigdsti, phitd);
+         deltaEgat     = max(0.5 * phigdgat, phitd);
+
+         // values of atat, needed in TAT model
+         atatbot       = deltaEbot * phitdinv;
+         atatsti       = deltaEsti * phitdinv;
+         atatgat       = deltaEgat * phitdinv;
+
+         // values of btatpart, needed in TAT model
+         btatpartbot   = sqrt(32 * MEFFTATBOT_i * `MELE * `QELE * (deltaEbot * deltaEbot * deltaEbot)) / (3 * `HBAR);
+         btatpartsti   = sqrt(32 * MEFFTATSTI_i * `MELE * `QELE * (deltaEsti * deltaEsti * deltaEsti)) / (3 * `HBAR);
+         btatpartgat   = sqrt(32 * MEFFTATGAT_i * `MELE * `QELE * (deltaEgat * deltaEgat * deltaEgat)) / (3 * `HBAR);
+
+         // temperature-scaled values of FBBT, needed in BBT model
+         fbbtbot       = FBBTRBOT_i * (1 + STFBBTBOT_i * (tkd - tkr));
+         fbbtsti       = FBBTRSTI_i * (1 + STFBBTSTI_i * (tkd - tkr));
+         fbbtgat       = FBBTRGAT_i * (1 + STFBBTGAT_i * (tkd - tkr));
+         fbbtbot       = `CLIP_LOW(fbbtbot, 0);
+         fbbtsti       = `CLIP_LOW(fbbtsti, 0);
+         fbbtgat       = `CLIP_LOW(fbbtgat, 0);
+
+         // parameter for current after breakdown, needed in avalanche/breakdown model
+         alphaav       = (FREV_i - 1) / FREV_i;
+
+         // values of fstop, needed in avalanche/breakdown model
+         fstopbot      = 1 / (1 - pow(alphaav, PBRBOT_i));
+         fstopsti      = 1 / (1 - pow(alphaav, PBRSTI_i));
+         fstopgat      = 1 / (1 - pow(alphaav, PBRGAT_i));
+
+
+         //Diode_cmc code
+         //  Breakdown and inverse values of breakdown voltages with temperature scaling, needed in avalanche/breakdown model
+         // Note that it violates the naming convention of this code. Usually we should not recalculate the <modelparameter>_i
+         // inside the code. However, fixing this will cause a lot more inconsistency between diode_cmc and juncap2
+
+         VBRBOT_i     = VBRBOT_i *( 1 + (tkd-tkr) * (STVBRBOT1_i + (tkd-tkr)*STVBRBOT2_i));
+         VBRSTI_i     = VBRSTI_i *( 1 + (tkd-tkr) * (STVBRSTI1_i + (tkd-tkr)*STVBRSTI2_i));
+         VBRGAT_i     = VBRGAT_i *( 1 + (tkd-tkr) * (STVBRGAT1_i + (tkd-tkr)*STVBRGAT2_i));
+
+         if (VBRBOT_i <= 0.1) begin
+            VBRBOT_i   =  0.1;
+            VBRinvbot  = 10.0;
+         end else begin
+            VBRinvbot  = 1.0 / VBRBOT_i ;
+         end
+
+         if (VBRSTI_i <= 0.1) begin
+            VBRSTI_i   =  0.1;
+            VBRinvsti  = 10.0;
+         end else begin
+            VBRinvsti  = 1.0 / VBRSTI_i ;
+         end
+
+         if (VBRGAT_i <= 0.1) begin
+            VBRGAT_i   =  0.1;
+            VBRinvgat  = 10.0;
+         end else begin
+            VBRinvgat  = 1.0 / VBRGAT_i ;
+         end
+
+         shrinkL   = 1.0 - 0.01 * SHRINK_i;
+         //End of Diode_cmc code
+
+         // slopes for linear extrapolation close to and beyond breakdown, needed in avalanche/breakdown model
+         slopebot      = -(fstopbot * fstopbot * pow(alphaav, (PBRBOT_i - 1))) * PBRBOT_i * VBRinvbot;
+         slopesti      = -(fstopsti * fstopsti * pow(alphaav, (PBRSTI_i - 1))) * PBRSTI_i * VBRinvsti;
+         slopegat      = -(fstopgat * fstopgat * pow(alphaav, (PBRGAT_i - 1))) * PBRGAT_i * VBRinvgat;
+
+         //Diode_cmc code
+         // Series resistance calculation
+         resbot        = RSBOT_i * pow(auxt,STRS_i);
+         resgat        = RSGAT_i * pow(auxt,STRS_i);
+         ressti        = RSSTI_i * pow(auxt,STRS_i);
+         rescom        = RSCOM_i * pow(auxt,STRS_i);
+         //End of Diode_cmc code
+
+
+         //Diode_cmc recovery and high-injection equations code
+         NDIBOT_i = NDIBOT * `C_CONC;     // [cm-3] -> [m-3]
+         NDISTI_i = NDISTI * `C_CONC;     // [cm-3] -> [m-3]
+         NDIGAT_i = NDIGAT * `C_CONC;     // [cm-3] -> [m-3]
+         NDI_i    = NDIBOT_i;             // [cm-3] -> [m-3]
+         NJL      = NFABOT_i;
+         MUEN_i   = `C_MUEN * `C_cm2m_p2;  // [cm2/V/sec] -> [m2/V/sec]
+         MUEP_i   = `C_MUEP * `C_cm2m_p2;  // [cm2/V/sec] -> [m2/V/sec]
+         PB       = 0.6;  //Built-in potential at P/N junction (minor) [V]
+         JUNCDLT  = 1e-3; //Smoothness of depletion width around zero bias (minor) [V]
+         //// Temperature-dependent variables
+         // Intrinsic Carrier Density:
+         Nin = `C_Nin0 * ftdbot2;
+         // Minority Carrier Density:
+         Pn0 = Nin * Nin / NDI_i;
+         // Ambipolar Diffusion Length:
+         T1 = pow(auxt, -`C_MUETMP); // temperature dependence of phonon scattering
+         Dn = (MUEN_i * T1) / phitdinv;
+         Dp = (MUEP_i * T1) / phitdinv;
+         Da = 2*Dn*Dp/(Dn+Dp);
+         T2 = pow(auxt, TAUT); // temperature dependence of tau
+         tau_HL = TAU * T2;
+         La = sqrt(tau_HL * Da);
+         // High-Injection Threshold Voltages:
+         V_HA = (NJL / phitdinv) * ln( NDI_i / Pn0 );
+         V_HK = (NJL / phitdinv) * ( ln( NDI_i / Pn0 ) + WI/La );
+         //End of Diode_cmc recovery and high-injection equations code
+

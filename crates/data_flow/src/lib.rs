@@ -44,9 +44,6 @@ pub trait AnalysisDomain {
     fn bottom_value(&self, cfg: &ControlFlowGraph) -> Self::Domain;
 
     /// Mutates the initial value of the dataflow state upon entry to the `START_BLOCK`.
-    ///
-    /// For backward analyses, initial state besides the bottom value is not yet supported. Trying
-    /// to mutate the initial state will result in a panic.
     fn initialize_start_block(&self, cfg: &ControlFlowGraph, state: &mut Self::Domain);
 }
 
@@ -73,9 +70,6 @@ pub trait GenKillAnalysisDomain {
     fn bottom_value(&self, cfg: &ControlFlowGraph) -> Self::Domain;
 
     /// Mutates the initial value of the dataflow state upon entry to the `START_BLOCK`.
-    ///
-    /// For backward analyses, initial state besides the bottom value is not yet supported. Trying
-    /// to mutate the initial state will result in a panic.
     fn initialize_start_block(&self, cfg: &ControlFlowGraph, state: &mut Self::Domain);
 
     fn domain_size(&self, cfg: &ControlFlowGraph) -> usize;
@@ -248,7 +242,8 @@ pub trait GenKillAnalysis: GenKillAnalysisDomain {
     }
 }
 
-pub struct GenKillAnalysisImpl<A>(A);
+#[derive(Debug, Clone)]
+pub struct GenKillAnalysisImpl<A>(pub A);
 
 impl<A> AnalysisDomain for GenKillAnalysisImpl<A>
 where

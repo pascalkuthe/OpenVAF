@@ -2,7 +2,6 @@ use std::mem;
 
 use basedb::lints::LintRegistry;
 use basedb::{AstIdMap, ErasedAstId, LintAttrs};
-use lasso::Rodeo;
 use syntax::ast::{self, ArgListOwner, AttrIter, AttrsOwner, FunctionRef};
 use syntax::name::AsName;
 use syntax::AstPtr;
@@ -96,9 +95,7 @@ impl LowerCtx<'_> {
                 }
             }
 
-            ast::Expr::Literal(lit) => {
-                Expr::Literal(Literal::new(lit.kind(), &mut self.source_map.str_lit_interner))
-            }
+            ast::Expr::Literal(lit) => Expr::Literal(Literal::new(lit.kind())),
         };
         self.alloc_expr(e, AstPtr::new(&expr))
     }
@@ -277,10 +274,10 @@ impl LowerCtx<'_> {
 }
 
 impl Literal {
-    pub fn new(ast: ast::LiteralKind, resolver: &mut Rodeo) -> Literal {
+    pub fn new(ast: ast::LiteralKind) -> Literal {
         match ast {
             ast::LiteralKind::String(lit) => {
-                Literal::String(resolver.get_or_intern(lit.unescaped_value()))
+                Literal::String(lit.unescaped_value().into_boxed_str())
             }
             ast::LiteralKind::IntNumber(lit) => Literal::Int(lit.value()),
             ast::LiteralKind::SiRealNumber(lit) => Literal::Float(lit.value().into()),

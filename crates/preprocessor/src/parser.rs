@@ -81,7 +81,7 @@ impl<'a, 'd> Parser<'a, 'd> {
             .collect();
 
         relevant_tokens.push((PreprocessorToken::Eof, full_tokens.next_key()));
-        dst.reserve(dst.capacity() - dst.len() + full_tokens.len());
+        dst.reserve(full_tokens.len());
 
         let (token, full_token_pos) =
             mk_token(RelevantTokenIdx(0), &relevant_tokens, full_tokens.next_key());

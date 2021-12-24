@@ -21,7 +21,7 @@ pub enum LintLevel {
 }
 
 impl LintLevel {
-    pub fn attr(&self) -> &'static str {
+    pub fn attr(self) -> &'static str {
         match self {
             LintLevel::Deny => "openvaf_allow",
             LintLevel::Warn => "openvaf_warn",

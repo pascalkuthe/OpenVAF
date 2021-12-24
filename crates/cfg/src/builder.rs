@@ -2,10 +2,11 @@
 //! Therefore a builder is provided here to make that task more ergnomic.
 
 use ahash::AHashMap;
+use smallvec::smallvec;
 
 use crate::{
-    BasicBlock, BasicBlockData, ControlFlowGraph, InstrDst, Instruction, Local, Op, Operand, Place,
-    Terminator,
+    BasicBlock, BasicBlockData, ControlFlowGraph, InstrDst, Instruction, Local, Op, Operand,
+    Operands, Place, Terminator,
 };
 
 pub struct CfgBuilder<'a> {
@@ -14,14 +15,57 @@ pub struct CfgBuilder<'a> {
 }
 
 impl<'a> CfgBuilder<'a> {
-    pub fn new_cfg(cfg: &'a mut ControlFlowGraph) -> CfgBuilder {
+    pub fn new(cfg: &'a mut ControlFlowGraph) -> CfgBuilder {
         let current = cfg.blocks.push_and_get_key(BasicBlockData::default());
         CfgBuilder { cfg, current }
     }
+
     pub fn build_phi(&mut self, sources: impl IntoIterator<Item = (BasicBlock, Local)>) -> Local {
         let dst = self.cfg.new_local();
         self.add_phi(dst, sources.into_iter().collect());
         dst
+    }
+
+    pub fn build_select(
+        &mut self,
+        cond: Operand,
+        lower_branch: impl FnMut(&mut Self, bool) -> Local,
+    ) -> Local {
+        let (then_src, else_src) = self.build_cond(cond, lower_branch);
+
+        self.build_phi([then_src, else_src])
+    }
+
+    pub fn build_cond<T>(
+        &mut self,
+        cond: Operand,
+        mut lower_branch: impl FnMut(&mut Self, bool) -> T,
+    ) -> ((BasicBlock, T), (BasicBlock, T)) {
+        let start = self.current;
+
+        let then_head_bb = self.enter_new_block();
+        let then_val = lower_branch(self, true);
+        let then_tail_bb = self.current;
+
+        let else_head_bb = self.enter_new_block();
+        let else_val = lower_branch(self, false);
+        let else_tail_bb = self.current;
+
+        let end = self.enter_new_block();
+        self.terminate_bb(else_tail_bb, Terminator::Goto(end));
+        self.terminate_bb(then_tail_bb, Terminator::Goto(end));
+
+        self.terminate_bb(
+            start,
+            Terminator::Split {
+                condition: cond,
+                true_block: then_head_bb,
+                false_block: else_head_bb,
+                loop_head: false,
+            },
+        );
+
+        ((then_tail_bb, then_val), (else_tail_bb, else_val))
     }
 
     pub fn add_phi(&mut self, dst: Local, sources: AHashMap<BasicBlock, Local>) -> Local {
@@ -31,12 +75,12 @@ impl<'a> CfgBuilder<'a> {
         dst
     }
 
-    pub fn build_val(&mut self, op: Op, operands: Vec<Operand>, src: i32) -> Local {
+    pub fn build_val(&mut self, op: Op, operands: Operands, src: i32) -> Local {
         let dst = self.cfg.new_local();
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst: InstrDst::Local(dst),
             op,
-            args: operands.into_boxed_slice(),
+            args: operands,
             src,
         });
         dst
@@ -45,7 +89,7 @@ impl<'a> CfgBuilder<'a> {
     pub fn to_local(&mut self, val: Operand, src: i32) -> Local {
         match val {
             Operand::Local(local) => local,
-            _ => self.build_val(Op::Copy, vec![val], src),
+            _ => self.build_val(Op::Copy, smallvec![val], src),
         }
     }
 
@@ -53,25 +97,25 @@ impl<'a> CfgBuilder<'a> {
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst: InstrDst::Place(dst),
             op: Op::Copy,
-            args: vec![val].into_boxed_slice(),
+            args: smallvec![val],
             src: src as i32,
         });
     }
 
-    pub fn build_assign(&mut self, dst: InstrDst, op: Op, operands: Vec<Operand>, src: i32) {
+    pub fn build_assign(&mut self, dst: InstrDst, op: Op, operands: Operands, src: i32) {
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst,
             op,
-            args: operands.into_boxed_slice(),
+            args: operands,
             src: src as i32,
         });
     }
 
-    pub fn build_stmt(&mut self, op: Op, operands: Vec<Operand>, src: i32) {
+    pub fn build_stmt(&mut self, op: Op, operands: Operands, src: i32) {
         self.cfg.blocks[self.current].instructions.push(crate::Instruction {
             dst: InstrDst::Ignore,
             op,
-            args: operands.into_boxed_slice(),
+            args: operands,
             src: src as i32,
         });
     }
@@ -111,5 +155,10 @@ impl<'a> CfgBuilder<'a> {
 
     pub fn current_block(&self) -> &BasicBlockData {
         &self.cfg[self.current]
+    }
+
+    pub fn prepend_entry(&mut self, entry: BasicBlock) {
+        self.terminate(Terminator::Goto(self.cfg.entry()));
+        self.cfg.entry = entry;
     }
 }

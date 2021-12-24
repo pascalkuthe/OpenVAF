@@ -9,12 +9,12 @@ use stdx::{impl_from, impl_from_typed};
 use syntax::name::{kw, Name};
 
 use self::diagnostics::DefDiagnostic;
-use crate::builtin::{insert_builtin_scope, BuiltIn};
+use crate::builtin::{insert_builtin_scope, BuiltIn, ParamSysFun};
 use crate::db::HirDefDB;
 use crate::nameres::diagnostics::PathResolveError;
 use crate::{
-    BlockId, BranchId, DisciplineId, FunctionArgId, FunctionId, Lookup, ModuleId, NatureAttrId,
-    NatureId, NodeId, ParamId, VarId,
+    AliasParamId, BlockId, BranchId, DisciplineId, FunctionArgId, FunctionId, Lookup, ModuleId,
+    NatureAttrId, NatureId, NodeId, ParamId, VarId,
 };
 
 mod collect;
@@ -83,6 +83,8 @@ pub enum ScopeDefItem {
     NodeId(NodeId),
     VarId(VarId),
     ParamId(ParamId),
+    ParamSysFun(ParamSysFun),
+    AliasParamId(AliasParamId),
     BranchId(BranchId),
     FunctionId(FunctionId),
     BuiltIn(BuiltIn),
@@ -130,6 +132,8 @@ impl_from! {
     BranchId,
     FunctionId,
     NatureAttrId,
+    AliasParamId,
+    ParamSysFun,
     // DisciplineAttrId,
     FunctionArgId,
     BuiltIn
@@ -166,6 +170,8 @@ scope_item_kinds! {
     NodeId => "node",
     VarId => "variable",
     ParamId => "parameter",
+    ParamSysFun => "hierarchical parameter system function",
+    AliasParamId => "parameter",
     BranchId => "branch",
     FunctionId => "function",
     BuiltIn => "function",

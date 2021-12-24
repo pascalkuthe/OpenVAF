@@ -8,7 +8,7 @@ use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
 
-use crate::LoweringResult;
+use crate::HirInterner;
 
 mod integration;
 mod units;
@@ -31,7 +31,8 @@ impl TestDataBase {
         let mut res = Self { storage: salsa::Storage::default(), vfs: None, root_file: None };
         let vfs = RwLock::new(Vfs::default());
         let foo: &mut dyn BaseDB = &mut res;
-        let root_file = foo.setup_test_db(root_file_name, root_file, &mut vfs.write());
+        let root_file =
+            foo.setup_test_db(root_file_name, root_file.to_owned().into(), &mut vfs.write());
         res.root_file = Some(root_file);
         res.vfs = Some(vfs);
         res
@@ -53,7 +54,7 @@ impl TestDataBase {
     fn lower_and_check_rec(&self, scope: LocalScopeId, def_map: &DefMap) {
         for (_, declaration) in &def_map[scope].declarations {
             if let ScopeDefItem::ModuleId(id) = *declaration {
-                LoweringResult::lower_body(self, id.into());
+                HirInterner::lower_body(self, id.into());
             }
         }
 
@@ -91,19 +92,18 @@ pub fn generate_integration_tests() {
                     return
                 }
                 let db = TestDataBase::new(#root_file,"");
+                let mut vfs = db.vfs().write();
                 #(
-                    {
-                        let path = project_root().join("integration_tests").join(#test_name).join(#files);
-                        let file_contents =read_to_string(path).unwrap();
-                        db.vfs().write().add_virt_file(#file_names, &file_contents);
-                    }
+                    let path = project_root().join("integration_tests").join(#test_name).join(#files);
+                    vfs.add_virt_file(#file_names, read(path).into());
                 )*
+                drop(vfs);
                 db.lower_and_check();
             }
         }
     });
 
-    let header = "use std::fs::read_to_string;
+    let header = "use std::fs::read;
 
         use sourcegen::{skip_slow_tests,project_root};
 

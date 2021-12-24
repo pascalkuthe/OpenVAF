@@ -1,0 +1,23 @@
+[package]
+name = "program_dependence"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+
+[dependencies]
+stdx = {version = "0.0.0", path = "../stdx" }
+cfg = { version = "0.0.0", path = "../cfg" }
+data_flow = { version = "0.0.0", path = "../data_flow" }
+typed_indexmap = { version = "0.0.0", path = "../typed_indexmap" }
+bitset = {version = "0.0.0", path = "../bitset" }
+workqueue = {version = "0.0.0", path = "../workqueue" }
+
+once_cell = "1.3"
+typed-index-collections = "3.0"
+
+[dev-dependencies]
+expect-test = "1.1"

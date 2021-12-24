@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat, to_upper_snake_case};
 use stdx::iter::multiunzip;
 
-const ANALOG_OPERATORS: [&str; 16] = [
+const ANALOG_OPERATORS: [&str; 17] = [
     "absdelay",
     "ddt",
     "idt",
@@ -20,7 +20,7 @@ const ANALOG_OPERATORS: [&str; 16] = [
     "limexp",
     "last_crossing",
     "slew",
-    // "transition",
+    "transition",
 ];
 
 const ANALOG_OPERATORS_SYSFUN: [&str; 2] = ["$limit", "$bound_step"];
@@ -56,7 +56,9 @@ const BUILTINS: [&str; 25] = [
     "tanh",
 ];
 
-const SYSFUNS: [&str; 86] = [
+const PARAM_SYSFUNS: [&str; 6] = ["mfactor", "xposition", "yposition", "angle", "hflip", "vflip"];
+
+const SYSFUNS: [&str; 80] = [
     "$display",
     "$strobe",
     "$write",
@@ -135,12 +137,6 @@ const SYSFUNS: [&str; 86] = [
     "$simparam$str",
     "$simprobe",
     "$discontinuity",
-    "$mfactor",
-    "$xposition",
-    "$yposition",
-    "$angle",
-    "$hflip",
-    "$vflip",
     "$param_given",
     "$port_connected",
     "$analog_node_alias",
@@ -161,9 +157,9 @@ fn generate_builtins() {
         .map(|builtin| {
             let is_sysfun = builtin.starts_with('$');
 
-            let ident = if is_sysfun { builtin[1..].replace('$', "_") } else { builtin.to_owned() };
-            let variant = ident.replace('$', "_");
-            let ident = format_ident!("{}", ident);
+            let variant =
+                if is_sysfun { builtin[1..].replace('$', "_") } else { builtin.to_owned() };
+            let ident = format_ident!("{}", variant);
             let prefix = if is_sysfun { format_ident!("sysfun") } else { format_ident!("kw") };
             (prefix, ident, variant)
         });
@@ -182,6 +178,7 @@ fn generate_builtins() {
         ANALOG_OPERATORS_SYSFUN.into_iter().map(|op| format_ident!("{}", &op[1..]));
 
     let variants = variants.iter().map(|var| format_ident!("{}", var));
+    let params = PARAM_SYSFUNS.map(|var| format_ident!("{}", var));
 
     let hir_def = quote! {
         #[derive(Eq,PartialEq,Copy,Clone, Hash,Debug)]
@@ -189,6 +186,13 @@ fn generate_builtins() {
         #[repr(u8)]
         pub enum BuiltIn{
             #(#unique_variants = #indicies),*
+        }
+
+
+        #[derive(Eq,PartialEq,Copy,Clone, Hash,Debug)]
+        #[allow(nonstandard_style,unreachable_pub)]
+        pub enum ParamSysFun{
+            #(#params),*
         }
 
         impl BuiltIn{
@@ -219,6 +223,11 @@ fn generate_builtins() {
 
         pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>){
             #(dst.insert(#kw_types::#kws,BuiltIn::#variants.into());)*
+        }
+
+
+        pub fn insert_modulle_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>){
+            #(dst.insert(sysfun::#params,ParamSysFun::#params.into());)*
         }
     };
 

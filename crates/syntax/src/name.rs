@@ -339,6 +339,8 @@ pub mod kw {
         zi_np,
         zi_zd,
         zi_zp,
+
+        transition,
     }
 }
 
@@ -397,7 +399,6 @@ pub mod kw_comp {
         bufif0,
         bufif1,
 
-        transition,
     }
 }
 

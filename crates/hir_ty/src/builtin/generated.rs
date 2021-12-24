@@ -4,7 +4,7 @@ use hir_def::BuiltIn;
 
 use crate::builtin::*;
 
-const BUILTIN_INFO: [BuiltinInfo; 116usize] = [
+const BUILTIN_INFO: [BuiltinInfo; 111usize] = [
     ABS,
     ACOS,
     ACOSH,
@@ -85,12 +85,6 @@ const BUILTIN_INFO: [BuiltinInfo; 116usize] = [
     SIMPARAM_STR,
     SIMPROBE,
     DISCONTINUITY,
-    MFACTOR,
-    XPOSITION,
-    YPOSITION,
-    ANGLE,
-    HFLIP,
-    VFLIP,
     PARAM_GIVEN,
     PORT_CONNECTED,
     ANALOG_NODE_ALIAS,
@@ -121,5 +115,6 @@ const BUILTIN_INFO: [BuiltinInfo; 116usize] = [
     LIMEXP,
     LAST_CROSSING,
     SLEW,
+    TRANSITION,
 ];
 pub(crate) fn bultin_info(builtin: BuiltIn) -> BuiltinInfo { BUILTIN_INFO[builtin as u8 as usize] }

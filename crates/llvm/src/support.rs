@@ -10,12 +10,15 @@ use crate::{LLVMCreateMessage, LLVMDisposeMessage};
 
 /// An owned LLVM String. Also known as a LLVM Message
 #[derive(Eq)]
+#[repr(transparent)]
 pub struct LLVMString {
     pub(crate) ptr: *const c_char,
 }
 
 impl LLVMString {
-    pub(crate) unsafe fn new(ptr: *const c_char) -> Self {
+    /// # Safety
+    /// This functions requires a string that was allocated by LLVM!
+    pub unsafe fn new(ptr: *const c_char) -> Self {
         LLVMString { ptr }
     }
 
@@ -34,8 +37,8 @@ impl LLVMString {
     // }
 
     /// This method will allocate a c string through LLVM
-    pub(crate) fn create_from_str(string: &str) -> LLVMString {
-        debug_assert_eq!(string.as_bytes()[string.as_bytes().len() - 1], 0);
+    pub fn create_from_str(string: &CStr) -> LLVMString {
+        // debug_assert_eq!(string.as_bytes()[string.as_bytes().len() - 1], 0);
 
         unsafe { LLVMString::new(LLVMCreateMessage(string.as_ptr() as *const _)) }
     }

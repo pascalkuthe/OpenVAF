@@ -1,9 +1,11 @@
+use std::mem::forget;
+
 use ::libc::{c_char, c_uint};
 
-use crate::{Bool, Context, Type};
+use crate::{Bool, Context, Type, TypeKind};
 
 extern "C" {
-    // pub fn LLVMGetTypeKind(Ty: &'a Type) -> LLVMTypeKind;
+    pub fn LLVMGetTypeKind(ty: &Type) -> TypeKind;
     // pub fn LLVMTypeIsSized(Ty: &'a Type) -> LLVMBool;
     // pub fn LLVMGetTypeContext(Ty: &'a Type) -> ContextRef;
     // pub fn LLVMDumpType(Val: &'a Type);
@@ -43,12 +45,7 @@ extern "C" {
     // Core->Types->Struct
     pub fn LLVMStructTypeInContext<'a>(
         ctx: &'a Context,
-        ElementTypes: *mut &'a Type,
-        ElementCount: c_uint,
-        Packed: Bool,
-    ) -> &'a Type;
-    pub fn LLVMStructType<'a>(
-        ElementTypes: *mut &'a Type,
+        ElementTypes: *const &'a Type,
         ElementCount: c_uint,
         Packed: Bool,
     ) -> &'a Type;
@@ -56,23 +53,23 @@ extern "C" {
     pub fn LLVMGetStructName<'a>(ty: &'a Type) -> *const c_char;
     pub fn LLVMStructSetBody<'a>(
         struct_ty: &'a Type,
-        ElementTypes: *mut &'a Type,
+        ElementTypes: *const &'a Type,
         ElementCount: c_uint,
         Packed: Bool,
     );
-    //pub fn LLVMCountStructElementTypes(struct_ty: &Type) -> c_uint;
-    //pub fn LLVMGetStructElementTypes<'a>(struct_ty: &'a Type, dst: *mut &'a Type);
+    pub fn LLVMCountStructElementTypes(struct_ty: &Type) -> c_uint;
+    fn LLVMGetStructElementTypes<'a>(struct_ty: &'a Type, dst: *mut &'a Type);
     ///// Get the type of the element at the given index in a structure.
     /////
     ///// Added in LLVM 3.7.
-    //pub fn LLVMStructGetTypeAtIndex<'a>(struct_ty: &'a Type, i: c_uint) -> &'a Type;
+    pub fn LLVMStructGetTypeAtIndex<'a>(struct_ty: &'a Type, i: c_uint) -> &'a Type;
     ///// Determine whether a structure is packed.
     //pub fn LLVMIsPackedStruct(struct_ty: &Type) -> Bool;
     //pub fn LLVMIsOpaqueStruct(struct_ty: &Type) -> Bool;
     //pub fn LLVMIsLiteralStruct(struct_ty: &Type) -> Bool;
 
     //// Core->Types->Sequential
-    //pub fn LLVMGetElementType<'a>(ty: &'a Type) -> &'a Type;
+    pub fn LLVMGetElementType<'a>(ty: &'a Type) -> &'a Type;
     ///// Get the subtypes of the given type.
     //pub fn LLVMGetSubtypes<'a>(ty: &'a Type, arr: *mut &'a Type);
     ///// Return the number of types in the derived type.
@@ -114,4 +111,17 @@ pub struct AddressSpace(pub c_uint);
 impl AddressSpace {
     /// The default address space, corresponding to data space.
     pub const DATA: Self = AddressSpace(0);
+}
+
+/// # Safety
+/// struct_ty must be a valid struct type
+pub unsafe fn struct_element_types(struct_ty: &Type) -> Box<[&Type]> {
+    let count = LLVMCountStructElementTypes(struct_ty);
+
+    let mut raw_vec: Vec<&Type> = Vec::with_capacity(count as usize);
+    let ptr = raw_vec.as_mut_ptr();
+    forget(raw_vec);
+
+    LLVMGetStructElementTypes(struct_ty, ptr);
+    Vec::from_raw_parts(ptr, count as usize, count as usize).into_boxed_slice()
 }

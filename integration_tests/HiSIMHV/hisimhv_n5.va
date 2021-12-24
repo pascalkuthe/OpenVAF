@@ -1,0 +1,115 @@
+/***********************************************************************
+
+ HiSIM (Hiroshima University STARC IGFET Model)
+ Copyright (C) 2000-2016 Hiroshima University and STARC
+ Copyright (C) 2016-2019 Hiroshima University
+ HiSIM_HV (High-Voltage Model)
+ Copyright (C) 2007-2016 Hiroshima University and STARC
+ Copyright (C) 2016-2019 Hiroshima University
+
+ MODEL NAME : HiSIM_HV 
+ ( VERSION : 2  SUBVERSION : 5  REVISION : 0 )
+ Model Parameter 'VERSION' : 2.50
+ FILE : hisimhv_n5.va
+
+ Date : 2019.04.26
+
+ released by Hiroshima University
+
+***********************************************************************/
+//
+////////////////////////////////////////////////////////////////
+//
+//
+//
+//The HiSIM_HV standard has been supported by the members of 
+//Silicon Integration Initiative's Compact Model Coalition. A 
+//link to the most recent version of this standard can be found 
+//at:
+//
+//http://www.si2.org/cmc
+//
+////////////////////////////////////////////////////////////////
+//
+//
+//* Memorandum on programming
+//* 
+//*(1) Bias(x: b|d|g)
+//*     . vxs : Input arguments: Outer branch voltages.
+//*     . vxsi: Input arguments: Inner branch voltages.
+//*     . deltemp: Input argument: delta temperature.
+//*     . Vxse: Internal name for outer branch voltages.
+//*     . Vxs:  Internal name for inner branch voltages.
+//*     . Vbscl:Inner bulk source voltage is clamped within a specified region. 
+//* 
+//* (2) Device Mode
+//*     . Normal mode(Vds>=0 for nMOS) is assumed.
+//*     . The sign of Vdse is assumed to be changed simultaneously, if the sign of Vds is changed;
+//*       hence Vdse may become negative even though Vds >=0.
+//*     . In case of reverse mode, parent routines have to properly 
+//*       transform or interchange inputs and outputs except ones 
+//*       related to junction diodes, which are regarded as being 
+//*       fixed to the nodal S/D.
+//*
+//* (3) Modification for symmetry at Vds=0
+//*     . Vxsz: Modified bias. (x: b|d|g)
+//*     . Ps0z: Modified Ps0.
+//*     . The following variables are calculated as a function of 
+//*       modified biases or potential.
+//*         Tox, Cox, (-- with quantum effect)
+//*         Vth*, dVth*, dPpg, Igate, Igidl, Igisl. 
+//*     . The following variables are calculated using a transform
+//*       function.
+//*         Lred
+//*     
+//*(4) Zones and Cases(terminology)
+//* 
+//*       Chi:=beta*(Ps0-Vbs)=       0    3    5
+//*
+//*                      Zone:    A  | D1 | D2 | D3
+//*                                  |
+//*                    (accumulation)|(depletion)
+//*                                  |
+//*                      Vgs =     Vgs_fb                Vth
+//*                                              /       /
+//*                      Case:    Nonconductive / Conductive
+//*                                            /
+//*             VgVt:=Qn0/Cox=             VgVt_small
+//*
+//*     . Ids is regarded as zero in zone-A.
+//*     . Procedure to calculate Psl and dependent variables is 
+//*       omitted in the nonconductive case. Ids and Qi are regarded
+//*       as zero in this case.
+//*
+//*********************************************************************/
+//
+
+`include "discipline.h"
+
+// Definitions for `ifdef directives
+`define _5_PORTS_CONNECTED_
+//`define COEXTDIO 1                  // Flag of the External Diode Model
+`define REPLACE_CLIPPING_WITH_SMOOTHING  
+
+`include "HSMHV_macrosAndDefs.inc"
+
+
+// Module Definition
+module hisimhv_n5_va(d, g, s, b, sub);
+   inout      d, g, s, b, sub ;
+   electrical d, g, s, b, sub                             ;  // External Nodes 
+   electrical temp, dp, gp, sp, bp, db, sb, qi, qb             ;  // Internal Nodes 
+   electrical qbd ;  // Internal node for nov_nqs
+   electrical n ;    // Internal node for induced gate noise
+   electrical charge_A, charge_K, depl_A;  //internal nodes for diode recovery model
+//`define _AGING_
+`ifdef _AGING_
+   voltage    idtag1 , idtag2                ;  // Internal Nodes for Aging
+   voltage   dVfb , idtag3 , idtag4          ;
+   voltage    ps0 , vtraplx , vgc1 , ve1     ;  
+`endif
+// 
+
+`include "HSMHV_module.inc"
+
+endmodule

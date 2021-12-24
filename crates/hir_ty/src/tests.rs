@@ -31,7 +31,8 @@ impl TestDataBase {
         let mut res = Self { storage: salsa::Storage::default(), vfs: None, root_file: None };
         let vfs = RwLock::new(Vfs::default());
         let foo: &mut dyn BaseDB = &mut res;
-        let root_file = foo.setup_test_db(root_file_name, root_file, &mut vfs.write());
+        let root_file =
+            foo.setup_test_db(root_file_name, root_file.to_owned().into(), &mut vfs.write());
         res.root_file = Some(root_file);
         res.vfs = Some(vfs);
         res
@@ -106,20 +107,19 @@ pub fn generate_integration_tests() {
                     return
                 }
                 let db = TestDataBase::new(#root_file,"");
+                let mut vfs = db.vfs().write();
                 #(
-                    {
-                        let path = project_root().join("integration_tests").join(#test_name).join(#files);
-                        let file_contents =read_to_string(path).unwrap();
-                        db.vfs().write().add_virt_file(#file_names, &file_contents);
-                    }
+                    let path = project_root().join("integration_tests").join(#test_name).join(#files);
+                    vfs.add_virt_file(#file_names, read(path).into());
                 )*
+                drop(vfs);
                 let actual = db.lower_and_check();
                 expect_file![project_root().join("integration_tests").join(#test_name).join("inference_diagnostics.log")].assert_eq(&actual);
             }
         }
     });
 
-    let header = "use std::fs::read_to_string;
+    let header = "use std::fs::read;
 
         use expect_test::expect_file;
         use sourcegen::{skip_slow_tests,project_root};

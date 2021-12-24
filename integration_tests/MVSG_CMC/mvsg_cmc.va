@@ -1,0 +1,1348 @@
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Copyright 2019 Ujwal Radhakrishna and Lan Wei
+//Copyright 2019 Massachusetts Institute of Technology
+//Copyright 2018 Ujwal Radhakrishna, Dimitri Antoniadis and Lan Wei
+//Copyright 2018 Massachusetts Institute of Technology
+//Copyright 2017 Massachusetts Institute of Technology
+//
+//Licensed under the Educational Community License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License. 
+//You may obtain a copy of the License at 
+//
+//	http://opensource.org/licenses/ECL-2.0
+//
+//Unless required by applicable law or agreed to in writing, software distributed under the
+//License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+//KIND, either express or implied. See the License for the specific language governing 
+//permissions and limitations under the License.
+//
+//
+//The MVSG_CMC standard has been supported by the members of Silicon Integration Initiatives
+//Compact Model Coalition. A link to the most recent version of this standard can be found at:
+//
+//http://www.si2.org/cmc
+//
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// VerilogA for MVSG_CMC GaN HEMT model based self-consistent transport/capacitance models for HV and RF applications
+// Model details:  U. Radhakrishna, et al, IEDM 2013.
+// Implemented on 8/06/2015, 2015 by U. Radhakrishna
+//  Updates from v1.1.0
+// 1. Four source-side FPs added
+// 2. Channel-breakdown model added
+// 3. RF-gate dispersion added
+// 4. Bug in Rg corrected
+// 5. Optimized T-function calls in ig-model and mobility-model
+// 6. Default parameter set inside VA changed: ngf=1, cofsm=cofdm=cofdsm=0, igmod=0, cfps1s=cfps2s=cfps3s=cfps4s=cfp1s=cfp2s=cfp3s=cfp4s=0, vtofp3=vtofp3=-74.5,  causing results of tests with default params to change
+//********Version number: 1.2.0*************//
+
+`include "disciplines.vams"
+`include "constants.vams"
+
+// Physical constants
+`define P_KK           (1.38062e-23)
+`define P_QQ           (1.60219e-19)
+`define T_MAX          (1500)
+`define T_MIN          (-270.0)
+
+// Mathematical Constants
+`define M_MAXEXP       (50.0)
+
+// Define macros for parameters
+`define MPRnb(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter real    nam=def ;
+`define MPRco(nam,def,uni,lwr,upr,des) (*units=uni,                   desc=des*) parameter real    nam=def from[lwr:upr) ;
+`define MPRcz(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter real    nam=def from[  0:inf);
+`define MPRoz(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter real    nam=def from(  0:inf);
+`define MPIsw(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter integer nam=def from[  0:  1] ;
+`define MPIty(nam,def,uni,        des) (*units=uni,                   desc=des*) parameter integer nam=def from[ -1:  1] exclude 0 ;
+`define IPRnb(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def ;
+`define IPRoz(nam,def,uni,        des) (*units=uni, type="instance",  desc=des*) parameter real    nam=def from(  0:inf);
+`define IPIco(nam,def,uni,lwr,upr,des) (*units=uni, type="instance",  desc=des*) parameter integer nam=def from[lwr:upr) ;
+
+// Define macros for OP-points
+`define OPP(nam,uni,des)               (* desc=des, units=uni *)                           real    nam;
+`define OPM(nam,uni,des)               (* desc=des, units=uni, multiplicity="multiply" *)  real    nam;
+`define OPD(nam,uni,des)               (* desc=des, units=uni, multiplicity="divide"   *)  real    nam;
+
+module mvsg_cmc (d, g, s, b); 
+
+inout d, g, s, b;
+electrical d, g, s, b;
+electrical di, gi1, gi2, si, fps1, fps2, fps3, fps4, fp1, fp2, fp3, fp4, drc, src, tr, tr1, xt1, xt2;
+thermal dt;
+
+// Parameter definition
+// Instance parameters                
+   `IPRoz(w,        180.0e-6, "m",       "Width per Finger")                               
+   `IPRoz(l,        250.0e-9, "m",       "Effective gate length")                      
+   `IPIco(ngf,      1,        "", 1, inf,"Number of Fingers")  
+   `IPRnb(dtemp,    0.0,      "K",       "Device temperature offset from ambient")              
+
+// Model parameters  
+   `MPRcz(version,  1.20,     "",        "Version number")          
+   `MPRco(tnom,     27.0,     "deg C", -273.15, inf, "Reference temperature for the model")
+   `MPIty(type,     1,        "",        "nFET=1 pFET=-1") 
+   `MPRoz(cg,       4.00e-03, "F/m^2",   "Gate cap/area") 
+   `MPRcz(cofsm,    0.0,      "F/m",     "Gate - Source outer fringing cap/width")
+   `MPRcz(cofdm,    0.0,      "F/m",     "Gate - Drain outer fringing cap/width") 
+   `MPRcz(cofdsm,   0.0,      "F/m",     "Source - Drain outer fringing cap/width")  
+   `MPRcz(cofdsubm, 0.0,      "F/m",     "Sub - Drain outer fringing cap/width")   
+   `MPRcz(cofssubm, 0.0,      "F/m",     "Sub - Source outer fringing cap/width")  
+   `MPRcz(cofgsubm, 0.0,      "F/m",     "Sub - Gate outer fringing cap/width")    
+   `MPRcz(rsh,      150.0,    "Ohms/Sq", "2-DEG Sheet Resistance")    
+   `MPRcz(rcs,      800e-6,   "Ohms*m",  "Source contact resistance * Width")    
+   `MPRcz(rcd,      800e-6,   "Ohms*m",  "Drain contact resistance * Width")    
+   `MPRoz(vx0,      3.0e5,    "m/s",     "Source injection velocity")    
+   `MPRoz(mu0,      0.135,    "m^2/Vs",  "Low-field mobility")    
+   `MPRoz(beta,     1.50,     "",        "Linear to saturation parameter")    
+   `MPRnb(vto,      -2.72,    "V",       "Threshold voltage") 
+   `MPRoz(ss,       0.120,    "V/dec",   "Sub-threshold slope")    
+   `MPRcz(delta1,   16e-3,    "",        "DIBL Coefficient 1")    
+   `MPRcz(delta2,   0.0,      "",        "DIBL Coefficient 2")    
+   `MPRcz(dibsat,   10.0,     "V",       "DIBL saturation Voltage")    
+   `MPRcz(nd,       0.0,      "",        "Punchthrough factor for subth slope")    
+   `MPRoz(alpha,    3.5,      "",        "Weak to strong inversion transition factor")    
+   `MPRcz(lambda,   0.0,      "1/V",     "CLM parameter")    
+   `MPRcz(vtheta,   0.0,      "1/V",     "Scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mtheta,   0.0,      "1/V",     "Scattering: mobility reduction parameter with Vg")    
+   `MPRcz(vzeta,    150e3,    "1/K",     "vx0 dependence on temperature")    
+   `MPRnb(vtzeta,   -0.4e-3 , "V/K",     "vto dependence on temperature")    
+   `MPRcz(epsilon,  2.3,      "",        "Mobility dependence on temperature")    
+   `MPRnb(rct1,     0.0,      "1/K",     "Linear Rsh and Rc temperature coefficient")    
+   `MPRnb(rct2,     0.0,      "1/K^2",   "Quadratic Rsh and Rc temperature coefficient")    
+
+   `MPIsw(flagres,  0,        "",        "Flag parameter for resistor: resistor is chosen if flagres=1 or implicit transitor is chosen if flagres=0") 
+
+// Source access region parameters
+   `MPRcz(lgs,      3.0e-6,   "m",       "Source access region (SAR) length parameter")                      
+   `MPRnb(vtors,    -650,     "V",       "SAR threshold voltage") 
+   `MPRoz(cgrs,     5.0e-3,   "F/m^2",   "SAR gate-cap/area") 
+   `MPRoz(vx0rs,    100e3,    "m/s",     "SAR source injection velocity")    
+   `MPRoz(mu0rs,    100e-3,   "m^2/Vs",  "SAR low-field mobility")    
+   `MPRoz(betars,   1.00,     "",        "SAR linear to saturation parameter")    
+   `MPRcz(delta1rs, 100e-3,   "",        "SAR DIBL Coefficient")    
+   `MPRoz(srs,      0.100,    "V/dec",   "SAR Sub-threshold slope")    
+   `MPRcz(ndrs,     0.0,      "",        "SAR punchthrough factor for subth slope")    
+   `MPRcz(vthetars, 0.0,      "1/V",     "SAR scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetars, 0.0,      "1/V",     "SAR scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphars,  3.5,      "",        "SAR weak to strong inversion transition factor")    
+
+// Drain access region parameters
+   `MPRcz(lgd,      4.85e-6,  "m",       "Drain access region (DAR) length parameter")                      
+   `MPRnb(vtord,    -650,     "V",       "DAR threshold voltage") 
+   `MPRoz(cgrd,     4.3e-3,   "F/m^2",   "DAR gate-cap/area") 
+   `MPRoz(vx0rd,    100e3,    "m/s",     "DAR source injection velocity")    
+   `MPRoz(mu0rd,    100e-3,   "m^2/Vs",  "DAR low-field mobility")    
+   `MPRoz(betard,   1.00,     "",        "DAR linear to saturation parameter")    
+   `MPRcz(delta1rd, 0.35,     "",        "DAR DIBL Coefficient")    
+   `MPRoz(srd,      0.3,      "V/dec",   "DAR Sub-threshold slope")    
+   `MPRcz(ndrd,     3.8,      "",        "DAR punchthrough factor for subth slope")    
+   `MPRcz(vthetard, 0.0,      "1/V",     "DAR scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetard, 0.0,      "1/V",     "DAR scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphard,  3.5,      "",        "DAR weak to strong inversion transition factor") 
+
+// Source-side Field-Plate 1 parameters
+   `MPIsw(flagfps1, 1,        "",        "Flag parameter: GFP=1 or SFP=0")
+   `MPRcz(lgfps1,   0.0,      "m",       "FP Length")
+   `MPRnb(vtofps1,  -44.5,    "V",       "FP threshold voltage")
+   `MPRoz(cgfps1,   2.0e-4,   "F/m^2",   "FP gate-cap/area")
+   `MPIsw(flagfps1s,1,        "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfps1s,   0e-19,    "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfps1,   0.9e-10,  "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfps1,   0.0,      "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fps1,  1.2e5,    "m/s",     "FP source injection velocity")
+   `MPRoz(mu0fps1,  0.2,      "m^2/Vs",  "FP low-field mobility")
+   `MPRoz(betafps1, 1.00,     "",        "FP linear to saturation parameter")
+   `MPRcz(delta1fps1,0.0,     "",        "FP DIBL Coefficient")
+   `MPRoz(sfps1,    3.2,      "V/dec",   "FP Sub-threshold slope")
+   `MPRcz(ndfps1,   0.0,      "",        "FP punchthrough factor for subth slope")
+   `MPRcz(vthetafps1,0.0,     "1/V",     "FP scattering: velocity reduction parameter with Vg")
+   `MPRcz(mthetafps1,0.0,     "1/V",     "FP scattering: mobility reduction parameter with Vg")
+   `MPRoz(alphafps1, 1e-2,    "",        "FP weak to strong inversion transition factor")
+
+// Source-side Field-Plate 2 parameters
+   `MPIsw(flagfps2,  0,       "",        "Flag parameter: GFP=1 or SFP=0") 
+   `MPRcz(lgfps2,    0.0,     "m",       "FP Length")                      
+   `MPRnb(vtofps2,   -74.5,   "V",       "FP threshold voltage") 
+   `MPRoz(cgfps2,    1.0e-4,  "F/m^2",   "FP gate-cap/area") 
+   `MPIsw(flagfps2s, 1,       "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfps2s,    0e-19,   "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfps2,    0.3e-10, "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfps2,    0.0,     "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fps2,   1.2e5,   "m/s",     "FP source injection velocity")  
+   `MPRoz(mu0fps2,   0.2,     "m^2/Vs",  "FP low-field mobility")    
+   `MPRoz(betafps2,  1.00,    "",        "FP linear to saturation parameter")    
+   `MPRcz(delta1fps2,0.0,     "",        "FP DIBL Coefficient")    
+   `MPRoz(sfps2,     3.2,     "V/dec",   "FP Sub-threshold slope")    
+   `MPRcz(ndfps2,    0.0,     "",        "FP punchthrough factor for subth slope")    
+   `MPRcz(vthetafps2,0.0,     "1/V",     "FP scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetafps2,0.0,     "1/V",     "FP scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphafps2, 1e-2,    "",        "FP weak to strong inversion transition factor") 
+
+// Source-side Field-Plate 3 parameters
+   `MPIsw(flagfps3,  0,       "",        "Flag parameter: GFP=1 or SFP=0") 
+   `MPRcz(lgfps3,    0.0,     "m",       "FP Length")                      
+   `MPRnb(vtofps3,   -74.5,   "V",       "FP threshold voltage") 
+   `MPRoz(cgfps3,    1.0e-4,  "F/m^2",   "FP gate-cap/area") 
+   `MPIsw(flagfps3s, 1,       "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfps3s,    0e-19,   "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfps3,    0.3e-10, "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfps3,    0.0,     "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fps3,   1.2e5,   "m/s",     "FP source injection velocity")  
+   `MPRoz(mu0fps3,   0.2,     "m^2/Vs",  "FP low-field mobility")    
+   `MPRoz(betafps3,  1.00,    "",        "FP linear to saturation parameter")    
+   `MPRcz(delta1fps3,0.0,     "",        "FP DIBL Coefficient")    
+   `MPRoz(sfps3,     3.2,     "V/dec",   "FP Sub-threshold slope")    
+   `MPRcz(ndfps3,    0.0,     "",        "FP punchthrough factor for subth slope")    
+   `MPRcz(vthetafps3,0.0,     "1/V",     "FP scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetafps3,0.0,     "1/V",     "FP scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphafps3, 1e-2,    "",        "FP weak to strong inversion transition factor") 
+ 
+// Source-side Field-Plate 4 parameters
+   `MPIsw(flagfps4,  0,       "",        "Flag parameter: GFP=1 or SFP=0") 
+   `MPRcz(lgfps4,    0.0,     "m",       "FP Length")                      
+   `MPRnb(vtofps4,   -74.5,   "V",       "FP threshold voltage") 
+   `MPRoz(cgfps4,    1.0e-4,  "F/m^2",   "FP gate-cap/area") 
+   `MPIsw(flagfps4s, 1,       "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfps4s,    0e-19,   "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfps4,    0.3e-10, "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfps4,    0.0,     "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fps4,   1.2e5,   "m/s",     "FP source injection velocity")  
+   `MPRoz(mu0fps4,   0.2,     "m^2/Vs",  "FP low-field mobility")    
+   `MPRoz(betafps4,  1.00,    "",        "FP linear to saturation parameter")    
+   `MPRcz(delta1fps4,0.0,     "",        "FP DIBL Coefficient")    
+   `MPRoz(sfps4,     3.2,     "V/dec",   "FP Sub-threshold slope")    
+   `MPRcz(ndfps4,    0.0,     "",        "FP punchthrough factor for subth slope")    
+   `MPRcz(vthetafps4,0.0,     "1/V",     "FP scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetafps4,0.0,     "1/V",     "FP scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphafps4, 1e-2,    "",        "FP weak to strong inversion transition factor") 
+
+// Field-Plate 1 parameters
+   `MPIsw(flagfp1,  1,        "",        "Flag parameter: GFP=1 or SFP=0") 
+   `MPRcz(lgfp1,    0.0,      "m",       "FP Length")                      
+   `MPRnb(vtofp1,   -44.5,    "V",       "FP threshold voltage") 
+   `MPRoz(cgfp1,    2.0e-4,   "F/m^2",   "FP gate-cap/area") 
+   `MPIsw(flagfp1s, 1,        "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfp1s,    0e-19,    "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfp1,    0.9e-10,  "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfp1,    0.0,      "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fp1,   1.2e5,    "m/s",     "FP source injection velocity")  
+   `MPRoz(mu0fp1,   0.2,      "m^2/Vs",  "FP low-field mobility")    
+   `MPRoz(betafp1,  1.00,     "",        "FP linear to saturation parameter")    
+   `MPRcz(delta1fp1,0.0,      "",        "FP DIBL Coefficient")    
+   `MPRoz(sfp1,     3.2,      "V/dec",   "FP Sub-threshold slope")    
+   `MPRcz(ndfp1,    0.0,      "",        "FP punchthrough factor for subth slope")    
+   `MPRcz(vthetafp1,0.0,      "1/V",     "FP scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetafp1,0.0,      "1/V",     "FP scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphafp1, 1e-2,     "",        "FP weak to strong inversion transition factor") 
+ 
+// Field-Plate 2 parameters
+   `MPIsw(flagfp2,  0,        "",        "Flag parameter: GFP=1 or SFP=0") 
+   `MPRcz(lgfp2,    0.0,      "m",       "FP Length")                      
+   `MPRnb(vtofp2,   -74.5,    "V",       "FP threshold voltage") 
+   `MPRoz(cgfp2,    1.0e-4,   "F/m^2",   "FP gate-cap/area") 
+   `MPIsw(flagfp2s, 1,        "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfp2s,    0e-19,    "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfp2,    0.3e-10,  "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfp2,    0.0,      "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fp2,   1.2e5,    "m/s",     "FP source injection velocity")  
+   `MPRoz(mu0fp2,   0.2,      "m^2/Vs",  "FP low-field mobility")    
+   `MPRoz(betafp2,  1.00,     "",        "FP linear to saturation parameter")    
+   `MPRcz(delta1fp2,0.0,      "",        "FP DIBL Coefficient")    
+   `MPRoz(sfp2,     3.2,      "V/dec",   "FP Sub-threshold slope")    
+   `MPRcz(ndfp2,    0.0,      "",        "FP punchthrough factor for subth slope")    
+   `MPRcz(vthetafp2,0.0,      "1/V",     "FP scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetafp2,0.0,      "1/V",     "FP scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphafp2, 1e-2,     "",        "FP weak to strong inversion transition factor") 
+
+// Field-Plate 3 parameters
+   `MPIsw(flagfp3,  0,        "",        "Flag parameter: GFP=1 or SFP=0") 
+   `MPRcz(lgfp3,    0.0,      "m",       "FP Length")                      
+   `MPRnb(vtofp3,   -74.5,    "V",       "FP threshold voltage") 
+   `MPRoz(cgfp3,    2.0e-4,   "F/m^2",   "FP gate-cap/area") 
+   `MPIsw(flagfp3s, 1,        "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfp3s,    0e-19,    "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfp3,    0.9e-10,  "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfp3,    0.0,      "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fp3,   1.2e5,    "m/s",     "FP source injection velocity")  
+   `MPRoz(mu0fp3,   0.2,      "m^2/Vs",  "FP low-field mobility")    
+   `MPRoz(betafp3,  1.00,     "",        "FP linear to saturation parameter")    
+   `MPRcz(delta1fp3,0.0,      "",        "FP DIBL Coefficient")    
+   `MPRoz(sfp3,     3.2,      "V/dec",   "FP Sub-threshold slope")    
+   `MPRcz(ndfp3,    0.0,      "",        "FP punchthrough factor for subth slope")    
+   `MPRcz(vthetafp3,0.0,      "1/V",     "FP scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetafp3,0.0,      "1/V",     "FP scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphafp3, 1e-2,     "",        "FP weak to strong inversion transition factor") 
+
+// Field-Plate 4 parameters
+   `MPIsw(flagfp4,  0,        "",        "Flag parameter: GFP=1 or SFP=0") 
+   `MPRcz(lgfp4,    0.0,      "m",       "FP Length")                      
+   `MPRnb(vtofp4,   -74.5,    "V",       "FP threshold voltage") 
+   `MPRoz(cgfp4,    2.0e-4,   "F/m^2",   "FP gate-cap/area") 
+   `MPIsw(flagfp4s, 1,        "",        "Flag parameter: cfp1s select=1 or cfp1s not select=0") 
+   `MPRcz(cfp4s,    0e-19,    "F/m",     "FP (source-side) to source cap/width")
+   `MPRcz(ccfp4,    0.9e-10,  "F/m",     "Source or gate to drain (under FP) cap/width")
+   `MPRcz(cbfp4,    0.0,      "F/m",     "Body to drain (under FP) cap/width")
+   `MPRoz(vx0fp4,   1.2e5,    "m/s",     "FP source injection velocity")  
+   `MPRoz(mu0fp4,   0.2,      "m^2/Vs",  "FP low-field mobility")    
+   `MPRoz(betafp4,  1.00,     "",        "FP linear to saturation parameter")    
+   `MPRcz(delta1fp4,0.0,      "",        "FP DIBL Coefficient")    
+   `MPRoz(sfp4,     3.2,      "V/dec",   "FP Sub-threshold slope")    
+   `MPRcz(ndfp4,    0.0,      "",        "FP punchthrough factor for subth slope")    
+   `MPRcz(vthetafp4,0.0,      "1/V",     "FP scattering: velocity reduction parameter with Vg")    
+   `MPRcz(mthetafp4,0.0,      "1/V",     "FP scattering: mobility reduction parameter with Vg")    
+   `MPRoz(alphafp4, 1e-2,     "",        "FP weak to strong inversion transition factor") 
+ 
+// Gate leakage parameters
+   `MPIsw(igmod,    0,        "",        "Flag parameter for gate leakage 0=off, 1=on") 
+   `MPRoz(vjg,      1.1,      "V",       "Gate diode cut in voltage")                                                                               
+   `MPRcz(pg_param1,820e-3,   "1/V",     "Temperature coefficient of exponent")    
+   `MPRcz(pg_params,1.00,     "1/V",     "G-S diode  inverse of ideality factor")  
+   `MPRcz(ijs,      1.00e-12, "A/m",     "G-S reverse leakage current normalized to width")   
+   `MPRcz(vgsats,   1.00,     "V",       "G-S high injection effect")    
+   `MPRcz(fracs,    0.5,      "",        "G-S fractional change in ideality factor due to high injection")   
+   `MPRoz(alphags,  10.0,     "",        "G-S high injection smoothing parameter") 
+   `MPRcz(pg_paramd,1.00,     "1/V",     "G-D diode  inverse of ideality factor")  
+   `MPRcz(ijd,      1.00e-12, "A/m",     "G-D reverse leakage current normalized to width")   
+   `MPRcz(vgsatd,   1.00,     "V",       "G-D high injection effect")    
+   `MPRcz(fracd,    0.5,      "",        "G-D fractional change in ideality factor due to high injection")    
+   `MPRoz(alphagd,  10.0,     "",        "G-D high injection smoothing parameter") 
+
+   `MPRcz(pgsrecs,  0.5,      "",        "G-S diode  inverse of ideality factor reverse recombination")    
+   `MPRcz(irecs,    1.0e-18,  "A/m",     "G-S reverse leakage current normalized to width")   
+   `MPRoz(vgsatqs,  2.00,     "V",       "G-S mimics depletion saturation")    
+   `MPRcz(vbdgs,    600,      "V",       "G-S soft breakdown voltage of G-S diode")    
+   `MPRcz(pbdgs,    4.00,     "1/V",     "G-S fitting parameter for breakdown: inverse of ideality factor")  
+   `MPRoz(betarecs, 2.00,     "",        "G-S linear to saturation parameter")    
+   `MPRcz(kbdgates, 00,       "",        "G-S fitting parameter to turn on the breakdown of G-S diode")    
+   `MPRcz(pgsrecd,  0.8,      "",        "G-D diode  inverse of ideality factor for reverse recombination")    
+   `MPRcz(irecd,    2e-5,     "A/m",     "G-D reverse leakage current normalized to width")   
+   `MPRoz(vgsatqd,  0.8,      "V",       "G-D mimics depletion saturation")    
+   `MPRcz(vbdgd,    600,      "V",       "G-D soft breakdown voltage of G-D diode")    
+   `MPRcz(pbdgd,    4.00,     "1/V",     "G-D fitting parameter for breakdown: inverse of ideality factor")  
+   `MPRoz(betarecd, 0.25,     "",        "G-D linear to saturation parameter")    
+   `MPRcz(kbdgated, 00,       "",        "G-D fitting parameter to turn on the breakdown of G-D diode")  
+
+// Channel breakdown model
+   `MPIsw(icbdmod,  0,        "",        "Flag parameter forchannel breakdown 0=off, 1=on") 
+   `MPRcz(ijscbd,   1.00e-9,  "A/m",     "G-S reverse channel breakdown leakage current normalized to width")   
+   `MPRcz(ijdcbd,   1.00e-9,  "A/m",     "G-S reverse channel breakdown leakage current normalized to width")   
+   `MPRcz(vchbdgs,  50,       "V",       "G-S soft breakdown voltage of channel diode")    
+   `MPRcz(pchbdgs,  4.00,     "1/V",     "G-S fitting parameter for channel breakdown: inverse of ideality factor")  
+   `MPRcz(vchbdgd,  50,       "V",       "G-D soft breakdown voltage of channel diode")    
+   `MPRcz(pchbdgd,  4.00,     "1/V",     "G-D fitting parameter for channel breakdown: inverse of ideality factor")  
+
+// Thermal sub-circuit parameters
+   `MPRcz(rth,      25,       "K/W ",    "Thermal resistance")   
+   `MPRcz(cth,      1e-4,     "s*W/K",   "Thermal capacitance")   
+
+// RF gm-dispersion parameters
+   `MPIsw(gmdisp,   0,        "",        "Flag parameter for gm-dispersion 0=off, 1=on") 
+   `MPRcz(taugmrf,  1e-3,     "s",       "gm-dispersion time constant")   
+
+// Layout and DC-to-RF gate-resistance parameters
+   `MPRcz(rgsp,     0.0,      "Ohms/m",  "Gate resistance / Width for 1 finger and 1 gate-contact")  
+   `MPRoz(ngcon,    1,        "",        "Number of gate-contacts per finger")    
+   `MPRcz(lovg,     0,        "m",       "Length of gate-finger line between gate-contact and the beginning of active gate-width")     
+   `MPRcz(agate,    1,        "m",       "DC-to-RF dispersion factor; fraction=1 DC value maintained at all frequencies")     
+
+// Trapping model parameters for Ron increase
+   `MPIsw(trapselect,0,       "",        "Select knob for charge trapping 0=off, 1=on") 
+   `MPRcz(ctrap,    1e-3,     "F",       "DC-block capacitor")   
+   `MPRcz(vttrap,   230,      "V",       "Trapping stress threshold voltage")   
+   `MPRcz(taut,     3e-5,     "s",       "Trap time constant")   
+   `MPRcz(alphat1,  1e-4,     "",        "Trap coefficient 1 on bias stress")   
+   `MPRoz(alphat2,  21,       "V",       "Trap coefficient 2 on bias stress") 
+   `MPRcz(tempt,    1e-4,     "1/K",     "Temperature coefficient for trapping")   
+
+// Noise model parameters
+   `MPIsw(noisemod, 0,       "",         "Select knob for noise model 0=off, 1=on") 
+   `MPRcz(shs,      3.0,     "",         "G-S shot noise parameter")   
+   `MPRcz(shd,      3.0,     "",         "G-D shot noise parameter")   
+   `MPRcz(kf,       1.0e-4,  "",         "Flicker noise coefficient")   
+   `MPRcz(af,       2.0,     "",         "Flicker noise exponent")   
+   `MPRoz(ffe,      1.2,     "",         "Flicker noise exponent for frequency")   
+
+// Minimum element parameters
+   `MPRcz(minr,     1.0e-3,  "Ohm",      "Minimum resistance")   
+   `MPRcz(minl,     1.0e-9,  "m",        "Minimum length of access or FP regions for modeling them as transistors")  
+   `MPRcz(minc,     0.0,     "F",        "Minimum capacitance")  
+
+   analog function real absfunc;
+      input x;
+      real x;
+      begin
+         absfunc=sqrt( x * x + 4.0 * 1e-5  );
+      end
+   endfunction
+
+   analog function real mmax;
+      input x,y;
+      real x,y;
+      begin
+         mmax=0.5*( x + y + sqrt( ( x - y ) * ( x - y ) + 4.0 * 1e-5 ));
+      end
+   endfunction
+
+   analog function real explim;
+      input x;
+      real x;
+      begin
+        if(x>`M_MAXEXP)
+        begin
+            explim    =exp( `M_MAXEXP ) * ( 1.0 + ( x - `M_MAXEXP ));
+        end else begin
+            if(x<-`M_MAXEXP) begin
+               explim =exp( -`M_MAXEXP );
+            end else begin
+               explim =exp( x );
+            end
+        end
+      end
+   endfunction
+  
+   analog function real calc_iq;
+      output idsout,qgsout,qgdout,qcout,qbout,qsout,vtdibl,vdsat1;
+      input vgsin,vdsin,qcbflag,vcin,vbin,qgsflag,tambin,tnomin,phitin,w,lin,cgin,cs,cc,cb,vto,ss;
+      input delta1,delta2,nd,alpha,vel0,mu0,beta,mtheta,vtheta;
+      input vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type;
+
+      // IO
+      real  idsout,qgsout,qgdout,qcout,qbout,qsout,vtdibl,vdsat1,vgsin,vdsin,qcbflag,vcin,vbin,qgsflag;
+      real  tambin,tnomin,phitin,w,lin,cgin,cs,cc,cb,vto,ss,delta1,delta2,nd,alpha,vel0,mu0,beta,mtheta,vtheta;
+      real  vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type;
+
+      // Local
+      real  alpha_phit, delta, n, vtof, vsatdibl, ffs, two_n_phit, qref, etas, qinvs, muf, vx, vxf;
+      real  n0, ffs0, two_n_phit0, qref0, etas0, qinvs0, muf0, vx0, tfacmobin;
+      real  ff, eta, qinvv;
+      real  ff0, eta0, qinvv0;
+      real  vdsats, vdsats1, vdsat, fsd, vdx, fds, vsx, ffd, etad, qinvd, vdsc, fsat, vel; 
+      real  vdsats0, vdsats10, vdsat10, fsd0, vdx0, fds0, vsx0, ffd0, etad0, qinvd0; 
+      real  qs2, qs3, qd2, qd3, qsqd, qinvdd, qd1, qs, qd, etac, etab, etags;
+      real  exparg, myarg, absvdsin, vgdin;
+      real  exparg0, myarg0;
+      
+      begin
+         absvdsin     = absfunc( vdsin );
+         vgdin        = vgsin - vdsin;
+         alpha_phit   = alpha * phitin; 
+         n            = ss / ( `M_LN10 * phitin ) + nd * absvdsin; 
+         vtof         = vto + vtzeta * ( tambin - tnomin );
+         tfacmobin    = pow(( tambin / tnomin ), epsilon );
+         if (dibsat != 0) begin
+            vsatdibl  = absvdsin / ( pow(( 1.0 + pow( absvdsin / dibsat, beta)),( 1.0/beta )));
+         end else begin
+            vsatdibl  = 0;
+         end
+         delta        = ( delta1 - vsatdibl * delta2 ) * absvdsin;
+         vtdibl       = vtof - delta;
+         two_n_phit   = 2.0 * n * phitin; 
+         qref         = cgin * two_n_phit; 
+         // Qinvv
+         myarg        = vtdibl - alpha_phit / 2.0;         
+         exparg       = (( mmax( vgsin,vgdin ) - myarg ) / ( alpha_phit ));
+         if (exparg > `M_MAXEXP) begin
+            ff        = 0.0;
+         end else if (exparg < -`M_MAXEXP) begin
+            ff        = 1.0;
+         end else begin
+            ff        = 1.0 / ( 1.0 + exp( exparg )); 
+         end 
+         eta          = ( mmax( vgsin,vgdin ) - ( vtdibl - 0.1 * alpha_phit * ff )) / two_n_phit;
+         if (eta > `M_MAXEXP) begin
+            qinvv     = qref * eta;
+         end else if (eta < -`M_MAXEXP) begin
+            qinvv     = 0;
+         end else begin
+            qinvv     = qref * ln( 1.0 + exp( eta )); 
+         end        
+         // velocity
+         muf          = mu0 / ( tfacmobin * ( 1.0 + mtheta * qinvv /cgin )); 
+         vx           = vel0 * (( 1.0 + vzeta * tnomin ) / ( 1.0 + vzeta * tambin )) * ( 1.0 + lambda * absvdsin /lin) / ( 1.0 + vtheta * qinvv/ cgin ); 
+         vxf          = 2.0 * ff * phitin * muf / lin + ( 1.0 - ff ) * vx;
+         vdsats       = vx * lin / muf; 
+         vdsats1      = vdsats * sqrt( 1.0 + 2.0 * qinvv / cgin / vdsats ) - vdsats; 
+         vdsat        = vdsats * ( 1.0 - ff ) + two_n_phit * ff; 
+         vdsat1       = vdsats1 * ( 1.0 - ff ) + two_n_phit * ff; 
+         fsd          = 1.0 / pow( 1.0 + pow( mmax( 0,( vdsin / vdsat1 )),beta ),1.0 / beta); 
+         vdx          = vdsin * fsd;
+         fds          = 1.0 / pow( 1.0 + pow( mmax( 0,( -vdsin / vdsat1 )),beta),1.0 / beta); 
+         vsx          = -vdsin * fds;
+         // Qinvs
+         exparg       = ( vgsin - myarg ) / ( alpha_phit );
+         if (exparg > `M_MAXEXP) begin
+            ffs       = 0.0;
+         end else if (exparg < -`M_MAXEXP) begin
+            ffs       = 1.0;
+         end else begin
+            ffs       = 1.0  /( 1.0 +  exp( exparg )); 
+         end
+         etas         = ( vgdin - vsx - ( vtdibl - 0.1 * alpha_phit * ffs )) / two_n_phit;
+         if (etas > `M_MAXEXP) begin
+            qinvs     = qref * etas;
+         end else if (etas < -`M_MAXEXP) begin
+            qinvs     = 0;
+         end else begin
+            qinvs     = qref * ln( 1.0 + exp( etas ));
+         end
+         // Qinvd
+         exparg       = ( vgdin - myarg ) / ( alpha_phit );
+         if (exparg > `M_MAXEXP) begin
+            ffd       = 0.0;
+         end else if (exparg < -`M_MAXEXP) begin
+            ffd       = 1.0;
+         end else begin
+            ffd       = 1.0 / ( 1.0 + exp( exparg ));
+         end
+         etad         = ( vgsin - vdx - ( vtdibl - 0.1 * alpha_phit * ffd )) / two_n_phit; 
+         if (etad > `M_MAXEXP) begin
+            qinvd     = qref * etad;
+         end else if (etad < -`M_MAXEXP) begin
+            qinvd     = 0;
+         end else begin
+            qinvd     = qref * ln( 1.0 + exp( etad ));
+         end
+         // Current
+         vdsc         = ( qinvs - qinvd ) / cgin;
+         myarg        = vdsc / vdsat;
+         fsat         = myarg / ( pow( 1.0 + pow( absfunc( myarg ),beta), 1.0 / beta)); 
+         vel          = vxf * fsat;
+         idsout       = type * w * ngf * 0.5 * ( qinvs + qinvd ) * vel;
+
+         // charge calc
+         n0           = ss / ( `M_LN10 * phitin ); 
+         two_n_phit0  = 2.0 * n0 * phitin; 
+         qref0        = cgin * two_n_phit0; 
+         // Qinvv0
+         myarg0       = vtof - alpha_phit / 2.0;         
+         exparg0      = (( mmax( vgsin,vgdin ) - myarg0 )/( alpha_phit ));
+         if (exparg0 > `M_MAXEXP) begin
+            ff0       = 0.0;
+         end else if (exparg0 < -`M_MAXEXP) begin
+            ff0       = 1.0;
+         end else begin
+            ff0       = 1.0 / ( 1.0 + exp( exparg0 ));  
+         end
+         eta0         = ( mmax( vgsin,vgdin ) - ( vtof - 0.1 * alpha_phit * ff0 )) / two_n_phit0;
+         if (eta0 > `M_MAXEXP) begin
+            qinvv0    = qref0 * eta0;
+         end else if (eta0 < -`M_MAXEXP) begin
+            qinvv0    = 0;
+         end else begin
+            qinvv0    = qref0 * ln( 1.0 + exp( eta0 ));    
+         end     
+         // velocity0
+         muf0         = mu0 / tfacmobin;
+         vx0          = vel0 * (( 1.0 + vzeta * tnomin ) / ( 1.0 + vzeta * tambin )); 
+         vdsats0      = vx0 * lin / muf0; 
+         vdsats10     = vdsats0 * sqrt( 1.0 + 2.0 * qinvv0 / cgin / vdsats0 ) - vdsats0; 
+         vdsat10      = vdsats10 * ( 1.0 - ff0 ) + two_n_phit0 * ff0; 
+         fsd0         = 1.0 / pow( 1.0 + pow( mmax(0,( vdsin / vdsat10 )),beta ),1.0 / beta); 
+         vdx0         = vdsin * fsd0;
+         fds0         = 1.0 / pow( 1.0 + pow( mmax(0,( -vdsin / vdsat10 )),beta ),1.0 / beta); 
+         vsx0         = -vdsin * fds0;
+         exparg0      = ( vgsin - myarg0 ) / ( alpha_phit );
+         if (exparg0 > `M_MAXEXP) begin
+            ffs0      = 0.0;
+         end else if (exparg0 < -`M_MAXEXP) begin
+            ffs0      = 1.0;
+         end else begin
+            ffs0      = 1.0 / ( 1.0 + exp( exparg0 )); 
+         end
+         etas0        = ( vgdin - vsx0 - ( vtof - 0.1 * alpha_phit * ffs0 )) / two_n_phit0;
+         if (etas0 > `M_MAXEXP) begin
+            qinvs0    = qref0 * etas0;
+         end else if (etas0 < -`M_MAXEXP) begin
+            qinvs0    = 0;
+         end else begin
+            qinvs0    = qref0 * ln( 1.0 + exp( etas0 ));
+         end
+         exparg0      = ( vgdin - myarg0 ) / ( alpha_phit );
+         if (exparg0 > `M_MAXEXP) begin
+            ffd0      = 0.0;
+         end else if (exparg0 < -`M_MAXEXP) begin
+            ffd0      = 1.0;
+         end else begin
+            ffd0      = 1.0 / ( 1.0 + exp( exparg0 ));
+         end
+         etad0        = ( vgsin - vdx0 - ( vtof - 0.1 * alpha_phit * ffd0 )) / two_n_phit0; 
+         if (etad0 > `M_MAXEXP) begin
+            qinvd0    = qref0 * etad0;
+         end else if (etad0 < -`M_MAXEXP) begin
+            qinvd0    = 0;
+         end else begin
+            qinvd0    = qref0 * ln( 1.0 + exp( etad0 ));
+         end
+         qs2          = qinvs0 * qinvs0 + 1e-38;
+         qs3          = qs2 * qinvs0 + 1e-57;
+         qd2          = qinvd0 * qinvd0 + 1e-38;
+         qd3          = qd2 * qinvd0 + 1e-57;
+         qsqd         = qinvs0 * qinvd0 + 1e-38;
+         qinvdd       = 2.0 / 3.0 * ( qs2 + qd2 + qsqd ) / ( qinvs0 + qinvd0 + 2e-19 );
+         qd1          = 2.0 * ( 2.0 * qs3 + 3.0 * qd3 + 4.0 * qs2 * qinvd0 + 6.0 * qd2 * qinvs0 ) / ( 15.0 * ( qs2+ qd2 + 2.0 * qsqd ));
+         qs           = qinvdd - qd1; 
+         qd           = qd1;
+         qgsout       = w * ngf * lin * type * qs;
+         qgdout       = w * ngf * lin * type * qd;
+         if (qcbflag==1) begin 
+            etac      = ( vcin - ( vtof - 0.5 * alpha_phit )) / two_n_phit0; 
+            if (etac > `M_MAXEXP) begin
+               exparg = etac;
+            end else if (etac < -`M_MAXEXP) begin
+               exparg = 0;
+            end else begin
+               exparg = ln( 1.0 + exp( etac ));
+            end
+            qcout     = w * ngf * type * cc * two_n_phit0 * exparg; 
+            etab      = ( vbin - ( vtof - 0.5 * alpha_phit )) / two_n_phit0;
+            if (etab > `M_MAXEXP) begin
+               exparg = etab;
+            end else if (etab < -`M_MAXEXP) begin
+               exparg = 0;
+            end else begin
+               exparg = ln( 1.0 + exp( etab ));
+            end
+            qbout     = w * ngf * type * cb * two_n_phit0 * exparg; 
+         end else begin 
+            qcout     = 0; 
+            qbout     = 0; 
+         end 
+         if (qgsflag==1) begin 
+            etags     = ( vgsin - ( vtof - 0.5 * alpha_phit )) / two_n_phit0; 
+            if (etags > `M_MAXEXP) begin
+               exparg = etags;
+            end else if (etags < -`M_MAXEXP) begin
+               exparg = 0;
+            end else begin
+               exparg = ln( 1.0 + exp( etags  ));
+            end
+            qsout     = w * ngf * type * cs * two_n_phit0 * exparg; 
+         end else begin 
+            qsout     = 0; 
+         end 
+         calc_iq      = idsout;
+      end
+   endfunction
+
+   analog function real calc_ig;
+      output isdiodeout, isrecout;
+      input vgin, phitin;
+      input vgsatin, alphagin, fracin, pg_paramin, pbdgin, vbdgin, tfacdiodein;
+      input w, ngf,ijin, kbdgatein, vgsatqin, betarecin, irecin, pgsrecin, pg_param1, vjg, type;
+      // IO
+      real isdiodeout, isrecout;
+      real vgin, phitin;
+      real vgsatin, alphagin, fracin, pg_paramin, pbdgin, vbdgin, tfacdiodein;
+      real w, ngf,ijin, kbdgatein, vgsatqin, betarecin, irecin, pgsrecin, pg_param1, vjg, type;
+      // Local
+      real igout, alpha_phit, t0, ffvgin, pgin, iginbd, igindiode;
+      real frecgin, iginrec;
+      real expbdarg1, expbdarg2, expbd1, expbd2, expphib, expffvarg, expiforarg, expifor, expirevarg, expirev;
+
+      begin
+         alpha_phit   = alphagin * phitin; 
+         expphib      = pg_param1 / phitin * (- vjg);
+         t0           = explim( expphib );
+         expffvarg    = ( vgin - ( vgsatin - alphagin * alpha_phit / 2.0))/( alphagin * alpha_phit );
+         if (expffvarg > `M_MAXEXP) begin
+            ffvgin    = 0.0;
+         end else if (expffvarg < -`M_MAXEXP) begin
+            ffvgin    = 1.0;
+         end else begin
+            ffvgin    = 1.0 / ( 1.0 + exp( expffvarg ));
+         end
+         pgin         = ( fracin * pg_paramin + ( 1.0 - fracin) * pg_paramin * ffvgin );
+
+         expbdarg1    = pbdgin * ( -vgin  - vbdgin ) + expphib;
+         expbdarg2    = -pbdgin * vbdgin + expphib;
+         expbd1       = explim( expbdarg1 );
+         expbd2       = explim( expbdarg2 );
+         iginbd       = ( expbd1 - expbd2 );
+
+         isdiodeout   = type * w * ngf * ijin * tfacdiodein;
+         expiforarg   = pgin / phitin * vgin + expphib;
+         expifor      = explim( expiforarg );
+         igindiode    = isdiodeout * ( expifor - ( kbdgatein * iginbd ) - t0 );
+
+         frecgin      = -vgin / pow(( 1.0 + pow( absfunc( vgin  / vgsatqin ), betarecin )), 1.0 / betarecin );
+         isrecout     = -type * w * ngf * irecin * tfacdiodein * 1.0;
+         expirevarg   = pgsrecin / phitin * frecgin;
+         expirev      = explim( expirevarg );
+         iginrec      = isrecout * ( expirev - 1.0 );
+
+         igout        = igindiode + iginrec;
+         calc_ig      = igout;
+      end
+   endfunction 
+   
+// Local variables
+   real gmin;
+   real rdi, rsi, rcs_w, rcd_w, rg1, rg2;
+   real vdsi, vgsi, vigs, vigd, vsars, vdars, vtdibli, vdsat1i, vgsrs, vdsrs, vtdiblrs, vdsatrs, vgsrd, vdsrd, vtdiblrd, vdsatrd;
+   real vgsfps1, vdsfps1, vcfps1, vbfps1, vtdiblfps1, vdsatfps1;
+   real vgsfps2, vdsfps2, vcfps2, vbfps2, vtdiblfps2, vdsatfps2;
+   real vgsfps3, vdsfps3, vcfps3, vbfps3, vtdiblfps3, vdsatfps3;
+   real vgsfps4, vdsfps4, vcfps4, vbfps4, vtdiblfps4, vdsatfps4;
+   real vgsfp1, vdsfp1, vcfp1, vbfp1, vtdiblfp1, vdsatfp1;
+   real vgsfp2, vdsfp2, vcfp2, vbfp2, vtdiblfp2, vdsatfp2;
+   real vgsfp3, vdsfp3, vcfp3, vbfp3, vtdiblfp3, vdsatfp3;
+   real vgsfp4, vdsfp4, vcfp4, vbfp4, vtdiblfp4, vdsatfp4;
+   real tambk, tnomk, tsh, tdut, tfacdiode, phit, pdiss;
+   real ids, idsrf, qgs, qgd, qc, qb, qs, igsi, igdi, igssdio, igdsdio, igsrec, igdrec;
+   real igscbd, igdcbd, igscbddio, igdcbddio, igsrecbd, igdrecbd; 
+   real idsrs,  qgsrs, qgdrs, qcrs, qbrs, qsrs;
+   real idsrd,  qgsrd, qgdrd, qcrd, qbrd, qsrd;
+   real idsfps1, qgsfps1, qgdfps1, qcfps1, qbfps1, qsfps1;
+   real idsfps2, qgsfps2, qgdfps2, qcfps2, qbfps2, qsfps2;
+   real idsfps3, qgsfps3, qgdfps3, qcfps3, qbfps3, qsfps3;
+   real idsfps4, qgsfps4, qgdfps4, qcfps4, qbfps4, qsfps4;
+   real idsfp1, qgsfp1, qgdfp1, qcfp1, qbfp1, qsfp1;
+   real idsfp2, qgsfp2, qgdfp2, qcfp2, qbfp2, qsfp2;
+   real idsfp3, qgsfp3, qgdfp3, qcfp3, qbfp3, qsfp3;
+   real idsfp4, qgsfp4, qgdfp4, qcfp4, qbfp4, qsfp4;
+   real qofs, qofd, qofds, qofdsub, qofssub, qofgsub;
+   real drsht, vtcollapse, vtcollapse0, ttrapfac;
+   real gm, svc;
+
+   `OPP(vgisi,     "V",    "internal gate-source voltage")
+   `OPP(vdisi,     "V",    "internal drain-source voltage")
+   `OPP(vti,       "V",    "internal threshold voltage including DIBL")
+   `OPP(vdsati,    "V",    "internal drain-source saturation  voltage")
+   `OPM(pdc,       "W",    "total power dissipation from the device")
+   `OPM(idisi,     "A",    "drain-to-source current in intrinsic transistor")
+   `OPM(igs,       "A",    "gate-source gate-leakage current")
+   `OPM(igd,       "A",    "gate-drain gate-leakage current")
+   `OPM(qgi,       "C",    "intrinsic gate charge")
+   `OPM(qdi,       "C",    "intrinsic drain charge")
+   `OPM(qsi,       "C",    "intrinsic source charge")
+   `OPM(qbi,       "C",    "intrinsic body charge")
+   `OPM(gmi,       "A/V",  "intrinsic transconductance")
+   `OPM(gdsi,      "A/V",  "intrinsic output-conductance")
+   `OPM(gmbsi,     "A/V",  "intrinsic body-transconductance")
+   `OPM(cggi,      "F",    "intrinsic gate-gate capacitance")
+   `OPM(cgdi,      "F",    "intrinsic gate-drain capacitance")
+   `OPM(cgsi,      "F",    "intrinsic gate-source capacitance")
+   `OPM(cgbi,      "F",    "intrinsic gate-body capacitance")
+   `OPM(cdgi,      "F",    "intrinsic drain-gate capacitance")
+   `OPM(cddi,      "F",    "intrinsic drain-drain capacitance")
+   `OPM(cdsi,      "F",    "intrinsic drain-source capacitance")
+   `OPM(cdbi,      "F",    "intrinsic drain-body capacitance")
+   `OPM(csgi,      "F",    "intrinsic source-gate capacitance")
+   `OPM(csdi,      "F",    "intrinsic source-drain capacitance")
+   `OPM(cssi,      "F",    "intrinsic source-source capacitance")
+   `OPM(csbi,      "F",    "intrinsic source-body capacitance")
+   `OPM(cbgi,      "F",    "intrinsic body-gate capacitance")
+   `OPM(cbdi,      "F",    "intrinsic body-drain capacitance")
+   `OPM(cbsi,      "F",    "intrinsic body-source capacitance")
+   `OPM(cbbi,      "F",    "intrinsic body-body capacitance")
+   `OPM(cgs,       "F",    "gate-to-source fringing capacitance")
+   `OPM(cgd,       "F",    "gate-to-drain fringing capacitance")
+   `OPP(t_total_k, "K",    "actual device temperature in Kelvin")
+   `OPP(t_total_c, "deg C","actual device temperature in Celsius")
+   `OPP(t_delta_sh,"K",    "change in device temperature caused by self-heating")
+   `OPD(rs,        "Ohm",  "resistance of source access region")
+   `OPD(rd,        "Ohm",  "resistance of drain access region")
+   
+analog begin
+
+   // Temperature dependence of voltage independent terms
+   gmin               = $simparam("gmin",1e-12);
+   tnomk              = tnom + `P_CELSIUS0;
+   tambk              = $temperature;
+   tsh                = Temp(dt);
+   tdut               = tambk + dtemp + tsh;
+   if(tdut < `T_MIN + `P_CELSIUS0) begin
+      tdut            = `T_MIN + `P_CELSIUS0;
+   end else begin
+      if (tdut > `T_MAX + `P_CELSIUS0) begin
+         tdut         = `T_MAX + `P_CELSIUS0;
+      end
+   end
+   rsi                = 0;
+   rdi                = 0;
+
+   if (flagres==0) begin
+      rcs_w           = rcs / w / ngf;
+      rcd_w           = rcd / w / ngf;
+   end else begin
+      rcs_w           = ( rcs / w + rsh * lgs / w ) / ngf;
+      rcd_w           = ( rcd / w + rsh * lgd / w ) / ngf;
+   end
+   if (rcs_w >= minr ) begin
+      rsi             = ( rcs_w ) *  ( 1.0 + rct1 *  ( tdut - tnomk ) + rct2 *  ( tdut - tnomk ) *  ( tdut - tnomk ));
+      if (rsi < 0.1 * rcs_w) begin
+         rsi          = 0.1 * rcs_w;
+      end
+   end else begin
+      rsi             = 0;
+   end
+   if (rcd_w >= minr ) begin
+      rdi             = ( rcd_w ) *  ( 1.0 + rct1 *  ( tdut - tnomk ) + rct2 *  ( tdut - tnomk ) *  ( tdut - tnomk ));
+      if (rdi < 0.1 * rcd_w) begin
+         rdi          = 0.1 * rcd_w;
+      end
+   end else begin
+      rdi             = 0;
+   end
+
+   rg1                 = ( rgsp / ngf / ngcon ) * ( lovg + agate * w / ngcon );
+   rg2                 = ( rgsp / ngf / ngcon ) * ( (1.0 - agate) * w / ngcon );
+   phit               = `P_KK * tdut / `P_QQ;
+   ttrapfac           = 1.0 + tempt * ( tdut - tnomk );
+   if (ttrapfac < 0.1) begin
+      ttrapfac        = 0.1;
+   end
+   tfacdiode          = pow( ( tdut / tnomk ) , 3.0 );
+
+   // Determine drain-source and gate-source voltage for intrinsic transistor   
+   vdsi               = type *  V(di,si);
+   vgsi               = type *  V(gi2,si);
+
+   // Determine drain-source and gate-source voltage for SAR transistor
+   if (type * V(src,d)<= type * V(src,s)) begin
+      vsars           = type * V(src,s);
+   end else begin
+      vsars           = type * V(src,d);
+   end
+   vigs               = vtors + 1.0 / (rsh * cgrs * mu0);
+   vdsrs              = type * V(fps4,src);
+   vgsrs              = (vigs - vsars);
+
+   // Trap time constant
+   if ( trapselect    != 0) begin
+      vtcollapse0     = alphat1 * abs(V(d,g)) + explim( (V(d,g) - vttrap) / alphat2 );
+      I(tr1)          <+ -vtcollapse0;
+      I(tr1,tr)       <+ ddt(ctrap * V(tr1,tr));
+      I(tr)           <+ ddt(taut * V(tr));
+      I(tr)           <+ V(tr);
+      vtcollapse      = V(tr);
+      drsht           = 1.0 + (vtcollapse) * ttrapfac;
+   end else begin
+      vtcollapse0     = 0;
+      vtcollapse      = 0;
+      V(tr1)          <+0;
+      V(tr)           <+0;
+      drsht           = 1.0;
+   end
+   // Determine drain-source and gate-source voltage for DAR transistor
+   if (type * V(fp4,d)<= type * V(fp4,s)) begin
+      vdars           = type * V(fp4,s);
+   end else begin
+      vdars           = type * V(fp4,d);
+   end
+   vigd               = vtord + 1.0 / (drsht * rsh * cgrd * mu0);
+   vdsrd              = type * V(drc,fp4);
+   vgsrd              = (vigd - vdars);
+   
+   // Determine gate-source, drain-source voltage and cross-coupled voltages for FP transistors
+   if (flagfps1 == 1) begin
+      vgsfps1         = type * V(gi2,fps1);
+      vcfps1          = type * V(s,fps1);
+   end else begin
+      vgsfps1         = type * V(s,fps1);
+      vcfps1          = type * V(gi2,fps1);
+   end
+   vdsfps1            = type * V(si,fps1);
+   vbfps1             = type * V(b,fps1);
+   if (flagfps2 == 1) begin
+      vgsfps2         = type * V(gi2,fps2);
+      vcfps2          = type * V(s,fps2);
+   end else begin
+      vgsfps2         = type * V(s,fps2);
+      vcfps2          = type * V(gi2,fps2);
+   end
+   vdsfps2            = type * V(fps1,fps2);
+   vbfps2             = type * V(b,fps2);
+   if (flagfps3 == 1) begin
+      vgsfps3         = type * V(gi2,fps3);
+      vcfps3          = type * V(s,fps3);
+   end else begin
+      vgsfps3         = type * V(s,fps3);
+      vcfps3          = type * V(gi2,fps3);
+   end
+   vdsfps3            = type * V(fps2,fps3);
+   vbfps3             = type * V(b,fps3);
+   if (flagfps4 == 1) begin
+      vgsfps4         = type * V(gi2,fps4);
+      vcfps4          = type * V(s,fps4);
+   end else begin
+      vgsfps4         = type * V(s,fps4);
+      vcfps4          = type * V(gi2,fps4);
+   end
+   vdsfps4            = type * V(fps3,fps4);
+   vbfps4             = type * V(b,fps4);
+   if (flagfp1 == 1) begin
+      vgsfp1          = type * V(gi2,di);
+      vcfp1           = type * V(s,di);
+   end else begin
+      vgsfp1          = type * V(s,di);
+      vcfp1           = type * V(gi2,di);
+   end
+   vdsfp1             = type * V(fp1,di);
+   vbfp1              = type * V(b,di);
+   if (flagfp2 == 1) begin
+      vgsfp2          = type * V(gi2,fp1);
+      vcfp2           = type * V(s,fp1);
+   end else begin
+      vgsfp2          = type * V(s,fp1);
+      vcfp2           = type * V(gi2,fp1);
+   end
+   vdsfp2             = type * V(fp2,fp1);
+   vbfp2              = type * V(b,fp1);
+   if (flagfp3 == 1) begin
+      vgsfp3          = type * V(gi2,fp2);
+      vcfp3           = type * V(s,fp2);
+   end else begin
+      vgsfp3          = type * V(s,fp2);
+      vcfp3           = type * V(gi2,fp2);
+   end
+   vdsfp3             = type * V(fp3,fp2);
+   vbfp3              = type * V(b,fp2);
+   if (flagfp4 == 1) begin
+      vgsfp4          = type * V(gi2,fp3);
+      vcfp4           = type * V(s,fp3);
+   end else begin
+      vgsfp4          = type * V(s,fp3);
+      vcfp4           = type * V(gi2,fp3);
+   end
+   vdsfp4             = type * V(fp4,fp3);
+   vbfp4              = type * V(b,fp3);
+
+   // current and charge calculations
+   idsfp4             = 0;
+   qgsfp4             = 0;
+   qgdfp4             = 0;
+   qcfp4              = 0;
+   qbfp4              = 0;
+   qsfp4              = 0;
+   vtdiblfp4          = 0;
+   vdsatfp4           = 0;
+   if (lgfp4>(minl)) begin
+      idsfp4          = calc_iq(idsfp4,qgsfp4,qgdfp4,qcfp4,qbfp4,qsfp4,vtdiblfp4,vdsatfp4,vgsfp4,vdsfp4,1,vcfp4,vbfp4,flagfp4s,tdut,tnomk,phit,w,lgfp4,cgfp4,cfp4s,ccfp4,cbfp4,vtofp4,sfp4,delta1fp4,0.0,ndfp4,alphafp4,vx0fp4,mu0fp4,betafp4,mthetafp4,vthetafp4,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      I(fp4,fp3)      <+ idsfp4 + gmin * V(fp4,fp3);
+   end else begin
+      V(fp4,fp3)      <+ 0;
+   end
+   if (flagfp4==1) begin
+      I(gi2,fp3)      <+ ddt(qgsfp4) + ddt(minc * V(gi2,fp3));
+      I(gi2,fp4)      <+ ddt(qgdfp4) + ddt(minc * V(gi2,fp4));
+      I(s,fp3)        <+ ddt(qcfp4) + ddt(minc * V(s,fp3));
+      I(s,fp4)        <+ 0;
+      I(gi2,si)       <+ ddt(qsfp4) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,fp3)        <+ ddt(qgsfp4) + ddt(minc * V(s,fp3));
+      I(s,fp4)        <+ ddt(qgdfp4) + ddt(minc * V(s,fp4));
+      I(gi2,fp3)      <+ ddt(qcfp4) + ddt(minc * V(gi2,fp3));
+      I(gi2,fp4)      <+ 0;
+      I(gi2,si)       <+ 0;      
+   end
+   I(b,fp3)           <+ ddt(qbfp4) + ddt(minc * V(b,fp3));   
+   
+   idsfp3             = 0;
+   qgsfp3             = 0;
+   qgdfp3             = 0;
+   qcfp3              = 0;
+   qbfp3              = 0;
+   qsfp3              = 0;
+   vtdiblfp3          = 0;
+   vdsatfp3           = 0;
+   if (lgfp3>(minl)) begin
+      idsfp3          = calc_iq(idsfp3,qgsfp3,qgdfp3,qcfp3,qbfp3,qsfp3,vtdiblfp3,vdsatfp3,vgsfp3,vdsfp3,1,vcfp3,vbfp3,flagfp3s,tdut,tnomk,phit,w,lgfp3,cgfp3,cfp3s,ccfp3,cbfp3,vtofp3,sfp3,delta1fp3,0.0,ndfp3,alphafp3,vx0fp3,mu0fp3,betafp3,mthetafp3,vthetafp3,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      I(fp3,fp2)      <+ idsfp3 + gmin * V(fp3,fp2);
+   end else begin
+      V(fp3,fp2)      <+ 0;
+   end
+   if (flagfp3==1) begin
+      I(gi2,fp2)      <+ ddt(qgsfp3) + ddt(minc * V(gi2,fp2));
+      I(gi2,fp3)      <+  ddt(qgdfp3) + ddt(minc * V(gi2,fp3));
+      I(s,fp2)        <+ ddt(qcfp3) + ddt(minc * V(s,fp2));
+      I(s,fp3)        <+ 0;
+      I(gi2,si)       <+ ddt(qsfp3) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,fp2)        <+ ddt(qgsfp3) + ddt(minc * V(s,fp2));
+      I(s,fp3)        <+  ddt(qgdfp3) + ddt(minc * V(s,fp3));
+      I(gi2,fp2)      <+ ddt(qcfp3) + ddt(minc * V(gi2,fp2));
+      I(gi2,fp3)      <+ 0;
+      I(gi2,si)       <+ 0;
+   end
+   I(b,fp2)           <+ ddt(qbfp3) + ddt(minc * V(b,fp2));
+
+   idsfp2             = 0;
+   qgsfp2             = 0;
+   qgdfp2             = 0;
+   qcfp2              = 0;
+   qbfp2              = 0;
+   qsfp2              = 0;
+   vtdiblfp2          = 0;
+   vdsatfp2           = 0;
+   if (lgfp2>(minl)) begin
+      idsfp2          = calc_iq(idsfp2,qgsfp2,qgdfp2,qcfp2,qbfp2,qsfp2,vtdiblfp2,vdsatfp2,vgsfp2,vdsfp2,1,vcfp2,vbfp2,flagfp2s,tdut,tnomk,phit,w,lgfp2,cgfp2,cfp2s,ccfp2,cbfp2,vtofp2,sfp2,delta1fp2,0.0,ndfp2,alphafp2,vx0fp2,mu0fp2,betafp2,mthetafp2,vthetafp2,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      I(fp2,fp1)      <+ idsfp2 + gmin * V(fp2,fp1);
+   end else begin
+      V(fp2,fp1)      <+ 0;
+   end
+   if (flagfp2==1) begin
+      I(gi2,fp1)      <+ ddt(qgsfp2) + ddt(minc * V(gi2,fp1));
+      I(gi2,fp2)      <+ ddt(qgdfp2) + ddt(minc * V(gi2,fp2));
+      I(s,fp1)        <+ ddt(qcfp2) + ddt(minc * V(s,fp1));
+      I(s,fp2)        <+ 0;
+      I(gi2,si)       <+ ddt(qsfp2) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,fp1)        <+ ddt(qgsfp2) + ddt(minc * V(s,fp1));
+      I(s,fp2)        <+ ddt(qgdfp2) + ddt(minc * V(s,fp2));
+      I(gi2,fp1)      <+  ddt(qcfp2) + ddt(minc * V(gi2,fp1));
+      I(gi2,fp2)      <+ 0;
+      I(gi2,si)       <+ 0;
+   end
+   I(b,fp1)           <+ ddt(qbfp2) + ddt(minc * V(b,fp1));
+
+
+   idsfp1             = 0;
+   qgsfp1             = 0;
+   qgdfp1             = 0;
+   qcfp1              = 0;
+   qbfp1              = 0;
+   qsfp1              = 0;
+   vtdiblfp1          = 0;
+   vdsatfp1           = 0;
+   if (lgfp1>(minl)) begin
+      idsfp1          = calc_iq(idsfp1,qgsfp1,qgdfp1,qcfp1,qbfp1,qsfp1,vtdiblfp1,vdsatfp1,vgsfp1,vdsfp1,1,vcfp1,vbfp1,flagfp1s,tdut,tnomk,phit,w,lgfp1,cgfp1,cfp1s,ccfp1,cbfp1,vtofp1,sfp1,delta1fp1,0.0,ndfp1,alphafp1,vx0fp1,mu0fp1,betafp1,mthetafp1,vthetafp1,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      
+      I(fp1,di)       <+ idsfp1 + gmin * V(fp1,di);
+   end else begin
+      V(fp1,di)       <+ 0;
+   end
+   if (flagfp1==1) begin
+      I(gi2,di)       <+ ddt(qgsfp1) + ddt(minc * V(gi2,di));
+      I(gi2,fp1)      <+ ddt(qgdfp1) + ddt(minc * V(gi2,fp1));
+      I(s,di)         <+ ddt(qcfp1) + ddt(minc * V(s,di));
+      I(s,fp1)        <+ 0;
+      I(gi2,si)       <+ ddt(qsfp1) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,di)         <+ ddt(qgsfp1) + ddt(minc * V(s,di));
+      I(s,fp1)        <+ ddt(qgdfp1) + ddt(minc * V(s,fp1));
+      I(gi2,di)       <+ ddt(qcfp1) + ddt(minc * V(gi2,di));
+      I(gi2,fp1)      <+ 0;
+      I(gi2,si)       <+ 0;
+   end
+   I(b,di)            <+ ddt(qbfp1) + ddt(minc * V(b,di));
+
+
+   idsfps1            = 0;
+   qgsfps1            = 0;
+   qgdfps1            = 0;
+   qcfps1             = 0;
+   qbfps1             = 0;
+   qsfps1             = 0;
+   vtdiblfps1         = 0;
+   vdsatfps1          = 0;
+   if (lgfps1>(minl)) begin
+      idsfps1         = calc_iq(idsfps1,qgsfps1,qgdfps1,qcfps1,qbfps1,qsfps1,vtdiblfps1,vdsatfps1,vgsfps1,vdsfps1,1,vcfps1,vbfps1,flagfps1,tdut,tnomk,phit,w,lgfps1,cgfps1,cfps1s,ccfps1,cbfps1,vtofps1,sfps1,delta1fps1,0.0,ndfps1,alphafps1,vx0fps1,mu0fps1,betafps1,mthetafps1,vthetafps1,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      
+      I(si,fps1)      <+ idsfps1 + gmin * V(si,fps1);
+   end else begin
+      V(si,fps1)      <+ 0;
+   end
+   if (flagfps1==1) begin
+      I(gi2,fps1)     <+ ddt(qgsfps1) + ddt(minc * V(gi2,fps1));
+      I(gi2,si)       <+ ddt(qgdfps1) + ddt(minc * V(gi2,si));
+      I(s,fps1)       <+ ddt(qcfps1) + ddt(minc * V(s,fps1));
+      I(s,si)         <+ 0;
+      I(gi2,si)       <+ ddt(qsfps1) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,fps1)       <+ ddt(qgsfps1) + ddt(minc * V(s,fps1));
+      I(s,si)         <+ ddt(qgdfps1) + ddt(minc * V(s,si));
+      I(gi2,fps1)     <+ ddt(qcfps1) + ddt(minc * V(gi2,fps1));
+      I(gi2,si)       <+ 0;
+      I(gi2,si)       <+ 0;
+   end
+   I(b,fps1)          <+ ddt(qbfps1) + ddt(minc * V(b,fps1));
+
+   idsfps2            = 0;
+   qgsfps2            = 0;
+   qgdfps2            = 0;
+   qcfps2             = 0;
+   qbfps2             = 0;
+   qsfps2             = 0;
+   vtdiblfps2         = 0;
+   vdsatfps2          = 0;
+   if (lgfps2>(minl)) begin
+      idsfps2         = calc_iq(idsfps2,qgsfps2,qgdfps2,qcfps2,qbfps2,qsfps2,vtdiblfps2,vdsatfps2,vgsfps2,vdsfps2,1,vcfps2,vbfps2,flagfps2,tdut,tnomk,phit,w,lgfps2,cgfps2,cfps2s,ccfps2,cbfps2,vtofps2,sfps2,delta1fps2,0.0,ndfps2,alphafps2,vx0fps2,mu0fps2,betafps2,mthetafps2,vthetafps2,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      
+      I(fps1,fps2)    <+ idsfps2 + gmin * V(fps1,fps2);
+   end else begin
+      V(fps1,fps2)    <+ 0;
+   end
+   if (flagfps2==1) begin
+      I(gi2,fps2)     <+ ddt(qgsfps2) + ddt(minc * V(gi2,fps2));
+      I(gi2,fps1)     <+ ddt(qgdfps2) + ddt(minc * V(gi2,fps1));
+      I(s,fps2)       <+ ddt(qcfps2) + ddt(minc * V(s,fps2));
+      I(s,fps1)       <+ 0;
+      I(gi2,si)       <+ ddt(qsfps2) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,fps2)       <+ ddt(qgsfps2) + ddt(minc * V(s,fps2));
+      I(s,fps1)       <+ ddt(qgdfps2) + ddt(minc * V(s,fps1));
+      I(gi2,fps2)     <+ ddt(qcfps2) + ddt(minc * V(gi2,fps2));
+      I(gi2,fps1)     <+ 0;
+      I(gi2,si)       <+ 0;
+   end
+   I(b,fps2)          <+ ddt(qbfps2) + ddt(minc * V(b,fps2));
+
+   idsfps3            = 0;
+   qgsfps3            = 0;
+   qgdfps3            = 0;
+   qcfps3             = 0;
+   qbfps3             = 0;
+   qsfps3             = 0;
+   vtdiblfps3         = 0;
+   vdsatfps3          = 0;
+   if (lgfps3>(minl)) begin
+      idsfps3         = calc_iq(idsfps3,qgsfps3,qgdfps3,qcfps3,qbfps3,qsfps3,vtdiblfps3,vdsatfps3,vgsfps3,vdsfps3,1,vcfps3,vbfps3,flagfps3,tdut,tnomk,phit,w,lgfps3,cgfps3,cfps3s,ccfps3,cbfps3,vtofps3,sfps3,delta1fps3,0.0,ndfps3,alphafps3,vx0fps3,mu0fps3,betafps3,mthetafps3,vthetafps3,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      
+      I(fps2,fps3)    <+ idsfps3 + gmin * V(fps2,fps3);
+   end else begin
+      V(fps2,fps3)    <+ 0;
+   end
+   if (flagfps3==1) begin
+      I(gi2,fps3)     <+ ddt(qgsfps3) + ddt(minc * V(gi2,fps3));
+      I(gi2,fps2)     <+ ddt(qgdfps3) + ddt(minc * V(gi2,fps2));
+      I(s,fps3)       <+ ddt(qcfps3) + ddt(minc * V(s,fps3));
+      I(s,fps2)       <+ 0;
+      I(gi2,si)       <+ ddt(qsfps3) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,fps3)       <+ ddt(qgsfps3) + ddt(minc * V(s,fps3));
+      I(s,fps2)       <+ ddt(qgdfps3) + ddt(minc * V(s,fps2));
+      I(gi2,fps3)     <+ ddt(qcfps3) + ddt(minc * V(gi2,fps3));
+      I(gi2,fps2)     <+ 0;
+      I(gi2,si)       <+ 0;
+   end
+   I(b,fps3)          <+ ddt(qbfps3) + ddt(minc * V(b,fps3));
+
+   idsfps4            = 0;
+   qgsfps4            = 0;
+   qgdfps4            = 0;
+   qcfps4             = 0;
+   qbfps4             = 0;
+   qsfps4             = 0;
+   vtdiblfps4         = 0;
+   vdsatfps4          = 0;
+   if (lgfps4>(minl)) begin
+      idsfps4         = calc_iq(idsfps4,qgsfps4,qgdfps4,qcfps4,qbfps4,qsfps4,vtdiblfps4,vdsatfps4,vgsfps4,vdsfps4,1,vcfps4,vbfps4,flagfps4,tdut,tnomk,phit,w,lgfps4,cgfps4,cfps4s,ccfps4,cbfps4,vtofps4,sfps4,delta1fps4,0.0,ndfps4,alphafps4,vx0fps4,mu0fps4,betafps4,mthetafps4,vthetafps4,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      
+      I(fps3,fps4)    <+ idsfps4 + gmin * V(fps3,fps4);
+   end else begin
+      V(fps3,fps4)    <+ 0;
+   end
+   if (flagfps4==1) begin
+      I(gi2,fps4)     <+ ddt(qgsfps4) + ddt(minc * V(gi2,fps4));
+      I(gi2,fps3)     <+ ddt(qgdfps4) + ddt(minc * V(gi2,fps3));
+      I(s,fps4)       <+ ddt(qcfps4) + ddt(minc * V(s,fps4));
+      I(s,fps3)       <+ 0;
+      I(gi2,si)       <+ ddt(qsfps4) + ddt(minc * V(gi2,si));
+   end else begin
+      I(s,fps4)       <+ ddt(qgsfps4) + ddt(minc * V(s,fps4));
+      I(s,fps3)       <+ ddt(qgdfps4) + ddt(minc * V(s,fps3));
+      I(gi2,fps4)     <+ ddt(qcfps4) + ddt(minc * V(gi2,fps4));
+      I(gi2,fps3)     <+ 0;
+      I(gi2,si)       <+ 0;
+   end
+   I(b,fps4)          <+ ddt(qbfps4) + ddt(minc * V(b,fps4));
+
+   idsrs              = 0;
+   if (flagres==0 && lgs>(minl)) begin
+      idsrs           = calc_iq(idsrs,qgsrs,qgdrs,qcrs,qbrs,qsrs,vtdiblrs,vdsatrs,vgsrs,vdsrs,0,0,0,0,tdut,tnomk,phit,w,lgs,cgrs,0,0,0,vtors,srs,delta1rs,0.0,ndrs,alphars,vx0rs,mu0rs,betars,mthetars,vthetars,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      I(fps4,src)     <+ idsrs + gmin * V(fps4,src);
+   end else begin
+      V(fps4,src)     <+ 0;
+   end
+
+   idsrd              = 0;
+   if (flagres==0 && lgd>(minl)) begin
+      idsrd              = calc_iq(idsrd,qgsrd,qgdrd,qcrd,qbrd,qsrd,vtdiblrd,vdsatrd,vgsrd,vdsrd,0,0,0,0,tdut,tnomk,phit,w,lgd,cgrd,0,0,0,vtord,srd,delta1rd,0.0,ndrd,alphard,vx0rd,mu0rd,betard,mthetard,vthetard,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+      I(drc,fp4)      <+ idsrd + gmin * V(drc,fp4);
+   end else begin
+      V(drc,fp4)      <+ 0;
+   end
+
+   ids                = calc_iq(ids,qgs,qgd,qc,qb,qs,vtdibli,vdsat1i,vgsi,vdsi,0,0,0,0,tdut,tnomk,phit,w,l,cg,0,0,0,vto,ss,delta1,delta2,nd,alpha,vx0,mu0,beta,mtheta,vtheta,vtzeta,dibsat,epsilon,vzeta,lambda,ngf,type);
+   idsrf              = V(xt2);
+   if (gmdisp==0) begin
+      V(xt1)          <+ 0;
+      V(xt2)          <+ 0;
+      I(di,si)        <+ ids + gmin * V(di,si);
+   end else begin
+      I(xt1)          <+ ids - V(xt2) - ddt(taugmrf * V(xt1));
+      I(xt2)          <+ V(xt1) - V(xt2) - ddt((taugmrf/3.0) * V(xt2));
+      I(di,si)        <+ idsrf + gmin * V(di,si);
+   end 
+   I(gi2,si)          <+ ddt(qgs) + ddt(minc * V(gi2,si));
+   I(gi2,di)          <+ ddt(qgd) + ddt(minc * V(gi2,di));
+
+   igsi               = 0;
+   igdi               = 0;
+   igssdio            = 0;
+   igdsdio            = 0;
+   igsrec             = 0;
+   igdrec             = 0;
+   if (igmod == 1) begin
+      igsi            = calc_ig(igssdio,igsrec,vgsi,phit,vgsats,alphags,fracs,pg_params,pbdgs,vbdgs,tfacdiode,w,ngf,ijs,kbdgates,vgsatqs,betarecs,irecs,pgsrecs,pg_param1,vjg,type);
+      igdi            = calc_ig(igdsdio,igdrec,vgsi-vdsi,phit,vgsatd,alphagd,fracd,pg_paramd,pbdgd,vbdgd,tfacdiode,w,ngf,ijd,kbdgated,vgsatqd,betarecd,irecd,pgsrecd,pg_param1,vjg,type);      
+      I(gi2,si)       <+ igsi + gmin * V(gi2,si);
+      I(gi2,di)       <+ igdi + gmin * V(gi2,di);
+   end
+
+   igscbd             = 0;
+   igdcbd             = 0;
+   if (icbdmod == 1) begin
+      igscbd          = calc_ig(igscbddio,igsrecbd,V(s,d)+V(s,gi2),phit,vgsats,alphags,fracs,0,pchbdgs,vchbdgs,tfacdiode,w,ngf,ijscbd,1.0,vgsatqs,betarecs,0,pgsrecs,0,vjg,type);
+      igdcbd          = calc_ig(igdcbddio,igdrecbd,V(d,s)+V(d,gi2),phit,vgsatd,alphagd,fracd,0,pchbdgd,vchbdgd,tfacdiode,w,ngf,ijdcbd,1.0,vgsatqd,betarecd,0,pgsrecd,0,vjg,type);      
+      I(s,d)          <+ igscbd;
+      I(d,s)          <+ igdcbd;
+   end
+
+   // resistors
+   if (rcd_w <= minr) begin
+      V(d,drc)        <+ 0;
+   end else begin
+      I(d,drc)        <+ V(d,drc) / rdi;
+   end
+   if (rcs_w <= minr) begin
+      V(src,s)        <+ 0;
+   end else begin
+      I(src,s)        <+ V(src,s) / rsi; 
+   end
+   if (rg1 <= minr) begin
+      V(g,gi1)        <+ 0;
+   end else begin
+      I(g,gi1)        <+ V(g,gi1) / rg1;
+   end
+   if (rg2 <= minr) begin
+      V(gi1,gi2)      <+ 0;
+   end else begin
+      I(gi1,gi2)      <+ V(gi1,gi2) / rg2;
+   end
+   
+   qofs               = w * ngf * cofsm * V(gi1,s);
+   I(gi1,s)           <+ ddt(qofs);
+   
+   qofd               = w * ngf * cofdm * V(gi1,d);
+   I(gi1,d)           <+ ddt(qofd);
+   
+   qofds              = w * ngf * cofdsm * V(d,s);
+   I(d,s)             <+ ddt(qofds);
+   
+   qofdsub            = w * ngf * cofdsubm * V(d,b);
+   I(d,b)             <+ ddt(qofdsub);
+ 
+   qofssub            = w * ngf * cofssubm * V(s,b);
+   I(s,b)             <+ ddt(qofssub);
+  
+   qofgsub            = w * ngf * cofgsubm * V(gi1,b);
+   I(gi1,b)           <+ ddt(qofgsub);
+
+   gm                 = 0;
+   svc                = 0;
+   if (noisemod == 1) begin
+      I(gi2,si)       <+ white_noise(shs * `P_QQ * abs(igsi + 2.0 * (igssdio + igsrec)), "g-s shot");
+      I(gi2,di)       <+ white_noise(shd * `P_QQ * abs(igdi + 2.0 * (igdsdio + igdrec)), "g-d shot");
+
+      I(di,si)        <+ flicker_noise(kf * ( w * ngf / l ) * pow( (ids / ( w * ngf )), af), ffe, "flicker");
+
+      gm              = ddx(ids , V(gi2));
+      svc             = 4.0 * `P_KK * tdut * gm * ( qgs + qgd ) / ( w * ngf * l * type * cg );
+      I(di,si)        <+ white_noise(svc, "channel");
+
+      if (lgfps1>(minl) && rsh!=0) begin
+         I(si,fps1)   <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfps1 / ( w * ngf )), "rfps1");
+      end
+      if (lgfps2>(minl) && rsh!=0) begin
+         I(fps1,fps2) <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfps2 / ( w * ngf )), "rfps2");
+      end
+      if (lgfps3>(minl) && rsh!=0) begin
+         I(fps2,fps3) <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfps3 / ( w * ngf )), "rfps3");
+      end
+      if (lgfps4>(minl) && rsh!=0) begin
+         I(fps3,fps4) <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfps4 / ( w * ngf )), "rfps4");
+      end
+      if (lgfp1>(minl) && rsh!=0) begin
+         I(fp1,di)    <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfp1 / ( w * ngf )), "rfp1");
+      end
+      if (lgfp2>(minl) && rsh!=0) begin
+         I(fp2,fp1)   <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfp2 / ( w * ngf )), "rfp2");
+      end
+      if (lgfp3>(minl) && rsh!=0) begin
+         I(fp3,fp2)   <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfp3 / ( w * ngf )), "rfp3");
+      end
+      if (lgfp4>(minl) && rsh!=0) begin
+         I(fp4,fp3)   <+ white_noise(4.0 * `P_KK * tdut / (rsh * lgfp4 / ( w * ngf )), "rfp4");
+      end
+      if (rsi >minr) begin
+         I(src,s)     <+ white_noise(4.0 * `P_KK * tdut / rsi, "rcs");
+      end
+      if (rdi >minr) begin
+         I(d,drc)     <+ white_noise(4.0 * `P_KK * tdut / rdi, "rcd");
+      end
+   end
+
+   pdiss              = ( ids * V(di,si) + idsrd * V(drc,fp4) + idsrs * V(fps4,src) + idsfps4 * V(fps3,fps4) + idsfps3 * V(fps2,fps3) + idsfps2 * V(fps1,fps2) + idsfps1 * V(si,fps1) + idsfp1 * V(fp1,di) + idsfp2 * V(fp2,fp1) + idsfp3 * V(fp3,fp2) + idsfp4 * V(fp4,fp3) );
+   if (rdi !=0) begin
+      pdiss           = pdiss + ( V(drc,d) * V(drc,d) / rdi );
+   end
+   if (rsi !=0) begin
+      pdiss           = pdiss + ( V(src,s) * V(src,s) / rsi );
+   end
+   // Self-heating
+   if (rth >0) begin
+      Pwr(dt)         <+ ddt( cth  * Temp(dt));
+      Pwr(dt)         <+ - pdiss; 
+      Pwr(dt)         <+ Temp(dt) / rth;
+   end
+   //else
+   //   Pwr(dt)         <+ Temp(dt) * 1e9;
+   else
+      Temp(dt)        <+  0.0;
+
+   // OP-point variables
+   vgisi              = V(gi2,si);
+   vdisi              = V(di,si);
+   vti                = vtdibli;
+   vdsati             = vdsat1i;
+   pdc                = pdiss;
+   idisi              = ids;
+   igs                = igsi;
+   igd                = igdi;
+   qgi                = qgs + qgd;
+   qdi                = -qgd;
+   qsi                = -qgs;
+   qbi                = 0;
+   gmi                = ddx(ids , V(gi2));
+   gdsi               = ddx(ids , V(di));
+   gmbsi              = ddx(ids , V(b));
+   cggi               = ddx(qgi, V(gi2));
+   cgdi               = ddx(qgi, V(di));
+   cgsi               = ddx(qgi, V(si));
+   cgbi               = ddx(qgi, V(b));
+   cdgi               = ddx(qdi, V(gi2));
+   cddi               = ddx(qdi, V(di));
+   cdsi               = ddx(qdi, V(si));
+   cdbi               = ddx(qdi, V(b));
+   csgi               = ddx(qsi, V(gi2));
+   csdi               = ddx(qsi, V(di));
+   cssi               = ddx(qsi, V(si));
+   csbi               = ddx(qsi, V(b));
+   cbgi               = ddx(qbi, V(gi2));
+   cbdi               = ddx(qbi, V(di));
+   cbsi               = ddx(qbi, V(si));
+   cbbi               = ddx(qbi, V(b));
+   cgs                = w * ngf * cofsm;
+   cgd                = w * ngf * cofdm;    
+   t_total_k          = tdut;
+   t_total_c          = tdut - `P_CELSIUS0;
+   t_delta_sh         = tsh;
+   rs                 = ( rsh * lgs / w ) / ngf;
+   rd                 = ( rsh * lgd / w ) / ngf;
+   
+end
+
+endmodule 
+

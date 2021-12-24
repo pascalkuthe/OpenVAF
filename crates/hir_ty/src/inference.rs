@@ -11,7 +11,7 @@ use hir_def::nameres::diagnostics::PathResolveError;
 use hir_def::nameres::{NatureAccess, ResolvedPath, ScopeDefItem, ScopeDefItemKind};
 use hir_def::{
     BranchId, BuiltIn, DefWithBodyId, Expr, ExprId, FunctionArgLoc, FunctionId, LocalFunctionArgId,
-    Lookup, NatureId, NodeId, Path, Stmt, StmtId, Type, VarId,
+    Lookup, NatureId, NodeId, ParamSysFun, Path, Stmt, StmtId, Type, VarId,
 };
 use stdx::impl_from;
 use stdx::iter::zip;
@@ -34,6 +34,7 @@ mod tests;
 pub enum ResolvedFun {
     User(FunctionId),
     BuiltIn(BuiltIn),
+    Param(ParamSysFun),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -113,7 +114,7 @@ impl Ctx<'_> {
                 // TODO lint for side effect free expressions
                 self.infere_assigment(stmt, expr, self.expr_stmt_ty.clone());
             }
-            Stmt::Assigment { dst, val, ref assignment_kind } => {
+            Stmt::Assigment { dst, val, assignment_kind } => {
                 let dst_ty = self.infere_assigment_dst(stmt, dst, assignment_kind);
                 self.infere_assigment(stmt, val, dst_ty);
             }
@@ -183,7 +184,7 @@ impl Ctx<'_> {
         &mut self,
         stmt: StmtId,
         expr: ExprId,
-        assigment_kind: &ast::AssignOp,
+        assigment_kind: ast::AssignOp,
     ) -> Option<Type> {
         let e = self.infere_expr(stmt, expr);
 
@@ -279,6 +280,10 @@ impl Ctx<'_> {
                 ScopeDefItem::ParamId(param) => {
                     Ty::Param(self.db.param_data(param).ty.clone(), param)
                 }
+                ScopeDefItem::AliasParamId(param) => {
+                    let param = self.db.resolve_alias(param)?;
+                    Ty::Param(self.db.param_data(param).ty.clone(), param)
+                }
                 ScopeDefItem::BranchId(branch) => Ty::Branch(branch),
                 ScopeDefItem::BuiltIn(_)
                 | ScopeDefItem::FunctionId(_)
@@ -296,7 +301,10 @@ impl Ctx<'_> {
                         arg: Some(id),
                     }
                 }
-                ScopeDefItem::NatureAttrId(attr) => self.db.nature_attr_ty(attr)?,
+                ScopeDefItem::NatureAttrId(attr) => {
+                    Ty::NatureAttr(self.db.nature_attr_ty(attr)?, attr)
+                }
+                ScopeDefItem::ParamSysFun(_) => Ty::Val(Type::Real),
             },
 
             Expr::BinaryOp { op: None, lhs, rhs } => {
@@ -309,7 +317,8 @@ impl Ctx<'_> {
                 self.infere_bin_op(stmt, expr, lhs, rhs, op)?
             }
 
-            Expr::UnaryOp { expr: arg, op: UnaryOp::Identity | UnaryOp::Neg } => {
+            Expr::UnaryOp { expr: arg, op: UnaryOp::Identity } => self.infere_expr(stmt, arg)?,
+            Expr::UnaryOp { expr: arg, op: UnaryOp::Neg } => {
                 let ty = self.infere_expr(stmt, arg)?;
                 let variant = self.expect::<false>(
                     arg,
@@ -330,6 +339,7 @@ impl Ctx<'_> {
 
             Expr::UnaryOp { expr: arg, op: UnaryOp::BitNegate } => {
                 let ty = self.infere_expr(stmt, arg)?;
+                // TODO bool
                 self.expect::<false>(
                     arg,
                     Some(expr),
@@ -345,7 +355,7 @@ impl Ctx<'_> {
                     arg,
                     Some(expr),
                     ty,
-                    Cow::Borrowed(&[TyRequirement::Val(Type::Bool)]),
+                    Cow::Borrowed(&[TyRequirement::Condition]),
                 );
                 Ty::Val(Type::Bool)
             }
@@ -365,14 +375,13 @@ impl Ctx<'_> {
                 self.infere_fun_call(stmt, expr, fun.as_ref()?, args)?
             }
             Expr::Array(ref args) if args.is_empty() => Ty::Val(Type::EmptyArray),
-            Expr::Array(ref args) => return self.infere_array(stmt, args),
-            Expr::Literal(Literal::Inf) => Ty::Literal(Type::Integer),
+            Expr::Array(ref args) => self.infere_array(stmt, args)?,
             Expr::Literal(Literal::Float(_)) => Ty::Literal(Type::Real),
-            Expr::Literal(Literal::Int(_)) => Ty::Literal(Type::Integer),
+            Expr::Literal(Literal::Inf | Literal::Int(_)) => Ty::Literal(Type::Integer),
             Expr::Literal(Literal::String(_)) => Ty::Literal(Type::String),
         };
 
-        self.result.expr_types.insert(expr, ty.clone());
+        self.result.expr_types[expr] = ty.clone();
 
         Some(ty)
     }
@@ -394,6 +403,19 @@ impl Ctx<'_> {
             ScopeDefItem::BuiltIn(builtin) => {
                 self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(builtin));
                 self.infere_builtin(stmt, expr, builtin, args)
+            }
+            ScopeDefItem::ParamSysFun(param) => {
+                self.result.resolved_calls.insert(expr, ResolvedFun::Param(param));
+                if !args.is_empty() {
+                    let err = InferenceDiagnostic::ArgCntMissmatch {
+                        expected: 0,
+                        found: args.len(),
+                        expr,
+                        exact: true,
+                    };
+                    self.result.diagnostics.push(err);
+                }
+                Some(Ty::Val(Type::Real))
             }
             found => {
                 self.result.diagnostics.push(InferenceDiagnostic::PathResolveError {
@@ -809,11 +831,9 @@ impl Ctx<'_> {
         };
 
         for (dst, (src, arg)) in zip(signatures[res].args.as_ref(), zip(arg_types, args)) {
-            if let TyRequirement::Val(dst) = dst {
-                if let Some(src) = src.and_then(|ty| ty.to_value()) {
-                    if &src != dst {
-                        self.result.casts.insert(*arg, dst.clone());
-                    }
+            if let Some(src) = src.and_then(|ty| ty.to_value()) {
+                if let Some(cast) = dst.cast(&src) {
+                    self.result.casts.insert(*arg, cast);
                 }
             }
         }
@@ -843,12 +863,9 @@ impl Ctx<'_> {
                             .resolved_signatures
                             .insert(parent_fun, Signature::from(matched));
                     }
-
-                    if let TyRequirement::Val(req) = &req[matched] {
-                        if let Some(ty) = ty.to_value() {
-                            if !req.is_semantically_equivalent(&ty) {
-                                self.result.casts.insert(expr, req.clone());
-                            }
+                    if let Some(ty) = ty.to_value() {
+                        if let Some(cast) = req[matched].cast(&ty) {
+                            self.result.casts.insert(expr, cast);
                         }
                     }
                 }

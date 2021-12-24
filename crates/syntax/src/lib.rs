@@ -15,7 +15,7 @@ pub use ast::AstNode;
 pub use error::SyntaxError;
 pub use preprocessor::diagnostics::PreprocessorDiagnostic;
 use preprocessor::sourcemap::{CtxSpan, FileSpan, SourceContext};
-pub use preprocessor::{preprocess, sourcemap, FileReadError, Preprocess, SourceProvider};
+pub use preprocessor::{preprocess, sourcemap, Preprocess, SourceProvider};
 pub use ptr::{AstPtr, SyntaxNodePtr};
 pub use rowan::{
     Direction, GreenNode, NodeOrToken, SyntaxText, TextRange, TextSize, TokenAtOffset, WalkEvent,

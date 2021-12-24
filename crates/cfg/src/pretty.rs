@@ -5,7 +5,7 @@ use lasso::Spur;
 use crate::{BasicBlockData, Const, ControlFlowGraph, InstrDst, Instruction, Operand, Terminator};
 
 impl ControlFlowGraph {
-    pub fn dump(&self, lit: &lasso::Rodeo<Spur>) -> String {
+    pub fn dump(&self, lit: Option<&lasso::Rodeo<Spur>>) -> String {
         let mut print =
             Printer { cfg: self, lit, buf: String::new(), indent_level: 0, needs_indent: true };
         print.print();
@@ -30,7 +30,7 @@ macro_rules! w {
 
 struct Printer<'a> {
     cfg: &'a ControlFlowGraph,
-    lit: &'a lasso::Rodeo<Spur>,
+    lit: Option<&'a lasso::Rodeo<Spur>>,
     buf: String,
     indent_level: usize,
     needs_indent: bool,
@@ -66,6 +66,8 @@ impl<'a> Printer<'a> {
         }
         if let Some(terminator) = &bb.terminator {
             self.print_terminator(terminator);
+        } else {
+            wln!(self, "terminator MISSING")
         }
         wln!(self);
     }
@@ -114,7 +116,12 @@ impl<'a> Printer<'a> {
 
     pub fn print_constant(&mut self, constant: &Const) {
         match constant {
-            Const::String(val) => w!(self, "str {:?}", self.lit.resolve(val)),
+            Const::String(val) => {
+                let val = self
+                    .lit
+                    .map_or_else(|| format!("{:?}", val), |lits| lits.resolve(val).to_owned());
+                w!(self, "str {:?}", val)
+            }
             // Const::StringArray(data) => {
             //     let slice: Vec<_> = data.slice.iter().map(|s| self.lit.resolve(s)).collect();
             //     w!(self, "str[] {:?}", slice)

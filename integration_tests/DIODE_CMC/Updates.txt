@@ -1,0 +1,184 @@
+Note:
+Warning and Known (potential) issues
+1.  Juncapexpress only works when all three ideality factors have the same value.
+2.  The code is not compatible with Eldo compiler version 2008.1 or older
+3.  The code is not compatible with Spectre compiler versions earlier than
+    6.1.0.262 or older, which do not support the multiplicity factor for
+    Verilog-A instances.
+4.  Ideality factor has not been applied to variables used in charge 
+    calculation. One can still get similar C-V fit
+5.  The code does not exactly follow the juncap2 coding style and 
+    convention. This is to make the code more concise and having fewer
+    compatibility problems
+
+
+2016.08.23
+o.  Copyright update with the CMC in-code statement
+
+2016.03.10
+o.  added a new model parameter FREV for current after breakdown
+o.  updated LEVEL from 1002 to 2002 and VERSION from 1 to 2
+
+2015.09.02
+o.  Copyright update
+
+
+2015.06.18
+o.  put initialization of VRS, Vtotal, idmultbot, idmultgat and idmultsti before if statement (if SWJUNEXP_i ==1 ...)
+o.  put declaration of idmultbot, idmultgat and idmultsti from LocalGlobalVars into DIODE_CMC_varlist2.include file
+o.  introduced initialization of IWnqs0_A, Inqs0_A, Inqs0_K, Q_nqs_A, Q_nqs_K and W_nqs_A into initializeInstance branch of diode_cmc.va
+o.  fixed indentation, removed TABs and 3-space indents
+o.  commented declaration of ijunbot, ijunsti, ijungat, ijnonbot, ijnonsti and ijnongat because they are already declared in DIODE_CMC_varlist2.include
+
+2015.06.17
+o.  commented Q_depA in evaluateRecoveryCharge branch
+o.  removed VRS = 0.0 and Vtotal = 0.0 in JUNCAPexpressInit branch
+
+
+2015.06.09
+o.  Replaced expression VAK = TYPE * V(A, AIK);
+    by if-else statement
+    if(TYPE == -1) begin
+      VAK = -V(A,AIK);
+    end
+    else begin
+      VAK = V(A,AIK);
+    end
+    This change is only temporary until bug fix in one simulator.
+    
+o.  Replaced expression VRS = TYPE * V(AIK, K)
+    by VRS = V(AIK, K)
+    and
+    I(AIK,K) <+ (TYPE * MULT_i) * VRS * conducts
+    by
+    I(AIK,K) <+ MULT_i * VRS * conducts
+    and for operating point
+    vrs     = VRS
+    by 
+    vrs     = TYPE * VRS
+
+2015.03.06
+o.  Replaced Eg model in the recovery part with that in the juncap part
+o.  Removed EG0, BGTMP1 and BGTMP2 in accordance with the above change
+o.  Moved bias-independent parts of recovery equation to DIODE_CMC_InitModel.include
+o.  Removed redundant variables (here_DIO_beta, TNOM_i, TTEMP)
+o.  Removed unused variables/directives (Eg, `Small, etc.)
+
+2015.02.25
+o.  Set default of NJH to 1 for compatibility with old model parameter sets
+o.  Changed position of juncapexpress block in diode_cmc.va
+o.  Changed initial value rnode=0 to rnode=1
+
+2015.02.18
+o.  Added directive nja_dx for derivative continuity in juncap current equation
+o.  Removed CODCHIGH and the related codes
+o.  Unified DC and recovery models by substituting idmultbot for exp_A
+o.  Set default of INJ1 to 1
+
+2015.02.16
+o.  Introduced directive nja for voltage dependent emission coefficient
+o.  Added high injection expression in juncap current equation
+o.  Changed initial value rnode=0 to rnode=1
+o.  Introduced NDIBOT, NDISTI and NDIGAT, and removed NDI
+o.  Removed parameter NJL in recovery part and replaced it by NFABOT
+
+
+2015.01.15
+o.  Replaced PB and JUNCDLT with fixed local variables
+o.  Removed HSHIFT and WDEPK
+o.  Added CODCHIGH as a model flag for DC high-injection model
+o.  Added TAUT for temp. co of carrier lifetime
+o.  Added INJT for temp. co of carrier density under high-inj. condition
+o.  Added TNOM alias for TRJ
+o.  Added another default value of INJ1 for CODCHIGH=1
+o.  Added temp. dependence of phonon scattering with a fixed parameter
+o.  Copyright update
+
+2014.09.19
+o.  Added CORECOVERY as a model flag for recovery equations
+o.  Added recovery equations
+o.  Added recovery NQS node contribs
+o.  Added recovery charge "qrr" for OPinfo
+o.  Copyright update
+
+
+2010.01.10
+o.  Copyright update
+
+2009.03.17
+o.  Removed aliasparam M; simulator should handle this.
+o.  Fixed a few typos.
+
+2009.02.03
+o.  ADMS workaround for ddx() function
+Bug Fixes
+    -  A few hidden states and typos fixes
+    -  Diffusion cap depends on ideal current 
+
+
+2009.01.16
+o. Code tidy
+o. Added Level, Version, Subversion, Revision
+o. Shot noise model update
+o. Added rcommon resistor
+o. Cleaned up unwanted globally declared arguments in macrofunctions. They
+   are in Juncap2 to facilitate source/drain junction calculation.
+o. Added XTI/PT parameters to handle SBD
+o. Made juncapexpress work if all the ideality factors have the same value
+o. Added warning messages on Juncapexpress limitation
+o. Added shrink and scale parameters
+Bug Fixes
+   - Fixed a bug that caused current glitches when Imax is kicking in
+   - When one of the resistor is zero, the total resistor is zero
+   - Opened the limits of breakdown voltage temp. co's.
+   - diffusion cap depends on ideal current and SRH current instead of
+     total current
+   - VFMAX, VRMAX, RESBOT, RESSTI, RESGAT, TEMPMAX default changes
+   - Removed idmult as it is not used
+   - A few fixes to Juncapcheckop macro
+   - Fixed a few warnings due to duplicated variables 
+   - Fixed a few warnings due to undefined memory states
+   - Ideality factor should be applied to bandgap term etc.
+
+
+
+
+2008.11.18
+o.  Synch'ed  the model with PSP 103 juncap2 code
+o.  Fixed a few bugs reported by Geoffrey  -- Thanks Geoffrey
+
+Bug fixes
+  - Fixed quite a few typos in the comments
+  - Fixed a few bugs to make it Spectre compiler compatible
+  - Fixed Shot noise model
+
+
+2008.11.13
+o. Updated the default values of RSBOT, RSGAT, RSSTI, LS
+o. Added alias to parameters AB, LS, and MULT
+o. Copyright information revised
+
+Bug fixes
+  - Added temp co to breakdown voltage directly instead of inverse
+    of breakdown voltage. More realistic negative breakdown voltage
+    trapping
+
+
+2008.10.31
+o. Added a few warning parameters. They are
+   ABMIN,ABMAX,LSMIN,LSMAX,LGMIN,LGMAX
+   TEMPMIN,TEMPMAX
+   VFMAX,VRMAX
+o. Removed source to bulk and drain to bulk parameters and related
+   functions
+
+Bug fixes
+ - diffusion cap only works when there is series resistor
+ - wrong calculation of resistance in .op
+ - resistor is always zero because of a typo in "if" statement
+
+
+
+
+
+

@@ -67,6 +67,7 @@ impl ItemTree {
             discipline_attrs,
             variables,
             parameters,
+            alias_parameters,
             nets,
             ports,
             branches,
@@ -77,6 +78,7 @@ impl ItemTree {
         natures.shrink_to_fit();
         variables.shrink_to_fit();
         parameters.shrink_to_fit();
+        alias_parameters.shrink_to_fit();
         nets.shrink_to_fit();
         ports.shrink_to_fit();
         ports.shrink_to_fit();
@@ -101,6 +103,7 @@ pub(crate) struct ItemTreeData {
 
     pub variables: Arena<Var>,
     pub parameters: Arena<Param>,
+    pub alias_parameters: Arena<AliasParam>,
     pub nets: Arena<Net>,
     pub ports: Arena<Port>,
     pub branches: Arena<Branch>,
@@ -212,6 +215,7 @@ item_tree_nodes! {
 
     Var in variables -> ast::Var,
     Param in parameters -> ast::Param,
+    AliasParam in alias_parameters -> ast::AliasParam,
     Net in nets -> ast::NetDecl,
     Port in ports -> ast::PortDecl,
     Branch in branches -> ast::BranchDecl,
@@ -232,6 +236,7 @@ pub struct Module {
 pub enum ModuleItem {
     Scope(AstId<BlockStmt>),
     Parameter(ItemTreeId<Param>),
+    AliasParameter(ItemTreeId<AliasParam>),
     Variable(ItemTreeId<Var>),
     Branch(ItemTreeId<Branch>),
     Node(LocalNodeId),
@@ -241,6 +246,7 @@ pub enum ModuleItem {
 impl_from_typed! (
     Scope(AstId<BlockStmt>),
     Parameter(ItemTreeId<Param>),
+    AliasParameter(ItemTreeId<AliasParam>),
     Variable(ItemTreeId<Var>),
     Branch(ItemTreeId<Branch>),
     Node(LocalNodeId),
@@ -280,7 +286,15 @@ pub struct Var {
 pub struct Param {
     pub name: Name,
     pub ty: Type,
+    pub is_local: bool,
     pub ast_id: AstId<ast::Param>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub struct AliasParam {
+    pub name: Name,
+    pub src: Option<Path>,
+    pub ast_id: AstId<ast::AliasParam>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -416,29 +430,29 @@ pub enum NodeTypeDecl {
 }
 
 impl NodeTypeDecl {
-    pub fn discipline<'a>(&self, tree: &'a ItemTree) -> &'a Option<Name> {
-        match *self {
+    pub fn discipline(self, tree: &ItemTree) -> &Option<Name> {
+        match self {
             NodeTypeDecl::Net(net) => &tree[net].discipline,
             NodeTypeDecl::Port(port) => &tree[port].discipline,
         }
     }
 
-    pub fn is_gnd(&self, tree: &ItemTree) -> bool {
-        match *self {
+    pub fn is_gnd(self, tree: &ItemTree) -> bool {
+        match self {
             NodeTypeDecl::Net(net) => tree[net].is_gnd,
             NodeTypeDecl::Port(port) => tree[port].is_gnd,
         }
     }
 
-    pub fn direction(&self, tree: &ItemTree) -> Option<(bool, bool)> {
-        match *self {
+    pub fn direction(self, tree: &ItemTree) -> Option<(bool, bool)> {
+        match self {
             NodeTypeDecl::Port(port) => Some((tree[port].is_input, tree[port].is_output)),
             NodeTypeDecl::Net(_) => None,
         }
     }
 
-    pub fn ast_id(&self, tree: &ItemTree) -> ErasedAstId {
-        match *self {
+    pub fn ast_id(self, tree: &ItemTree) -> ErasedAstId {
+        match self {
             NodeTypeDecl::Net(net) => tree[net].ast_id.into(),
             NodeTypeDecl::Port(port) => tree[port].ast_id.into(),
         }

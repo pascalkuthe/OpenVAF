@@ -33,7 +33,6 @@ typed-index-collections = "3.0"
 
 # Performant collections
 ahash = "0.7"
-lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
 

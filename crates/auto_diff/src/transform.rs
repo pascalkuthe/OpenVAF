@@ -7,11 +7,11 @@ use arena::{Arena, IdxRange};
 use arrayvec::ArrayVec;
 use bitset::GrowableSparseBitMatrix;
 use cfg::{
-    BasicBlock, BasicBlockData, CfgBuilder, Const, ControlFlowGraph, InstIdx, InstrDst,
-    Instruction, Local, Op, Operand, Phi, PhiIdx, Place,
+    smallvec, BasicBlock, BasicBlockData, CfgBuilder, Const, ControlFlowGraph, InstIdx, InstrDst,
+    Instruction, Local, Op, Operand, Operands, Phi, PhiIdx, Place,
 };
 use data_flow::{Results, ResultsVisitor};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use stdx::iter::zip;
 
 #[cfg(test)]
@@ -54,7 +54,7 @@ pub(crate) struct CfgTransform<'a> {
     cfg: CfgBuilder<'a>,
     analysis: &'a LiveDerivativeAnalysis,
     locals: AHashMap<(Local, Unkown), Local>,
-    places: AHashMap<(Place, Unkown), Place>,
+    places: IndexSet<(Place, FirstOrderUnkown)>,
 
     // Kept in a struct so we can reuse the capacity
     delayed_writes: IndexMap<Local, Place, ahash::RandomState>,
@@ -72,7 +72,7 @@ impl<'a> CfgTransform<'a> {
             cfg: cfg::CfgBuilder { cfg: new_cfg, current: 0u32.into() },
             analysis,
             locals: AHashMap::new(),
-            places: AHashMap::new(),
+            places: IndexSet::new(),
             delayed_writes: IndexMap::default(),
             cache_data: Arena::new(),
             derivative_cache: AHashMap::new(),
@@ -210,7 +210,7 @@ impl ResultsVisitor for CfgTransform<'_> {
                 for (instr, cache_data_i) in zip(origin.instructions(), cache.data.clone()) {
                     let Instruction { dst, op, ref mut args, .. } =
                         self.cfg.current_block_mut().instructions[instr];
-                    let args = replace(args, vec![].into_boxed_slice());
+                    let args = replace(args, Operands::new());
                     let dst = self.derivative_dst(dst, base);
 
                     self.instr_derivative(dst, op, &args, base, src, &cache_data[cache_data_i]);
@@ -270,7 +270,7 @@ impl CfgTransform<'_> {
     }
 
     fn derivative_place_1(&mut self, place: Place, unkown: FirstOrderUnkown) -> Place {
-        *self.places.entry((place, unkown.into())).or_insert_with(|| self.cfg.cfg.new_place())
+        self.cfg.cfg.next_place + self.places.insert_full((place, unkown)).0
     }
 
     fn operand_derivative(&mut self, operand: &Operand, unkown: FirstOrderUnkown) -> Operand {
@@ -308,7 +308,7 @@ impl CfgTransform<'_> {
     /// This function generates these assignments
     fn build_delayed_assign(&mut self, src: i32) {
         for (local, place) in self.delayed_writes.drain(..) {
-            self.cfg.build_assign(InstrDst::Place(place), Op::Copy, vec![local.into()], src)
+            self.cfg.build_assign(InstrDst::Place(place), Op::Copy, smallvec![local.into()], src)
         }
     }
 
@@ -332,7 +332,7 @@ impl CfgTransform<'_> {
                         self.cfg.current_block_mut().instructions[instr];
 
                     // make the borrow checker happy
-                    let args = replace(args, vec![].into_boxed_slice());
+                    let args = replace(args, Operands::new());
 
                     // determine origin
                     let original = match dst {
@@ -373,151 +373,152 @@ impl CfgTransform<'_> {
         let mut res = ArrayVec::new();
         let op = match op {
             Op::IntDiv => {
-                let val =
-                    self.cfg.build_val(Op::IntMul, vec![args[1].clone(), args[1].clone()], src);
-                self.cfg.build_val(Op::IntToReal, vec![val.into()], src).into()
+                let val = self.cfg.build_val(Op::IntMul, smallvec![args[1], args[1]], src);
+                self.cfg.build_val(Op::IntToReal, smallvec![val.into()], src).into()
             }
-            Op::RealDiv => {
-                self.cfg.build_val(Op::RealMul, vec![args[1].clone(), args[1].clone()], src).into()
-            }
+            Op::RealDiv => self.cfg.build_val(Op::RealMul, smallvec![args[1], args[1]], src).into(),
             // Op::CmplxDiv => {
-            //     self.cfg.build_val(Op::CmplxDiv, vec![args[1].clone(), args[1].clone()], src).into()
+            //     self.cfg.build_val(Op::CmplxDiv, smallvec![args[1].clone(), args[1].clone()], src).into()
             // }
 
             // Technically not required but makes code look nicer..
             // exp(x) -> exp(x)
             Op::Exp => original,
 
+            // hypot(x,y) -> (x' + y')/2hypot(x,y)
             // sqrt(x) -> 1/2sqrt(x)
-            Op::Sqrt => self.cfg.build_val(Op::RealMul, vec![2f64.into(), original], src).into(),
+            Op::Hypot | Op::Sqrt => {
+                self.cfg.build_val(Op::RealMul, smallvec![2f64.into(), original], src).into()
+            }
             // ln(x) -> 1/x
-            Op::Ln => original,
+            Op::Ln => args[0],
             // log(x) -> log(e)/x
             Op::Log => self
                 .cfg
-                .build_val(
-                    Op::RealDiv,
-                    vec![std::f64::consts::LOG10_E.into(), args[0].clone()],
-                    src,
-                )
+                .build_val(Op::RealDiv, smallvec![std::f64::consts::LOG10_E.into(), args[0]], src)
                 .into(),
             // sin(x) -> cos(x)
-            Op::Sin => self.cfg.build_val(Op::Cos, vec![args[0].clone()], src).into(),
+            Op::Sin => self.cfg.build_val(Op::Cos, smallvec![args[0]], src).into(),
             // cos(x) -> -sin(x)
             Op::Cos => {
-                let sin = self.cfg.build_val(Op::Cos, vec![args[0].clone()], src);
-                self.cfg.build_val(Op::RealArtihNeg, vec![sin.into()], src).into()
+                let sin = self.cfg.build_val(Op::Sin, smallvec![args[0]], src);
+                self.cfg.build_val(Op::RealArtihNeg, smallvec![sin.into()], src).into()
             }
             // tan(x) -> 1 + tan^2(x)
             Op::Tan => {
-                let tan_2 = self.cfg.build_val(Op::RealMul, vec![original.clone(), original], src);
-                self.cfg.build_val(Op::RealAdd, vec![1f64.into(), tan_2.into()], src).into()
+                let tan_2 = self.cfg.build_val(Op::RealMul, smallvec![original, original], src);
+                self.cfg.build_val(Op::RealAdd, smallvec![1f64.into(), tan_2.into()], src).into()
             }
 
-            // hypot(x,y) -> (x' + y')/2hypot(x,y)
-            Op::Hypot => self.cfg.build_val(Op::RealMul, vec![2f64.into(), original], src).into(),
             // asin(x) -> 1/sqrt(1-x^2)
             Op::ArcSin => {
                 // 1 - x^2
-                let arg_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[0].clone(), args[0].clone()], src);
-                let sqrt_arg =
-                    self.cfg.build_val(Op::RealSub, vec![1f64.into(), arg_squared.into()], src);
+                let arg_squared = self.cfg.build_val(Op::RealMul, smallvec![args[0], args[0]], src);
+                let sqrt_arg = self.cfg.build_val(
+                    Op::RealSub,
+                    smallvec![1f64.into(), arg_squared.into()],
+                    src,
+                );
 
                 // sqrt(1-x^2)
-                self.cfg.build_val(Op::Sqrt, vec![sqrt_arg.into()], src).into()
+                self.cfg.build_val(Op::Sqrt, smallvec![sqrt_arg.into()], src).into()
             }
             // acos(x) -> -1/sqrt(1-x^2)
             Op::ArcCos => {
-                // 1 - x^2
-                let arg_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[0].clone(), args[0].clone()], src);
-                let sqrt_arg =
-                    self.cfg.build_val(Op::RealSub, vec![arg_squared.into(), 1f64.into()], src);
+                let arg_squared = self.cfg.build_val(Op::RealMul, smallvec![args[0], args[0]], src);
+                let sqrt_arg = self.cfg.build_val(
+                    Op::RealSub,
+                    smallvec![1f64.into(), arg_squared.into()],
+                    src,
+                );
 
                 // sqrt(1-x^2)
-                let sqrt = self.cfg.build_val(Op::Sqrt, vec![sqrt_arg.into()], src);
-                self.cfg.build_val(Op::RealArtihNeg, vec![sqrt.into()], src).into()
+                let sqrt = self.cfg.build_val(Op::Sqrt, smallvec![sqrt_arg.into()], src);
+                self.cfg.build_val(Op::RealArtihNeg, smallvec![sqrt.into()], src).into()
             }
             // arctan(x) -> 1/(1 + x^2)
             Op::ArcTan => {
                 // 1 + x^2
-                let arg_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[0].clone(), args[0].clone()], src);
-                self.cfg.build_val(Op::RealAdd, vec![1f64.into(), arg_squared.into()], src).into()
+                let arg_squared = self.cfg.build_val(Op::RealMul, smallvec![args[0], args[0]], src);
+                self.cfg
+                    .build_val(Op::RealAdd, smallvec![1f64.into(), arg_squared.into()], src)
+                    .into()
             }
             // arctan2(x,y) => (x'*y - y'*x)/(x^2+y^2)
             Op::ArcTan2 => {
-                let lhs_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[0].clone(), args[0].clone()], src);
-                let rhs_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[1].clone(), args[1].clone()], src);
+                let lhs_squared = self.cfg.build_val(Op::RealMul, smallvec![args[0], args[0]], src);
+                let rhs_squared = self.cfg.build_val(Op::RealMul, smallvec![args[1], args[1]], src);
 
                 let bot = self.cfg.build_val(
                     Op::RealAdd,
-                    vec![lhs_squared.into(), rhs_squared.into()],
+                    smallvec![lhs_squared.into(), rhs_squared.into()],
                     src,
                 );
 
                 let lhs_cache =
-                    self.cfg.build_val(Op::RealDiv, vec![args[1].clone(), bot.into()], src);
+                    self.cfg.build_val(Op::RealDiv, smallvec![args[1], bot.into()], src);
                 let rhs_cache =
-                    self.cfg.build_val(Op::RealDiv, vec![args[0].clone(), bot.into()], src);
+                    self.cfg.build_val(Op::RealDiv, smallvec![args[0], bot.into()], src);
                 res.push(lhs_cache.into());
                 rhs_cache.into()
             }
 
             // sinh(x) -> cosh(x)
-            Op::SinH => self.cfg.build_val(Op::CosH, vec![args[0].clone()], src).into(),
+            Op::SinH => self.cfg.build_val(Op::CosH, smallvec![args[0]], src).into(),
             // cosh(x) -> sinh(x)
-            Op::CosH => self.cfg.build_val(Op::SinH, vec![args[0].clone()], src).into(),
+            Op::CosH => self.cfg.build_val(Op::SinH, smallvec![args[0]], src).into(),
 
             // tanh(x) -> 1 - tanh^2(x)
             Op::TanH => {
-                let tan_2 = self.cfg.build_val(Op::RealMul, vec![original.clone(), original], src);
-                self.cfg.build_val(Op::RealSub, vec![1f64.into(), tan_2.into()], src).into()
+                let tan_2 = self.cfg.build_val(Op::RealMul, smallvec![original, original], src);
+                self.cfg.build_val(Op::RealSub, smallvec![1f64.into(), tan_2.into()], src).into()
             }
+            // acsinh(x) -> 1/sqrt(x^2 + 1)
             Op::ArcSinH => {
                 // 1 + x^2
-                let arg_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[0].clone(), args[0].clone()], src);
-                let sqrt_arg =
-                    self.cfg.build_val(Op::RealAdd, vec![1f64.into(), arg_squared.into()], src);
+                let arg_squared = self.cfg.build_val(Op::RealMul, smallvec![args[0], args[0]], src);
+                let sqrt_arg = self.cfg.build_val(
+                    Op::RealAdd,
+                    smallvec![1f64.into(), arg_squared.into()],
+                    src,
+                );
 
                 // sqrt(1 + x^2)
-                self.cfg.build_val(Op::Sqrt, vec![sqrt_arg.into()], src).into()
+                self.cfg.build_val(Op::Sqrt, smallvec![sqrt_arg.into()], src).into()
             }
             // acosh(x) -> 1/sqrt(x^2 - 1)
             Op::ArcCosH => {
                 // x^2 - 1
-                let arg_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[0].clone(), args[0].clone()], src);
-                let sqrt_arg =
-                    self.cfg.build_val(Op::RealSub, vec![arg_squared.into(), 1f64.into()], src);
+                let arg_squared = self.cfg.build_val(Op::RealMul, smallvec![args[0], args[0]], src);
+                let sqrt_arg = self.cfg.build_val(
+                    Op::RealSub,
+                    smallvec![arg_squared.into(), 1f64.into()],
+                    src,
+                );
 
                 // sqrt(x^2 - 1)
-                self.cfg.build_val(Op::Sqrt, vec![sqrt_arg.into()], src).into()
+                self.cfg.build_val(Op::Sqrt, smallvec![sqrt_arg.into()], src).into()
             }
 
             // arctanh(x) -> 1/(1-x^2)
             Op::ArcTanH => {
                 // 1 - x^2
-                let arg_squared =
-                    self.cfg.build_val(Op::RealMul, vec![args[0].clone(), args[0].clone()], src);
-                self.cfg.build_val(Op::RealSub, vec![1f64.into(), arg_squared.into()], src).into()
+                let arg_squared = self.cfg.build_val(Op::RealMul, smallvec![args[0], args[0]], src);
+                self.cfg
+                    .build_val(Op::RealSub, smallvec![1f64.into(), arg_squared.into()], src)
+                    .into()
             }
 
             // x << y = x*pow(2,y)-> ln(2) * x * y'* pow(2,y)  + x' * pow(2,y)
             // = ln(2) * y' * x<<y + x' * 1<<y
             Op::IntShl => {
-                let original = self.cfg.build_val(Op::IntToReal, vec![original], src);
+                let original = self.cfg.build_val(Op::IntToReal, smallvec![original], src);
                 let lhs_cache =
-                    self.cfg.build_val(Op::RealMul, vec![LN_2.into(), original.into()], src);
+                    self.cfg.build_val(Op::RealMul, smallvec![LN_2.into(), original.into()], src);
                 res.push(lhs_cache.into());
 
-                let rhs_cache =
-                    self.cfg.build_val(Op::IntShl, vec![1.into(), args[1].clone()], src);
-                let rhs_cache = self.cfg.build_val(Op::IntToReal, vec![rhs_cache.into()], src);
+                let rhs_cache = self.cfg.build_val(Op::IntShl, smallvec![1.into(), args[1]], src);
+                let rhs_cache = self.cfg.build_val(Op::IntToReal, smallvec![rhs_cache.into()], src);
 
                 rhs_cache.into()
             }
@@ -525,22 +526,21 @@ impl CfgTransform<'_> {
             // = -ln(2) * y' * x>>y + x' * 1>>y
             Op::IntShr => {
                 let lhs_cache =
-                    self.cfg.build_val(Op::RealMul, vec![(-LN_2).into(), original], src);
-                let rhs_cache =
-                    self.cfg.build_val(Op::IntShl, vec![1.into(), args[1].clone()], src);
+                    self.cfg.build_val(Op::RealMul, smallvec![(-LN_2).into(), original], src);
+                let rhs_cache = self.cfg.build_val(Op::IntShl, smallvec![1.into(), args[1]], src);
                 res.push(lhs_cache.into());
                 rhs_cache.into()
             }
 
             // pow(x,y) -> (y/x * x' + ln(x) * y') * pow(x,y)
             Op::RealPow => {
-                let y_x =
-                    self.cfg.build_val(Op::RealDiv, vec![args[1].clone(), args[0].clone()], src);
+                let y_x = self.cfg.build_val(Op::RealDiv, smallvec![args[1], args[0]], src);
                 let lhs_cache =
-                    self.cfg.build_val(Op::RealMul, vec![y_x.into(), original.clone()], src);
+                    self.cfg.build_val(Op::RealMul, smallvec![y_x.into(), original], src);
 
-                let ln = self.cfg.build_val(Op::Ln, vec![args[0].clone()], src);
-                let rhs_cache = self.cfg.build_val(Op::RealMul, vec![ln.into(), original], src);
+                let ln = self.cfg.build_val(Op::Ln, smallvec![args[0]], src);
+                let rhs_cache =
+                    self.cfg.build_val(Op::RealMul, smallvec![ln.into(), original], src);
 
                 res.push(lhs_cache.into());
                 rhs_cache.into()
@@ -566,53 +566,49 @@ impl CfgTransform<'_> {
 
         let gen_mul_derivative = |sel: &mut CfgTransform, add, convert: bool| {
             let (lhs, rhs) = if convert {
-                let lhs = sel.cfg.build_val(Op::IntToReal, vec![args[0].clone()], src).into();
-                let rhs = sel.cfg.build_val(Op::IntToReal, vec![args[1].clone()], src).into();
+                let lhs = sel.cfg.build_val(Op::IntToReal, smallvec![args[0]], src).into();
+                let rhs = sel.cfg.build_val(Op::IntToReal, smallvec![args[1]], src).into();
                 (lhs, rhs)
             } else {
-                (args[0].clone(), args[1].clone())
+                (args[0], args[1])
             };
             let drhs = arg_derivatrive(sel, 1);
             let dlhs = arg_derivatrive(sel, 0);
-            let sum1 = sel.cfg.build_val(op, vec![lhs, drhs], src);
-            let sum2 = sel.cfg.build_val(op, vec![dlhs, rhs], src);
-            (add, vec![sum1.into(), sum2.into()])
+            let sum1 = sel.cfg.build_val(Op::RealMul, smallvec![lhs, drhs], src);
+            let sum2 = sel.cfg.build_val(Op::RealMul, smallvec![dlhs, rhs], src);
+            (add, smallvec![sum1.into(), sum2.into()])
         };
 
         // (f/g)' -> (f'*g - g' *f) / g^2 = f'/g - g'*f/g^2
         let gen_div_derivative = |sel: &mut CfgTransform, sub, mul, convert: bool| {
             let (lhs, rhs) = if convert {
-                let lhs = sel.cfg.build_val(Op::IntToReal, vec![args[0].clone()], src).into();
-                let rhs = sel.cfg.build_val(Op::IntToReal, vec![args[1].clone()], src).into();
+                let lhs = sel.cfg.build_val(Op::IntToReal, smallvec![args[0]], src).into();
+                let rhs = sel.cfg.build_val(Op::IntToReal, smallvec![args[1]], src).into();
                 (lhs, rhs)
             } else {
-                (args[0].clone(), args[1].clone())
+                (args[0], args[1])
             };
 
             // f'/g
             let dlhs = arg_derivatrive(sel, 0);
-            let sum1 = sel.cfg.build_val(op, vec![dlhs, rhs], src);
+            let sum1 = sel.cfg.build_val(Op::RealDiv, smallvec![dlhs, rhs], src);
 
             // f*g'/g^2
             let drhs = arg_derivatrive(sel, 1);
-            let top = sel.cfg.build_val(mul, vec![lhs, drhs], src);
-            let sum2 = sel.cfg.build_val(op, vec![top.into(), cache[0].clone()], src);
+            let top = sel.cfg.build_val(mul, smallvec![lhs, drhs], src);
+            let sum2 = sel.cfg.build_val(Op::RealDiv, smallvec![top.into(), cache[0]], src);
 
-            (sub, vec![sum1.into(), sum2.into()])
+            (sub, smallvec![sum1.into(), sum2.into()])
         };
 
         let (op, args) = match op {
-            Op::NoOp => return,
-            Op::Call(_) => return, // TODO handle calls?
-            
-            Op::RealArtihNeg
-                => (Op::RealArtihNeg, vec![arg_derivatrive(self, 0)]),
-
-            Op::IntArithNeg => (Op::RealArtihNeg, vec![arg_derivatrive(self, 0)]),
+            Op::NoOp | Op::Call(_) => return, // TODO handle calls?
+            Op::RealArtihNeg | Op::IntArithNeg
+                => (Op::RealArtihNeg, smallvec![arg_derivatrive(self, 0)]),
 
             // All derivatives are REAL to all casts are essentially just copies
-            Op::Copy | Op::IntToReal | Op::RealToInt | Op::BoolToInt | Op::IntToBool | Op::BoolToReal => {
-                (Op::Copy, vec![arg_derivatrive(self, 0)])
+            Op::Copy | Op::IntToReal | Op::RealToInt | Op::BoolToInt | Op::IntToBool | Op::RealToBool | Op::BoolToReal => {
+                (Op::Copy, smallvec![arg_derivatrive(self, 0)])
             }
 
             // TODO error?
@@ -646,15 +642,15 @@ impl CfgTransform<'_> {
             | Op::IntNeq
             | Op::RealNeq
             | Op::StringNeq
-            | Op::BoolNeq => (Op::Copy, vec![0.0.into()]),
+            | Op::BoolNeq => (Op::Copy, smallvec![0.0.into()]),
 
             Op::IntAdd
-            | Op::IntSub
             | Op::RealAdd
+                => (Op::RealAdd, smallvec![arg_derivatrive(self, 0), arg_derivatrive(self, 1)]),
+
+            Op::IntSub
             | Op::RealSub
-            // | Op::CmplxPlus
-            // | Op::CmplxMinus
-                => (op, vec![arg_derivatrive(self, 0), arg_derivatrive(self, 1)]),
+                => (Op::RealSub, smallvec![arg_derivatrive(self, 0), arg_derivatrive(self, 1)]),
 
             Op::IntMul => gen_mul_derivative(self, Op::RealAdd, true),
             Op::RealMul => gen_mul_derivative(self, Op::RealAdd, false),
@@ -662,12 +658,12 @@ impl CfgTransform<'_> {
                 // => gen_mul_derivative(self, Op::CmplxPlus, false),
 
             // Op::CmplxDiv => gen_div_derivative(self, Op::CmplxMinus, Op::CmplxMul, false),
-            Op::IntDiv => gen_div_derivative(self, Op::RealSub, Op::IntMul, true),
+            Op::IntDiv => gen_div_derivative(self, Op::RealSub, Op::RealMul, true),
             Op::RealDiv => gen_div_derivative(self,  Op::RealSub, Op::RealMul, false),
 
 
             Op::Exp | Op::Log | Op::Sin | Op::Cos | Op::SinH | Op::CosH | Op::Tan | Op::TanH => {
-                (Op::RealMul, vec![cache[0].clone(), arg_derivatrive(self, 0)])
+                (Op::RealMul, smallvec![cache[0], arg_derivatrive(self, 0)])
             }
             Op::Ln
             | Op::Sqrt
@@ -677,15 +673,20 @@ impl CfgTransform<'_> {
             | Op::ArcTan2
             | Op::ArcSinH
             | Op::ArcCosH
-            | Op::ArcTanH => (Op::RealDiv, vec![cache[0].clone(), arg_derivatrive(self, 0)]),
+            | Op::ArcTanH => (Op::RealDiv, smallvec![arg_derivatrive(self, 0),cache[0],]),
              Op::RealPow | Op::IntShl | Op::IntShr => {
                  let dlhs = arg_derivatrive(self, 0);
                  let drhs = arg_derivatrive(self, 1);
-                let lhs = self.cfg.build_val(Op::RealMul, vec![cache[0].clone(), dlhs], src);
-                let rhs = self.cfg.build_val(Op::RealMul, vec![cache[1].clone(), drhs], src);
-                (Op::RealAdd, vec![lhs.into(),rhs.into()])
+                let lhs = self.cfg.build_val(Op::RealMul, smallvec![cache[0], dlhs], src);
+                let rhs = self.cfg.build_val(Op::RealMul, smallvec![cache[1], drhs], src);
+                (Op::RealAdd, smallvec![lhs.into(),rhs.into()])
             },
-            Op::Hypot => todo!(),
+            Op::Hypot => {
+                 let dlhs = arg_derivatrive(self, 0);
+                 let drhs = arg_derivatrive(self, 1);
+                 let sum = self.cfg.build_val(Op::RealAdd, smallvec![dlhs,drhs], src);
+                 (Op::RealDiv, smallvec![sum.into(),cache[0]])
+            }
 
         };
 
@@ -694,7 +695,7 @@ impl CfgTransform<'_> {
 }
 
 pub type LocalDerivatives = AHashMap<(Local, Unkown), Local>;
-pub type PlaceDerivatives = AHashMap<(Place, Unkown), Place>;
+pub type PlaceDerivatives = IndexSet<(Place, FirstOrderUnkown)>;
 
 pub fn gen_derivatives(
     cfg: &mut ControlFlowGraph,
@@ -708,11 +709,13 @@ pub fn gen_derivatives(
         blocks: vec![BasicBlockData::default(); cfg.blocks.len()].into(),
         predecessor_cache: take(&mut cfg.predecessor_cache),
         is_cyclic: take(&mut cfg.is_cyclic),
+        entry: cfg.entry(),
     };
 
     let mut transform = CfgTransform::new(&mut new_cfg, &live_derivatives.analysis);
     live_derivatives.visit_with(cfg, &mut transform);
     let res = (transform.locals, transform.places);
     *cfg = new_cfg;
+    cfg.next_place += res.1.len();
     res
 }

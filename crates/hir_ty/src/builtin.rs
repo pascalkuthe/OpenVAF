@@ -251,6 +251,15 @@ bultins! {
     }
 
     SLEW = const {
+        fn TRANSITION_NO_ARGS(Val(Integer)) -> Real;
+        fn TRANSITION_DELAY(Val(Integer),Val(Real)) -> Real;
+        fn TRANSITION_DELAY_RISET(Val(Integer),Val(Real)) -> Real;
+        fn TRANSITION_DELAY_RISET_FALLT(Val(Integer),Val(Real),Val(Real)) -> Real;
+        fn TRANSITION_DELAY_RISET_FALLT_TOL(Val(Integer),Val(Real),Val(Real), Val(Real)) -> Real;
+    }
+
+
+    TRANSITION = const {
         fn SLEW_NO_MAX(Val(Real)) -> Real;
         fn SLEW_POS_MAX(Val(Real),Val(Real)) -> Real;
         fn SLEW_NEG_MAX(Val(Real),Val(Real),Val(Real)) -> Real;
@@ -460,12 +469,6 @@ copied_builtins! {
 
     ABSTIME = REAL_INFO
     TEMPERATURE = REAL_INFO
-    MFACTOR = REAL_INFO
-    XPOSITION = REAL_INFO
-    YPOSITION = REAL_INFO
-    ANGLE = REAL_INFO
-    HFLIP = REAL_INFO
-    VFLIP = REAL_INFO
 
     RDIST_CHI_SQUARE = RDIST_1_ARG
     RDIST_EXPONENTIAL = RDIST_1_ARG

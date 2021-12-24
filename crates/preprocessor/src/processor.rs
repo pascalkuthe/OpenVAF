@@ -1,3 +1,4 @@
+use std::io;
 use std::iter::once;
 use std::sync::Arc;
 
@@ -84,7 +85,7 @@ impl<'a> Processor<'a> {
                     let file = self.sources.file_id(path.clone());
                     match self.sources.file_text(file) {
                         Ok(contents) => break Some((contents, file)),
-                        Err(FileReadError::NotFound) => (),
+                        Err(FileReadError::Io(io::ErrorKind::NotFound)) => (),
                         Err(err) => return Err((err, Some(path))),
                     }
                 }
@@ -92,7 +93,7 @@ impl<'a> Processor<'a> {
                 break None;
             }
         };
-        let (src, file) = found.ok_or((FileReadError::NotFound, None))?;
+        let (src, file) = found.ok_or((FileReadError::Io(io::ErrorKind::NotFound), None))?;
         let src = self.arena.ensure(src);
         let workdir = self.sources.file_path(file).parent().unwrap();
 
@@ -202,24 +203,18 @@ impl<'a> Processor<'a> {
                         let span = CtxSpan { range, ctx: p.ctx() };
                         match self.include_file(file_name, span, p.dst, err, &p.working_dir) {
                             Ok(_) => (),
-                            Err((FileReadError::InvalidTextFormat, file)) => {
+                            Err((FileReadError::InvalidTextFormat(err_msg), file)) => {
                                 err.push(PreprocessorDiagnostic::InvalidTextFormat {
                                     file: file.unwrap(),
                                     span: Some(span),
+                                    err: err_msg,
                                 })
                             }
                             Err((FileReadError::Io(kind), file)) => {
-                                err.push(PreprocessorDiagnostic::IoError {
+                                err.push(PreprocessorDiagnostic::FileNotFound {
                                     file: file.unwrap(),
                                     error: kind,
                                     span: Some(span),
-                                })
-                            }
-
-                            Err((FileReadError::NotFound, _)) => {
-                                err.push(PreprocessorDiagnostic::FileNotFound {
-                                    span: Some(span),
-                                    file: file_name.to_owned(),
                                 })
                             }
                         }

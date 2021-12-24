@@ -15,7 +15,6 @@ use std::fmt::{Debug, Display};
 use std::intrinsics::transmute;
 
 use arena::Idx;
-use lasso::Spur;
 use stdx::impl_debug;
 use syntax::ast::{self, BinaryOp, UnaryOp};
 
@@ -23,9 +22,9 @@ use crate::Path;
 
 pub type ExprId = Idx<Expr>;
 
-#[derive(Clone, Eq, PartialEq, Copy)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum Literal {
-    String(Spur),
+    String(Box<str>),
     Int(i32),
     Float(BitewiseF64),
     Inf,

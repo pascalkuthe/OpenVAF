@@ -1,7 +1,6 @@
 use std::path::Path;
 
-use anyhow::Result;
-use sha2::{Digest, Sha256};
+use anyhow::{bail, Result};
 use xshell::{cmd, read_file, rm_rf, write_file};
 
 use crate::flags;
@@ -31,12 +30,13 @@ pub fn lockfile_hash() -> Result<String> {
     }
     lock.sort_by(|(name1, _), (name2, _)| name1.cmp(name2));
     lock.dedup(); // Should not be necessary but better be save
-    let mut hash = Sha256::new();
+    let mut hash = md5::Context::new();
     for (name, version) in lock {
-        hash.update(format!("{}:{}\n", name, version))
+        hash.consume(format!("{}:{}\n", name, version))
     }
 
-    Ok(base32::encode(base32::Alphabet::Crockford, &hash.finalize()))
+    let hash = u128::from_le_bytes(hash.compute().into());
+    Ok(base_n::encode(hash, base_n::CASE_INSENSITIVE))
 }
 
 fn vendor_file() -> Result<String> {
@@ -49,6 +49,10 @@ impl flags::Vendor {
         let old_file = read_file(".vendor/hash")?;
         if old_file == vendor_file && !self.force {
             return Ok(());
+        }
+
+        if self.check {
+            bail!("Cargo Dependency hash has changed! Please run cargo xtask vendor to update it!");
         }
 
         write_file(".vendor/hash", &vendor_file)?;
@@ -69,7 +73,6 @@ fi"#,
         );
 
         write_file(".vendor/pull.sh", vendor_pull)?;
-        cmd!("git add .vendor Cargo.lock").run()?;
 
         cmd!("tar --zstd -cf {vendor_file} ./vendor").run()?;
 
@@ -86,12 +89,10 @@ fi"#,
     If you are a maintainer please add the .maintainer file and try uploading again (cargo xtask vendor --force)");
         }
 
+        eprintln!("\x1b[33;1mwarning\x1b[0m: .vendor has changed! Please make sure to commit these changes before any changes that require these changed dependenceis");
         // cleanup
         rm_rf("vendor")?;
         rm_rf(vendor_file)?;
-
-        // for commit hook
-        write_file(".commit", ".")?;
 
         Ok(())
     }

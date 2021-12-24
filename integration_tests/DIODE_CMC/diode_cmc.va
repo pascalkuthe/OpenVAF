@@ -1,0 +1,650 @@
+//======================================================================================
+//======================================================================================
+// Filename: diode_cmc.va
+//======================================================================================
+//
+//    
+//                        Silicon Integration Initiative (Si2)
+//                      Compact Model Coalition In-Code Statement
+//    
+//    Software is distributed as is, completely without warranty or service support.  NXP
+//    Semiconductors, Hiroshima University, and Silicon Integration Initiative, Inc. (Si2),
+//    along with their employees are not liable for the condition or performance of the software.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 own the copyright and grant users
+//    a perpetual, irrevocable, worldwide, non-exclusive, royalty-free license with respect to the
+//    software as set forth below.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 hereby disclaim all implied
+//    warranties.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 grant the users the right to modify,
+//    copy, and redistribute the software and documentation, both within the user's organization
+//    and externally, subject to the following restrictions
+//    
+//      1. The users agree not to charge for the NXP Semiconductors, Hiroshima University,
+//      and Si2 -developed code itself but may charge for additions, extensions, or support.
+//    
+//      2. In any product based on the software, the users agree to acknowledge NXP
+//      Semiconductors, Hiroshima University, and Si2 that developed the software.  This
+//      acknowledgment shall appear in the product documentation.
+//    
+//      3. Redistributions to others of source code and documentation must retain the copyright
+//      notice, disclaimer, and list of conditions.
+//    
+//      4. Redistributions to others in binary form must reproduce the copyright notice,
+//      disclaimer, and list of conditions in the documentation and/or other materials provided
+//      with the distribution.
+//    
+//                                                     CMC In-Code Statement Revision 1.1 6/9/2016
+//
+//
+//
+// The diode_cmc is based on Juncap2 200.3.3 (test) from NXP Semiconductors. 
+//
+// Portions commented as diode_cmc code: additional models since 2009.
+//
+// Portions commented as diode_cmc recovery and high-injection equations code: recovery model by Hiroshima University.
+//
+// All other parts are taken from Juncap2 200.3.3. Copyright 2008 NXP Semiconductors, All Rights Reserved.
+//======================================================================================
+//======================================================================================
+//
+//
+
+`include "discipline.h"
+
+`include "DIODE_CMC_SIMKIT_macrodefs.include"
+
+`include "DIODE_CMC_macrodefs.include"
+
+`define JUNCAP_StandAlone
+
+// Note: some verilog-A compilers have problems handling the ddx-operator,
+// which occurs in definition of OP-output variables. If the line below is
+// commented out, all OP-output variables using the ddx-operator are skipped.
+`define OPderiv
+
+/////////////////////////////////////////////////////////////////////////////
+//
+//  Start of Diode_cmc model code
+//
+/////////////////////////////////////////////////////////////////////////////
+
+module DIODE_CMC(A,K);
+
+//
+//  Node definitions
+//
+inout A,K;
+electrical A,K;
+electrical AIK;  //internal node -- Diode_cmc code
+electrical charge_A, charge_K, depl_A;  //internal node -- Diode_cmc recovery and high-injection equations code
+
+    ///////////////////////////////
+    //  Diode_cmc model parameters
+    ///////////////////////////////
+
+    parameter real LEVEL      = 2002                              `P(info="Model level must be 2002" unit="");
+    parameter real VERSION    = 2                                 `P(info="Model version" unit="");
+    parameter real SUBVERSION = 0                                 `P(info="Model subversion" unit="");
+    parameter real REVISION   = 0                                 `P(info="Model revision" unit="");
+    parameter real TYPE       = 1      `from(-1.0         , 1.0 ) `P(info="Type parameter, in output value 1 reflects n-type, -1 reflects p-type" unit="");
+    parameter real DTA        = 0                                 `P(info="Temperature offset with respect to ambient temperature" unit="C");
+    `include "DIODE_CMC_parlist.include"
+
+    //  Instance parameters
+    parameter real AB         = 1E-12  `from(`AB_cliplow  , inf ) `P(type="instance" info="Junction area" unit="m^2" );
+    parameter real LS         = 1e-6   `from(`LS_cliplow  , inf ) `P(type="instance" info="STI-edge part of junction perimeter" unit="m" );
+    parameter real LG         = 0      `from(`LG_cliplow  , inf ) `P(type="instance" info="Gate-edge part of junction perimeter" unit="m" );
+    parameter real MULT       = 1      `from(`MULT_cliplow, inf ) `P(type="instance" info="Number of devices in parallel" unit="" );
+
+    // Diode_cmc code
+    aliasparam   AREA         = AB;
+    aliasparam   PERIM        = LS;
+    aliasparam   PJ           = LS;
+    aliasparam   PT           = XTI;
+    // End of Diode_cmc code
+
+    //////////////////////////
+    //
+    //  Variables
+    //
+    //////////////////////////
+
+    real MULT_i;
+    real EPSSI;
+
+
+    `include "DIODE_CMC_varlist1.include"
+    `include "DIODE_CMC_varlist2.include"
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    //
+    // Variables for operating point info
+    //
+    /////////////////////////////////////////////////////////////////////////////
+
+    `OPdef(vak  ,"Voltage between anode and cathode excluding the series resistor", "V")
+`ifdef OPderiv
+    `OPdef(cj   ,"Total source junction capacitance", "F")
+    `OPdef(cjbot,"Junction capacitance (bottom component)", "F")
+    `OPdef(cjgat,"Junction capacitance (gate-edge component)", "F")
+    `OPdef(cjsti,"Junction capacitance (STI-edge component)", "F")
+`endif // OPderiv
+    `OPdef(ij   ,"Total source junction current", "A")
+    `OPdef(ijbot,"Junction current (bottom component)", "A")
+    `OPdef(ijgat,"Junction current (gate-edge component)", "A")
+    `OPdef(ijsti,"Junction current (STI-edge component)", "A")
+    `OPdef(si   ,"Total junction current noise spectral density", "A^2/Hz")
+
+    // Diode_cmc code
+    `OPdef(vrs  ,"Voltage across series resistor", "V")
+    `OPdef(sf   ,"Total junction flicker noise spectral density", "A^2/Hz")
+    `OPdef(sr   ,"Total series resistor thermal noise spectral density", "A^2/Hz")
+    `OPdef(rseries,"Series resistor", "V/A")
+    // End of Diode_cmc code
+
+    // Diode_cmc recovery and high-injection equations code
+    `OPdef(qrr,"Recovery charge", "C")
+    // End of Diode_cmc recovery and high-injection equations code
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    //
+    //  Analog block with all calculations and contribs
+    //
+    /////////////////////////////////////////////////////////////////////////////
+
+    analog begin
+
+        begin : initialize_Model
+
+            EPSSI      =  `EPSO * `EPSRSI;
+            `include "DIODE_CMC_InitModel.include"
+
+        end // initializeModel
+
+
+        // Code independent of bias but dependent on instance parameters
+        begin : initializeInstance
+
+            // Clipping of the local model parameters
+            // Note that it violates the naming convention of this code. Usually we should not recalculate the <modelparameter>_i
+            // inside the code. However, fixing this will cause a lot more inconsistency between diode_cmc and juncap2
+
+            AB_i   = `CLIP_LOW(AB  , `AB_cliplow) * SCALE_i * SCALE_i * shrinkL * shrinkL;
+            LS_i   = `CLIP_LOW(LS  , `LS_cliplow) * SCALE_i * shrinkL;
+            LG_i   = `CLIP_LOW(LG  , `LG_cliplow) * SCALE_i * shrinkL;
+            MULT_i = `CLIP_LOW(MULT, `MULT_cliplow);
+
+            exp_VMAX_over_phitd = 0.0;
+            exp_VMAX_over_phitd_bot = 0.0;
+            exp_VMAX_over_phitd_sti = 0.0;
+            exp_VMAX_over_phitd_gat = 0.0;
+           `JuncapInitInstance
+
+            // Diode_cmc code
+            `Juncapparametercheck
+            //Total saturation current for shot noise calculation
+            isattotal  = AB_i * idsatbot + LS_i * idsatsti + LG_i * idsatgat;
+            // End of Diode_cmc code
+
+            // Initialization of (global) variables; required for some verilog-A compilers
+            ISATFOR1   = 0.0;
+            MFOR1      = 1.0;  // The value is updated DIODE_CMC_InitModel.include
+            MFOR2      = 1.0;
+            ISATFOR2   = 0.0;
+            MREV       = 1.0;
+            ISATREV    = 0.0;
+            m0flag     = 0.0;
+            xhighf1    = 0.0;
+            expxhf1    = 0.0;
+            xhighf2    = 0.0;
+            expxhf2    = 0.0;
+            xhighr     = 0.0;
+            expxhr     = 0.0;
+            m0_rev     = 0.0;
+            mcor_rev   = 0.0;
+            I1_cor     = 0.0;
+            I2_cor     = 0.0;
+            I3_cor     = 0.0;
+            I4_cor     = 0.0;
+            I5_cor     = 0.0;
+            tt0        = 0.0;
+            tt1        = 0.0;
+            tt2        = 0.0;
+            zfrac      = 0.0;
+            zflagbot   = 1.0;
+            zflagsti   = 1.0;
+            zflaggat   = 1.0;
+            alphaje    = 0.0;
+            tmpv       = 0.0;
+            vjv        = 0.0;
+
+            // Diode_cmc code
+            rnode      = 1;
+            restotal   = 0.0;
+            conducts   = 1.0/`MINRES;  // by default, no junction resistance
+            `Junresistor   // calculate series resistance
+            idmultbot = 0.0;
+            idmultgat = 0.0;
+            idmultsti = 0.0;
+            // End of Diode_cmc code
+            // Diode_cmc recovery and high-injection equations code
+            IWnqs0_A  = 0.0;
+            Inqs0_A   = 0.0;
+            Inqs0_K   = 0.0;
+            Q_nqs_A   = 0.0;
+            Q_nqs_K   = 0.0;
+            W_nqs_A   = 0.0;
+            // End of Diode_cmc recovery and high-injection equations code
+
+
+            `ExpressCodeValidation
+            if (SWJUNEXP_i == 1.0) begin : JUNCAPexpressInit
+                // The variables in the macro below are (re-)declared LOCALLY, to keep
+                // them separated from their globally declared counterparts. This trick
+                // allows one to use the "juncapcommon" macro both in the JUNCAP-express
+                // initialization and in the full-JUNCAP evaluation, while in the former
+                // the verilog-A compiler will still consider the variables as
+                // voltage-INdependent. This is essential to avoid re-computation of the
+                // JUNCAP-express initialization at each bias-step.
+                `LocalGlobalVars
+                // results computed here are not used elsewhere
+//                real ijunbot, ijunsti, ijungat;
+//                real ijnonbot, ijnonsti, ijnongat;
+                // Initialization of (local) variables; required for some verilog-A compilers
+                ysq = 0.0;
+                terfc = 0.0;
+                erfcpos = 0.0;
+                h1 = 0.0;
+                h2 = 0.0;
+                h2d = 0.0;
+                h3 = 0.0;
+                h4 = 0.0;
+                h5 = 0.0;
+                VAK = 0.0;
+                DQAbot  = 0.0;
+                DQAsti  = 0.0;
+                DQAgat  = 0.0;
+                vj = 0.0;
+                z = 0.0;
+                zinv = 0.0;
+                two_psistar = 0.0;
+                vjlim = 0.0;
+                vjsrh = 0.0;
+                vbbt = 0.0;
+                vav = 0.0;
+                tmp = 0.0;
+                id = 0.0;
+                isrh = 0.0;
+                vbi_minus_vjsrh = 0.0;
+                wsrhstep = 0.0;
+                dwsrh = 0.0;
+                wsrh = 0.0;
+                wdep = 0.0;
+                asrh = 0.0;
+                itat = 0.0;
+                btat = 0.0;
+                twoatatoverthreebtat = 0.0;
+                umaxbeforelimiting = 0.0;
+                umax = 0.0;
+                sqrtumax = 0.0;
+                umaxpoweronepointfive = 0.0;
+                wgamma = 0.0;
+                wtat = 0.0;
+                ktat = 0.0;
+                ltat = 0.0;
+                mtat = 0.0;
+                xerfc = 0.0;
+                erfctimesexpmtat = 0.0;
+                gammamax = 0.0;
+                ibbt = 0.0;
+                Fmaxr = 0.0;
+                fbreakdown = 0.0;
+
+                // Computation of JUNCAP-express internal parameters
+                // JuncapExpressInit1 is a broken into two parts (JuncapExpressInit1 and JuncapExpressInit12) due to the size limitation of macros
+                `JuncapExpressInit1
+
+                // Diode_cmc code
+                `JuncapExpressInit12
+                // Diode_cmc code
+
+                `JuncapExpressInit2
+                `JuncapExpressInit3
+                `JuncapExpressInit4
+                `JuncapExpressInit5
+
+            end // JUNCAPexpressInit
+
+        end // initializeInstance
+
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        //  DC-bias dependent quantities (calculations for current contribs)
+        //
+        /////////////////////////////////////////////////////////////////////////////
+
+        begin : evaluateStaticDynamic
+//            VAK = TYPE * V(A, AIK);
+            if(TYPE == -1) begin
+                VAK = -V(A,AIK);
+            end else begin
+                VAK =  V(A,AIK);
+            end
+
+            if (SWJUNEXP_i == 1.0) begin
+                `JuncapExpressCurrent(VAK)
+                ijunbot = 0;
+                ijunsti = 0;
+                ijungat = 0;
+                ijnonbot = 0;
+                ijnonsti = 0;
+                ijnongat = 0;
+                begin : evaluateDynamic
+                    `JuncapExpressCharge(VAK)
+                end
+            end else begin
+                `juncapcommon(VAK)
+                ijun = AB_i * ijunbot + LS_i * ijunsti + LG_i * ijungat;
+                ijnon = AB_i * ijnonbot + LS_i * ijnonsti + LG_i * ijnongat;
+            end
+            qjun = AB_i * qjunbot + LS_i * qjunsti + LG_i * qjungat;
+
+            // Diode_cmc code
+            VRS  = V(AIK,K);
+
+            Vtotal = V(A,K);
+            // End of Diode_cmc code
+
+        end // evaluateStaticDynamic
+
+        // Diode_cmc code
+        `Juncapcheckop(Vtotal)
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        //  Recovery charge (calculations for ddt() contribs)
+        //
+        /////////////////////////////////////////////////////////////////////////////
+
+        // Diode_cmc recovery and high-injection equations code
+        begin : evaluateRecoveryCharge
+
+            if ( CORECOVERY > 0 ) begin
+
+                //// High-Injection part //////////////////////////////////////////////////////
+
+                // High-Injection Coefficient for the N+/N- Junction:
+                if (NJL < NJH) begin
+                    nj_K0 = NJDV * (VAK - V_HK) + NJL;
+                    //nj_K0 = NJDV * (VAK - V_HK) + (NJH + NJL)/2; //improved code but results will change
+                    `Fn_SU( nj_K1, nj_K0, NJH, `C_NJDLT )
+                    `Fn_SL( nj_K,  nj_K1, NJL, `C_NJDLT )
+                end else begin //protection:
+                    nj_K = NJL;
+                end
+
+                // Hole Density at the P+/N- Junction:
+                exp_A = idmultbot;
+
+                // Hole Density at the N+/N- Junction:
+                if ( VAK - ( V_HK - V_HA ) > 0 ) begin
+                    `expl( phitdinv * ( VAK / nj_K - (V_HK-V_HA) / nj_K + V_HK * (nj_K-NJL) / (NJL*NJH) ) ,  exp_K )
+                end else begin
+                    exp_K = 1;
+                end
+
+
+                //// Carrier-distribution-based recovery model ////////////////////////////////
+
+                /////////////////////////////////////////////////////////
+                //// Injected Charge from the P+/N- Junction (Anode Side)
+                /////////////////////////////////////////////////////////
+
+                // Modification of exp_A (especially for the high-injection condition):
+                if (INJ2 == 0 || VAK < V_HA) begin
+                    exp_A2 = exp_A * INJ1;
+                end else begin
+                    exp_A2 = exp_A * INJ1 * exp( - INJ2*(VAK-V_HA)*(VAK-V_HA) * exp(INJT*ln(tkr / tkd)) );
+                end
+                exp_A2 = ( exp_A2 > `C_EXPCEIL ?  `C_EXPCEIL : exp_A2); // safety valve
+
+                // Hole Density at the P+/N- Junction:
+                p_nA = Pn0 * exp_A2;
+
+                // Excess Charge Density (Quasi-Static):
+                q_pexA = `QELE * AB_i * ( p_nA - Pn0 );
+
+                //// Nonquasi-Static (NQS) Effect Model Formulation
+                if ( NQS > 0.0 ) begin
+                    Q_qs_A = q_pexA * `QN_INJ_SCALING;        //input: QS charge density (scaled)
+                    Q_nqs_A = `NQS_CAPACITOR * V(charge_A);   //output: NQS charge dens. (scaled)
+                    Inqs0_A = (Q_nqs_A - Q_qs_A ) / NQS;      //DC current to the charge node
+                    // Injected Charge Density (Nonquasi-Static):
+                    q_pexA_nqs = Q_nqs_A / `QN_INJ_SCALING;   //(rescaled)
+                end else begin
+                    Q_qs_A = q_pexA;     //input: QS charge density (unscaled)
+                    q_pexA_nqs = Q_qs_A; //(unscaled)
+                end
+
+                /////////////////////////////////////////////////////////
+                //// Injected Charge from the N+/N- Junction (Cathode Side)
+                /////////////////////////////////////////////////////////
+
+                // Modification of exp_A (especially for the high-injection condition):
+                if (INJ2 == 0 || VAK < V_HK) begin
+                    exp_K2 = exp_K * INJ1;
+                end else begin
+                    exp_K2 = exp_K * INJ1 * exp( - INJ2*(VAK-V_HK)*(VAK-V_HK) * exp(INJT*ln(tkr / tkd)) );
+                end
+                exp_K2 = ( exp_K2 > `C_EXPCEIL ?  `C_EXPCEIL : exp_K2); // safety valve
+
+                // Hole Density at the N+/N- Junction:
+                p_nK = Pn0 * exp_K2;
+
+                // Excess Charge Density (Quasi-Static):
+                q_pexK = `QELE * AB_i * (p_nK - Pn0);
+
+                //// Nonquasi-Static (NQS) Effect Model Formulation
+                if ( NQS > 0.0 ) begin
+                    Q_qs_K = q_pexK * `QN_INJ_SCALING;        //input: QS charge density (scaled)
+                    Q_nqs_K = `NQS_CAPACITOR * V(charge_K);   //output: NQS charge dens. (scaled)
+                    Inqs0_K = (Q_nqs_K - Q_qs_K ) / NQS;      //DC current to the charge node
+                    // Injected Charge Density (Nonquasi-Static):
+                    q_pexK_nqs = Q_nqs_K / `QN_INJ_SCALING;   //(rescaled)
+                end else begin
+                    Q_qs_K = q_pexK;     //input: QS charge density (unscaled)
+                    q_pexK_nqs = Q_qs_K; //(unscaled)
+                end
+
+                /////////////////////////////////////////////////////////
+                //// Depletion part
+                /////////////////////////////////////////////////////////
+
+                //// At the P+/N- Junction:
+                Vjunc_A = PB - VAK ;
+                //Vjunc_A = VBIRBOT_i - VAK ; //to use the existing parameter in diode_cmc but results will change
+                `Fn_SZ( Vjunc_A, Vjunc_A, JUNCDLT )
+                W_depA = sqrt (2 * `C_ESI * Vjunc_A / (`QELE * NDI_i));
+                //W_depA = sqrt (2 * EPSSI * Vjunc_A / (`QELE * NDI_i)); //to use the existing parameter in diode_cmc but results will change
+
+                // Punch through effect:
+                `Fn_SU( W_depA, W_depA, WI, `C_PUNCH )
+
+                // NQS Effect on W_depA (temporary model):
+                if ( DEPNQS > 0.0 ) begin
+                    W_qs_A = W_depA * `DEP_SCALING;            //input: QS value (scaled)
+                    W_nqs_A = `DEPNQS_CAPACITOR * V(depl_A);   //output: NQS value (scaled)
+                    IWnqs0_A = (W_nqs_A - W_qs_A ) / DEPNQS;   //DC current to the NQS node
+                    // Depletion Width (Nonquasi-Static):
+                    W_depA_nqs = W_nqs_A / `DEP_SCALING;       //(rescaled)
+                end else begin
+                    W_qs_A = W_depA;     //input: QS value (unscaled)
+                    W_depA_nqs = W_qs_A; //(unscaled)
+                end
+
+
+                /////////////////////////////////////////////////////////
+                //// Final Equations
+                /////////////////////////////////////////////////////////
+                //----- Analytical Integration Based on the Carrier Distribution:
+                // basic majority-carrier charge:
+                Q_n0 = - (NDI_i * AB_i * `QELE) * WI;
+                // excess charge (Anode side):
+                Q_nexA_nqs = La * q_pexA_nqs * ( exp( - WI/La ) - exp( - W_depA_nqs/La ) );
+                // excess charge (Cathode side):
+                Q_nexK_nqs = La * q_pexK_nqs * ( exp( - (WI - W_depA_nqs)/La ) - 1.0 );
+                // depletion charge:
+//              Q_depA = + (NDI_i * AB_i * `QELE) * W_depA_nqs;
+
+                //// Final total electron charge:
+                Qrr = - ( Q_n0 + Q_nexA_nqs + Q_nexK_nqs );
+
+                /////////////////////////////////////
+                //connection with original Diode_cmc:
+                /////////////////////////////////////
+                qjun = qjun + Qrr;
+                TT_i = 0.0; //original recovery model is inactivated
+
+            end else begin
+
+                Qrr = TT_i * (ijun-ijnon); //for OPinfo
+
+            end
+
+        end // evaluateRecoveryCharge
+        // End of Diode_cmc recovery and high-injection equations code
+
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        //  Noise
+        //
+        /////////////////////////////////////////////////////////////////////////////
+
+        begin : noise
+            jnoise = (2 * `QELE * MULT_i) * ((ijun-ijnon) + 2 * isattotal + abs(ijnon));
+            I(A, AIK) <+ white_noise(jnoise, "shot");
+            jfnoise = KF_i * pow(abs(ijun) * MULT_i, AF_i);
+            I(A, AIK) <+ flicker_noise(jfnoise, 1.0, "flicker");
+            jtnoise = 4 * `KBOL * tkd * conducts * MULT_i*rnode;
+            I(AIK,K)  <+ white_noise(jtnoise, "thermal");
+        end //noise
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        //  Current contribs
+        //
+        /////////////////////////////////////////////////////////////////////////////
+
+        begin : loadStatic
+            I(A, AIK) <+ (TYPE * MULT_i) * ijun;
+            if (rnode == 1) begin
+                I(AIK,K) <+ MULT_i * VRS * conducts;
+            end else begin
+                V(AIK,K) <+ 0;
+            end
+        end // loadStatic
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        //  NQS nodes contribs for the recovery model
+        //
+        /////////////////////////////////////////////////////////////////////////////
+
+        // Diode_cmc recovery and high-injection equations code
+        begin : loadRecovery
+            if ( CORECOVERY > 0 && NQS > 0.0 ) begin
+                I(charge_A) <+ Inqs0_A + ddt(Q_nqs_A);
+                I(charge_K) <+ Inqs0_K + ddt(Q_nqs_K);
+            end else begin
+                V(charge_A) <+ 0.0;
+                V(charge_K) <+ 0.0;
+            end
+            if ( CORECOVERY > 0 && DEPNQS > 0.0 ) begin
+                I(depl_A) <+ IWnqs0_A + ddt(W_nqs_A);
+            end else begin
+                V(depl_A) <+ 0.0;
+            end
+        end // loadRecovery
+        // End of Diode_cmc recovery and high-injection equations code
+
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        //  ddt() contribs from charges
+        //
+        /////////////////////////////////////////////////////////////////////////////
+
+        begin : loadDynamic
+            I(A, AIK) <+ ddt((TYPE * MULT_i) * qjun);
+            I(A, AIK) <+ ddt((TYPE * MULT_i) * TT_i * (ijun-ijnon));
+        end // loadDynamic
+        // End of Diode_cmc code
+
+        /////////////////////////////////////////////////////////////////////////////
+        //
+        // Operating point info
+        //
+        /////////////////////////////////////////////////////////////////////////////
+
+        begin : OPinfo
+
+            // The output variables defined below are currently not available in
+            // Verilog-A, but only in the SiMKit-C-code which was generated from
+            // this source. Similar functionality will be available in Verilog-A
+            // from Verilog-A version 2.2 onwards. However, a different syntax is
+            // to be used (see Verilog AMS language reference manual, version 2.2,
+            // November 2004, Accellera).
+
+            vak     = VAK;
+`ifdef OPderiv
+            // DQAxxx calculation is not for op output but  ADMS workaround
+            DQAbot      = ddx(qjunbot, V(A));
+            DQAgat      = ddx(qjungat, V(A));
+            DQAsti      = ddx(qjunsti, V(A));
+
+            cjbot   = TYPE * MULT_i * AB_i * DQAbot;
+            cjgat   = TYPE * MULT_i * LG_i * DQAgat;
+            cjsti   = TYPE * MULT_i * LS_i * DQAsti;
+            cj      = cjbot + cjgat + cjsti;
+`endif // OPderiv
+            if (SWJUNEXP_i == 1.0) begin
+                ijbot   = 0.0;
+                ijgat   = 0.0;
+                ijsti   = 0.0;
+            end else begin
+                ijbot   = MULT_i * AB_i * ijunbot;
+                ijgat   = MULT_i * LG_i * ijungat;
+                ijsti   = MULT_i * LS_i * ijunsti;
+            end
+            ij      = MULT_i * ijun;
+            si      = jnoise;
+
+            // Diode_cmc code
+            sf      = jfnoise;
+            if (rnode == 1) begin
+                sr      = jtnoise;
+                rseries = 1.0/ (MULT_i  * conducts);
+                vrs     = TYPE * VRS;
+            end else begin
+                sr      = 0.0;
+                rseries = 0.0;
+                vrs     = 0.0;
+            end
+            // End of Diode_cmc code
+
+            // Diode_cmc recovery and high-injection equations code
+            qrr     = Qrr;
+            // End of Diode_cmc recovery and high-injection equations code
+
+        end // OPinfo
+
+   end // analogBlock
+
+endmodule

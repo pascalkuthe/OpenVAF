@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 use cfg::{
-    BasicBlock, CfgParam, Const, ControlFlowGraph, InstIdx, InstrDst, Instruction, Op, Operand,
-    Phi, PhiIdx, Terminator,
+    smallvec, BasicBlock, CfgParam, Const, ControlFlowGraph, InstIdx, InstrDst, Instruction, Op,
+    Operand, Phi, PhiIdx, Terminator,
 };
 use data_flow::lattice::{FlatSet, JoinSemiLattice, SparseFlatSetMap};
 use data_flow::{direction, Analysis, AnalysisDomain, ResultsVisitorMut, SplitEdgeEffects};
@@ -163,7 +163,7 @@ impl<'a, 'b> ResultsVisitorMut for WriteBackConsts<'a, 'b> {
 
     #[inline]
     fn visit_terminator_before_effect(
-        &self,
+        &mut self,
         state: &Self::FlowState,
         term: &mut Terminator,
         _block: BasicBlock,
@@ -198,7 +198,7 @@ impl<'a, 'b> ResultsVisitorMut for WriteBackConsts<'a, 'b> {
         match val {
             Some(val) => {
                 instr.op = Op::Copy;
-                instr.args = vec![Operand::Const(val)].into_boxed_slice()
+                instr.args = smallvec![Operand::Const(val)]
             }
             None => {
                 let eval_ctx = EvalCtx {

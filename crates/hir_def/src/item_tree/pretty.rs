@@ -120,6 +120,10 @@ impl<'a> Printer<'a> {
                     wln!(self, "function {}", function.name);
                     self.indented(|s| s.print_function(function))
                 }
+                ModuleItem::AliasParameter(param) => {
+                    let param = &self.tree[param];
+                    wln!(self, "aliasparam {} = {:?}", param.name, param.src);
+                }
             }
         }
     }

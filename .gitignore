@@ -1,5 +1,6 @@
 /target/
 /crates/*/target/
+/libs/*/target/
 !/crates/test/src/middle.rs
 .direnv
 .envrc

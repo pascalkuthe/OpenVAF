@@ -26,11 +26,11 @@ use stdx::impl_from;
 use syntax::ast::{self, BlockStmt};
 use syntax::AstNode;
 
-pub use crate::builtin::BuiltIn;
+pub use crate::builtin::{BuiltIn, ParamSysFun};
 use crate::db::HirDefDB;
 pub use crate::expr::{Case, Expr, ExprId, Literal, Stmt, StmtId};
 use crate::item_tree::{
-    Branch, Discipline, Function, ItemTreeId, ItemTreeNode, Module, Nature, Param, Var,
+    AliasParam, Branch, Discipline, Function, ItemTreeId, ItemTreeNode, Module, Nature, Param, Var,
 };
 pub use crate::item_tree::{BranchKind, ItemTree, NatureRef, NatureRefKind, NodeTypeDecl};
 use crate::nameres::ScopeDefItem;
@@ -198,15 +198,15 @@ pub struct DisciplineLoc {
 }
 
 impl DisciplineLoc {
-    pub fn item_tree(&self, db: &dyn HirDefDB) -> Arc<ItemTree> {
+    pub fn item_tree(self, db: &dyn HirDefDB) -> Arc<ItemTree> {
         db.item_tree(self.root_file)
     }
 
-    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::DisciplineDecl> {
+    pub fn ast_id(self, db: &dyn HirDefDB) -> AstId<ast::DisciplineDecl> {
         self.item_tree(db)[self.id].ast_id
     }
 
-    pub fn source(&self, db: &dyn HirDefDB) -> ast::DisciplineDecl {
+    pub fn source(self, db: &dyn HirDefDB) -> ast::DisciplineDecl {
         let ast_id = self.ast_id(db);
         db.ast_id_map(self.root_file).get(ast_id).to_node(db.parse(self.root_file).tree().syntax())
     }
@@ -221,15 +221,15 @@ pub struct NatureLoc {
 }
 
 impl NatureLoc {
-    pub fn item_tree(&self, db: &dyn HirDefDB) -> Arc<ItemTree> {
+    pub fn item_tree(self, db: &dyn HirDefDB) -> Arc<ItemTree> {
         db.item_tree(self.root_file)
     }
 
-    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::NatureDecl> {
+    pub fn ast_id(self, db: &dyn HirDefDB) -> AstId<ast::NatureDecl> {
         db.item_tree(self.root_file)[self.id].ast_id
     }
 
-    pub fn source(&self, db: &dyn HirDefDB) -> ast::NatureDecl {
+    pub fn source(self, db: &dyn HirDefDB) -> ast::NatureDecl {
         let ast_id = self.ast_id(db);
         db.ast_id_map(self.root_file).get(ast_id).to_node(db.parse(self.root_file).tree().syntax())
     }
@@ -246,6 +246,9 @@ impl_intern!(VarId, VarLoc, intern_var, lookup_intern_var);
 pub type ParamLoc = ItemLoc<Param>;
 impl_intern!(ParamId, ParamLoc, intern_param, lookup_intern_param);
 
+pub type AliasParamLoc = ItemLoc<AliasParam>;
+impl_intern!(AliasParamId, AliasParamLoc, intern_alias_param, lookup_intern_alias_param);
+
 pub type FunctionLoc = ItemLoc<Function>;
 impl_intern!(FunctionId, FunctionLoc, intern_function, lookup_intern_function);
 
@@ -260,7 +263,7 @@ pub type LocalNodeId = Idx<Node>;
 impl_intern!(NodeId, NodeLoc, intern_node, lookup_intern_node);
 
 impl NodeLoc {
-    pub fn ast_id(&self, db: &dyn HirDefDB) -> ErasedAstId {
+    pub fn ast_id(self, db: &dyn HirDefDB) -> ErasedAstId {
         let loc = self.module.lookup(db);
         loc.item_tree(db)[loc.id].nodes[self.id].ast_id
     }
@@ -273,7 +276,7 @@ pub struct FunctionArgLoc {
 }
 
 impl FunctionArgLoc {
-    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::FunctionArg> {
+    pub fn ast_id(self, db: &dyn HirDefDB) -> AstId<ast::FunctionArg> {
         let fun = self.fun.lookup(db);
         fun.item_tree(db)[fun.id].args[self.id].ast_ids[0]
     }
@@ -307,7 +310,7 @@ pub struct NatureAttrLoc {
 }
 
 impl NatureAttrLoc {
-    pub fn ast_id(&self, db: &dyn HirDefDB) -> AstId<ast::NatureAttr> {
+    pub fn ast_id(self, db: &dyn HirDefDB) -> AstId<ast::NatureAttr> {
         let nature = self.nature.lookup(db);
         let item_tree = &nature.item_tree(db);
         let nature = &item_tree[nature.id];

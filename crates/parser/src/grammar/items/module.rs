@@ -9,6 +9,7 @@ const MODULE_ITEM_RECOVERY: TokenSet = DIRECTION_TS.union(TokenSet::new(&[
     REAL_KW,
     INTEGER_KW,
     PARAMETER_KW,
+    LOCALPARAM_KW,
     ENDMODULE_KW,
 ]));
 pub(super) const MODULE_ITEM_OR_ATTR_RECOVERY: TokenSet =
@@ -49,6 +50,21 @@ fn module_ports(p: &mut Parser) {
         }
     }
     p.expect(T![')']);
+}
+
+pub(super) fn alias_parameter_decl(p: &mut Parser, m: Marker) {
+    p.bump(ALIASPARAM_KW);
+    name_r(p, TokenSet::new(&[T![;], T![=]]));
+    p.expect(T![=]);
+    if p.at(SYSFUN) {
+        let m = p.start();
+        p.bump_any();
+        m.complete(p, SYS_FUN);
+    } else {
+        path(p);
+    }
+    p.eat(T![;]);
+    m.complete(p, PARAM_DECL);
 }
 
 const DIRECTION_TS: TokenSet = TokenSet::new(&[T![inout], T![output], T![input]]);
@@ -102,8 +118,11 @@ fn module_item(p: &mut Parser) {
         IDENT => {
             net_decl::<false>(p, m);
         }
-        PARAMETER_KW => {
+        PARAMETER_KW | LOCALPARAM_KW => {
             parameter_decl(p, m);
+        }
+        ALIASPARAM_KW => {
+            alias_parameter_decl(p, m);
         }
         BRANCH_KW => {
             branch_decl(p, m);
@@ -140,7 +159,7 @@ fn net_dec_list(p: &mut Parser) {
 }
 
 const FUNCTION_RECOVER: TokenSet = TokenSet::new(&[EOF, ENDMODULE_KW, ENDFUNCTION_KW]);
-const FUN_ITEM_TS: TokenSet = TokenSet::unique(PARAMETER_KW)
+const FUN_ITEM_TS: TokenSet = TokenSet::new(&[PARAMETER_KW, LOCALPARAM_KW])
     .union(TYPE_TS)
     .union(STMT_RECOVER)
     .union(DIRECTION_TS)
@@ -158,7 +177,7 @@ fn func_decl(p: &mut Parser, m: Marker) {
         attrs(p, FUN_ITEM_TS.union(FUNCTION_RECOVER));
         if p.at_ts(TYPE_TS) {
             var_decl(p, m)
-        } else if p.at(PARAMETER_KW) {
+        } else if p.at_ts(TokenSet::new(&[PARAMETER_KW, LOCALPARAM_KW])) {
             parameter_decl(p, m)
         } else if p.at_ts(DIRECTION_TS) {
             func_arg(p, m);

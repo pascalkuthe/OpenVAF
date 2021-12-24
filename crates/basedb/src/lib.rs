@@ -8,7 +8,6 @@ pub mod lints;
 mod tests;
 
 use std::intrinsics::transmute;
-use std::str::from_utf8;
 use std::sync::Arc;
 
 pub use ast_id_map::{AstId, AstIdMap, ErasedAstId};
@@ -18,9 +17,10 @@ use lints::{Lint, LintData, LintLevel, LintRegistry};
 use parking_lot::RwLock;
 use salsa::Durability;
 use syntax::sourcemap::SourceMap;
-use syntax::{FileReadError, Parse, Preprocess, SourceFile, SourceProvider, TextRange, TextSize};
+use syntax::{Parse, Preprocess, SourceFile, SourceProvider, TextRange, TextSize};
 use typed_index_collections::{TiSlice, TiVec};
 pub use vfs::{FileId, Vfs, VfsPath};
+use vfs::{FileReadError, VfsEntry};
 
 pub trait VfsStorage {
     fn vfs(&self) -> &RwLock<Vfs>;
@@ -120,8 +120,9 @@ fn lint_lvl(
 
 #[inline]
 fn line_index(db: &dyn BaseDB, file_id: FileId) -> Arc<LineIndex> {
-    let text = db.file_text(file_id);
-    Arc::new(LineIndex::new(text.as_ref().map_or("", |t| &*t)))
+    let vfs = db.vfs().read();
+    let text = vfs.file_contents_unchecked(file_id);
+    Arc::new(LineIndex::new(text))
 }
 
 #[inline]
@@ -157,9 +158,8 @@ fn preprocess(db: &dyn BaseDB, root_file: FileId) -> Preprocess {
 fn file_text(db: &dyn BaseDB, file: FileId) -> Result<Arc<str>, FileReadError> {
     db.salsa_runtime().report_synthetic_read(Durability::LOW);
     let vfs = db.vfs().read();
-    let contents = vfs.file_contents(file).ok_or(FileReadError::NotFound)?;
-    let contents = from_utf8(contents).map_err(|_| FileReadError::InvalidTextFormat)?;
-    Ok(Arc::from(contents))
+    // TODO request file from FS
+    vfs.file_contents(file).map(Arc::from)
 }
 
 fn file_path(db: &dyn BaseDB, file: FileId) -> VfsPath {
@@ -234,7 +234,7 @@ impl dyn BaseDB {
     pub fn setup_test_db(
         &mut self,
         root_file_name: &str,
-        root_file: &str,
+        root_file: VfsEntry,
         vfs: &mut Vfs,
     ) -> FileId {
         let root_file = vfs.add_virt_file(root_file_name, root_file);

@@ -14,7 +14,7 @@ endmodule
 
 "#;
 
-    let db = TestDataBase::new("/root.va", src);
+    let db = TestDataBase::new("/root.va", src.to_owned().into());
     let (_, actual) = db.parse_and_check();
 
     let expected = expect![[r#"
@@ -57,7 +57,7 @@ module test();
 endmodule
 "#;
 
-    let db = TestDataBase::new("/root.va", src);
+    let db = TestDataBase::new("/root.va", src.to_owned().into());
     let (_, actual) = db.parse_and_check();
 
     let expected = expect![[r#"
@@ -88,7 +88,7 @@ endmodule
 
 "#;
 
-    let db = TestDataBase::new("/root.va", src);
+    let db = TestDataBase::new("/root.va", src.to_owned().into());
     let (_, actual) = db.parse_and_check();
 
     let expected = expect![[r#"
@@ -139,7 +139,7 @@ endmodule
 
 "#;
 
-    let db = TestDataBase::new("/root.va", src);
+    let db = TestDataBase::new("/root.va", src.to_owned().into());
     let (_, actual) = db.parse_and_check();
 
     let expected = expect![[r#"

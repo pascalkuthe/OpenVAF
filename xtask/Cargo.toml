@@ -10,6 +10,6 @@ rust-version = "1.56"
 anyhow = "1.0"
 xshell = "0.1"
 xflags = "0.2"
-sha2 = "0.10"
-base32 = "0.4"
+md5 = "0.7"
+base_n = {version="1",path = "../lib/base_n"}
 # Avoid adding more dependencies to this crate

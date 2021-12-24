@@ -1,7 +1,7 @@
 #[macro_use]
 // these lints are nice normally but why generate macros when you can generate pre expanded code
 // the manual_non_exhaustive one is a false positive
-#[allow(clippy::match_like_matches_macro,clippy::manual_non_exhaustive)]
+#[allow(clippy::match_like_matches_macro,clippy::manual_non_exhaustive, clippy::enum_variant_names)]
 #[rustfmt::skip]
 mod generated;
 

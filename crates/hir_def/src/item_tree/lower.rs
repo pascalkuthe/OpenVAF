@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use arena::IdxRange;
 use basedb::{AstId, AstIdMap, FileId};
-use syntax::ast::{self, PathSegmentKind};
+use syntax::ast::{self, ParamRef, PathSegmentKind};
 use syntax::name::{kw, AsIdent, AsName};
 use syntax::{match_ast, AstNode, WalkEvent};
 use typed_index_collections::TiVec;
@@ -15,6 +15,7 @@ use super::{
 };
 // use tracing::trace;
 use crate::db::HirDefDB;
+use crate::item_tree::AliasParam;
 use crate::types::AsType;
 use crate::{LocalFunctionArgId, LocalNodeId, Path, Type};
 
@@ -126,7 +127,7 @@ impl Ctx {
 
         let kind = match &*name {
             kw::raw::potential => NatureRefKind::DisciplinePotential,
-            kw::raw::flow => NatureRefKind::DisciplinePotential,
+            kw::raw::flow => NatureRefKind::DisciplineFlow,
             _ if decl.qualifier().is_none() && decl.segment_kind()? == PathSegmentKind::Name => {
                 NatureRefKind::Nature
             }
@@ -270,6 +271,7 @@ impl Ctx {
                     self.lower_fun(fun, dst);
                 }
                 ast::ModuleItem::BranchDecl(branch) => self.lower_branch(branch, dst),
+                ast::ModuleItem::AliasParam(alias) => self.lower_alias_param(alias, dst),
             };
         }
     }
@@ -543,10 +545,38 @@ impl Ctx {
         for param in decl.paras() {
             if let Some(name) = param.name() {
                 let ast_id = self.source_ast_id_map.ast_id(&param);
-                let param = Param { name: name.as_name(), ty: ty.clone(), ast_id };
+                let param = Param {
+                    name: name.as_name(),
+                    is_local: decl.localparam_token().is_some(),
+                    ty: ty.clone(),
+                    ast_id,
+                };
                 let id = self.tree.data.parameters.push_and_get_key(param);
                 dst.push(id.into())
             }
+        }
+    }
+
+    fn lower_alias_param<T: From<ItemTreeId<AliasParam>>>(
+        &mut self,
+        decl: ast::AliasParam,
+        dst: &mut Vec<T>,
+    ) {
+        let name = decl.name();
+        let src = decl.src();
+
+        if let (Some(name), Some(src)) = (name, src) {
+            let src = match src {
+                ParamRef::Path(path) => Path::resolve(path),
+                ParamRef::SysFun(fun) => Some(Path::new_ident(fun.as_name())),
+            };
+            let param = AliasParam {
+                name: name.as_name(),
+                src,
+                ast_id: self.source_ast_id_map.ast_id(&decl),
+            };
+            let param = self.tree.data.alias_parameters.push_and_get_key(param);
+            dst.push(param.into())
         }
     }
 }

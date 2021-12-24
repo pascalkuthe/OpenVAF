@@ -19,6 +19,7 @@ use crate::{
 pub type GenKillResults<A> = Results<GenKillAnalysisImpl<A>>;
 
 /// A dataflow analysis that has converged to fixpoint.
+#[derive(Clone)]
 pub struct Results<A>
 where
     A: Analysis,
@@ -166,12 +167,11 @@ where
         apply_trans_for_block: Option<Box<dyn Fn(BasicBlock, &mut A::Domain)>>,
     ) -> Self {
         let bottom_value = analysis.bottom_value(cfg);
-        let mut entry_sets = TiVec::from(vec![bottom_value.clone(); cfg.blocks.len()]);
-        analysis.initialize_start_block(cfg, &mut entry_sets[cfg.entry()]);
+        let mut entry_sets = TiVec::from(vec![bottom_value; cfg.blocks.len()]);
+        let start =
+            if A::Direction::IS_FORWARD { cfg.entry() } else { cfg.blocks.last_key().unwrap() };
 
-        if !A::Direction::IS_FORWARD && entry_sets[cfg.entry()] != bottom_value {
-            panic!("`initialize_start_block` is not yet supported for backward dataflow analyses");
-        }
+        analysis.initialize_start_block(cfg, &mut entry_sets[start]);
 
         Engine { cfg, entry_sets, analysis, apply_trans_for_block }
     }

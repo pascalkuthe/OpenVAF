@@ -1,4 +1,3 @@
-use std::io;
 use std::sync::Arc;
 
 use codespan_reporting::diagnostic::Severity;
@@ -44,15 +43,14 @@ impl<'a> Files<'_> for FileSrc<'a> {
     }
 
     fn source(&self, id: Self::FileId) -> Result<Self::Source, codespan_reporting::files::Error> {
-        self.0.file_text(id).map_err(|err| match err {
-            syntax::FileReadError::Io(err) => {
-                codespan_reporting::files::Error::Io(io::Error::from(err))
+        match self.0.file_text(id) {
+            Ok(src) => Ok(src),
+            Err(_) => {
+                let vfs = self.0.vfs().read();
+                let contents = Arc::from(vfs.file_contents_unchecked(id));
+                Ok(contents)
             }
-            syntax::FileReadError::InvalidTextFormat => {
-                codespan_reporting::files::Error::FileMissing
-            }
-            syntax::FileReadError::NotFound => codespan_reporting::files::Error::FileMissing,
-        })
+        }
     }
 
     fn line_index(

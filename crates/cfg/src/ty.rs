@@ -18,96 +18,17 @@
 //! the CFG. Furthermore a huge amount of constants is usually cloned and stored during const propagation.
 //! As a result `Const` is heavily optimized for size and should be cheap to clone.
 //!
-//! This is achieved by using interned strings (lasso::Spur) to represent strings, thin arcs
-//! (triomphe::ThinArc) for arrays and boxing complex numbers (to cut their size in half when not
-//! used)
-
-// use std::ops::{Add, Div, Mul, Sub};
+//! This is achieved by using interned strings (lasso::Spur) to represent strings
 
 use lasso::Spur;
 use stdx::{impl_debug, impl_from_typed};
 
-// use triomphe::ThinArc;
-// use crate::parse::{CfgParser, Parse, ParseFromStr};
-
-// #[derive(Clone, PartialEq, Copy)]
-// pub struct Complex64 {
-//     pub real: f64,
-//     pub imag: f64,
-// }
-
-// impl Complex64 {
-//     pub fn abs2(self) -> f64 {
-//         self.real * self.real + self.imag + self.imag
-//     }
-// }
-
-// impl Add for Complex64 {
-//     type Output = Complex64;
-
-//     fn add(self, rhs: Complex64) -> Complex64 {
-//         Complex64 { real: self.real + rhs.real, imag: self.imag + rhs.imag }
-//     }
-// }
-
-// impl Sub for Complex64 {
-//     type Output = Complex64;
-
-//     fn sub(self, rhs: Complex64) -> Complex64 {
-//         Complex64 { real: self.real - rhs.real, imag: self.imag - rhs.imag }
-//     }
-// }
-
-// impl Mul for Complex64 {
-//     type Output = Complex64;
-
-//     fn mul(self, rhs: Complex64) -> Complex64 {
-//         Complex64 {
-//             real: self.real * rhs.real - self.imag * rhs.imag,
-//             imag: self.real * rhs.imag + self.imag * rhs.real,
-//         }
-//     }
-// }
-
-// impl Div for Complex64 {
-//     type Output = Complex64;
-
-//     fn div(self, rhs: Complex64) -> Complex64 {
-//         let rhs_abs2 = rhs.abs2();
-//         Complex64 {
-//             real: (self.real * rhs.real + self.imag * rhs.imag) / rhs_abs2,
-//             imag: (self.imag * rhs.real - self.real * rhs.imag) / rhs_abs2,
-//         }
-//     }
-// }
-
-// impl_debug! {
-//     match Complex64{
-//         Complex64{real,imag} => "{}, {}", real,imag;
-//     }
-// }
-
-// impl Parse for Complex64 {
-//     fn parse(p: &mut CfgParser) -> Result<Self, String> {
-//         let real: ParseFromStr<f64> = p.parse()?;
-//         p.expect(",")?;
-//         let imag: ParseFromStr<f64> = p.parse()?;
-//         Ok(Complex64 { real: real.0, imag: imag.0 })
-//     }
-// }
-
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Const {
     Real(f64),
     Int(i32),
     Bool(bool),
-    // Complex(Complex64),
     String(Spur),
-    // RealArray(Array<f64>),
-    // IntArray(Array<i32>),
-    // ComplexArray(Array<Complex64>),
-    // StringArray(Array<Spur>),
-    // Zero sized type (currently only used for empty array)
     Zst,
 }
 
@@ -124,6 +45,9 @@ impl PartialEq for Const {
         }
     }
 }
+
+// Equivalence relation is defined as bit Equivalence for floats
+impl Eq for Const {}
 
 impl Const {
     pub fn unwrap_real(&self) -> f64 {

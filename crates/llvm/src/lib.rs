@@ -254,3 +254,28 @@ pub fn get_version() -> (u32, u32, u32) {
 /// that the instruction is to be left unnamed (i.e. numbered, in textual IR).
 // FIXME(eddyb) pass `&CStr` directly to FFI once it's a thin pointer.
 pub const UNNAMED: *const c_char = b"\0".as_ptr() as *const c_char;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TypeKind {
+    Void = 0,
+    Half = 1,
+    Float = 2,
+    Double = 3,
+    X86_FP80 = 4,
+    FP128 = 5,
+    PPC_FP128 = 6,
+    Label = 7,
+    Integer = 8,
+    Function = 9,
+    Struct = 10,
+    Array = 11,
+    Pointer = 12,
+    Vector = 13,
+    Metadata = 14,
+    X86_MMX = 15,
+    Token = 16,
+    ScalableVector = 17,
+    BFloat = 18,
+    X86_AMX = 19,
+}

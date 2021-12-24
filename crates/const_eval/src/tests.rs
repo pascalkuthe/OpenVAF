@@ -7,7 +7,7 @@ use crate::conditional_const_propagation;
 fn check(raw: &str, propagted: Expect) {
     let (mut cfg, literals) = ControlFlowGraph::parse(raw).unwrap();
     conditional_const_propagation(&mut cfg, &AHashMap::new());
-    let dump = cfg.dump(&literals);
+    let dump = cfg.dump(Some(&literals));
     propagted.assert_eq(&dump);
 }
 

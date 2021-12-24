@@ -247,6 +247,14 @@ extern "C" {
         NumIndices: c_uint,
         Name: *const c_char,
     ) -> &'a Value;
+
+    pub fn LLVMBuildStructGEP2<'a>(
+        builder: &Builder<'a>,
+        ty: &'a Type,
+        ptr: &'a Value,
+        idx: u32,
+        Name: *const c_char,
+    ) -> &'a Value;
     // pub fn LLVMBuildFPTrunc(
     //     builder: &Builder<'a>,
     //     Val: &'a Value,

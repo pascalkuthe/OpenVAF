@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 
 use hir_def::{
-    BranchId, DisciplineId, FunctionId, LocalFunctionArgId, NatureId, NodeId, ParamId, Type, VarId,
+    BranchId, DisciplineId, FunctionId, LocalFunctionArgId, NatureAttrId, NatureId, NodeId,
+    ParamId, Type, VarId,
 };
 use stdx::{impl_display, impl_idx_from};
 
@@ -19,6 +20,16 @@ pub enum TyRequirement {
     AnyParam,
     Branch,
     Literal(Type),
+}
+
+impl TyRequirement {
+    pub fn cast(&self, src: &Type) -> Option<Type> {
+        match self {
+            TyRequirement::Val(ty) if src != ty => Some(ty.to_owned()),
+            TyRequirement::Condition if src != &Type::Bool => Some(Type::Bool),
+            _ => None,
+        }
+    }
 }
 
 impl_display! {
@@ -46,6 +57,7 @@ pub enum Ty {
     Nature(NatureId),
     Discipline(DisciplineId),
     Var(Type, VarId),
+    NatureAttr(Type, NatureAttrId),
     FuntionVar { ty: Type, fun: FunctionId, arg: Option<LocalFunctionArgId> },
     Param(Type, ParamId),
     Literal(Type),
@@ -65,6 +77,7 @@ impl_display! {
         Ty::Nature(_) => "nature reference";
         Ty::Discipline(_) => "discipline reference";
         Ty::Var(ty,_) => "{} variable reference", ty;
+        Ty::NatureAttr(ty,_) => "{} nature attriubte reference", ty;
         Ty::FuntionVar{ty,..} => "{} variable reference", ty;
         Ty::Param(ty,_) => "{} parameter ref", ty;
         Ty::Literal(ty) => "{} literal", ty;
@@ -114,11 +127,13 @@ impl Ty {
     pub fn satisfies_with_conversion(&self, requirement: &TyRequirement) -> bool {
         self.satisfies::<true>(requirement)
     }
+
     fn satisfies<const ALLOW_CONVERSION: bool>(&self, requirement: &TyRequirement) -> bool {
         match (self, requirement) {
             (
                 Ty::Val(_)
                 | Ty::Var(_, _)
+                | Ty::NatureAttr(_, _)
                 | Ty::Param(_, _)
                 | Ty::InfLiteral
                 | Ty::Literal(_)
@@ -127,15 +142,21 @@ impl Ty {
             )
             | (Ty::InfLiteral, TyRequirement::Val(Type::Real))
             | (
-                Ty::Val(Type::EmptyArray) | Ty::Val(Type::Array { len: 0, .. }),
+                Ty::Val(Type::EmptyArray | Type::Array { len: 0, .. }),
                 TyRequirement::ArrayAnyLength { .. }
                 | TyRequirement::Val(Type::Array { len: 0, .. }),
-            ) => true,
+            )
+            | (Ty::Node(_), TyRequirement::Node)
+            | (Ty::PortFlow(_), TyRequirement::PortFlow)
+            | (Ty::Nature(_), TyRequirement::Nature)
+            | (Ty::Param(_, _), TyRequirement::AnyParam)
+            | (Ty::Branch(_), TyRequirement::Branch) => true,
 
             (
                 Ty::Val(ty1)
                 | Ty::Literal(ty1)
                 | Ty::Var(ty1, _)
+                | Ty::NatureAttr(ty1, _)
                 | Ty::Param(ty1, _)
                 | Ty::FuntionVar { ty: ty1, .. },
                 TyRequirement::Val(ty2),
@@ -151,6 +172,7 @@ impl Ty {
             (
                 Ty::Val(ty)
                 | Ty::Var(ty, _)
+                | Ty::NatureAttr(ty, _)
                 | Ty::Param(ty, _)
                 | Ty::Literal(ty)
                 | Ty::FuntionVar { ty, .. },
@@ -170,14 +192,11 @@ impl Ty {
             }
 
             // No conversion for explicit references
-            (Ty::Var(ty1, _) | Ty::FuntionVar { ty: ty1, .. }, TyRequirement::Var(ty2))
+            (
+                Ty::Var(ty1, _) | Ty::NatureAttr(ty1, _) | Ty::FuntionVar { ty: ty1, .. },
+                TyRequirement::Var(ty2),
+            )
             | (Ty::Param(ty1, _), TyRequirement::Param(ty2)) => ty1 == ty2,
-
-            (Ty::Node(_), TyRequirement::Node)
-            | (Ty::PortFlow(_), TyRequirement::PortFlow)
-            | (Ty::Nature(_), TyRequirement::Nature)
-            | (Ty::Param(_, _), TyRequirement::AnyParam)
-            | (Ty::Branch(_), TyRequirement::Branch) => true,
 
             _ => false,
         }
@@ -187,6 +206,7 @@ impl Ty {
         match self {
             Ty::Val(ty)
             | Ty::Var(ty, _)
+            | Ty::NatureAttr(ty, _)
             | Ty::Param(ty, _)
             | Ty::Literal(ty)
             | Ty::FuntionVar { ty, .. } => Some(ty.clone()),
@@ -247,9 +267,9 @@ impl SignatureData {
     };
 
     pub const NUMERIC_BIN_OP: &'static [SignatureData] =
-        &[SignatureData::REAL_BIN_OP, SignatureData::INT_BIN_OP];
+        &[SignatureData::INT_BIN_OP, SignatureData::REAL_BIN_OP];
     pub const NUMERIC_COMPARISON: &'static [SignatureData] =
-        &[SignatureData::REAL_COMPARISON, SignatureData::INT_COMPARISON];
+        &[SignatureData::INT_COMPARISON, SignatureData::REAL_COMPARISON];
     pub const ANY_COMPARISON: &'static [SignatureData] = &[
         SignatureData::BOOL_COMPARISON,
         SignatureData::INT_COMPARISON,
@@ -266,8 +286,8 @@ pub const INT_EQ: Signature = Signature(1);
 pub const REAL_EQ: Signature = Signature(2);
 pub const STR_EQ: Signature = Signature(3);
 
-pub const REAL_OP: Signature = Signature(0);
-pub const INT_OP: Signature = Signature(1);
+pub const INT_OP: Signature = Signature(0);
+pub const REAL_OP: Signature = Signature(1);
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Signature(pub u32);

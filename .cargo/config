@@ -1,7 +1,40 @@
+[build]
+rustflags = [
+    "-Wclippy::unnested_or_patterns",
+    "-Wclippy::trivially_copy_pass_by_ref",
+    "-Wclippy::same_functions_in_if_condition",
+    "-Wclippy::ref_binding_to_reference",
+    "-Wclippy::trivially_copy_pass_by_ref",
+    "-Wclippy::match_same_arms",
+
+    # TODO fix stylistics lints
+    "-Aclippy::enum_variant_names",
+    "-Aclippy::upper_case_acronyms",
+    "-Aclippy::wrong_self_convention",
+
+    # "-Aclippy::must_use_candidate",
+    # "-Aclippy::explicit_deref_methods",
+    # "-Aclippy::explicit_deref_methods",
+    # "-Aclippy::enum-glob-use",
+    # "-Aclippy::semicolon_if_nothing_returned",
+    # "-Aclippy::too-many-lines",
+    # "-Aclippy::doc_markdown",
+    # "-Aclippy::if_not_else",
+    # "-Aclippy::wildcard_imports",
+    # "-Aclippy::implicit_clone",
+
+    "-Ctarget-cpu=native",
+    "-Clink-arg=-fuse-ld=lld",
+    "-Clink-arg=-Wl,--no-rosegment",
+]
+
 [alias]
 xtask = "run --package xtask --bin xtask --"
 lint = "clippy --all-targets"
 
+
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld"
 
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"

@@ -19,6 +19,7 @@ pub enum Op {
 
     // casts (also unary)
     RealToInt,
+    RealToBool,
     IntToReal,
     BoolToReal,
     BoolToInt,
@@ -132,6 +133,7 @@ impl_debug! {
         IntArithNeg         => "i32-";
 
         RealToInt           => "cast_f64_i32";
+        RealToBool           => "cast_f64_bool";
         IntToReal           => "cast_i32_f64";
         BoolToInt           => "cast_bool_i32";
         IntToBool           => "cast_i32_bool";
@@ -253,6 +255,7 @@ impl FromStr for Op {
             "i32-" => IntArithNeg,
 
             "cast_f64_i32" => RealToInt,
+            "cast_f64_bool" => RealToBool,
             "cast_i32_f64" => IntToReal,
             "cast_bool_i32" => BoolToInt,
             "cast_i32_bool" => IntToBool,

@@ -5,7 +5,6 @@ use arena::{Arena, ArenaMap};
 pub use ast::ConstraintKind;
 use basedb::lints::{Lint, LintSrc};
 use basedb::{AttrDiagnostic, LintAttrs};
-use lasso::Rodeo;
 use lower::LowerCtx;
 use syntax::{ast, AstNode, AstPtr};
 
@@ -43,7 +42,6 @@ pub struct BodySourceMap {
     /// Diagnostics accumulated during body lowering. These contain `AstPtr`s and so are stored in
     /// the source map (since they're just as volatile).
     pub diagnostics: Vec<AttrDiagnostic>,
-    pub str_lit_interner: Rodeo,
 }
 
 impl BodySourceMap {

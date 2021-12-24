@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
 
 use ::libc::c_char;
@@ -57,7 +57,7 @@ pub unsafe fn create_target(
     reloc_mode: RelocMode,
     code_model: CodeModel,
 ) -> Result<&'static mut TargetMachine, LLVMString> {
-    let triple_ = LLVMString::create_from_str(triple);
+    let triple_ = LLVMString::create_from_str(&CString::new(triple).unwrap());
     let triple_ = LLVMString::new(LLVMNormalizeTargetTriple(triple_.as_ptr()));
     let mut target = None;
     let mut err_string = MaybeUninit::uninit();
@@ -83,17 +83,19 @@ pub unsafe fn create_target(
     );
 
     target_machine.ok_or_else(|| {
-        LLVMString::create_from_str(&format!(
-            "error: code gen not available for target \"{}\"",
-            triple
-        ))
+        LLVMString::create_from_str(
+            CStr::from_bytes_with_nul(
+                format!("error: code gen not available for target \"{}\"\0", triple).as_bytes(),
+            )
+            .unwrap(),
+        )
     })
 }
 
 /// # Safety
 /// This function calls LLVM raw ffi which is implemented in C and may be unsound
 pub unsafe fn set_normalized_target(module: &Module, triple: &str) {
-    let triple = LLVMString::create_from_str(triple);
+    let triple = LLVMString::create_from_str(&CString::new(triple).unwrap());
     let triple = LLVMString::new(LLVMNormalizeTargetTriple(triple.as_ptr()));
     LLVMSetTarget(module, triple.as_ptr())
 }

@@ -1,8 +1,10 @@
 use std::iter;
+use std::mem::MaybeUninit;
 
 use libc::{c_char, size_t};
 
-use crate::{Context, Module, Type, Value};
+use crate::support::LLVMString;
+use crate::{Bool, Context, Module, Type, Value};
 
 // Core->Modules
 extern "C" {
@@ -104,9 +106,30 @@ extern "C" {
     // fn LLVMGetLastFunction<'a>(module: &Module) -> Option<&'a Value>;
     fn LLVMGetNextFunction(fun: &Value) -> Option<&Value>;
     // fn LLVMGetPreviousFunction<'a>(Fn: &'a Value) -> Option<&'a Value>;
+
+    /// Verify that a module is valid, taking the specified action if not.
+    ///
+    /// Optionally returns a human-readable description of any invalid constructs,
+    /// which must be disposed with `LLVMDisposeMessage`.
+    pub fn LLVMVerifyModule(
+        module: &Module,
+        Action: VerifierFailureAction,
+        OutMessage: Option<&mut MaybeUninit<LLVMString>>,
+    ) -> Bool;
 }
 
 pub fn function_iter(module: &Module) -> impl Iterator<Item = &Value> + '_ {
     let fun = unsafe { LLVMGetFirstFunction(module) };
     iter::successors(fun, |fun| unsafe { LLVMGetNextFunction(fun) })
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum VerifierFailureAction {
+    /// Print to stderr and abort the process.
+    AbortProcess = 0,
+    /// Print to stderr and return 1.
+    PrintMessage = 1,
+    /// Return 1 and print nothing.
+    ReturnStatus = 2,
 }

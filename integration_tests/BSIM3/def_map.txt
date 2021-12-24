@@ -32,6 +32,12 @@ Velocity = nature;
 Voltage = nature;
 bsim3_va = module;
 
+    $angle = hierarchical parameter system function;
+    $hflip = hierarchical parameter system function;
+    $mfactor = hierarchical parameter system function;
+    $vflip = hierarchical parameter system function;
+    $xposition = hierarchical parameter system function;
+    $yposition = hierarchical parameter system function;
     AbovVgst2Vtm = variable;
     Abulk = variable;
     Abulk0 = variable;

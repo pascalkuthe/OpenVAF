@@ -1,0 +1,122 @@
+//======================================================================================
+//======================================================================================
+// Filename: DIODE_CMC_varlist2.include
+//======================================================================================
+//
+//    
+//                        Silicon Integration Initiative (Si2)
+//                      Compact Model Coalition In-Code Statement
+//    
+//    Software is distributed as is, completely without warranty or service support.  NXP
+//    Semiconductors, Hiroshima University, and Silicon Integration Initiative, Inc. (Si2),
+//    along with their employees are not liable for the condition or performance of the software.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 own the copyright and grant users
+//    a perpetual, irrevocable, worldwide, non-exclusive, royalty-free license with respect to the
+//    software as set forth below.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 hereby disclaim all implied
+//    warranties.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 grant the users the right to modify,
+//    copy, and redistribute the software and documentation, both within the user's organization
+//    and externally, subject to the following restrictions
+//    
+//      1. The users agree not to charge for the NXP Semiconductors, Hiroshima University,
+//      and Si2 -developed code itself but may charge for additions, extensions, or support.
+//    
+//      2. In any product based on the software, the users agree to acknowledge NXP
+//      Semiconductors, Hiroshima University, and Si2 that developed the software.  This
+//      acknowledgment shall appear in the product documentation.
+//    
+//      3. Redistributions to others of source code and documentation must retain the copyright
+//      notice, disclaimer, and list of conditions.
+//    
+//      4. Redistributions to others in binary form must reproduce the copyright notice,
+//      disclaimer, and list of conditions in the documentation and/or other materials provided
+//      with the distribution.
+//    
+//                                                     CMC In-Code Statement Revision 1.1 6/9/2016
+//
+//
+//
+// The diode_cmc is based on Juncap2 200.3.3 (test) from NXP Semiconductors. 
+//
+// Portions commented as diode_cmc code: additional models since 2009.
+//
+// Portions commented as diode_cmc recovery and high-injection equations code: recovery model by Hiroshima University.
+//
+// All other parts are taken from Juncap2 200.3.3. Copyright 2008 NXP Semiconductors, All Rights Reserved.
+//======================================================================================
+//
+//
+    //================================================================
+    // Variables that are different for source and drain side junction
+    // and have a scope larger than a single macro-call
+    //================================================================
+
+    real AB_i, LS_i, LG_i;
+    real zflagbot, zflagsti, zflaggat;
+    real VMAX, exp_VMAX_over_phitd, vbimin, vch, vfmin, vbbtlim;
+    real ijunbot, qjunbot, ijunsti, qjunsti, ijungat, qjungat, ijun, qjun, jnoise;
+
+     //Diode_cmc code
+    real VAK; //voltage across the junction
+    real DQAbot, DQAsti, DQAgat; // intermediate variable for ddx() workaround
+    real exp_VMAX_over_phitd_bot, exp_VMAX_over_phitd_sti, exp_VMAX_over_phitd_gat;
+
+    real VRS; //voltage across the resistor
+    real conducts; // total series conductance and resistance
+    real jfnoise; //flicker noise
+    real jtnoise; //thermal noise
+    real Vtotal; //voltage across the whole diode
+    real isattotal; //Total saturation current
+    real ijnon, ijnonbot, ijnonsti, ijnongat; //non-ideal currents for noise calculation
+    //End of Diode_cmc code
+
+    // JUNCAP-express variables
+    real xhighf1, expxhf1, xhighf2, expxhf2, xhighr, expxhr;
+
+    // JUNCAP2-express intermediate parameters
+    real ISATFOR1, MFOR1, ISATFOR2, MFOR2, ISATREV, MREV, m0flag;
+
+
+    //Diode_cmc recovery and high-injection equations code
+
+    // for unit conversion
+    real NDI_i;
+    real NDIBOT_i;
+    real NDIGAT_i;
+    real NDISTI_i;
+    real MUEN_i, MUEP_i;
+    real NJL;
+
+    // temporary variables
+    real TMF1, TMF2;
+    real T1, T2;
+
+    // bias-dependent variables for the recovery model
+    real Nin, Pn0;
+    real Dn, Dp, Da, La, tau_HL;
+
+    real Vjunc_A, W_depA;
+    real Q_n0, Q_nexA_nqs, Q_nexK_nqs, Qrr;
+    //, Q_depA;
+    real q_pexA, q_pexK, Q_qs_A, Q_qs_K, Q_nqs_A, Q_nqs_K;
+    real Inqs0_A, Inqs0_K, q_pexA_nqs, q_pexK_nqs;
+    real W_qs_A, W_nqs_A, IWnqs0_A, W_depA_nqs;
+
+    real V_HA, V_HK;
+    real nj_K0, nj_K1, nj_K;
+    real exp_A, exp_K, p_nA, p_nK;
+    real exp_A2, exp_K2;
+    real nj1, nja10, nja11, vha1, pnn0;
+    real dFn_SU, dFn_SL, dnj1_dV, dVMAX_over_phitd_dV;
+
+    // fixed parameters
+    real PB;      //Built-in potential at P/N junction (minor) [V]
+    real JUNCDLT; //Smoothness of depletion width around zero bias (minor) [V]
+
+    //End of Diode_cmc recovery and high-injection equations code
+    /* The following line is Diode_cmc code */
+    real idmultbot, idmultsti, idmultgat;

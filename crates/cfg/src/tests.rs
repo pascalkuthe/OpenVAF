@@ -26,7 +26,7 @@ pub fn roundtrip() {
             end
         }"##]];
     let (cfg, literals) = ControlFlowGraph::parse(src.data).unwrap();
-    let actual = cfg.dump(&literals);
+    let actual = cfg.dump(Some(&literals));
     src.assert_eq(&actual)
 }
 

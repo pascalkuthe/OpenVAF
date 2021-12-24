@@ -1,0 +1,11 @@
+[package]
+name = "base_n"
+version = "1.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A simple library to convert unsigned integers into a string representation with some base"
+repository = "https://git.sr.ht/~dspom/OpenVAF/tree/master/libs/base_n"
+
+[lib]
+doctest = false

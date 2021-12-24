@@ -1,9 +1,8 @@
-use std::io;
 use std::sync::Arc;
 
 use diagnostics::PreprocessorDiagnostic;
 use sourcemap::{CtxSpan, SourceMap};
-use vfs::{FileId, VfsPath};
+use vfs::{FileId, FileReadError, VfsPath};
 
 use crate::processor::Processor;
 // use tracing::trace_span;
@@ -44,40 +43,25 @@ pub fn preprocess(sources: &dyn SourceProvider, file: FileId) -> Preprocess {
         }
         Err(FileReadError::Io(error)) => (
             vec![],
-            vec![PreprocessorDiagnostic::IoError {
+            vec![PreprocessorDiagnostic::FileNotFound {
                 file: sources.file_path(file),
                 error,
                 span: None,
             }],
             SourceMap::new(file, 0.into()),
         ),
-        Err(FileReadError::InvalidTextFormat) => (
+        Err(FileReadError::InvalidTextFormat(err)) => (
             vec![],
             vec![PreprocessorDiagnostic::InvalidTextFormat {
                 file: sources.file_path(file),
                 span: None,
-            }],
-            SourceMap::new(file, 0.into()),
-        ),
-
-        Err(FileReadError::NotFound) => (
-            vec![],
-            vec![PreprocessorDiagnostic::FileNotFound {
-                file: sources.file_path(file).to_string(),
-                span: None,
+                err,
             }],
             SourceMap::new(file, 0.into()),
         ),
     };
 
     Preprocess { ts: Arc::new(ts), diagnostics: Arc::new(diagnostics), sm: Arc::new(sm) }
-}
-
-#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
-pub enum FileReadError {
-    Io(io::ErrorKind),
-    InvalidTextFormat,
-    NotFound,
 }
 
 pub trait SourceProvider {

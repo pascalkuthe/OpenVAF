@@ -1,0 +1,120 @@
+//======================================================================================
+//======================================================================================
+// Filename: DIODE_CMC_varlist1.include
+//======================================================================================
+//
+//    
+//                        Silicon Integration Initiative (Si2)
+//                      Compact Model Coalition In-Code Statement
+//    
+//    Software is distributed as is, completely without warranty or service support.  NXP
+//    Semiconductors, Hiroshima University, and Silicon Integration Initiative, Inc. (Si2),
+//    along with their employees are not liable for the condition or performance of the software.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 own the copyright and grant users
+//    a perpetual, irrevocable, worldwide, non-exclusive, royalty-free license with respect to the
+//    software as set forth below.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 hereby disclaim all implied
+//    warranties.
+//    
+//    NXP Semiconductors, Hiroshima University, and Si2 grant the users the right to modify,
+//    copy, and redistribute the software and documentation, both within the user's organization
+//    and externally, subject to the following restrictions
+//    
+//      1. The users agree not to charge for the NXP Semiconductors, Hiroshima University,
+//      and Si2 -developed code itself but may charge for additions, extensions, or support.
+//    
+//      2. In any product based on the software, the users agree to acknowledge NXP
+//      Semiconductors, Hiroshima University, and Si2 that developed the software.  This
+//      acknowledgment shall appear in the product documentation.
+//    
+//      3. Redistributions to others of source code and documentation must retain the copyright
+//      notice, disclaimer, and list of conditions.
+//    
+//      4. Redistributions to others in binary form must reproduce the copyright notice,
+//      disclaimer, and list of conditions in the documentation and/or other materials provided
+//      with the distribution.
+//    
+//                                                     CMC In-Code Statement Revision 1.1 6/9/2016
+//
+//
+//
+// The diode_cmc is based on Juncap2 200.3.3 (test) from NXP Semiconductors. 
+//
+// Portions commented as diode_cmc code: additional models since 2009.
+//
+// All other parts are taken from Juncap2 200.3.3. Copyright 2008 NXP Semiconductors, All Rights Reserved.
+//======================================================================================
+//
+//
+
+    // declaration of clipped parameters
+    real TRJ_i, IMAX_i;
+    real CJORBOT_i, CJORSTI_i, CJORGAT_i, VBIRBOT_i, VBIRSTI_i, VBIRGAT_i;
+    real PBOT_i, PSTI_i, PGAT_i, PHIGBOT_i, PHIGSTI_i, PHIGGAT_i;
+    real IDSATRBOT_i, IDSATRSTI_i, IDSATRGAT_i, XJUNSTI_i, XJUNGAT_i;
+    real CSRHBOT_i, CSRHSTI_i, CSRHGAT_i, CTATBOT_i, CTATSTI_i, CTATGAT_i;
+    real MEFFTATBOT_i, MEFFTATSTI_i, MEFFTATGAT_i;
+    real CBBTBOT_i, CBBTSTI_i, CBBTGAT_i, FBBTRBOT_i, FBBTRSTI_i, FBBTRGAT_i;
+    real STFBBTBOT_i, STFBBTSTI_i, STFBBTGAT_i;
+    real VBRBOT_i, VBRSTI_i, VBRGAT_i, PBRBOT_i, PBRSTI_i, PBRGAT_i;
+    real FREV_i;
+
+    real SWJUNEXP_i, VJUNREF_i, FJUNQ_i;
+
+    //Diode_cmc code
+    real RSBOT_i, RSSTI_i, RSGAT_i, STRS_i, RSCOM_i;
+    real KF_i, AF_i;
+    real TT_i;
+    real STVBRBOT1_i, STVBRBOT2_i, STVBRSTI1_i, STVBRSTI2_i, STVBRGAT1_i, STVBRGAT2_i;
+    real NFABOT_i, NFAGAT_i, NFASTI_i;
+    real ABMIN_i, ABMAX_i, LGMAX_i, LGMIN_i, LSMAX_i, LSMIN_i, TEMPMIN_i, TEMPMAX_i;
+    real VFMAX_i, VRMAX_i;
+    real XTI_i;
+    real SCALE_i, SHRINK_i;
+    //End of Diode_cmc code
+
+    // declaration of variables calculated outside macro "juncapfunction", voltage-independent part
+    real tkr, tkd, auxt, KBOL_over_QELE, phitr, phitrinv, phitd, phitdinv;
+    real perfc, berfc, cerfc;
+    real deltaphigr, deltaphigd, pmax;
+
+    real phigrbot, phigrsti, phigrgat, phigdbot, phigdsti, phigdgat;
+    real ftdbot, ftdsti, ftdgat, idsatbot, idsatsti, idsatgat;
+    real ubibot, ubisti, ubigat, vbibot, vbisti, vbigat;
+    real vbibot2, vbisti2, vbigat2, pbot2, psti2, pgat2, vbibot2r, vbisti2r, vbigat2r;
+    real vbiinvbot, vbiinvsti, vbiinvgat;
+    real one_minus_PBOT, one_minus_PSTI, one_minus_PGAT;
+    real one_over_one_minus_PBOT, one_over_one_minus_PSTI, one_over_one_minus_PGAT;
+    real cjobot, cjosti, cjogat;
+    real qprefbot, qprefsti, qprefgat, qpref2bot, qpref2sti, qpref2gat;
+    real wdepnulrbot, wdepnulrsti, wdepnulrgat, wdepnulrinvbot, wdepnulrinvsti, wdepnulrinvgat;
+    real VBIRBOTinv, VBIRSTIinv, VBIRGATinv;
+    real deltaEbot, deltaEsti, deltaEgat, atatbot, atatsti, atatgat;
+    real btatpartbot, btatpartsti, btatpartgat;
+    real fbbtbot, fbbtsti, fbbtgat;
+    real alphaav;
+    real fstopbot, fstopsti, fstopgat, VBRinvbot, VBRinvsti, VBRinvgat;
+    real slopebot, slopesti, slopegat;
+
+    //Diode_cmc code
+    real vmaxbot, vmaxsti, vmaxgat;
+    real restotal, rescom, resbot, ressti, resgat;
+    real ftdbot2, ftdsti2, ftdgat2;
+    real shrinkL;
+    integer rnode;
+    //End of Diode_cmc code
+
+    // JUNCAP-Express variables
+    real I1, I2, I3, I4, I5;
+    real I1_cor, I2_cor, I3_cor, I4_cor, I5_cor;
+    real V1, V2, V3, V4, V5;
+    real alphaje, m0_rev, mcor_rev;
+    real tt0, tt1, tt2, tm0, tm1;
+    real tmpv, vjv;
+    real FRACNA, FRACNB, FRACI;
+    real zfrac;
+    real ijunfor1, ijunfor2, ijunrev;
+
+   `LocalGlobalVars

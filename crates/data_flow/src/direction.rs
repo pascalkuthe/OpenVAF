@@ -235,28 +235,6 @@ impl Direction for Backward {
         results.reconstruct_terminator_effect(cfg, state, cfg.blocks[block].terminator(), block);
         vis.visit_terminator_after_effect(state, cfg.blocks[block].terminator_mut(), block);
 
-        for phi in cfg.blocks[block].phis.keys().rev() {
-            vis.visit_phi_before_effect(
-                state,
-                unsafe { cfg.blocks[block].phis.get_unchecked_mut(phi) },
-                block,
-                phi,
-            );
-            results.reconstruct_phi_effect(
-                cfg,
-                state,
-                unsafe { cfg.blocks[block].phis.get_unchecked(phi) },
-                block,
-                phi,
-            );
-            vis.visit_phi_after_effect(
-                state,
-                unsafe { cfg.blocks[block].phis.get_unchecked_mut(phi) },
-                block,
-                phi,
-            );
-        }
-
         for instr in cfg.blocks[block].instructions.keys().rev() {
             vis.visit_instruction_before_effect(
                 state,
@@ -276,6 +254,28 @@ impl Direction for Backward {
                 unsafe { cfg.blocks[block].instructions.get_unchecked_mut(instr) },
                 block,
                 instr,
+            );
+        }
+
+        for phi in cfg.blocks[block].phis.keys().rev() {
+            vis.visit_phi_before_effect(
+                state,
+                unsafe { cfg.blocks[block].phis.get_unchecked_mut(phi) },
+                block,
+                phi,
+            );
+            results.reconstruct_phi_effect(
+                cfg,
+                state,
+                unsafe { cfg.blocks[block].phis.get_unchecked(phi) },
+                block,
+                phi,
+            );
+            vis.visit_phi_after_effect(
+                state,
+                unsafe { cfg.blocks[block].phis.get_unchecked_mut(phi) },
+                block,
+                phi,
             );
         }
 
@@ -553,7 +553,7 @@ impl Direction for Forward {
                     propagate(true_block, exit_state);
                 }
             }
-            Terminator::End => {}
+            Terminator::Ret => {}
         }
     }
 }
