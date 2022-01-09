@@ -317,7 +317,7 @@ where
     }
 
     pub fn inverse(&self) -> SparseBitMatrix<C, R> {
-        let mut res = SparseBitMatrix::new(self.num_columns, self.num_columns);
+        let mut res = SparseBitMatrix::new(self.num_columns, self.num_rows);
         for (row, data) in self.rows.iter().enumerate() {
             for column in data.iter() {
                 res.insert(column, R::from(row));
@@ -377,6 +377,10 @@ where
 
     pub fn rows(&self) -> impl Iterator<Item = R> {
         (0..self.rows.len()).map(R::from)
+    }
+
+    pub fn row_data(&self) -> impl Iterator<Item = &HybridBitSet<C>> {
+        self.rows.iter()
     }
 
     /// Iterates through all the columns set to true in a given row of

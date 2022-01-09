@@ -11,38 +11,46 @@ pub use crate::control_dependence::{control_dependence, ControlDependenceGraph};
 pub use crate::def_use::DefUseGraph;
 pub use crate::post_dominators::{post_dominators, PostDominators};
 pub use crate::reaching_definitions::{ReachingDefinitions, ReachingDefintionsAnalysis};
-pub use crate::use_def::UseDefVisitor;
+pub use crate::use_def::UseDefGraph;
 
 mod control_dependence;
-mod dead_code_elemination;
-mod def_use;
+pub mod def_use;
 mod post_dominators;
 mod reaching_definitions;
-mod use_def;
+pub mod use_def;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
-pub struct Assigment(u32);
-impl_idx_from!(Assigment(u32));
-impl_idx_math!(Assigment(u32));
-impl_debug!(match Assigment{param => "asssign{}",param.0;});
+pub struct Assignment(u32);
+impl_idx_from!(Assignment(u32));
+impl_idx_math!(Assignment(u32));
+impl_debug!(match Assignment{param => "asssign{}",param.0;});
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct AssigmentLoc {
-    bb: BasicBlock,
-    instr: InstIdx,
+    pub bb: BasicBlock,
+    pub instr: InstIdx,
+}
+
+impl_debug! {
+    match AssigmentLoc{
+        AssigmentLoc{bb, instr} => "{:?} -> {:?}", bb,instr;
+    }
 }
 
 impl From<AssigmentLoc> for Location {
     fn from(loc: AssigmentLoc) -> Self {
-        Location { block: loc.bb, kind: LocationKind::Instruction(loc.instr) }
+        Location { bb: loc.bb, kind: LocationKind::Instruction(loc.instr) }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct AssigmentInterner {
-    pub assigment_locations: TiSet<Assigment, AssigmentLoc>,
+    pub assigment_locations: TiSet<Assignment, AssigmentLoc>,
     pub local_defs: Box<TiSlice<Local, Location>>,
-    pub place_assigments: SparseBitMatrix<Place, Assigment>,
+    pub place_assigments: SparseBitMatrix<Place, Assignment>,
 }
 
 impl AssigmentInterner {
@@ -50,7 +58,7 @@ impl AssigmentInterner {
         // for this purpose LocationKind::Terminator == UNDEF
         let mut local_defs =
             TiVec::from(vec![
-                Location { block: 0u32.into(), kind: LocationKind::Terminator };
+                Location { bb: 0u32.into(), kind: LocationKind::Terminator };
                 cfg.next_local.into()
             ])
             .into_boxed_slice();
@@ -58,7 +66,7 @@ impl AssigmentInterner {
         let mut assigment_locations = TiSet::with_capacity(cfg.next_place.into());
         for (bb, data) in cfg.blocks.iter_enumerated() {
             for (phi, data) in data.phis.iter_enumerated() {
-                local_defs[data.dst] = Location { block: bb, kind: LocationKind::Phi(phi) };
+                local_defs[data.dst] = Location { bb, kind: LocationKind::Phi(phi) };
             }
 
             assigment_locations.raw.extend(data.instructions.iter_enumerated().filter_map(
@@ -66,7 +74,7 @@ impl AssigmentInterner {
                     InstrDst::Place(_) => Some(AssigmentLoc { bb, instr: id }),
                     InstrDst::Local(local) => {
                         local_defs[local] =
-                            Location { block: bb, kind: LocationKind::Instruction(id) };
+                            Location { bb, kind: LocationKind::Instruction(id) };
                         None
                     }
                     InstrDst::Ignore => None,
@@ -92,32 +100,37 @@ pub struct ProgramDependenGraph<'a> {
     pub reaching_definitions: ReachingDefinitions<'a>,
     pub control_dependence: ControlDependenceGraph,
     pub inv_control_dependence: OnceCell<ControlDependenceGraph>,
-    pub def_use_graph: Option<DefUseGraph>,
+    pub use_def_graph: UseDefGraph,
+    pub def_use_graph: OnceCell<DefUseGraph>,
 }
 
 impl<'a> ProgramDependenGraph<'a> {
-    pub fn build(
-        assignments: &'a AssigmentInterner,
-        cfg: &ControlFlowGraph,
-        ipdom: &PostDominators,
-    ) -> Self {
-        let reaching_definitions =
-            ReachingDefintionsAnalysis { assignments }.into_engine(cfg).iterate_to_fixpoint();
-        let control_dependence = control_dependence(ipdom, cfg);
+    pub fn build(assignments: &'a AssigmentInterner, cfg: &ControlFlowGraph) -> Self {
+        let reaching_definitions = ReachingDefintionsAnalysis { intern: assignments }
+            .into_engine(cfg)
+            .iterate_to_fixpoint();
+        let ipdom = post_dominators(cfg);
+        let control_dependence = control_dependence(&ipdom, cfg);
+        let use_def_graph = UseDefGraph::build(cfg, &reaching_definitions);
 
         ProgramDependenGraph {
             reaching_definitions,
             control_dependence,
             inv_control_dependence: OnceCell::new(),
-            def_use_graph: None,
+            use_def_graph,
+            def_use_graph: OnceCell::new(),
         }
     }
 
-    pub fn interner(&self) -> &AssigmentInterner {
-        self.reaching_definitions.analysis.0.assignments
+    pub fn interner(&self) -> &'a AssigmentInterner {
+        self.reaching_definitions.analysis.0.intern
     }
 
     pub fn inv_control_dependence(&self) -> &ControlDependenceGraph {
         self.inv_control_dependence.get_or_init(|| self.control_dependence.inverse())
+    }
+
+    pub fn def_use_graph(&self) -> &DefUseGraph {
+        self.def_use_graph.get_or_init(|| DefUseGraph::build(&self.use_def_graph))
     }
 }

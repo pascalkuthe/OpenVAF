@@ -49,10 +49,16 @@ impl HirInterner {
         let mut cfg = CfgBuilder::new(dst);
         let entry = cfg.enter_new_block();
         for (place, kind) in self.places.clone().iter_enumerated() {
-            if let PlaceKind::Var(var) = *kind {
-                let val = self.lower_expr_body(db, var.into(), 0, &mut cfg);
-                cfg.build_assign(place.into(), Op::Copy, smallvec![val], 1)
-            }
+            let val = match *kind {
+                PlaceKind::Var(var) => self.lower_expr_body(db, var.into(), 0, &mut cfg),
+                PlaceKind::BranchVoltage(_)
+                | PlaceKind::BranchCurrent(_)
+                | PlaceKind::ImplicitBranchVoltage { .. }
+                | PlaceKind::ImplicitBranchCurrent { .. }
+                | PlaceKind::Derivative { .. } => 0f64.into(),
+                PlaceKind::Param(_) | PlaceKind::FunctionReturn { .. } => continue,
+            };
+            cfg.build_assign(place.into(), Op::Copy, smallvec![val], 1)
         }
         cfg.prepend_entry(entry)
     }

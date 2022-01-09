@@ -1,6 +1,6 @@
-use std::cell::{Cell, UnsafeCell};
 use std::fmt::Debug;
 use std::iter;
+use std::mem::take;
 
 use cfg::{Callback, CfgParam};
 use indexmap::IndexMap;
@@ -38,14 +38,14 @@ pub struct NthOrderUnkownInfo {
 }
 
 pub struct Unkowns {
-    first_order_unkowns: TiMap<FirstOrderUnkown, Callback, FirstOrderUnkownInfo>,
-    higher_order_unkowns: UnsafeCell<TiSet<NthOrderUnkown, NthOrderUnkownInfo>>,
-    buf: Cell<Vec<FirstOrderUnkown>>,
+    pub first_order_unkowns: TiMap<FirstOrderUnkown, Callback, FirstOrderUnkownInfo>,
+    higher_order_unkowns: TiSet<NthOrderUnkown, NthOrderUnkownInfo>,
+    buf: Vec<FirstOrderUnkown>,
 }
 
 impl Unkowns {
     pub fn len(&self) -> usize {
-        self.first_order_unkowns.len() + unsafe { &*self.higher_order_unkowns.get() }.len()
+        self.first_order_unkowns.len() + self.higher_order_unkowns.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -56,9 +56,9 @@ impl Unkowns {
         let first_order_unkowns: IndexMap<_, _, ahash::RandomState> = unkowns.into_iter().collect();
         Self {
             first_order_unkowns: first_order_unkowns.into(),
-            higher_order_unkowns: UnsafeCell::new(TiSet::default()),
+            higher_order_unkowns: TiSet::default(),
             // don't expect more than 8. th order derivative in most code
-            buf: Cell::new(Vec::with_capacity(8)),
+            buf: Vec::with_capacity(8),
         }
     }
 
@@ -112,26 +112,25 @@ impl Unkowns {
     }
 
     fn nth_order_info(&self, unkown: NthOrderUnkown) -> NthOrderUnkownInfo {
-        // This is save since we never hand out a reference (only a copy)
-        let unkowns = unsafe { &*self.higher_order_unkowns.get() };
-        unkowns[unkown]
+        self.higher_order_unkowns[unkown]
     }
 
-    pub fn raise_order(&self, unkown: Unkown, next_unkown: FirstOrderUnkown) -> Unkown {
+    pub fn raise_order(&mut self, unkown: Unkown, next_unkown: FirstOrderUnkown) -> Unkown {
         // This is save since we never hand out a reference
 
-        let mut prev_orders = self.buf.take();
+        let mut prev_orders = take(&mut self.buf);
         prev_orders.extend(self.first_order_unkowns(unkown));
 
         let mut curr = next_unkown.into();
         for base in prev_orders.drain(..).rev() {
-            let unkown = unsafe { &mut *self.higher_order_unkowns.get() }
+            let unkown = &mut self
+                .higher_order_unkowns
                 .ensure(NthOrderUnkownInfo { previous_order: curr, base })
                 .0;
             curr = Unkown(unkown.0 + self.first_order_unkowns.len() as u32);
         }
 
-        self.buf.set(prev_orders);
+        self.buf = prev_orders;
 
         curr
     }

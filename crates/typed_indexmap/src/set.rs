@@ -98,6 +98,19 @@ impl<K: From<usize>, V> TiSet<K, V> {
 
 impl<K, V> TiSet<K, V>
 where
+    K: From<usize> + Debug,
+    V: Eq + Hash + Debug,
+{
+    pub fn unwrap_index(&self, val: &V) -> K {
+        match self.raw.get_index_of(val) {
+            Some(i) => i.into(),
+            None => unreachable!("Called unwrap_index on {:?}\nNot found in {:?}", val, self),
+        }
+    }
+}
+
+impl<K, V> TiSet<K, V>
+where
     K: From<usize>,
     V: Eq + Hash,
 {

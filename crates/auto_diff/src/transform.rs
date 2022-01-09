@@ -5,19 +5,19 @@ use std::ops::Range;
 use ahash::AHashMap;
 use arena::{Arena, IdxRange};
 use arrayvec::ArrayVec;
-use bitset::GrowableSparseBitMatrix;
 use cfg::{
-    smallvec, BasicBlock, BasicBlockData, CfgBuilder, Const, ControlFlowGraph, InstIdx, InstrDst,
-    Instruction, Local, Op, Operand, Operands, Phi, PhiIdx, Place,
+    smallvec, BasicBlock, CfgBuilder, Const, ControlFlowGraph, InstIdx, InstrDst, Instruction,
+    Local, Op, Operand, Operands, Phi, Place,
 };
-use data_flow::{Results, ResultsVisitor};
 use indexmap::{IndexMap, IndexSet};
+use program_dependence::def_use::Def;
+use program_dependence::{AssigmentInterner, AssigmentLoc};
 use stdx::iter::zip;
 
 #[cfg(test)]
 mod tests;
 
-use crate::{FirstOrderUnkown, LiveDerivativeAnalysis, Unkown};
+use crate::{FirstOrderUnkown, LiveDerivatives, Unkown, Unkowns};
 
 #[derive(Debug, PartialEq, Clone, Eq, Hash)]
 struct CacheInfo {
@@ -34,11 +34,11 @@ struct ResolvedDerivative {
 }
 
 impl ResolvedDerivative {
-    fn root_instr() -> ResolvedDerivative {
+    fn root_instr(pos: InstIdx) -> ResolvedDerivative {
         // The original instruction (so something the user typed) never has a cache and is always the first
         // instruction.
         ResolvedDerivative {
-            instrs: InstIdx::from(0u32)..InstIdx::from(1u32),
+            instrs: InstIdx::from(u32::from(pos))..InstIdx::from(u32::from(pos) + 1),
             cache_instrs: InstIdx::from(0u32)..InstIdx::from(0u32),
         }
     }
@@ -52,160 +52,155 @@ impl ResolvedDerivative {
 
 pub(crate) struct CfgTransform<'a> {
     cfg: CfgBuilder<'a>,
-    analysis: &'a LiveDerivativeAnalysis,
-    locals: AHashMap<(Local, Unkown), Local>,
+    live_derivatives: &'a LiveDerivatives,
+    interner: &'a AssigmentInterner,
+    unkowns: &'a Unkowns,
+    locals: AHashMap<(Local, FirstOrderUnkown), Local>,
     places: IndexSet<(Place, FirstOrderUnkown)>,
+    zero: Local,
 
     // Kept in a struct so we can reuse the capacity
     delayed_writes: IndexMap<Local, Place, ahash::RandomState>,
-    cache_data: Arena<CacheData>,
-    derivative_cache: AHashMap<Option<Unkown>, CacheInfo>,
     resolved_derivatives: AHashMap<Option<Unkown>, ResolvedDerivative>,
 }
 
 impl<'a> CfgTransform<'a> {
     pub(crate) fn new(
-        new_cfg: &'a mut ControlFlowGraph,
-        analysis: &'a LiveDerivativeAnalysis,
+        cfg: &'a mut ControlFlowGraph,
+        live_derivatives: &'a LiveDerivatives,
+        unkowns: &'a Unkowns,
+        pdg: &'a AssigmentInterner,
     ) -> Self {
+        let mut cfg = cfg::CfgBuilder { current: cfg.entry(), cfg };
+        let zero = cfg.build_val(Op::Copy, smallvec![0f64.into()], -1);
         CfgTransform {
-            cfg: cfg::CfgBuilder { cfg: new_cfg, current: 0u32.into() },
-            analysis,
+            cfg,
+            live_derivatives,
+            interner: pdg,
+            unkowns,
             locals: AHashMap::new(),
             places: IndexSet::new(),
+            zero,
             delayed_writes: IndexMap::default(),
-            cache_data: Arena::new(),
-            derivative_cache: AHashMap::new(),
             resolved_derivatives: AHashMap::new(),
         }
     }
-}
 
-impl ResultsVisitor for CfgTransform<'_> {
-    type FlowState = GrowableSparseBitMatrix<Place, Unkown>;
-
-    fn visit_block_end(
-        &mut self,
-        _state: &Self::FlowState,
-        _block_data: &BasicBlockData,
-        block: BasicBlock,
-    ) {
-        // The control flow remains unchanged so we always
-        // stay in the same block as the original
-        self.cfg.current = block;
-    }
-
-    fn visit_block_start(
-        &mut self,
-        _state: &Self::FlowState,
-        block_data: &BasicBlockData,
-        _block: BasicBlock,
-    ) {
-        self.cfg.current_block_mut().instructions.reverse();
-        if let Some(terminator) = block_data.terminator.clone() {
-            self.cfg.terminate(terminator)
+    pub fn run(&mut self) {
+        // reverse postorder walk so we can assume locals to be initalized
+        for bb in self.cfg.cfg.reverse_postorder() {
+            self.cfg.current = bb;
+            self.add_phis(bb);
+            self.add_instructions(bb)
         }
     }
 
-    fn visit_phi_before_effect(
-        &mut self,
-        _state: &Self::FlowState,
-        phi: &Phi,
-        _block: BasicBlock,
-        _id: PhiIdx,
-    ) {
-        if let Some(required_unkowns) =
-            self.analysis.live_local_derivatives.borrow().matrix.row(phi.dst)
-        {
-            for unkown in required_unkowns.iter() {
-                let dst = self.derivative_local(phi.dst, unkown);
-                let sources = phi
-                    .sources
-                    .iter()
-                    .map(|(bb, local)| (*bb, self.derivative_local(*local, unkown)))
-                    .collect();
+    fn add_phis(&mut self, bb: BasicBlock) {
+        let mut res = Vec::new();
+        let mut phis = take(&mut self.cfg.cfg[bb].phis);
+        for phi in phis.iter() {
+            if let Some(required_unkowns) = self.live_derivatives.local_derivatives.row(phi.dst) {
+                for unkown in required_unkowns.iter() {
+                    let prev_order = match self.unkowns.previous_order(unkown) {
+                        Some(unknown) => self.derivative_local::<true>(phi.dst, unknown),
+                        None => phi.dst,
+                    };
 
-                self.cfg.add_phi(dst, sources);
+                    let dst = self.cfg.cfg.new_local();
+                    let old =
+                        self.locals.insert((prev_order, self.unkowns.to_first_order(unkown)), dst);
+                    debug_assert_eq!(old, None);
+
+                    let sources = phi
+                        .sources
+                        .iter()
+                        .map(|(bb, local)| (*bb, self.derivative_local::<false>(*local, unkown)))
+                        .collect();
+
+                    res.push(Phi { dst, sources })
+                }
             }
         }
-
-        self.cfg.add_phi(phi.dst, phi.sources.clone());
+        phis.extend(res);
+        self.cfg.cfg[bb].phis = phis
     }
 
-    #[inline(always)]
-    fn visit_instruction_before_effect(
+    fn add_instructions(&mut self, bb: BasicBlock) {
+        let mut cache_data = Arena::new();
+        let mut derivative_cache = AHashMap::new();
+        let old = take(&mut self.cfg.cfg.blocks[bb].instructions);
+        self.cfg.cfg.blocks[bb].instructions.reserve(old.len());
+        for (idx, instr) in old.into_iter().enumerate() {
+            self.add_instr(instr, bb, idx.into(), &mut cache_data, &mut derivative_cache);
+        }
+    }
+
+    fn add_instr(
         &mut self,
-        state: &Self::FlowState,
-        instr_src: &Instruction,
-        _block: BasicBlock,
-        _id: InstIdx,
+        mut instr: Instruction,
+        bb: BasicBlock,
+        idx: InstIdx,
+        cache_data: &mut Arena<CacheData>,
+        derivative_cache: &mut AHashMap<Option<Unkown>, CacheInfo>,
     ) {
-        let borrow;
-
-        let dst = instr_src.dst;
-
-        let unkowns = match instr_src.dst {
+        let dst = instr.dst;
+        let (mut unkowns, def): (_, Def) = match instr.dst {
             InstrDst::Local(local) => {
-                borrow = self.analysis.live_local_derivatives.borrow();
-                borrow.matrix.row(local)
+                (self.live_derivatives.local_derivatives.row(local), local.into())
             }
 
-            InstrDst::Place(place) => state.matrix.row(place),
-            InstrDst::Ignore => None,
+            InstrDst::Place(_) => {
+                let assigment = self
+                    .interner
+                    .assigment_locations
+                    .unwrap_index(&AssigmentLoc { bb, instr: idx });
+                (self.live_derivatives.assign_derivatives.row(assigment), assigment.into())
+            }
+            InstrDst::Ignore => {
+                self.cfg.add_instr(instr);
+                return;
+            }
         };
 
+        if let Some((ddx_unkown, relevant_unkowns)) = self.live_derivatives.ddx.get(&def) {
+            instr.op = Op::Copy;
+            unkowns = if relevant_unkowns.is_empty() { None } else { Some(relevant_unkowns) };
+            instr.args[0] = self.operand_derivative(&instr.args[0], *ddx_unkown);
+        }
+
         let is_self_referential = if let InstrDst::Place(place) = dst {
-            unkowns.is_some() && instr_src.args.iter().any(|arg| arg == &Operand::Place(place))
+            unkowns.is_some() && instr.args.iter().any(|arg| arg == &Operand::Place(place))
         } else {
             false
         };
 
-        let mut instr = instr_src.clone();
-        if let Op::Call(call) = instr.op {
-            if let Some(ddx_unkown) = self.analysis.unkowns.callback_unkown(call) {
-                instr.op = Op::Copy;
-                instr.args[0] = self.operand_derivative(&instr.args[0], ddx_unkown);
-            }
-        }
+        // Derivatives get negative sources so that we can apply float some fast math (mostly float reassociation) to them (but not the
+        // rest of the program)
+        let src = -instr.src;
 
         if let Some(unkowns) = unkowns {
-            // Derivatives are generated in forward direction but globally speaking we generate
-            // backwards -> create all derivatives in their own block -> reverse them after and
-            // append to the rest
-            let instructions = take(&mut self.cfg.current_block_mut().instructions);
-
             // add the original instruction
+            self.resolved_derivatives.insert(
+                None,
+                ResolvedDerivative::root_instr(self.cfg.current_block().instructions.len().into()),
+            );
             self.cfg.add_instr(instr);
-            self.resolved_derivatives.insert(None, ResolvedDerivative::root_instr());
-
-            // make the borrow checker happy
-            let mut cache_data = take(&mut self.cache_data);
-            let mut derivative_cache = take(&mut self.derivative_cache);
-
-            // Derivatives get negative sources so that we can apply float some fast math (mostly float reassociation) to them (but not the
-            // rest of the program)
-            let src = -instr_src.src;
 
             for unkown in unkowns.iter() {
-                let prev_order = self.analysis.unkowns.previous_order(unkown);
+                let prev_order = self.unkowns.previous_order(unkown);
                 let origin = self.resolved_derivatives[&prev_order].clone();
                 let cache = self.ensure_cache(
                     prev_order,
                     &origin,
-                    &mut derivative_cache,
-                    &mut cache_data,
+                    derivative_cache,
+                    cache_data,
                     is_self_referential,
                     src,
                 );
 
                 let instr_start = self.cfg.current_block().instructions.len().into();
 
-                // let val_unkown = match ddx_unkown {
-                //     Some(next_unkown) => self.analysis.unkowns.raise_order(unkown, next_unkown),
-                //     None => unkown,
-                // };
-
-                let base = self.analysis.unkowns.to_first_order(unkown);
+                let base = self.unkowns.to_first_order(unkown);
 
                 for (instr, cache_data_i) in zip(origin.instructions(), cache.data.clone()) {
                     let Instruction { dst, op, ref mut args, .. } =
@@ -231,42 +226,27 @@ impl ResultsVisitor for CfgTransform<'_> {
 
             self.build_delayed_assign(src);
 
-            // reverse derivative, append to all instructions of the current block and restore full
-            // block to cfg
-            let mut instructions =
-                replace(&mut self.cfg.current_block_mut().instructions, instructions);
-            instructions.reverse();
-            self.cfg.current_block_mut().instructions.append(&mut instructions);
-
-            // make the borrow checker happy
-            self.cache_data = cache_data;
-            self.derivative_cache = derivative_cache;
-
             // clean up data so we don't bleed state/avoid unnecessary large allocations
-            self.cache_data.clear();
-            self.derivative_cache.clear();
+            cache_data.clear();
+            derivative_cache.clear();
             self.resolved_derivatives.clear();
         } else {
             // Just add the instructions no derivatives required ;)
             self.cfg.add_instr(instr)
         }
     }
-}
 
-impl CfgTransform<'_> {
-    fn derivative_local(&mut self, mut local: Local, unkown: Unkown) -> Local {
-        // TODO benchmark: is this worht it
-        if let Some(local) = self.locals.get(&(local, unkown)) {
-            return *local;
-        }
-        for unkown in self.analysis.unkowns.first_order_unkowns_rev(unkown) {
-            local = self.derivative_local_1(local, unkown);
+    fn derivative_local<const WRITE: bool>(&mut self, mut local: Local, unkown: Unkown) -> Local {
+        for unkown in self.unkowns.first_order_unkowns_rev(unkown) {
+            if let Some(derivative) = self.locals.get(&(local, unkown)) {
+                local = *derivative
+            } else if WRITE {
+                unreachable!()
+            } else {
+                return self.zero;
+            }
         }
         local
-    }
-
-    fn derivative_local_1(&mut self, local: Local, unkown: FirstOrderUnkown) -> Local {
-        *self.locals.entry((local, unkown.into())).or_insert_with(|| self.cfg.cfg.new_local())
     }
 
     fn derivative_place_1(&mut self, place: Place, unkown: FirstOrderUnkown) -> Place {
@@ -276,11 +256,14 @@ impl CfgTransform<'_> {
     fn operand_derivative(&mut self, operand: &Operand, unkown: FirstOrderUnkown) -> Operand {
         match *operand {
             Operand::Const(_) => 0f64.into(),
-            Operand::Local(local) => self.derivative_local_1(local, unkown).into(),
+            Operand::Local(local) => self
+                .locals
+                .get(&(local, unkown))
+                // We walk the graph in reverse postorder so all locals must exists. Those that do
+                // not have a derivative of zero (do not depend on any parameter that belong to an unkown)
+                .map_or(Operand::Const(Const::Real(0f64)), |local| (*local).into()),
             Operand::Place(place) => self.derivative_place_1(place, unkown).into(),
-            Operand::CfgParam(param) => {
-                self.analysis.unkowns.param_derivative(param, unkown).into()
-            }
+            Operand::CfgParam(param) => self.unkowns.param_derivative(param, unkown).into(),
         }
     }
 
@@ -288,7 +271,12 @@ impl CfgTransform<'_> {
         match dst {
             InstrDst::Local(local) => match self.delayed_writes.get(&local).copied() {
                 Some(place) => self.derivative_place_1(place, unkown).into(),
-                None => self.derivative_local_1(local, unkown).into(),
+                None => {
+                    let derivative = self.cfg.cfg.new_local();
+                    let old = self.locals.insert((local, unkown), derivative);
+                    debug_assert_eq!(old, None);
+                    derivative.into()
+                }
             },
             InstrDst::Place(place) => self.derivative_place_1(place, unkown).into(),
             InstrDst::Ignore => InstrDst::Ignore,
@@ -694,28 +682,18 @@ impl CfgTransform<'_> {
     }
 }
 
-pub type LocalDerivatives = AHashMap<(Local, Unkown), Local>;
+pub type LocalDerivatives = AHashMap<(Local, FirstOrderUnkown), Local>;
 pub type PlaceDerivatives = IndexSet<(Place, FirstOrderUnkown)>;
 
 pub fn gen_derivatives(
     cfg: &mut ControlFlowGraph,
-    live_derivatives: &Results<LiveDerivativeAnalysis>,
+    live_derivatives: &LiveDerivatives,
+    unkowns: &Unkowns,
+    intern: &AssigmentInterner,
 ) -> (LocalDerivatives, PlaceDerivatives) {
-    let mut new_cfg = ControlFlowGraph {
-        next_local: cfg.next_local,
-        next_place: cfg.next_place,
-        // This transformation does not create any new branches so the amount of blocks and their
-        // predecessors will stay the same
-        blocks: vec![BasicBlockData::default(); cfg.blocks.len()].into(),
-        predecessor_cache: take(&mut cfg.predecessor_cache),
-        is_cyclic: take(&mut cfg.is_cyclic),
-        entry: cfg.entry(),
-    };
-
-    let mut transform = CfgTransform::new(&mut new_cfg, &live_derivatives.analysis);
-    live_derivatives.visit_with(cfg, &mut transform);
+    let mut transform = CfgTransform::new(cfg, live_derivatives, unkowns, intern);
+    transform.run();
     let res = (transform.locals, transform.places);
-    *cfg = new_cfg;
     cfg.next_place += res.1.len();
     res
 }

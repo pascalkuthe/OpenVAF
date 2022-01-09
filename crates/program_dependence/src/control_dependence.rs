@@ -13,7 +13,10 @@ pub type ControlDependenceGraph = SparseBitMatrix<BasicBlock, BasicBlock>;
 ///# Note
 /// This analysis pass allows to manually pass the `PostDominators` so that the post dominators can be reused
 /// If you dont want to reuse `ipdom` you should can simply pass `BuildPostDominators`
-pub fn control_dependence(ipdom: &PostDominators, cfg: &ControlFlowGraph) -> ControlDependenceGraph {
+pub fn control_dependence(
+    ipdom: &PostDominators,
+    cfg: &ControlFlowGraph,
+) -> ControlDependenceGraph {
     let mut cdg = SparseBitMatrix::new(cfg.blocks.len(), cfg.blocks.len());
 
     for (id, bb) in cfg.blocks.iter_enumerated() {

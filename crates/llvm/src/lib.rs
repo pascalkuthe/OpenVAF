@@ -38,6 +38,7 @@ pub use builder::*;
 pub use context::*;
 pub use initialization::*;
 pub use module::*;
+pub use pass_manager::*;
 pub use targets::*;
 pub use types::*;
 pub use values::*;
@@ -88,7 +89,7 @@ pub enum TargetMachine {}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum CodeGenOptLevel {
+pub enum OptLevel {
     None = 0,
     Less = 1,
     Default = 2,

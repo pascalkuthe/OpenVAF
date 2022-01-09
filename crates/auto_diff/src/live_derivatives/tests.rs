@@ -1,22 +1,34 @@
 use cfg::ControlFlowGraph;
 use expect_test::{expect, Expect};
+use program_dependence::{use_def, AssigmentInterner, ProgramDependenGraph};
+use stdx::format_to;
+use stdx::iter::zip;
 
-use crate::live_derivatives;
+use crate::{LiveDerivatives, Unkowns};
 
 fn check(src: &str, data_flow_result: Expect) {
     let (cfg, _) = ControlFlowGraph::parse(src).unwrap();
 
-    let res = live_derivatives(
-        &cfg,
-        [
-            (0u32.into(), vec![(0u32.into(), 1f64.to_bits())].into_boxed_slice()),
-            (1u32.into(), vec![(1u32.into(), 1f64.to_bits())].into_boxed_slice()),
-        ],
-        None,
-    );
+    let mut unkowns = Unkowns::new([
+        (0u32.into(), vec![(0u32.into(), 1f64.to_bits())].into_boxed_slice()),
+        (1u32.into(), vec![(1u32.into(), 1f64.to_bits())].into_boxed_slice()),
+    ]);
 
-    let actual =
-        format!("{:#?}\n{:#?}", res.analysis.live_local_derivatives.borrow(), res.entry_sets);
+    let assignments = AssigmentInterner::new(&cfg);
+    let pdg = ProgramDependenGraph::build(&assignments, &cfg);
+    let mut dfs = use_def::DepthFirstSearch::new(&pdg);
+    dfs.walk_place::<true>(0u32.into(), &pdg, &cfg);
+    let res = LiveDerivatives::build(&dfs, &cfg, &pdg, 4, &mut unkowns, []);
+
+    let mut actual = format!("{:#?}\n{{\n", res.local_derivatives);
+    for (loc, unkowns) in
+        zip(assignments.assigment_locations.raw.iter(), res.assign_derivatives.row_data())
+    {
+        for unkown in unkowns.iter() {
+            format_to!(actual, "\t{:?}: {:?},\n", loc, unkown);
+        }
+    }
+    actual.push('}');
     data_flow_result.assert_eq(&actual);
 }
 
@@ -25,18 +37,18 @@ fn smoke_test() {
     let src = r##"
         {
         next_local _11;
-        next_place p2;
+        next_place p3;
         bb0:
-            let p0 := copy [f64 0.0];
+            let p2 := copy [f64 0.0];
             let _0 := f64.- [#0];
             let _1 := cb2 [#1, f64 3.141];
-            let _2 := f64./ [#2, f64 3.141];
+            let _2 := f64./ [#0, f64 3.141];
             let _3 := sin [#3];
-            let _4 := f64.!= [#4, f64 1.0];
+            let _4 := f64.!= [#2, f64 1.0];
             if _4 { bb1 } else { bb2 }
         bb1:
             let _5 := f64.* [_1,#5];
-            let p0 := copy [_2];
+            let p2 := copy [_2];
             goto bb3;
         bb2:
             let _6 := copy [_3];
@@ -44,8 +56,8 @@ fn smoke_test() {
         bb3:
             phi _7 := [(bb1,_5),(bb2,_6)];
             let _8 := cb0 [_7];
-            let _9 := f64.+ [p0,_8];
-            let _10 := cb1 [_9];
+            let _9 := f64.+ [p2,_8];
+            let p0 := cb1 [_9];
             end
         }"##;
 
@@ -55,32 +67,20 @@ fn smoke_test() {
             _1: unkown1,
             _1: unkown2,
             _2: unkown1,
-            _3: unkown0,
-            _3: unkown1,
-            _3: unkown2,
             _5: unkown0,
             _5: unkown1,
             _5: unkown2,
-            _6: unkown0,
-            _6: unkown1,
-            _6: unkown2,
             _7: unkown0,
             _7: unkown1,
             _7: unkown2,
+            _8: unkown0,
             _8: unkown1,
+            _8: unkown2,
             _9: unkown1,
         }
         {
-            bb0: SparseBitMatrix(2x2) {
-                p0: unkown1,
-            },
-            bb1: SparseBitMatrix(2x2) {
-                p0: unkown1,
-            },
-            bb2: SparseBitMatrix(2x2) {
-                p0: unkown1,
-            },
-            bb3: SparseBitMatrix(2x2) {},
+        	bb1 -> Idx::<Instruction>(1): unkown1,
+        	bb3 -> Idx::<Instruction>(2): unkown1,
         }"#]];
 
     check(src, data_flow_result)
@@ -91,24 +91,24 @@ fn loop_with_backwards_dependency() {
     let src = r##"
         {
         next_local _4;
-        next_place p1;
+        next_place p3;
         bb0:
-            let p0 := copy [i32 10];
+            let p1 := copy [#1];
             let _1 := f64.+ [f64 3141, #0];
             goto bb1;
         bb1:
-            let p0 := i32.- [p0, i32 10];
+            let p1 := i32.- [p1, i32 10];
             goto bb2;
         bb2:
-            let _0 := i32.< [p0,i32 10];
+            let _0 := i32.< [p1,i32 10];
             if _0 { bb3 } else{ bb4 } (loop)
         bb3: 
-            let _2 := cast_i32_f64 [p0];
-            let p0 := i32.+ [p0,i32 20];
-            let p1 := f64.* [_2,_1];
+            let _2 := cast_i32_f64 [p1];
+            let p1 := i32.+ [p1,i32 20];
+            let p2 := f64.* [_2,_1];
             goto bb2;
         bb4:
-            let _3 := cb0 [p1]; 
+            let p0 := cb0 [p2]; 
             end
         }"##;
 
@@ -118,23 +118,11 @@ fn loop_with_backwards_dependency() {
             _2: unkown0,
         }
         {
-            bb0: SparseBitMatrix(1x2) {
-                p0: unkown0,
-                p1: unkown0,
-            },
-            bb1: SparseBitMatrix(1x2) {
-                p0: unkown0,
-                p1: unkown0,
-            },
-            bb2: SparseBitMatrix(1x2) {
-                p0: unkown0,
-                p1: unkown0,
-            },
-            bb3: SparseBitMatrix(1x2) {
-                p0: unkown0,
-                p1: unkown0,
-            },
-            bb4: SparseBitMatrix(1x2) {},
+        	bb0 -> Idx::<Instruction>(0): unkown0,
+        	bb1 -> Idx::<Instruction>(0): unkown0,
+        	bb3 -> Idx::<Instruction>(1): unkown0,
+        	bb3 -> Idx::<Instruction>(2): unkown0,
+        	bb4 -> Idx::<Instruction>(0): unkown0,
         }"#]];
 
     check(src, data_flow_result)
@@ -158,10 +146,9 @@ fn self_assign() {
     let data_flow_result = expect![[r#"
         SparseBitMatrix(4x2) {}
         {
-            bb0: SparseBitMatrix(1x2) {
-                p0: unkown1,
-            },
-            bb1: SparseBitMatrix(1x2) {},
+        	bb0 -> Idx::<Instruction>(0): unkown1,
+        	bb1 -> Idx::<Instruction>(0): unkown1,
+        	bb1 -> Idx::<Instruction>(1): unkown1,
         }"#]];
 
     check(src, data_flow_result)

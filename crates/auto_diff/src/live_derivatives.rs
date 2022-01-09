@@ -1,165 +1,128 @@
-//! This module implements a data flow analysis similar to live variable analysis.
-//! It tracks which places and locals require a derivative at a
-//! certain point in the program. This is required to properly generate derivatives for loops.
-//!
-//! The algorithm is nearly identical to live variable analysis with a two key differences:
-//!
-//! * Instead of just tracking one state (live/not live) for each place/local a set of states is
-//! tracked instead (live/not live for each unkown) -> `SparseBitMatrix` instead of `BitSet` as Domain
-//!
-//! * Higher Order Derivatives may introduce additional unkowns which can not be known ahead of
-//! time so the domain may grow -> `GrowableSparseBitMatrix`
+use ahash::AHashMap;
+use bitset::{BitSet, HybridBitSet, SparseBitMatrix};
+use cfg::{Callback, ControlFlowGraph, Local, Op, Operand, Place};
+use program_dependence::def_use::Def;
+use program_dependence::{use_def, Assignment, ProgramDependenGraph};
 
-use std::cell::{Cell, RefCell};
-
-use bitset::matrix::GrowableSparseBitMatrix;
-use bitset::{BitSet, HybridBitSet};
-use cfg::{Callback, ControlFlowGraph, InstrDst, Local, Op, Operand, Place};
-use data_flow::{direction, Analysis, AnalysisDomain};
-
-use crate::unkowns::{FirstOrderUnkownInfo, Unkown, Unkowns};
+use crate::{FirstOrderUnkown, Unkown, Unkowns};
 
 #[cfg(test)]
 mod tests;
 
-pub struct LiveDerivativeAnalysis {
-    pub unkowns: Unkowns,
-    pub bottom: GrowableSparseBitMatrix<Place, Unkown>,
-    pub live_local_derivatives: RefCell<GrowableSparseBitMatrix<Local, Unkown>>,
-    tmp_dense: Cell<BitSet<Unkown>>,
+#[derive(Debug, Clone)]
+pub struct LiveDerivatives {
+    pub local_derivatives: SparseBitMatrix<Local, Unkown>,
+    pub assign_derivatives: SparseBitMatrix<Assignment, Unkown>,
+    pub ddx: AHashMap<Def, (FirstOrderUnkown, HybridBitSet<Unkown>)>,
 }
 
-impl LiveDerivativeAnalysis {
-    pub fn new(
+impl LiveDerivatives {
+    pub fn build(
+        dfs: &use_def::DepthFirstSearch,
         cfg: &ControlFlowGraph,
-        unkowns: impl IntoIterator<Item = (Callback, FirstOrderUnkownInfo)>,
-        bottom: Option<GrowableSparseBitMatrix<Place, Unkown>>,
-    ) -> LiveDerivativeAnalysis {
-        let unkowns = Unkowns::new(unkowns);
-        let bottom = bottom
-            .unwrap_or_else(|| GrowableSparseBitMatrix::new(cfg.next_place.into(), unkowns.len()));
-        LiveDerivativeAnalysis {
-            tmp_dense: Cell::new(BitSet::new_empty(0)),
-            live_local_derivatives: RefCell::new(GrowableSparseBitMatrix::new(
-                cfg.next_local.into(),
-                unkowns.len(),
-            )),
-            unkowns,
-            bottom,
-        }
-    }
-}
+        pdg: &ProgramDependenGraph,
+        param_cnt: usize,
+        unkowns: &mut Unkowns,
+        extra_derivatives: impl IntoIterator<Item = (Place, Callback)>,
+    ) -> LiveDerivatives {
+        let mut unkown_params = BitSet::new_empty(param_cnt);
 
-impl AnalysisDomain for LiveDerivativeAnalysis {
-    type Domain = GrowableSparseBitMatrix<Place, Unkown>;
-    type Direction = direction::Backward;
-
-    /// A descriptive name for this analysis. Used only for debugging.
-    const NAME: &'static str = "Live Derivatives";
-
-    /// The initial value of the dataflow state upon entry to each basic block.
-    fn bottom_value(&self, _cfg: &ControlFlowGraph) -> GrowableSparseBitMatrix<Place, Unkown> {
-        self.bottom.clone()
-    }
-
-    fn initialize_start_block(&self, _cfg: &ControlFlowGraph, _state: &mut Self::Domain) {}
-}
-
-impl Analysis for LiveDerivativeAnalysis {
-    fn apply_phi_effect(
-        &self,
-        _cfg: &ControlFlowGraph,
-        _state: &mut Self::Domain,
-        phi: &cfg::Phi,
-        _bb: cfg::BasicBlock,
-        _idx: cfg::PhiIdx,
-    ) {
-        if self.live_local_derivatives.borrow().matrix.row(phi.dst).is_some() {
-            // Propagate require dependencies from dst to all sources
-            for (_, local) in &phi.sources {
-                self.live_local_derivatives.borrow_mut().union_rows(phi.dst, *local);
-            }
-        }
-    }
-
-    fn apply_instr_effect(
-        &self,
-        _cfg: &ControlFlowGraph,
-        state: &mut Self::Domain,
-        instr: &cfg::Instruction,
-        _idx: cfg::InstIdx,
-        _bb: cfg::BasicBlock,
-    ) {
-        let (propgated, propgated_domain_size) = match instr.dst {
-            InstrDst::Local(local) => (
-                match self.live_local_derivatives.borrow().matrix.row(local) {
-                    Some(HybridBitSet::Sparse(sparse)) => {
-                        Some(HybridBitSet::Sparse(sparse.clone()))
-                    }
-                    Some(HybridBitSet::Dense(dense)) => {
-                        let mut dst = self.tmp_dense.take();
-                        dst.clone_from(dense);
-                        Some(HybridBitSet::Dense(dst))
-                    }
-                    None => None,
-                },
-                self.live_local_derivatives.borrow().matrix.num_columns(),
-            ),
-            InstrDst::Place(place) => (state.matrix.take_row(place), state.matrix.num_columns()),
-            InstrDst::Ignore => (None, 0),
-        };
-
-        if let Op::Call(callback) = instr.op {
-            if let Some(unkown) = self.unkowns.callback_unkown(callback) {
-                // A derivative operator (ddx)!
-                match instr.args[0] {
-                    Operand::Local(local) => {
-                        let mut live_local_derivatives = self.live_local_derivatives.borrow_mut();
-                        live_local_derivatives.insert(local, unkown.into());
-                        if let Some(propgated) = &propgated {
-                            for previous_order in propgated.iter() {
-                                let unkown = self.unkowns.raise_order(previous_order, unkown);
-                                live_local_derivatives.insert(local, unkown);
-                            }
-                        }
-                    }
-                    Operand::Place(place) => {
-                        state.insert(place, unkown.into());
-                        if let Some(propgated) = &propgated {
-                            for previous_order in propgated.iter() {
-                                let unkown = self.unkowns.raise_order(previous_order, unkown);
-                                state.insert(place, unkown);
-                            }
-                        }
-                    }
-                    _ => (), // technically not well optimized but doesn't matter because who write ddx(<const>)
-                };
-
-                // Do not return here
-                // we still need to lower order derivatives to calculate the higher order derivatives
+        for (_, params) in unkowns.first_order_unkowns.raw.iter() {
+            for (param, _) in params.iter() {
+                unkown_params.insert(*param);
             }
         }
 
-        if let Some(propgated) = propgated {
-            for arg in &*instr.args {
-                match *arg {
-                    Operand::Local(local) => {
-                        self.live_local_derivatives.borrow_mut().union_with(
-                            &propgated,
-                            propgated_domain_size,
-                            local,
-                        );
-                    }
-                    Operand::Place(place) => {
-                        state.union_with(&propgated, propgated_domain_size, place);
-                    }
-                    _ => (),
+        let mut locals = BitSet::new_empty(cfg.next_local.into());
+        let mut assigns = BitSet::new_empty(pdg.interner().assigment_locations.len());
+        let mut ddx = AHashMap::new();
+
+        eprintln!("{:?}", unkowns.first_order_unkowns);
+
+        dfs.visited_instructions(pdg, cfg, |def, instr| {
+            if let Op::Call(call) = instr.op {
+                eprintln!("call {:?}", call);
+                if let Some(unkown) = unkowns.first_order_unkowns.index(&call) {
+                    ddx.insert(def, unkown);
                 }
             }
 
-            if let HybridBitSet::Dense(dense) = propgated {
-                self.tmp_dense.set(dense)
+            instr.visit_operands(|op| {
+                if matches!(op, Operand::CfgParam(param) if unkown_params.contains(*param)) {
+                    match def {
+                        Def::Local(local) => {
+                            locals.insert(local);
+                        }
+                        Def::Assignment(assign) => {
+                            assigns.insert(assign);
+                        }
+                    }
+                }
+            })
+        });
+
+        let entrys = locals.iter().map(Def::from).chain(assigns.iter().map(Def::from));
+
+        let mut res = LiveDerivatives {
+            local_derivatives: SparseBitMatrix::new(cfg.next_local.into(), unkowns.len()),
+            assign_derivatives: SparseBitMatrix::new(
+                pdg.interner().assigment_locations.len(),
+                unkowns.len(),
+            ),
+            ddx: AHashMap::new(),
+        };
+
+        let mut cursor = pdg.reaching_definitions.as_results_cursor(cfg);
+        cursor.seek_to_block_end(cfg.blocks.last_key().unwrap(), cfg);
+
+        for (place, cb) in extra_derivatives {
+            if let Some(assigns) = pdg.interner().place_assigments.row(place) {
+                let unkown = unkowns.first_order_unkowns.index(&cb).unwrap();
+                for assign in assigns.iter() {
+                    if cursor.get().contains(assign) {
+                        res.assign_derivatives.insert(assign, unkown.into());
+                    }
+                }
             }
         }
+
+        let dug = pdg.def_use_graph();
+        for def in dug.dependent_defs_rec_postorder(entrys) {
+            let mut dst = HybridBitSet::new_empty();
+            for def in dug.dependent_defs(def) {
+                match def {
+                    Def::Local(local) => {
+                        if let Some(row) = res.local_derivatives.row(local) {
+                            dst.union(row, unkowns.len());
+                        }
+                    }
+                    Def::Assignment(assign) => {
+                        if let Some(row) = res.assign_derivatives.row(assign) {
+                            dst.union(row, unkowns.len());
+                        }
+                    }
+                }
+            }
+
+            if let Some(ddx) = ddx.get(&def).copied() {
+                let old = dst.clone();
+                for unkown in old.iter() {
+                    let higher_order = unkowns.raise_order(unkown, ddx);
+                    dst.insert_growable(higher_order, unkowns.len());
+                }
+
+                dst.insert(ddx.into(), unkowns.len());
+                res.ddx.insert(def, (ddx, old));
+            }
+
+            if !dst.is_empty() {
+                match def {
+                    Def::Local(local) => *res.local_derivatives.ensure_row(local) = dst,
+                    Def::Assignment(assign) => *res.assign_derivatives.ensure_row(assign) = dst,
+                }
+            }
+        }
+
+        res
     }
 }

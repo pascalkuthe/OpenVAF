@@ -113,7 +113,7 @@ where
     /// successors (ignoring edge-specific effects).
     pub fn seek_to_block_end(&mut self, block: BasicBlock, cfg: &ControlFlowGraph) {
         if A::Direction::IS_FORWARD {
-            self.seek_after_effect(Location { block, kind: LocationKind::Terminator }, cfg)
+            self.seek_after_effect(Location { bb: block, kind: LocationKind::Terminator }, cfg)
         } else {
             self.seek_to_block_entry(block, cfg)
         }
@@ -127,13 +127,13 @@ where
     /// Advances the cursor to hold the dataflow state at `target` after its effect is
     /// applied.
     pub fn seek_after_effect(&mut self, target: Location, cfg: &ControlFlowGraph) {
-        self.seek(Effect::After.at_location(target, cfg), target.block, cfg)
+        self.seek(Effect::After.at_location(target, cfg), target.bb, cfg)
     }
 
     /// Advances the cursor to hold the dataflow state at `target` after its effect is
     /// applied.
     pub fn seek_before_effect(&mut self, target: Location, cfg: &ControlFlowGraph) {
-        self.seek(Effect::Before.at_location(target, cfg), target.block, cfg)
+        self.seek(Effect::Before.at_location(target, cfg), target.bb, cfg)
     }
 
     fn seek(&mut self, target: EffectIndex, block: BasicBlock, cfg: &ControlFlowGraph) {

@@ -5,7 +5,7 @@ use ::libc::c_char;
 
 use crate::support::LLVMString;
 use crate::{
-    Bool, CodeGenFileType, CodeGenOptLevel, CodeModel, Module, RelocMode, Target, TargetMachine,
+    Bool, CodeGenFileType, OptLevel, CodeModel, Module, RelocMode, Target, TargetMachine,
 };
 
 extern "C" {
@@ -19,7 +19,7 @@ extern "C" {
         Triple: *const c_char,
         CPU: *const c_char,
         Features: *const c_char,
-        Level: CodeGenOptLevel,
+        Level: OptLevel,
         Reloc: RelocMode,
         CodeModel: CodeModel,
     ) -> Option<&'static mut TargetMachine>;
@@ -53,7 +53,7 @@ pub unsafe fn create_target(
     triple: &str,
     cpu: &str,
     features: &str,
-    level: CodeGenOptLevel,
+    level: OptLevel,
     reloc_mode: RelocMode,
     code_model: CodeModel,
 ) -> Result<&'static mut TargetMachine, LLVMString> {

@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::ops::RangeInclusive;
+use std::usize;
 
 use cfg::{BasicBlock, BasicBlockData, ControlFlowGraph, InstIdx, PhiIdx, Terminator};
 
@@ -120,10 +121,10 @@ impl Direction for Backward {
             let stmnt_start = InstIdx::from(start.saturating_sub(block_data.phis.len()));
             let stmnt_end = InstIdx::from(end - block_data.phis.len());
             // Handle all statements
-            for (idx, stmnt) in
-                block_data.instructions[stmnt_start..stmnt_end].iter_enumerated().rev()
+            for (i, stmnt) in
+                block_data.instructions[stmnt_start..stmnt_end].iter().enumerate().rev()
             {
-                analysis.apply_instr_effect(cfg, state, stmnt, idx, block);
+                analysis.apply_instr_effect(cfg, state, stmnt, (start + i).into(), block);
             }
             end = block_data.phis.len()
         }
@@ -132,8 +133,14 @@ impl Direction for Backward {
             let start = PhiIdx::from(start);
             let end = PhiIdx::from(end);
             // Handle all statements
-            for (phi, phi_data) in block_data.phis[start..end].iter_enumerated().rev() {
-                analysis.apply_phi_effect(cfg, state, phi_data, block, phi);
+            for (i, phi_data) in block_data.phis[start..end].iter().enumerate().rev() {
+                analysis.apply_phi_effect(
+                    cfg,
+                    state,
+                    phi_data,
+                    block,
+                    (usize::from(start) + i).into(),
+                );
             }
         }
     }
@@ -343,8 +350,14 @@ impl Direction for Forward {
             let phi_start = PhiIdx::from(start);
             let phi_end = min(PhiIdx::from(end), block_data.phis.next_key());
             // Handle all phis
-            for (phi, phi_data) in block_data.phis[phi_start..phi_end].iter_enumerated() {
-                analysis.apply_phi_effect(cfg, state, phi_data, block, phi);
+            for (i, phi_data) in block_data.phis[phi_start..phi_end].iter().enumerate() {
+                analysis.apply_phi_effect(
+                    cfg,
+                    state,
+                    phi_data,
+                    block,
+                    (usize::from(phi_start) + i).into(),
+                );
             }
 
             start = block_data.phis.len()
@@ -354,8 +367,14 @@ impl Direction for Forward {
             let start = InstIdx::from(start - block_data.phis.len());
             let end = InstIdx::from(end - block_data.phis.len());
             // Handle all statements
-            for (idx, stmnt) in block_data.instructions[start..end].iter_enumerated() {
-                analysis.apply_instr_effect(cfg, state, stmnt, idx, block);
+            for (i, stmnt) in block_data.instructions[start..end].iter().enumerate() {
+                analysis.apply_instr_effect(
+                    cfg,
+                    state,
+                    stmnt,
+                    (usize::from(start) + i).into(),
+                    block,
+                );
             }
         }
 

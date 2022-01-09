@@ -7,15 +7,14 @@ use auto_diff::auto_diff;
 use basedb::FileId;
 use bitset::BitSet;
 use cfg::{Callback, CfgParam, ControlFlowGraph, Operand, Place};
-use cfg_opt::{
-    copy_propagation, dead_code_elimination, remove_dead_data, simplify_branches, simplify_cfg,
-};
+use cfg_opt::{copy_propagation, remove_dead_data, simplify_branches, simplify_cfg};
 use codegen_llvm::{Builder, CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use const_eval::conditional_const_propagation;
 use hir_def::nameres::ScopeOrigin;
 use hir_def::{NodeId, ParamId, ParamSysFun, Type};
 use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamKind, PlaceKind};
 use hir_ty::db::HirTyDB;
+use program_dependence::{use_def, AssigmentInterner, ProgramDependenGraph};
 use stdx::iter::zip;
 use syntax::name::Name;
 use target::spec::Target;
@@ -131,18 +130,19 @@ pub fn compile_to_cfg(
                 | PlaceKind::BranchVoltage(_)
                 | PlaceKind::ImplicitBranchVoltage { .. }
                 | PlaceKind::ImplicitBranchCurrent { .. }
-                | PlaceKind::Var(_)
         ) {
             output_places.insert(place);
         }
     }
 
-    // copy_propagation(&mut cfg);
+    copy_propagation(&mut cfg);
     // eprintln!("{}", cfg.dump(Some(&res.literals)));
     // dead_code_elimination(&mut cfg, &output_places, &sideeffects);
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
     cfg.assert_verified(&res.literals);
+
+    cfg.cannonicalize_ret();
 
     for (param, kind) in res.params.iter_enumerated() {
         if matches!(kind, ParamKind::Voltage { .. }) {
@@ -150,15 +150,68 @@ pub fn compile_to_cfg(
         }
     }
 
-    let (_, ad_places) = auto_diff(&mut cfg, res.unkowns(), None);
+    let assignments = AssigmentInterner::new(&cfg);
+    let mut pdg = ProgramDependenGraph::build(&assignments, &cfg);
+
+    // eliminate dead code
+    let mut live_code = use_def::DepthFirstSearch::new(&pdg);
+    live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
+    live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
+    live_code.remove_unvisited_from_cfg(&mut cfg, &mut pdg);
+
+    // live_code.clear();
+
+    let mut dfs = use_def::DepthFirstSearch::new(&pdg);
+
+    let mut matrix_entries: TiSet<CfgParam, (Place, Callback)> = TiSet::default();
+    for place in output_places.iter() {
+        dfs.walk_place::<false>(place, &pdg, &cfg);
+        dfs.visited_instructions(&pdg, &cfg, |_, instr| {
+            instr.visit_operands(|op| {
+                if let Operand::CfgParam(param) = op {
+                    if matches!(
+                        res.params[*param],
+                        ParamKind::Voltage { .. } | ParamKind::Current(_)
+                    ) {
+                        let unkown = res.callbacks.ensure(CallBackKind::Derivative(*param)).0;
+                        matrix_entries.ensure((place, unkown));
+                    }
+                }
+            })
+        });
+
+        dfs.clear();
+    }
+
+    let (_, ad_places, unkowns) = auto_diff(
+        &mut cfg,
+        &pdg,
+        &live_code,
+        res.params.len(),
+        res.unkowns(),
+        matrix_entries.raw.iter().cloned(),
+    );
+
     res.places.raw.extend(ad_places.iter().map(|(original, unkown)| PlaceKind::Derivative {
         original: *original,
         unkown: (*unkown).into(),
     }));
-    output_places.ensure_enabled(res.places.len());
+
+    output_places.ensure(res.places.len());
+
+    for (place, kind) in res.places.iter_enumerated() {
+        if let PlaceKind::Derivative { original, unkown } = kind {
+            if let Some((cb, _)) = unkowns.first_order_unkowns.raw.get_index(*unkown as usize) {
+                if matrix_entries.contains(&(*original, *cb)) {
+                    output_places.insert(place);
+                }
+            }
+        }
+    }
 
     // copy_propagation(&mut cfg);
     // dead_code_elimination(&mut cfg, &output_places, &sideeffects);
+    copy_propagation(&mut cfg);
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
     cfg.assert_verified(&res.literals);
@@ -169,6 +222,20 @@ pub fn compile_to_cfg(
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
     cfg.assert_verified(&res.literals);
+
+    let assignments = AssigmentInterner::new(&cfg);
+    let mut pdg = ProgramDependenGraph::build(&assignments, &cfg);
+
+    // eliminate dead code
+    let mut live_code = use_def::DepthFirstSearch::new(&pdg);
+    live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
+    live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
+    live_code.remove_unvisited_from_cfg(&mut cfg, &mut pdg);
+
+    simplify_branches(&mut cfg);
+    simplify_cfg(&mut cfg);
+    cfg.assert_verified(&res.literals);
+
     let (_, place_map, param_map, callback_map) = remove_dead_data(&mut cfg);
     res.map(&place_map, &param_map, &callback_map);
 
@@ -183,7 +250,7 @@ pub fn compile_to_bin(
     ret: (&Type, &Operand),
 ) -> ModuleLlvm {
     let target = Target::host_target().unwrap();
-    let backend = LLVMBackend::new(&[], &target, llvm::CodeGenOptLevel::Aggressive);
+    let backend = LLVMBackend::new(&[], &target, llvm::OptLevel::Aggressive);
     let module = unsafe { backend.new_module(name).unwrap() };
     let mut cx = unsafe { backend.new_ctx(&mut res.literals, &module) };
     let param_struct = ParamStruct::new(db, &cx, &format!("{}Params", name), &res.params);
@@ -231,6 +298,9 @@ pub fn compile_to_bin(
     }
 
     drop(builder);
+    assert!(module.verify_and_print(), "Invalid code generated");
+    module.optimize(&backend);
+    assert!(module.verify_and_print(), "Invalid code generated");
     module
 }
 

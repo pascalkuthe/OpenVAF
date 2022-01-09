@@ -452,9 +452,9 @@ impl Effect {
     pub fn at_location(self, loc: Location, cfg: &ControlFlowGraph) -> EffectIndex {
         let idx = match loc.kind {
             LocationKind::Phi(x) => x.into(),
-            LocationKind::Instruction(x) => usize::from(x) + cfg.blocks[loc.block].phis.len(),
+            LocationKind::Instruction(x) => usize::from(x) + cfg.blocks[loc.bb].phis.len(),
             LocationKind::Terminator => {
-                cfg.blocks[loc.block].phis.len() + cfg.blocks[loc.block].instructions.len()
+                cfg.blocks[loc.bb].phis.len() + cfg.blocks[loc.bb].instructions.len()
             }
         };
         self.at_index(idx)

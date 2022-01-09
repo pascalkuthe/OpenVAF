@@ -4,11 +4,11 @@ use crate::{BasicBlock, InstIdx, PhiIdx};
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Location {
-    pub block: BasicBlock,
+    pub bb: BasicBlock,
     pub kind: LocationKind,
 }
 
-impl_debug!(match Location{Location{block,kind} => "{:?} -> {:?}", block,kind;});
+impl_debug!(match Location{Location{bb,kind} => "{:?} -> {:?}", bb,kind;});
 
 #[derive(PartialOrd, Ord, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum LocationKind {

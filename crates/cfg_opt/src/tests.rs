@@ -76,12 +76,14 @@ fn non_local_phis() {
         next_place p1;
         bb0:
             let _0 := copy [#1];
-            if #2 { bb2 } else { bb1 } 
+            if #2 { bb1 } else { bb2 } 
         bb1:
-            let _1 := copy [#3];
-            goto bb2;
+            goto bb3;
         bb2:
-            phi _2 := [(bb0, _0), (bb1, _1)];
+            let _1 := copy [#3];
+            goto bb3;
+        bb3:
+            phi _2 := [(bb1, _0), (bb2, _1)];
             end
         }"##]];
     check(cfg, simplified_cfg)

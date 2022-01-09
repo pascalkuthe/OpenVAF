@@ -11,7 +11,7 @@ doctest = false
 
 [dependencies]
 cfg = { version = "0.0.0", path = "../cfg" }
-data_flow = { version = "0.0.0", path = "../data_flow/" }
+program_dependence = { version = "0.0.0", path = "../program_dependence"}
 
 bitset = { version = "0.0.0", path = "../bitset" }
 typed_indexmap = { version = "0.0.0", path = "../typed_indexmap" }

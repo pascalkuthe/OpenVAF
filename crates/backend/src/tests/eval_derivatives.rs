@@ -10,16 +10,36 @@
 //! to eval cos)
 
 use auto_diff::auto_diff;
-use cfg::{ControlFlowGraph, Local};
+use cfg::{smallvec, ControlFlowGraph, InstrDst, Local, Op};
 use float_cmp::{assert_approx_eq, F64Margin};
+use program_dependence::{use_def, AssigmentInterner, ProgramDependenGraph};
 
 fn check(cfg: &str, params: &[f64], expected: &[(Local, f64)]) {
     let (mut cfg, _literals) = ControlFlowGraph::parse(cfg).unwrap();
-    let derivatives = (0..params.len() as u32)
-        .map(|i| (i.into(), vec![(i.into(), 1f64.to_bits())].into_boxed_slice()));
-    auto_diff(&mut cfg, derivatives, None);
+    cfg.blocks.last_mut().unwrap().instructions.push(cfg::Instruction {
+        dst: InstrDst::Place(0u32.into()),
+        op: Op::Copy,
+        args: smallvec![expected.last().unwrap().0.into()],
+        src: 0,
+    });
+    cfg.next_place += 1u32;
 
-    // eprintln!("\n{}\n", cfg.dump(Some(&literals)));
+    let assignments = AssigmentInterner::new(&cfg);
+    let pdg = ProgramDependenGraph::build(&assignments, &cfg);
+    let mut dfs = use_def::DepthFirstSearch::new(&pdg);
+    dfs.walk_place::<true>(0u32.into(), &pdg, &cfg);
+
+    auto_diff(
+        &mut cfg,
+        &pdg,
+        &dfs,
+        4,
+        [
+            (0u32.into(), vec![(0u32.into(), 1f64.to_bits())].into_boxed_slice()),
+            (1u32.into(), vec![(1u32.into(), 1f64.to_bits())].into_boxed_slice()),
+        ],
+        [],
+    );
 
     let params = params.iter().enumerate().map(|(i, val)| (i.into(), (*val).into())).collect();
     let res = const_eval::conditional_const_propagation(&mut cfg, &params);

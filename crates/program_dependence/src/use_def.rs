@@ -1,222 +1,372 @@
-use std::collections::VecDeque;
-
-use bitset::BitSet;
+use ahash::AHashMap;
+use bitset::{BitSet, HybridBitSet, SparseBitMatrix};
 use cfg::{
-    BasicBlock, Callback, ControlFlowGraph, Instruction, Local, LocationKind, Op, Operand, Place,
-    Terminator,
+    BasicBlock, Callback, ControlFlowGraph, InstIdx, Instruction, Local, LocationKind, Op, Operand,
+    Place, Terminator,
 };
-use data_flow::GenKillResultsRefCursor;
-use stdx::impl_from;
+use data_flow::ResultsVisitor;
 
-use crate::{Assigment, ProgramDependenGraph, ReachingDefintionsAnalysis};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Work {
-    Local(Local),
-    Assigment(Assigment),
-    BasicBlock(BasicBlock),
-}
-
-impl_from!(
-    Local,Assigment,BasicBlock for Work
-);
+use crate::def_use::Def;
+use crate::{
+    AssigmentInterner, AssigmentLoc, Assignment, ProgramDependenGraph, ReachingDefinitions,
+};
 
 #[derive(Debug, Clone)]
-pub struct ProgramDependenceWorkQueue<'a, 'i> {
-    pub work_queue: VecDeque<Work>,
-    pub visited_locals: BitSet<Local>,
-    pub visited_assigns: BitSet<Assigment>,
-    pub visited_blocks: BitSet<BasicBlock>,
-    pub tmp: BitSet<Assigment>,
-    pub pdg: &'a ProgramDependenGraph<'i>,
-    pub cursor: GenKillResultsRefCursor<'a, ReachingDefintionsAnalysis<'i>>,
+pub struct UseDefGraph {
+    pub assign_local: SparseBitMatrix<Assignment, Local>,
+    pub assign_assign: SparseBitMatrix<Assignment, Assignment>,
+    pub local_local: SparseBitMatrix<Local, Local>,
+    pub local_assign: SparseBitMatrix<Local, Assignment>,
+    pub term_assign: SparseBitMatrix<BasicBlock, Assignment>,
+    pub term_local: AHashMap<BasicBlock, Local>,
 }
 
-impl<'a, 'i> ProgramDependenceWorkQueue<'a, 'i> {
-    pub fn new(
+impl UseDefGraph {
+    pub fn build(
         cfg: &ControlFlowGraph,
-        pdg: &'a ProgramDependenGraph<'i>,
-    ) -> ProgramDependenceWorkQueue<'a, 'i> {
-        ProgramDependenceWorkQueue {
-            work_queue: VecDeque::new(),
-            visited_locals: BitSet::new_empty(cfg.next_local.into()),
-            visited_assigns: BitSet::new_empty(pdg.interner().local_defs.len()),
-            visited_blocks: BitSet::new_empty(cfg.blocks.len()),
-            tmp: BitSet::new_empty(pdg.interner().local_defs.len()),
-            pdg,
-            cursor: pdg.reaching_definitions.as_results_cursor(cfg),
+        reaching_definitions: &ReachingDefinitions,
+    ) -> UseDefGraph {
+        let local_cnt = cfg.next_local.into();
+        let intern = reaching_definitions.analysis.0.intern;
+        let assign_cnt = intern.assigment_locations.len();
+        let mut res = UseDefGraph {
+            assign_local: SparseBitMatrix::new(assign_cnt, local_cnt),
+            assign_assign: SparseBitMatrix::new(assign_cnt, assign_cnt),
+            local_local: SparseBitMatrix::new(local_cnt, local_cnt),
+            local_assign: SparseBitMatrix::new(local_cnt, assign_cnt),
+            term_assign: SparseBitMatrix::new(cfg.blocks.len(), assign_cnt),
+            term_local: AHashMap::new(),
+        };
+
+        reaching_definitions.visit_with(
+            cfg,
+            &mut UseDefBuilder { dst: &mut res, intern, tmp: BitSet::new_empty(assign_cnt) },
+        );
+
+        res
+    }
+}
+
+struct UseDefBuilder<'a> {
+    dst: &'a mut UseDefGraph,
+    intern: &'a AssigmentInterner,
+    tmp: BitSet<Assignment>,
+}
+
+impl ResultsVisitor for UseDefBuilder<'_> {
+    type FlowState = BitSet<Assignment>;
+
+    fn visit_phi_before_effect(
+        &mut self,
+        _state: &Self::FlowState,
+        phi: &cfg::Phi,
+        _bb: BasicBlock,
+        _id: cfg::PhiIdx,
+    ) {
+        for src in phi.sources.values() {
+            self.dst.local_local.insert(phi.dst, *src);
         }
     }
 
-    pub fn insert_stmts_with_sideffects(
+    fn visit_instruction_before_effect(
         &mut self,
-        cfg: &ControlFlowGraph,
-        sideeffects: &BitSet<Callback>,
+        state: &Self::FlowState,
+        instr: &cfg::Instruction,
+        bb: BasicBlock,
+        idx: InstIdx,
     ) {
-        for bb in &cfg.blocks {
-            for instr in &bb.instructions {
-                if matches!(instr.op, Op::Call(call) if sideeffects.contains(call)) {
-                    self.walk_instr(instr);
+        let mut locals = HybridBitSet::new_empty();
+        let mut read_place = false;
+
+        for operand in &instr.args {
+            match operand {
+                cfg::Operand::Local(local) => {
+                    locals.insert(*local, self.dst.local_local.num_rows());
+                }
+                cfg::Operand::Place(place) => {
+                    read_place = true;
+                    if let Some(assings) = self.intern.place_assigments.row(*place) {
+                        self.tmp.union(assings);
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        match instr.dst {
+            cfg::InstrDst::Local(local) => {
+                if !locals.is_empty() {
+                    *self.dst.local_local.ensure_row(local) = locals;
+                }
+                if read_place {
+                    self.tmp.intersect(state);
+                    self.dst
+                        .local_assign
+                        .ensure_row(local)
+                        .union(&self.tmp, self.tmp.domain_size());
+
                     self.tmp.clear();
                 }
             }
-        }
-    }
-
-    pub fn run(&mut self, visitor: &mut impl UseDefVisitor) {
-        while let Some(work) = self.take() {
-            match work {
-                Work::Local(local) => visitor.visit_local(self, local),
-                Work::Assigment(assign) => visitor.visit_assign(self, assign),
-                Work::BasicBlock(bb) => visitor.visit_bb(self, bb),
-            }
-        }
-    }
-
-    pub fn insert_places(
-        &mut self,
-        cfg: &ControlFlowGraph,
-        pdg: &ProgramDependenGraph,
-        places: &BitSet<Place>,
-    ) {
-        let intern = pdg.interner();
-        for place in places.iter() {
-            if let Some(row) = intern.place_assigments.row(place) {
-                self.tmp.union(row);
-            }
-        }
-
-        self.cursor.seek_to_block_end(cfg.blocks.last_key().unwrap(), cfg);
-        self.tmp.intersect(self.cursor.get());
-        self.insert_tmp_assigments();
-        self.tmp.clear();
-    }
-
-    pub fn insert_tmp_assigments(&mut self) {
-        for assign in self.tmp.iter() {
-            if self.visited_assigns.insert(assign) {
-                self.work_queue.push_back(assign.into())
-            }
-        }
-    }
-    pub fn insert(&mut self, work: Work) {
-        let changed = match work {
-            Work::Local(local) => self.visited_locals.insert(local),
-            Work::Assigment(assign) => self.visited_assigns.insert(assign),
-            Work::BasicBlock(bb) => self.visited_blocks.insert(bb),
-        };
-
-        if changed {
-            self.work_queue.push_back(work)
-        }
-    }
-
-    pub fn take(&mut self) -> Option<Work> {
-        self.work_queue.pop_front()
-    }
-
-    pub fn pop(&mut self) -> Option<Work> {
-        let work = self.take();
-        match work {
-            Some(Work::Assigment(assign)) => {
-                self.visited_assigns.remove(assign);
-            }
-            Some(Work::BasicBlock(bb)) => {
-                self.visited_blocks.remove(bb);
-            }
-            Some(Work::Local(local)) => {
-                self.visited_locals.remove(local);
-            }
-            None => (),
-        }
-        work
-    }
-
-    pub fn walk_local<const WALK_CONTROL: bool>(&mut self, cfg: &ControlFlowGraph, local: Local) {
-        let intern = self.pdg.interner();
-        let loc = intern.local_defs[local];
-        if WALK_CONTROL {
-            self.walk_control_dependence(loc.block);
-        }
-        match loc.kind {
-            LocationKind::Phi(phi) => {
-                for src in cfg[loc.block].phis[phi].sources.values().copied() {
-                    self.insert(src.into());
+            cfg::InstrDst::Place(_) => {
+                let assing =
+                    self.intern.assigment_locations.unwrap_index(&AssigmentLoc { bb, instr: idx });
+                if !locals.is_empty() {
+                    *self.dst.assign_local.ensure_row(assing) = locals;
                 }
-            }
-            LocationKind::Instruction(instr) => {
-                self.cursor.seek_before_effect(loc, cfg);
-                self.walk_instr(&cfg[loc.block].instructions[instr])
-            }
-            LocationKind::Terminator => unreachable!("UNDEF local {:?}", local),
-        };
-        // self.insert(loc.block.into());
-    }
+                if read_place {
+                    self.tmp.intersect(state);
+                    self.dst
+                        .assign_assign
+                        .ensure_row(assing)
+                        .union(&self.tmp, self.tmp.domain_size());
 
-    pub fn walk_instr(&mut self, instr: &Instruction) {
-        instr.visit_operands(|arg| self.walk_operand(*arg));
-
-        self.tmp.intersect(self.cursor.get());
-        self.insert_tmp_assigments();
-    }
-
-    pub fn walk_operand(&mut self, op: Operand) {
-        match op {
-            Operand::Local(local) => {
-                self.insert(local.into());
-            }
-            Operand::Place(place) => {
-                if let Some(assigments) = self.pdg.interner().place_assigments.row(place) {
-                    self.tmp.union(assigments);
+                    self.tmp.clear();
                 }
             }
             _ => (),
         }
     }
 
-    pub fn walk_assign<const WALK_CONTROL: bool>(
+    fn visit_terminator_before_effect(
         &mut self,
-        cfg: &ControlFlowGraph,
-        assign: Assigment,
-    ) {
-        let loc = self.pdg.interner().assigment_locations[assign];
-
-        if WALK_CONTROL {
-            self.walk_control_dependence(loc.bb);
-        }
-        self.cursor.seek_before_effect(loc.into(), cfg);
-        self.walk_instr(&cfg[loc.bb].instructions[loc.instr])
-    }
-
-    pub fn walk_terminator<const WALK_CONTROL: bool>(
-        &mut self,
-        cfg: &ControlFlowGraph,
+        state: &Self::FlowState,
+        term: &Terminator,
         bb: BasicBlock,
     ) {
-        if WALK_CONTROL {
-            self.walk_control_dependence(bb);
-        }
-
-        if let Some(Terminator::Split { condition, .. }) = cfg.blocks[bb].terminator {
-            self.walk_operand(condition);
-            if matches!(condition, Operand::Place(_)) {
-                self.insert_tmp_assigments();
-                self.tmp.clear();
+        match term {
+            Terminator::Split { condition: Operand::Local(local), .. } => {
+                self.dst.term_local.insert(bb, *local);
             }
-        }
-    }
-
-    pub fn walk_control_dependence(&mut self, bb: BasicBlock) {
-        if let Some(control_dependence) = self.pdg.control_dependence.row(bb) {
-            for bb in control_dependence.iter() {
-                self.insert(bb.into())
+            Terminator::Split { condition: Operand::Place(place), .. } => {
+                if let Some(assings) = self.intern.place_assigments.row(*place) {
+                    self.tmp.union(assings);
+                    self.tmp.intersect(state);
+                    self.dst.term_assign.ensure_row(bb).union(&self.tmp, self.tmp.domain_size());
+                    self.tmp.clear();
+                }
             }
+            _ => (),
         }
     }
 }
 
-pub trait UseDefVisitor {
-    fn visit_bb(&mut self, work_queue: &mut ProgramDependenceWorkQueue, bb: BasicBlock);
-    fn visit_assign(&mut self, work_queue: &mut ProgramDependenceWorkQueue, assing: Assigment);
-    fn visit_local(&mut self, work_queue: &mut ProgramDependenceWorkQueue, local: Local);
+/// Perfroms recrusive depth first search on a use_def_graph optionally taking into account control
+/// depenendence. The This allows extremly effective dead code elemination / program slicing.
+/// All visited locations are stored in the `visited_assigments` and `visited_locals` set
+#[derive(Debug, Clone)]
+pub struct DepthFirstSearch {
+    pub visited_locals: BitSet<Local>,
+    pub visited_assigments: BitSet<Assignment>,
+    visited_basic_blocks: BitSet<BasicBlock>,
+}
+
+impl DepthFirstSearch {
+    pub fn new(pdg: &ProgramDependenGraph) -> DepthFirstSearch {
+        DepthFirstSearch {
+            visited_locals: BitSet::new_empty(pdg.use_def_graph.local_local.num_rows()),
+            visited_assigments: BitSet::new_empty(pdg.use_def_graph.assign_assign.num_rows()),
+            visited_basic_blocks: BitSet::new_empty(pdg.use_def_graph.term_assign.num_rows()),
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.visited_locals.clear();
+        self.visited_assigments.clear();
+        self.visited_basic_blocks.clear();
+    }
+
+    pub fn remove_unvisited_from_cfg(
+        &self,
+        cfg: &mut ControlFlowGraph,
+        pdg: &mut ProgramDependenGraph,
+    ) {
+        for (assign, loc) in pdg.interner().assigment_locations.iter_enumerated() {
+            if !self.visited_assigments.contains(assign) {
+                cfg.blocks[loc.bb].instructions[loc.instr] = Instruction::default();
+                pdg.use_def_graph.assign_local.take_row(assign);
+                pdg.use_def_graph.assign_assign.take_row(assign);
+            }
+        }
+
+        for (local, loc) in pdg.interner().local_defs.iter_enumerated() {
+            if !self.visited_locals.contains(local) {
+                match loc.kind {
+                    cfg::LocationKind::Phi(phi) => cfg[loc.bb].phis[phi].sources.clear(),
+                    cfg::LocationKind::Instruction(instr) => {
+                        cfg.blocks[loc.bb].instructions[instr] = Instruction::default()
+                    }
+                    cfg::LocationKind::Terminator => (), // UNDEF local is dead... good
+                }
+
+                pdg.use_def_graph.local_local.take_row(local);
+                pdg.use_def_graph.local_assign.take_row(local);
+            }
+        }
+    }
+
+    pub fn visited_instructions(
+        &self,
+        pdg: &ProgramDependenGraph,
+        cfg: &ControlFlowGraph,
+        mut f: impl FnMut(Def, &Instruction),
+    ) {
+        for (assign, loc) in pdg.interner().assigment_locations.iter_enumerated() {
+            if self.visited_assigments.contains(assign) {
+                f(assign.into(), &cfg.blocks[loc.bb].instructions[loc.instr])
+            }
+        }
+
+        for (local, loc) in pdg.interner().local_defs.iter_enumerated() {
+            if self.visited_locals.contains(local) {
+                if let cfg::LocationKind::Instruction(instr) = loc.kind {
+                    f(local.into(), &cfg.blocks[loc.bb].instructions[instr])
+                }
+            }
+        }
+    }
+
+    pub fn walk_places<I: IntoIterator<Item = Place>, const WALK_CONTROL: bool>(
+        &mut self,
+        places: I,
+        pdg: &ProgramDependenGraph,
+        cfg: &ControlFlowGraph,
+    ) {
+        for place in places {
+            self.walk_place::<WALK_CONTROL>(place, pdg, cfg)
+        }
+    }
+
+    pub fn walk_sideffects<const WALK_CONTROL: bool>(
+        &mut self,
+        side_effect: &BitSet<Callback>,
+        pdg: &ProgramDependenGraph,
+        cfg: &ControlFlowGraph,
+    ) {
+        // This is not very performant as we fallback onto reaching_definitions but probably doesn't
+        // matter as stmts with sideeffects are very rare
+        let mut cursor = pdg.reaching_definitions.as_results_cursor(cfg);
+        let intern = pdg.interner();
+        for (bb, block) in cfg.blocks.iter_enumerated() {
+            for (idx, instr) in block.instructions.iter_enumerated() {
+                if matches!(instr.op, Op::Call(call) if side_effect.contains(call)) {
+                    cursor.seek_before_effect(
+                        cfg::Location { bb, kind: LocationKind::Instruction(idx) },
+                        cfg,
+                    );
+                    instr.visit_operands(|op| match *op {
+                        Operand::Local(local) => self.walk_local::<WALK_CONTROL>(local, pdg, cfg),
+                        Operand::Place(place) => {
+                            if let Some(assigns) = intern.place_assigments.row(place) {
+                                for assing in assigns.iter() {
+                                    if cursor.get().contains(assing) {
+                                        self.walk_assign::<WALK_CONTROL>(assing, pdg, cfg)
+                                    }
+                                }
+                            }
+                        }
+                        _ => (),
+                    })
+                }
+            }
+        }
+    }
+
+    pub fn walk_place<const WALK_CONTROL: bool>(
+        &mut self,
+        place: Place,
+        pdg: &ProgramDependenGraph,
+        cfg: &ControlFlowGraph,
+    ) {
+        let mut cursor = pdg.reaching_definitions.as_results_cursor(cfg);
+        cursor.seek_to_block_end(cfg.blocks.last_key().unwrap(), cfg);
+        if let Some(defs) = pdg.interner().place_assigments.row(place) {
+            for assignment in defs.iter() {
+                if cursor.get().contains(assignment) {
+                    self.walk_assign::<WALK_CONTROL>(assignment, pdg, cfg)
+                }
+            }
+        }
+    }
+
+    pub fn walk_assign<const WALK_CONTROL: bool>(
+        &mut self,
+        assignment: Assignment,
+        pdg: &ProgramDependenGraph,
+        cfg: &ControlFlowGraph,
+    ) {
+        if self.visited_assigments.insert(assignment) {
+            if WALK_CONTROL {
+                let bb = pdg.interner().assigment_locations[assignment].bb;
+                self.walk_control_dependence(bb, pdg, cfg);
+            }
+
+            if let Some(deps) = pdg.use_def_graph.assign_assign.row(assignment) {
+                for dep in deps.iter() {
+                    self.walk_assign::<WALK_CONTROL>(dep, pdg, cfg);
+                }
+            }
+
+            if let Some(deps) = pdg.use_def_graph.assign_local.row(assignment) {
+                for dep in deps.iter() {
+                    self.walk_local::<WALK_CONTROL>(dep, pdg, cfg);
+                }
+            }
+        }
+    }
+
+    pub fn walk_local<const WALK_CONTROL: bool>(
+        &mut self,
+        local: Local,
+        pdg: &ProgramDependenGraph,
+        cfg: &ControlFlowGraph,
+    ) {
+        if self.visited_locals.insert(local) {
+            if WALK_CONTROL {
+                let bb = pdg.interner().local_defs[local].bb;
+                self.walk_control_dependence(bb, pdg, cfg);
+                if matches!(pdg.interner().local_defs[local].kind, LocationKind::Phi(_)) {
+                    for predecessor in cfg.predecessors(bb) {
+                        self.walk_control_dependence(*predecessor, pdg, cfg)
+                    }
+                }
+            }
+
+            if let Some(deps) = pdg.use_def_graph.local_assign.row(local) {
+                for dep in deps.iter() {
+                    self.walk_assign::<WALK_CONTROL>(dep, pdg, cfg);
+                }
+            }
+
+            if let Some(deps) = pdg.use_def_graph.local_local.row(local) {
+                for dep in deps.iter() {
+                    self.walk_local::<WALK_CONTROL>(dep, pdg, cfg);
+                }
+            }
+        }
+    }
+
+    fn walk_control_dependence(
+        &mut self,
+        bb: BasicBlock,
+        pdg: &ProgramDependenGraph,
+        cfg: &ControlFlowGraph,
+    ) {
+        if self.visited_basic_blocks.insert(bb) {
+            if let Some(control_deps) = pdg.control_dependence.row(bb) {
+                for dep in control_deps.iter() {
+                    // self.visited_basic_blocks.insert(dep);
+                    if let Some(deps) = pdg.use_def_graph.term_assign.row(dep) {
+                        for dep in deps.iter() {
+                            self.walk_assign::<true>(dep, pdg, cfg);
+                        }
+                    }
+
+                    if let Some(dep) = pdg.use_def_graph.term_local.get(&dep) {
+                        self.walk_local::<true>(*dep, pdg, cfg);
+                    }
+                }
+            }
+        }
+    }
 }

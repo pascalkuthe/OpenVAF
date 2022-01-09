@@ -2,29 +2,24 @@ mod live_derivatives;
 mod transform;
 mod unkowns;
 
-use bitset::GrowableSparseBitMatrix;
-use cfg::{Callback, ControlFlowGraph, Place};
-use data_flow::Analysis;
-
-pub use crate::live_derivatives::LiveDerivativeAnalysis;
-pub use crate::transform::gen_derivatives;
-use crate::transform::{LocalDerivatives, PlaceDerivatives};
+pub use crate::transform::{gen_derivatives, LocalDerivatives, PlaceDerivatives};
 use crate::unkowns::FirstOrderUnkownInfo;
 pub use crate::unkowns::{FirstOrderUnkown, Unkown, Unkowns};
-
-pub fn live_derivatives(
-    cfg: &ControlFlowGraph,
-    unkowns: impl IntoIterator<Item = (Callback, FirstOrderUnkownInfo)>,
-    bottom: Option<GrowableSparseBitMatrix<Place, Unkown>>,
-) -> data_flow::Results<LiveDerivativeAnalysis> {
-    LiveDerivativeAnalysis::new(cfg, unkowns, bottom).into_engine(cfg).iterate_to_fixpoint()
-}
+use cfg::{Callback, ControlFlowGraph, Place};
+pub use live_derivatives::LiveDerivatives;
+use program_dependence::{use_def, ProgramDependenGraph};
 
 pub fn auto_diff(
     cfg: &mut ControlFlowGraph,
+    pdg: &ProgramDependenGraph,
+    dfs: &use_def::DepthFirstSearch,
+    param_cnt: usize,
     unkowns: impl IntoIterator<Item = (Callback, FirstOrderUnkownInfo)>,
-    bottom: Option<GrowableSparseBitMatrix<Place, Unkown>>,
-) -> (LocalDerivatives, PlaceDerivatives) {
-    let live_derivatives = live_derivatives(cfg, unkowns, bottom);
-    gen_derivatives(cfg, &live_derivatives)
+    extra_derivatives: impl IntoIterator<Item = (Place, Callback)>,
+) -> (LocalDerivatives, PlaceDerivatives, Unkowns) {
+    let mut unkowns = Unkowns::new(unkowns);
+    let live_derivatives =
+        LiveDerivatives::build(dfs, cfg, pdg, param_cnt, &mut unkowns, extra_derivatives);
+    let (locals, places) = gen_derivatives(cfg, &live_derivatives, &unkowns, pdg.interner());
+    (locals, places, unkowns)
 }

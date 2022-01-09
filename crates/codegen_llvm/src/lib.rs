@@ -3,7 +3,7 @@ use std::mem::MaybeUninit;
 
 use lasso::Rodeo;
 use llvm::support::LLVMString;
-pub use llvm::CodeGenOptLevel;
+pub use llvm::OptLevel;
 use target::spec::Target;
 
 mod builder;
@@ -22,19 +22,21 @@ pub use context::CodegenCx;
 
 pub struct LLVMBackend<'t> {
     target: &'t Target,
-    opt_lvl: CodeGenOptLevel,
+    opt_lvl: OptLevel,
+    builder: Option<&'static mut llvm::PassManagerBuilder>,
 }
 
 impl<'t> LLVMBackend<'t> {
-    pub fn new(
-        cg_opts: &[String],
-        target: &'t Target,
-        opt_lvl: CodeGenOptLevel,
-    ) -> LLVMBackend<'t> {
+    pub fn new(cg_opts: &[String], target: &'t Target, opt_lvl: OptLevel) -> LLVMBackend<'t> {
         // TODO add target options here if we ever have any
         llvm::initialization::init(cg_opts, &[]);
-
-        LLVMBackend { target, opt_lvl }
+        let builder = unsafe {
+            let builder = llvm::LLVMPassManagerBuilderCreate();
+            llvm::pass_manager_builder_set_opt_lvl(builder, opt_lvl);
+            llvm::LLVMPassManagerBuilderSetSizeLevel(builder, 0);
+            builder
+        };
+        LLVMBackend { target, opt_lvl, builder: Some(builder) }
     }
 
     /// # Safety
@@ -58,6 +60,14 @@ impl<'t> LLVMBackend<'t> {
     }
 }
 
+impl Drop for LLVMBackend<'_> {
+    fn drop(&mut self) {
+        if let Some(builder) = self.builder.take() {
+            unsafe { llvm::LLVMPassManagerBuilderDispose(builder) }
+        }
+    }
+}
+
 pub struct ModuleLlvm {
     llcx: &'static mut llvm::Context,
     // must be a raw pointer because the reference must not outlife self/the context
@@ -66,11 +76,7 @@ pub struct ModuleLlvm {
 }
 
 impl ModuleLlvm {
-    unsafe fn new(
-        name: &str,
-        target: &Target,
-        lvl: CodeGenOptLevel,
-    ) -> Result<ModuleLlvm, LLVMString> {
+    unsafe fn new(name: &str, target: &Target, lvl: OptLevel) -> Result<ModuleLlvm, LLVMString> {
         let llcx = llvm::LLVMContextCreate();
         let target_data_layout = target.data_layout.clone();
 
@@ -96,6 +102,22 @@ impl ModuleLlvm {
 
     pub fn llmod(&self) -> &llvm::Module {
         unsafe { &*self.llmod_raw }
+    }
+
+    pub fn optimize(&self, backend: &LLVMBackend) {
+        let builder = backend.builder.as_ref().unwrap();
+        let llmod = self.llmod();
+        unsafe {
+            let fpm = llvm::LLVMCreateFunctionPassManagerForModule(llmod);
+            llvm::LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpm);
+            llvm::run_function_pass_manager(fpm, llmod);
+            llvm::LLVMDisposePassManager(fpm);
+
+            let mpm = llvm::LLVMCreatePassManager();
+            llvm::LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
+            llvm::LLVMRunPassManager(mpm, llmod);
+            llvm::LLVMDisposePassManager(mpm);
+        }
     }
 
     /// Verifies this module and prints out  any errors
