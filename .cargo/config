@@ -23,9 +23,9 @@ rustflags = [
     # "-Aclippy::wildcard_imports",
     # "-Aclippy::implicit_clone",
 
-    "-Ctarget-cpu=native",
-    "-Clink-arg=-fuse-ld=lld",
-    "-Clink-arg=-Wl,--no-rosegment",
+    # "-Ctarget-cpu=native",
+    # "-Clink-arg=-fuse-ld=lld",
+    # "-Clink-arg=-Wl,--no-rosegment",
 ]
 
 [alias]
@@ -36,5 +36,5 @@ lint = "clippy --all-targets"
 [target.x86_64-pc-windows-msvc]
 linker = "rust-lld"
 
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
+# [target.x86_64-unknown-linux-gnu]
+# linker = "clang"
