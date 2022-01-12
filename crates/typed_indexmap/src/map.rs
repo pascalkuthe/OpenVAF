@@ -81,7 +81,6 @@ where
     pub fn insert(&mut self, key: K, val: V) -> Option<V> {
         self.raw.insert(key, val)
     }
-
 }
 
 impl<I: From<usize>, K, V> TiMap<I, K, V> {

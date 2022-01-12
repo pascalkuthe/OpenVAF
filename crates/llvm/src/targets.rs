@@ -4,9 +4,7 @@ use std::mem::MaybeUninit;
 use ::libc::c_char;
 
 use crate::support::LLVMString;
-use crate::{
-    Bool, CodeGenFileType, OptLevel, CodeModel, Module, RelocMode, Target, TargetMachine,
-};
+use crate::{Bool, CodeGenFileType, CodeModel, Module, OptLevel, RelocMode, Target, TargetMachine};
 
 extern "C" {
     fn LLVMGetTargetFromTriple(

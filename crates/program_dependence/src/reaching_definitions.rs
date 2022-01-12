@@ -43,9 +43,8 @@ impl GenKillAnalysis for ReachingDefintionsAnalysis<'_> {
     ) {
         if let InstrDst::Place(place) = instr.dst {
             trans.kill_set(self.intern.place_assigments.row(place).unwrap());
-            trans.gen(
-                self.intern.assigment_locations.unwrap_index(&AssigmentLoc { bb, instr: idx }),
-            )
+            trans
+                .gen(self.intern.assigment_locations.unwrap_index(&AssigmentLoc { bb, instr: idx }))
         }
     }
 }

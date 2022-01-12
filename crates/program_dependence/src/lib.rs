@@ -73,8 +73,7 @@ impl AssigmentInterner {
                 |(id, instr)| match instr.dst {
                     InstrDst::Place(_) => Some(AssigmentLoc { bb, instr: id }),
                     InstrDst::Local(local) => {
-                        local_defs[local] =
-                            Location { bb, kind: LocationKind::Instruction(id) };
+                        local_defs[local] = Location { bb, kind: LocationKind::Instruction(id) };
                         None
                     }
                     InstrDst::Ignore => None,
