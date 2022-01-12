@@ -3,6 +3,7 @@
 [![license](https://img.shields.io/badge/license-GPL%203.0-brightgreen)](https://gitlab.com/DSPOM/OpenVAF/-/blob/master/LICENSE)
 ![maintaince](https://img.shields.io/badge/maintenance-actively--developed-informational)
 [![builds.sr.ht status](https://builds.sr.ht/~dspom/OpenVAF.svg)](https://builds.sr.ht/~dspom/OpenVAF?)
+![coverage](https://img.shields.io/badge/coverage-68%25-yellowgreen)
 
 OpenVAF is a compiler for Verilog-A aimed predominantly at compact modeling.
 This Project is not an executable itself but rather servers as the main component of various sub projects such as VerilogAE and OSDIC.
