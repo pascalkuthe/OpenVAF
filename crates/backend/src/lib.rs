@@ -16,6 +16,7 @@ use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamKind, PlaceKind};
 use hir_ty::db::HirTyDB;
 use program_dependence::{use_def, AssigmentInterner, ProgramDependenGraph};
 use stdx::iter::zip;
+use stdx::IS_CI;
 use syntax::name::Name;
 use target::spec::Target;
 use typed_index_collections::TiVec;
@@ -218,20 +219,20 @@ pub fn compile_to_cfg(
 
     // eprintln!("{}", cfg.dump(&res.literals));
     conditional_const_propagation(&mut cfg, &AHashMap::new());
-    cfg.assert_verified(&res.literals);
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
     cfg.assert_verified(&res.literals);
 
-    let assignments = AssigmentInterner::new(&cfg);
-    let mut pdg = ProgramDependenGraph::build(&assignments, &cfg);
+    if !IS_CI {
+        let assignments = AssigmentInterner::new(&cfg);
+        let mut pdg = ProgramDependenGraph::build(&assignments, &cfg);
 
-    // eliminate dead code
-    let mut live_code = use_def::DepthFirstSearch::new(&pdg);
-    live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
-    live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
-    live_code.remove_unvisited_from_cfg(&mut cfg, &mut pdg);
-
+        // eliminate dead code
+        let mut live_code = use_def::DepthFirstSearch::new(&pdg);
+        live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
+        live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
+        live_code.remove_unvisited_from_cfg(&mut cfg, &mut pdg);
+    }
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
     cfg.assert_verified(&res.literals);
@@ -299,8 +300,9 @@ pub fn compile_to_bin(
 
     drop(builder);
     assert!(module.verify_and_print(), "Invalid code generated");
-    module.optimize(&backend);
-    assert!(module.verify_and_print(), "Invalid code generated");
+    if !IS_CI {
+        module.optimize(&backend);
+    }
     module
 }
 
