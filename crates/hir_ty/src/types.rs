@@ -1,10 +1,11 @@
 use std::borrow::Cow;
+use std::ops::Deref;
 
 use hir_def::{
     BranchId, DisciplineId, FunctionId, LocalFunctionArgId, NatureAttrId, NatureId, NodeId,
     ParamId, Type, VarId,
 };
-use stdx::{impl_display, impl_idx_from};
+use stdx::{impl_display, impl_idx_from, pretty};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TyRequirement {
@@ -220,6 +221,12 @@ impl Ty {
 pub struct SignatureData {
     pub args: Cow<'static, [TyRequirement]>,
     pub return_ty: Type,
+}
+
+impl_display! {
+    match SignatureData{
+        SignatureData{ args, return_ty } => "({}) -> {}", pretty::List::with_final_seperator(args.deref(), ", "), return_ty;
+    }
 }
 
 impl SignatureData {

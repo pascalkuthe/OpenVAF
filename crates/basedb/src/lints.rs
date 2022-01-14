@@ -160,5 +160,6 @@ pub mod builtin {
         pub const useless_function_call = LintData{default_lvl: Warn, documentation_id: 10};
         pub const non_standard_code = LintData{default_lvl: Warn, documentation_id: 11};
         pub const vams_keyword_compat = LintData{default_lvl: Warn, documentation_id: 12};
+        pub const non_standard_analog_operator = LintData{default_lvl: Deny, documentation_id: 13};
     }
 }

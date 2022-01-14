@@ -214,6 +214,7 @@ impl Ctx<'_> {
                         self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                             e: expr,
                             maybe_different_operand: None,
+                            assigment_kind,
                         });
                         return None;
                     }
@@ -231,6 +232,7 @@ impl Ctx<'_> {
                 self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                     e: expr,
                     maybe_different_operand: None,
+                    assigment_kind,
                 });
                 return None;
             }
@@ -241,13 +243,15 @@ impl Ctx<'_> {
             (AssignDst::Var(_) | AssignDst::FunVar { .. }, ast::AssignOp::Contribute) => {
                 self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                     e: expr,
-                    maybe_different_operand: Some(MaybeDifferentOperand::Assign),
+                    maybe_different_operand: Some(ast::AssignOp::Assign),
+                    assigment_kind,
                 });
             }
             (AssignDst::Flow(_) | AssignDst::Potential(_), ast::AssignOp::Assign) => {
                 self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                     e: expr,
-                    maybe_different_operand: Some(MaybeDifferentOperand::Contribute),
+                    maybe_different_operand: Some(ast::AssignOp::Contribute),
+                    assigment_kind,
                 });
             }
             _ => {
@@ -788,6 +792,10 @@ impl Ctx<'_> {
                     type_missmatches: errors.into_boxed_slice(),
                     signatures: signatures.clone(),
                     src,
+                    found: arg_types
+                        .iter()
+                        .map(|it| it.clone().unwrap_or(Ty::Val(Type::Err)))
+                        .collect(),
                 }
                 .into(),
             );
@@ -925,22 +933,33 @@ impl Ctx<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub enum MaybeDifferentOperand {
-    Contribute,
-    Assign,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InferenceDiagnostic {
-    InvalidAssignDst { e: ExprId, maybe_different_operand: Option<MaybeDifferentOperand> },
-    PathResolveError { err: PathResolveError, expr: ExprId },
-    ArgCntMissmatch { expected: usize, found: usize, expr: ExprId, exact: bool },
+    InvalidAssignDst {
+        e: ExprId,
+        maybe_different_operand: Option<ast::AssignOp>,
+        assigment_kind: ast::AssignOp,
+    },
+    PathResolveError {
+        err: PathResolveError,
+        expr: ExprId,
+    },
+    ArgCntMissmatch {
+        expected: usize,
+        found: usize,
+        expr: ExprId,
+        exact: bool,
+    },
     TypeMissmatch(TypeMissmatch),
     SignatureMissmatch(SignatureMissmatch),
     ArrayTypeMissmatch(ArrayTypeMissmatch),
-    InvalidUnkown { e: ExprId },
-    NonStandardUnkown { e: ExprId, stmt: StmtId },
+    InvalidUnkown {
+        e: ExprId,
+    },
+    NonStandardUnkown {
+        e: ExprId,
+        stmt: StmtId,
+    },
 }
 
 impl_from!(TypeMissmatch,SignatureMissmatch, ArrayTypeMissmatch for InferenceDiagnostic);

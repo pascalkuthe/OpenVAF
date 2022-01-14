@@ -3,10 +3,11 @@ use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx};
-use basedb::FileId;
+use basedb::{AstIdMap, ErasedAstId, FileId};
 use once_cell::sync::Lazy;
-use stdx::{impl_from, impl_from_typed};
+use stdx::{impl_display, impl_from, impl_from_typed};
 use syntax::name::{kw, Name};
+use syntax::{AstNode, Parse, SourceFile, TextRange};
 
 use self::diagnostics::DefDiagnostic;
 use crate::builtin::{insert_builtin_scope, BuiltIn, ParamSysFun};
@@ -94,30 +95,104 @@ pub enum ScopeDefItem {
 }
 
 impl ScopeDefItem {
-    // pub fn ast_id(&self, db: &dyn HirDefDB) -> Option<ErasedAstId> {
-    //     let id: ErasedAstId = match self {
-    //         ScopeDefItem::ModuleId(module) => module.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::BlockId(block) => block.lookup(db).ast.into(),
-    //         ScopeDefItem::NatureId(nature) => nature.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::NatureAccess(access) => access.0.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::DisciplineId(discipline) => discipline.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::VarId(var) => var.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::ParamId(param) => param.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::BranchId(branch) => branch.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::FunctionReturn(fun) | ScopeDefItem::FunctionId(fun) => {
-    //             fun.lookup(db).ast_id(db).into()
-    //         }
-    //         ScopeDefItem::FunctionArgId(arg) => arg.lookup(db).ast_id(db).into(),
-    //         ScopeDefItem::NodeId(noe) => noe.lookup(db).ast_id(db),
-    //         ScopeDefItem::BuiltIn(_) => return None,
-    //     };
-    //     Some(id)
-    // }
+    pub fn ast_id(&self, db: &dyn HirDefDB) -> Option<ErasedAstId> {
+        let id: ErasedAstId = match self {
+            ScopeDefItem::ModuleId(module) => module.lookup(db).ast_id(db).into(),
+            ScopeDefItem::BlockId(block) => block.lookup(db).ast.into(),
+            ScopeDefItem::NatureId(nature) => nature.lookup(db).ast_id(db).into(),
+            ScopeDefItem::NatureAccess(access) => access.0.lookup(db).ast_id(db).into(),
+            ScopeDefItem::DisciplineId(discipline) => discipline.lookup(db).ast_id(db).into(),
+            ScopeDefItem::VarId(var) => var.lookup(db).ast_id(db).into(),
+            ScopeDefItem::ParamId(param) => param.lookup(db).ast_id(db).into(),
+            ScopeDefItem::BranchId(branch) => branch.lookup(db).ast_id(db).into(),
+            ScopeDefItem::FunctionReturn(fun) | ScopeDefItem::FunctionId(fun) => {
+                fun.lookup(db).ast_id(db).into()
+            }
+            ScopeDefItem::FunctionArgId(arg) => arg.lookup(db).ast_id(db).into(),
+            ScopeDefItem::NodeId(node) => node.lookup(db).ast_id(db),
+            ScopeDefItem::BuiltIn(_) | ScopeDefItem::ParamSysFun(_) => return None,
+            ScopeDefItem::AliasParamId(id) => id.lookup(db).ast_id(db).into(),
+            ScopeDefItem::NatureAttrId(id) => id.lookup(db).ast_id(db).into(),
+        };
+        Some(id)
+    }
 
-    // pub fn pos(&self, db: &dyn HirDefDB, root_file: FileId) -> Option<TextRange> {
-    //     let id = self.ast_id(db);
-    //     let id = db.ast_id_map(root_file).get_syntax(id);
-    // }
+    pub fn text_range(
+        &self,
+        db: &dyn HirDefDB,
+        ast_id_map: &AstIdMap,
+        parse: &Parse<SourceFile>,
+    ) -> Option<TextRange> {
+        let res = match self {
+            ScopeDefItem::ModuleId(module) => ast_id_map
+                .get(module.lookup(db).ast_id(db))
+                .to_node(parse.tree().syntax())
+                .name()?
+                .syntax()
+                .text_range(),
+            ScopeDefItem::BlockId(block) => ast_id_map
+                .get(block.lookup(db).ast)
+                .to_node(parse.tree().syntax())
+                .block_scope()?
+                .name()?
+                .syntax()
+                .text_range(),
+            ScopeDefItem::NatureId(nature) => ast_id_map
+                .get(nature.lookup(db).ast_id(db))
+                .to_node(parse.tree().syntax())
+                .name()?
+                .syntax()
+                .text_range(),
+            ScopeDefItem::NatureAccess(access) => {
+                ast_id_map.get(access.0.lookup(db).ast_id(db)).range()
+            }
+
+            ScopeDefItem::DisciplineId(discipline) => ast_id_map
+                .get(discipline.lookup(db).ast_id(db))
+                .to_node(parse.tree().syntax())
+                .name()?
+                .syntax()
+                .text_range(),
+            ScopeDefItem::VarId(var) => ast_id_map.get(var.lookup(db).ast_id(db)).range(),
+
+            ScopeDefItem::ParamId(param) => ast_id_map.get(param.lookup(db).ast_id(db)).range(),
+            ScopeDefItem::BranchId(branch) => {
+                let branch = branch.lookup(db);
+                let pos = branch.item_tree(db)[branch.id].name_idx;
+                ast_id_map
+                    .get(branch.ast_id(db))
+                    .to_node(parse.tree().syntax())
+                    .names()
+                    .nth(pos)?
+                    .syntax()
+                    .text_range()
+            }
+            ScopeDefItem::FunctionReturn(fun) | ScopeDefItem::FunctionId(fun) => ast_id_map
+                .get(fun.lookup(db).ast_id(db))
+                .to_node(parse.tree().syntax())
+                .name()?
+                .syntax()
+                .text_range(),
+            ScopeDefItem::FunctionArgId(arg) => {
+                let arg = arg.lookup(db);
+                let fun = arg.fun.lookup(db);
+                let pos = fun.item_tree(db)[fun.id].args[arg.id].name_idx;
+                ast_id_map
+                    .get(arg.ast_id(db))
+                    .to_node(parse.tree().syntax())
+                    .names()
+                    .nth(pos)?
+                    .syntax()
+                    .text_range()
+            }
+            ScopeDefItem::NodeId(node) => ast_id_map.get_syntax(node.lookup(db).ast_id(db)).range(),
+            ScopeDefItem::BuiltIn(_) | ScopeDefItem::ParamSysFun(_) => return None,
+            ScopeDefItem::AliasParamId(id) => ast_id_map.get(id.lookup(db).ast_id(db)).range(),
+            ScopeDefItem::NatureAttrId(id) => ast_id_map.get(id.lookup(db).ast_id(db)).range(),
+        };
+
+        Some(res)
+    }
 }
 
 impl_from! {
@@ -470,6 +545,14 @@ pub enum ResolvedPath {
     FlowAttriubte { branch: BranchId, name: Name },
     PotentialAttribute { branch: BranchId, name: Name },
     ScopeDefItem(ScopeDefItem),
+}
+
+impl_display! {
+    match ResolvedPath{
+        ResolvedPath::FlowAttriubte{..}  => "nature attribute";
+        ResolvedPath::PotentialAttribute{..} => "nature attribute";
+        ResolvedPath::ScopeDefItem(item) => "{}", item.item_kind();
+    }
 }
 
 impl_from!(ScopeDefItem for ResolvedPath);

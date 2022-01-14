@@ -40,32 +40,88 @@ fn ddx() {
     );
     let actual = db.lower_and_check();
     expect![[r#"
-        [
-            NonStandardUnkown {
-                e: Idx::<Expr>(14),
-                stmt: Idx::<Stmt>(2),
-            },
-            InvalidUnkown {
-                e: Idx::<Expr>(23),
-            },
-            InvalidUnkown {
-                e: Idx::<Expr>(29),
-            },
-            InvalidUnkown {
-                e: Idx::<Expr>(34),
-            },
-            InvalidUnkown {
-                e: Idx::<Expr>(39),
-            },
-            InvalidUnkown {
-                e: Idx::<Expr>(44),
-            },
-        ][
-            PotentialOfPortFlow {
-                expr: Idx::<Expr>(44),
-                branch: None,
-            },
-        ]"#]]
+        warning[L011]: the unkown supplied to the ddx operator
+           ┌─ /root.va:16:29
+           │
+        16 │                 x = ddx(1.0,V(a,c));
+           │                             ^^^^^^ unkown is not standard compliant
+           │
+           = help: expected one of the following
+           = branch current acces: I(branch), I(a,b)
+           = node voltage: V(x)
+           = explicit voltage: V(x,y)
+           = temperature: $temperature
+           = non_standard_code is set to warn by default
+
+        error: invalid unkown was supplied to the ddx operator
+           ┌─ /root.va:20:29
+           │
+        20 │                 x = ddx(1.0,V(br_ac));
+           │                             ^^^^^^^^ invalid ddx unkown
+           │
+           = help: expected one of the following
+           = branch current acces: I(branch), I(a,b)
+           = node voltage: V(x)
+           = explicit voltage: V(x,y)
+           = temperature: $temperature
+
+        error: invalid unkown was supplied to the ddx operator
+           ┌─ /root.va:21:29
+           │
+        21 │                 x = ddx(1.0,I(a,c));
+           │                             ^^^^^^ invalid ddx unkown
+           │
+           = help: expected one of the following
+           = branch current acces: I(branch), I(a,b)
+           = node voltage: V(x)
+           = explicit voltage: V(x,y)
+           = temperature: $temperature
+
+        error: invalid unkown was supplied to the ddx operator
+           ┌─ /root.va:22:29
+           │
+        22 │                 x = ddx(1.0,I(a));
+           │                             ^^^^ invalid ddx unkown
+           │
+           = help: expected one of the following
+           = branch current acces: I(branch), I(a,b)
+           = node voltage: V(x)
+           = explicit voltage: V(x,y)
+           = temperature: $temperature
+
+        error: invalid unkown was supplied to the ddx operator
+           ┌─ /root.va:23:29
+           │
+        23 │                 x = ddx(1.0,I(<a>));
+           │                             ^^^^^^ invalid ddx unkown
+           │
+           = help: expected one of the following
+           = branch current acces: I(branch), I(a,b)
+           = node voltage: V(x)
+           = explicit voltage: V(x,y)
+           = temperature: $temperature
+
+        error: invalid unkown was supplied to the ddx operator
+           ┌─ /root.va:24:29
+           │
+        24 │                 x = ddx(1.0,V(<a>));
+           │                             ^^^^^^ invalid ddx unkown
+           │
+           = help: expected one of the following
+           = branch current acces: I(branch), I(a,b)
+           = node voltage: V(x)
+           = explicit voltage: V(x,y)
+           = temperature: $temperature
+
+        error: access of port-branch potential
+           ┌─ /root.va:24:29
+           │
+        24 │                 x = ddx(1.0,V(<a>));
+           │                             ^^^^^^ invalid potential access
+           │
+           = help: only the flow of port branches like <foo> can be accessed
+
+    "#]]
     .assert_eq(&actual);
 }
 

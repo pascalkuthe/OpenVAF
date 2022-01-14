@@ -1,6 +1,6 @@
 use basedb::diagnostics::sink::Buffer;
 use basedb::diagnostics::{Config, ConsoleSink, DiagnosticSink};
-use basedb::{BaseDB, BaseDatabase, FileId, Vfs, VfsStorage};
+use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsStorage};
 use parking_lot::RwLock;
 use quote::{format_ident, quote};
 use sourcegen::{
@@ -76,6 +76,12 @@ impl salsa::Database for TestDataBase {}
 impl VfsStorage for TestDataBase {
     fn vfs(&self) -> &RwLock<Vfs> {
         self.vfs()
+    }
+}
+
+impl Upcast<dyn BaseDB> for TestDataBase {
+    fn upcast(&self) -> &(dyn BaseDB + 'static) {
+        self
     }
 }
 

@@ -3,9 +3,10 @@ use std::mem::replace;
 use arrayvec::ArrayVec;
 use hir_def::body::Body;
 use hir_def::{
-    BranchId, BuiltIn, DefWithBodyId, Expr, ExprId, Lookup, NodeId, ParamId, Path, Stmt, StmtId,
-    VarId,
+    BranchId, BuiltIn, DefWithBodyId, Expr, ExprId, FunctionArgLoc, Lookup, NodeId, ParamId, Path,
+    Stmt, StmtId, VarId,
 };
+use stdx::impl_display;
 use syntax::ast::AssignOp;
 use syntax::name::{AsIdent, Name};
 
@@ -21,7 +22,7 @@ use crate::types::{Signature, Ty};
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum IllegalCtxAccessKind {
     NatureAccess,
-    AnalogOperator { name: Name, is_standard: bool, non_const_dominator: Box<[IllegalCtxAccess]> },
+    AnalogOperator { name: Name, is_standard: bool, non_const_dominator: Box<[ExprId]> },
     AnalysisFun { name: Name },
     Var(VarId),
 }
@@ -43,19 +44,6 @@ pub enum BodyValidationDiagnostic {
         expr: ExprId,
         branch: Option<BranchId>,
     },
-    // IncompatibleNodes {
-    //     expr: ExprId,
-    //     err: IncompatibleNodes,
-    // },
-    IllegalNatureAccess {
-        expr: ExprId,
-        ctx: BodyCtx,
-    },
-    IllegalAnalogFilter {
-        expr: ExprId,
-        name: Path,
-        ctx: BodyCtx,
-    },
     IllegalContribute {
         stmt: StmtId,
         ctx: BodyCtx,
@@ -67,9 +55,9 @@ pub enum BodyValidationDiagnostic {
         write: bool,
     },
 
-    InvalidArgDirectionForAccess {
+    WriteToInputArg {
         expr: ExprId,
-        write: bool,
+        arg: FunctionArgLoc,
     },
 
     IllegalParamAccess {
@@ -142,6 +130,17 @@ impl BodyCtx {
     }
 }
 
+impl_display! {
+    match BodyCtx{
+       BodyCtx::AnalogBlock => "module analog block";
+       BodyCtx::Conditional => "conditions";
+       BodyCtx::EventControl => "events";
+       BodyCtx::Function => "analog functions";
+       BodyCtx::ConstOrAnalysis => "constant or analysis";
+       BodyCtx::Const => "constants";
+    }
+}
+
 struct BodyValidator<'a> {
     db: &'a dyn HirTyDB,
     owner: DefWithBodyId,
@@ -149,7 +148,7 @@ struct BodyValidator<'a> {
     infer: &'a InferenceResult,
     diagnostics: Vec<BodyValidationDiagnostic>,
     ctx: BodyCtx,
-    non_const_dominator: Box<[IllegalCtxAccess]>,
+    non_const_dominator: Box<[ExprId]>,
 }
 
 impl BodyValidator<'_> {
@@ -202,7 +201,7 @@ impl BodyValidator<'_> {
         &mut self,
         cond: ExprId,
         f: impl FnOnce(&mut Self),
-    ) -> Option<Box<[IllegalCtxAccess]>> {
+    ) -> Option<Box<[ExprId]>> {
         if self.ctx == BodyCtx::AnalogBlock || self.ctx == BodyCtx::Conditional {
             let mut non_const_access = Vec::new();
             ExprValidator {
@@ -239,16 +238,28 @@ impl BodyValidator<'_> {
 
 struct ExprValidator<'a, 'b> {
     parent: &'a mut BodyValidator<'b>,
-    cond_diagnostic_sink: Option<&'a mut Vec<IllegalCtxAccess>>,
+    cond_diagnostic_sink: Option<&'a mut Vec<ExprId>>,
     write: bool,
 }
 
 impl ExprValidator<'_, '_> {
     fn report_illegal_access(&mut self, kind: IllegalCtxAccessKind, expr: ExprId) {
         let err = IllegalCtxAccess { kind, ctx: self.parent.ctx, expr };
-        match &mut self.cond_diagnostic_sink {
-            Some(sink) => sink.push(err),
-            None => self.parent.diagnostics.push(BodyValidationDiagnostic::IllegalCtxAccess(err)),
+        self.parent.diagnostics.push(BodyValidationDiagnostic::IllegalCtxAccess(err));
+    }
+
+    fn check_access(
+        &mut self,
+        kind: impl FnOnce(&Self) -> IllegalCtxAccessKind,
+        expr: ExprId,
+        allowed: bool,
+    ) {
+        if let Some(sink) = &mut self.cond_diagnostic_sink {
+            sink.push(expr)
+        }
+
+        if !allowed {
+            self.report_illegal_access(kind(self), expr)
         }
     }
 
@@ -289,19 +300,23 @@ impl ExprValidator<'_, '_> {
             Expr::Path { port: false, .. } => {
                 match self.parent.infer.expr_types[expr] {
                     Ty::FuntionVar { arg: Some(arg), fun, .. } => {
-                        let arg = &self.parent.db.function_data(fun).args[arg];
-                        if self.write && !arg.is_output {
+                        let is_output = self.parent.db.function_data(fun).args[arg].is_output;
+                        if self.write && !is_output {
                             self.parent.diagnostics.push(
-                                BodyValidationDiagnostic::InvalidArgDirectionForAccess {
+                                BodyValidationDiagnostic::WriteToInputArg {
                                     expr,
-                                    write: self.write,
+                                    arg: FunctionArgLoc { fun, id: arg },
                                 },
                             )
                         }
                     }
 
-                    Ty::Var(_, var) if !self.parent.ctx.allow_var_ref() => {
-                        self.report_illegal_access(IllegalCtxAccessKind::Var(var), expr);
+                    Ty::Var(_, var) => {
+                        self.check_access(
+                            |__| IllegalCtxAccessKind::Var(var),
+                            expr,
+                            self.parent.ctx.allow_var_ref(),
+                        );
                     }
                     Ty::Param(_, param) => {
                         if let DefWithBodyId::ParamId(def) = self.parent.owner {
@@ -337,23 +352,30 @@ impl ExprValidator<'_, '_> {
         call: BuiltIn,
         signature: Option<Signature>,
     ) {
-        match (call, signature) {
-            _ if (call.is_analog_operator() || call.is_analog_operator_sysfun())
-                && !self.parent.ctx.allow_analog_operator() =>
-            {
-                let non_const_dominator = if self.cond_diagnostic_sink.is_none() {
-                    self.parent.non_const_dominator.clone()
-                } else {
-                    vec![].into_boxed_slice()
-                };
+        match call {
+            BuiltIn::potential | BuiltIn::flow => self.check_access(
+                |_| IllegalCtxAccessKind::NatureAccess,
+                expr,
+                self.parent.ctx.allow_nature_access(),
+            ),
 
-                self.report_illegal_access(
-                    IllegalCtxAccessKind::AnalogOperator {
+            _ if call.is_analog_operator() && call != BuiltIn::ddx
+                || call.is_analog_operator_sysfun() =>
+            {
+                // let non_const_dominator = if self.cond_diagnostic_sink.is_none() {
+                // self.parent.non_const_dominator.clone()
+                // } else {
+                // vec![].into_boxed_slice()
+                // };
+
+                self.check_access(
+                    |sel| IllegalCtxAccessKind::AnalogOperator {
                         name: name.as_ref().and_then(|p| p.as_ident()).unwrap(),
                         is_standard: call.is_analog_operator(),
-                        non_const_dominator,
+                        non_const_dominator: sel.parent.non_const_dominator.clone(),
                     },
                     expr,
+                    self.parent.ctx.allow_analog_operator(),
                 )
             }
 
@@ -364,13 +386,10 @@ impl ExprValidator<'_, '_> {
                     },
                     expr,
                 ),
+            _ => (),
+        }
 
-            (BuiltIn::potential | BuiltIn::flow, Some(_))
-                if !self.parent.ctx.allow_nature_access() =>
-            {
-                self.report_illegal_access(IllegalCtxAccessKind::NatureAccess, expr)
-            }
-
+        match (call, signature) {
             (BuiltIn::potential | BuiltIn::flow, Some(NATURE_ACCESS_NODES)) => {
                 let hi = self.parent.infer.expr_types[args[0]].unwrap_node();
                 let lo = self.parent.infer.expr_types[args[1]].unwrap_node();

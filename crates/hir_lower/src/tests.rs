@@ -72,6 +72,12 @@ impl VfsStorage for TestDataBase {
     }
 }
 
+impl Upcast<dyn BaseDB> for TestDataBase {
+    fn upcast(&self) -> &(dyn BaseDB + 'static) {
+        self
+    }
+}
+
 #[test]
 pub fn generate_integration_tests() {
     let tests = collect_integration_tests();

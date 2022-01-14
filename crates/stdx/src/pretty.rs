@@ -22,6 +22,10 @@ impl<C> List<C> {
     pub fn with_final_seperator(contents: C, final_seperator: &'static str) -> Self {
         Self { data: contents, seperator: ", ", final_seperator, prefix: "", postfix: "" }
     }
+
+    pub fn path(contents: C) -> Self {
+        Self { data: contents, seperator: ".", final_seperator: ".", prefix: "", postfix: "" }
+    }
 }
 
 impl<C: Debug> Debug for List<C> {

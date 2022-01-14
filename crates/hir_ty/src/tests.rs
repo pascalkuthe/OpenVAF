@@ -1,15 +1,15 @@
+use basedb::diagnostics::sink::Buffer;
+use basedb::diagnostics::{Config, ConsoleSink};
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsStorage};
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
-use hir_def::nameres::{DefMap, LocalScopeId};
 use parking_lot::RwLock;
 use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
-use stdx::format_to;
 
-use crate::db::{HirTyDB, HirTyDatabase};
-use crate::validation;
+use crate::collect_diagnostics;
+use crate::db::HirTyDatabase;
 
 mod integration;
 
@@ -46,36 +46,14 @@ impl TestDataBase {
     }
     pub fn lower_and_check(&self) -> String {
         let root_file = self.root_file();
-        let def_map = self.def_map(root_file);
-        let mut dst = String::new();
 
-        let diagnostics = validation::TypeValidationDiagnostic::collect(self, root_file);
-        if !diagnostics.is_empty() {
-            format_to!(dst, "{:#?}", diagnostics);
+        let mut buf = Buffer::no_color();
+        {
+            let mut sink = ConsoleSink::buffer(Config::default(), self, &mut buf);
+            collect_diagnostics(self, root_file, &mut sink);
         }
-
-        let root_scope = def_map.root();
-        self.lower_and_check_rec(root_scope, &def_map, &mut dst);
-        dst
-    }
-
-    fn lower_and_check_rec(&self, scope: LocalScopeId, def_map: &DefMap, dst: &mut String) {
-        for (_, declaration) in &def_map[scope].declarations {
-            if let Ok(id) = (*declaration).try_into() {
-                let res = &self.inference_result(id);
-                if !res.diagnostics.is_empty() {
-                    format_to!(dst, "{:#?}", res.diagnostics);
-                }
-                let diagnostics = validation::BodyValidationDiagnostic::collect(self, id);
-                if !diagnostics.is_empty() {
-                    format_to!(dst, "{:#?}", diagnostics);
-                }
-            }
-        }
-
-        for (_, child) in &def_map[scope].children {
-            self.lower_and_check_rec(*child, def_map, dst)
-        }
+        let data = buf.into_inner();
+        String::from_utf8(data).unwrap()
     }
 }
 
@@ -84,6 +62,12 @@ impl salsa::Database for TestDataBase {}
 impl VfsStorage for TestDataBase {
     fn vfs(&self) -> &RwLock<Vfs> {
         self.vfs()
+    }
+}
+
+impl Upcast<dyn BaseDB> for TestDataBase {
+    fn upcast(&self) -> &(dyn BaseDB + 'static) {
+        self
     }
 }
 

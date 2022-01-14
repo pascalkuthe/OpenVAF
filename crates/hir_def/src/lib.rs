@@ -24,15 +24,18 @@ use nameres::diagnostics::PathResolveError;
 use nameres::{DefMap, DefMapSource, ResolvedPath, ScopeDefItemKind};
 use stdx::impl_from;
 use syntax::ast::{self, BlockStmt};
-use syntax::AstNode;
+use syntax::name::Name;
+use syntax::{AstNode, AstPtr};
 
 pub use crate::builtin::{BuiltIn, ParamSysFun};
 use crate::db::HirDefDB;
 pub use crate::expr::{Case, Expr, ExprId, Literal, Stmt, StmtId};
 use crate::item_tree::{
-    AliasParam, Branch, Discipline, Function, ItemTreeId, ItemTreeNode, Module, Nature, Param, Var,
+    AliasParam, Branch, Discipline, Function, ItemTreeId, Module, Nature, Param, Var,
 };
-pub use crate::item_tree::{BranchKind, ItemTree, NatureRef, NatureRefKind, NodeTypeDecl};
+pub use crate::item_tree::{
+    BranchKind, ItemTree, ItemTreeNode, NatureRef, NatureRefKind, NodeTypeDecl,
+};
 use crate::nameres::ScopeDefItem;
 pub use crate::path::Path;
 pub use crate::types::Type;
@@ -126,11 +129,17 @@ impl<N: ItemTreeNode> ItemLoc<N> {
         N::lookup(&self.item_tree(db), self.id).ast_id()
     }
 
-    pub fn source(&self, db: &dyn HirDefDB) -> N::Source {
+    pub fn ast_ptr(&self, db: &dyn HirDefDB) -> AstPtr<N::Source> {
         let ast_id = self.ast_id(db);
-        db.ast_id_map(self.scope.root_file)
-            .get(ast_id)
-            .to_node(db.parse(self.scope.root_file).tree().syntax())
+        db.ast_id_map(self.scope.root_file).get(ast_id)
+    }
+
+    pub fn name(&self, db: &dyn HirDefDB) -> Name {
+        N::lookup(&self.item_tree(db), self.id).name().clone()
+    }
+
+    pub fn source(&self, db: &dyn HirDefDB) -> N::Source {
+        self.ast_ptr(db).to_node(db.parse(self.scope.root_file).tree().syntax())
     }
 }
 
@@ -267,6 +276,11 @@ impl NodeLoc {
         let loc = self.module.lookup(db);
         loc.item_tree(db)[loc.id].nodes[self.id].ast_id
     }
+
+    pub fn ast_ptr(self, db: &dyn HirDefDB) -> ErasedAstId {
+        let loc = self.module.lookup(db);
+        loc.item_tree(db)[loc.id].nodes[self.id].ast_id
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -279,6 +293,21 @@ impl FunctionArgLoc {
     pub fn ast_id(self, db: &dyn HirDefDB) -> AstId<ast::FunctionArg> {
         let fun = self.fun.lookup(db);
         fun.item_tree(db)[fun.id].args[self.id].ast_ids[0]
+    }
+
+    pub fn syntax(self, db: &dyn HirDefDB) -> ast::FunctionArg {
+        let file = self.fun.lookup(db).scope.root_file;
+        let ptr = db.ast_id_map(file).get(self.ast_id(db));
+        ptr.to_node(db.parse(file).tree().syntax())
+    }
+
+    pub fn ast_ptr(self, db: &dyn HirDefDB) -> AstPtr<ast::FunctionArg> {
+        db.ast_id_map(self.fun.lookup(db).scope.root_file).get(self.ast_id(db))
+    }
+
+    pub fn name(self, db: &dyn HirDefDB) -> Name {
+        let fun = self.fun.lookup(db);
+        fun.item_tree(db)[fun.id].args[self.id].name.clone()
     }
 }
 

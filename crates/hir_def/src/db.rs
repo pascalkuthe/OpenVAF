@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use basedb::{BaseDB, FileId};
+use basedb::{BaseDB, FileId, Upcast};
 
 use crate::body::{Body, BodySourceMap, ParamExprs};
 use crate::data::{
@@ -47,7 +47,7 @@ pub trait InternDB: BaseDB {
 }
 
 #[salsa::query_group(HirDefDatabase)]
-pub trait HirDefDB: InternDB {
+pub trait HirDefDB: InternDB + Upcast<dyn BaseDB> {
     #[salsa::invoke(ItemTree::file_item_tree_query)]
     fn item_tree(&self, root_file: FileId) -> Arc<ItemTree>;
 

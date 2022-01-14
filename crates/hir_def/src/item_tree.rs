@@ -114,6 +114,8 @@ pub(crate) struct ItemTreeData {
 pub trait ItemTreeNode: Clone {
     type Source: AstNode;
 
+    fn name(&self) -> &Name;
+
     fn ast_id(&self) -> AstId<Self::Source>;
 
     /// Looks up an instance of `Self` in an item tree.
@@ -174,6 +176,11 @@ macro_rules! item_tree_nodes {
         $(
             impl ItemTreeNode for $typ {
                 type Source = $ast;
+
+
+                fn name(&self) -> &Name {
+                    &self.name
+                }
 
                 fn ast_id(&self) -> AstId<Self::Source> {
                     self.ast_id
