@@ -11,19 +11,33 @@ use cfg_opt::{copy_propagation, remove_dead_data, simplify_branches, simplify_cf
 use codegen_llvm::{Builder, CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use const_eval::conditional_const_propagation;
 use hir_def::nameres::ScopeOrigin;
-use hir_def::{NodeId, ParamId, ParamSysFun, Type};
+use hir_def::{ModuleId, NodeId, ParamId, Type};
 use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamKind, PlaceKind};
 use hir_ty::db::HirTyDB;
+use lasso::Rodeo;
 use program_dependence::{use_def, AssigmentInterner, ProgramDependenGraph};
 use stdx::iter::zip;
-use stdx::IS_CI;
-use syntax::name::Name;
 use target::spec::Target;
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
 #[cfg(test)]
 mod tests;
+
+pub fn sim_param_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+    cx.const_callback(&[cx.ty_str()], cx.const_real(0.0))
+}
+
+pub fn sim_param_opt_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+    cx.const_return(&[cx.ty_str(), cx.ty_real()], 1)
+}
+
+pub fn sim_param_str_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+    let empty_str = cx.literals.get("").unwrap();
+    let empty_str = cx.const_str(empty_str);
+    let ty_str = cx.ty_str();
+    cx.const_callback(&[ty_str], empty_str)
+}
 
 pub fn stub_callbacks<'ll>(
     cb: &TiSet<Callback, CallBackKind>,
@@ -32,31 +46,32 @@ pub fn stub_callbacks<'ll>(
     cb.raw
         .iter()
         .map(|kind| match kind {
-            CallBackKind::SimParam => cx.const_callback(&[cx.ty_str()], cx.const_real(0.0)),
-            CallBackKind::SimParamOpt => cx.const_return(&[cx.ty_str(), cx.ty_real()], 1),
-            CallBackKind::SimParamStr => {
-                let empty_str = cx.literals.get_or_intern_static("");
-                let empty_str = cx.const_str(empty_str);
-                let ty_str = cx.ty_str();
-                cx.const_callback(&[ty_str], empty_str)
-            }
+            CallBackKind::SimParam => sim_param_stub(cx),
+            CallBackKind::SimParamOpt => sim_param_opt_stub(cx),
+            CallBackKind::SimParamStr => sim_param_str_stub(cx),
             CallBackKind::Derivative(_) => unreachable!("Derivative must not remain in final CFG!"),
             CallBackKind::NodeDerivative(_) => {
                 unreachable!("Derivative must not remain in final CFG!")
+            }
+            CallBackKind::ParamInfo(_, _) => {
+                unreachable!("Standard cfg should not check parameters")
             }
         })
         .collect()
 }
 
 pub fn callback_sideeffects(cb: &TiSet<Callback, CallBackKind>) -> BitSet<Callback> {
-    let res = BitSet::new_empty(cb.len());
-    for (_cb, kind) in cb.iter_enumerated() {
+    let mut res = BitSet::new_empty(cb.len());
+    for (cb, kind) in cb.iter_enumerated() {
         match kind {
             CallBackKind::SimParam
             | CallBackKind::SimParamOpt
             | CallBackKind::SimParamStr
             | CallBackKind::Derivative(_)
             | CallBackKind::NodeDerivative(_) => (),
+            CallBackKind::ParamInfo(_, _) => {
+                res.insert(cb);
+            }
         }
     }
     res
@@ -66,10 +81,15 @@ pub fn places<'ll, 'a>(
     db: &dyn HirTyDB,
     builder: &Builder<'_, '_, 'll>,
     places: impl IntoIterator<Item = &'a PlaceKind>,
+    mut overwrite: impl FnMut(&PlaceKind) -> Option<(&'ll llvm::Type, &'ll llvm::Value)>,
 ) -> TiVec<Place, (&'ll llvm::Type, &'ll llvm::Value)> {
     places
         .into_iter()
         .map(|kind| {
+            if let Some(overwrite) = overwrite(kind) {
+                return overwrite;
+            }
+
             let ty = match kind {
                 PlaceKind::Var(var) => lltype(&db.var_data(*var).ty, builder.cx),
                 PlaceKind::FunctionReturn { fun } => {
@@ -80,7 +100,9 @@ pub fn places<'ll, 'a>(
                 | PlaceKind::Derivative { .. }
                 | PlaceKind::BranchCurrent(_)
                 | PlaceKind::BranchVoltage(_) => builder.cx.ty_real(),
-                PlaceKind::Param(param) => lltype(&db.param_data(*param).ty, builder.cx),
+                PlaceKind::Param(param)
+                | PlaceKind::ParamMin(param)
+                | PlaceKind::ParamMax(param) => lltype(&db.param_data(*param).ty, builder.cx),
             };
 
             (ty, unsafe { builder.alloca(ty) })
@@ -101,30 +123,8 @@ pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
     }
 }
 
-pub fn compile_to_cfg(
-    db: &dyn HirTyDB,
-    root_file: FileId,
-) -> (Name, ControlFlowGraph, HirInterner) {
-    let def_map = db.def_map(root_file);
-    let root = def_map.entry();
-    let (module_name, module) = def_map[root]
-        .children
-        .iter()
-        .find_map(|(name, scope)| {
-            if let ScopeOrigin::Module(module) = def_map[*scope].origin {
-                Some((name.clone(), module))
-            } else {
-                None
-            }
-        })
-        .expect("No Module found");
-    let (mut cfg, mut res) = hir_lower::HirInterner::lower_body(db, module.into());
-    cfg.assert_verified(&res.literals);
-
-    let sideeffects = callback_sideeffects(&res.callbacks);
-    let mut output_places = BitSet::new_empty(cfg.next_place.into());
-
-    for (place, kind) in res.places.iter_enumerated() {
+pub fn find_branch_place(places: &TiSet<Place, PlaceKind>, dst: &mut BitSet<Place>) {
+    for (place, kind) in places.iter_enumerated() {
         if matches!(
             kind,
             PlaceKind::BranchCurrent(_)
@@ -132,16 +132,51 @@ pub fn compile_to_cfg(
                 | PlaceKind::ImplicitBranchVoltage { .. }
                 | PlaceKind::ImplicitBranchCurrent { .. }
         ) {
-            output_places.insert(place);
+            dst.insert(place);
         }
     }
+}
+
+pub fn find_module(db: &dyn HirTyDB, root_file: FileId) -> ModuleId {
+    let def_map = db.def_map(root_file);
+    let root = def_map.entry();
+    def_map[root]
+        .children
+        .values()
+        .find_map(|scope| {
+            if let ScopeOrigin::Module(module) = def_map[*scope].origin {
+                Some(module)
+            } else {
+                None
+            }
+        })
+        .expect("No Module found")
+}
+
+pub fn compile_to_cfg(
+    db: &dyn HirTyDB,
+    module: ModuleId,
+    jacobian: bool,
+    opt: bool,
+    verify: bool,
+    find_output_places: &mut dyn FnMut(&mut TiSet<Place, PlaceKind>, &mut BitSet<Place>),
+) -> (ControlFlowGraph, HirInterner, Rodeo) {
+    let (mut cfg, mut res, mut literals) = hir_lower::HirInterner::lower_body(db, module.into());
+    literals.get_or_intern_static("");
+    if verify {
+        cfg.assert_verified();
+    }
+
+    let sideeffects = callback_sideeffects(&res.callbacks);
+    let mut output_places = BitSet::new_empty(cfg.next_place.into());
+    find_output_places(&mut res.places, &mut output_places);
 
     copy_propagation(&mut cfg);
     // eprintln!("{}", cfg.dump(Some(&res.literals)));
-    // dead_code_elimination(&mut cfg, &output_places, &sideeffects);
-    simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
-    cfg.assert_verified(&res.literals);
+    if verify {
+        cfg.assert_verified();
+    }
 
     cfg.cannonicalize_ret();
 
@@ -158,30 +193,33 @@ pub fn compile_to_cfg(
     let mut live_code = use_def::DepthFirstSearch::new(&pdg);
     live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
     live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
-    live_code.remove_unvisited_from_cfg(&mut cfg, &mut pdg);
+    live_code.remove_unvisited_from_cfg(&mut cfg, &assignments, Some(&mut pdg));
 
     // live_code.clear();
 
     let mut dfs = use_def::DepthFirstSearch::new(&pdg);
 
     let mut matrix_entries: TiSet<CfgParam, (Place, Callback)> = TiSet::default();
-    for place in output_places.iter() {
-        dfs.walk_place::<false>(place, &pdg, &cfg);
-        dfs.visited_instructions(&pdg, &cfg, |_, instr| {
-            instr.visit_operands(|op| {
-                if let Operand::CfgParam(param) = op {
-                    if matches!(
-                        res.params[*param],
-                        ParamKind::Voltage { .. } | ParamKind::Current(_)
-                    ) {
-                        let unkown = res.callbacks.ensure(CallBackKind::Derivative(*param)).0;
-                        matrix_entries.ensure((place, unkown));
-                    }
-                }
-            })
-        });
 
-        dfs.clear();
+    if jacobian {
+        for place in output_places.iter() {
+            dfs.walk_place::<false>(place, &pdg, &cfg);
+            dfs.visited_instructions(&pdg, &cfg, |_, instr| {
+                instr.visit_operands(|op| {
+                    if let Operand::CfgParam(param) = op {
+                        if matches!(
+                            res.params[*param],
+                            ParamKind::Voltage { .. } | ParamKind::Current(_)
+                        ) {
+                            let unkown = res.callbacks.ensure(CallBackKind::Derivative(*param)).0;
+                            matrix_entries.ensure((place, unkown));
+                        }
+                    }
+                })
+            });
+
+            dfs.clear();
+        }
     }
 
     let (_, ad_places, unkowns) = auto_diff(
@@ -200,30 +238,35 @@ pub fn compile_to_cfg(
 
     output_places.ensure(res.places.len());
 
-    for (place, kind) in res.places.iter_enumerated() {
-        if let PlaceKind::Derivative { original, unkown } = kind {
-            if let Some((cb, _)) = unkowns.first_order_unkowns.raw.get_index(*unkown as usize) {
-                if matrix_entries.contains(&(*original, *cb)) {
-                    output_places.insert(place);
+    if jacobian {
+        for (place, kind) in res.places.iter_enumerated() {
+            if let PlaceKind::Derivative { original, unkown } = kind {
+                if let Some((cb, _)) = unkowns.first_order_unkowns.raw.get_index(*unkown as usize) {
+                    if matrix_entries.contains(&(*original, *cb)) {
+                        output_places.insert(place);
+                    }
                 }
             }
         }
     }
 
-    // copy_propagation(&mut cfg);
-    // dead_code_elimination(&mut cfg, &output_places, &sideeffects);
+    res.insert_var_init(db, &mut literals, &mut cfg);
+
     copy_propagation(&mut cfg);
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
-    cfg.assert_verified(&res.literals);
+    if verify {
+        cfg.assert_verified();
+    }
 
-    // eprintln!("{}", cfg.dump(&res.literals));
     conditional_const_propagation(&mut cfg, &AHashMap::new());
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
-    cfg.assert_verified(&res.literals);
+    if verify {
+        cfg.assert_verified();
+    }
 
-    if !IS_CI {
+    if opt {
         let assignments = AssigmentInterner::new(&cfg);
         let mut pdg = ProgramDependenGraph::build(&assignments, &cfg);
 
@@ -231,29 +274,30 @@ pub fn compile_to_cfg(
         let mut live_code = use_def::DepthFirstSearch::new(&pdg);
         live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
         live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
-        live_code.remove_unvisited_from_cfg(&mut cfg, &mut pdg);
+        live_code.remove_unvisited_from_cfg(&mut cfg, &assignments, Some(&mut pdg));
+        simplify_branches(&mut cfg);
+        simplify_cfg(&mut cfg);
+        cfg.assert_verified();
+
+        let (_, place_map, param_map, callback_map) = remove_dead_data(&mut cfg);
+        res.map(&place_map, &param_map, &callback_map);
     }
-    simplify_branches(&mut cfg);
-    simplify_cfg(&mut cfg);
-    cfg.assert_verified(&res.literals);
 
-    let (_, place_map, param_map, callback_map) = remove_dead_data(&mut cfg);
-    res.map(&place_map, &param_map, &callback_map);
-
-    (module_name, cfg, res)
+    (cfg, res, literals)
 }
 
 pub fn compile_to_bin(
     db: &dyn HirTyDB,
     name: &str,
     cfg: ControlFlowGraph,
-    mut res: HirInterner,
+    res: &HirInterner,
+    literals: &Rodeo,
     ret: (&Type, &Operand),
 ) -> ModuleLlvm {
     let target = Target::host_target().unwrap();
     let backend = LLVMBackend::new(&[], &target, llvm::OptLevel::Aggressive);
     let module = unsafe { backend.new_module(name).unwrap() };
-    let mut cx = unsafe { backend.new_ctx(&mut res.literals, &module) };
+    let mut cx = unsafe { backend.new_ctx(literals, &module) };
     let param_struct = ParamStruct::new(db, &cx, &format!("{}Params", name), &res.params);
     let current_struct = CurrentStruct::new(&cx, &res.params);
     let voltage_struct = VoltagesStruct::new(&cx, &res.params);
@@ -269,7 +313,7 @@ pub fn compile_to_bin(
 
     let true_val = cx.const_bool(true);
     let mut builder = Builder::new(&mut cx, &cfg, fun);
-    builder.places = places(db, &builder, res.places.raw.iter());
+    builder.places = places(db, &builder, res.places.raw.iter(), |_| None);
     builder.callbacks = stub_callbacks(&res.callbacks, builder.cx);
 
     let params = unsafe { llvm::LLVMGetParam(fun, 1) };
@@ -288,21 +332,20 @@ pub fn compile_to_bin(
             ParamKind::Current(current) => currents[current],
             ParamKind::Temperature => unsafe { llvm::LLVMGetParam(fun, 0) },
             ParamKind::ParamGiven { .. } | ParamKind::PortConnected { .. } => true_val,
-            ParamKind::ParamSysFun(ParamSysFun::mfactor) => builder.cx.const_real(1.0),
-            ParamKind::ParamSysFun(_) => todo!(),
+            ParamKind::ParamSysFun(param) => builder.cx.const_real(param.default_value()),
         })
         .collect();
 
     unsafe {
         builder.build_cfg();
-        builder.build_returns(|builder, _| builder.operand(ret.1))
+        builder.build_returns(|builder, _| {
+            let val = builder.operand(ret.1);
+            builder.ret(val)
+        })
     }
 
     drop(builder);
     assert!(module.verify_and_print(), "Invalid code generated");
-    if !IS_CI {
-        module.optimize(&backend);
-    }
     module
 }
 

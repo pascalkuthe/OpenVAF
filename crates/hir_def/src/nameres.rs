@@ -1,9 +1,9 @@
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 
-use ahash::AHashMap as HashMap;
 use arena::{Arena, Idx};
 use basedb::{AstIdMap, ErasedAstId, FileId};
+use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use stdx::{impl_display, impl_from, impl_from_typed};
 use syntax::name::{kw, Name};
@@ -274,8 +274,8 @@ impl_from_typed! {
     for ScopeOrigin
 }
 
-static BUILTIN_SCOPE: Lazy<HashMap<Name, ScopeDefItem>> = Lazy::new(|| {
-    let mut scope = HashMap::new();
+static BUILTIN_SCOPE: Lazy<IndexMap<Name, ScopeDefItem, ahash::RandomState>> = Lazy::new(|| {
+    let mut scope = IndexMap::default();
     insert_builtin_scope(&mut scope);
     scope
 });
@@ -284,8 +284,8 @@ static BUILTIN_SCOPE: Lazy<HashMap<Name, ScopeDefItem>> = Lazy::new(|| {
 pub struct Scope {
     pub origin: ScopeOrigin,
     parent: Option<LocalScopeId>,
-    pub children: HashMap<Name, LocalScopeId>,
-    pub declarations: HashMap<Name, ScopeDefItem>,
+    pub children: IndexMap<Name, LocalScopeId, ahash::RandomState>,
+    pub declarations: IndexMap<Name, ScopeDefItem, ahash::RandomState>,
 }
 
 impl DefMap {

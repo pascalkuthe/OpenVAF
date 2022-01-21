@@ -1,7 +1,8 @@
 use libc::{c_char, c_double, c_uint, c_ulonglong};
 
 use crate::{
-    BasicBlock, Bool, CallConv, Context, Linkage, Module, Type, UnnamedAddr, Value, Visibility,
+    BasicBlock, Bool, CallConv, Context, DLLStorageClass, Linkage, Module, Type, UnnamedAddr,
+    Value, Visibility,
 };
 
 // Core->Values
@@ -43,7 +44,7 @@ extern "C" {
     /// Obtain a constant value referring to a poison value of a type.
     // pub fn LLVMGetPoison(Ty: TypeRef) -> &'a Value;
     // pub fn LLVMIsNull(Val: &'a Value) -> LLVMBool;
-    // pub fn LLVMConstPointerNull(Ty: TypeRef) -> &'a Value;
+    pub fn LLVMConstPointerNull(ty: &Type) -> &Value;
 
     // Core->Values->Constants->Scalar
     pub fn LLVMConstInt(ty: &Type, val: c_ulonglong, sign_extend: Bool) -> &Value;
@@ -97,8 +98,11 @@ extern "C" {
         Count: c_uint,
         Packed: Bool,
     ) -> &'a Value;
-    pub fn LLVMConstArray<'a>(element_ty: &'a Type, vals: *mut &'a Value, len: c_uint)
-        -> &'a Value;
+    pub fn LLVMConstArray<'a>(
+        element_ty: &'a Type,
+        vals: *const &'a Value,
+        len: c_uint,
+    ) -> &'a Value;
     pub fn LLVMConstNamedStruct<'a>(
         ty: &'a Type,
         ConstantVals: *mut &'a Value,
@@ -152,27 +156,27 @@ extern "C" {
     // pub fn LLVMConstShl(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
     // pub fn LLVMConstLShr(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
     // pub fn LLVMConstAShr(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
-    // pub fn LLVMConstGEP<'a>(
+    pub fn LLVMConstGEP<'a>(
+        ConstantVal: &'a Value,
+        ConstantIndices: *const &'a Value,
+        NumIndices: c_uint,
+    ) -> &'a Value;
+    // pub fn LLVMConstGEP2<'a>(
+    //     ty: &'a Type,
     //     ConstantVal: &'a Value,
-    //     ConstantIndices: *mut &'a Value,
+    //     ConstantIndices: *const &'a Value,
     //     NumIndices: c_uint,
-    // ) -> &'a Value;
-    // pub fn LLVMConstGEP2(
-    //     Ty: TypeRef,
-    //     ConstantVal: &'a Value,
-    //     ConstantIndices: *mut &'a Value,
-    //     NumIndices: ::libc::c_uint,
     // ) -> &'a Value;
     // pub fn LLVMConstInBoundsGEP(
     //     ConstantVal: &'a Value,
     //     ConstantIndices: *mut &'a Value,
     //     NumIndices: ::libc::c_uint,
     // ) -> &'a Value;
-    // pub fn LLVMConstInBoundsGEP2(
-    //     Ty: TypeRef,
+    // pub fn LLVMConstInBoundsGEP2<'a>(
+    //     ty: &'a Type,
     //     ConstantVal: &'a Value,
-    //     ConstantIndices: *mut &'a Value,
-    //     NumIndices: ::libc::c_uint,
+    //     ConstantIndices: *const &'a Value,
+    //     NumIndices: c_uint,
     // ) -> &'a Value;
     // pub fn LLVMConstTrunc(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
     // pub fn LLVMConstSExt(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
@@ -239,7 +243,7 @@ extern "C" {
     // pub fn LLVMGetVisibility(global: &'a Value) -> Visibility;
     pub fn LLVMSetVisibility(global: &Value, viz: Visibility);
     // pub fn LLVMGetDLLStorageClass(global: &'a Value) -> LLVMDLLStorageClass;
-    // pub fn LLVMSetDLLStorageClass(global: &'a Value, Class: LLVMDLLStorageClass);
+    pub fn LLVMSetDLLStorageClass(global: &Value, Class: DLLStorageClass);
 
     // pub fn LLVMGetUnnamedAddress(global: &'a Value) -> LLVMUnnamedAddr;
     pub fn LLVMSetUnnamedAddress(global: &Value, UnnamedAddr: UnnamedAddr);
@@ -365,8 +369,9 @@ extern "C" {
     //    NameLength: *mut ::libc::size_t,
     //) -> *const ::libc::c_char;
     //pub fn LLVMIntrinsicIsOverloaded(ID: ::libc::c_uint) -> LLVMBool;
-    //pub fn LLVMGetFunctionCallConv(Fn: &'a Value) -> ::libc::c_uint;
+    pub fn LLVMGetFunctionCallConv(Fn: &Value) -> CallConv;
     pub fn LLVMSetFunctionCallConv(fun: &Value, cc: CallConv);
+    pub fn LLVMSetInstructionCallConv(instr: &Value, cc: CallConv);
     //pub fn LLVMGetGC(Fn: &'a Value) -> *const ::libc::c_char;
     //pub fn LLVMSetGC(Fn: &'a Value, Name: *const ::libc::c_char);
     //pub fn LLVMAddAttributeAtIndex(F: &'a Value, Idx: LLVMAttributeIndex, A: LLVMAttributeRef);

@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::sync::Arc;
 
 use codespan_reporting::diagnostic::Severity;
@@ -85,6 +86,40 @@ impl<'a> ConsoleSink<'a> {
 
     pub fn buffer(config: Config, db: &'a dyn BaseDB, buffer: &'a mut Buffer) -> ConsoleSink<'a> {
         ConsoleSink::new_with(config, db, Box::new(buffer))
+    }
+
+    pub fn summary(&mut self, target_name: &impl Display) -> bool {
+        if self.error_cnt != 0 {
+            let warn = if self.warning_cnt != 0 {
+                format!("; {} warning emitted", self.warning_cnt)
+            } else {
+                String::new()
+            };
+            let message = format!(
+                "could not compile `{}` due to {} previous errors{}",
+                target_name, self.error_cnt, warn
+            );
+
+            self.print_simple_message(Severity::Error, message);
+            return true;
+        }
+
+        if self.warning_cnt != 0 {
+            let message = format!("`{}` generated {} warning", target_name, self.warning_cnt);
+            self.print_simple_message(Severity::Warning, message);
+        }
+
+        false
+    }
+
+    pub fn print_simple_message(&mut self, severity: Severity, msg: String) {
+        emit(
+            &mut self.dst,
+            &self.config,
+            &FileSrc(self.db),
+            &Report::new(severity).with_message(msg),
+        )
+        .expect("Span emitting should never fail");
     }
 
     pub fn new_with(

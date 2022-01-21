@@ -11,7 +11,7 @@ pub struct CodegenCx<'a, 'll> {
 
     // ty_isize: &'ll Type,
     pub target: &'a Target,
-    pub literals: &'a mut Rodeo,
+    pub literals: &'a Rodeo,
     str_lit_cache: AHashMap<Spur, &'ll Value>,
     pub(crate) intrinsics: AHashMap<&'static str, (&'ll Type, &'ll Value)>,
     pub(crate) local_gen_sym_counter: usize,
@@ -19,7 +19,7 @@ pub struct CodegenCx<'a, 'll> {
 
 impl<'a, 'll> CodegenCx<'a, 'll> {
     pub(crate) fn new(
-        literals: &'a mut Rodeo,
+        literals: &'a Rodeo,
         llvm_module: &'ll crate::ModuleLlvm,
         target: &'a Target,
     ) -> CodegenCx<'a, 'll> {
@@ -42,7 +42,10 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             return val;
         }
 
-        let val = self.literals.resolve(&lit);
+        let val = self.literals.resolve(&lit).as_bytes().to_owned();
+
+        // assert!(!val.contains(&b'\0'));
+        // val.push(b'\0');
         let val = unsafe {
             llvm::LLVMConstStringInContext(
                 self.llcx,
@@ -62,7 +65,9 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             llvm::LLVMSetGlobalConstant(global, llvm::True);
             llvm::LLVMSetLinkage(global, llvm::Linkage::InternalLinkage);
         }
-        self.ptrcast(global, self.ty_str())
+        let res = self.ptrcast(global, self.ty_str());
+        self.str_lit_cache.insert(lit, res);
+        res
     }
 
     pub fn ptrcast(&self, val: &'ll Value, ty: &'ll Type) -> &'ll Value {

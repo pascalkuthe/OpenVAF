@@ -7,7 +7,7 @@ fn check(raw: &str, propagted: Expect) {
     let (mut cfg, literals) = ControlFlowGraph::parse(raw).unwrap();
     simplify_branches(&mut cfg);
     simplify_cfg(&mut cfg);
-    cfg.assert_verified(&literals);
+    cfg.assert_verified();
     // remove_dead_data(&mut cfg, param_cnt);
     let dump = cfg.dump(Some(&literals));
     propagted.assert_eq(&dump);

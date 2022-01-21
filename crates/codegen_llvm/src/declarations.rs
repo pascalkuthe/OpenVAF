@@ -92,4 +92,81 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             }
         })
     }
+
+    pub fn export_array(
+        &self,
+        name: &str,
+        elem_ty: &'ll Type,
+        vals: &[&'ll Value],
+        is_const: bool,
+        add_cnt: bool,
+    ) -> &'ll Value {
+        let arr = self
+            .define_global(name, self.ty_array(elem_ty, vals.len() as u32))
+            .unwrap_or_else(|| unreachable!("symbol '{}' already defined", name));
+
+        unsafe {
+            let init = self.const_arr(elem_ty, vals);
+            llvm::LLVMSetInitializer(arr, init);
+            if is_const {
+                llvm::LLVMSetGlobalConstant(arr, llvm::True);
+            }
+            llvm::LLVMSetLinkage(arr, llvm::Linkage::ExternalLinkage);
+            llvm::LLVMSetUnnamedAddress(arr, llvm::UnnamedAddr::No);
+            llvm::LLVMSetDLLStorageClass(arr, llvm::DLLStorageClass::Export);
+        }
+
+        if add_cnt {
+            let name = format!("{}.cnt", name);
+            let len = self
+                .define_global(&name, self.ty_isize())
+                .unwrap_or_else(|| unreachable!("symbol '{}' already defined", name));
+
+            unsafe {
+                let init = self.const_usize(vals.len());
+                llvm::LLVMSetInitializer(len, init);
+                llvm::LLVMSetGlobalConstant(len, llvm::True);
+                llvm::LLVMSetLinkage(len, llvm::Linkage::ExternalLinkage);
+                llvm::LLVMSetUnnamedAddress(len, llvm::UnnamedAddr::No);
+                llvm::LLVMSetDLLStorageClass(len, llvm::DLLStorageClass::Export);
+            }
+        }
+
+        arr
+    }
+
+    pub fn export_zeroed_array(
+        &self,
+        name: &str,
+        elem_ty: &'ll Type,
+        len: usize,
+        add_cnt: bool,
+    ) -> &'ll Value {
+        let ty = self.ty_array(elem_ty, len as u32);
+        let arr = self
+            .define_global(name, ty)
+            .unwrap_or_else(|| unreachable!("symbol '{}' already defined", name));
+
+        unsafe {
+            let init = llvm::LLVMConstNull(ty);
+            llvm::LLVMSetInitializer(arr, init);
+            llvm::LLVMSetLinkage(arr, llvm::Linkage::ExternalLinkage);
+        }
+
+        if add_cnt {
+            let name = format!("{}.cnt", name);
+            let arr_len = self
+                .define_global(&name, self.ty_isize())
+                .unwrap_or_else(|| unreachable!("symbol '{}' already defined", name));
+
+            unsafe {
+                let init = self.const_usize(len);
+                llvm::LLVMSetInitializer(arr_len, init);
+                llvm::LLVMSetGlobalConstant(arr_len, llvm::True);
+                llvm::LLVMSetLinkage(arr_len, llvm::Linkage::ExternalLinkage);
+            }
+        }
+
+        arr
+    }
 }

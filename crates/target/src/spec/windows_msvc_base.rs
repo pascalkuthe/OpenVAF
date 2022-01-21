@@ -1,20 +1,21 @@
-/*
- *  ******************************************************************************************
- *  Copyright (c) 2021 Pascal Kuthe. This file is part of the frontend project.
- *  It is subject to the license terms in the LICENSE file found in the top-level directory
- *  of this distribution and at  https://gitlab.com/DSPOM/OpenVAF/blob/master/LICENSE.
- *  No part of frontend, including this file, may be copied, modified, propagated, or
- *  distributed except according to the terms contained in the LICENSE file.
- *  *****************************************************************************************
- */
-
-use crate::spec::TargetOptions;
+use crate::spec::{LinkArgs, LinkerFlavor, TargetOptions};
 
 pub fn opts() -> TargetOptions {
+    let pre_link_args_msvc = vec![
+        // Suppress the verbose logo and authorship debugging output, which would needlessly
+        // clog any log files.
+        "/NOLOGO".to_string(),
+    ];
+    let mut pre_link_args = LinkArgs::new();
+    pre_link_args.insert(LinkerFlavor::Msvc, pre_link_args_msvc);
+    // pre_link_args.insert(LinkerFlavor::Lld(LldFlavor::Link), pre_link_args_msvc);
+
     TargetOptions {
         //       dll_prefix: "".to_string(),
         is_like_windows: true,
         is_like_msvc: true,
+        linker_flavor: LinkerFlavor::Msvc,
+        pre_link_args,
         ..Default::default()
     }
 }

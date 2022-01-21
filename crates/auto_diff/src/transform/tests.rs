@@ -102,9 +102,52 @@ fn place() {
             goto bb3;
         bb2:
             let p1 := exp [#2];
+            let p2 := copy [f64 0.0];
             goto bb3;
         bb3:
             let p0 := copy [p2];
+            end
+        }"##]];
+    check(src, expect);
+}
+
+#[test]
+fn const_place() {
+    let src = r##"
+        {
+        next_local _0;
+        next_place p3;
+        bb0:
+            let p1 := ln [#1];
+            if #0 { bb1 } else { bb2 }
+        bb1:
+            let p1 := exp [#1];
+            goto bb3;
+        bb2:
+            let p1 := copy [f64 1.0];
+            goto bb3;
+        bb3:
+            let p0 := cb1 [p1];
+            end
+        }"##;
+    let expect = expect![[r##"
+        {
+        next_local _1;
+        next_place p4;
+        bb0:
+            let p1 := ln [#1];
+            let _0 := copy [f64 0.0];
+            if #0 { bb1 } else { bb2 } 
+        bb1:
+            let p1 := exp [#1];
+            let p3 := f64.* [p1, f64 1.0];
+            goto bb3;
+        bb2:
+            let p1 := copy [f64 1.0];
+            let p3 := copy [f64 0.0];
+            goto bb3;
+        bb3:
+            let p0 := copy [p3];
             end
         }"##]];
     check(src, expect);

@@ -79,6 +79,7 @@ fn smoke_test() {
             _9: unkown1,
         }
         {
+        	bb0 -> Idx::<Instruction>(0): unkown1,
         	bb1 -> Idx::<Instruction>(1): unkown1,
         	bb3 -> Idx::<Instruction>(2): unkown1,
         }"#]];

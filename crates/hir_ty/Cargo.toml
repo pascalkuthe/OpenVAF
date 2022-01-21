@@ -33,11 +33,12 @@ text-size = "1.1"
 ahash = "0.7"
 indexmap = "1.6"
 arrayvec = "0.7"
+smol_str = {version = "0.1",  default-features = false}
 
 [dev-dependencies]
 
 sourcegen = {version ="0.0.0", path ="../sourcegen"}
-parking_lot = "0.11"
+parking_lot = "0.12"
 expect-test = "1.1"
 proc-macro2 = "1.0"
 quote = "1.0"

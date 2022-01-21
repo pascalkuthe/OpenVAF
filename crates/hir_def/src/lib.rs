@@ -34,11 +34,21 @@ use crate::item_tree::{
     AliasParam, Branch, Discipline, Function, ItemTreeId, Module, Nature, Param, Var,
 };
 pub use crate::item_tree::{
-    BranchKind, ItemTree, ItemTreeNode, NatureRef, NatureRefKind, NodeTypeDecl,
+    BranchKind, DisciplineAttr, ItemTree, ItemTreeNode, NatureAttr, NatureRef, NatureRefKind,
+    NodeTypeDecl,
 };
 use crate::nameres::ScopeDefItem;
 pub use crate::path::Path;
 pub use crate::types::Type;
+
+impl ParamSysFun {
+    pub fn default_value(self) -> f64 {
+        match self {
+            ParamSysFun::vflip | ParamSysFun::hflip | ParamSysFun::mfactor => 1f64,
+            ParamSysFun::xposition | ParamSysFun::yposition | ParamSysFun::angle => 0f64,
+        }
+    }
+}
 
 pub trait Intern {
     type ID;

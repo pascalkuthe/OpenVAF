@@ -282,4 +282,5 @@ pub fn remove_dead_blocks(cfg: &mut ControlFlowGraph) {
         }
         data.terminator_mut().visit_bb_mut(|succ| *succ = replacements[*succ])
     }
+    cfg.entry = replacements[cfg.entry];
 }

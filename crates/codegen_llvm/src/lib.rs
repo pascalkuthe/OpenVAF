@@ -1,5 +1,6 @@
 use std::ffi::CString;
 use std::mem::MaybeUninit;
+use std::path::Path;
 
 use lasso::Rodeo;
 use llvm::support::LLVMString;
@@ -36,6 +37,7 @@ impl<'t> LLVMBackend<'t> {
             llvm::LLVMPassManagerBuilderSetSizeLevel(builder, 0);
             builder
         };
+
         LLVMBackend { target, opt_lvl, builder: Some(builder) }
     }
 
@@ -53,7 +55,7 @@ impl<'t> LLVMBackend<'t> {
     /// Exercise caution!
     pub unsafe fn new_ctx<'a, 'll>(
         &'a self,
-        literals: &'a mut Rodeo,
+        literals: &'a Rodeo,
         module: &'ll ModuleLlvm,
     ) -> CodegenCx<'a, 'll> {
         CodegenCx::new(literals, module, self.target)
@@ -92,12 +94,16 @@ impl ModuleLlvm {
             &target.options.cpu,
             &target.options.features,
             lvl,
-            llvm::RelocMode::Default,
+            llvm::RelocMode::PIC,
             llvm::CodeModel::Default,
         )?;
         let llmod_raw = llmod as _;
 
         Ok(ModuleLlvm { llcx, llmod_raw, tm })
+    }
+
+    pub fn to_str(&self) -> LLVMString {
+        unsafe { LLVMString::new(llvm::LLVMPrintModuleToString(self.llmod())) }
     }
 
     pub fn llmod(&self) -> &llvm::Module {
@@ -149,6 +155,31 @@ impl ModuleLlvm {
                 None
             }
         }
+    }
+
+    pub fn emit_obect(&self, dst: &Path) -> Result<(), LLVMString> {
+        let path = CString::new(dst.to_str().unwrap()).unwrap();
+
+        let mut err_string = MaybeUninit::uninit();
+        let return_code = unsafe {
+            // REVIEW: Why does LLVM need a mutable ptr to path...?
+
+            llvm::LLVMTargetMachineEmitToFile(
+                self.tm,
+                self.llmod(),
+                path.as_ptr(),
+                llvm::CodeGenFileType::ObjectFile,
+                err_string.as_mut_ptr(),
+            )
+        };
+
+        if return_code == 1 {
+            unsafe {
+                return Err(LLVMString::new(err_string.assume_init()));
+            }
+        }
+
+        Ok(())
     }
 }
 

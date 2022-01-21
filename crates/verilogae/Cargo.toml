@@ -1,0 +1,60 @@
+[package]
+name = "verilogae"
+version = "0.9.0-beta1"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+crate-type = ["cdylib"]
+name = "verilogae"
+
+
+[dependencies]
+
+
+syntax = {version = "0.0.0", path = "../syntax"}
+basedb = { version = "0.0.0", path = "../basedb" }
+hir_def = { version = "0.0.0", path = "../hir_def" }
+hir_lower = {version ="0.0.0", path ="../hir_lower"}
+hir_ty = { version = "0.0.0", path = "../hir_ty" }
+
+cfg = { version = "0.0.0", path = "../cfg" }
+codegen_llvm = { version = "0.0.0", path = "../codegen_llvm" }
+llvm = { version = "0.0.0", path = "../llvm" }
+cfg_opt = { version = "0.0.0", path = "../cfg_opt" }
+auto_diff = { version = "0.0.0", path = "../auto_diff" }
+const_eval = { version = "0.0.0", path = "../const_eval" }
+program_dependence = { version = "0.0.0", path = "../program_dependence"}
+backend = {version = "0.0.0", path = "../backend"}
+
+
+target = { version = "0.0.0", path = "../target" }
+linker = { version = "0.0.0", path = "../linker" }
+
+stdx = { version = "0.0.0", path = "../stdx" }
+typed_indexmap = {version = "0.0.0", path = "../typed_indexmap"}
+bitset = {version = "0.0.0", path = "../bitset"}
+base_n = {version = "1", path = "../../lib/base_n"}
+paths = {version = "0.0", path = "../paths"}
+
+
+lasso = {version = "0.6", features = ["ahash"]}
+indexmap = "1.6"
+md5 = "0.7"
+directories-next = "2"
+libloading = "0.7"
+
+rayon-core = "1"
+
+smol_str = {version = "0.1",  default-features = false}
+parking_lot = "0.12"
+typed-index-collections = "3"
+ahash = "0.7"
+arrayvec = "0.7"
+
+anyhow = "1"
+
+salsa = "0.17.0-pre.2"
+

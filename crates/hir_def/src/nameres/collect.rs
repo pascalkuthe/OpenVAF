@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use ahash::AHashMap as HashMap;
 use arena::Arena;
 use basedb::{AstId, FileId};
+use indexmap::IndexMap;
 use syntax::ast;
 use syntax::name::Name;
 
@@ -161,7 +161,7 @@ impl DefCollector<'_> {
                 let scope = Scope {
                     origin: scope.origin,
                     parent: Some(root),
-                    children: HashMap::new(),
+                    children: IndexMap::default(),
                     declarations,
                 };
 
@@ -315,8 +315,8 @@ impl DefCollector<'_> {
         self.map.scopes.push_and_get_key(Scope {
             origin,
             parent: Some(parent),
-            children: HashMap::new(),
-            declarations: HashMap::new(),
+            children: IndexMap::default(),
+            declarations: IndexMap::default(),
         })
     }
 
@@ -324,8 +324,8 @@ impl DefCollector<'_> {
         self.map.scopes.push_and_get_key(Scope {
             origin,
             parent: None,
-            children: HashMap::new(),
-            declarations: HashMap::new(),
+            children: IndexMap::default(),
+            declarations: IndexMap::default(),
         })
     }
 

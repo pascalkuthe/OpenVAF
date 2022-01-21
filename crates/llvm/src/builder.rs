@@ -255,6 +255,14 @@ extern "C" {
         idx: u32,
         Name: *const c_char,
     ) -> &'a Value;
+
+    pub fn LLVMBuildSelect<'a>(
+        builder: &Builder<'a>,
+        cond: &'a Value,
+        then_val: &'a Value,
+        else_val: &'a Value,
+        name: *const c_char,
+    ) -> &'a Value;
     // pub fn LLVMBuildFPTrunc(
     //     builder: &Builder<'a>,
     //     Val: &'a Value,

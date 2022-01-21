@@ -9,6 +9,8 @@ use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
 
+use crate::{find_branch_place, find_module};
+
 mod eval_derivatives;
 mod integration;
 
@@ -46,20 +48,19 @@ impl TestDataBase {
     }
 
     pub fn full_compile(&self) {
-        let (root_module, cfg, interner) = crate::compile_to_cfg(self, self.root_file());
-        // let ret_var = if let ResolvedPath::ScopeDefItem(ScopeDefItem::VarId(var)) = self
-        //     .def_map(self.root_file())
-        //     .resolve_root_path(&[root_module.clone(), ret], self)
-        //     .unwrap()
-        // {
-        //     var
-        // } else {
-        //     unreachable!()
-        // };
-        // let ret_val = interner.places.index(&ret_var.into()).unwrap().into();
-        // let ret_ty = self.var_data(ret_var).ty.clone();
-        let module =
-            crate::compile_to_bin(self, &root_module, cfg, interner, (&Type::Real, &0f64.into()));
+        let module = find_module(self, self.root_file());
+        let (cfg, interner, literals) =
+            crate::compile_to_cfg(self, module, true, false, true, &mut |places, dst| {
+                find_branch_place(places, dst)
+            });
+        let module = crate::compile_to_bin(
+            self,
+            "test",
+            cfg,
+            &interner,
+            &literals,
+            (&Type::Real, &0f64.into()),
+        );
         assert!(module.verify_and_print(), "Invalid LLVM code generated")
     }
 }

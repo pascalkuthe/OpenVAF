@@ -1,0 +1,33 @@
+language = "C++"
+
+namespace = "vae"
+pragma_once = true
+
+after_includes = """
+
+namespace vae {
+    template<typename T>
+    struct Slice;
+
+    #if defined(_WIN32)
+        using NativePath = Slice<uint16_t>;
+    #else
+        using NativePath = Slice<uint8_t>;
+    #endif
+}
+"""
+
+trailer = """
+namespace vae {
+    const ParamFlags PARAM_FLAGS_MIN_INCLUSIVE = 1;
+    const ParamFlags PARAM_FLAGS_MAX_INCLUSIVE = 2;
+    const ParamFlags PARAM_FLAGS_INVALID = 4;
+    const ParamFlags PARAM_FLAGS_GIVEN = 8;
+}
+"""
+
+[export]
+exclude = ["NativePath"]
+
+[parse.expand]
+crates = ["verilogae"]

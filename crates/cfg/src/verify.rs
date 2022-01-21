@@ -1,5 +1,4 @@
 use bitset::BitSet;
-use lasso::Rodeo;
 use stdx::impl_debug;
 
 use crate::{
@@ -85,10 +84,10 @@ impl ControlFlowGraph {
         res.into_boxed_slice()
     }
 
-    pub fn assert_verified(&self, literals: &Rodeo) {
+    pub fn assert_verified(&self) {
         let errs = self.verify();
         if !errs.is_empty() {
-            let cfg = self.dump(Some(literals));
+            let cfg = self.dump(None);
             eprintln!(
                 "\n\x1b[31;1merror\x1b[0m: CFG violates invariants\n\n{}\n\n{:#?}",
                 cfg, errs

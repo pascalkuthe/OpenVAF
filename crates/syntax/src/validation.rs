@@ -3,8 +3,8 @@ use tokens::SyntaxKind;
 use tokens::SyntaxKind::NET_TYPE;
 
 use crate::ast::{
-    self, support, ArgListOwner, AttrsOwner, BlockItem, Expr, FunctionItem, LiteralKind,
-    ModulePortKind, ModulePorts, Name, PathSegmentKind,
+    self, support, ArgListOwner, AttrsOwner, BlockItem, ConstraintValue, Expr, FunctionItem,
+    LiteralKind, ModulePortKind, ModulePorts, Name, PathSegmentKind,
 };
 use crate::name::{kw, kw_comp};
 use crate::{match_ast, AstNode, AstPtr, SyntaxError, SyntaxNode, SyntaxNodePtr, T};
@@ -23,7 +23,30 @@ pub(crate) fn validate(root: &SyntaxNode, errors: &mut Vec<SyntaxError>) {
                 ast::Literal(decl) => validate_literal(decl, errors),
                 ast::Name(name) => validate_name(name,errors),
                 ast::ModuleDecl(module) => validate_module(module,errors),
+                ast::ParamDecl(param) => validate_param(param, errors),
                 _ => validate_net_type_token(node,errors)
+            }
+        }
+    }
+}
+
+fn validate_param(param_decl: ast::ParamDecl, errors: &mut Vec<SyntaxError>) {
+    let range_allowed =
+        param_decl.ty().map_or(true, |ty| ty.integer_token().is_some() | ty.real_token().is_some());
+    if range_allowed {
+        return;
+    }
+
+    for param in param_decl.paras() {
+        for constraint in param.constraints() {
+            if matches!(constraint.val(), Some(ConstraintValue::Range(_))) {
+                if let Some(name) = param.name() {
+                    errors.push(SyntaxError::RangeConstraintForNonNumericParameter {
+                        param: name.text().to_owned(),
+                        range: constraint.syntax().text_range(),
+                        ty: param_decl.ty().unwrap().syntax().text_range(),
+                    });
+                }
             }
         }
     }

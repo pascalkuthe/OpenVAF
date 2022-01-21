@@ -33,12 +33,12 @@ typed-index-collections = "3.0"
 
 # Performant collections
 ahash = "0.7"
+indexmap = "1.6"
 
 [dev-dependencies]
 
 sourcegen = {version ="0.0.0", path ="../sourcegen"}
-parking_lot = "0.11"
+parking_lot = "0.12"
 expect-test = "1.1"
 proc-macro2 = "1.0"
 quote = "1.0"
-indexmap = "1.6"

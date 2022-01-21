@@ -17,12 +17,12 @@ impl Display for Name {
 
 impl Name {
     /// Shortcut to create inline plain text name
-    pub(crate) const fn new_inline(text: &str) -> Name {
+    pub const fn new_inline(text: &str) -> Name {
         Name(SmolStr::new_inline(text))
     }
 
     /// Resolve a name from the text of token.
-    pub(crate) fn resolve(raw_text: &str) -> Name {
+    pub fn resolve(raw_text: &str) -> Name {
         if raw_text.starts_with('\\') {
             Name(SmolStr::new(&raw_text[1..raw_text.len() - 1]))
         } else {
@@ -81,6 +81,12 @@ impl AsIdent for ast::Expr {
 impl AsIdent for ast::Path {
     fn as_ident(&self) -> Option<Name> {
         self.as_raw_ident().as_ref().map(AsName::as_name)
+    }
+}
+
+impl From<Name> for SmolStr {
+    fn from(name: Name) -> Self {
+        name.0
     }
 }
 

@@ -19,12 +19,20 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { llvm::LLVMInt32TypeInContext(self.llcx) }
     }
 
+    pub fn ty_long(&self) -> &'ll Type {
+        unsafe { llvm::LLVMInt64TypeInContext(self.llcx) }
+    }
+
     pub fn ty_isize(&self) -> &'ll Type {
         unsafe { llvm::LLVMIntTypeInContext(self.llcx, self.target.pointer_width) }
     }
 
     pub fn ty_bool(&self) -> &'ll Type {
         unsafe { llvm::LLVMInt1TypeInContext(self.llcx) }
+    }
+
+    pub fn ty_c_bool(&self) -> &'ll Type {
+        unsafe { llvm::LLVMInt8TypeInContext(self.llcx) }
     }
 
     pub fn ty_str(&self) -> &'ll Type {
@@ -36,6 +44,10 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn ty_void(&self) -> &'ll Type {
         unsafe { llvm::LLVMVoidTypeInContext(self.llcx) }
+    }
+
+    pub fn ty_void_ptr(&self) -> &'ll Type {
+        self.ptr_ty(self.zst())
     }
 
     pub fn ty_func(&self, args: &[&'ll Type], ret: &'ll Type) -> &'ll Type {
@@ -58,6 +70,13 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { llvm::LLVMPointerType(elem, llvm::AddressSpace::DATA) }
     }
 
+    pub fn fat_ptr(&self, elem: &'ll Type, always_use_long: bool) -> &'ll Type {
+        let ptr = self.ptr_ty(elem);
+
+        let len = if always_use_long { self.ty_long() } else { self.ty_isize() };
+        self.struct_ty("fat_ptr", &[ptr, len])
+    }
+
     pub fn const_val(&mut self, val: &Const) -> &'ll Value {
         match *val {
             Const::Real(val) => self.const_real(val),
@@ -67,6 +86,17 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             Const::String(val) => self.const_str(val),
             Const::Zst => self.const_zst(),
         }
+    }
+
+    /// # Safety
+    /// indicies must be valid and inbounds for the provided ptr
+    /// The pointer must be a constant address
+    pub unsafe fn const_gep(
+        &self,
+        ptr: &'ll llvm::Value,
+        indicies: &[&'ll llvm::Value],
+    ) -> &'ll llvm::Value {
+        llvm::LLVMConstGEP(ptr, indicies.as_ptr(), indicies.len() as u32)
     }
 
     pub fn const_zst(&self) -> &'ll Value {
@@ -89,23 +119,36 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { llvm::LLVMConstInt(self.ty_bool(), val as u64, False) }
     }
 
+    pub fn const_c_bool(&self, val: bool) -> &'ll Value {
+        unsafe { llvm::LLVMConstInt(self.ty_c_bool(), val as u64, False) }
+    }
+
+    pub fn const_u8(&self, val: u8) -> &'ll Value {
+        unsafe { llvm::LLVMConstInt(self.ty_c_bool(), val as u64, False) }
+    }
+
     pub fn const_real(&self, val: f64) -> &'ll Value {
         unsafe { llvm::LLVMConstReal(self.ty_real(), val) }
     }
 
-    // pub fn const_cmplx(&self, val: &Complex64) -> &'ll Value {
-    //     let real = self.const_real(val.real);
-    //     let imag = self.const_real(val.imag);
-    //     let vals = [real, imag];
-    //     unsafe { llvm::LLVMConstArray(self.ty_real(), vals.as_mut_ptr(), 2) }
-    // }
+    pub fn const_arr(&self, elem_ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
+        unsafe { llvm::LLVMConstArray(elem_ty, vals.as_ptr(), vals.len() as u32) }
+    }
 
     pub fn const_null(&self, t: &'ll Type) -> &'ll Value {
         unsafe { llvm::LLVMConstNull(t) }
     }
 
+    pub fn const_null_ptr(&self, t: &'ll Type) -> &'ll Value {
+        unsafe { llvm::LLVMConstPointerNull(t) }
+    }
+
     pub fn const_undef(&self, t: &'ll Type) -> &'ll Value {
         unsafe { llvm::LLVMGetUndef(t) }
+    }
+
+    pub fn elem_ty(&self, v: &'ll Type) -> &'ll Type {
+        unsafe { llvm::LLVMGetElementType(v) }
     }
 
     pub fn val_ty(&self, v: &'ll Value) -> &'ll Type {

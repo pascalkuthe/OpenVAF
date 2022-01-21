@@ -2,7 +2,6 @@ use std::vec;
 
 use cfg::{Callback, CfgParam, Place};
 use hir_def::{BranchId, FunctionId, NodeId, ParamId, ParamSysFun, VarId};
-use lasso::Rodeo;
 use stdx::{impl_debug, impl_idx_from};
 use typed_indexmap::TiSet;
 
@@ -59,6 +58,8 @@ pub enum PlaceKind {
     },
     /// A parameter during param initiliztion is mutable (write default in case its not given)
     Param(ParamId),
+    ParamMin(ParamId),
+    ParamMax(ParamId),
 }
 
 impl From<VarId> for PlaceKind {
@@ -68,12 +69,22 @@ impl From<VarId> for PlaceKind {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum ParamInfoKind {
+    Invalid,
+    MinInclusive,
+    MaxInclusive,
+    MinExclusive,
+    MaxExclusive,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CallBackKind {
     SimParam,
     SimParamOpt,
     SimParamStr,
     Derivative(CfgParam),
     NodeDerivative(NodeId),
+    ParamInfo(ParamInfoKind, ParamId),
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
@@ -83,12 +94,12 @@ impl_debug!(match CfgNodeId{node => "node{}",node.0;});
 
 /// A mapping between abstractions used in the control flow graph and the corresponding
 /// information from the HIR. This allows the CFG to remain independent of the HirInterner
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct HirInterner {
     pub params: TiSet<CfgParam, ParamKind>,
     pub places: TiSet<Place, PlaceKind>,
     pub callbacks: TiSet<Callback, CallBackKind>,
-    pub literals: Rodeo,
+    // pub literals: Rodeo, We want clone
 }
 
 impl HirInterner {

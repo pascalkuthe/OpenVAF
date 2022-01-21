@@ -119,7 +119,7 @@ impl NatureData {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarData {
-    // pub name: Name,
+    pub name: Name,
     pub ty: Type,
 }
 
@@ -127,13 +127,13 @@ impl VarData {
     pub fn var_data_query(db: &dyn HirDefDB, id: VarId) -> Arc<VarData> {
         let loc = id.lookup(db);
         let var = &loc.item_tree(db)[loc.id];
-        Arc::new(VarData { ty: var.ty.clone() })
+        Arc::new(VarData { name: var.name.clone(), ty: var.ty.clone() })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamData {
-    // pub name: Name,
+    pub name: Name,
     pub ty: Type,
 }
 
@@ -141,12 +141,13 @@ impl ParamData {
     pub fn param_data_query(db: &dyn HirDefDB, id: ParamId) -> Arc<ParamData> {
         let loc = id.lookup(db);
         let param = &loc.item_tree(db)[loc.id];
-        Arc::new(ParamData { ty: param.ty.clone() })
+        Arc::new(ParamData { name: param.name.clone(), ty: param.ty.clone() })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeData {
+    pub name: Name,
     pub discipline: Option<Name>,
     pub is_input: bool,
     pub is_output: bool,
@@ -162,6 +163,7 @@ impl NodeData {
         let (is_input, is_output) = node.direction(&tree);
 
         Arc::new(NodeData {
+            name: node.name.clone(),
             discipline: node.discipline(&tree),
             is_input,
             is_output,
@@ -187,7 +189,7 @@ impl NodeData {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchData {
-    // pub name: Name,
+    pub name: Name,
     pub kind: BranchKind,
 }
 
@@ -195,12 +197,13 @@ impl BranchData {
     pub fn branch_data_query(db: &dyn HirDefDB, id: BranchId) -> Arc<BranchData> {
         let loc = id.lookup(db);
         let branch = &loc.item_tree(db)[loc.id];
-        Arc::new(BranchData { kind: branch.kind.clone() })
+        Arc::new(BranchData { name: branch.name.clone(), kind: branch.kind.clone() })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionArg {
+    pub name: Name,
     pub ty: Type,
     pub is_input: bool,
     pub is_output: bool,
@@ -208,12 +211,18 @@ pub struct FunctionArg {
 
 impl FunctionArg {
     fn new(arg: &item_tree::FunctionArg, tree: &ItemTree) -> FunctionArg {
-        FunctionArg { ty: arg.ty(tree), is_input: arg.is_input, is_output: arg.is_output }
+        FunctionArg {
+            name: arg.name.clone(),
+            ty: arg.ty(tree),
+            is_input: arg.is_input,
+            is_output: arg.is_output,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionData {
+    pub name: Name,
     pub return_ty: Type,
     pub args: Box<TiSlice<LocalFunctionArgId, FunctionArg>>,
 }
@@ -222,8 +231,12 @@ impl FunctionData {
     pub fn function_data_query(db: &dyn HirDefDB, id: FunctionId) -> Arc<FunctionData> {
         let loc = id.lookup(db);
         let item_tree = loc.item_tree(db);
-        let args =
-            item_tree[loc.id].args.iter().map(|arg| FunctionArg::new(arg, &item_tree)).collect();
-        Arc::new(FunctionData { return_ty: item_tree[loc.id].ty.clone(), args })
+        let fun = &item_tree[loc.id];
+        let args = fun.args.iter().map(|arg| FunctionArg::new(arg, &item_tree)).collect();
+        Arc::new(FunctionData {
+            name: fun.name.clone(),
+            return_ty: item_tree[loc.id].ty.clone(),
+            args,
+        })
     }
 }

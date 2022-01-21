@@ -44,7 +44,7 @@ fn check_with_diagnostics(src: &str, diagnostics: Expect, cfg: Expect) {
     diagnostics.assert_eq(&actual);
 
     let res = HirInterner::lower_body(&db, def);
-    cfg.assert_eq(&res.0.dump(Some(&res.1.literals)));
+    cfg.assert_eq(&res.0.dump(Some(&res.2)));
 }
 
 fn check(src: &str, cfg: Expect) {

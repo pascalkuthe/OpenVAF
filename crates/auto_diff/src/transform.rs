@@ -179,6 +179,20 @@ impl<'a> CfgTransform<'a> {
         let src = -instr.src;
 
         if let Some(unkowns) = unkowns {
+            if let (InstrDst::Place(place), Def::Assignment(assign)) = (instr.dst, def) {
+                if self.live_derivatives.assign_zero.contains(assign) {
+                    // Just add the instruction and write zero to all derivatives
+                    self.cfg.add_instr(instr);
+
+                    // places are mutable so we have to write zeros into their (also mutable) derivatives
+                    for unkown in unkowns.iter() {
+                        let place = self.derivative_place(place, unkown);
+                        self.cfg.build_assign(place.into(), Op::Copy, smallvec![0f64.into()], -src);
+                    }
+                    return;
+                }
+            }
+            // calculate derivatives
             // add the original instruction
             self.resolved_derivatives.insert(
                 None,
@@ -232,7 +246,7 @@ impl<'a> CfgTransform<'a> {
             self.resolved_derivatives.clear();
         } else {
             // Just add the instructions no derivatives required ;)
-            self.cfg.add_instr(instr)
+            self.cfg.add_instr(instr);
         }
     }
 
@@ -247,6 +261,13 @@ impl<'a> CfgTransform<'a> {
             }
         }
         local
+    }
+
+    fn derivative_place(&mut self, mut place: Place, unkown: Unkown) -> Place {
+        for unkown in self.unkowns.first_order_unkowns_rev(unkown) {
+            place = self.derivative_place_1(place, unkown);
+        }
+        place
     }
 
     fn derivative_place_1(&mut self, place: Place, unkown: FirstOrderUnkown) -> Place {

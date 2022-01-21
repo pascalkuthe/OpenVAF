@@ -85,6 +85,9 @@ pub enum PassManagerBuilder {}
 pub enum Target {}
 
 #[derive(Debug)]
+pub enum TargetData {}
+
+#[derive(Debug)]
 pub enum TargetMachine {}
 
 #[repr(C)]
@@ -105,7 +108,7 @@ pub enum OptLevel {
 pub enum RelocMode {
     Default = 0,
     // Static = 1,
-    // PIC = 2,
+    PIC = 2,
     // DynamicNoPic = 3,
     // ROPI = 4,
     // RWPI = 5,
@@ -138,13 +141,19 @@ pub enum Linkage {
     AvailableExternallyLinkage = 1,
     LinkOnceAnyLinkage = 2,
     LinkOnceODRLinkage = 3,
-    WeakAnyLinkage = 4,
-    WeakODRLinkage = 5,
-    AppendingLinkage = 6,
-    InternalLinkage = 7,
-    PrivateLinkage = 8,
-    ExternalWeakLinkage = 9,
-    CommonLinkage = 10,
+    LinkOnceODRAutoHideLinkage = 4,
+    WeakAnyLinkage = 5,
+    WeakODRLinkage = 6,
+    AppendingLinkage = 7,
+    InternalLinkage = 8,
+    PrivateLinkage = 9,
+    DLLImportLinkage = 10,
+    DLLExportLinkage = 11,
+    ExternalWeakLinkage = 12,
+    GhostLinkage = 13,
+    CommonLinkage = 14,
+    LinkerPrivateLinkage = 15,
+    LinkerPrivateWeakLinkage = 16,
 }
 
 #[repr(C)]
@@ -168,10 +177,10 @@ pub enum UnnamedAddr {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum LLVMDLLStorageClass {
-    LLVMDefaultStorageClass = 0,
-    LLVMDLLImportStorageClass = 1,
-    LLVMDLLExportStorageClass = 2,
+pub enum DLLStorageClass {
+    Default = 0,
+    Import = 1,
+    Export = 2,
 }
 
 // LLVM CallingConv::ID. Should we wrap this?

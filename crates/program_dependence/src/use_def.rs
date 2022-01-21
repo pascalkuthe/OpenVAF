@@ -179,29 +179,50 @@ impl DepthFirstSearch {
     pub fn remove_unvisited_from_cfg(
         &self,
         cfg: &mut ControlFlowGraph,
-        pdg: &mut ProgramDependenGraph,
+        intern: &AssigmentInterner,
+        pdg: Option<&mut ProgramDependenGraph>,
     ) {
-        for (assign, loc) in pdg.interner().assigment_locations.iter_enumerated() {
-            if !self.visited_assigments.contains(assign) {
-                cfg.blocks[loc.bb].instructions[loc.instr] = Instruction::default();
-                pdg.use_def_graph.assign_local.take_row(assign);
-                pdg.use_def_graph.assign_assign.take_row(assign);
+        fn remove_unvisited_from_cfg_impl(
+            live: &DepthFirstSearch,
+            cfg: &mut ControlFlowGraph,
+            intern: &AssigmentInterner,
+            mut remove_def: impl FnMut(Def),
+        ) {
+            for (assign, loc) in intern.assigment_locations.iter_enumerated() {
+                if !live.visited_assigments.contains(assign) {
+                    cfg.blocks[loc.bb].instructions[loc.instr] = Instruction::default();
+                    remove_def(assign.into());
+                }
+            }
+
+            for (local, loc) in intern.local_defs.iter_enumerated() {
+                if !live.visited_locals.contains(local) {
+                    match loc.kind {
+                        cfg::LocationKind::Phi(phi) => cfg[loc.bb].phis[phi].sources.clear(),
+                        cfg::LocationKind::Instruction(instr) => {
+                            cfg.blocks[loc.bb].instructions[instr] = Instruction::default()
+                        }
+                        cfg::LocationKind::Terminator => (), // UNDEF local is dead... good
+                    }
+
+                    remove_def(local.into());
+                }
             }
         }
 
-        for (local, loc) in pdg.interner().local_defs.iter_enumerated() {
-            if !self.visited_locals.contains(local) {
-                match loc.kind {
-                    cfg::LocationKind::Phi(phi) => cfg[loc.bb].phis[phi].sources.clear(),
-                    cfg::LocationKind::Instruction(instr) => {
-                        cfg.blocks[loc.bb].instructions[instr] = Instruction::default()
-                    }
-                    cfg::LocationKind::Terminator => (), // UNDEF local is dead... good
+        if let Some(pdg) = pdg {
+            remove_unvisited_from_cfg_impl(self, cfg, intern, |def| match def {
+                Def::Local(local) => {
+                    pdg.use_def_graph.local_local.take_row(local);
+                    pdg.use_def_graph.local_assign.take_row(local);
                 }
-
-                pdg.use_def_graph.local_local.take_row(local);
-                pdg.use_def_graph.local_assign.take_row(local);
-            }
+                Def::Assignment(assign) => {
+                    pdg.use_def_graph.assign_local.take_row(assign);
+                    pdg.use_def_graph.assign_assign.take_row(assign);
+                }
+            })
+        } else {
+            remove_unvisited_from_cfg_impl(self, cfg, intern, |_| ())
         }
     }
 

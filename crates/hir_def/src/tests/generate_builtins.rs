@@ -221,17 +221,18 @@ fn generate_builtins() {
             }
         }
 
-        pub fn insert_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>){
+        pub fn insert_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>){
             #(dst.insert(#kw_types::#kws,BuiltIn::#variants.into());)*
         }
 
 
-        pub fn insert_modulle_builtin_scope(dst: &mut AHashMap<Name, ScopeDefItem>){
+        pub fn insert_modulle_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>){
             #(dst.insert(sysfun::#params,ParamSysFun::#params.into());)*
         }
     };
 
-    let header = "use ahash::AHashMap;
+    let header = "use ahash::RandomState;
+        use indexmap::IndexMap;
         use syntax::name::{kw, sysfun, Name};
 
         use crate::nameres::ScopeDefItem;

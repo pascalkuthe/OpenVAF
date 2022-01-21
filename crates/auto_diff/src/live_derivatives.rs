@@ -13,6 +13,7 @@ mod tests;
 pub struct LiveDerivatives {
     pub local_derivatives: SparseBitMatrix<Local, Unkown>,
     pub assign_derivatives: SparseBitMatrix<Assignment, Unkown>,
+    pub assign_zero: BitSet<Assignment>,
     pub ddx: AHashMap<Def, (FirstOrderUnkown, HybridBitSet<Unkown>)>,
 }
 
@@ -37,11 +38,8 @@ impl LiveDerivatives {
         let mut assigns = BitSet::new_empty(pdg.interner().assigment_locations.len());
         let mut ddx = AHashMap::new();
 
-        eprintln!("{:?}", unkowns.first_order_unkowns);
-
         dfs.visited_instructions(pdg, cfg, |def, instr| {
             if let Op::Call(call) = instr.op {
-                eprintln!("call {:?}", call);
                 if let Some(unkown) = unkowns.first_order_unkowns.index(&call) {
                     ddx.insert(def, unkown);
                 }
@@ -69,6 +67,7 @@ impl LiveDerivatives {
                 pdg.interner().assigment_locations.len(),
                 unkowns.len(),
             ),
+            assign_zero: BitSet::new_empty(0),
             ddx: AHashMap::new(),
         };
 
@@ -87,7 +86,8 @@ impl LiveDerivatives {
         }
 
         let dug = pdg.def_use_graph();
-        for def in dug.dependent_defs_rec_postorder(entrys) {
+        let mut postorder = dug.dependent_defs_rec_postorder(entrys);
+        for def in &mut postorder {
             let mut dst = HybridBitSet::new_empty();
             for def in dug.dependent_defs(def) {
                 match def {
@@ -123,6 +123,38 @@ impl LiveDerivatives {
             }
         }
 
+        // All assigns who have not been visited always have a zero derivatives
+        // Because places are mutable we can't do a simple trick of replacing all uses with zero
+        // Instead we must write zeros into the derivative place
+        // 99% of these derivatives (and quickly removed by DCE)
+        // But in edgcases this can be very important
+
+        res.assign_zero = {
+            postorder.visited_assigns.inverse();
+            postorder.visited_assigns
+        };
+
+        for assign in res.assign_zero.iter() {
+            let mut dst = HybridBitSet::new_empty();
+            for def in dug.dependent_defs(assign.into()) {
+                match def {
+                    Def::Local(local) => {
+                        if let Some(row) = res.local_derivatives.row(local) {
+                            dst.union(row, unkowns.len());
+                        }
+                    }
+                    Def::Assignment(assign) => {
+                        if let Some(row) = res.assign_derivatives.row(assign) {
+                            dst.union(row, unkowns.len());
+                        }
+                    }
+                }
+            }
+
+            if !dst.is_empty() {
+                *res.assign_derivatives.ensure_row(assign) = dst
+            }
+        }
         res
     }
 }

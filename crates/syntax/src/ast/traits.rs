@@ -3,7 +3,7 @@ use std::iter::FlatMap;
 
 use rowan::{GreenNodeData, GreenTokenData, NodeOrToken};
 
-use crate::ast::{support, AstChildren};
+use crate::ast::{support, RevAstChildren};
 use crate::{ast, AstNode, SyntaxNode, TokenText};
 
 pub trait ArgListOwner: AstNode {
@@ -13,14 +13,14 @@ pub trait ArgListOwner: AstNode {
 }
 
 pub type AttrIter = FlatMap<
-    AstChildren<ast::AttrList>,
-    AstChildren<ast::Attr>,
-    fn(ast::AttrList) -> AstChildren<ast::Attr>,
+    RevAstChildren<ast::AttrList>,
+    RevAstChildren<ast::Attr>,
+    fn(ast::AttrList) -> RevAstChildren<ast::Attr>,
 >;
 
 pub fn attrs(syntax: &SyntaxNode) -> AttrIter {
-    support::children::<ast::AttrList>(syntax)
-        .flat_map(|list| support::children::<ast::Attr>(list.syntax()))
+    support::rev_children::<ast::AttrList>(syntax)
+        .flat_map(|list| support::rev_children::<ast::Attr>(list.syntax()))
 }
 
 pub trait AttrsOwner: AstNode {

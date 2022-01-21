@@ -2,19 +2,19 @@
 [workspace]
 resolver = "2"
 members = ["crates/*","xtask/", "lib/*"]
-exclude = ["crates/linker","crates/lld","crates/pass"]
+exclude = ["exclude/*"]
 
-[profile.benchmark]
-inherits = "release"
+[profile.release]
 lto = "thin"
 incremental = true
-
+panic = "abort"
 
 
 [profile.dev]
 # Disabling debug info speeds up builds a bunch,
 # and we don't rely on it for debugging that much.
-debug = 2
+debug = false
+panic = "abort"
 
 [profile.dev.package]
 # These speed up local tests.
@@ -26,4 +26,6 @@ text-size.opt-level = 3
 
 
 [patch.crates-io]
-salsa = { git = 'https://github.com/DSPOM2/salsa' , branch = 'patch-1'}
+salsa = { git = 'https://github.com/DSPOM2/salsa'}
+pyo3-ffi = { git = 'https://github.com/DSPOM2/pyo3'}
+pyo3-build-config = { git = 'https://github.com/DSPOM2/pyo3'}

@@ -94,6 +94,12 @@ pub enum SyntaxError {
         found: String,
         range: TextRange,
     },
+
+    RangeConstraintForNonNumericParameter {
+        param: String,
+        range: TextRange,
+        ty: TextRange,
+    },
 }
 
 use SyntaxError::*;
@@ -121,5 +127,6 @@ impl_display! {
         MixedModuleHead{..} => "module header contains mix of port references and port declarations";
         IllegalBodyPorts{..} => "ports declared in module head and body";
         IllegalNetType{found,..} => "{} nets are currently not supported!",found;
+        RangeConstraintForNonNumericParameter{param,..} => "non-numeric parameter '{}' has range bounds", param;
     }
 }

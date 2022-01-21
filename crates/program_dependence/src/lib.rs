@@ -2,7 +2,7 @@ use bitset::SparseBitMatrix;
 use cfg::{BasicBlock, ControlFlowGraph, InstIdx, InstrDst, Local, Location, LocationKind, Place};
 
 use data_flow::GenKillAnalysis;
-use once_cell::unsync::OnceCell;
+use once_cell::sync::OnceCell;
 use stdx::{impl_debug, impl_idx_from, impl_idx_math};
 use typed_index_collections::{TiSlice, TiVec};
 use typed_indexmap::TiSet;

@@ -502,6 +502,23 @@ impl Diagnostic for SyntaxError {
                     message: "unsupported net type".to_owned(),
                 }])
             }
+            SyntaxError::RangeConstraintForNonNumericParameter { range, ty, .. } => {
+                let (file_id, [range, ty]) = text_ranges_to_unified_spans(&sm, &parse, [range, ty]);
+                Report::error().with_labels(vec![
+                    Label {
+                        style: LabelStyle::Primary,
+                        file_id,
+                        range: range.into(),
+                        message: "illegal range bounds".to_owned(),
+                    },
+                    Label {
+                        style: LabelStyle::Secondary,
+                        file_id,
+                        range: ty.into(),
+                        message: "help: expected real or integer".to_owned(),
+                    },
+                ])
+            }
         };
 
         report.with_message(self.to_string())

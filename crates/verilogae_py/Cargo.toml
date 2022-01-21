@@ -1,0 +1,27 @@
+[package]
+name = "verilogae_py"
+version = "0.9.0-beta2"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+crate-type = ["cdylib"]
+name = "verilogae_py"
+
+[dependencies]
+pyo3-ffi = { version = "0.15", features = ["extension-module"]}
+verilogae_ffi = { version = "0.9.0-beta1", path = "../verilogae_ffi"}
+libc = "0.2"
+ahash = "0.7"
+
+[build-dependencies]
+
+pyo3-build-config = {version = "0.15", features = ["resolve-config"]}
+
+
+[features]
+
+default = ["build"]
+build = ["verilogae_ffi/build"]

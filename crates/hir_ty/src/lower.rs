@@ -64,7 +64,7 @@ impl NatureTy {
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn nature_info_recover(
         db: &dyn HirTyDB,
-        _cycle: &[String],
+        _cycle: &salsa::Cycle,
         nature: &NatureId,
     ) -> Arc<NatureTy> {
         NatureTy::obtain(db, *nature, false)

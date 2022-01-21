@@ -2,11 +2,11 @@ use cfg::{
     smallvec, Callback, CfgBuilder, CfgParam, Const, ControlFlowGraph, Local, Op, Operand, Place,
     Terminator,
 };
-use hir_def::body::Body;
+use hir_def::body::{Body, ConstraintKind, ConstraintValue};
 use hir_def::expr::CaseCond;
 use hir_def::{
-    BuiltIn, Case, DefWithBodyId, ExprId, FunctionId, LocalFunctionArgId, NodeId, ParamSysFun,
-    Stmt, StmtId, Type,
+    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, LocalFunctionArgId, NodeId,
+    ParamSysFun, Stmt, StmtId, Type,
 };
 use hir_ty::builtin::{
     ABS_INT, ABS_REAL, DDX_POT, IDT_NO_IC, MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH,
@@ -16,22 +16,28 @@ use hir_ty::builtin::{
 use hir_ty::db::HirTyDB;
 use hir_ty::inference::{AssignDst, BranchWrite, InferenceResult, ResolvedFun};
 use hir_ty::types::{Ty as HirTy, BOOL_EQ, INT_EQ, INT_OP, REAL_EQ, REAL_OP, STR_EQ};
+use lasso::Rodeo;
 use stdx::iter::zip;
 
-use crate::{CallBackKind, CurrentKind, HirInterner, ParamKind, PlaceKind};
+use crate::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
 use syntax::ast::{AssignOp, BinaryOp, UnaryOp};
 use typed_index_collections::{TiSlice, TiVec};
 
 impl HirInterner {
-    pub fn lower_body(db: &dyn HirTyDB, def: DefWithBodyId) -> (ControlFlowGraph, HirInterner) {
+    pub fn lower_body(
+        db: &dyn HirTyDB,
+        def: DefWithBodyId,
+    ) -> (ControlFlowGraph, HirInterner, Rodeo) {
         let mut cfg = ControlFlowGraph::default();
         let body = db.body(def);
         let infere = db.inference_result(def);
 
         let mut res = HirInterner::default();
+        let mut literals = Rodeo::new();
         let mut ctx = LoweringCtx {
             db,
             cfg: &mut CfgBuilder::new(&mut cfg),
+            literals: &mut literals,
             data: &mut res,
             body: &body,
             infere: &infere,
@@ -42,43 +48,279 @@ impl HirInterner {
         ctx.cfg.terminate(Terminator::Ret);
         cfg.next_place = res.places.len().into();
 
-        (cfg, res)
+        (cfg, res, literals)
     }
 
-    pub fn insert_var_init(&mut self, db: &dyn HirTyDB, dst: &mut ControlFlowGraph) {
+    pub fn insert_var_init(
+        &mut self,
+        db: &dyn HirTyDB,
+        literals: &mut Rodeo,
+        dst: &mut ControlFlowGraph,
+    ) {
         let mut cfg = CfgBuilder::new(dst);
-        let entry = cfg.enter_new_block();
+        let entry = cfg.current;
         for (place, kind) in self.places.clone().iter_enumerated() {
             let val = match *kind {
-                PlaceKind::Var(var) => self.lower_expr_body(db, var.into(), 0, &mut cfg),
+                PlaceKind::Var(var) => self.lower_expr_body(db, literals, var.into(), 0, &mut cfg),
                 PlaceKind::BranchVoltage(_)
                 | PlaceKind::BranchCurrent(_)
                 | PlaceKind::ImplicitBranchVoltage { .. }
                 | PlaceKind::ImplicitBranchCurrent { .. }
                 | PlaceKind::Derivative { .. } => 0f64.into(),
-                PlaceKind::Param(_) | PlaceKind::FunctionReturn { .. } => continue,
+                PlaceKind::Param(_)
+                | PlaceKind::FunctionReturn { .. }
+                | PlaceKind::ParamMin(_)
+                | PlaceKind::ParamMax(_) => continue,
             };
             cfg.build_assign(place.into(), Op::Copy, smallvec![val], 1)
         }
         cfg.prepend_entry(entry)
     }
 
-    //     pub fn insert_param_init(&mut self, db: &dyn HirTyDB, dst: &mut ControlFlowGraph) {
-    //         let mut cfg = CfgBuilder::new(dst);
-    //         let entry = cfg.enter_new_block();
-    //         for kind in self.params.raw.clone() {
-    //             if let ParamKind::Param(param) = kind {
-    //                 self.params.ensure(ParamKind::ParamGiven { param });
-    //             }
-    //         }
-    //         cfg.terminate(Terminator::Goto(cfg.cfg.entry()));
-    //         cfg.prepend_entry(entry)
-    //     }
+    pub fn insert_param_init(
+        &mut self,
+        db: &dyn HirTyDB,
+        literals: &mut Rodeo,
+        dst: &mut ControlFlowGraph,
+    ) {
+        let mut cfg = CfgBuilder::new(dst);
+        let entry = cfg.current;
+        for kind in self.params.raw.clone() {
+            if let ParamKind::Param(param) = kind {
+                let (given, _) = self.params.ensure(ParamKind::ParamGiven { param });
+                let (place, _) = self.places.ensure(PlaceKind::Param(param));
+
+                let body = db.body(param.into());
+                let infere = db.inference_result(param.into());
+                let info = db.param_exprs(param);
+                let data = db.param_data(param).clone();
+                let ty = &data.ty;
+
+                cfg.build_cond(given.into(), |cfg, given| {
+                    if !given {
+                        let def_val = self.lower_expr_body(db, literals, param.into(), 0, cfg);
+                        cfg.build_assign(place.into(), Op::Copy, smallvec![def_val], 0);
+                    }
+                });
+
+                let mut ctx = LoweringCtx {
+                    db,
+                    data: self,
+                    literals,
+                    cfg: &mut cfg,
+                    body: &body,
+                    infere: &infere,
+                    args: TiSlice::from_ref(&[]),
+                };
+
+                let call = ctx
+                    .data
+                    .callbacks
+                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param))
+                    .0;
+
+                let min_inclusive = ctx
+                    .data
+                    .callbacks
+                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param))
+                    .0;
+
+                let max_inclusive = ctx
+                    .data
+                    .callbacks
+                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param))
+                    .0;
+
+                let min_exclusive = ctx
+                    .data
+                    .callbacks
+                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param))
+                    .0;
+
+                let max_exclusive = ctx
+                    .data
+                    .callbacks
+                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param))
+                    .0;
+                let exclude_start = ctx.cfg.create_block();
+
+                let mut exclude_pos = exclude_start;
+                let mut from_pos = ctx.cfg.current;
+
+                let default_bounds: Option<(Operand, Operand)> = match ty {
+                    Type::Real => Some((f64::NEG_INFINITY.into(), f64::INFINITY.into())),
+                    Type::Integer => Some((i32::MIN.into(), i32::MAX.into())),
+                    _ => None,
+                };
+
+                let bounds_info = default_bounds.map(|(default_min, default_max)| {
+                    let min = ctx.data.places.ensure(PlaceKind::ParamMin(param)).0;
+                    let max = ctx.data.places.ensure(PlaceKind::ParamMax(param)).0;
+                    (min, max, default_min, default_max)
+                });
+
+                let mut has_bounds = false;
+
+                for bound in info.bounds.iter() {
+                    let exclude = match bound.kind {
+                        ConstraintKind::Exclude => {
+                            ctx.cfg.current = exclude_pos;
+                            true
+                        }
+                        ConstraintKind::From => {
+                            ctx.cfg.current = from_pos;
+                            false
+                        }
+                    };
+
+                    match bound.val {
+                        ConstraintValue::Value(val) => {
+                            let val = ctx.lower_expr(val);
+                            let op = match (ty, exclude) {
+                                (Type::Real, false) => Op::RealEq,
+                                (Type::Integer, false) => Op::IntEq,
+                                (Type::String, false) => Op::StringEq,
+                                (Type::Real, true) => Op::RealNeq,
+                                (Type::Integer, true) => Op::IntNeq,
+                                (Type::String, true) => Op::StringNeq,
+                                _ => unreachable!(),
+                            };
+
+                            let mut err = ctx.cfg.build_val(op, smallvec![val, place.into()], 0);
+                            if exclude {
+                                err =
+                                    ctx.cfg.build_val(Op::BoolBitNegate, smallvec![err.into()], 0);
+                            }
+                            ctx.cfg.build_cond(err.into(), |cfg, is_err| {
+                                if is_err {
+                                    cfg.build_stmt(Op::Call(call), smallvec![], 0);
+                                }
+                            });
+                        }
+                        ConstraintValue::Range(range) => {
+                            let op = match (ty, range.start_inclusive) {
+                                (Type::Real, true) => Op::RealLessThen,
+                                (Type::Real, false) => Op::RealLessEqual,
+                                (Type::Integer, true) => Op::IntLessThen,
+                                (Type::Integer, false) => Op::IntLessEqual,
+                                _ => unreachable!(),
+                            };
+
+                            let (min, max, _, _) = bounds_info.unwrap();
+
+                            let start = ctx.lower_expr(range.start);
+                            let mut err1 = ctx.cfg.build_val(op, smallvec![place.into(), start], 0);
+                            if exclude {
+                                err1 =
+                                    ctx.cfg.build_val(Op::BoolBitNegate, smallvec![err1.into()], 0);
+                            } else if has_bounds {
+                                let is_min = ctx.cfg.build_val(op, smallvec![start, min.into()], 0);
+                                ctx.cfg.build_cond(is_min.into(), |cfg, is_min| {
+                                    if is_min {
+                                        cfg.build_assign(min.into(), Op::Copy, smallvec![start], 0);
+
+                                        let call = if range.start_inclusive {
+                                            min_inclusive
+                                        } else {
+                                            min_exclusive
+                                        };
+
+                                        cfg.build_stmt(Op::Call(call), smallvec![], 0);
+                                    }
+                                });
+                            } else {
+                                ctx.cfg.build_assign(min.into(), Op::Copy, smallvec![start], 0);
+
+                                let call = if range.start_inclusive {
+                                    min_inclusive
+                                } else {
+                                    min_exclusive
+                                };
+
+                                ctx.cfg.build_stmt(Op::Call(call), smallvec![], 0)
+                            }
+
+                            ctx.cfg.build_cond(err1.into(), |cfg, is_err| {
+                                if is_err {
+                                    cfg.build_stmt(Op::Call(call), smallvec![], 0);
+                                }
+                            });
+
+                            let op = match (ty, range.end_inclusive) {
+                                (Type::Real, true) => Op::RealGreaterThen,
+                                (Type::Real, false) => Op::RealGreaterEqual,
+                                (Type::Integer, true) => Op::IntGreaterThen,
+                                (Type::Integer, false) => Op::IntGreaterEqual,
+                                _ => unreachable!(),
+                            };
+                            let end = ctx.lower_expr(range.end);
+                            let mut err2 = ctx.cfg.build_val(op, smallvec![place.into(), end], 0);
+                            if exclude {
+                                err2 =
+                                    ctx.cfg.build_val(Op::BoolBitNegate, smallvec![err2.into()], 0);
+                            } else if has_bounds {
+                                let is_max = ctx.cfg.build_val(op, smallvec![end, max.into()], 0);
+                                ctx.cfg.build_cond(is_max.into(), |cfg, is_max| {
+                                    if is_max {
+                                        cfg.build_assign(max.into(), Op::Copy, smallvec![end], 0);
+                                        let call = if range.end_inclusive {
+                                            max_inclusive
+                                        } else {
+                                            max_exclusive
+                                        };
+
+                                        cfg.build_stmt(Op::Call(call), smallvec![], 0)
+                                    }
+                                });
+                            } else {
+                                ctx.cfg.build_assign(max.into(), Op::Copy, smallvec![end], 0);
+                                has_bounds = true;
+
+                                let call =
+                                    if range.end_inclusive { max_inclusive } else { max_exclusive };
+
+                                ctx.cfg.build_stmt(Op::Call(call), smallvec![], 0)
+                            }
+
+                            ctx.cfg.build_cond(err2.into(), |cfg, is_err| {
+                                if is_err {
+                                    cfg.build_stmt(Op::Call(call), smallvec![], 0);
+                                }
+                            });
+                        }
+                    }
+
+                    match bound.kind {
+                        ConstraintKind::Exclude => {
+                            exclude_pos = ctx.cfg.current;
+                        }
+                        ConstraintKind::From => {
+                            from_pos = ctx.cfg.current;
+                        }
+                    };
+                }
+
+                cfg.enter_new_block();
+                cfg.terminate_bb(from_pos, Terminator::Goto(exclude_start));
+                cfg.terminate_bb(exclude_pos, Terminator::Goto(cfg.current));
+                if !has_bounds {
+                    let (min, max, min_val, max_val) = bounds_info.unwrap();
+                    cfg.build_assign(max.into(), Op::Copy, smallvec![max_val], 0);
+                    cfg.build_assign(min.into(), Op::Copy, smallvec![min_val], 0);
+                    cfg.build_stmt(Op::Call(min_inclusive), smallvec![], 0);
+                    cfg.build_stmt(Op::Call(max_inclusive), smallvec![], 0);
+                }
+            }
+        }
+        cfg.prepend_entry(entry);
+        cfg.cfg.next_place = self.places.len().into();
+    }
 
     /// Lowers a body
     fn lower_expr_body(
         &mut self,
         db: &dyn HirTyDB,
+        literals: &mut Rodeo,
         def: DefWithBodyId,
         i: usize,
         cfg: &mut CfgBuilder,
@@ -89,6 +331,7 @@ impl HirInterner {
         let mut ctx = LoweringCtx {
             db,
             data: self,
+            literals,
             cfg,
             body: &body,
             infere: &infere,
@@ -113,6 +356,7 @@ macro_rules! match_signature {
 pub struct LoweringCtx<'a, 'c> {
     pub db: &'a dyn HirTyDB,
     pub data: &'a mut HirInterner,
+    pub literals: &'a mut Rodeo,
     pub cfg: &'a mut CfgBuilder<'c>,
     pub body: &'a Body,
     pub infere: &'a InferenceResult,
@@ -206,6 +450,7 @@ impl LoweringCtx<'_, '_> {
                     LoweringCtx {
                         db: self.db,
                         data: self.data,
+                        literals: self.literals,
                         cfg,
                         body: self.body,
                         infere: self.infere,
@@ -346,7 +591,7 @@ impl LoweringCtx<'_, '_> {
                 HirTy::FuntionVar { arg: Some(arg), .. } => self.args[arg],
                 HirTy::Param(_, param) => self.param(ParamKind::Param(param)).into(),
                 HirTy::NatureAttr(_, attr) => {
-                    self.data.lower_expr_body(self.db, attr.into(), 0, self.cfg)
+                    self.data.lower_expr_body(self.db, self.literals, attr.into(), 0, self.cfg)
                 }
                 _ => unreachable!(),
             },
@@ -365,11 +610,15 @@ impl LoweringCtx<'_, '_> {
             hir_def::Expr::Array(ref vals) => self.lower_array(expr, vals),
             hir_def::Expr::Literal(ref lit) => match *lit {
                 hir_def::Literal::String(ref str) => {
-                    Const::String(self.data.literals.get_or_intern(str)).into()
+                    Const::String(self.literals.get_or_intern(str)).into()
                 }
-                hir_def::Literal::Int(val) => Const::Int(val).into(),
-                hir_def::Literal::Float(val) => Const::Real(val.into()).into(),
-                hir_def::Literal::Inf => Const::Real(f64::INFINITY).into(),
+                hir_def::Literal::Int(val) => val.into(),
+                hir_def::Literal::Float(val) => f64::from(val).into(),
+                hir_def::Literal::Inf => match self.infere.expr_types[expr].to_value().unwrap() {
+                    Type::Real => return f64::INFINITY.into(),
+                    Type::Integer => return i32::MAX.into(),
+                    _ => unreachable!(),
+                },
             },
             ref expr => unreachable!(
                 "encounted invalid expr {:?}: this should have been caught in the frontend",
@@ -416,18 +665,28 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn lower_unary_op(&mut self, expr: ExprId, arg: ExprId, op: UnaryOp) -> Operand {
-        let arg = self.lower_expr(arg);
         let op = match op {
             UnaryOp::BitNegate => Op::IntBitNegate,
             UnaryOp::Not => Op::BoolBitNegate,
-            UnaryOp::Neg => match self.infere.resolved_signatures[&expr] {
-                REAL_OP => Op::RealArtihNeg,
-                INT_OP => Op::IntArithNeg,
-                _ => unreachable!(),
-            },
-            UnaryOp::Identity => return arg,
+            UnaryOp::Neg => {
+                // Special case INFINITY
+                if Expr::Literal(Literal::Inf) == self.body.exprs[arg] {
+                    match self.infere.expr_types[arg].to_value().unwrap() {
+                        Type::Real => return f64::NEG_INFINITY.into(),
+                        Type::Integer => return i32::MIN.into(),
+                        _ => unreachable!(),
+                    }
+                }
+                match self.infere.resolved_signatures[&expr] {
+                    REAL_OP => Op::RealArtihNeg,
+                    INT_OP => Op::IntArithNeg,
+                    _ => unreachable!(),
+                }
+            }
+            UnaryOp::Identity => Op::Copy,
         };
 
+        let arg = self.lower_expr(arg);
         self.cfg.build_val(op, smallvec![arg], u32::from(expr) as i32).into()
     }
 
@@ -615,6 +874,7 @@ impl LoweringCtx<'_, '_> {
             let mut ctx = LoweringCtx {
                 db: self.db,
                 data: self.data,
+                literals: self.literals,
                 cfg,
                 body: self.body,
                 infere: self.infere,
@@ -663,6 +923,7 @@ impl LoweringCtx<'_, '_> {
         let mut ctx = LoweringCtx {
             db: self.db,
             data: self.data,
+            literals: self.literals,
             cfg: self.cfg,
             body: &body,
             infere: &infere,

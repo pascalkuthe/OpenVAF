@@ -104,9 +104,28 @@ impl<'a> TreeSink for TextTreeSink<'a> {
         let leading_trivias = &self.tokens[self.token_pos..self.token_pos + n_trivias];
         let pos =
             self.text_pos + leading_trivias.iter().map(|it| it.span.range.len()).sum::<TextSize>();
-        let len = self.tokens[self.token_pos + n_trivias].span.range.len();
         let parser::SyntaxError::UnexpectedToken { expected, found }: parser::SyntaxError = error;
         let missing_delimeter = found == T![end];
+        if self.token_pos + n_trivias == self.tokens.len() {
+            let expected_at = expected
+                .data
+                .iter()
+                .any(|t| *t == T![;] || *t == T![')'])
+                .then(|| TextRange::at(self.text_pos, 0.into()));
+            let error = SyntaxError::UnexpectedToken {
+                expected,
+                found,
+                span: TextRange::at(
+                    self.text_pos,
+                    self.tokens.last().map_or_else(|| TextSize::from(0), |t| t.span.range.len()),
+                ),
+                expected_at,
+                missing_delimeter,
+            };
+            self.inner.error(error);
+            return;
+        }
+        let len = self.tokens[self.token_pos + n_trivias].span.range.len();
 
         let panic = mem::replace(&mut self.panic, true);
         if panic && !missing_delimeter {

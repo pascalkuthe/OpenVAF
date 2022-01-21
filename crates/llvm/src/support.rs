@@ -1,6 +1,6 @@
 use core::fmt;
 use std::error::Error;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 
@@ -32,14 +32,13 @@ impl LLVMString {
     // }
 
     // /// This method will allocate a c string through LLVM
-    // pub(crate) fn create_from_c_str(string: &CStr) -> LLVMString {
-    //     unsafe { LLVMString::new(LLVMCreateMessage(string.as_ptr() as *const _)) }
-    // }
+    pub(crate) fn create_from_str(string: &str) -> LLVMString {
+        let msg = CString::new(string).unwrap();
+        unsafe { LLVMString::new(LLVMCreateMessage(msg.as_ptr() as *const _)) }
+    }
 
     /// This method will allocate a c string through LLVM
-    pub fn create_from_str(string: &CStr) -> LLVMString {
-        // debug_assert_eq!(string.as_bytes()[string.as_bytes().len() - 1], 0);
-
+    pub fn create_from_c_str(string: &CStr) -> LLVMString {
         unsafe { LLVMString::new(LLVMCreateMessage(string.as_ptr() as *const _)) }
     }
 }
@@ -60,7 +59,7 @@ impl Debug for LLVMString {
 
 impl Display for LLVMString {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{:?}", self.deref())
+        write!(f, "{}", self.deref().to_string_lossy())
     }
 }
 

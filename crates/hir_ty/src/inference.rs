@@ -381,7 +381,15 @@ impl Ctx<'_> {
             Expr::Array(ref args) if args.is_empty() => Ty::Val(Type::EmptyArray),
             Expr::Array(ref args) => self.infere_array(stmt, args)?,
             Expr::Literal(Literal::Float(_)) => Ty::Literal(Type::Real),
-            Expr::Literal(Literal::Inf | Literal::Int(_)) => Ty::Literal(Type::Integer),
+            Expr::Literal(Literal::Int(_)) => Ty::Literal(Type::Integer),
+            // +/- inf can only appear in param bounds.
+            // This is checked during ast validation and when it appears it is always correct
+            Expr::Literal(Literal::Inf) => {
+                if let Some(ty) = &self.expr_stmt_ty {
+                    self.result.expr_types[expr] = Ty::Val(ty.clone());
+                }
+                return None;
+            }
             Expr::Literal(Literal::String(_)) => Ty::Literal(Type::String),
         };
 

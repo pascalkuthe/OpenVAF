@@ -16,7 +16,7 @@ extern "C" {
     pub fn LLVMInt8TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
     // pub fn LLVMInt16TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
     pub fn LLVMInt32TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
-    // pub fn LLVMInt64TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
+    pub fn LLVMInt64TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
     // pub fn LLVMInt128TypeInContext<'a>(ctx: &'a Context) -> &'a Type;
     pub fn LLVMIntTypeInContext<'a>(ctx: &'a Context, num_bits: c_uint) -> &'a Type;
     // pub fn LLVMGetIntTypeWidth<'a>(ty: &Type) -> c_uint;

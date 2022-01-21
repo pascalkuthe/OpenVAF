@@ -67,6 +67,7 @@ impl DefUseGraph {
         def_use_graph
     }
 
+    #[inline]
     pub fn dependent_defs(&self, def: Def) -> DependentDefs<'_> {
         match def {
             Def::Local(local) => DependentDefs {
@@ -79,6 +80,7 @@ impl DefUseGraph {
             },
         }
     }
+    #[inline]
     pub fn uses(&self, def: Def) -> Uses<'_> {
         match def {
             Def::Local(local) => Uses {

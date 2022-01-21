@@ -66,3 +66,26 @@ impl SyntaxTreeBuilder {
         self.errors.push(error)
     }
 }
+
+// Syntax node children iterated in reverse order
+// Fairly trivial but sadly lacking from rowan
+#[derive(Clone, Debug)]
+pub struct RevSyntaxNodeChildren {
+    next: Option<SyntaxNode>,
+}
+
+impl RevSyntaxNodeChildren {
+    pub fn new(parent: &SyntaxNode) -> RevSyntaxNodeChildren {
+        RevSyntaxNodeChildren { next: parent.last_child() }
+    }
+}
+
+impl Iterator for RevSyntaxNodeChildren {
+    type Item = SyntaxNode;
+    fn next(&mut self) -> Option<SyntaxNode> {
+        self.next.take().map(|next| {
+            self.next = next.prev_sibling();
+            next
+        })
+    }
+}

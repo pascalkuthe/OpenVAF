@@ -12,7 +12,9 @@ pub use self::node_ext::{
     AssignOp, BranchKind, ConstraintKind, ConstraintValue, PathSegment, PathSegmentKind,
 };
 pub use self::traits::*;
-use crate::syntax_node::{SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
+use crate::syntax_node::{
+    RevSyntaxNodeChildren, SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken,
+};
 use crate::SyntaxKind;
 
 /// The main trait to go from untyped `SyntaxNode`  to a typed ast. The
@@ -84,6 +86,26 @@ impl<N: AstNode> Iterator for AstChildren<N> {
     }
 }
 
+/// An iterator over `SyntaxNode` children of a particular AST type.
+#[derive(Debug, Clone)]
+pub struct RevAstChildren<N> {
+    inner: RevSyntaxNodeChildren,
+    ph: PhantomData<N>,
+}
+
+impl<N> RevAstChildren<N> {
+    fn new(parent: &SyntaxNode) -> Self {
+        RevAstChildren { inner: RevSyntaxNodeChildren::new(parent), ph: PhantomData }
+    }
+}
+
+impl<N: AstNode> Iterator for RevAstChildren<N> {
+    type Item = N;
+    fn next(&mut self) -> Option<N> {
+        self.inner.find_map(N::cast)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AstChildTokens<N> {
     inner: SyntaxElementChildren,
@@ -104,6 +126,8 @@ impl<N: AstToken> Iterator for AstChildTokens<N> {
 }
 
 pub(crate) mod support {
+    use crate::ast::RevAstChildren;
+
     use super::{
         AstChildTokens, AstChildren, AstNode, AstToken, SyntaxKind, SyntaxNode, SyntaxToken,
     };
@@ -114,6 +138,10 @@ pub(crate) mod support {
 
     pub(crate) fn children<N: AstNode>(parent: &SyntaxNode) -> AstChildren<N> {
         AstChildren::new(parent)
+    }
+
+    pub(crate) fn rev_children<N: AstNode>(parent: &SyntaxNode) -> RevAstChildren<N> {
+        RevAstChildren::new(parent)
     }
 
     pub(crate) fn child_token<N: AstToken>(parent: &SyntaxNode) -> AstChildTokens<N> {

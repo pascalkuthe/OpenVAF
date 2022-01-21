@@ -7,6 +7,7 @@
 //!
 //! This binary is integrated into the `cargo` command line by using an alias in
 //! `.cargo/config`.
+mod build_py;
 mod flags;
 mod vendor;
 
@@ -29,6 +30,7 @@ fn main() -> Result<()> {
         }
         flags::XtaskCmd::Cache(cmd) => cmd.run(),
         flags::XtaskCmd::Vendor(cmd) => cmd.run(),
+        flags::XtaskCmd::Verilogae(cmd) => cmd.run(),
     }
 }
 

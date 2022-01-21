@@ -221,13 +221,15 @@ impl EvalCtx<'_> {
 
     // These are two optimizations that ignore NANs and always propagate 0.0
     // While this is usually not a good idea for auto diff this is an essential optimizations
-    // Since that code is not handwritten anywau for good rounding behaviour/nan handling we
+    // Since that code is not handwritten anyway for good rounding behaviour/nan handling we
     // propagate the zeros in that case
 
     fn f64_mul_short_cricuit(&self, args: &[Operand], src: i32) -> FlatSet<Const> {
         match (self.get_operand(&args[0]), self.get_operand(&args[1])) {
             (FlatSet::Elem(val), _) | (_, FlatSet::Elem(val))
-                if src < 0 && val.clone().unwrap_real() == 0f64 =>
+                if src < 0
+                    && (val.clone().unwrap_real() == 0f64
+                        || val.clone().unwrap_real() == -0f64) =>
             {
                 FlatSet::Elem(0f64.into())
             }
@@ -245,7 +247,11 @@ impl EvalCtx<'_> {
 
     fn f64_div_short_cricuit(&self, args: &[Operand], src: i32) -> FlatSet<Const> {
         match (self.get_operand(&args[0]), self.get_operand(&args[1])) {
-            (FlatSet::Elem(val), _) if src < 0 && val.clone().unwrap_real() == 0f64 => {
+            (FlatSet::Elem(val), _)
+                if src < 0
+                    && (val.clone().unwrap_real() == 0f64
+                        || val.clone().unwrap_real() == -0f64) =>
+            {
                 FlatSet::Elem(0f64.into())
             }
 

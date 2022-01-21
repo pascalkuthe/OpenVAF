@@ -41,6 +41,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         ifn!("llvm.log10.f64", fn(t_f64) -> t_f64);
         ifn!("llvm.log2.f64", fn(t_f64) -> t_f64);
         ifn!("llvm.floor.f64", fn(t_f64) -> t_f64);
+        ifn!("llvm.ctlz", fn(t_i32, t_bool) -> t_i32);
 
         // not technically intrinsics but part of the C standard library
         // TODO link custom mathmatical functions

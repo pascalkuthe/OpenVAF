@@ -7,6 +7,7 @@ pub mod lints;
 #[cfg(test)]
 mod tests;
 
+use std::fs;
 use std::intrinsics::transmute;
 use std::sync::Arc;
 
@@ -159,7 +160,21 @@ fn file_text(db: &dyn BaseDB, file: FileId) -> Result<Arc<str>, FileReadError> {
     db.salsa_runtime().report_synthetic_read(Durability::LOW);
     let vfs = db.vfs().read();
     // TODO request file from FS
-    vfs.file_contents(file).map(Arc::from)
+
+    match vfs.file_contents(file) {
+        Ok(res) => Ok(res.into()),
+        Err(err) => {
+            if let Some(path) = vfs.file_path(file).as_path() {
+                drop(vfs);
+                let mut vfs = db.vfs().write();
+                vfs.set_file_contents(file, fs::read(path).into());
+                let contents = vfs.file_contents(file);
+                contents.map(Arc::from)
+            } else {
+                Err(err)
+            }
+        }
+    }
 }
 
 fn file_path(db: &dyn BaseDB, file: FileId) -> VfsPath {

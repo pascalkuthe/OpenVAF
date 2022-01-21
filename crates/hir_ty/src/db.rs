@@ -37,10 +37,11 @@ fn nature_attr_ty(db: &dyn HirTyDB, id: NatureAttrId) -> Option<Type> {
     db.inference_result(id.into()).expr_types.get(expr).and_then(|ty| ty.to_value())
 }
 
+// TODO proper cycel revery
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn nature_attr_ty_recover(
     _db: &dyn HirTyDB,
-    _cycel: &[String],
+    _cycel: &salsa::Cycle,
     _id: &NatureAttrId,
 ) -> Option<Type> {
     None
@@ -49,7 +50,7 @@ fn nature_attr_ty_recover(
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn resolve_alias_recover(
     _db: &dyn HirTyDB,
-    _cycel: &[String],
+    _cycel: &salsa::Cycle,
     _id: &AliasParamId,
 ) -> Option<ParamId> {
     None

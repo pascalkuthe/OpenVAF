@@ -13,7 +13,7 @@ fn verify(cfg: &str, expect: Expect) {
     let mut places = BitSet::new_empty(cfg.next_place.into());
     places.insert(0u32.into());
     work_queue.walk_places::<_, true>(places.iter(), &pdg, &cfg);
-    work_queue.remove_unvisited_from_cfg(&mut cfg, &mut pdg);
+    work_queue.remove_unvisited_from_cfg(&mut cfg, &assignments, Some(&mut pdg));
     let cfg = cfg.dump(Some(&literals));
     expect.assert_eq(&cfg)
 }

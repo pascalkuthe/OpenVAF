@@ -32,6 +32,7 @@ program_dependence = { version = "0.0.0", path = "../program_dependence"}
 typed-index-collections = "3.0"
 ahash = "0.7"
 arrayvec = "0.7"
+lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
 
@@ -42,7 +43,7 @@ quote = "1.0"
 
 salsa = "0.17.0-pre.2"
 
-parking_lot = "0.11"
+parking_lot = "0.12"
 
 expect-test = "1.1"
 float-cmp = {version = "0.9"}

@@ -18,20 +18,20 @@ endmodule
     let (_, actual) = db.parse_and_check();
 
     let expected = expect![[r#"
-        error[L008]: unknown lint 'foo'
-          ┌─ /root.va:4:25
-          │
-        4 │         (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar=0.0;
-          │                         ^^^^^ unknown lint
-          │
-          = help: this attribute has no effect
-          = lint_not_found is set to deny by default
-
         error[L008]: unknown lint 'bar'
           ┌─ /root.va:4:44
           │
         4 │         (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar=0.0;
           │                                            ^^^^^ unknown lint
+          │
+          = help: this attribute has no effect
+          = lint_not_found is set to deny by default
+
+        error[L008]: unknown lint 'foo'
+          ┌─ /root.va:4:25
+          │
+        4 │         (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar=0.0;
+          │                         ^^^^^ unknown lint
           │
           = help: this attribute has no effect
           = lint_not_found is set to deny by default

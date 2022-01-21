@@ -237,7 +237,7 @@ impl Body {
                         entry_stmts.push(stmt);
 
                         let end = ctx.collect_opt_expr(range.end());
-                        let stmt = ctx.alloc_stmt_desugared(Stmt::Expr(start));
+                        let stmt = ctx.alloc_stmt_desugared(Stmt::Expr(end));
                         entry_stmts.push(stmt);
 
                         ConstraintValue::Range(Range {

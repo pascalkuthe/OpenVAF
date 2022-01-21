@@ -46,7 +46,7 @@ mod vfs_path;
 use std::borrow::Cow;
 use std::char::REPLACEMENT_CHARACTER;
 use std::ops::Range;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::{fmt, io, mem};
 
 pub use paths::{AbsPath, AbsPathBuf};
@@ -75,13 +75,15 @@ impl Default for VfsEntry {
 
 impl From<Result<Vec<u8>, io::ErrorKind>> for VfsEntry {
     fn from(src: Result<Vec<u8>, io::ErrorKind>) -> Self {
-        let contents = match src {
-            Err(err) => {
-                return VfsEntry { contents: Box::from(""), err: Some(FileReadError::Io(err)) }
-            }
-            Ok(contents) => contents,
-        };
+        match src {
+            Err(err) => VfsEntry { contents: Box::from(""), err: Some(FileReadError::Io(err)) },
+            Ok(contents) => contents.into(),
+        }
+    }
+}
 
+impl From<Vec<u8>> for VfsEntry {
+    fn from(contents: Vec<u8>) -> Self {
         let (contents, err) = if let Cow::Owned(src) = String::from_utf8_lossy(&contents) {
             let err =
                 Some(FileReadError::InvalidTextFormat(InvalidTextFormatErr::from_lossy(&src)));
@@ -143,6 +145,8 @@ impl ChangedFile {
     }
 }
 
+pub type VfsExport = Vec<(Box<str>, Box<str>)>;
+
 /// Kind of [file change](ChangedFile).
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum ChangeKind {
@@ -169,6 +173,49 @@ impl Vfs {
     /// Id of the given path if it exists in the `Vfs` and is not deleted.
     pub fn file_id(&self, path: &VfsPath) -> Option<FileId> {
         self.interner.get(path)
+    }
+
+    pub fn export_native_paths_to_virt(
+        &self,
+        root_file: &AbsPath,
+    ) -> Result<(VfsExport, Vec<&AbsPath>), &'static str> {
+        let mut ignored_files = Vec::new();
+
+        let anchor = root_file.parent().unwrap();
+        let path: Result<Vec<_>, _> = self
+            .iter()
+            .filter_map(|(file, path)| {
+                if let Some(path) = path.as_path() {
+                    if let Some(rel_path) = path.strip_prefix(anchor) {
+                        let path = match rel_path.as_ref().to_str() {
+                            Some(path) => path,
+                            None => {
+                                return Some(Err("all paths must be valid utf8 for VFS export"))
+                            }
+                        };
+                        let mut path = if std::path::MAIN_SEPARATOR != '/' {
+                            if path.contains('/') {
+                                return Some(Err("VFS paths must not contain '/'"));
+                            }
+                            path.replace(std::path::MAIN_SEPARATOR, "/")
+                        } else {
+                            path.to_owned()
+                        };
+
+                        // all paths must start with '/'
+                        path.insert(0, '/');
+
+                        Some(Ok((path.into_boxed_str(), self.get(file).contents.clone())))
+                    } else {
+                        ignored_files.push(path);
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok((path?, ignored_files))
     }
 
     /// File path corresponding to the given `file_id`.
@@ -214,8 +261,7 @@ impl Vfs {
     ///
     /// If the path does not currently exists in the `Vfs`, allocates a new
     /// [`FileId`] for it.
-    pub fn set_file_contents(&mut self, path: VfsPath, contents: VfsEntry) -> bool {
-        let file_id = self.ensure_file_id(path);
+    pub fn set_file_contents(&mut self, file_id: FileId, contents: VfsEntry) -> bool {
         let old = self.get(file_id);
         if old == &contents {
             return false;
@@ -235,8 +281,9 @@ impl Vfs {
 
     pub fn add_virt_file(&mut self, name: &str, src: VfsEntry) -> FileId {
         let path = VfsPath::new_virtual_path(name.to_owned());
-        self.set_file_contents(path.clone(), src);
-        self.file_id(&path).unwrap()
+        let file_id = self.ensure_file_id(path);
+        self.set_file_contents(file_id, src);
+        file_id
     }
 
     /// Returns `true` if the `Vfs` contains [changes](ChangedFile).
@@ -291,7 +338,7 @@ impl fmt::Debug for Vfs {
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub struct InvalidTextFormatErr {
-    pub pos: Rc<[Range<usize>]>,
+    pub pos: Arc<[Range<usize>]>,
 }
 
 impl InvalidTextFormatErr {
@@ -317,7 +364,7 @@ impl InvalidTextFormatErr {
             spans.push(start..src.len());
         }
 
-        InvalidTextFormatErr { pos: Rc::from(spans.into_boxed_slice()) }
+        InvalidTextFormatErr { pos: Arc::from(spans.into_boxed_slice()) }
     }
 }
 

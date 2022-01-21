@@ -211,6 +211,40 @@ impl<'a, 'b> ResultsVisitorMut for WriteBackConsts<'a, 'b> {
                         *arg = Operand::Const(val)
                     }
                 });
+
+                // some float operations form identities when one of their arguments is known
+                // unless full fastmath flags are set (which we really shouldn't do) LLVM will not
+                // assume these identities due to NAN/inf handeling
+                // however for our purposes applying these optimizations is fine for derivative since this is auto generated code anyway
+                // while this is not in any useful to the rest of openvaf this allows LLVM to perform more
+                // optimizations and is therefore worthwile
+
+                if instr.src < 0 {
+                    let float_identity = match instr.op {
+                        Op::RealSub
+                            if instr.args[0] == 0f64.into() || instr.args[0] == (-0f64).into() =>
+                        {
+                            Some((1, Op::RealArtihNeg))
+                        }
+                        Op::RealAdd if instr.args[0] == 0f64.into() => Some((1, Op::Copy)),
+                        Op::RealAdd | Op::RealSub
+                            if instr.args[1] == 0f64.into() || instr.args[1] == (-0f64).into() =>
+                        {
+                            Some((0, Op::Copy))
+                        }
+                        Op::RealMul | Op::RealDiv if instr.args[1] == 1f64.into() => {
+                            Some((0, Op::Copy))
+                        }
+
+                        Op::RealMul if instr.args[0] == 1f64.into() => Some((1, Op::Copy)),
+                        _ => None,
+                    };
+
+                    if let Some((val, op)) = float_identity {
+                        instr.op = op;
+                        instr.args = smallvec![instr.args[val]]
+                    }
+                }
             }
         }
     }

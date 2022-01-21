@@ -1,0 +1,31 @@
+language = "C"
+pragma_once = true
+
+after_includes = """
+
+#if defined(_WIN32)
+    typedef struct VAENativePath {
+      uint16_t *ptr;
+      uintptr_t len;
+    } VAENativePath;
+#else
+    typedef VAESlice_u8;
+    typedef struct VAESlice_u8 VAENativePath;
+#endif
+
+#define VAE_PARAM_FLAGS_MIN_INCLUSIVE 1
+#define VAE_PARAM_FLAGS_MAX_INCLUSIVE 2
+#define VAE_PARAM_FLAGS_INVALID 4
+#define VAE_PARAM_FLAGS_GIVEN 8
+"""
+
+[export]
+prefix = "VAE"
+exclude = ["NativePath"]
+
+[enum]
+prefix_with_name = true
+
+[parse.expand]
+crates = ["verilogae"]
+

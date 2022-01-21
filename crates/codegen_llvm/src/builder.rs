@@ -23,6 +23,8 @@ pub struct Builder<'a, 'cx, 'll> {
     pub places: TiVec<Place, (&'ll llvm::Type, &'ll llvm::Value)>,
     pub params: TiVec<CfgParam, &'ll llvm::Value>,
     pub callbacks: TiVec<Callback, CallbackFun<'ll>>,
+    pub prepend_pos: &'ll llvm::BasicBlock,
+    fun: &'ll llvm::Value,
 }
 
 impl Drop for Builder<'_, '_, '_> {
@@ -45,13 +47,14 @@ impl<'a, 'cx, 'll> Builder<'a, 'cx, 'll> {
         cfg: &'a ControlFlowGraph,
         fun: &'ll llvm::Value,
     ) -> Self {
+        let entry = unsafe { llvm::LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED) };
         let llbuilder = unsafe { llvm::LLVMCreateBuilderInContext(cx.llcx) };
         let blocks: TiVec<_, _> = cfg
             .blocks
             .keys()
             .map(|_| unsafe { llvm::LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED) })
             .collect();
-        unsafe { llvm::LLVMPositionBuilderAtEnd(llbuilder, blocks[cfg.entry()]) };
+        unsafe { llvm::LLVMPositionBuilderAtEnd(llbuilder, entry) };
 
         Builder {
             llbuilder,
@@ -62,6 +65,8 @@ impl<'a, 'cx, 'll> Builder<'a, 'cx, 'll> {
             places: Default::default(),
             params: Default::default(),
             callbacks: Default::default(),
+            fun,
+            prepend_pos: entry,
         }
     }
 }
@@ -72,6 +77,51 @@ impl<'ll> Builder<'_, '_, 'll> {
     /// Must be called in the entry block of the function
     pub unsafe fn alloca(&self, ty: &'ll llvm::Type) -> &'ll llvm::Value {
         llvm::LLVMBuildAlloca(self.llbuilder, ty, UNNAMED)
+    }
+
+    /// # Safety
+    /// Only correct llvm api calls must be performed within build_then and build_else
+    /// Their return types must match and cond must be a bool
+    pub unsafe fn add_branching_select(
+        &mut self,
+        cond: &'ll llvm::Value,
+        build_then: impl FnOnce(&mut Self) -> &'ll llvm::Value,
+        build_else: impl FnOnce(&mut Self) -> &'ll llvm::Value,
+    ) -> &'ll llvm::Value {
+        let start = self.prepend_pos;
+        let exit = llvm::LLVMAppendBasicBlockInContext(self.cx.llcx, self.fun, UNNAMED);
+        let then_bb = llvm::LLVMAppendBasicBlockInContext(self.cx.llcx, self.fun, UNNAMED);
+        llvm::LLVMPositionBuilderAtEnd(self.llbuilder, then_bb);
+        self.prepend_pos = then_bb;
+        let then_val = build_then(self);
+        llvm::LLVMBuildBr(self.llbuilder, exit);
+
+        let else_bb = llvm::LLVMAppendBasicBlockInContext(self.cx.llcx, self.fun, UNNAMED);
+        llvm::LLVMPositionBuilderAtEnd(self.llbuilder, else_bb);
+        self.prepend_pos = else_bb;
+        let else_val = build_else(self);
+        llvm::LLVMBuildBr(self.llbuilder, exit);
+
+        llvm::LLVMPositionBuilderAtEnd(self.llbuilder, start);
+        llvm::LLVMBuildCondBr(self.llbuilder, cond, then_bb, else_bb);
+
+        self.prepend_pos = exit;
+        llvm::LLVMPositionBuilderAtEnd(self.llbuilder, self.prepend_pos);
+        let phi = llvm::LLVMBuildPhi(self.llbuilder, llvm::LLVMTypeOf(then_val), UNNAMED);
+        llvm::LLVMAddIncoming(phi, [then_val, else_val].as_ptr(), [then_bb, else_bb].as_ptr(), 2);
+        phi
+    }
+
+    /// # Safety
+    /// Only correct llvm api calls must be performed within build_then and build_else
+    /// Their return types must match and cond must be a bool
+    pub unsafe fn select(
+        &self,
+        cond: &'ll llvm::Value,
+        then_val: &'ll llvm::Value,
+        else_val: &'ll llvm::Value,
+    ) -> &'ll llvm::Value {
+        llvm::LLVMBuildSelect(self.llbuilder, cond, then_val, else_val, UNNAMED)
     }
 
     /// # Safety
@@ -105,14 +155,41 @@ impl<'ll> Builder<'_, '_, 'll> {
 
     /// # Safety
     /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn ptrcast(&self, ptr: &'ll llvm::Value, ty: &'ll llvm::Type) -> &'ll llvm::Value {
+        llvm::LLVMBuildPointerCast(self.llbuilder, ptr, ty, UNNAMED)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn struct_gep(&self, ptr: &'ll llvm::Value, idx: u32) -> &'ll llvm::Value {
         let struct_ty = llvm::LLVMGetElementType(llvm::LLVMTypeOf(ptr));
         self.typed_struct_gep(struct_ty, ptr, idx)
     }
 
     /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn fat_ptr_get_ptr(&self, ptr: &'ll llvm::Value) -> &'ll llvm::Value {
+        self.struct_gep(ptr, 0)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn fat_ptr_get_meta(&self, ptr: &'ll llvm::Value) -> &'ll llvm::Value {
+        self.struct_gep(ptr, 1)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn fat_ptr_to_parts(
+        &self,
+        ptr: &'ll llvm::Value,
+    ) -> (&'ll llvm::Value, &'ll llvm::Value) {
+        (self.fat_ptr_get_ptr(ptr), self.fat_ptr_get_meta(ptr))
+    }
+
+    /// # Safety
     /// * Must not be called when a block that already contains a terminator is selected
-    /// * struct_ty must be a valid struct type for this pointer and
+    /// * struct_ty must be a valid struct type for this pointer and idx must be in bounds
     pub unsafe fn typed_struct_gep(
         &self,
         struct_ty: &'ll llvm::Type,
@@ -123,9 +200,33 @@ impl<'ll> Builder<'_, '_, 'll> {
     }
 
     /// # Safety
+    /// * Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn call(
+        &self,
+        fun_ty: &'ll llvm::Type,
+        fun: &'ll llvm::Value,
+        operands: &[&'ll llvm::Value],
+    ) -> &'ll llvm::Value {
+        let res = llvm::LLVMBuildCall2(
+            self.llbuilder,
+            fun_ty,
+            fun,
+            operands.as_ptr(),
+            operands.len() as u32,
+            UNNAMED,
+        );
+
+        // forgett this is a real footgun
+        let cconv = llvm::LLVMGetFunctionCallConv(fun);
+        llvm::LLVMSetInstructionCallConv(res, cconv);
+        res
+    }
+
+    /// # Safety
     /// Must not be called if any block already contain any non-phi instruction (eg must not be
     /// called twice)
     pub unsafe fn build_cfg(&mut self) {
+        self.build_terminator(&Terminator::Goto(self.cfg.entry()));
         for bb in self.cfg.reverse_postorder() {
             self.build_bb(bb)
         }
@@ -192,6 +293,13 @@ impl<'ll> Builder<'_, '_, 'll> {
         llvm::LLVMBuildRet(self.llbuilder, val);
     }
 
+    /// # Safety
+    /// must not be called multiple times
+    /// a terminator must not be build for the exit bb trough other means
+    pub unsafe fn ret_void(&mut self) {
+        llvm::LLVMBuildRetVoid(self.llbuilder);
+    }
+
     unsafe fn build_terminator(&mut self, term: &Terminator) {
         match *term {
             Terminator::Goto(bb) => {
@@ -215,14 +323,10 @@ impl<'ll> Builder<'_, '_, 'll> {
     /// # Safety
     /// must not be called multiple times
     /// a terminator must not be build for the exit bb trough other means
-    pub unsafe fn build_returns(
-        &mut self,
-        mut f: impl FnMut(&mut Self, BasicBlock) -> &'ll llvm::Value,
-    ) {
+    pub unsafe fn build_returns(&mut self, mut f: impl FnMut(&mut Self, BasicBlock)) {
         for (bb, data) in self.cfg.postorder_iter() {
             if data.terminator() == &Terminator::Ret {
-                let val = f(self, bb);
-                self.ret(val);
+                f(self, bb)
             }
         }
     }
@@ -266,9 +370,11 @@ impl<'ll> Builder<'_, '_, 'll> {
                 let arg = self.operand(&args[0]);
                 llvm::LLVMBuildIntCast2(self.llbuilder, arg, self.cx.ty_int(), llvm::False, UNNAMED)
             }
-            Op::IntToBool => self.int_cmp(&[args[0], 0i32.into()], llvm::IntPredicate::IntNE),
+            Op::IntToBool => self.build_int_cmp(&[args[0], 0i32.into()], llvm::IntPredicate::IntNE),
 
-            Op::RealToBool => self.real_cmp(&[args[0], 0f64.into()], llvm::RealPredicate::RealONE),
+            Op::RealToBool => {
+                self.build_real_cmp(&[args[0], 0f64.into()], llvm::RealPredicate::RealONE)
+            }
             Op::IntAdd => {
                 let lhs = self.operand(&args[0]);
                 let rhs = self.operand(&args[1]);
@@ -350,18 +456,18 @@ impl<'ll> Builder<'_, '_, 'll> {
                 let rhs = self.operand(&args[1]);
                 llvm::LLVMBuildFRem(self.llbuilder, lhs, rhs, UNNAMED)
             }
-            Op::IntLessThen => self.int_cmp(args, llvm::IntPredicate::IntSLT),
-            Op::IntGreaterThen => self.int_cmp(args, llvm::IntPredicate::IntSGT),
-            Op::RealLessThen => self.real_cmp(args, llvm::RealPredicate::RealOLT),
-            Op::RealGreaterThen => self.real_cmp(args, llvm::RealPredicate::RealOGT),
-            Op::IntLessEqual => self.int_cmp(args, llvm::IntPredicate::IntSLE),
-            Op::IntGreaterEqual => self.int_cmp(args, llvm::IntPredicate::IntSGE),
-            Op::RealLessEqual => self.real_cmp(args, llvm::RealPredicate::RealOLE),
-            Op::RealGreaterEqual => self.real_cmp(args, llvm::RealPredicate::RealOGE),
-            Op::IntEq | Op::BoolEq => self.int_cmp(args, llvm::IntPredicate::IntEQ),
-            Op::RealEq => self.real_cmp(args, llvm::RealPredicate::RealOEQ),
-            Op::RealNeq => self.real_cmp(args, llvm::RealPredicate::RealONE),
-            Op::BoolNeq | Op::IntNeq => self.int_cmp(args, llvm::IntPredicate::IntNE),
+            Op::IntLessThen => self.build_int_cmp(args, llvm::IntPredicate::IntSLT),
+            Op::IntGreaterThen => self.build_int_cmp(args, llvm::IntPredicate::IntSGT),
+            Op::RealLessThen => self.build_real_cmp(args, llvm::RealPredicate::RealOLT),
+            Op::RealGreaterThen => self.build_real_cmp(args, llvm::RealPredicate::RealOGT),
+            Op::IntLessEqual => self.build_int_cmp(args, llvm::IntPredicate::IntSLE),
+            Op::IntGreaterEqual => self.build_int_cmp(args, llvm::IntPredicate::IntSGE),
+            Op::RealLessEqual => self.build_real_cmp(args, llvm::RealPredicate::RealOLE),
+            Op::RealGreaterEqual => self.build_real_cmp(args, llvm::RealPredicate::RealOGE),
+            Op::IntEq | Op::BoolEq => self.build_int_cmp(args, llvm::IntPredicate::IntEQ),
+            Op::RealEq => self.build_real_cmp(args, llvm::RealPredicate::RealOEQ),
+            Op::RealNeq => self.build_real_cmp(args, llvm::RealPredicate::RealONE),
+            Op::BoolNeq | Op::IntNeq => self.build_int_cmp(args, llvm::IntPredicate::IntNE),
             Op::RealToInt => self.intrinsic(args, "llvm.llround.i32.f64"),
             Op::StringEq => self.strcmp(args, false),
             Op::StringNeq => self.strcmp(args, true),
@@ -369,7 +475,11 @@ impl<'ll> Builder<'_, '_, 'll> {
             Op::Exp => self.intrinsic(args, "llvm.exp.f64"),
             Op::Ln => self.intrinsic(args, "llvm.log.f64"),
             Op::Log => self.intrinsic(args, "llvm.log10.f64"),
-            Op::Clog2 => todo!(),
+            Op::Clog2 => {
+                let leading_zeros = self.intrinsic(&[args[0], true.into()], "llvm.ctlz");
+                let total_bits = self.cx.const_int(32);
+                llvm::LLVMBuildSub(self.llbuilder, total_bits, leading_zeros, UNNAMED)
+            }
             Op::Floor => self.intrinsic(args, "llvm.floor.f64"),
             Op::Ceil => self.intrinsic(args, "llvm.ceil.f64"),
             Op::Sin => self.intrinsic(args, "llvm.sin.f64"),
@@ -396,14 +506,7 @@ impl<'ll> Builder<'_, '_, 'll> {
                     .copied()
                     .chain(args.iter().map(|operand| self.operand(operand)))
                     .collect();
-                let res = llvm::LLVMBuildCall2(
-                    self.llbuilder,
-                    callback.fun_ty,
-                    callback.fun,
-                    operands.as_ptr(),
-                    operands.len() as u32,
-                    UNNAMED,
-                );
+                let res = self.call(callback.fun_ty, callback.fun, &operands);
                 self.callbacks = callbacks;
                 res
             }
@@ -502,25 +605,73 @@ impl<'ll> Builder<'_, '_, 'll> {
 
     /// # Safety
     /// Must not be called when a block that already contains a terminator is selected
-    unsafe fn int_cmp(
+    pub unsafe fn imul(&self, val1: &'ll llvm::Value, val2: &'ll llvm::Value) -> &'ll llvm::Value {
+        llvm::LLVMBuildMul(self.llbuilder, val1, val2, UNNAMED)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn ptr_diff(
+        &self,
+        ptr1: &'ll llvm::Value,
+        ptr2: &'ll llvm::Value,
+    ) -> &'ll llvm::Value {
+        llvm::LLVMBuildPtrDiff(self.llbuilder, ptr1, ptr2, UNNAMED)
+    }
+
+    /// # Safety
+    ///
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn is_null_ptr(&self, ptr: &'ll llvm::Value) -> &'ll llvm::Value {
+        let ty = llvm::LLVMTypeOf(ptr);
+        let null_ptr = self.cx.const_null_ptr(ty);
+
+        llvm::LLVMBuildICmp(self.llbuilder, llvm::IntPredicate::IntEQ, null_ptr, ptr, UNNAMED)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    unsafe fn build_int_cmp(
         &mut self,
         args: &[Operand],
         predicate: llvm::IntPredicate,
     ) -> &'ll llvm::Value {
         let lhs = self.operand(&args[0]);
         let rhs = self.operand(&args[1]);
+        self.int_cmp(lhs, rhs, predicate)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn int_cmp(
+        &mut self,
+        lhs: &'ll llvm::Value,
+        rhs: &'ll llvm::Value,
+        predicate: llvm::IntPredicate,
+    ) -> &'ll llvm::Value {
         llvm::LLVMBuildICmp(self.llbuilder, predicate, lhs, rhs, UNNAMED)
     }
 
     /// # Safety
     /// Must not be called when a block that already contains a terminator is selected
-    unsafe fn real_cmp(
+    unsafe fn build_real_cmp(
         &mut self,
         args: &[Operand],
         predicate: llvm::RealPredicate,
     ) -> &'ll llvm::Value {
         let lhs = self.operand(&args[0]);
         let rhs = self.operand(&args[1]);
+        self.real_cmp(lhs, rhs, predicate)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn real_cmp(
+        &mut self,
+        lhs: &'ll llvm::Value,
+        rhs: &'ll llvm::Value,
+        predicate: llvm::RealPredicate,
+    ) -> &'ll llvm::Value {
         llvm::LLVMBuildFCmp(self.llbuilder, predicate, lhs, rhs, UNNAMED)
     }
 

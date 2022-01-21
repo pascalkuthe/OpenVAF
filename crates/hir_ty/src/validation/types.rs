@@ -6,6 +6,7 @@ use hir_def::{
     NatureId, NodeId, NodeTypeDecl,
 };
 use syntax::ast;
+use syntax::name::Name;
 use typed_index_collections::TiSlice;
 
 use crate::db::HirTyDB;
@@ -25,7 +26,7 @@ pub enum TypeValidationDiagnostic {
     MultipleDirections(DuplicateItem<AstId<ast::PortDecl>, NodeId>),
     MultipleDisciplines(DuplicateItem<ErasedAstId, NodeId>),
     MultipleGnds(DuplicateItem<ErasedAstId, NodeId>),
-    PortWithoutDirection { decl: ErasedAstId },
+    PortWithoutDirection { decl: ErasedAstId, name: Name },
 }
 
 impl TypeValidationDiagnostic {
@@ -75,8 +76,10 @@ impl TypeValidationCtx<'_> {
         let node_ = &self.tree[module.id].nodes[loc.id];
         match node_.decls.len() {
             0 => {
-                self.dst
-                    .push(TypeValidationDiagnostic::PortWithoutDirection { decl: node_.ast_id });
+                self.dst.push(TypeValidationDiagnostic::PortWithoutDirection {
+                    decl: node_.ast_id,
+                    name: node_.name.clone(),
+                });
                 return; // Do not print other diagnostics here would just lead to duplications
             }
             _ => {
@@ -97,8 +100,10 @@ impl TypeValidationCtx<'_> {
                         }))
                     }
                 } else if node_.decls[0].ast_id(self.tree) != node_.ast_id {
-                    self.dst
-                        .push(TypeValidationDiagnostic::PortWithoutDirection { decl: node_.ast_id })
+                    self.dst.push(TypeValidationDiagnostic::PortWithoutDirection {
+                        decl: node_.ast_id,
+                        name: node_.name.clone(),
+                    })
                 }
             }
         }

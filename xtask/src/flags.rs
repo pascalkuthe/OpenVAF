@@ -22,6 +22,18 @@ xflags::xflags! {
             cmd update{}
         }
 
+        cmd verilogae{
+            cmd build{
+                optional --force
+                optional --manylinux
+                optional --install
+            }
+
+            cmd test {
+            }
+
+        }
+
     }
 }
 // generated start
@@ -37,6 +49,7 @@ pub enum XtaskCmd {
     Help(Help),
     Vendor(Vendor),
     Cache(Cache),
+    Verilogae(Verilogae),
 }
 
 #[derive(Debug)]
@@ -79,6 +92,27 @@ pub struct Fetch;
 
 #[derive(Debug)]
 pub struct Update;
+
+#[derive(Debug)]
+pub struct Verilogae {
+    pub subcommand: VerilogaeCmd,
+}
+
+#[derive(Debug)]
+pub enum VerilogaeCmd {
+    Build(Build),
+    Test(Test),
+}
+
+#[derive(Debug)]
+pub struct Build {
+    pub force: bool,
+    pub manylinux: bool,
+    pub install: bool,
+}
+
+#[derive(Debug)]
+pub struct Test;
 
 impl Xtask {
     pub const HELP: &'static str = Self::HELP_;
