@@ -50,7 +50,7 @@ impl TestDataBase {
     pub fn full_compile(&self) {
         let module = find_module(self, self.root_file());
         let (cfg, interner, literals) =
-            crate::compile_to_cfg(self, module, true, false, true, &mut |places, dst| {
+            crate::compile_to_cfg(self, module, true, true, true, &mut |places, dst| {
                 find_branch_place(places, dst)
             });
         let module = crate::compile_to_bin(

@@ -4,6 +4,8 @@ packages:
   - rust
   - llvm
   - s3cmd
+  - cbindgen
+  - rust-bindgen
 
 secrets:
   - a7b78c60-966c-46c7-a584-4a9ba3738fa0
@@ -13,6 +15,7 @@ environment:
   RUST_BACK_TRACE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
+
 
 tasks:
   - pull_cache: |

@@ -267,21 +267,23 @@ pub fn compile_to_cfg(
     }
 
     if opt {
-        let assignments = AssigmentInterner::new(&cfg);
-        let mut pdg = ProgramDependenGraph::build(&assignments, &cfg);
+        // let assignments = AssigmentInterner::new(&cfg);
+        // let mut pdg = ProgramDependenGraph::build(&assignments, &cfg);
 
-        // eliminate dead code
-        let mut live_code = use_def::DepthFirstSearch::new(&pdg);
-        live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
-        live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
-        live_code.remove_unvisited_from_cfg(&mut cfg, &assignments, Some(&mut pdg));
-        simplify_branches(&mut cfg);
-        simplify_cfg(&mut cfg);
-        cfg.assert_verified();
-
+        // // eliminate dead code
+        // let mut live_code = use_def::DepthFirstSearch::new(&pdg);
+        // live_code.walk_places::<_, true>(output_places.iter(), &pdg, &cfg);
+        // live_code.walk_sideffects::<true>(&sideeffects, &pdg, &cfg);
+        // live_code.remove_unvisited_from_cfg(&mut cfg, &assignments, Some(&mut pdg));
+        // simplify_branches(&mut cfg);
+        // simplify_cfg(&mut cfg);
+        // if verify {
+        //     cfg.assert_verified();
+        // }
         let (_, place_map, param_map, callback_map) = remove_dead_data(&mut cfg);
         res.map(&place_map, &param_map, &callback_map);
     }
+
 
     (cfg, res, literals)
 }
@@ -296,6 +298,7 @@ pub fn compile_to_bin(
 ) -> ModuleLlvm {
     let target = Target::host_target().unwrap();
     let backend = LLVMBackend::new(&[], &target, llvm::OptLevel::Aggressive);
+
     let module = unsafe { backend.new_module(name).unwrap() };
     let mut cx = unsafe { backend.new_ctx(literals, &module) };
     let param_struct = ParamStruct::new(db, &cx, &format!("{}Params", name), &res.params);
