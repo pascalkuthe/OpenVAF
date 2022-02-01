@@ -1,5 +1,7 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
 use backend::compile_to_cfg;
@@ -12,6 +14,8 @@ use program_dependence::{AssigmentInterner, ProgramDependenGraph};
 use salsa::ParallelDatabase;
 use stdx::iter::zip;
 use stdx::pretty;
+use termcolor::ColorChoice::Auto;
+use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 
 use crate::api::{Opts, VfsEntry};
 use crate::compiler_db::{CompilationDB, ModelInfo};
@@ -30,6 +34,8 @@ mod cache;
 mod compiler_db;
 mod middle;
 mod opts;
+#[cfg(test)]
+mod tests;
 
 pub fn export_vfs(path: &Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
     let db = CompilationDB::new(path, opts)?;
@@ -78,6 +84,7 @@ impl CompilationDB {
         opts: &Opts,
         dst: &Path,
     ) -> Result<()> {
+        let start = Instant::now();
         let db = self;
 
         let file = path.file_name().to_owned().unwrap().to_string_lossy();
@@ -171,6 +178,13 @@ impl CompilationDB {
         for file in object_files {
             fs::remove_file(file);
         }
+
+        let seconds = Instant::elapsed(&start).as_secs_f64();
+        let mut stderr = StandardStream::stderr(Auto);
+        stderr.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
+        write!(&mut stderr, "Finished")?;
+        stderr.set_color(&ColorSpec::new())?;
+        writeln!(&mut stderr, " building {} in {:.2}s", file, seconds)?;
 
         Ok(())
     }

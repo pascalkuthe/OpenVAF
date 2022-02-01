@@ -898,6 +898,7 @@ dependencies = [
  "stdx",
  "syntax",
  "target",
+ "termcolor",
  "typed-index-collections",
  "typed_indexmap",
 ]
