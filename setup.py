@@ -17,7 +17,7 @@ extension = RustExtension(
 
 setup(
     name="verilogae",
-    version="0.9-beta-2",
+    version="0.9-beta-3",
     author="DSPOM",
     author_email="dspom@protonmail.com",
     url="https://man.sr.ht/~dspom/openvaf_doc/verilogae/",
