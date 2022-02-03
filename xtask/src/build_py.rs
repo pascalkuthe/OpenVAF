@@ -10,6 +10,7 @@ impl Verilogae {
         match self.subcommand {
             crate::flags::VerilogaeCmd::Build(cmd) => cmd.run(),
             crate::flags::VerilogaeCmd::Test(cmd) => cmd.run(),
+            crate::flags::VerilogaeCmd::Publish(cmd) => cmd.run(),
         }
     }
 }
@@ -67,6 +68,15 @@ impl crate::flags::Test {
             cmd!("{py} test_hicum.py").run()?;
         }
 
+        Ok(())
+    }
+}
+
+impl crate::flags::Publish {
+    pub fn run(self) -> Result<()> {
+        crate::flags::Build { force: true, manylinux: true, install: true }.run()?;
+        let files = read_dir("wheels")?;
+        cmd!("twine upload {files...}").run()?;
         Ok(())
     }
 }

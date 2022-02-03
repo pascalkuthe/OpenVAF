@@ -32,6 +32,9 @@ xflags::xflags! {
             cmd test {
             }
 
+            cmd publish {
+            }
+
         }
 
     }
@@ -102,6 +105,7 @@ pub struct Verilogae {
 pub enum VerilogaeCmd {
     Build(Build),
     Test(Test),
+    Publish(Publish),
 }
 
 #[derive(Debug)]
@@ -113,6 +117,9 @@ pub struct Build {
 
 #[derive(Debug)]
 pub struct Test;
+
+#[derive(Debug)]
+pub struct Publish;
 
 impl Xtask {
     pub const HELP: &'static str = Self::HELP_;
