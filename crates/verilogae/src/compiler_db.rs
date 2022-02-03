@@ -212,6 +212,7 @@ pub struct ModelInfo {
     pub var_names: AHashMap<VarId, SmolStr>,
     pub op_vars: Vec<SmolStr>,
     pub module: ModuleId,
+    pub ports: Vec<SmolStr>,
 }
 
 impl ModelInfo {
@@ -319,6 +320,8 @@ impl ModelInfo {
                 );
             }
         };
+
+        let mut ports = Vec::new();
 
         visit_relative_defs(db, module.lookup(db.upcast()).scope, |path, name, def| match def {
             ScopeDefItem::VarId(var) => {
@@ -440,6 +443,14 @@ impl ModelInfo {
                 info.name = collect_path(path, name);
                 params.insert(param, info);
             }
+
+            ScopeDefItem::NodeId(node) => {
+                let data = db.node_data(node);
+                if data.is_port() {
+                    ports.push(data.name.clone().into())
+                }
+            }
+
             _ => (),
         });
 
@@ -447,6 +458,6 @@ impl ModelInfo {
             bail!("compilation failed");
         }
 
-        Ok(ModelInfo { params, functions, op_vars, module, var_names })
+        Ok(ModelInfo { params, functions, op_vars, module, var_names, ports })
     }
 }

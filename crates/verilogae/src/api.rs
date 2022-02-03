@@ -87,6 +87,7 @@ expose_ptrs! {
     const verilogae_str_param_units: *const c_char = "params.unit.string";
     const verilogae_str_param_descriptions: *const c_char = "params.desc.string";
     const verilogae_str_param_groups: *const c_char = "params.group.string";
+    const verilogae_nodes: *const c_char = "nodes";
 }
 
 macro_rules! expose_consts{
@@ -132,6 +133,7 @@ expose_consts! {
     verilogae_real_param_cnt: usize = "params.real.cnt";
     verilogae_int_param_cnt: usize = "params.integer.cnt";
     verilogae_str_param_cnt: usize = "params.string.cnt";
+    verilogae_node_cnt: usize = "nodes.cnt";
 }
 
 macro_rules! expose_named_ptrs {
@@ -294,6 +296,26 @@ pub unsafe extern "C" fn verilogae_fun_ptr(lib: *const c_void, fun: *const c_cha
     })
     .ok()
     .flatten()
+}
+
+/// # Safety
+/// handle must be a valid model compiled with VerilogAE
+#[no_mangle]
+pub unsafe extern "C" fn verilogae_module_name(lib: *const c_void) -> *const c_char {
+    catch_unwind(|| {
+        let lib = Library::from_raw(lib as _);
+        let res = match lib.get::<*const *const c_char>("module_name\0".as_bytes()) {
+            Ok(val) => **val,
+            Err(err) => {
+                eprintln!("error: failed to access module_name\n\n{}", err);
+                std::ptr::null()
+            }
+        };
+        // forget library so it doesn't get closed
+        std::mem::forget(lib);
+        res
+    })
+    .unwrap_or(ptr::null())
 }
 
 /// # Safety

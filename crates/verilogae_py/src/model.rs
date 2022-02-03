@@ -13,7 +13,8 @@ use verilogae_ffi::{
     verilogae_function_symbols, verilogae_functions, verilogae_init_modelcard,
     verilogae_int_fun_depbreak, verilogae_int_fun_depbreak_cnt, verilogae_int_fun_param_cnt,
     verilogae_int_fun_params, verilogae_int_param_cnt, verilogae_int_param_descriptions,
-    verilogae_int_param_groups, verilogae_int_param_units, verilogae_int_params, verilogae_opvars,
+    verilogae_int_param_groups, verilogae_int_param_units, verilogae_int_params,
+    verilogae_module_name, verilogae_node_cnt, verilogae_nodes, verilogae_opvars,
     verilogae_opvars_cnt, verilogae_real_fun_depbreak, verilogae_real_fun_depbreak_cnt,
     verilogae_real_fun_param_cnt, verilogae_real_fun_params, verilogae_real_param_cnt,
     verilogae_real_param_descriptions, verilogae_real_param_groups, verilogae_real_param_units,
@@ -43,7 +44,7 @@ pub static mut VAE_MODEL_TY: PyTypeObject = {
     res
 };
 
-static mut VAE_MODEL_MEMBERS: [PyMemberDef; 4] = [
+static mut VAE_MODEL_MEMBERS: [PyMemberDef; 6] = [
     PyMemberDef {
         name: "functions\0".as_ptr() as *mut c_char,
         type_code: T_OBJECT_EX,
@@ -65,6 +66,20 @@ static mut VAE_MODEL_MEMBERS: [PyMemberDef; 4] = [
         flags: READONLY,
         doc: "all variables marked with (*op_var*)\0".as_ptr() as *mut c_char,
     },
+    PyMemberDef {
+        name: "module_name\0".as_ptr() as *mut c_char,
+        type_code: T_OBJECT_EX,
+        offset: VaeModel::offset_to.module_name as isize,
+        flags: READONLY,
+        doc: "the name of the compiled model\0".as_ptr() as *mut c_char,
+    },
+    PyMemberDef {
+        name: "nodes\0".as_ptr() as *mut c_char,
+        type_code: T_OBJECT_EX,
+        offset: VaeModel::offset_to.nodes as isize,
+        flags: READONLY,
+        doc: "Verilog-A ports of the compiled module\0".as_ptr() as *mut c_char,
+    },
     unsafe { zero!(PyMemberDef) },
 ];
 
@@ -75,6 +90,8 @@ with_offsets! {
         functions: *mut PyObject,
         modelcard: *mut PyObject,
         op_vars: *mut PyObject,
+        module_name: *mut PyObject,
+        nodes: *mut PyObject,
     }
 }
 
@@ -113,6 +130,18 @@ impl VaeModel {
             let var = *opvars.add(i);
             let var = PyUnicode_InternFromString(var);
             PyList_SetItem(res.op_vars, i as isize, var);
+        }
+
+        let module_name = verilogae_module_name(handle);
+        res.module_name = PyUnicode_InternFromString(module_name);
+
+        let nodes = verilogae_nodes(handle);
+        let node_cnt = verilogae_node_cnt(handle);
+
+        res.nodes = PyList_New(node_cnt as isize);
+        for i in 0..node_cnt {
+            let node = PyUnicode_InternFromString(*nodes.add(i));
+            PyList_SetItem(res.nodes, i as isize, node);
         }
 
         ptr

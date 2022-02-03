@@ -7,12 +7,13 @@ use ahash::AHashMap;
 use backend::{
     lltype, places, sim_param_opt_stub, sim_param_str_stub, sim_param_stub, stub_callbacks,
 };
+use basedb::Upcast;
 use cfg::{Callback, CfgParam, ControlFlowGraph, Operand, Terminator};
 use cfg_opt::{remove_dead_data, simplify_branches, simplify_cfg};
 use codegen_llvm::{Builder, CallbackFun, CodegenCx, LLVMBackend};
 use const_eval::conditional_const_propagation;
 use hir_def::db::HirDefDB;
-use hir_def::{NodeId, ParamId, Type, VarId};
+use hir_def::{Lookup, NodeId, ParamId, Type, VarId};
 use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
 use lasso::Rodeo;
 use llvm::{IntPredicate, Value, UNNAMED};
@@ -145,6 +146,11 @@ pub(crate) fn compile_model_info(
     #[allow(clippy::needless_collect)] // false posivtive this is required to pass borrow check
     let op_vars: Vec<_> = info.op_vars.iter().map(|name| literals.get_or_intern(&**name)).collect();
 
+    #[allow(clippy::needless_collect)] // false posivtive this is required to pass borrow check
+    let nodes: Vec<_> = info.ports.iter().map(|name| literals.get_or_intern(&**name)).collect();
+
+    let module_name = literals.get_or_intern(&*info.module.lookup(db.upcast()).name(db.upcast()));
+
     let mut cfg = ControlFlowGraph::default();
     cfg.blocks.push(cfg::BasicBlockData {
         phis: Default::default(),
@@ -192,12 +198,26 @@ pub(crate) fn compile_model_info(
     let (fun_names, fun_symbols): (Vec<_>, Vec<_>) =
         functions.into_iter().map(|(name, sym)| (cx.const_str(name), cx.const_str(sym))).unzip();
 
-    let op_vars: Vec<_> = op_vars.into_iter().map(|name| cx.const_str(name)).collect();
-
     cx.export_array("functions", cx.ty_str(), &fun_names, true, true);
     cx.export_array("functions.sym", cx.ty_str(), &fun_symbols, true, false);
 
+    let op_vars: Vec<_> = op_vars.into_iter().map(|name| cx.const_str(name)).collect();
     cx.export_array("opvars", cx.ty_str(), &op_vars, true, true);
+
+    let nodes: Vec<_> = nodes.into_iter().map(|name| cx.const_str(name)).collect();
+    cx.export_array("nodes", cx.ty_str(), &nodes, true, true);
+
+    let module_name = cx.const_str(module_name);
+    let module_name_ = cx
+        .define_global("module_name", cx.ty_str())
+        .unwrap_or_else(|| unreachable!("symbol 'module_name' already defined"));
+    unsafe {
+        llvm::LLVMSetInitializer(module_name_, module_name);
+        llvm::LLVMSetGlobalConstant(module_name_, llvm::True);
+        llvm::LLVMSetLinkage(module_name_, llvm::Linkage::ExternalLinkage);
+        llvm::LLVMSetUnnamedAddress(module_name_, llvm::UnnamedAddr::No);
+        llvm::LLVMSetDLLStorageClass(module_name_, llvm::DLLStorageClass::Export);
+    }
 
     let (params, units, descriptions, groups): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
         multiunzip(param_info.iter().filter_map(|(info, ty)| (*ty == &Type::Real).then(|| *info)));

@@ -34,8 +34,6 @@ mod cache;
 mod compiler_db;
 mod middle;
 mod opts;
-#[cfg(test)]
-mod tests;
 
 pub fn export_vfs(path: &Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
     let db = CompilationDB::new(path, opts)?;

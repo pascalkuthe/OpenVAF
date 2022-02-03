@@ -195,6 +195,14 @@ const char *const *verilogae_str_param_descriptions(const void *lib);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 const char *const *verilogae_str_param_groups(const void *lib);
 
+///This function returns a pointer to the `nodes` global
+/// of a VerilogAE model loaded with `load`.
+///
+/// # Safety
+///
+/// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
+const char *const *verilogae_nodes(const void *lib);
+
 ///This function returns the value stored in the `functions.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
@@ -234,6 +242,14 @@ uintptr_t verilogae_int_param_cnt(const void *lib);
 ///
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_str_param_cnt(const void *lib);
+
+///This function returns the value stored in the `nodes.cnt` global
+/// of a VerilogAE model loaded with `load`.
+///
+/// # Safety
+///
+/// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
+uintptr_t verilogae_node_cnt(const void *lib);
 
 ///This function returns a pointer to the `params.real` global
 /// of a VerilogAE model loaded with `load`.
@@ -367,6 +383,10 @@ ModelcardInit verilogae_init_modelcard(const void *lib);
 ///
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 VaeFun verilogae_fun_ptr(const void *lib, const char *fun);
+
+/// # Safety
+/// handle must be a valid model compiled with VerilogAE
+const char *verilogae_module_name(const void *lib);
 
 /// # Safety
 ///

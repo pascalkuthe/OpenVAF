@@ -231,6 +231,17 @@ extern "C" {
     ) -> *const *const ::std::os::raw::c_char;
 }
 extern "C" {
+    #[doc = "This function returns a pointer to the `nodes` global"]
+    #[doc = " of a VerilogAE model loaded with `load`."]
+    #[doc = ""]
+    #[doc = " # Safety"]
+    #[doc = ""]
+    #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
+    pub fn verilogae_nodes(
+        lib: *const ::std::os::raw::c_void,
+    ) -> *const *const ::std::os::raw::c_char;
+}
+extern "C" {
     #[doc = "This function returns the value stored in the `functions.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
@@ -274,6 +285,15 @@ extern "C" {
     #[doc = ""]
     #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
     pub fn verilogae_str_param_cnt(lib: *const ::std::os::raw::c_void) -> usize;
+}
+extern "C" {
+    #[doc = "This function returns the value stored in the `nodes.cnt` global"]
+    #[doc = " of a VerilogAE model loaded with `load`."]
+    #[doc = ""]
+    #[doc = " # Safety"]
+    #[doc = ""]
+    #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
+    pub fn verilogae_node_cnt(lib: *const ::std::os::raw::c_void) -> usize;
 }
 extern "C" {
     #[doc = "This function returns a pointer to the `params.real` global"]
@@ -468,6 +488,13 @@ extern "C" {
         lib: *const ::std::os::raw::c_void,
         fun: *const ::std::os::raw::c_char,
     ) -> VaeFun;
+}
+extern "C" {
+    #[doc = " # Safety"]
+    #[doc = " handle must be a valid model compiled with VerilogAE"]
+    pub fn verilogae_module_name(
+        lib: *const ::std::os::raw::c_void,
+    ) -> *const ::std::os::raw::c_char;
 }
 extern "C" {
     #[doc = " # Safety"]
