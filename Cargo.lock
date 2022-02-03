@@ -211,6 +211,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03746e0c6dd9b5d2d9132ffe0bede35fb5f815604fd371bb42599fd37bc8e483"
 
 [[package]]
+name = "cranelift-entity"
+version = "0.80.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2906740053dd3bcf95ce53df0fd9b5649c68ae4bd9adada92b406f059eae461"
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -530,6 +536,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "mir"
+version = "0.0.0"
+dependencies = [
+ "cranelift-entity",
+ "expect-test",
+ "lasso",
+ "proc-macro2",
+ "quote",
+ "sourcegen",
+ "stdx",
 ]
 
 [[package]]
@@ -865,7 +884,7 @@ checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 
 [[package]]
 name = "verilogae"
-version = "0.9.0-beta1"
+version = "0.9.0-beta3"
 dependencies = [
  "ahash",
  "anyhow",
@@ -905,7 +924,7 @@ dependencies = [
 
 [[package]]
 name = "verilogae_ffi"
-version = "0.9.0-beta1"
+version = "0.9.0-beta3"
 dependencies = [
  "sourcegen",
  "verilogae",
@@ -914,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "verilogae_py"
-version = "0.9.0-beta2"
+version = "0.9.0-beta3"
 dependencies = [
  "ahash",
  "libc",

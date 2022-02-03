@@ -1,6 +1,6 @@
 #!/usr/bin/env bash 
-if s3cmd get s3://openva/vendor-10s3so8f7sw6g2yrhr3mt2zui.tar.zst vendor-10s3so8f7sw6g2yrhr3mt2zui.tar.zst; then
-    tar --zstd -xf "vendor-10s3so8f7sw6g2yrhr3mt2zui.tar.zst"
+if s3cmd get s3://openva/vendor-278atro83ch53ruzrq3i5mune.tar.zst vendor-278atro83ch53ruzrq3i5mune.tar.zst; then
+    tar --zstd -xf "vendor-278atro83ch53ruzrq3i5mune.tar.zst"
     found=1
 fi
 if [ -f ~/.s3cfg ] || [ -z ${found+x} ]; then
