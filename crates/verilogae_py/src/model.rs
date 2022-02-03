@@ -165,7 +165,7 @@ pub static mut VAE_PARAM_TY: PyTypeObject = {
     res
 };
 
-static mut VAE_PARAM_MEMBERS: [PyMemberDef; 9] = [
+static mut VAE_PARAM_MEMBERS: [PyMemberDef; 10] = [
     PyMemberDef {
         name: "name\0".as_ptr() as *mut c_char,
         type_code: T_OBJECT,
@@ -209,7 +209,7 @@ static mut VAE_PARAM_MEMBERS: [PyMemberDef; 9] = [
         doc: "Whether the higest bound is inclusive\0".as_ptr() as *mut c_char,
     },
     PyMemberDef {
-        name: "descr\0".as_ptr() as *mut c_char,
+        name: "description\0".as_ptr() as *mut c_char,
         type_code: T_OBJECT_EX,
         offset: VaeParam::offset_to.description as isize,
         flags: READONLY,
@@ -221,6 +221,13 @@ static mut VAE_PARAM_MEMBERS: [PyMemberDef; 9] = [
         offset: VaeParam::offset_to.unit as isize,
         flags: READONLY,
         doc: "Contents of the units attribute of the parameter\0".as_ptr() as *mut c_char,
+    },
+    PyMemberDef {
+        name: "group\0".as_ptr() as *mut c_char,
+        type_code: T_OBJECT_EX,
+        offset: VaeParam::offset_to.group as isize,
+        flags: READONLY,
+        doc: "Contents of the group attribute of the parameter\0".as_ptr() as *mut c_char,
     },
     unsafe { zero!(PyMemberDef) },
 ];
