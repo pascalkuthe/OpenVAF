@@ -53,13 +53,14 @@ macro_rules! parse_args {
         }
 
         let $path = match OsStr::new_path(*$args) {
-            Some(path) => path,
-            None => {
+            Some(Some(path)) => path,
+            Some(None) => {
                 return raise_type_exception(concat!(
                     $fun,
                     "() positional argument 'path' must be a pathlib Path or str"
                 ))
             }
+            None => return ptr::null_mut(),
         };
 
         let mut $opts = Opts::default();
@@ -100,13 +101,14 @@ macro_rules! parse_args {
         }
 
         let $path = match OsStr::new_path(path) {
-            Some(path) => path,
-            None => {
+            Some(Some(path)) => path,
+            Some(None) => {
                 return raise_type_exception(concat!(
                     $fun,
                     "() positional argument 'path' must be a pathlib Path or str"
                 ))
             }
+            None => return ptr::null_mut(),
         };
 
         let mut $opts = Opts::default();

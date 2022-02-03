@@ -19,14 +19,17 @@ pub struct OsStr {
 }
 
 impl OsStr {
-    pub fn new_path(py: *mut PyObject) -> Option<OsStr> {
-        if unsafe { PyObject_IsInstance(py, PATHLIB_PATH as *mut PyObject) == 0 } {
-            let py = unsafe { PyObject_Str(py) };
-            let res = OsStr::new(py);
-            unsafe { Py_XDECREF(py) };
-            res
-        } else {
-            OsStr::new(py)
+    pub fn new_path(py: *mut PyObject) -> Option<Option<OsStr>> {
+        match unsafe { PyObject_IsInstance(py, PATHLIB_PATH as *mut PyObject) } {
+            1 => {
+                let py = unsafe { PyObject_Str(py) };
+                let res = OsStr::new(py);
+                unsafe { Py_XDECREF(py) };
+                Some(res)
+            }
+
+            0 => Some(OsStr::new(py)),
+            _ => None,
         }
     }
 
