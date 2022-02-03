@@ -46,7 +46,15 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
     /// Declare a internal function.
     pub fn declare_int_fn(&self, name: &str, fn_type: &'ll Type) -> &'ll Value {
         // Function addresses are never significant, allowing functions to be merged.
-        declare_raw_fn(self, name, llvm::CallConv::FastCallConv, llvm::UnnamedAddr::Global, fn_type)
+        let fun = declare_raw_fn(
+            self,
+            name,
+            llvm::CallConv::FastCallConv,
+            llvm::UnnamedAddr::Global,
+            fn_type,
+        );
+        unsafe { llvm::LLVMSetLinkage(fun, llvm::Linkage::InternalLinkage) }
+        fun
     }
 
     /// Declare a global with an intention to define it.
