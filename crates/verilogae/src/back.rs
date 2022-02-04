@@ -19,6 +19,7 @@ use lasso::Rodeo;
 use llvm::{IntPredicate, Value, UNNAMED};
 use salsa::Snapshot;
 use stdx::iter::multiunzip;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
@@ -136,6 +137,10 @@ pub(crate) fn compile_model_info(
         .functions
         .iter()
         .map(|fun| {
+            // ensure that all dependency breaking is interned
+            for dep in &*fun.dependency_breaking {
+                literals.get_or_intern(&*info.var_names[dep]);
+            }
             (
                 literals.get_or_intern(&*info.var_names[&fun.var]),
                 literals.get_or_intern(&fun.prefix),
@@ -489,8 +494,23 @@ pub(crate) fn compile_fun(
     builder.places = places(db.deref(), &builder, intern.places.raw.iter(), |_| None);
 
     for (var, val) in real_dep_break.into_iter().chain(int_dep_break) {
-        let place = intern.places.unwrap_index(&PlaceKind::Var(var));
-        unsafe { builder.store(builder.places[place].1, val) }
+        if let Some(place) = intern.places.index(&PlaceKind::Var(var)) {
+            unsafe { builder.store(builder.places[place].1, val) }
+        } else {
+            use std::io::Write;
+
+            let mut stderr = StandardStream::stderr(ColorChoice::Auto);
+            let _ = stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true));
+            let _ = write!(&mut stderr, "warning");
+            let _ = stderr.set_color(&ColorSpec::new());
+            let name = &model_info.var_names[&fun.var];
+            let dep_name = &model_info.var_names[&var];
+            let _ = writeln!(
+                &mut stderr,
+                ":  function '{}' does not depend on variable '{}'",
+                name, dep_name
+            );
+        }
     }
 
     builder.callbacks = stub_callbacks(&intern.callbacks, builder.cx);
