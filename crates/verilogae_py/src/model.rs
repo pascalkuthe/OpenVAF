@@ -641,6 +641,12 @@ macro_rules! read_branch_val {
                 read_array!(name, val, Float, $len, dst)
             } else if is_float(ty) {
                 dst.set_scalar(PyFloat_AS_DOUBLE(val));
+            } else if is_int(ty) {
+                // allow conversion of scalars
+                dst.set_scalar(PyLong_AsLong(val) as f64);
+                if unlikely(!PyErr_Occurred().is_null()) {
+                    return ptr::null_mut();
+                }
             } else {
                 return raise_eval_illegal_data_type_exception(name);
             }
@@ -889,6 +895,12 @@ impl VaeFun {
             read_array!("temperature", temperature, Float, len, temp);
         } else if is_float(ty) {
             temp.set_scalar(PyFloat_AS_DOUBLE(temperature));
+        } else if is_int(ty) {
+            // allow conversion of scalars
+            temp.set_scalar(PyLong_AsLong(temperature) as f64);
+            if unlikely(!PyErr_Occurred().is_null()) {
+                return ptr::null_mut();
+            }
         } else {
             return raise_eval_illegal_data_type_exception("temperature");
         }
@@ -914,6 +926,12 @@ impl VaeFun {
                 dst.set_scalar(PyFloat_AS_DOUBLE(val));
             } else if is_array(ty) {
                 read_array!(name, val, Float, len, dst)
+            } else if is_int(ty) {
+                // allow conversion of scalars
+                dst.set_scalar(PyLong_AsLong(val) as f64);
+                if unlikely(!PyErr_Occurred().is_null()) {
+                    return ptr::null_mut();
+                }
             } else {
                 return raise_eval_illegal_data_type_exception(name);
             }
@@ -933,7 +951,7 @@ impl VaeFun {
 
             let ty = ob_type!(val);
 
-            if likely(PyLong_Check(val) != 0) {
+            if likely(is_int(ty)) {
                 dst.set_scalar(PyLong_AsLong(val) as i32);
                 if unlikely(!PyErr_Occurred().is_null()) {
                     return ptr::null_mut();
@@ -1061,8 +1079,13 @@ fn is_array(ty: *mut PyTypeObject) -> bool {
 }
 
 #[inline(always)]
-fn is_float(ty: *mut PyTypeObject) -> bool {
-    unsafe { ty == &mut PyFloat_Type || PyType_IsSubtype(ty, &mut PyFloat_Type) != 0 }
+unsafe fn is_float(ty: *mut PyTypeObject) -> bool {
+    ty == &mut PyFloat_Type || PyType_IsSubtype(ty, &mut PyFloat_Type) != 0
+}
+
+#[inline(always)]
+unsafe fn is_int(ty: *mut PyTypeObject) -> bool {
+    PyType_FastSubclass(ty, Py_TPFLAGS_LONG_SUBCLASS) != 0
 }
 
 #[cold]
