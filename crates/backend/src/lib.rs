@@ -284,7 +284,6 @@ pub fn compile_to_cfg(
         res.map(&place_map, &param_map, &callback_map);
     }
 
-
     (cfg, res, literals)
 }
 

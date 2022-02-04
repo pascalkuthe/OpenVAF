@@ -651,7 +651,7 @@ branch          (b,ci)          br_bci;
 branch          (si,ci)         br_sici;
 branch          (s,c)           br_sc;   // External SC branch required for CSCp
 branch          (bp,si)         br_bpsi;
-branch          (tnode )        br_sht;
+(*opt_voltage*) branch          (tnode )        br_sht;
 
 //Excess phase network for ITF
 branch		(xf1 )		br_bxf1;

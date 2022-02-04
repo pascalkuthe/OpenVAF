@@ -8,20 +8,21 @@ use libc::{c_char, c_void};
 use pyo3_ffi::structmember::{PyMemberDef, READONLY, T_OBJECT, T_OBJECT_EX};
 use pyo3_ffi::*;
 use verilogae_ffi::{
-    verilogae_call_fun_parallel, verilogae_fun_current_cnt, verilogae_fun_currents,
-    verilogae_fun_ptr, verilogae_fun_voltage_cnt, verilogae_fun_voltages, verilogae_function_cnt,
-    verilogae_function_symbols, verilogae_functions, verilogae_init_modelcard,
-    verilogae_int_fun_depbreak, verilogae_int_fun_depbreak_cnt, verilogae_int_fun_param_cnt,
-    verilogae_int_fun_params, verilogae_int_param_cnt, verilogae_int_param_descriptions,
-    verilogae_int_param_groups, verilogae_int_param_units, verilogae_int_params,
-    verilogae_module_name, verilogae_node_cnt, verilogae_nodes, verilogae_opvars,
-    verilogae_opvars_cnt, verilogae_real_fun_depbreak, verilogae_real_fun_depbreak_cnt,
-    verilogae_real_fun_param_cnt, verilogae_real_fun_params, verilogae_real_param_cnt,
-    verilogae_real_param_descriptions, verilogae_real_param_groups, verilogae_real_param_units,
-    verilogae_real_params, verilogae_str_fun_param_cnt, verilogae_str_fun_params,
-    verilogae_str_param_cnt, verilogae_str_param_descriptions, verilogae_str_param_groups,
-    verilogae_str_param_units, verilogae_str_params, FatPtr, Meta, ParamFlags, PARAM_FLAGS_INVALID,
-    PARAM_FLAGS_MAX_INCLUSIVE, PARAM_FLAGS_MIN_INCLUSIVE,
+    verilogae_call_fun_parallel, verilogae_fun_current_cnt, verilogae_fun_current_default_cnt,
+    verilogae_fun_current_defaults, verilogae_fun_currents, verilogae_fun_ptr,
+    verilogae_fun_voltage_cnt, verilogae_fun_voltage_default_cnt, verilogae_fun_voltage_defaults,
+    verilogae_fun_voltages, verilogae_function_cnt, verilogae_function_symbols,
+    verilogae_functions, verilogae_init_modelcard, verilogae_int_fun_depbreak,
+    verilogae_int_fun_depbreak_cnt, verilogae_int_fun_param_cnt, verilogae_int_fun_params,
+    verilogae_int_param_cnt, verilogae_int_param_descriptions, verilogae_int_param_groups,
+    verilogae_int_param_units, verilogae_int_params, verilogae_module_name, verilogae_node_cnt,
+    verilogae_nodes, verilogae_opvars, verilogae_opvars_cnt, verilogae_real_fun_depbreak,
+    verilogae_real_fun_depbreak_cnt, verilogae_real_fun_param_cnt, verilogae_real_fun_params,
+    verilogae_real_param_cnt, verilogae_real_param_descriptions, verilogae_real_param_groups,
+    verilogae_real_param_units, verilogae_real_params, verilogae_str_fun_param_cnt,
+    verilogae_str_fun_params, verilogae_str_param_cnt, verilogae_str_param_descriptions,
+    verilogae_str_param_groups, verilogae_str_param_units, verilogae_str_params, FatPtr, Meta,
+    ParamFlags, PARAM_FLAGS_INVALID, PARAM_FLAGS_MAX_INCLUSIVE, PARAM_FLAGS_MIN_INCLUSIVE,
 };
 
 use crate::ffi::new_type;
@@ -566,8 +567,8 @@ with_offsets! {
         real_params: Box<[(*mut PyObject, &'static str)]>,
         int_params:  Box<[(*mut PyObject, &'static str)]>,
         str_params:  Box<[(*mut PyObject, &'static str)]>,
-        voltages_:   Box<[(*mut PyObject, &'static str)]>,
-        currents_:   Box<[(*mut PyObject, &'static str)]>,
+        voltages_:   Box<[(*mut PyObject, &'static str, f64)]>,
+        currents_:   Box<[(*mut PyObject, &'static str, f64)]>,
 
         required_kwargs: usize,
 
@@ -616,14 +617,22 @@ macro_rules! read_array {
 }
 
 macro_rules! read_branch_val {
-    ($expected: expr, $found: expr, $len: ident, $dst: expr) => {
-        for ((name_, name), dst) in $expected.iter().copied().zip(&mut $dst) {
+    ( $expected: expr, $found: expr, $len: ident, $dst: expr) => {
+        for ((name_, name, default_val), dst) in $expected.iter().copied().zip(&mut $dst) {
             let dst = &mut dst.float;
 
             let val = PyDict_GetItem($found, name_);
-            if unlikely(val.is_null()) {
-                dst.set_scalar(0.0);
-                continue;
+            if val.is_null() {
+                if unlikely(default_val.is_nan()) {
+                    return raise_eval_exception(&format!(
+                        "eval() missing required {} '{}'",
+                        stringify!($found),
+                        name
+                    ));
+                } else {
+                    dst.set_scalar(default_val);
+                    continue;
+                }
             }
 
             let ty = ob_type!(val);
@@ -681,6 +690,8 @@ impl VaeFun {
 
         let voltage_names = verilogae_fun_voltages(handle, sym);
         let voltage_cnt = verilogae_fun_voltage_cnt(handle, sym);
+        let voltage_default_cnt = verilogae_fun_voltage_default_cnt(handle, sym);
+        let voltage_defaults = verilogae_fun_voltage_defaults(handle, sym);
 
         let voltages = PyList_New(voltage_cnt as isize);
 
@@ -690,12 +701,16 @@ impl VaeFun {
                 let name_py = PyUnicode_InternFromString(name);
                 PyList_SetItem(voltages, i as isize, name_py);
                 let name = std::str::from_utf8(CStr::from_ptr(name).to_bytes()).unwrap();
-                (name_py, name)
+                let default =
+                    if i < voltage_default_cnt { *voltage_defaults.add(i) } else { f64::NAN };
+                (name_py, name, default)
             })
             .collect();
 
         let current_names = verilogae_fun_currents(handle, sym);
         let currents_cnt = verilogae_fun_current_cnt(handle, sym);
+        let current_default_cnt = verilogae_fun_current_default_cnt(handle, sym);
+        let current_defaults = verilogae_fun_current_defaults(handle, sym);
 
         let currents = PyList_New(currents_cnt as isize);
 
@@ -705,7 +720,9 @@ impl VaeFun {
                 let name_py = PyUnicode_InternFromString(name);
                 PyList_SetItem(currents, i as isize, name_py);
                 let name = std::str::from_utf8(CStr::from_ptr(name).to_bytes()).unwrap();
-                (name_py, name)
+                let default =
+                    if i < current_default_cnt { *current_defaults.add(i) } else { f64::NAN };
+                (name_py, name, default)
             })
             .collect();
 

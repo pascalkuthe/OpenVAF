@@ -14,15 +14,16 @@ use basedb::lints::{Lint, LintLevel};
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsPath, VfsStorage, STANDARD_FLAGS};
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::ScopeDefItem;
-use hir_def::{Lookup, ModuleId, ParamId, Path, ScopeId, Type, VarId};
-use hir_ty::db::HirTyDatabase;
+use hir_def::{BranchId, Lookup, ModuleId, NodeId, ParamId, Path, ScopeId, Type, VarId};
+use hir_ty::db::{HirTyDB, HirTyDatabase};
+use hir_ty::lower::BranchKind;
 use hir_ty::{collect_diagnostics, collect_path, visit_relative_defs};
 use indexmap::IndexMap;
 use parking_lot::RwLock;
 use salsa::ParallelDatabase;
 use smol_str::SmolStr;
 use stdx::iter::zip;
-use syntax::ast::{AttrsOwner, Expr, LiteralKind, ParamDecl, PathExpr, VarDecl};
+use syntax::ast::{Attr, AttrsOwner, Expr, LiteralKind, ParamDecl, PathExpr, VarDecl};
 use syntax::sourcemap::FileSpan;
 use syntax::{AstNode, SyntaxNode, TextRange};
 use typed_index_collections::TiSlice;
@@ -50,7 +51,6 @@ impl Upcast<dyn BaseDB> for CompilationDB {
 }
 
 impl CompilationDB {
-    // TODO configure
     pub(crate) fn new(root_file: &std::path::Path, opts: &Opts) -> Result<Self> {
         let mut vfs = Vfs::default();
         vfs.insert_std_lib();
@@ -213,6 +213,8 @@ pub struct ModelInfo {
     pub op_vars: Vec<SmolStr>,
     pub module: ModuleId,
     pub ports: Vec<SmolStr>,
+    pub optional_currents: AHashMap<BranchId, f64>,
+    pub optional_voltages: AHashMap<(NodeId, Option<NodeId>), f64>,
 }
 
 impl ModelInfo {
@@ -274,6 +276,7 @@ impl ModelInfo {
 
         let mut resolved_retrieve_attr = AHashMap::new();
         let mut resolved_param_attrs = AHashMap::new();
+        let mut resolved_branch_attrs = AHashMap::new();
 
         let resolve_path = |sink: &mut ConsoleSink, expr: PathExpr, scope: ScopeId| {
             let path = Path::resolve(expr.path().unwrap()).unwrap();
@@ -322,6 +325,8 @@ impl ModelInfo {
         };
 
         let mut ports = Vec::new();
+        let mut optional_currents = AHashMap::new();
+        let mut optional_voltages = AHashMap::new();
 
         visit_relative_defs(db, module.lookup(db.upcast()).scope, |path, name, def| match def {
             ScopeDefItem::VarId(var) => {
@@ -451,6 +456,76 @@ impl ModelInfo {
                 }
             }
 
+            ScopeDefItem::BranchId(branch) => {
+                let loc = branch.lookup(db.upcast());
+                let ast = loc.item_tree(db.upcast())[loc.id].ast_id;
+                let ast = ast_id_map.get(ast).to_node(parse.tree().syntax());
+
+                let mut default_val = |attr: Attr| {
+                    let val = match attr.val() {
+                        Some(ref expr @ Expr::Literal(ref lit)) => match lit.kind() {
+                            LiteralKind::IntNumber(val) => val.value() as f64,
+                            LiteralKind::SiRealNumber(val) => val.value() as f64,
+                            LiteralKind::StdRealNumber(val) => val.value() as f64,
+                            _ => {
+                                let diag = IllegalExpr {
+                                    expr: expr.clone(),
+                                    expected: "a real literal",
+                                    attr: "vae_optional",
+                                };
+                                sink.add_diagnostic(&diag, root_file, db.upcast());
+                                return None;
+                            }
+                        },
+                        Some(expr) => {
+                            let diag = IllegalExpr {
+                                expr,
+                                expected: "a real number",
+                                attr: "vae_optional",
+                            };
+                            sink.add_diagnostic(&diag, root_file, db.upcast());
+                            return None;
+                        }
+                        None => 0f64,
+                    };
+
+                    Some(val)
+                };
+
+                let resolve_optional = || {
+                    if let Some(attr) = ast.get_attr("opt_voltage") {
+                        if let Some(mut val) = default_val(attr) {
+                            let (hi, lo) = match db.branch_info(branch).unwrap().kind {
+                                BranchKind::NodeGnd(hi) => (hi, None),
+                                BranchKind::Nodes(hi, lo) if db.node_data(hi).is_gnd => {
+                                    val = -val;
+                                    (lo, None)
+                                }
+
+                                BranchKind::Nodes(hi, lo) if db.node_data(lo).is_gnd => (hi, None),
+
+                                BranchKind::Nodes(hi, lo) => (hi, Some(lo)),
+                                _ => unreachable!(),
+                            };
+
+                            // TODO check for multiple declaration
+                            optional_voltages.insert((hi, lo), val);
+                            if let Some(lo) = lo {
+                                optional_voltages.insert((lo, Some(hi)), -val);
+                            }
+                        }
+                    }
+                    ast.get_attr("opt_current").and_then(default_val)
+                };
+
+                if let Some(val) = *resolved_branch_attrs
+                    .entry(ast.syntax().text_range())
+                    .or_insert_with(resolve_optional)
+                {
+                    optional_currents.insert(branch, val);
+                }
+            }
+
             _ => (),
         });
 
@@ -458,6 +533,15 @@ impl ModelInfo {
             bail!("compilation failed");
         }
 
-        Ok(ModelInfo { params, functions, op_vars, module, var_names, ports })
+        Ok(ModelInfo {
+            params,
+            functions,
+            op_vars,
+            module,
+            var_names,
+            ports,
+            optional_currents,
+            optional_voltages,
+        })
     }
 }

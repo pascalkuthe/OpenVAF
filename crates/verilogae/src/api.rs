@@ -8,7 +8,7 @@ use libloading::os::unix::Library;
 #[cfg(windows)]
 use libloading::os::windows::Library;
 
-use crate::{export_vfs, load_impl};
+use crate::{export_vfs, load};
 
 #[cfg(unix)]
 pub type NativePath = Slice<u8>;
@@ -177,6 +177,8 @@ expose_named_ptrs! {
     const verilogae_int_fun_depbreak: *const c_char = "depbreak.integer";
     const verilogae_fun_voltages: *const c_char = "voltages";
     const verilogae_fun_currents: *const c_char = "currents";
+    const verilogae_fun_voltage_defaults: f64 = "voltages.default";
+    const verilogae_fun_current_defaults: f64 = "currents.default";
 }
 
 macro_rules! expose_named_consts {
@@ -218,6 +220,8 @@ expose_named_consts! {
     verilogae_int_fun_depbreak_cnt: usize = "depbreak.integer.cnt";
     verilogae_fun_voltage_cnt: usize = "voltages.cnt";
     verilogae_fun_current_cnt: usize = "currents.cnt";
+    verilogae_fun_voltage_default_cnt: usize = "voltages.default.cnt";
+    verilogae_fun_current_default_cnt: usize = "currents.default.cnt";
 }
 
 #[derive(Clone, Copy)]
@@ -549,7 +553,7 @@ pub unsafe extern "C" fn verilogae_load(
         &*opts
     };
 
-    let res = std::panic::catch_unwind(|| load_impl(path, full_compile, opts));
+    let res = std::panic::catch_unwind(|| load(path, full_compile, opts));
 
     if let Ok(res) = res {
         match res {

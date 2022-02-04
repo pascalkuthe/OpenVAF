@@ -14,7 +14,7 @@ temp_ = np.repeat(temp, 300)
 vbe_ = np.tile(vbe,9)
 vbc_ = np.tile(np.repeat(vbc, 100), 3)
 args['temperature'] = temp_
-args['voltages'] = {'br_biei': vbe_,'br_bei': vbe_,'br_bpei': vbe_, 'br_bie': vbe_,'br_be': vbe_,'br_bpe': vbe_, 'br_bici': vbc_,'br_bpci': vbc_, 'br_bci': vbc_,'br_sici': vbc_ - vbe_, 'br_sc': vbc_ - vbe_ }
+args['voltages'] = {'br_bpbi': 0.0, 'br_biei': vbe_,'br_bei': vbe_,'br_bpei': vbe_, 'br_bie': vbe_,'br_be': vbe_,'br_bpe': vbe_, 'br_bici': vbc_,'br_bpci': vbc_, 'br_bci': vbc_,'br_sici': vbc_ - vbe_, 'br_sc': vbc_ - vbe_}
 
 hl2 = verilogae.load("hicumL2V2p4p0_vae.va")
 

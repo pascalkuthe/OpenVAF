@@ -213,16 +213,7 @@ pub(crate) fn compile_model_info(
     cx.export_array("nodes", cx.ty_str(), &nodes, true, true);
 
     let module_name = cx.const_str(module_name);
-    let module_name_ = cx
-        .define_global("module_name", cx.ty_str())
-        .unwrap_or_else(|| unreachable!("symbol 'module_name' already defined"));
-    unsafe {
-        llvm::LLVMSetInitializer(module_name_, module_name);
-        llvm::LLVMSetGlobalConstant(module_name_, llvm::True);
-        llvm::LLVMSetLinkage(module_name_, llvm::Linkage::ExternalLinkage);
-        llvm::LLVMSetUnnamedAddress(module_name_, llvm::UnnamedAddr::No);
-        llvm::LLVMSetDLLStorageClass(module_name_, llvm::DLLStorageClass::Export);
-    }
+    cx.export_val("module_name", cx.ty_str(), module_name, true);
 
     let (params, units, descriptions, groups): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
         multiunzip(param_info.iter().filter_map(|(info, ty)| (*ty == &Type::Real).then(|| *info)));
@@ -430,11 +421,13 @@ pub(crate) fn compile_fun(
 
     // setup cfg params
 
-    let voltages =
-        unsafe { map_voltages(db, &mut builder, prefix, &intern.params, offset, voltages) };
+    let voltages = unsafe {
+        map_voltages(db, model_info, &mut builder, prefix, &intern.params, offset, voltages)
+    };
 
-    let currents =
-        unsafe { map_currents(db, &mut builder, prefix, &intern.params, offset, currents) };
+    let currents = unsafe {
+        map_currents(db, model_info, &mut builder, prefix, &intern.params, offset, currents)
+    };
 
     let real_params = unsafe {
         map_params(
@@ -635,13 +628,14 @@ fn voltage_name(db: &Snapshot<CompilationDB>, hi: NodeId, lo: Option<NodeId>) ->
 
 unsafe fn map_voltages<'ll>(
     db: &Snapshot<CompilationDB>,
+    model_info: &ModelInfo,
     builder: &mut Builder<'_, '_, 'll>,
     prefix: &str,
     params: &TiSet<CfgParam, ParamKind>,
     offset: &'ll llvm::Value,
     ptr: &'ll llvm::Value,
 ) -> AHashMap<(NodeId, Option<NodeId>), &'ll llvm::Value> {
-    let kinds = params.raw.iter().filter_map(|kind| {
+    let voltages = params.raw.iter().filter_map(|kind| {
         if let ParamKind::Voltage { hi, lo } = kind {
             Some((*hi, *lo))
         } else {
@@ -649,10 +643,25 @@ unsafe fn map_voltages<'ll>(
         }
     });
 
+    let default_val = |voltage| {
+        model_info.optional_voltages.get(&voltage).map(|val| (voltage, builder.cx.const_real(*val)))
+    };
+
+    let (optional_voltages, default_vals): (Vec<_>, Vec<_>) =
+        voltages.clone().filter_map(default_val).unzip();
+
+    let global_name = format!("{}.voltages.default", prefix);
+    builder.cx.export_array(&global_name, builder.cx.ty_real(), &default_vals, true, true);
+
+    let non_optional_voltages: Vec<_> =
+        voltages.filter(|kind| default_val(*kind).is_none()).collect();
+
+    let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
+
     let global_name = format!("{}.voltages", prefix);
-    let names = kinds.clone().map(|(hi, lo)| voltage_name(db, hi, lo));
+    let names = voltages.clone().map(|(hi, lo)| voltage_name(db, hi, lo));
     export_names(builder.cx, names, &global_name);
-    mapping(kinds, builder, offset, ptr)
+    mapping(voltages, builder, offset, ptr)
 }
 
 fn current_name(db: &Snapshot<CompilationDB>, kind: CurrentKind) -> String {
@@ -672,6 +681,7 @@ fn current_name(db: &Snapshot<CompilationDB>, kind: CurrentKind) -> String {
 
 unsafe fn map_currents<'ll>(
     db: &Snapshot<CompilationDB>,
+    model_info: &ModelInfo,
     builder: &mut Builder<'_, '_, 'll>,
     prefix: &str,
     params: &TiSet<CfgParam, ParamKind>,
@@ -686,10 +696,29 @@ unsafe fn map_currents<'ll>(
         }
     });
 
+    let default_val = |kind| {
+        if let CurrentKind::ExplicitBranch(branch) = kind {
+            if let Some(val) = model_info.optional_currents.get(&branch) {
+                return Some((kind, builder.cx.const_real(*val)));
+            }
+        }
+        None
+    };
+
+    let (optional_currents, default_vals): (Vec<_>, Vec<_>) =
+        kinds.clone().filter_map(default_val).unzip();
+
+    let global_name = format!("{}.currents.default", prefix);
+    builder.cx.export_array(&global_name, builder.cx.ty_real(), &default_vals, true, true);
+
+    let nonoptional_currents: Vec<_> = kinds.filter(|kind| default_val(*kind).is_none()).collect();
+
+    let currents = optional_currents.into_iter().chain(nonoptional_currents);
+
     let global_name = format!("{}.currents", prefix);
-    let names = kinds.clone().map(|kind| current_name(db, kind));
+    let names = currents.clone().map(|kind| current_name(db, kind));
     export_names(builder.cx, names, &global_name);
-    mapping(kinds, builder, offset, ptr)
+    mapping(currents, builder, offset, ptr)
 }
 
 fn export_names<T: Borrow<str>>(

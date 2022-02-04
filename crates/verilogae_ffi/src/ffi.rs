@@ -387,6 +387,32 @@ extern "C" {
     ) -> *const *const ::std::os::raw::c_char;
 }
 extern "C" {
+    #[doc = "This function returns a pointer to the `voltages.default` global"]
+    #[doc = " of a VerilogAE model loaded with `load`."]
+    #[doc = ""]
+    #[doc = " # Safety"]
+    #[doc = ""]
+    #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
+    #[doc = "`sym_name` must batch the schema fun.{NUM}voltages.default"]
+    pub fn verilogae_fun_voltage_defaults(
+        lib: *const ::std::os::raw::c_void,
+        fun: *const ::std::os::raw::c_char,
+    ) -> *const f64;
+}
+extern "C" {
+    #[doc = "This function returns a pointer to the `currents.default` global"]
+    #[doc = " of a VerilogAE model loaded with `load`."]
+    #[doc = ""]
+    #[doc = " # Safety"]
+    #[doc = ""]
+    #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
+    #[doc = "`sym_name` must batch the schema fun.{NUM}currents.default"]
+    pub fn verilogae_fun_current_defaults(
+        lib: *const ::std::os::raw::c_void,
+        fun: *const ::std::os::raw::c_char,
+    ) -> *const f64;
+}
+extern "C" {
     #[doc = "This funprefix_with_name = falsection returns a pointer to the `params.real.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
@@ -466,6 +492,30 @@ extern "C" {
     #[doc = ""]
     #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
     pub fn verilogae_fun_current_cnt(
+        lib: *const ::std::os::raw::c_void,
+        fun: *const ::std::os::raw::c_char,
+    ) -> usize;
+}
+extern "C" {
+    #[doc = "This funprefix_with_name = falsection returns a pointer to the `voltages.default.cnt` global"]
+    #[doc = " of a VerilogAE model loaded with `load`."]
+    #[doc = ""]
+    #[doc = " # Safety"]
+    #[doc = ""]
+    #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
+    pub fn verilogae_fun_voltage_default_cnt(
+        lib: *const ::std::os::raw::c_void,
+        fun: *const ::std::os::raw::c_char,
+    ) -> usize;
+}
+extern "C" {
+    #[doc = "This funprefix_with_name = falsection returns a pointer to the `currents.default.cnt` global"]
+    #[doc = " of a VerilogAE model loaded with `load`."]
+    #[doc = ""]
+    #[doc = " # Safety"]
+    #[doc = ""]
+    #[doc = " `lib` must be a valid pointer returned by the `load` functions or `dlopen`"]
+    pub fn verilogae_fun_current_default_cnt(
         lib: *const ::std::os::raw::c_void,
         fun: *const ::std::os::raw::c_char,
     ) -> usize;

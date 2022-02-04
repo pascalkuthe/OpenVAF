@@ -394,6 +394,28 @@ const char *const *verilogae_fun_voltages(const void *lib, const char *fun);
 const char *const *verilogae_fun_currents(const void *lib, const char *fun);
 
 /**
+ *This function returns a pointer to the `voltages.default` global
+ * of a VerilogAE model loaded with `load`.
+ *
+ * # Safety
+ *
+ * `lib` must be a valid pointer returned by the `load` functions or `dlopen`
+ *`sym_name` must batch the schema fun.{NUM}voltages.default
+ */
+const double *verilogae_fun_voltage_defaults(const void *lib, const char *fun);
+
+/**
+ *This function returns a pointer to the `currents.default` global
+ * of a VerilogAE model loaded with `load`.
+ *
+ * # Safety
+ *
+ * `lib` must be a valid pointer returned by the `load` functions or `dlopen`
+ *`sym_name` must batch the schema fun.{NUM}currents.default
+ */
+const double *verilogae_fun_current_defaults(const void *lib, const char *fun);
+
+/**
  *This funprefix_with_name = falsection returns a pointer to the `params.real.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
@@ -462,6 +484,26 @@ uintptr_t verilogae_fun_voltage_cnt(const void *lib, const char *fun);
  * `lib` must be a valid pointer returned by the `load` functions or `dlopen`
  */
 uintptr_t verilogae_fun_current_cnt(const void *lib, const char *fun);
+
+/**
+ *This funprefix_with_name = falsection returns a pointer to the `voltages.default.cnt` global
+ * of a VerilogAE model loaded with `load`.
+ *
+ * # Safety
+ *
+ * `lib` must be a valid pointer returned by the `load` functions or `dlopen`
+ */
+uintptr_t verilogae_fun_voltage_default_cnt(const void *lib, const char *fun);
+
+/**
+ *This funprefix_with_name = falsection returns a pointer to the `currents.default.cnt` global
+ * of a VerilogAE model loaded with `load`.
+ *
+ * # Safety
+ *
+ * `lib` must be a valid pointer returned by the `load` functions or `dlopen`
+ */
+uintptr_t verilogae_fun_current_default_cnt(const void *lib, const char *fun);
 
 /**
  * Obtains a pointer to the modelcard initialization function of a VerilogAE model loaded with `load`.
