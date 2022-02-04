@@ -22,7 +22,6 @@ fn check_with_diagnostics(src: &str, diagnostics: Expect, cfg: Expect) {
     let mut actual = String::new();
 
     let res = &db.parse(db.root_file());
-    eprintln!("{:?}", res);
     if !res.errors().is_empty() {
         diagnostics::assert_empty_diagnostics(&db, db.root_file(), res.errors())
     }

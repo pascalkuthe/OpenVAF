@@ -178,9 +178,6 @@ impl EvalCtx<'_> {
             (FlatSet::Elem(arg1), FlatSet::Elem(arg2)) => {
                 let arg1 = arg1.try_into();
                 let arg2 = arg2.try_into();
-                if arg1.is_err() || arg2.is_err() {
-                    eprintln!("{:?}", args);
-                }
                 match f(arg1.unwrap(), arg2.unwrap()) {
                     Some(c) => FlatSet::Elem(c.into()),
                     None => {
