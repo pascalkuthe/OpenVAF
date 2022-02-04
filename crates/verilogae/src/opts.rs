@@ -132,6 +132,9 @@ impl Opts {
 }
 
 impl NativePath {
+    /// # Safety
+    ///
+    /// `self.ptr` must be valid for `self.len` reads
     pub unsafe fn to_path(&self) -> &Path {
         let path = self.read();
 
