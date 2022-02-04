@@ -1,10 +1,15 @@
 /target/
 /crates/*/target/
 /libs/*/target/
-!/crates/test/src/middle.rs
 .direnv
 .envrc
 cargo-timing*.html
 vendor
 .maintainer
 .commit
+wheels
+verilogae-egg-info
+build
+flamegraph.svg
+perf.data
+verilogae/__pycache__
