@@ -7,8 +7,9 @@ license = "GPL-3.0"
 
 [lib]
 doctest = false
-crate-type = ["cdylib"]
+crate-type = ["rlib", "cdylib"]
 name = "verilogae"
+
 
 
 [dependencies]

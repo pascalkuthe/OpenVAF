@@ -28,7 +28,7 @@ use libloading::os::windows::Library;
 #[cfg(unix)]
 use libloading::os::unix::Library;
 
-mod api;
+pub mod api;
 mod back;
 mod cache;
 mod compiler_db;
@@ -57,7 +57,7 @@ pub fn export_vfs(path: &Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
     Ok(res)
 }
 
-fn load_impl(path: &Path, full_compile: bool, opts: &Opts) -> Result<Library> {
+pub fn load(path: &Path, full_compile: bool, opts: &Opts) -> Result<Library> {
     let lib = build_local_model(path, full_compile, opts)?;
     let lib = unsafe { Library::new(lib).expect("failed to open lib") };
     Ok(lib)
