@@ -1,11 +1,18 @@
-image: archlinux
+image: fedora/35
 
 packages:
   - rust
-  - llvm
+  - cargo
+  - llvm-devel
   - s3cmd
   - cbindgen
-  - rust-bindgen
+  - bindgen
+  - tar
+  - zstd
+  - g++
+  - gcc
+  - rustfmt
+  - clippy
 
 secrets:
   - a7b78c60-966c-46c7-a584-4a9ba3738fa0

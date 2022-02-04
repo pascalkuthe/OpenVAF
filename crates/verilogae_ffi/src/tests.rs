@@ -3,6 +3,10 @@ use xshell::cmd;
 
 #[test]
 fn gen_ffi() {
+    // messes with caching
+    if std::env::var("CI").is_ok() {
+        return;
+    }
     let vae_dir = project_root().join("crates/verilogae");
 
     // rustc_bootstrap is used to allow macro expansion on stable. It ain't pretty but its fine here since
