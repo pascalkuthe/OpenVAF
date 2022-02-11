@@ -491,7 +491,7 @@ fn bitwise<Op>(out_vec: &mut [Word], in_vec: &[Word], op: Op) -> bool
 where
     Op: Fn(Word, Word) -> Word,
 {
-    assert_eq!(out_vec.len(), in_vec.len());
+    let out_vec = &mut out_vec[..in_vec.len()];
     let mut changed = 0;
     for (out_elem, in_elem) in out_vec.iter_mut().zip(in_vec) {
         let old_val = *out_elem;

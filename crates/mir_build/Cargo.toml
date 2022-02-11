@@ -1,0 +1,30 @@
+[package]
+name = "mir_build"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+[lib]
+doctest = false
+
+
+[dependencies]
+mir = {version = "0.0.0", path = "../mir" }
+
+stdx = {version = "0.0.0", path = "../stdx" }
+bforest = {version = "0.0.0" , path = "../bforest"}
+list_pool = {version = "0.0.0" , path = "../list_pool"}
+typed_indexmap = { version = "0.0.0", path = "../typed_indexmap" }
+bitset = {version = "0.0.0", path = "../bitset" }
+
+smallvec = {version = "1.7", features = ["const_new","union"]}
+indexmap = "1.6"
+typed-index-collections = "3.0"
+ahash = "0.7"
+lasso = {version = "0.6", features = ["ahash"]}
+
+[dev-dependencies]
+expect-test = "1.1"
+mir_reader = {version = "0.0.0", path = "../mir_reader" }
+# mir_interpret = {version = "0.0.0", path = "../mir_interpret" }

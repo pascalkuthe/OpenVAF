@@ -3,13 +3,12 @@
 //! The order of basic blocks in a function and the order of instructions in a block is
 //! determined by the `Layout` data structure defined in this module.
 
-use core::iter::{IntoIterator, Iterator};
+use std::iter::{IntoIterator, Iterator};
 
-use crate::dfg::DataFlowGraph;
+use stdx::packed_option::PackedOption;
+use typed_index_collections::TiVec;
+
 use crate::{Block, Inst};
-
-use cranelift_entity::packed_option::PackedOption;
-use cranelift_entity::SecondaryMap;
 
 #[cfg(test)]
 mod tests;
@@ -31,11 +30,11 @@ mod tests;
 pub struct Layout {
     /// Linked list nodes for the layout order of blocks Forms a doubly linked list, terminated in
     /// both ends by `None`.
-    blocks: SecondaryMap<Block, BlockNode>,
+    blocks: TiVec<Block, BlockNode>,
 
     /// Linked list nodes for the layout order of instructions. Forms a double linked list per block,
     /// terminated in both ends by `None`.
-    insts: SecondaryMap<Inst, InstNode>,
+    insts: TiVec<Inst, InstNode>,
 
     /// First block in the layout order, or `None` when no blocks have been laid out.
     first_block: Option<Block>,
@@ -53,12 +52,7 @@ impl Default for Layout {
 impl Layout {
     /// Create a new empty `Layout`.
     pub fn new() -> Self {
-        Self {
-            blocks: SecondaryMap::new(),
-            insts: SecondaryMap::new(),
-            first_block: None,
-            last_block: None,
-        }
+        Self { blocks: TiVec::new(), insts: TiVec::new(), first_block: None, last_block: None }
     }
 
     /// Clear the layout.
@@ -70,8 +64,8 @@ impl Layout {
     }
 
     /// Returns the capacity of the `BlockData` map.
-    pub fn block_capacity(&self) -> usize {
-        self.blocks.capacity()
+    pub fn num_blocks(&self) -> usize {
+        self.blocks.len()
     }
 }
 
@@ -85,6 +79,28 @@ impl Layout {
 /// blocks do not affect the semantics of the program.
 ///
 impl Layout {
+    pub fn make_block(&mut self) -> Block {
+        self.blocks.push_and_get_key(BlockNode {
+            prev: None.into(),
+            next: None.into(),
+            first_inst: None.into(),
+            last_inst: None.into(),
+        })
+    }
+
+    pub fn append_new_block(&mut self) -> Block {
+        let res = self.blocks.push_and_get_key(BlockNode {
+            prev: None.into(),
+            next: None.into(),
+            first_inst: None.into(),
+            last_inst: None.into(),
+        });
+
+        self.append_block(res);
+
+        res
+    }
+
     /// Is `block` currently part of the layout?
     pub fn is_block_inserted(&self, block: Block) -> bool {
         Some(block) == self.first_block || self.blocks[block].prev.is_some()
@@ -150,21 +166,37 @@ impl Layout {
         }
     }
 
+    pub fn clear_block(&mut self, block: Block) {
+        let mut curr = self.first_inst(block);
+        while let Some(inst) = curr {
+            let n = &mut self.insts[inst];
+            curr = n.next.expand();
+            *n = InstNode::default();
+        }
+
+        self.blocks[block].first_inst = None.into();
+        self.blocks[block].last_inst = None.into();
+    }
+
+    pub fn remove_and_clear_block(&mut self, block: Block) {
+        self.clear_block(block);
+        self.remove_empty_block(block);
+    }
+
     /// Remove `block` from the layout.
-    pub fn remove_block(&mut self, block: Block) {
+    pub fn remove_empty_block(&mut self, block: Block) {
         debug_assert!(self.is_block_inserted(block), "block not in the layout");
         debug_assert!(self.first_inst(block).is_none(), "block must be empty.");
 
         // Clear the `block` node and extract links.
         let prev;
         let next;
-        {
-            let n = &mut self.blocks[block];
-            prev = n.prev;
-            next = n.next;
-            n.prev = None.into();
-            n.next = None.into();
-        }
+        let n = &mut self.blocks[block];
+        prev = n.prev;
+        next = n.next;
+        n.prev = None.into();
+        n.next = None.into();
+
         // Fix up links to `block`.
         match prev.expand() {
             None => self.first_block = next.expand(),
@@ -174,11 +206,23 @@ impl Layout {
             None => self.last_block = prev.expand(),
             Some(n) => self.blocks[n].prev = prev,
         }
+
+        if self.last_block.unwrap() == block {
+            self.last_block = prev.expand();
+        }
     }
 
     /// Return an iterator over all blocks in layout order.
     pub fn blocks(&self) -> Blocks {
         Blocks { layout: self, next: self.first_block }
+    }
+
+    pub fn blocks_cursor(&self) -> BlockCursor {
+        BlockCursor { next: self.first_block }
+    }
+
+    pub fn rev_blocks_cursor(&self) -> RevBlockCursor {
+        RevBlockCursor { next: self.last_block }
     }
 
     /// Get the function's entry block.
@@ -231,6 +275,38 @@ impl<'f> Iterator for Blocks<'f> {
     }
 }
 
+pub struct BlockCursor {
+    pub next: Option<Block>,
+}
+
+impl BlockCursor {
+    pub fn next(&mut self, layout: &Layout) -> Option<Block> {
+        match self.next {
+            Some(block) => {
+                self.next = layout.next_block(block);
+                Some(block)
+            }
+            None => None,
+        }
+    }
+}
+
+pub struct RevBlockCursor {
+    pub next: Option<Block>,
+}
+
+impl RevBlockCursor {
+    pub fn next(&mut self, layout: &Layout) -> Option<Block> {
+        match self.next {
+            Some(block) => {
+                self.next = layout.prev_block(block);
+                Some(block)
+            }
+            None => None,
+        }
+    }
+}
+
 /// Use a layout reference in a for loop.
 impl<'f> IntoIterator for &'f Layout {
     type Item = Block;
@@ -248,7 +324,7 @@ impl<'f> IntoIterator for &'f Layout {
 impl Layout {
     /// Get the block containing `inst`, or `None` if `inst` is not inserted in the layout.
     pub fn inst_block(&self, inst: Inst) -> Option<Block> {
-        self.insts[inst].block.into()
+        self.insts.get(inst).and_then(|inst| inst.block.expand())
     }
 
     // /// Get the block containing the program point `pp`. Panic if `pp` is not in the layout.
@@ -265,27 +341,30 @@ impl Layout {
     // }
 
     /// Append `inst` to the end of `block`.
-    pub fn append_inst(&mut self, inst: Inst, block: Block) {
+    pub fn append_inst_to_bb(&mut self, inst: Inst, block: Block) {
+        if self.insts.len() <= usize::from(inst) {
+            self.insts.resize(usize::from(inst) + 1, InstNode::default())
+        }
+
         debug_assert_eq!(self.inst_block(inst), None);
         debug_assert!(
             self.is_block_inserted(block),
             "Cannot append instructions to block not in layout"
         );
+
+        let block_node = &mut self.blocks[block];
         {
-            let block_node = &mut self.blocks[block];
-            {
-                let inst_node = &mut self.insts[inst];
-                inst_node.block = block.into();
-                inst_node.prev = block_node.last_inst;
-                debug_assert!(inst_node.next.is_none());
-            }
-            if block_node.first_inst.is_none() {
-                block_node.first_inst = inst.into();
-            } else {
-                self.insts[block_node.last_inst.unwrap()].next = inst.into();
-            }
-            block_node.last_inst = inst.into();
+            let inst_node = &mut self.insts[inst];
+            inst_node.block = block.into();
+            inst_node.prev = block_node.last_inst;
+            debug_assert!(inst_node.next.is_none());
         }
+        if block_node.first_inst.is_none() {
+            block_node.first_inst = inst.into();
+        } else {
+            self.insts[block_node.last_inst.unwrap()].next = inst.into();
+        }
+        block_node.last_inst = inst.into();
     }
 
     /// Fetch a block's first instruction.
@@ -308,35 +387,47 @@ impl Layout {
         self.insts[inst].prev.expand()
     }
 
-    /// Fetch the first instruction in a block's terminal branch group.
-    pub fn canonical_branch_inst(&self, dfg: &DataFlowGraph, block: Block) -> Option<Inst> {
-        // Basic blocks permit at most two terminal branch instructions.
-        // If two, the former is conditional and the latter is unconditional.
-        let last = self.last_inst(block)?;
-        if let Some(prev) = self.prev_inst(last) {
-            if dfg[prev].opcode().is_branch() {
-                return Some(prev);
-            }
-        }
-        Some(last)
-    }
-
     /// Insert `inst` before the instruction `before` in the same block.
-    pub fn insert_inst(&mut self, inst: Inst, before: Inst) {
+    pub fn prepend_inst(&mut self, inst: Inst, before: Inst) {
+        if self.insts.len() <= usize::from(inst) {
+            self.insts.resize(usize::from(inst) + 1, InstNode::default())
+        }
+
         debug_assert_eq!(self.inst_block(inst), None);
         let block =
             self.inst_block(before).expect("Instruction before insertion point not in the layout");
+
         let after = self.insts[before].prev;
-        {
-            let inst_node = &mut self.insts[inst];
-            inst_node.block = block.into();
-            inst_node.next = before.into();
-            inst_node.prev = after;
-        }
+        let inst_node = &mut self.insts[inst];
+        inst_node.block = block.into();
+        inst_node.next = before.into();
+        inst_node.prev = after;
         self.insts[before].prev = inst.into();
         match after.expand() {
             None => self.blocks[block].first_inst = inst.into(),
             Some(a) => self.insts[a].next = inst.into(),
+        }
+    }
+
+    /// Insert `inst` after the instruction `after` in the same block.
+    pub fn append_inst(&mut self, inst: Inst, after: Inst) {
+        if self.insts.len() <= usize::from(inst) {
+            self.insts.resize(usize::from(inst) + 1, InstNode::default())
+        }
+
+        debug_assert_eq!(self.inst_block(inst), None);
+        let block =
+            self.inst_block(after).expect("Instruction before insertion point not in the layout");
+
+        let before = self.insts[after].next;
+        let inst_node = &mut self.insts[inst];
+        inst_node.block = block.into();
+        inst_node.next = before;
+        inst_node.prev = after.into();
+        self.insts[after].next = inst.into();
+        match before.expand() {
+            None => self.blocks[block].last_inst = inst.into(),
+            Some(prev) => self.insts[prev].prev = inst.into(),
         }
     }
 
@@ -366,23 +457,75 @@ impl Layout {
     }
 
     /// Iterate over the instructions in `block` in layout order.
-    pub fn block_insts(&self, block: Block) -> Insts {
-        Insts {
-            layout: self,
+    pub fn block_insts(&self, block: Block) -> InstIter {
+        InstIter { layout: self, cursor: self.block_inst_cursor(block) }
+    }
+
+    pub fn block_insts_no_term(&self, block: Block) -> InstIter {
+        let mut insts = self.block_insts(block);
+        insts.next_back();
+        insts
+    }
+
+    /// Iterate over the instructions in `block` in layout order.
+    pub fn block_inst_cursor(&self, block: Block) -> InstCursor {
+        InstCursor {
             head: self.blocks[block].first_inst.into(),
             tail: self.blocks[block].last_inst.into(),
         }
     }
 
-    pub fn likely_branch(&self, block: Block) -> Option<Inst> {
-        // if we have a branch its the second last instruction (last one is fall trough jump)
-        let mut iter = self.block_insts(block);
-        iter.next_back();
-        iter.next_back()
+    pub fn block_terminator(&self, block: Block) -> Option<Inst> {
+        self.blocks[block].last_inst.into()
     }
 
-    pub fn terminator(&self, block: Block) -> Option<Inst> {
-        self.blocks[block].last_inst.into()
+    /// Merges `succ` ito `pred` by remvoing the terminator from `pred` and appding all instructions
+    /// to `pred`. Aftwars `succ` is removed from the layout
+    ///
+    /// #Note
+    /// It is up to the caller to ensure that this merge is valid:
+    ///
+    /// * No phis remain in `succ`
+    /// * `pred` is terminated by a `jump` to `succ`
+    /// * `no other branches to `succ` remain
+    /// that `succ` has no arguments
+    pub fn merge_blocks(&mut self, pred: Block, succ: Block) {
+        // remove branch instructions from `pred`
+        if let Some(succ_start) = self.blocks[succ].first_inst.expand() {
+            let pred_end = {
+                let mut cursor = self.block_inst_cursor(pred);
+                let jmp_branch = cursor.next_back(self).unwrap();
+                self.insts[jmp_branch] = InstNode::default();
+                cursor.next_back(self)
+            };
+
+            let mut cursor = self.block_inst_cursor(succ);
+            while let Some(inst) = cursor.next(self) {
+                self.insts[inst].block = pred.into();
+            }
+
+            if let Some(pred_end) = pred_end {
+                // link up insts
+                self.insts[pred_end].next = succ_start.into();
+                self.insts[succ_start].prev = pred_end.into();
+            } else {
+                // precessor only contained jmp
+                // just update the block
+                self.blocks[pred].first_inst = self.blocks[succ].first_inst;
+            }
+
+            self.blocks[pred].last_inst = self.blocks[succ].last_inst;
+        } else {
+            // sucessor is empty... Kind of odd but probably valid (collapse empty jump the
+            // terminator). Just remove the branch
+            self.remove_inst(self.last_inst(pred).unwrap())
+        }
+
+        self.blocks[succ].first_inst = None.into();
+        self.blocks[succ].last_inst = None.into();
+
+        // finally delete `succ`
+        self.remove_empty_block(succ)
     }
 
     /// Split the block containing `before` in two.
@@ -458,39 +601,58 @@ struct InstNode {
     next: PackedOption<Inst>,
 }
 
+#[derive(Clone)]
 /// Iterate over instructions in a block in layout order. See `Layout::block_insts()`.
-pub struct Insts<'f> {
-    layout: &'f Layout,
-    head: Option<Inst>,
-    tail: Option<Inst>,
+pub struct InstIter<'f> {
+    pub layout: &'f Layout,
+    pub cursor: InstCursor,
 }
 
-impl<'f> Iterator for Insts<'f> {
+impl<'f> Iterator for InstIter<'f> {
     type Item = Inst;
 
     fn next(&mut self) -> Option<Inst> {
+        self.cursor.next(self.layout)
+    }
+}
+
+impl<'f> DoubleEndedIterator for InstIter<'f> {
+    fn next_back(&mut self) -> Option<Inst> {
+        self.cursor.next_back(self.layout)
+    }
+}
+
+/// Iterate over instructions in a block in layout order. See `Layout::block_insts()`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct InstCursor {
+    pub head: Option<Inst>,
+    pub tail: Option<Inst>,
+}
+
+impl InstCursor {
+    pub fn next(&mut self, layout: &Layout) -> Option<Inst> {
         let rval = self.head;
         if let Some(inst) = rval {
             if self.head == self.tail {
                 self.head = None;
                 self.tail = None;
             } else {
-                self.head = self.layout.insts[inst].next.into();
+                self.head = layout.insts[inst].next.into();
             }
         }
         rval
     }
 }
 
-impl<'f> DoubleEndedIterator for Insts<'f> {
-    fn next_back(&mut self) -> Option<Inst> {
+impl InstCursor {
+    pub fn next_back(&mut self, layout: &Layout) -> Option<Inst> {
         let rval = self.tail;
         if let Some(inst) = rval {
             if self.head == self.tail {
                 self.head = None;
                 self.tail = None;
             } else {
-                self.tail = self.layout.insts[inst].prev.into();
+                self.tail = layout.insts[inst].prev.into();
             }
         }
         rval

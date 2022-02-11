@@ -499,8 +499,8 @@ pub trait Cursor {
         use self::CursorPosition::*;
         match self.position() {
             Nowhere | Before(..) => panic!("Invalid insert_inst position"),
-            At(cur) => self.layout_mut().insert_inst(inst, cur),
-            After(block) => self.layout_mut().append_inst(inst, block),
+            At(cur) => self.layout_mut().prepend_inst(inst, cur),
+            After(block) => self.layout_mut().append_inst_to_bb(inst, block),
         }
     }
 

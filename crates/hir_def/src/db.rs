@@ -8,7 +8,7 @@ use crate::data::{
     VarData,
 };
 use crate::item_tree::ItemTree;
-use crate::nameres::DefMap;
+use crate::nameres::{DefMap, ScopeOrigin};
 use crate::{
     AliasParamId, AliasParamLoc, BlockId, BlockLoc, BranchId, BranchLoc, DefWithBodyId,
     DisciplineAttrId, DisciplineAttrLoc, DisciplineId, DisciplineLoc, FunctionArgId,
@@ -97,6 +97,9 @@ pub trait HirDefDB: InternDB + Upcast<dyn BaseDB> {
 
     #[salsa::invoke(AliasParamData::alias_data_query)]
     fn alias_data(&self, param: AliasParamId) -> Arc<AliasParamData>;
+
+    #[salsa::transparent]
+    fn find_module(&self, root_file: FileId) -> ModuleId;
 }
 
 fn body_source_map(db: &dyn HirDefDB, def: DefWithBodyId) -> Arc<BodySourceMap> {
@@ -109,4 +112,20 @@ fn body(db: &dyn HirDefDB, def: DefWithBodyId) -> Arc<Body> {
 
 fn param_exprs(db: &dyn HirDefDB, param: ParamId) -> ParamExprs {
     db.param_body_with_sourcemap(param).2
+}
+
+pub fn find_module(db: &dyn HirDefDB, root_file: FileId) -> ModuleId {
+    let def_map = db.def_map(root_file);
+    let root = def_map.entry();
+    def_map[root]
+        .children
+        .values()
+        .find_map(|scope| {
+            if let ScopeOrigin::Module(module) = def_map[*scope].origin {
+                Some(module)
+            } else {
+                None
+            }
+        })
+        .expect("No Module found")
 }

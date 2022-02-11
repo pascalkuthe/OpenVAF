@@ -1,96 +1,125 @@
-use crate::instructions::Opcode;
+use expect_test::expect;
+
+use crate::instructions::{Opcode, PhiMap, PhiNode};
+use crate::{Block, F_ZERO};
 
 use super::*;
 
 #[test]
 fn make_inst() {
     let mut dfg = DataFlowGraph::new();
+    let v3 = dfg.make_param(0u32.into());
 
-    let idata = InstructionData::UnaryInt { imm: 0 };
+    let idata = InstructionData::Binary { opcode: Opcode::Fadd, args: [F_ZERO, v3] };
     let inst = dfg.make_inst(idata);
 
     dfg.make_inst_results(inst);
     assert_eq!(inst.to_string(), "inst0");
-    assert_eq!(dfg.display_inst(inst).to_string(), "v0 = iconst 0");
-
-    // Immutable reference resolution.
-    {
-        let immdfg = &dfg;
-        let ins = &immdfg[inst];
-        assert_eq!(ins.opcode(), Opcode::Iconst);
-    }
+    expect![[r#"
+        "v14 = fadd v3, v13"
+    "#]]
+    .assert_debug_eq(&dfg.display_inst(inst).to_string());
 
     // Results.
-    let val = dfg.first_result(inst);
-    assert_eq!(dfg.inst_results(inst), &[val]);
+    let v4 = dfg.first_result(inst);
+    assert_eq!(dfg.inst_results(inst), &[v4]);
 
-    assert_eq!(dfg.value_def(val), ValueDef::Result(inst, 0));
+    assert_eq!(dfg.value_def(v4), ValueDef::Result(inst, 0));
 
     // Replacing results.
-    assert!(dfg.value_is_attached(val));
-    let v2 = dfg.replace_result(val);
-    assert!(!dfg.value_is_attached(val));
-    assert!(dfg.value_is_attached(v2));
-    assert_eq!(dfg.inst_results(inst), &[v2]);
-    assert_eq!(dfg.value_def(v2), ValueDef::Result(inst, 0));
+    assert!(dfg.value_attached(v4));
+    assert_eq!(dfg.uses(v4).count(), 0);
+
+    let idata = InstructionData::Binary { opcode: Opcode::Fadd, args: [v4, v4] };
+    let inst = dfg.make_inst(idata);
+    dfg.make_inst_results(inst);
+    let v5 = dfg.first_result(inst);
+
+    assert_eq!(dfg.value_def(v5), ValueDef::Result(inst, 0));
+    assert_eq!(dfg.uses(v5).count(), 0);
+    // test that uses are created correctly
+    assert_eq!(dfg.uses(v4).count(), 2);
+
+    // linked list is fifo so reverse the iterator.
+    // The code does not make any garuntee about the order of the iterator just the contents so if
+    // this test ever fails because of order its ok to change this
+    assert_eq!(dfg.uses_double_ended(v4).rev().collect::<Vec<_>>(), dfg.operands(inst));
+    // test that updating is a noop when nothing has changed
+    dfg.zap_inst(inst);
+    dfg.update_inst_uses(inst);
+    assert_eq!(dfg.uses(v4).count(), 2);
+
+    dfg.replace_uses(v4, F_ZERO);
+    assert_eq!(dfg.instr_args(inst), &[F_ZERO, F_ZERO]);
+    assert_eq!(dfg.uses(F_ZERO).count(), 3);
+    assert!(dfg.value_dead(v4));
+    assert_eq!(dfg.uses_double_ended(v4).rev().count(), 0);
+
+    dfg.zap_inst(inst);
+    dfg.zap_inst(inst);
+
+    assert_eq!(dfg.uses(v3).count(), 1);
+    assert_eq!(dfg.uses(F_ZERO).count(), 1);
+    assert!(dfg.value_dead(v4));
+    assert_eq!(dfg.uses(v4).count(), 0);
+
+    dfg.instr_args_mut(inst).copy_from_slice(&[v3, v4]);
+    dfg.update_inst_uses(inst);
+
+    assert_eq!(dfg.uses(F_ZERO).count(), 1);
+    assert_eq!(dfg.uses(v4).count(), 1);
+    assert_eq!(dfg.uses(v3).count(), 2);
 }
 
 #[test]
-fn block() {
+fn phi() {
     let mut dfg = DataFlowGraph::new();
+    let v3 = dfg.fconst(2f64.into());
+    let v4 = dfg.fconst(4f64.into());
+    let b0 = Block::from(0u32);
+    let b1 = Block::from(1u32);
+    let inst = dfg.make_inst(PhiNode { args: ValueList::new(), blocks: PhiMap::new() }.into());
+    assert_eq!(
+        dfg.insts[inst].unwrap_phi().edges(&dfg.insts.value_lists, &dfg.phi_forest).count(),
+        0
+    );
+    dfg.insert_phi_edge(inst, b0, F_ZERO);
+    dfg.insert_phi_edge(inst, b1, v3);
+    assert_eq!(dfg.uses(F_ZERO).count(), 1);
+    assert_eq!(dfg.uses(v3).count(), 1);
+    assert_eq!(
+        dfg.insts[inst]
+            .unwrap_phi()
+            .edges(&dfg.insts.value_lists, &dfg.phi_forest)
+            .collect::<Vec<_>>(),
+        &[(b0, F_ZERO), (b1, v3)]
+    );
 
-    let block = dfg.make_block();
-    assert_eq!(block.to_string(), "block0");
-    assert_eq!(dfg.num_block_params(block), 0);
-    assert_eq!(dfg.block_params(block), &[]);
-    assert!(dfg.detach_block_params(block).is_empty());
-    assert_eq!(dfg.num_block_params(block), 0);
-    assert_eq!(dfg.block_params(block), &[]);
+    dfg.insert_phi_edge(inst, b1, v4);
+    assert_eq!(dfg.uses(F_ZERO).count(), 1);
+    assert_eq!(dfg.uses(v4).count(), 1);
+    assert_eq!(dfg.uses(v3).count(), 0);
+    assert_eq!(
+        dfg.insts[inst]
+            .unwrap_phi()
+            .edges(&dfg.insts.value_lists, &dfg.phi_forest)
+            .collect::<Vec<_>>(),
+        &[(b0, F_ZERO), (b1, v4)]
+    );
+    assert_eq!(
+        dfg.insts[inst].unwrap_phi().edge_val(b0, &dfg.insts.value_lists, &dfg.phi_forest),
+        Some(F_ZERO)
+    );
+    assert!(dfg.try_remove_phi_edge_at(inst, b0).is_some());
 
-    let arg1 = dfg.append_block_param(block);
-    assert_eq!(arg1.to_string(), "v0");
-    assert_eq!(dfg.num_block_params(block), 1);
-    assert_eq!(dfg.block_params(block), &[arg1]);
-
-    let arg2 = dfg.append_block_param(block);
-    assert_eq!(arg2.to_string(), "v1");
-    assert_eq!(dfg.num_block_params(block), 2);
-    assert_eq!(dfg.block_params(block), &[arg1, arg2]);
-
-    assert_eq!(dfg.value_def(arg1), ValueDef::Param(block, 0));
-    assert_eq!(dfg.value_def(arg2), ValueDef::Param(block, 1));
-
-    // Swap the two block parameters.
-    let vlist = dfg.detach_block_params(block);
-    assert_eq!(dfg.num_block_params(block), 0);
-    assert_eq!(dfg.block_params(block), &[]);
-    assert_eq!(vlist.as_slice(&dfg.value_lists), &[arg1, arg2]);
-    dfg.attach_block_param(block, arg2);
-    let arg3 = dfg.append_block_param(block);
-    dfg.attach_block_param(block, arg1);
-    assert_eq!(dfg.block_params(block), &[arg2, arg3, arg1]);
-}
-
-#[test]
-fn swap_remove_block_params() {
-    let mut dfg = DataFlowGraph::new();
-
-    let block = dfg.make_block();
-    let arg1 = dfg.append_block_param(block);
-    let arg2 = dfg.append_block_param(block);
-    let arg3 = dfg.append_block_param(block);
-    assert_eq!(dfg.block_params(block), &[arg1, arg2, arg3]);
-
-    dfg.swap_remove_block_param(arg1);
-    assert!(!dfg.value_is_attached(arg1));
-    assert!(dfg.value_is_attached(arg2));
-    assert!(dfg.value_is_attached(arg3));
-    assert_eq!(dfg.block_params(block), &[arg3, arg2]);
-    dfg.swap_remove_block_param(arg2);
-    assert!(!dfg.value_is_attached(arg2));
-    assert!(dfg.value_is_attached(arg3));
-    assert_eq!(dfg.block_params(block), &[arg3]);
-    dfg.swap_remove_block_param(arg3);
-    assert!(!dfg.value_is_attached(arg3));
-    assert_eq!(dfg.block_params(block), &[]);
+    assert_eq!(dfg.uses(F_ZERO).count(), 0);
+    assert_eq!(dfg.uses(v3).count(), 0);
+    assert_eq!(dfg.uses(v4).count(), 1);
+    assert_eq!(
+        dfg.insts[inst]
+            .unwrap_phi()
+            .edges(&dfg.insts.value_lists, &dfg.phi_forest)
+            .collect::<Vec<_>>(),
+        &[(b1, v4)]
+    );
 }

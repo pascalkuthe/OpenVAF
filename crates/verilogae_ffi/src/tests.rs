@@ -4,7 +4,7 @@ use xshell::cmd;
 #[test]
 fn gen_ffi() {
     // messes with caching
-    if std::env::var("CI").is_ok() {
+    if std::env::var("CI").is_ok() || std::env::var("RUN_SLOW_TEST").is_err() {
         return;
     }
     let vae_dir = project_root().join("crates/verilogae");

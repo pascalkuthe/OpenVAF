@@ -211,6 +211,7 @@ pub unsafe extern "C" fn load_info_py(
     VaeModel::new(model, false)
 }
 
+
 #[cfg(Py_3_8)]
 #[no_mangle]
 pub unsafe extern "C" fn load_info_py(

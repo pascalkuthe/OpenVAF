@@ -1,9 +1,13 @@
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::iter;
 use std::marker::PhantomData;
 use std::ops::Index;
 
 use indexmap::IndexSet;
+
+pub type Iter<'a, K, V> =
+    iter::Map<iter::Enumerate<indexmap::set::Iter<'a, V>>, fn((usize, &'a V)) -> (K, &'a V)>;
 
 pub struct TiSet<K, V> {
     /// raw set property
@@ -91,7 +95,7 @@ where
 }
 
 impl<K: From<usize>, V> TiSet<K, V> {
-    pub fn iter_enumerated(&self) -> impl Iterator<Item = (K, &V)> {
+    pub fn iter_enumerated(&self) -> Iter<K, V> {
         self.raw.iter().enumerate().map(|(index, val)| (index.into(), val))
     }
 }

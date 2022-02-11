@@ -22,28 +22,32 @@ const FUN_FLAG: c_int = METH_FASTCALL;
 #[cfg(not(Py_3_8))]
 const FUN_FLAG: c_int = METH_VARARGS;
 
-#[cfg(Py_3_8)]
-type FunType = _PyCFunctionFastWithKeywords;
-#[cfg(not(Py_3_8))]
-type FunType = PyCFunctionWithKeywords;
-
 static mut FUNCTIONS: [PyMethodDef; 4] = unsafe {
     [
     PyMethodDef {
             ml_name: "load\0".as_ptr() as *const c_char,
-            ml_meth: Some(std::mem::transmute::<FunType, PyCFunction>(load_py)),
+            #[cfg(Py_3_8)]
+            ml_meth: PyMethodDefPointer{_PyCFunctionFastWithKeywords: load_py},
+            #[cfg(not(Py_3_8))]
+            ml_meth: PyMethodDefPointer{PyCFunctionWithKeywords: load_py},
             ml_flags: FUN_FLAG | METH_KEYWORDS,
             ml_doc: "loads a Verilog-A model by either loading it from the object cache or compiling it\0".as_ptr() as *const c_char,
     },
     PyMethodDef {
             ml_name: "load_info\0".as_ptr() as *const c_char,
-            ml_meth: Some(std::mem::transmute::<FunType, PyCFunction>(load_info_py)),
+            #[cfg(Py_3_8)]
+            ml_meth: PyMethodDefPointer{_PyCFunctionFastWithKeywords: load_info_py},
+            #[cfg(not(Py_3_8))]
+            ml_meth: PyMethodDefPointer{PyCFunctionWithKeywords: load_info_py},
             ml_flags: FUN_FLAG | METH_KEYWORDS,
             ml_doc: "loads information about Verilog-A model by either loading it from the object cache or compiling it\nThis funciton does not compile retrieved funcitons.\nThis allows for much faster compile times.\nModelsCompiled with this function lack the `functions` attribute.\0".as_ptr() as *const c_char,
     },
     PyMethodDef {
             ml_name: "export_vfs\0".as_ptr() as *const c_char,
-            ml_meth: Some(std::mem::transmute::<FunType, PyCFunction>(load_vfs)),
+            #[cfg(Py_3_8)]
+            ml_meth: PyMethodDefPointer{_PyCFunctionFastWithKeywords: load_vfs},
+            #[cfg(not(Py_3_8))]
+            ml_meth: PyMethodDefPointer{PyCFunctionWithKeywords: load_vfs},
             ml_flags: FUN_FLAG | METH_KEYWORDS,
             ml_doc: "runs the preprocessor on a Verilog-A file and exports a dict with all files.\nThe result of this functions can be passed to other functions `vfs` argument\0".as_ptr() as *const c_char,
     },

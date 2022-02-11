@@ -1,8 +1,6 @@
 `include "constants.vams"
 `include "disciplines.vams"
 
-`define OPP(nam,uni,des)               (*units=uni,                   desc=des*) parameter           real    nam = 0.0 ;
-
 module diode_va(A,C);
     inout A, C;
     electrical A,C,CI;
@@ -21,46 +19,20 @@ module diode_va(A,C);
     (*desc= "Junction potential", units = "V"*) parameter real Vj = 1.0 from [0.2:2];
 
     (*desc= "Grading coefficient"*) parameter real M = 0.5 from [0:inf];
-    `OPP(para,"uni","desc")
 
 
     real Vd, Vr, Qd;
 
     real Id;
-    real vte;
-    real vcrit;
+    real Cd;
 
     real VT,x,y,vf;
 
     analog begin
-
-
-        if (Rs < 1e-3) begin
-            V(br_ci_c) <+ 0;
-
-            VT = `P_K*$temperature /`P_Q;
-            if (Rs < 1e-3) begin
-                    vcrit = vte * log(vte / (`M_SQRT2 * Is));
-            end
-        end
-
-
-        if (Rs > 1e-3) begin
-            VT = `P_K*$temperature /`P_Q;
-            if (Rs < 1e-3) begin
-                    vcrit = vte * log(vte / (`M_SQRT2 * Is));
-            end
-        end
-
-        vte = VT * N;
-        vcrit = vte * log(vte / (`M_SQRT2 * Is));
-
-        /* Vd = $limit(V(br_a_ci), "pnjlim", VT, vcrit); */
-        Vd = V(A,CI);
+        VT = `P_K*$temperature /`P_Q;
+        Vd = V(br_a_ci);
         Vr = V(br_ci_c);
-
-        Id = Is * (exp(Vd / vte) - 1);
-
+        Id = Is * (exp(Vd / (N * VT)) - 1);
         //junction capacitance
         //smoothing of voltage over cap
         vf   = Vj*(1 - pow(3, -1/M));
@@ -68,7 +40,7 @@ module diode_va(A,C);
         y    = sqrt(x*x + 1.92);
         Vd   = vf-VT*(x + y)/(2);
         Qd   = Cj0*Vj * (1-pow(1-Vd/Vj, 1-M))/(1-M);
-
+        Cd   = ddx(Qd,V(A));
         I(br_a_ci) <+ Id + ddt(Qd);
         I(br_ci_c) <+ Vr / Rs;
     end

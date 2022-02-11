@@ -1,6 +1,6 @@
 [package]
 name = "verilogae"
-version = "0.9.0-beta4"
+version = "0.9.0-beta5"
 authors = ["DSPOM"]
 edition = "2021"
 license = "GPL-3.0"
@@ -14,23 +14,18 @@ name = "verilogae"
 
 [dependencies]
 
-
 syntax = {version = "0.0.0", path = "../syntax"}
 basedb = { version = "0.0.0", path = "../basedb" }
 hir_def = { version = "0.0.0", path = "../hir_def" }
 hir_lower = {version ="0.0.0", path ="../hir_lower"}
 hir_ty = { version = "0.0.0", path = "../hir_ty" }
 
-cfg = { version = "0.0.0", path = "../cfg" }
-codegen_llvm = { version = "0.0.0", path = "../codegen_llvm" }
+mir = { version = "0.0.0", path = "../mir" }
+mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
+mir_opt = { version = "0.0.0", path = "../mir_opt" }
+mir_autodiff = { version = "0.0.0", path = "../mir_autodiff" }
+
 llvm = { version = "0.0.0", path = "../llvm" }
-cfg_opt = { version = "0.0.0", path = "../cfg_opt" }
-auto_diff = { version = "0.0.0", path = "../auto_diff" }
-const_eval = { version = "0.0.0", path = "../const_eval" }
-program_dependence = { version = "0.0.0", path = "../program_dependence"}
-backend = {version = "0.0.0", path = "../backend"}
-
-
 target = { version = "0.0.0", path = "../target" }
 linker = { version = "0.0.0", path = "../linker" }
 

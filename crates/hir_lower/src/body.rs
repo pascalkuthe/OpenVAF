@@ -1,12 +1,11 @@
-use cfg::{
-    smallvec, Callback, CfgBuilder, CfgParam, Const, ControlFlowGraph, Local, Op, Operand, Place,
-    Terminator,
-};
-use hir_def::body::{Body, ConstraintKind, ConstraintValue};
-use hir_def::expr::CaseCond;
+use std::f64::{INFINITY, NEG_INFINITY};
+
+use ahash::AHashSet;
+use hir_def::body::{Body, ConstraintKind, ConstraintValue, ParamConstraint};
+use hir_def::expr::{CaseCond, NZERO, PZERO};
 use hir_def::{
-    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, LocalFunctionArgId, NodeId,
-    ParamSysFun, Stmt, StmtId, Type,
+    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, NodeId, ParamSysFun, Stmt,
+    StmtId, Type, VarId,
 };
 use hir_ty::builtin::{
     ABS_INT, ABS_REAL, DDX_POT, IDT_NO_IC, MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH,
@@ -15,80 +14,196 @@ use hir_ty::builtin::{
 };
 use hir_ty::db::HirTyDB;
 use hir_ty::inference::{AssignDst, BranchWrite, InferenceResult, ResolvedFun};
+use hir_ty::lower::BranchKind;
 use hir_ty::types::{Ty as HirTy, BOOL_EQ, INT_EQ, INT_OP, REAL_EQ, REAL_OP, STR_EQ};
 use lasso::Rodeo;
+use mir::builder::InstBuilder;
+use mir::{FuncRef, Function, Opcode, Value, FALSE, F_ZERO, GRAVESTONE, TRUE, ZERO};
+use mir_build::{FunctionBuilder, FunctionBuilderContext, Place};
 use stdx::iter::zip;
+use stdx::packed_option::ReservedValue;
+use typed_indexmap::TiSet;
 
 use crate::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
 use syntax::ast::{AssignOp, BinaryOp, UnaryOp};
-use typed_index_collections::{TiSlice, TiVec};
 
-impl HirInterner {
-    pub fn lower_body(
-        db: &dyn HirTyDB,
+pub struct MirBuilder<'a> {
+    db: &'a dyn HirTyDB,
+    def: DefWithBodyId,
+    is_output: &'a dyn Fn(PlaceKind) -> bool,
+    tagged_reads: AHashSet<VarId>,
+    ctx: Option<&'a mut FunctionBuilderContext>,
+}
+
+impl<'a> MirBuilder<'a> {
+    pub fn new(
+        db: &'a dyn HirTyDB,
         def: DefWithBodyId,
-    ) -> (ControlFlowGraph, HirInterner, Rodeo) {
-        let mut cfg = ControlFlowGraph::default();
-        let body = db.body(def);
-        let infere = db.inference_result(def);
+        is_output: &'a dyn Fn(PlaceKind) -> bool,
+    ) -> MirBuilder<'a> {
+        MirBuilder { db, def, tagged_reads: AHashSet::new(), is_output, ctx: None }
+    }
 
-        let mut res = HirInterner::default();
+    pub fn tag_reads(&mut self, var: VarId) -> bool {
+        self.tagged_reads.insert(var)
+    }
+
+    pub fn with_tagged_reads(mut self, taged_vars: AHashSet<VarId>) -> Self {
+        self.tagged_reads = taged_vars;
+        self
+    }
+
+    pub fn with_ctx(mut self, ctx: &'a mut FunctionBuilderContext) -> Self {
+        self.ctx = Some(ctx);
+        self
+    }
+
+    pub fn with_builder_ctx(mut self, ctx: &'a mut FunctionBuilderContext) -> Self {
+        self.ctx = Some(ctx);
+        self
+    }
+
+    pub fn build(self) -> (Function, HirInterner, Rodeo) {
+        let mut func = Function::default();
+        let mut interner = HirInterner::default();
         let mut literals = Rodeo::new();
+
+        let mut ctx_;
+        let ctx = if let Some(ctx) = self.ctx {
+            ctx
+        } else {
+            ctx_ = FunctionBuilderContext::new();
+            &mut ctx_
+        };
+
+        let mut builder = FunctionBuilder::new(&mut func, &mut literals, ctx);
+
+        let body = self.db.body(self.def);
+        let infere = self.db.inference_result(self.def);
+        let mut places = TiSet::default();
+
         let mut ctx = LoweringCtx {
-            db,
-            cfg: &mut CfgBuilder::new(&mut cfg),
-            literals: &mut literals,
-            data: &mut res,
+            db: self.db,
+            func: &mut builder,
+            data: &mut interner,
             body: &body,
             infere: &infere,
-            args: TiSlice::from_ref(&[]),
+            tagged_vars: &self.tagged_reads,
+            places: &mut places,
         };
 
         ctx.lower_entry_stmts();
-        ctx.cfg.terminate(Terminator::Ret);
-        cfg.next_place = res.places.len().into();
+        let is_output = self.is_output;
 
-        (cfg, res, literals)
+        interner.outputs = places
+            .iter_enumerated()
+            .filter_map(|(place, kind)| {
+                if is_output(*kind) {
+                    let val = builder.use_var(place);
+                    let val = builder.ins().optbarrier(val);
+                    Some((*kind, val))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        builder.ins().ret();
+        builder.finalize();
+
+        (func, interner, literals)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CmpOps {
+    lt: Option<Opcode>,
+    le: Option<Opcode>,
+    eq: Opcode,
+}
+
+impl CmpOps {
+    fn from_ty(ty: &Type) -> Self {
+        match ty {
+            Type::Real => CmpOps { lt: Some(Opcode::Flt), le: Some(Opcode::Fle), eq: Opcode::Feq },
+            Type::Integer => {
+                CmpOps { lt: Some(Opcode::Ilt), le: Some(Opcode::Ile), eq: Opcode::Ieq }
+            }
+            Type::String => CmpOps { lt: None, le: None, eq: Opcode::Seq },
+            Type::Array { ty, .. } => Self::from_ty(ty),
+            Type::EmptyArray => CmpOps { lt: None, le: None, eq: Opcode::Ieq },
+            _ => unreachable!(),
+        }
     }
 
-    pub fn insert_var_init(
-        &mut self,
-        db: &dyn HirTyDB,
-        literals: &mut Rodeo,
-        dst: &mut ControlFlowGraph,
-    ) {
-        let mut cfg = CfgBuilder::new(dst);
-        let entry = cfg.current;
-        for (place, kind) in self.places.clone().iter_enumerated() {
-            let val = match *kind {
-                PlaceKind::Var(var) => self.lower_expr_body(db, literals, var.into(), 0, &mut cfg),
-                PlaceKind::BranchVoltage(_)
-                | PlaceKind::BranchCurrent(_)
-                | PlaceKind::ImplicitBranchVoltage { .. }
-                | PlaceKind::ImplicitBranchCurrent { .. }
-                | PlaceKind::Derivative { .. } => 0f64.into(),
-                PlaceKind::Param(_)
-                | PlaceKind::FunctionReturn { .. }
-                | PlaceKind::ParamMin(_)
-                | PlaceKind::ParamMax(_) => continue,
-            };
-            cfg.build_assign(place.into(), Op::Copy, smallvec![val], 1)
+    fn in_bound(self, inclusive: bool) -> Opcode {
+        if inclusive {
+            self.le.unwrap()
+        } else {
+            self.lt.unwrap()
         }
-        cfg.prepend_entry(entry)
+    }
+}
+
+impl HirInterner {
+    pub fn insert_var_init(&mut self, db: &dyn HirTyDB, func: &mut Function, literals: &mut Rodeo) {
+        let mut term = func.layout.entry_block().and_then(|bb| func.layout.last_inst(bb));
+        if let Some(last_inst) = term {
+            if func.dfg.insts[last_inst].is_terminator() {
+                func.layout.remove_inst(last_inst);
+            } else {
+                term = None;
+            }
+        }
+        let mut ctx = FunctionBuilderContext::default();
+        let mut builder = FunctionBuilder::new(func, literals, &mut ctx);
+        for (kind, param) in self.params.raw.iter() {
+            if let ParamKind::HiddenState(var) = *kind {
+                if builder.func.dfg.value_dead(*param) {
+                    continue;
+                }
+                let val = self.lower_expr_body(db, var.into(), 0, &mut builder);
+                builder.func.dfg.replace_uses(*param, val);
+            }
+        }
+
+        if let Some(term) = term {
+            builder.func.layout.append_inst_to_bb(term, builder.current_block())
+        }
+    }
+
+    pub fn ensure_param(&mut self, func: &mut Function, kind: ParamKind) -> Value {
+        let len = self.params.len();
+        *self.params.raw.entry(kind).or_insert_with(|| func.dfg.make_param(len.into()))
     }
 
     pub fn insert_param_init(
         &mut self,
         db: &dyn HirTyDB,
+        func: &mut Function,
         literals: &mut Rodeo,
-        dst: &mut ControlFlowGraph,
+        build_min_max: bool,
     ) {
-        let mut cfg = CfgBuilder::new(dst);
-        let entry = cfg.current;
-        for kind in self.params.raw.clone() {
+        let mut term = func.layout.entry_block().and_then(|bb| func.layout.last_inst(bb));
+        if let Some(last_inst) = term {
+            if func.dfg.insts[last_inst].is_terminator() {
+                func.layout.remove_inst(last_inst);
+            } else {
+                term = None;
+            }
+        }
+
+        let f_neg_inf = func.dfg.fconst(NEG_INFINITY.into());
+        let f_inf = func.dfg.fconst(INFINITY.into());
+        let i_inf = func.dfg.iconst(i32::MAX);
+        let i_neg_inf = func.dfg.iconst(i32::MIN);
+
+        let mut ctx = FunctionBuilderContext::default();
+        let mut builder = FunctionBuilder::new(func, literals, &mut ctx);
+
+        for (kind, param_val) in self.params.raw.clone() {
             if let ParamKind::Param(param) = kind {
-                let (given, _) = self.params.ensure(ParamKind::ParamGiven { param });
-                let (place, _) = self.places.ensure(PlaceKind::Param(param));
+                let param_given = self.ensure_param(builder.func, ParamKind::ParamGiven { param });
 
                 let body = db.body(param.into());
                 let infere = db.inference_result(param.into());
@@ -96,246 +211,215 @@ impl HirInterner {
                 let data = db.param_data(param).clone();
                 let ty = &data.ty;
 
-                cfg.build_cond(given.into(), |cfg, given| {
-                    if !given {
-                        let def_val = self.lower_expr_body(db, literals, param.into(), 0, cfg);
-                        cfg.build_assign(place.into(), Op::Copy, smallvec![def_val], 0);
+                let param_val = builder.make_select(param_given, |builder, param_given| {
+                    if param_given {
+                        param_val
+                    } else {
+                        self.lower_expr_body(db, param.into(), 0, builder)
                     }
                 });
+
+                self.outputs.insert(PlaceKind::Param(param), param_val);
 
                 let mut ctx = LoweringCtx {
                     db,
                     data: self,
-                    literals,
-                    cfg: &mut cfg,
+                    func: &mut builder,
+                    places: &mut TiSet::default(),
                     body: &body,
                     infere: &infere,
-                    args: TiSlice::from_ref(&[]),
+                    tagged_vars: &AHashSet::default(),
                 };
 
-                let call = ctx
-                    .data
-                    .callbacks
-                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param))
-                    .0;
+                let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
 
-                let min_inclusive = ctx
-                    .data
-                    .callbacks
-                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param))
-                    .0;
+                let ops = CmpOps::from_ty(ty);
 
-                let max_inclusive = ctx
-                    .data
-                    .callbacks
-                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param))
-                    .0;
+                let precomuted_vals = if build_min_max {
+                    let min_inclusive =
+                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
 
-                let min_exclusive = ctx
-                    .data
-                    .callbacks
-                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param))
-                    .0;
+                    let max_inclusive =
+                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param));
 
-                let max_exclusive = ctx
-                    .data
-                    .callbacks
-                    .ensure(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param))
-                    .0;
-                let exclude_start = ctx.cfg.create_block();
+                    let min_exclusive =
+                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param));
 
-                let mut exclude_pos = exclude_start;
-                let mut from_pos = ctx.cfg.current;
+                    let max_exclusive =
+                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param));
 
-                let default_bounds: Option<(Operand, Operand)> = match ty {
-                    Type::Real => Some((f64::NEG_INFINITY.into(), f64::INFINITY.into())),
-                    Type::Integer => Some((i32::MIN.into(), i32::MAX.into())),
-                    _ => None,
+                    let mut bounds = None;
+
+                    let precomputed_vals = info
+                        .bounds
+                        .iter()
+                        .filter_map(|bound| {
+                            if matches!(bound.kind, ConstraintKind::Exclude) {
+                                return None;
+                            }
+                            let (val0, val1) = match bound.val {
+                                ConstraintValue::Value(val) => {
+                                    let val = ctx.lower_expr(val);
+
+                                    if let Some((min, max)) = bounds {
+                                        let is_min =
+                                            ctx.func.ins().binary1(ops.le.unwrap(), val, min);
+                                        let min =
+                                            ctx.func.make_select(is_min, |builder, is_min| {
+                                                if is_min {
+                                                    builder.ins().call(min_inclusive, &[]);
+                                                    val
+                                                } else {
+                                                    min
+                                                }
+                                            });
+
+                                        let is_max =
+                                            ctx.func.ins().binary1(ops.le.unwrap(), max, val);
+                                        let max =
+                                            ctx.func.make_select(is_max, |builder, is_max| {
+                                                if is_max {
+                                                    builder.ins().call(max_inclusive, &[]);
+                                                    val
+                                                } else {
+                                                    min
+                                                }
+                                            });
+
+                                        bounds = Some((min, max));
+                                    } else if ops.le.is_some() {
+                                        bounds = Some((val, val));
+                                        ctx.func.ins().call(min_inclusive, &[]);
+                                        ctx.func.ins().call(max_inclusive, &[]);
+                                    }
+                                    (val, Value::reserved_value())
+                                }
+                                ConstraintValue::Range(range) => {
+                                    let start = ctx.lower_expr(range.start);
+                                    let end = ctx.lower_expr(range.end);
+
+                                    if let Some((min, max)) = bounds {
+                                        let (op, call) = if range.start_inclusive {
+                                            (ops.le.unwrap(), min_inclusive)
+                                        } else {
+                                            (ops.lt.unwrap(), min_exclusive)
+                                        };
+
+                                        let is_min = ctx.func.ins().binary1(op, start, min);
+                                        let min =
+                                            ctx.func.make_select(is_min, |builder, is_min| {
+                                                if is_min {
+                                                    builder.ins().call(call, &[]);
+                                                    start
+                                                } else {
+                                                    min
+                                                }
+                                            });
+
+                                        let (op, call) = if range.end_inclusive {
+                                            (ops.le.unwrap(), max_inclusive)
+                                        } else {
+                                            (ops.lt.unwrap(), max_exclusive)
+                                        };
+
+                                        let is_max = ctx.func.ins().binary1(op, max, end);
+                                        let max =
+                                            ctx.func.make_select(is_max, |builder, is_max| {
+                                                if is_max {
+                                                    builder.ins().call(call, &[]);
+                                                    start
+                                                } else {
+                                                    min
+                                                }
+                                            });
+
+                                        bounds = Some((min, max));
+                                    } else {
+                                        if range.start_inclusive {
+                                            ctx.func.ins().call(min_inclusive, &[]);
+                                        } else {
+                                            ctx.func.ins().call(min_exclusive, &[]);
+                                        }
+
+                                        if range.start_inclusive {
+                                            ctx.func.ins().call(max_inclusive, &[]);
+                                        } else {
+                                            ctx.func.ins().call(max_exclusive, &[]);
+                                        }
+
+                                        bounds = Some((start, end));
+                                    }
+
+                                    (start, end)
+                                }
+                            };
+
+                            Some((val0, val1))
+                        })
+                        .collect();
+
+                    let (min, max) = bounds.unwrap_or_else(|| match ty {
+                        Type::Real => (f_neg_inf, f_inf),
+                        Type::Integer => (i_neg_inf, i_inf),
+                        _ => unreachable!(),
+                    });
+
+                    ctx.data.outputs.insert(PlaceKind::ParamMin(param), min);
+                    ctx.data.outputs.insert(PlaceKind::ParamMax(param), max);
+                    precomputed_vals
+                } else {
+                    vec![]
                 };
 
-                let bounds_info = default_bounds.map(|(default_min, default_max)| {
-                    let min = ctx.data.places.ensure(PlaceKind::ParamMin(param)).0;
-                    let max = ctx.data.places.ensure(PlaceKind::ParamMax(param)).0;
-                    (min, max, default_min, default_max)
-                });
+                // first from bounds (here we also get min/max from)
 
-                let mut has_bounds = false;
+                ctx.check_param(
+                    param_val,
+                    &info.bounds,
+                    &precomuted_vals,
+                    ConstraintKind::From,
+                    ops,
+                    invalid,
+                );
 
-                for bound in info.bounds.iter() {
-                    let exclude = match bound.kind {
-                        ConstraintKind::Exclude => {
-                            ctx.cfg.current = exclude_pos;
-                            true
-                        }
-                        ConstraintKind::From => {
-                            ctx.cfg.current = from_pos;
-                            false
-                        }
-                    };
-
-                    match bound.val {
-                        ConstraintValue::Value(val) => {
-                            let val = ctx.lower_expr(val);
-                            let op = match (ty, exclude) {
-                                (Type::Real, false) => Op::RealEq,
-                                (Type::Integer, false) => Op::IntEq,
-                                (Type::String, false) => Op::StringEq,
-                                (Type::Real, true) => Op::RealNeq,
-                                (Type::Integer, true) => Op::IntNeq,
-                                (Type::String, true) => Op::StringNeq,
-                                _ => unreachable!(),
-                            };
-
-                            let mut err = ctx.cfg.build_val(op, smallvec![val, place.into()], 0);
-                            if exclude {
-                                err =
-                                    ctx.cfg.build_val(Op::BoolBitNegate, smallvec![err.into()], 0);
-                            }
-                            ctx.cfg.build_cond(err.into(), |cfg, is_err| {
-                                if is_err {
-                                    cfg.build_stmt(Op::Call(call), smallvec![], 0);
-                                }
-                            });
-                        }
-                        ConstraintValue::Range(range) => {
-                            let op = match (ty, range.start_inclusive) {
-                                (Type::Real, true) => Op::RealLessThen,
-                                (Type::Real, false) => Op::RealLessEqual,
-                                (Type::Integer, true) => Op::IntLessThen,
-                                (Type::Integer, false) => Op::IntLessEqual,
-                                _ => unreachable!(),
-                            };
-
-                            let (min, max, _, _) = bounds_info.unwrap();
-
-                            let start = ctx.lower_expr(range.start);
-                            let mut err1 = ctx.cfg.build_val(op, smallvec![place.into(), start], 0);
-                            if exclude {
-                                err1 =
-                                    ctx.cfg.build_val(Op::BoolBitNegate, smallvec![err1.into()], 0);
-                            } else if has_bounds {
-                                let is_min = ctx.cfg.build_val(op, smallvec![start, min.into()], 0);
-                                ctx.cfg.build_cond(is_min.into(), |cfg, is_min| {
-                                    if is_min {
-                                        cfg.build_assign(min.into(), Op::Copy, smallvec![start], 0);
-
-                                        let call = if range.start_inclusive {
-                                            min_inclusive
-                                        } else {
-                                            min_exclusive
-                                        };
-
-                                        cfg.build_stmt(Op::Call(call), smallvec![], 0);
-                                    }
-                                });
-                            } else {
-                                ctx.cfg.build_assign(min.into(), Op::Copy, smallvec![start], 0);
-
-                                let call = if range.start_inclusive {
-                                    min_inclusive
-                                } else {
-                                    min_exclusive
-                                };
-
-                                ctx.cfg.build_stmt(Op::Call(call), smallvec![], 0)
-                            }
-
-                            ctx.cfg.build_cond(err1.into(), |cfg, is_err| {
-                                if is_err {
-                                    cfg.build_stmt(Op::Call(call), smallvec![], 0);
-                                }
-                            });
-
-                            let op = match (ty, range.end_inclusive) {
-                                (Type::Real, true) => Op::RealGreaterThen,
-                                (Type::Real, false) => Op::RealGreaterEqual,
-                                (Type::Integer, true) => Op::IntGreaterThen,
-                                (Type::Integer, false) => Op::IntGreaterEqual,
-                                _ => unreachable!(),
-                            };
-                            let end = ctx.lower_expr(range.end);
-                            let mut err2 = ctx.cfg.build_val(op, smallvec![place.into(), end], 0);
-                            if exclude {
-                                err2 =
-                                    ctx.cfg.build_val(Op::BoolBitNegate, smallvec![err2.into()], 0);
-                            } else if has_bounds {
-                                let is_max = ctx.cfg.build_val(op, smallvec![end, max.into()], 0);
-                                ctx.cfg.build_cond(is_max.into(), |cfg, is_max| {
-                                    if is_max {
-                                        cfg.build_assign(max.into(), Op::Copy, smallvec![end], 0);
-                                        let call = if range.end_inclusive {
-                                            max_inclusive
-                                        } else {
-                                            max_exclusive
-                                        };
-
-                                        cfg.build_stmt(Op::Call(call), smallvec![], 0)
-                                    }
-                                });
-                            } else {
-                                ctx.cfg.build_assign(max.into(), Op::Copy, smallvec![end], 0);
-                                has_bounds = true;
-
-                                let call =
-                                    if range.end_inclusive { max_inclusive } else { max_exclusive };
-
-                                ctx.cfg.build_stmt(Op::Call(call), smallvec![], 0)
-                            }
-
-                            ctx.cfg.build_cond(err2.into(), |cfg, is_err| {
-                                if is_err {
-                                    cfg.build_stmt(Op::Call(call), smallvec![], 0);
-                                }
-                            });
-                        }
-                    }
-
-                    match bound.kind {
-                        ConstraintKind::Exclude => {
-                            exclude_pos = ctx.cfg.current;
-                        }
-                        ConstraintKind::From => {
-                            from_pos = ctx.cfg.current;
-                        }
-                    };
-                }
-
-                cfg.enter_new_block();
-                cfg.terminate_bb(from_pos, Terminator::Goto(exclude_start));
-                cfg.terminate_bb(exclude_pos, Terminator::Goto(cfg.current));
-                if !has_bounds {
-                    let (min, max, min_val, max_val) = bounds_info.unwrap();
-                    cfg.build_assign(max.into(), Op::Copy, smallvec![max_val], 0);
-                    cfg.build_assign(min.into(), Op::Copy, smallvec![min_val], 0);
-                    cfg.build_stmt(Op::Call(min_inclusive), smallvec![], 0);
-                    cfg.build_stmt(Op::Call(max_inclusive), smallvec![], 0);
-                }
+                ctx.check_param(
+                    param_val,
+                    &info.bounds,
+                    &precomuted_vals,
+                    ConstraintKind::Exclude,
+                    ops,
+                    invalid,
+                );
             }
         }
-        cfg.prepend_entry(entry);
-        cfg.cfg.next_place = self.places.len().into();
+
+        let exit_bb = builder.func.layout.last_block().unwrap();
+        builder.ins().jump(exit_bb);
+
+        if let Some(term) = term {
+            builder.func.layout.append_inst_to_bb(term, builder.current_block())
+        }
     }
 
     /// Lowers a body
     fn lower_expr_body(
-        &mut self,
+        &self,
         db: &dyn HirTyDB,
-        literals: &mut Rodeo,
         def: DefWithBodyId,
         i: usize,
-        cfg: &mut CfgBuilder,
-    ) -> Operand {
+        func: &mut FunctionBuilder,
+    ) -> Value {
         let body = db.body(def);
         let infere = db.inference_result(def);
 
         let mut ctx = LoweringCtx {
             db,
-            data: self,
-            literals,
-            cfg,
+            data: &mut Self::default(),
+            func,
             body: &body,
             infere: &infere,
-            args: TiSlice::from_ref(&[]),
+            tagged_vars: &AHashSet::new(),
+            places: &mut TiSet::default(),
         };
 
         let expr = body.stmts[body.entry_stmts[i]].unwrap_expr();
@@ -356,18 +440,111 @@ macro_rules! match_signature {
 pub struct LoweringCtx<'a, 'c> {
     pub db: &'a dyn HirTyDB,
     pub data: &'a mut HirInterner,
-    pub literals: &'a mut Rodeo,
-    pub cfg: &'a mut CfgBuilder<'c>,
+    pub places: &'a mut TiSet<Place, PlaceKind>,
+    pub func: &'a mut FunctionBuilder<'c>,
     pub body: &'a Body,
     pub infere: &'a InferenceResult,
-    pub args: &'a TiSlice<LocalFunctionArgId, Operand>,
+    pub tagged_vars: &'a AHashSet<VarId>,
 }
 
 impl LoweringCtx<'_, '_> {
+    fn check_param(
+        &mut self,
+        param_val: Value,
+        bounds: &[ParamConstraint],
+        precomputed_vals: &[(Value, Value)],
+        kind: ConstraintKind,
+        ops: CmpOps,
+        invalid: FuncRef,
+    ) {
+        let mut found_bound = false;
+        let exit = self.func.create_block();
+
+        for (i, bound) in bounds.iter().enumerate() {
+            if bound.kind != kind {
+                continue;
+            }
+
+            found_bound = true;
+
+            match bound.val {
+                ConstraintValue::Value(val) => {
+                    let val = precomputed_vals
+                        .get(i)
+                        .map_or_else(|| self.lower_expr(val), |(val, _)| *val);
+
+                    let is_ok = self.func.ins().binary1(ops.eq, val, param_val);
+                    let next_bb = self.func.create_block();
+                    self.func.ins().br(is_ok, exit, next_bb);
+                    self.func.switch_to_block(next_bb);
+                }
+                ConstraintValue::Range(range) => {
+                    let (start, end) = precomputed_vals.get(i).map_or_else(
+                        || (self.lower_expr(range.start), self.lower_expr(range.end)),
+                        |(start, end)| (*start, *end),
+                    );
+
+                    let op = ops.in_bound(range.start_inclusive);
+                    let is_lo_ok = self.func.ins().binary1(op, start, param_val);
+
+                    let is_ok = self.func.make_select(is_lo_ok, |builder, is_ok| {
+                        if is_ok {
+                            let op = ops.in_bound(range.end_inclusive);
+                            builder.ins().binary1(op, param_val, end)
+                        } else {
+                            FALSE
+                        }
+                    });
+
+                    let next_bb = self.func.create_block();
+                    self.func.ins().br(is_ok, exit, next_bb);
+                    self.func.switch_to_block(next_bb);
+                }
+            }
+        }
+
+        if !found_bound {
+            self.func.ins().jump(exit);
+            self.func.switch_to_block(exit);
+            return;
+        }
+
+        match kind {
+            ConstraintKind::From => {
+                // error on falltrough
+                self.func.ins().call(invalid, &[]);
+
+                self.func.ins().jump(exit);
+                self.func.switch_to_block(exit);
+            }
+
+            ConstraintKind::Exclude => {
+                let final_exit = self.func.create_block();
+                self.func.ins().jump(final_exit);
+                self.func.switch_to_block(exit);
+                self.func.ins().call(invalid, &[]);
+                self.func.ins().jump(final_exit);
+                self.func.switch_to_block(final_exit);
+            }
+        }
+    }
+
     pub fn lower_entry_stmts(&mut self) {
         for stmt in &*self.body.entry_stmts {
             self.lower_stmt(*stmt)
         }
+    }
+
+    fn collapse_hint(&mut self, hi: NodeId, lo: Option<NodeId>) {
+        let hi = self.node(hi);
+        let lo = lo.and_then(|lo| self.node(lo));
+        let (hi, lo) = match (hi, lo) {
+            (Some(node), None) | (None, Some(node)) => (node, None),
+            (Some(hi), Some(lo)) => (hi, Some(lo)),
+            (None, None) => unreachable!(),
+        };
+        let cb = self.callback(CallBackKind::CollapseHint(hi, lo));
+        self.func.ins().call(cb, &[]);
     }
 
     pub fn lower_stmt(&mut self, stmt: StmtId) {
@@ -380,13 +557,18 @@ impl LoweringCtx<'_, '_> {
                 // TODO handle porperly
             }
             Stmt::Assigment { val, assignment_kind, .. } => {
-                let mut val_ = self.lower_expr(val);
+                let mut val_ = if assignment_kind == AssignOp::Contribute
+                    && matches!(
+                        self.body.exprs[val],
+                        Expr::Literal(Literal::Int(0) | Literal::Float(PZERO | NZERO)),
+                    ) {
+                    F_ZERO
+                } else {
+                    self.lower_expr(val)
+                };
                 if matches!(self.infere.assigment_destination[&stmt], AssignDst::Flow(_)) {
-                    let mfactor = self.param(ParamKind::ParamSysFun(ParamSysFun::mfactor)).into();
-                    val_ = self
-                        .cfg
-                        .build_val(Op::RealMul, smallvec![val_, mfactor], u32::from(val) as i32)
-                        .into();
+                    let mfactor = self.param(ParamKind::ParamSysFun(ParamSysFun::mfactor));
+                    val_ = self.func.ins().fmul(val_, mfactor)
                 }
 
                 let mut negate = false;
@@ -396,13 +578,30 @@ impl LoweringCtx<'_, '_> {
                     AssignDst::FunVar { fun, arg: None } => {
                         self.place(PlaceKind::FunctionReturn { fun })
                     }
-                    AssignDst::FunVar { arg: Some(arg), .. } => self.args[arg].unwrap_place(),
+                    AssignDst::FunVar { arg: Some(arg), fun } => {
+                        self.place(PlaceKind::FunctionArg { fun, arg })
+                    }
+                    AssignDst::Potential(BranchWrite::Explicit(branch)) if val_ == F_ZERO => {
+                        let (hi, lo) = match self.db.branch_info(branch).unwrap().kind {
+                            // TODO check in frontend
+                            BranchKind::PortFlow(_) => unreachable!(),
+                            BranchKind::NodeGnd(node) => (node, None),
+                            BranchKind::Nodes(hi, lo) => (hi, Some(lo)),
+                        };
+                        return self.collapse_hint(hi, lo);
+                    }
+                    AssignDst::Potential(BranchWrite::Implict { hi, lo }) if val_ == F_ZERO => {
+                        return self.collapse_hint(hi, lo)
+                    }
+
                     AssignDst::Flow(BranchWrite::Explicit(branch)) => {
                         self.place(PlaceKind::BranchCurrent(branch))
                     }
+
                     AssignDst::Potential(BranchWrite::Explicit(branch)) => {
                         self.place(PlaceKind::BranchVoltage(branch))
                     }
+
                     // TODO verify no contributes between GND nodes
                     AssignDst::Flow(BranchWrite::Implict { hi, lo }) => self
                         .lower_contribute_implict_branch(
@@ -412,6 +611,7 @@ impl LoweringCtx<'_, '_> {
                             |hi, lo| PlaceKind::ImplicitBranchCurrent { hi, lo },
                             |hi, lo| ParamKind::Current(CurrentKind::ImplictBranch { hi, lo }),
                         ),
+
                     AssignDst::Potential(BranchWrite::Implict { hi, lo }) => self
                         .lower_contribute_implict_branch(
                             &mut negate,
@@ -422,21 +622,14 @@ impl LoweringCtx<'_, '_> {
                         ),
                 };
                 if assignment_kind == AssignOp::Contribute {
-                    let op = if negate { Op::RealSub } else { Op::RealAdd };
-                    self.cfg.build_assign(
-                        place.into(),
-                        op,
-                        smallvec![place.into(), val_],
-                        u32::from(val) as i32,
-                    );
-                } else {
-                    self.cfg.build_assign(
-                        place.into(),
-                        Op::Copy,
-                        smallvec![val_],
-                        u32::from(val) as i32,
-                    );
-                }
+                    let old = self.func.use_var(place);
+                    val_ = if negate {
+                        self.func.ins().fsub(old, val_)
+                    } else {
+                        self.func.ins().fadd(old, val_)
+                    };
+                };
+                self.func.def_var(place, val_)
             }
             Stmt::Block { ref body } => {
                 for stmt in body {
@@ -445,16 +638,16 @@ impl LoweringCtx<'_, '_> {
             }
             Stmt::If { cond, then_branch, else_branch } => {
                 let cond = self.lower_expr(cond);
-                self.cfg.build_cond(cond, |cfg, branch| {
+                self.func.make_cond(cond, |func, branch| {
                     let stmt = if branch { then_branch } else { else_branch };
                     LoweringCtx {
                         db: self.db,
                         data: self.data,
-                        literals: self.literals,
-                        cfg,
+                        func,
                         body: self.body,
                         infere: self.infere,
-                        args: self.args,
+                        tagged_vars: self.tagged_vars,
+                        places: self.places,
                     }
                     .lower_stmt(stmt)
                 });
@@ -473,16 +666,16 @@ impl LoweringCtx<'_, '_> {
 
     fn lower_case(&mut self, discr: ExprId, case_arms: &[Case]) {
         let discr_op = match self.infere.expr_types[discr].to_value().unwrap() {
-            Type::Real => Op::RealEq,
-            Type::Integer => Op::IntEq,
-            Type::Bool => Op::BoolEq,
-            Type::String => Op::StringEq,
+            Type::Real => Opcode::Feq,
+            Type::Integer => Opcode::Ieq,
+            Type::Bool => Opcode::Beq,
+            Type::String => Opcode::Seq,
             Type::Array { .. } => todo!(),
             ty => unreachable!("Invalid type {}", ty),
         };
         let discr = self.lower_expr(discr);
 
-        let end = self.cfg.create_block();
+        let end = self.func.create_block();
 
         for Case { cond, body } in case_arms {
             // TODO does default mean that further cases are ignored?
@@ -493,43 +686,34 @@ impl LoweringCtx<'_, '_> {
                 CaseCond::Default => continue,
             };
 
-            // save position of the condition for later
-            let cond_head = self.cfg.current;
-
-            // First lower the body
-            let body_head = self.cfg.enter_new_block();
-
-            self.lower_stmt(*body);
-            // At the end of the body skip to the end of the case
-            self.cfg.terminate(Terminator::Goto(end));
-
-            // now do the conditions...
-            // Go back to that block
-            self.cfg.current = cond_head;
+            // Create the body block
+            let body_head = self.func.create_block();
 
             for val in vals {
+                self.func.ensured_sealed();
+
                 // Lower the condition (val == discriminant)
                 let val_ = self.lower_expr(*val);
-                let cond =
-                    self.cfg.build_val(discr_op, smallvec![val_, discr], u32::from(*val) as i32);
+                let old_loc = self.func.get_srcloc();
+                self.func.set_srcloc(mir::SourceLoc::new(u32::from(*val) as i32 + 1));
+                let cond = self.func.ins().binary1(discr_op, val_, discr);
+                self.func.set_srcloc(old_loc);
 
-                // Create the next block (either the next condition or another arm)
+                // Create the next block
+                let next_block = self.func.create_block();
+                self.func.ins().branch(cond, body_head, next_block, false);
 
-                // Save the current block (still needs to be terminated)
-                let cond_block = self.cfg.current;
-                let next_block = self.cfg.enter_new_block();
-
-                // If the condition is true go to the body otherwise try the next block
-                self.cfg.terminate_bb(
-                    cond_block,
-                    Terminator::Split {
-                        condition: cond.into(),
-                        true_block: body_head,
-                        false_block: next_block,
-                        loop_head: false,
-                    },
-                );
+                self.func.switch_to_block(next_block);
             }
+
+            self.func.seal_block(body_head);
+
+            // lower the body
+            let next = self.func.current_block();
+            self.func.switch_to_block(body_head);
+            self.lower_stmt(*body);
+            self.func.ins().jump(end);
+            self.func.switch_to_block(next);
         }
 
         if let Some(default_case) =
@@ -538,87 +722,154 @@ impl LoweringCtx<'_, '_> {
             self.lower_stmt(default_case.body);
         }
 
-        self.cfg.terminate(Terminator::Goto(end));
+        self.func.ensured_sealed();
+        self.func.ins().jump(end);
 
-        self.cfg.current = end;
+        self.func.seal_block(end);
+        self.func.switch_to_block(end)
     }
 
     fn lower_loop(&mut self, cond: ExprId, lower_body: impl FnOnce(&mut Self)) {
-        let start = self.cfg.current;
+        let loop_cond_head = self.func.create_block();
+        let loop_body_head = self.func.create_block();
+        let loop_end = self.func.create_block();
 
-        let loop_cond_head = self.cfg.enter_new_block();
-        let condition = self.lower_expr(cond);
-        let loop_cond_tail = self.cfg.current;
+        self.func.ins().jump(loop_cond_head);
+        self.func.switch_to_block(loop_cond_head);
 
-        let loop_body_head = self.cfg.enter_new_block();
+        let cond = self.lower_expr(cond);
+        self.func.ins().br_loop(cond, loop_body_head, loop_end);
+        self.func.seal_block(loop_body_head);
+        self.func.seal_block(loop_end);
+
+        self.func.switch_to_block(loop_body_head);
         lower_body(self);
-        let loop_body_tail = self.cfg.current;
+        self.func.ins().jump(loop_cond_head);
 
-        let loop_end = self.cfg.enter_new_block();
+        self.func.seal_block(loop_cond_head);
 
-        self.cfg.terminate_bb(
-            loop_cond_tail,
-            Terminator::Split {
-                condition,
-                true_block: loop_body_head,
-                false_block: loop_end,
-                loop_head: true,
-            },
-        );
-        self.cfg.terminate_bb(start, Terminator::Goto(loop_cond_head));
-        self.cfg.terminate_bb(loop_body_tail, Terminator::Goto(loop_cond_head));
+        self.func.switch_to_block(loop_end);
     }
 
     fn place(&mut self, kind: PlaceKind) -> Place {
-        self.data.places.ensure(kind).0
-    }
-
-    fn param(&mut self, kind: ParamKind) -> CfgParam {
-        self.data.params.ensure(kind).0
-    }
-
-    fn callback(&mut self, kind: CallBackKind) -> Callback {
-        self.data.callbacks.ensure(kind).0
-    }
-
-    pub fn lower_expr(&mut self, expr: ExprId) -> Operand {
-        let res: Operand = match self.body.exprs[expr] {
-            hir_def::Expr::Path { port: false, .. } => match self.infere.expr_types[expr] {
-                HirTy::Var(_, var) => self.place(PlaceKind::Var(var)).into(),
-                HirTy::FuntionVar { fun, arg: None, .. } => {
-                    self.place(PlaceKind::FunctionReturn { fun }).into()
+        let (place, inserted) = self.places.ensure(kind);
+        if inserted {
+            match kind {
+                PlaceKind::Var(var) => {
+                    let hidden_state = self.param(ParamKind::HiddenState(var));
+                    let entry = self.func.func.layout.entry_block().unwrap();
+                    self.func.def_var_at(place, hidden_state, entry);
                 }
-                HirTy::FuntionVar { arg: Some(arg), .. } => self.args[arg],
-                HirTy::Param(_, param) => self.param(ParamKind::Param(param)).into(),
-                HirTy::NatureAttr(_, attr) => {
-                    self.data.lower_expr_body(self.db, self.literals, attr.into(), 0, self.cfg)
+                // always initalized
+                PlaceKind::FunctionReturn { .. }
+                | PlaceKind::FunctionArg { .. }
+                | PlaceKind::Param(_)
+                | PlaceKind::ParamMin(_)
+                | PlaceKind::ParamMax(_) => (),
+
+                // always zero initalized
+                PlaceKind::BranchVoltage(_)
+                | PlaceKind::BranchCurrent(_)
+                | PlaceKind::ImplicitBranchVoltage { .. }
+                | PlaceKind::ImplicitBranchCurrent { .. } => {
+                    let entry = self.func.func.layout.entry_block().unwrap();
+                    self.func.def_var_at(place, F_ZERO, entry);
+                }
+            }
+        }
+        place
+    }
+
+    fn param(&mut self, kind: ParamKind) -> Value {
+        self.data.ensure_param(self.func.func, kind)
+    }
+
+    fn callback(&mut self, kind: CallBackKind) -> FuncRef {
+        let (func_ref, changed) = self.data.callbacks.ensure(kind);
+        if changed {
+            let data = kind.signature();
+            self.func.import_function(data);
+        }
+        func_ref
+    }
+
+    fn lower_expr_as_lhs(&mut self, expr: ExprId, mut val: Value) {
+        let place = match self.body.exprs[expr] {
+            hir_def::Expr::Path { port: false, .. } => match self.infere.expr_types[expr] {
+                HirTy::Var(_, var) => self.place(PlaceKind::Var(var)),
+                HirTy::FuntionVar { fun, arg: None, .. } => {
+                    self.place(PlaceKind::FunctionReturn { fun })
+                }
+                HirTy::FuntionVar { arg: Some(arg), fun, .. } => {
+                    self.place(PlaceKind::FunctionArg { fun, arg })
                 }
                 _ => unreachable!(),
             },
+            _ => unreachable!(),
+        };
+
+        if let Some(src) = self.infere.casts.get(&expr) {
+            let dst = self.infere.expr_types[expr].to_value().unwrap();
+            val = self.insert_cast(val, src, &dst)
+        };
+
+        self.func.def_var(place, val)
+    }
+
+    pub fn lower_expr(&mut self, expr: ExprId) -> Value {
+        let old_loc = self.func.get_srcloc();
+        self.func.set_srcloc(mir::SourceLoc::new(u32::from(expr) as i32 + 1));
+
+        let mut res = match self.body.exprs[expr] {
+            hir_def::Expr::Path { port: false, .. } => match self.infere.expr_types[expr] {
+                HirTy::Var(_, var) => {
+                    let place = self.place(PlaceKind::Var(var));
+                    let mut val = self.func.use_var(place);
+                    if self.tagged_vars.contains(&var) {
+                        val = self.func.ins().optbarrier(val);
+                        self.data.tagged_reads.insert(val, u32::from(var).into());
+                    }
+                    val
+                }
+                HirTy::FuntionVar { fun, arg: None, .. } => {
+                    let place = self.place(PlaceKind::FunctionReturn { fun });
+                    self.func.use_var(place)
+                }
+                HirTy::FuntionVar { arg: Some(arg), fun, .. } => {
+                    let place = self.place(PlaceKind::FunctionArg { fun, arg });
+                    self.func.use_var(place)
+                }
+                HirTy::Param(_, param) => self.param(ParamKind::Param(param)),
+                HirTy::NatureAttr(_, attr) => {
+                    self.data.lower_expr_body(self.db, attr.into(), 0, self.func)
+                }
+                ref expr => unreachable!("{:?}", expr),
+            },
             hir_def::Expr::BinaryOp { lhs, rhs, op: Some(op) } => {
-                self.lower_bin_op(expr, lhs, rhs, op).into()
+                self.lower_bin_op(expr, lhs, rhs, op)
             }
             hir_def::Expr::UnaryOp { expr: arg, op } => self.lower_unary_op(expr, arg, op),
-            hir_def::Expr::Select { cond, then_val, else_val } => self
-                .lower_select(expr, cond, |s| s.lower_expr(then_val), |s| s.lower_expr(else_val))
-                .into(),
+            hir_def::Expr::Select { cond, then_val, else_val } => {
+                self.lower_select(cond, |s| s.lower_expr(then_val), |s| s.lower_expr(else_val))
+            }
             hir_def::Expr::Call { ref args, .. } => match self.infere.resolved_calls[&expr] {
-                ResolvedFun::User(fun) => self.lower_user_fun(expr, fun, args),
+                ResolvedFun::User(fun) => self.lower_user_fun(fun, args),
                 ResolvedFun::BuiltIn(builtin) => self.lower_builtin(expr, builtin, args),
-                ResolvedFun::Param(param) => self.param(ParamKind::ParamSysFun(param)).into(), // TODO
+                ResolvedFun::Param(param) => self.param(ParamKind::ParamSysFun(param)),
             },
             hir_def::Expr::Array(ref vals) => self.lower_array(expr, vals),
             hir_def::Expr::Literal(ref lit) => match *lit {
-                hir_def::Literal::String(ref str) => {
-                    Const::String(self.literals.get_or_intern(str)).into()
+                hir_def::Literal::String(ref str) => self.func.sconst(str),
+                hir_def::Literal::Int(val) => self.func.iconst(val),
+                hir_def::Literal::Float(val) => self.func.fconst(val.into()),
+                hir_def::Literal::Inf => {
+                    self.func.set_srcloc(old_loc);
+                    match self.infere.expr_types[expr].to_value().unwrap() {
+                        Type::Real => return self.func.fconst(f64::INFINITY),
+                        Type::Integer => return self.func.iconst(i32::MAX),
+                        _ => unreachable!(),
+                    }
                 }
-                hir_def::Literal::Int(val) => val.into(),
-                hir_def::Literal::Float(val) => f64::from(val).into(),
-                hir_def::Literal::Inf => match self.infere.expr_types[expr].to_value().unwrap() {
-                    Type::Real => return f64::INFINITY.into(),
-                    Type::Integer => return i32::MAX.into(),
-                    _ => unreachable!(),
-                },
             },
             ref expr => unreachable!(
                 "encounted invalid expr {:?}: this should have been caught in the frontend",
@@ -627,70 +878,57 @@ impl LoweringCtx<'_, '_> {
         };
 
         if let Some(dst) = self.infere.casts.get(&expr) {
-            self.insert_cast(expr, res, dst)
-        } else {
-            res
-        }
+            let src = self.infere.expr_types[expr].to_value().unwrap();
+            res = self.insert_cast(res, &src, dst)
+        };
+
+        self.func.set_srcloc(old_loc);
+
+        res
     }
 
-    fn insert_cast(&mut self, expr: ExprId, val: Operand, dst: &Type) -> Operand {
-        let src = self.infere.expr_types[expr].to_value().unwrap();
+    fn insert_cast(&mut self, val: Value, src: &Type, dst: &Type) -> Value {
         let op = match (dst, src) {
-            (Type::Real, Type::Integer) => Op::IntToReal,
-            (Type::Integer, Type::Real) => Op::RealToInt,
-            (Type::Bool, Type::Real) => Op::RealToBool,
-            (Type::Real, Type::Bool) => Op::BoolToReal,
-            (Type::Integer, Type::Bool) => Op::BoolToInt,
-            (Type::Bool, Type::Integer) => Op::IntToBool,
+            (Type::Real, Type::Integer) => Opcode::IFcast,
+            (Type::Integer, Type::Real) => Opcode::FIcast,
+            (Type::Bool, Type::Real) => Opcode::FBcast,
+            (Type::Real, Type::Bool) => Opcode::BFcast,
+            (Type::Integer, Type::Bool) => Opcode::BIcast,
+            (Type::Bool, Type::Integer) => Opcode::IBcast,
             (Type::Array { .. }, Type::EmptyArray) | (Type::EmptyArray, Type::Array { .. }) => {
                 return val
             }
-            // TODO Arrays
-            // (dst @ Type::Array { .. }, src @ Type::Array { .. }) => {
-            //     match (dst.base_type(), src.base_type()) {
-            //         (Type::Real, Type::Integer) => Op::ArrIntToReal,
-            //         (Type::Integer, Type::Real) => Op::ArrRealToInt,
-            //         (Type::Real, Type::Bool) => Op::ArrBoolToReal,
-            //         (Type::Integer, Type::Bool) => Op::ArrBoolToInt,
-            //         (Type::Bool, Type::Integer) => Op::ArrIntToBool,
-            //         _ => unreachable!(),
-            //     }
-            // }
-            (dst, src) => unreachable!(
-                "unkown cast found for {:?} ({:?}): {:?} as {:?} -> {:?}",
-                expr, self.body.exprs[expr], self.infere.expr_types[expr], src, dst
-            ),
+            _ => unreachable!("unkown cast found  {:?} -> {:?}", src, dst),
         };
-        self.cfg.build_val(op, smallvec![val], u32::from(expr) as i32).into()
+        let inst = self.func.ins().unary(op, val).0;
+        self.func.func.dfg.first_result(inst)
     }
 
-    fn lower_unary_op(&mut self, expr: ExprId, arg: ExprId, op: UnaryOp) -> Operand {
-        let op = match op {
-            UnaryOp::BitNegate => Op::IntBitNegate,
-            UnaryOp::Not => Op::BoolBitNegate,
+    fn lower_unary_op(&mut self, expr: ExprId, arg: ExprId, op: UnaryOp) -> Value {
+        let arg_ = self.lower_expr(arg);
+        match op {
+            UnaryOp::BitNegate => self.func.ins().ineg(arg_),
+            UnaryOp::Not => self.func.ins().bnot(arg_),
             UnaryOp::Neg => {
                 // Special case INFINITY
                 if Expr::Literal(Literal::Inf) == self.body.exprs[arg] {
                     match self.infere.expr_types[arg].to_value().unwrap() {
-                        Type::Real => return f64::NEG_INFINITY.into(),
-                        Type::Integer => return i32::MIN.into(),
+                        Type::Real => return self.func.fconst(f64::NEG_INFINITY),
+                        Type::Integer => return self.func.iconst(i32::MIN),
                         _ => unreachable!(),
                     }
                 }
                 match self.infere.resolved_signatures[&expr] {
-                    REAL_OP => Op::RealArtihNeg,
-                    INT_OP => Op::IntArithNeg,
+                    REAL_OP => self.func.ins().fneg(arg_),
+                    INT_OP => self.func.ins().ineg(arg_),
                     _ => unreachable!(),
                 }
             }
-            UnaryOp::Identity => Op::Copy,
-        };
-
-        let arg = self.lower_expr(arg);
-        self.cfg.build_val(op, smallvec![arg], u32::from(expr) as i32).into()
+            UnaryOp::Identity => arg_,
+        }
     }
 
-    fn lower_array(&mut self, _expr: ExprId, _args: &[ExprId]) -> Operand {
+    fn lower_array(&mut self, _expr: ExprId, _args: &[ExprId]) -> Value {
         todo!("arrays")
     }
 
@@ -704,47 +942,37 @@ impl LoweringCtx<'_, '_> {
 
     fn nodes_from_args(
         &mut self,
-        expr: ExprId,
         args: &[ExprId],
         kind: impl Fn(NodeId, Option<NodeId>) -> ParamKind,
-    ) -> Operand {
+    ) -> Value {
         let hi = self.infere.expr_types[args[0]].unwrap_node();
         let lo = args.get(1).map(|arg| self.infere.expr_types[*arg].unwrap_node());
-        self.nodes(expr, hi, lo, kind)
+        self.nodes(hi, lo, kind)
     }
 
     fn nodes(
         &mut self,
-        expr: ExprId,
         hi: NodeId,
         lo: Option<NodeId>,
         kind: impl Fn(NodeId, Option<NodeId>) -> ParamKind,
-    ) -> Operand {
+    ) -> Value {
         let hi = self.node(hi);
         let lo = lo.and_then(|lo| self.node(lo));
         match (hi, lo) {
-            (Some(hi), None) => self.param(kind(hi, None)).into(),
+            (Some(hi), None) => self.param(kind(hi, None)),
             (None, Some(lo)) => {
                 let lo = self.param(kind(lo, None));
-                self.cfg
-                    .build_val(Op::RealArtihNeg, smallvec![lo.into()], u32::from(expr) as i32)
-                    .into()
+                self.func.ins().fneg(lo)
             }
             // TODO refactor to nice if let binding when stable
             (Some(hi), Some(lo)) => {
-                if let Some(inverted) = self.data.params.index(&kind(lo, Some(hi))) {
-                    self.cfg
-                        .build_val(
-                            Op::RealArtihNeg,
-                            smallvec![inverted.into()],
-                            u32::from(expr) as i32,
-                        )
-                        .into()
+                if let Some(inverted) = self.data.params.raw.get(&kind(lo, Some(hi))) {
+                    self.func.ins().fneg(*inverted)
                 } else {
-                    self.param(kind(hi, Some(lo))).into()
+                    self.param(kind(hi, Some(lo)))
                 }
             }
-            (None, None) => 0.0.into(),
+            (None, None) => F_ZERO,
         }
     }
 
@@ -765,11 +993,11 @@ impl LoweringCtx<'_, '_> {
                 self.place(kind(lo, None))
             }
             (Some(hi), Some(lo)) => {
-                if self.data.params.contains(&param_kind(lo, Some(hi))) {
+                if self.data.params.contains_key(&param_kind(lo, Some(hi))) {
                     *negate = true;
                     self.place(kind(lo, Some(hi)))
                 } else {
-                    self.data.params.ensure(param_kind(hi, Some(lo)));
+                    self.param(param_kind(hi, Some(lo)));
                     self.place(kind(hi, Some(lo)))
                 }
             }
@@ -777,225 +1005,298 @@ impl LoweringCtx<'_, '_> {
         }
     }
 
-    fn lower_bin_op(&mut self, expr: ExprId, lhs: ExprId, rhs: ExprId, op: BinaryOp) -> Local {
+    fn lower_bin_op(&mut self, expr: ExprId, lhs: ExprId, rhs: ExprId, op: BinaryOp) -> Value {
         let signature = self.infere.resolved_signatures.get(&expr);
         let op = match op {
             BinaryOp::BooleanOr => {
                 // lhs || rhs if lhs { true } else { rhs }
-                return self.lower_select(expr, lhs, |_| true.into(), |s| s.lower_expr(rhs));
+                return self.lower_select(lhs, |_| TRUE, |s| s.lower_expr(rhs));
             }
 
             BinaryOp::BooleanAnd => {
                 // lhs && rhs if lhs { rhs } else { false }
-                return self.lower_select(expr, lhs, |s| s.lower_expr(rhs), |_| false.into());
+                return self.lower_select(lhs, |s| s.lower_expr(rhs), |_| FALSE);
             }
 
             BinaryOp::EqualityTest => match_signature! {
                 signature:
-                    BOOL_EQ => Op::BoolEq,
-                    INT_EQ => Op::IntEq,
-                    REAL_EQ => Op::RealEq,
-                    STR_EQ => Op::StringEq
+                    BOOL_EQ => Opcode::Beq,
+                    INT_EQ  => Opcode::Ieq,
+                    REAL_EQ => Opcode::Feq,
+                    STR_EQ  => Opcode::Seq
             },
             BinaryOp::NegatedEqualityTest => match_signature! {
                 signature:
-                    BOOL_EQ => Op::BoolNeq,
-                    INT_EQ => Op::IntNeq,
-                    REAL_EQ => Op::RealNeq,
-                    STR_EQ => Op::StringNeq
+                    BOOL_EQ => Opcode::Bne,
+                    INT_EQ  => Opcode::Ine,
+                    REAL_EQ => Opcode::Fne,
+                    STR_EQ  => Opcode::Sne
             },
             BinaryOp::GreaterEqualTest => {
-                match_signature!(signature: INT_OP => Op::IntGreaterEqual, REAL_OP => Op::RealGreaterEqual)
+                match_signature!(signature: INT_OP => Opcode::Ige, REAL_OP => Opcode::Fge)
             }
             BinaryOp::GreaterTest => {
-                match_signature!(signature: INT_OP => Op::IntGreaterThen, REAL_OP => Op::RealGreaterThen)
+                match_signature!(signature: INT_OP => Opcode::Igt, REAL_OP => Opcode::Fgt)
             }
             BinaryOp::LesserEqualTest => {
-                match_signature!(signature: INT_OP => Op::IntLessEqual, REAL_OP => Op::RealLessEqual)
+                match_signature!(signature: INT_OP => Opcode::Ile, REAL_OP => Opcode::Fle)
             }
             BinaryOp::LesserTest => {
-                match_signature!(signature: INT_OP => Op::IntLessThen, REAL_OP => Op::RealLessThen)
+                match_signature!(signature: INT_OP => Opcode::Ilt, REAL_OP => Opcode::Flt)
             }
             BinaryOp::Addition => {
-                match_signature!(signature: INT_OP => Op::IntAdd, REAL_OP => Op::RealAdd)
+                match_signature!(signature: INT_OP => Opcode::Iadd, REAL_OP => Opcode::Fadd)
             }
             BinaryOp::Subtraction => {
-                match_signature!(signature: INT_OP => Op::IntSub, REAL_OP => Op::RealSub)
+                match_signature!(signature: INT_OP => Opcode::Isub, REAL_OP => Opcode::Fsub)
             }
             BinaryOp::Multiplication => {
-                match_signature!(signature: INT_OP => Op::IntMul, REAL_OP => Op::RealMul)
+                match_signature!(signature: INT_OP => Opcode::Imul, REAL_OP => Opcode::Fmul)
             }
             BinaryOp::Division => {
-                match_signature!(signature: INT_OP => Op::IntDiv, REAL_OP => Op::RealDiv)
+                match_signature!(signature: INT_OP => Opcode::Idiv, REAL_OP => Opcode::Fdiv)
             }
             BinaryOp::Remainder => {
-                match_signature!(signature: INT_OP => Op::IntRem, REAL_OP => Op::RealRem)
+                match_signature!(signature: INT_OP => Opcode::Irem, REAL_OP => Opcode::Frem)
             }
-            BinaryOp::Power => Op::RealPow,
+            BinaryOp::Power => Opcode::Pow,
 
-            BinaryOp::LeftShift => Op::IntShl,
-            BinaryOp::RightShift => Op::IntShr,
+            BinaryOp::LeftShift => Opcode::Ishl,
+            BinaryOp::RightShift => Opcode::Ishr,
 
-            BinaryOp::BitwiseXor => Op::IntXor,
-            BinaryOp::BitwiseEq => Op::IntNXor,
-            BinaryOp::BitwiseOr => Op::IntOr,
-            BinaryOp::BitwiseAnd => Op::IntAdd,
+            BinaryOp::BitwiseXor => Opcode::Ixor,
+            BinaryOp::BitwiseEq => {
+                let lhs = self.lower_expr(lhs);
+                let rhs = self.lower_expr(rhs);
+                let res = self.func.ins().ixor(lhs, rhs);
+                return self.func.ins().inot(res);
+            }
+            BinaryOp::BitwiseOr => Opcode::Ior,
+            BinaryOp::BitwiseAnd => Opcode::Iand,
         };
 
         let lhs = self.lower_expr(lhs);
         let rhs = self.lower_expr(rhs);
-        self.cfg.build_val(op, smallvec![lhs, rhs], u32::from(expr) as i32)
-    }
-
-    fn lower_to_local(&mut self, expr: ExprId, f: impl FnOnce(&mut Self) -> Operand) -> Local {
-        let val = f(self);
-        self.cfg.to_local(val, u32::from(expr) as i32)
+        let (inst, dfg) = self.func.ins().binary(op, lhs, rhs);
+        dfg.first_result(inst)
     }
 
     fn lower_select(
         &mut self,
-        expr: ExprId,
         cond: ExprId,
-        lower_then_val: impl FnMut(&mut LoweringCtx) -> Operand,
-        lower_else_val: impl FnMut(&mut LoweringCtx) -> Operand,
-    ) -> Local {
+        lower_then_val: impl FnMut(&mut LoweringCtx) -> Value,
+        lower_else_val: impl FnMut(&mut LoweringCtx) -> Value,
+    ) -> Value {
         let cond = self.lower_expr(cond);
-        self.lower_select_with(expr, cond, lower_then_val, lower_else_val)
+        self.lower_select_with(cond, lower_then_val, lower_else_val)
     }
 
     fn lower_select_with(
         &mut self,
-        expr: ExprId,
-        cond: Operand,
-        mut lower_then_val: impl FnMut(&mut LoweringCtx) -> Operand,
-        mut lower_else_val: impl FnMut(&mut LoweringCtx) -> Operand,
-    ) -> Local {
-        self.cfg.build_select(cond, |cfg, branch| {
+        cond: Value,
+        mut lower_then_val: impl FnMut(&mut LoweringCtx) -> Value,
+        mut lower_else_val: impl FnMut(&mut LoweringCtx) -> Value,
+    ) -> Value {
+        self.func.make_select(cond, |func, branch| {
             let mut ctx = LoweringCtx {
                 db: self.db,
                 data: self.data,
-                literals: self.literals,
-                cfg,
+                func,
                 body: self.body,
                 infere: self.infere,
-                args: self.args,
+                tagged_vars: self.tagged_vars,
+                places: self.places,
             };
             if branch {
-                ctx.lower_to_local(expr, &mut lower_then_val)
+                lower_then_val(&mut ctx)
             } else {
-                ctx.lower_to_local(expr, &mut lower_else_val)
+                lower_else_val(&mut ctx)
             }
         })
     }
 
-    fn lower_user_fun(&mut self, expr: ExprId, fun: FunctionId, args: &[ExprId]) -> Operand {
+    fn lower_user_fun(&mut self, fun: FunctionId, args: &[ExprId]) -> Value {
         let info = self.db.function_data(fun);
-        let return_var = self.place(PlaceKind::FunctionReturn { fun });
 
-        let args: TiVec<_, _> = args.iter().map(|arg| self.lower_expr(*arg)).collect();
         let body = self.db.body(fun.into());
         let infere = self.db.inference_result(fun.into());
 
         // TODO do not inline functions!
-        for (arg, operand) in zip(&*info.args, &args) {
-            if arg.is_output && !arg.is_input {
-                let init = match &arg.ty {
-                    Type::Real => 0.0.into(),
-                    Type::Integer => 0.into(),
+        for ((arg, info), expr) in zip(info.args.iter_enumerated(), args) {
+            let place = self.place(PlaceKind::FunctionArg { fun, arg });
+            let init = if info.is_input {
+                self.lower_expr(*expr)
+            } else {
+                match &info.ty {
+                    Type::Real => F_ZERO,
+                    Type::Integer => ZERO,
                     ty => unreachable!("invalid function arg type {:?}", ty),
-                };
-                self.cfg.build_assign(
-                    (*operand).unwrap_place().into(),
-                    Op::Copy,
-                    smallvec![init],
-                    u32::from(expr) as i32,
-                )
-            }
+                }
+            };
+            self.func.def_var(place, init)
         }
 
         let init = match &info.return_ty {
-            Type::Real => 0.0.into(),
-            Type::Integer => 0.into(),
+            Type::Real => F_ZERO,
+            Type::Integer => ZERO,
             ty => unreachable!("invalid function return type {:?}", ty),
         };
-        self.cfg.build_assign(return_var.into(), Op::Copy, smallvec![init], u32::from(expr) as i32);
+        let ret_place = self.place(PlaceKind::FunctionReturn { fun });
+        self.func.def_var(ret_place, init);
 
         let mut ctx = LoweringCtx {
             db: self.db,
             data: self.data,
-            literals: self.literals,
-            cfg: self.cfg,
+            func: self.func,
             body: &body,
             infere: &infere,
-            args: &args,
+            tagged_vars: self.tagged_vars,
+            places: self.places,
         };
 
         ctx.lower_entry_stmts();
 
-        Operand::Place(return_var)
+        // write outputs back to original (including possibly required cast)
+        for ((arg, info), expr) in zip(info.args.iter_enumerated(), args) {
+            if info.is_output {
+                let place = self.place(PlaceKind::FunctionArg { fun, arg });
+                let val = self.func.use_var(place);
+                self.lower_expr_as_lhs(*expr, val);
+            }
+        }
+
+        self.func.use_var(ret_place)
     }
 
-    fn lower_builtin(&mut self, expr: ExprId, builtin: BuiltIn, args: &[ExprId]) -> Operand {
-        let src = u32::from(expr) as i32;
+    fn lower_builtin(&mut self, expr: ExprId, builtin: BuiltIn, args: &[ExprId]) -> Value {
+        // let arg = |sel, i| sel.lower_expr(args[i]);
         let signature = self.infere.resolved_signatures.get(&expr);
-        let op = match builtin {
+        match builtin {
             BuiltIn::abs => {
                 let (negate, comparison, zero) = match_signature!(signature:
-                    ABS_REAL => (Op::RealArtihNeg,Op::RealLessThen,0f64.into()),
-                    ABS_INT => (Op::IntArithNeg,Op::IntLessThen,0.into())
+                    ABS_REAL => (Opcode::Fneg, Opcode::Flt,  F_ZERO),
+                    ABS_INT => (Opcode::Ineg, Opcode::Ilt, ZERO)
                 );
                 let val = self.lower_expr(args[0]);
-                let cond = self.cfg.build_val(comparison, smallvec![val, zero], src);
-                // can't use build select here without producing an unneccary local/bb that our
-                // optimizer currently can not remove
-                return self
-                    .lower_select_with(
-                        expr,
-                        cond.into(),
-                        |sel| -> Operand { sel.cfg.build_val(negate, smallvec![val], src).into() },
-                        |_| val,
-                    )
-                    .into();
-            }
-            BuiltIn::acos => Op::ArcCos,
-            BuiltIn::acosh => Op::ArcCosH,
-            BuiltIn::asin => Op::ArcSin,
-            BuiltIn::asinh => Op::ArcSinH,
-            BuiltIn::atan => Op::ArcTan,
-            BuiltIn::atan2 => Op::ArcTan2,
-            BuiltIn::atanh => Op::ArcTanH,
-            BuiltIn::cos => Op::Cos,
-            BuiltIn::cosh => Op::CosH,
-            // TODO implement properly
-            BuiltIn::limexp | BuiltIn::exp => Op::Exp,
-            BuiltIn::floor => Op::Floor,
-            BuiltIn::hypot => Op::Hypot,
-            BuiltIn::ln => Op::Ln,
+                let (inst, dfg) = self.func.ins().binary(comparison, val, zero);
+                let cond = dfg.first_result(inst);
 
-            BuiltIn::sin => Op::Sin,
-            BuiltIn::sinh => Op::SinH,
-            BuiltIn::sqrt => Op::Sqrt,
-            BuiltIn::tan => Op::Tan,
-            BuiltIn::tanh => Op::TanH,
-            BuiltIn::clog2 => Op::Clog2,
-            BuiltIn::log10 | BuiltIn::log => Op::Log,
-            BuiltIn::ceil => Op::Ceil,
+                self.lower_select_with(
+                    cond,
+                    |sel| {
+                        let (inst, dfg) = sel.func.ins().unary(negate, val);
+                        dfg.first_result(inst)
+                    },
+                    |_| val,
+                )
+            }
+            BuiltIn::acos => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().acos(arg0)
+            }
+            BuiltIn::acosh => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().acosh(arg0)
+            }
+            BuiltIn::asin => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().asin(arg0)
+            }
+            BuiltIn::asinh => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().asinh(arg0)
+            }
+            BuiltIn::atan => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().atan(arg0)
+            }
+            BuiltIn::atan2 => {
+                let arg0 = self.lower_expr(args[0]);
+                let arg1 = self.lower_expr(args[1]);
+                self.func.ins().atan2(arg0, arg1)
+            }
+            BuiltIn::atanh => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().atanh(arg0)
+            }
+            BuiltIn::cos => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().cos(arg0)
+            }
+            BuiltIn::cosh => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().cosh(arg0)
+            }
+            // TODO implement limexp properly
+            BuiltIn::limexp | BuiltIn::exp => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().exp(arg0)
+            }
+            BuiltIn::floor => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().floor(arg0)
+            }
+            BuiltIn::hypot => {
+                let arg0 = self.lower_expr(args[0]);
+                let arg1 = self.lower_expr(args[1]);
+                self.func.ins().hypot(arg0, arg1)
+            }
+            BuiltIn::ln => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().ln(arg0)
+            }
+            BuiltIn::sin => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().sin(arg0)
+            }
+            BuiltIn::sinh => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().sinh(arg0)
+            }
+            BuiltIn::sqrt => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().sqrt(arg0)
+            }
+            BuiltIn::tan => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().tan(arg0)
+            }
+            BuiltIn::tanh => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().tanh(arg0)
+            }
+            BuiltIn::clog2 => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().clog2(arg0)
+            }
+            BuiltIn::log10 | BuiltIn::log => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().log(arg0)
+            }
+            BuiltIn::ceil => {
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().ceil(arg0)
+            }
 
             BuiltIn::max => {
-                let comparison = match_signature!(signature: MAX_REAL => Op::RealGreaterThen, MAX_INT => Op::IntGreaterThen);
-                let lhs = self.lower_expr(args[0]);
-                let rhs = self.lower_expr(args[1]);
-                let cond = self.cfg.build_val(comparison, smallvec![lhs, rhs], src);
-                return self.lower_select_with(expr, cond.into(), |_| lhs, |_| rhs).into();
+                let comparison = match_signature!(signature: MAX_REAL => InstBuilder::fgt, MAX_INT => InstBuilder::igt);
+                let arg0 = self.lower_expr(args[0]);
+                let arg1 = self.lower_expr(args[1]);
+                let cond = comparison(self.func.ins(), arg0, arg1);
+                self.lower_select_with(cond, |_| arg0, |_| arg1)
             }
             BuiltIn::min => {
-                let comparison = match_signature!(signature: MAX_REAL => Op::RealLessThen, MAX_INT => Op::IntLessThen);
-                let lhs = self.lower_expr(args[0]);
-                let rhs = self.lower_expr(args[1]);
-                let cond = self.cfg.build_val(comparison, smallvec![lhs, rhs], src);
-                return self.lower_select_with(expr, cond.into(), |_| lhs, |_| rhs).into();
+                let comparison = match_signature!(signature: MAX_REAL => InstBuilder::flt, MAX_INT => InstBuilder::ilt);
+                let arg0 = self.lower_expr(args[0]);
+                let arg1 = self.lower_expr(args[1]);
+                let cond = comparison(self.func.ins(), arg0, arg1);
+                self.lower_select_with(cond, |_| arg0, |_| arg1)
             }
-            BuiltIn::pow => Op::RealPow,
+            BuiltIn::pow => {
+                let arg0 = self.lower_expr(args[0]);
+                let arg1 = self.lower_expr(args[1]);
+                self.func.ins().pow(arg0, arg1)
+            }
 
             // TODO implement properly
             BuiltIn::display
@@ -1007,114 +1308,116 @@ impl LoweringCtx<'_, '_> {
             | BuiltIn::warning
             | BuiltIn::error
             | BuiltIn::info
-            | BuiltIn::finish => return Operand::Const(Const::Zst),
+            | BuiltIn::finish => GRAVESTONE,
+
             BuiltIn::fatal => {
                 //TODO terminate
-                self.cfg.terminate(Terminator::Ret);
-                // Create dead block. This will be removed by CFG simplify
-                self.cfg.enter_new_block();
-                return Operand::Const(Const::Zst);
+                self.func.ins().ret();
+
+                let unreachable_bb = self.func.create_block();
+                self.func.switch_to_block(unreachable_bb);
+                self.func.seal_block(unreachable_bb);
+                GRAVESTONE
             }
-            BuiltIn::analysis => return false.into(),
+            BuiltIn::analysis => FALSE,
             BuiltIn::ac_stim
             | BuiltIn::noise_table
             | BuiltIn::noise_table_log
             | BuiltIn::white_noise
             | BuiltIn::flicker_noise
             | BuiltIn::abstime
-            | BuiltIn::ddt => return 0.0.into(),
+            | BuiltIn::ddt => F_ZERO,
 
-            BuiltIn::idt | BuiltIn::idtmod => {
-                let dc_val = match *signature.unwrap() {
-                    IDT_NO_IC => 0.0.into(),
-                    _ => self.lower_expr(args[1]),
-                };
-                return dc_val;
-            }
+            BuiltIn::idt | BuiltIn::idtmod => match *signature.unwrap() {
+                IDT_NO_IC => F_ZERO,
+                _ => self.lower_expr(args[1]),
+            },
 
-            BuiltIn::slew | BuiltIn::transition | BuiltIn::absdelay => {
-                return self.lower_expr(args[0])
-            }
+            // For benchmark
+            // BuiltIn::idt | BuiltIn::idtmod | BuiltIn::ddt => match *signature.unwrap() {
+            //     IDT_NO_IC => F_ZERO,
+            //     _ => self.lower_expr(args[0]),
+            // },
+            BuiltIn::slew | BuiltIn::transition | BuiltIn::absdelay => self.lower_expr(args[0]),
             BuiltIn::flow => {
                 let res = match_signature! {
                     signature:
                         NATURE_ACCESS_NODES|NATURE_ACCESS_NODE_GND => self.nodes_from_args(
-                            expr,
                             args,
                             |hi, lo| ParamKind::Current(CurrentKind::ImplictBranch{hi,lo})
                         ),
                         NATURE_ACCESS_BRANCH => self.param(ParamKind::Current(
-                            CurrentKind::ExplicitBranch(self.infere.expr_types[args[0]].unwrap_branch())
-                        )).into(),
+                        CurrentKind::ExplicitBranch(self.infere.expr_types[args[0]].unwrap_branch())
+                    )),
                         NATURE_ACCESS_PORT_FLOW => self.param(ParamKind::Current(
                             CurrentKind::Port(self.infere.expr_types[args[0]].unwrap_port_flow())
-                        )).into()
+                        ))
                 };
-                let mfactor = self.param(ParamKind::ParamSysFun(ParamSysFun::mfactor)).into();
-                return self.cfg.build_val(Op::RealDiv, smallvec![res, mfactor], src).into();
+                let mfactor = self.param(ParamKind::ParamSysFun(ParamSysFun::mfactor));
+                return self.func.ins().fdiv(res, mfactor);
             }
             BuiltIn::potential => {
-                let res = match_signature! {
+                match_signature! {
                     signature:
-                        NATURE_ACCESS_NODES|NATURE_ACCESS_NODE_GND => self.nodes_from_args(expr, args, |hi,lo|ParamKind::Voltage{hi,lo}),
+                        NATURE_ACCESS_NODES|NATURE_ACCESS_NODE_GND => self.nodes_from_args( args, |hi,lo|ParamKind::Voltage{hi,lo}),
                         NATURE_ACCESS_BRANCH => {
                             let branch = self.infere.expr_types[args[0]].unwrap_branch();
                             let info =self.db.branch_info(branch).unwrap().kind;
-                            self.nodes(expr, info.unwrap_hi_node(), info.lo_node(), |hi,lo|ParamKind::Voltage{hi,lo})
+                            self.nodes( info.unwrap_hi_node(), info.lo_node(), |hi,lo|ParamKind::Voltage{hi,lo})
                         }
-                };
-                return res;
+                }
             }
             BuiltIn::vt => {
                 // TODO make this a database input
                 const KB: f64 = 1.3806488e-23;
                 const Q: f64 = 1.602176565e-19;
+
+                let vt = self.func.fconst(KB / Q);
                 let temp = match args.get(0) {
                     Some(temp) => self.lower_expr(*temp),
-                    None => self.param(ParamKind::Temperature).into(),
+                    None => self.param(ParamKind::Temperature),
                 };
 
-                return self
-                    .cfg
-                    .build_val(Op::RealMul, smallvec![(KB / Q).into(), temp], src)
-                    .into();
+                self.func.ins().fmul(vt, temp)
             }
 
             BuiltIn::ddx => {
                 let val = self.lower_expr(args[0]);
-                let cfg_param = self.lower_expr(args[1]).unwrap_cfg_param();
+                let param = self.lower_expr(args[1]);
+                let param = self.func.func.dfg.value_def(param).unwrap_param();
                 let call = if *signature.unwrap() == DDX_POT {
                     // TODO how to handle gnd nodes?
-                    let node = self.data.params[cfg_param].unwrap_pot_node();
+                    let node = self.data.params.get_index(param).unwrap().0.unwrap_pot_node();
                     CallBackKind::NodeDerivative(node)
                 } else {
-                    CallBackKind::Derivative(cfg_param)
+                    CallBackKind::Derivative(param)
                 };
-                let call = self.callback(call);
-                let dst = self.cfg.build_val(Op::Call(call), smallvec![val], src);
-                // self.data.derivatives.insert(dst, unkown);
-                return dst.into();
+                let func_ref = self.callback(call);
+                self.func.ins().call1(func_ref, &[val])
             }
-            BuiltIn::temperature => return self.param(ParamKind::Temperature).into(),
+            BuiltIn::temperature => self.param(ParamKind::Temperature),
             BuiltIn::simparam => {
                 let call = match_signature!(signature: SIMPARAM_NO_DEFAULT => CallBackKind::SimParam,SIMPARAM_DEFAULT => CallBackKind::SimParamOpt);
-                Op::Call(self.callback(call))
+                let func_ref = self.callback(call);
+                let arg0 = self.lower_expr(args[0]);
+                if call == CallBackKind::SimParamOpt {
+                    let arg1 = self.lower_expr(args[1]);
+                    self.func.ins().call1(func_ref, &[arg0, arg1])
+                } else {
+                    self.func.ins().call1(func_ref, &[arg0])
+                }
             }
-            BuiltIn::simparam_str => Op::Call(self.callback(CallBackKind::SimParamStr)),
-            BuiltIn::param_given => {
-                return self
-                    .param(ParamKind::ParamGiven {
-                        param: self.infere.expr_types[args[0]].unwrap_param(),
-                    })
-                    .into()
+            BuiltIn::simparam_str => {
+                let func_ref = self.callback(CallBackKind::SimParamStr);
+                let arg0 = self.lower_expr(args[0]);
+                self.func.ins().call1(func_ref, &[arg0])
             }
-            BuiltIn::port_connected => {
-                return self
-                    .param(ParamKind::PortConnected {
-                        port: self.infere.expr_types[args[0]].unwrap_node(),
-                    })
-                    .into()
-            }
+            BuiltIn::param_given => self.param(ParamKind::ParamGiven {
+                param: self.infere.expr_types[args[0]].unwrap_param(),
+            }),
+            BuiltIn::port_connected => self.param(ParamKind::PortConnected {
+                port: self.infere.expr_types[args[0]].unwrap_node(),
+            }),
             _ => todo!(),
             // BuiltIn::fclose => todo!(),
             // BuiltIn::fopen => todo!(),
@@ -1175,9 +1478,6 @@ impl LoweringCtx<'_, '_> {
 
             // // TODO is this correct DC behaviour_
             // BuiltIn::last_crossing => return 0f64.into(),
-        };
-
-        let operands = args.iter().map(|arg| self.lower_expr(*arg)).collect();
-        self.cfg.build_val(op, operands, src).into()
+        }
     }
 }

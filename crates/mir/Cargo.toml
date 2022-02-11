@@ -11,8 +11,12 @@ doctest = false
 
 [dependencies]
 stdx = {version = "0.0.0", path = "../stdx" }
-cranelift-entity = "0.80"
+bforest = {version = "0.0.0" , path = "../bforest"}
+list_pool = {version = "0.0.0" , path = "../list_pool"}
+typed-index-collections = "3.0"
 lasso = {version = "0.6", features = ["ahash"]}
+ahash = "0.7"
+bitset = {version = "0.0.0", path = "../bitset" }
 
 [dev-dependencies]
 expect-test = "1.1"

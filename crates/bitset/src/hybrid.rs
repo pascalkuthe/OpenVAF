@@ -221,6 +221,7 @@ where
                         // Benchmarking seems to suggest that the second
                         // option is worth it.
                         let mut new_dense = other_dense.clone();
+                        new_dense.ensure(domain_size);
                         let changed = new_dense.reverse_union_sparse(other_sparse);
                         *other = HybridBitSet::Dense(new_dense);
                         changed

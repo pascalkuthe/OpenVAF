@@ -1,8 +1,9 @@
-use cranelift_entity::EntityRef;
+use expect_test::expect;
 
 use super::Layout;
-use crate::cursor::{Cursor, CursorPosition};
-use crate::{Block, Inst, SourceLoc};
+use crate::builder::InstBuilder;
+use crate::cursor::{Cursor, CursorPosition, FuncCursor};
+use crate::{Block, Function, Inst, SourceLoc};
 
 struct LayoutCursor<'f> {
     /// Borrowed function layout. Public so it can be re-borrowed from this cursor.
@@ -78,9 +79,9 @@ fn verify(layout: &mut Layout, blocks: &[(Block, &[Inst])]) {
 #[test]
 fn append_block() {
     let mut layout = Layout::new();
-    let e0 = Block::new(0);
-    let e1 = Block::new(1);
-    let e2 = Block::new(2);
+    let e0 = layout.make_block();
+    let e1 = layout.make_block();
+    let e2 = layout.make_block();
 
     {
         let imm = &layout;
@@ -152,9 +153,9 @@ fn append_block() {
 #[test]
 fn insert_block() {
     let mut layout = Layout::new();
-    let e0 = Block::new(0);
-    let e1 = Block::new(1);
-    let e2 = Block::new(2);
+    let e0 = layout.make_block();
+    let e1 = layout.make_block();
+    let e2 = layout.make_block();
 
     {
         let imm = &layout;
@@ -187,9 +188,9 @@ fn insert_block() {
 #[test]
 fn insert_block_after() {
     let mut layout = Layout::new();
-    let e0 = Block::new(0);
-    let e1 = Block::new(1);
-    let e2 = Block::new(2);
+    let e0 = layout.make_block();
+    let e1 = layout.make_block();
+    let e2 = layout.make_block();
 
     layout.append_block(e1);
     layout.insert_block_after(e2, e1);
@@ -202,28 +203,28 @@ fn insert_block_after() {
 #[test]
 fn append_inst() {
     let mut layout = Layout::new();
-    let e1 = Block::new(1);
+    let e1 = layout.make_block();
 
     layout.append_block(e1);
     let v: Vec<Inst> = layout.block_insts(e1).collect();
     assert_eq!(v, []);
 
-    let i0 = Inst::new(0);
-    let i1 = Inst::new(1);
-    let i2 = Inst::new(2);
+    let i0 = Inst::from(0u32);
+    let i1 = Inst::from(1u32);
+    let i2 = Inst::from(2u32);
 
     assert_eq!(layout.inst_block(i0), None);
     assert_eq!(layout.inst_block(i1), None);
     assert_eq!(layout.inst_block(i2), None);
 
-    layout.append_inst(i1, e1);
+    layout.append_inst_to_bb(i1, e1);
     assert_eq!(layout.inst_block(i0), None);
     assert_eq!(layout.inst_block(i1), Some(e1));
     assert_eq!(layout.inst_block(i2), None);
     let v: Vec<Inst> = layout.block_insts(e1).collect();
     assert_eq!(v, [i1]);
 
-    layout.append_inst(i2, e1);
+    layout.append_inst_to_bb(i2, e1);
     assert_eq!(layout.inst_block(i0), None);
     assert_eq!(layout.inst_block(i1), Some(e1));
     assert_eq!(layout.inst_block(i2), Some(e1));
@@ -234,7 +235,7 @@ fn append_inst() {
     let v: Vec<Inst> = layout.block_insts(e1).rev().collect();
     assert_eq!(v, [i2, i1]);
 
-    layout.append_inst(i0, e1);
+    layout.append_inst_to_bb(i0, e1);
     verify(&mut layout, &[(e1, &[i1, i2, i0])]);
 
     // Test cursor positioning.
@@ -277,35 +278,35 @@ fn append_inst() {
 #[test]
 fn insert_inst() {
     let mut layout = Layout::new();
-    let e1 = Block::new(1);
+    let e1 = layout.make_block();
 
     layout.append_block(e1);
     let v: Vec<Inst> = layout.block_insts(e1).collect();
     assert_eq!(v, []);
 
-    let i0 = Inst::new(0);
-    let i1 = Inst::new(1);
-    let i2 = Inst::new(2);
+    let i0 = Inst::from(0u32);
+    let i1 = Inst::from(1u32);
+    let i2 = Inst::from(2u32);
 
     assert_eq!(layout.inst_block(i0), None);
     assert_eq!(layout.inst_block(i1), None);
     assert_eq!(layout.inst_block(i2), None);
 
-    layout.append_inst(i1, e1);
+    layout.append_inst_to_bb(i1, e1);
     assert_eq!(layout.inst_block(i0), None);
     assert_eq!(layout.inst_block(i1), Some(e1));
     assert_eq!(layout.inst_block(i2), None);
     let v: Vec<Inst> = layout.block_insts(e1).collect();
     assert_eq!(v, [i1]);
 
-    layout.insert_inst(i2, i1);
+    layout.prepend_inst(i2, i1);
     assert_eq!(layout.inst_block(i0), None);
     assert_eq!(layout.inst_block(i1), Some(e1));
     assert_eq!(layout.inst_block(i2), Some(e1));
     let v: Vec<Inst> = layout.block_insts(e1).collect();
     assert_eq!(v, [i2, i1]);
 
-    layout.insert_inst(i0, i1);
+    layout.prepend_inst(i0, i1);
     verify(&mut layout, &[(e1, &[i2, i0, i1])]);
 }
 
@@ -313,8 +314,8 @@ fn insert_inst() {
 fn multiple_blocks() {
     let mut layout = Layout::new();
 
-    let e0 = Block::new(0);
-    let e1 = Block::new(1);
+    let e0 = layout.make_block();
+    let e1 = layout.make_block();
 
     assert_eq!(layout.entry_block(), None);
     layout.append_block(e0);
@@ -322,15 +323,15 @@ fn multiple_blocks() {
     layout.append_block(e1);
     assert_eq!(layout.entry_block(), Some(e0));
 
-    let i0 = Inst::new(0);
-    let i1 = Inst::new(1);
-    let i2 = Inst::new(2);
-    let i3 = Inst::new(3);
+    let i0 = Inst::from(0u32);
+    let i1 = Inst::from(1u32);
+    let i2 = Inst::from(2u32);
+    let i3 = Inst::from(3u32);
 
-    layout.append_inst(i0, e0);
-    layout.append_inst(i1, e0);
-    layout.append_inst(i2, e1);
-    layout.append_inst(i3, e1);
+    layout.append_inst_to_bb(i0, e0);
+    layout.append_inst_to_bb(i1, e0);
+    layout.append_inst_to_bb(i2, e1);
+    layout.append_inst_to_bb(i3, e1);
 
     let v0: Vec<Inst> = layout.block_insts(e0).collect();
     let v1: Vec<Inst> = layout.block_insts(e1).collect();
@@ -342,42 +343,40 @@ fn multiple_blocks() {
 fn split_block() {
     let mut layout = Layout::new();
 
-    let e0 = Block::new(0);
-    let e1 = Block::new(1);
-    let e2 = Block::new(2);
+    let e0 = layout.make_block();
+    let e1 = layout.make_block();
+    let e2 = layout.make_block();
 
-    let i0 = Inst::new(0);
-    let i1 = Inst::new(1);
-    let i2 = Inst::new(2);
-    let i3 = Inst::new(3);
+    let i0 = Inst::from(0u32);
+    let i1 = Inst::from(1u32);
+    let i2 = Inst::from(2u32);
+    let i3 = Inst::from(3u32);
 
     layout.append_block(e0);
-    layout.append_inst(i0, e0);
+    layout.append_inst_to_bb(i0, e0);
     assert_eq!(layout.inst_block(i0), Some(e0));
     layout.split_block(e1, i0);
     assert_eq!(layout.inst_block(i0), Some(e1));
 
-    {
-        let mut cur = LayoutCursor::new(&mut layout);
-        assert_eq!(cur.next_block(), Some(e0));
-        assert_eq!(cur.next_inst(), None);
-        assert_eq!(cur.next_block(), Some(e1));
-        assert_eq!(cur.next_inst(), Some(i0));
-        assert_eq!(cur.next_inst(), None);
-        assert_eq!(cur.next_block(), None);
+    let mut cur = LayoutCursor::new(&mut layout);
+    assert_eq!(cur.next_block(), Some(e0));
+    assert_eq!(cur.next_inst(), None);
+    assert_eq!(cur.next_block(), Some(e1));
+    assert_eq!(cur.next_inst(), Some(i0));
+    assert_eq!(cur.next_inst(), None);
+    assert_eq!(cur.next_block(), None);
 
-        // Check backwards links.
-        assert_eq!(cur.prev_block(), Some(e1));
-        assert_eq!(cur.prev_inst(), Some(i0));
-        assert_eq!(cur.prev_inst(), None);
-        assert_eq!(cur.prev_block(), Some(e0));
-        assert_eq!(cur.prev_inst(), None);
-        assert_eq!(cur.prev_block(), None);
-    }
+    // Check backwards links.
+    assert_eq!(cur.prev_block(), Some(e1));
+    assert_eq!(cur.prev_inst(), Some(i0));
+    assert_eq!(cur.prev_inst(), None);
+    assert_eq!(cur.prev_block(), Some(e0));
+    assert_eq!(cur.prev_inst(), None);
+    assert_eq!(cur.prev_block(), None);
 
-    layout.append_inst(i1, e0);
-    layout.append_inst(i2, e0);
-    layout.append_inst(i3, e0);
+    layout.append_inst_to_bb(i1, e0);
+    layout.append_inst_to_bb(i2, e0);
+    layout.append_inst_to_bb(i3, e0);
     layout.split_block(e2, i2);
 
     assert_eq!(layout.inst_block(i0), Some(e1));
@@ -385,30 +384,95 @@ fn split_block() {
     assert_eq!(layout.inst_block(i2), Some(e2));
     assert_eq!(layout.inst_block(i3), Some(e2));
 
-    {
-        let mut cur = LayoutCursor::new(&mut layout);
-        assert_eq!(cur.next_block(), Some(e0));
-        assert_eq!(cur.next_inst(), Some(i1));
-        assert_eq!(cur.next_inst(), None);
-        assert_eq!(cur.next_block(), Some(e2));
-        assert_eq!(cur.next_inst(), Some(i2));
-        assert_eq!(cur.next_inst(), Some(i3));
-        assert_eq!(cur.next_inst(), None);
-        assert_eq!(cur.next_block(), Some(e1));
-        assert_eq!(cur.next_inst(), Some(i0));
-        assert_eq!(cur.next_inst(), None);
-        assert_eq!(cur.next_block(), None);
+    let mut cur = LayoutCursor::new(&mut layout);
+    assert_eq!(cur.next_block(), Some(e0));
+    assert_eq!(cur.next_inst(), Some(i1));
+    assert_eq!(cur.next_inst(), None);
+    assert_eq!(cur.next_block(), Some(e2));
+    assert_eq!(cur.next_inst(), Some(i2));
+    assert_eq!(cur.next_inst(), Some(i3));
+    assert_eq!(cur.next_inst(), None);
+    assert_eq!(cur.next_block(), Some(e1));
+    assert_eq!(cur.next_inst(), Some(i0));
+    assert_eq!(cur.next_inst(), None);
+    assert_eq!(cur.next_block(), None);
 
-        assert_eq!(cur.prev_block(), Some(e1));
-        assert_eq!(cur.prev_inst(), Some(i0));
-        assert_eq!(cur.prev_inst(), None);
-        assert_eq!(cur.prev_block(), Some(e2));
-        assert_eq!(cur.prev_inst(), Some(i3));
-        assert_eq!(cur.prev_inst(), Some(i2));
-        assert_eq!(cur.prev_inst(), None);
-        assert_eq!(cur.prev_block(), Some(e0));
-        assert_eq!(cur.prev_inst(), Some(i1));
-        assert_eq!(cur.prev_inst(), None);
-        assert_eq!(cur.prev_block(), None);
-    }
+    assert_eq!(cur.prev_block(), Some(e1));
+    assert_eq!(cur.prev_inst(), Some(i0));
+    assert_eq!(cur.prev_inst(), None);
+    assert_eq!(cur.prev_block(), Some(e2));
+    assert_eq!(cur.prev_inst(), Some(i3));
+    assert_eq!(cur.prev_inst(), Some(i2));
+    assert_eq!(cur.prev_inst(), None);
+    assert_eq!(cur.prev_block(), Some(e0));
+    assert_eq!(cur.prev_inst(), Some(i1));
+    assert_eq!(cur.prev_inst(), None);
+    assert_eq!(cur.prev_block(), None);
+}
+
+#[test]
+fn merge_block() {
+    let mut func = Function::new();
+
+    let v4 = func.dfg.iconst(3);
+    let v5 = func.dfg.iconst(4);
+
+    let e0 = func.layout.make_block();
+    let e1 = func.layout.make_block();
+    let e2 = func.layout.make_block();
+
+    let mut cursor = FuncCursor::new(&mut func);
+
+    cursor.insert_block(e0);
+    let v6 = cursor.ins().iadd(v4, v5);
+    cursor.ins().jump(e1);
+
+    cursor.insert_block(e1);
+    let v7 = cursor.ins().isub(v6, v5);
+
+    func.layout.merge_blocks(e0, e1);
+
+    expect![[r#"
+        function %() {
+            v13 = iconst 3
+            v14 = iconst 4
+        block0:
+            v15 = iadd v13, v14
+            v16 = isub v15, v14
+        }
+    "#]]
+    .assert_eq(&func.to_debug_string());
+
+    assert_eq!(func.layout.prev_block(e0), None);
+    assert_eq!(func.layout.next_block(e0), None);
+    let i1 = func.layout.last_inst(e0).unwrap();
+    assert_eq!(func.layout.next_inst(i1), None);
+    assert_eq!(func.layout.inst_block(i1), Some(e0));
+    assert!(!func.layout.is_block_inserted(e1));
+
+    let mut cursor = FuncCursor::new(&mut func).after_inst(i1);
+    cursor.ins().jump(e1);
+    cursor.insert_block(e1);
+    let v8 = cursor.ins().imul(v7, v4);
+    cursor.ins().jump(e2);
+    cursor.insert_block(e2);
+    cursor.ins().imul(v8, v8);
+
+    func.layout.merge_blocks(e0, e1);
+
+    expect![[r#"
+        function %() {
+            v13 = iconst 3
+            v14 = iconst 4
+        block0:
+            v15 = iadd v13, v14
+            v16 = isub v15, v14
+            v17 = imul v16, v13
+            jmp block2
+
+        block2:
+            v18 = imul v17, v17
+        }
+    "#]]
+    .assert_eq(&func.to_debug_string());
 }

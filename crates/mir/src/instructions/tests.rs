@@ -57,18 +57,6 @@ macro_rules! opcodes {
 }
 
 opcodes! {
-    UnaryIeee64(0) -> 1{
-        Fconst
-    }
-    UnaryInt(0) -> 1{
-        Iconst
-    }
-    UnaryStr(0) -> 1{
-        Sconst
-    }
-    UnaryBool(0) -> 1{
-        Bconst
-    }
     Unary(1) -> 1 {
         Inot
         Bnot
@@ -83,6 +71,27 @@ opcodes! {
 
         FBcast
         BFcast
+        OptBarrier
+
+        Sqrt
+        Exp
+        Ln
+        Log
+        Clog2
+        Floor
+        Ceil
+        Sin
+        Cos
+        Tan
+        Asin
+        Acos
+        Atan
+        Sinh
+        Cosh
+        Tanh
+        Asinh
+        Acosh
+        Atanh
     }
 
     Binary(2) -> 1{
@@ -95,7 +104,6 @@ opcodes! {
         Ishl
         Ishr
         Ixor
-        Inxor
         Iand
         Ior
 
@@ -125,41 +133,25 @@ opcodes! {
         Sne
         Bne
 
-        Sqrt
-        Exp
-        Ln
-        Log
-        Clog2
-        Floor
-        Ceil
-        Sin
-        Cos
-        Tan
         Hypot
-        Asin
-        Acos
-        Atan
         Atan2
-        Sinh
-        Cosh
-        Tanh
-        Asinh
-        Acosh
-        Atanh
         Pow
     }
 
-    @varargs Jump {
-        Jmp(0) -> 0
+    Branch(1) -> 0 {
+        Br
+    }
+
+    Jump(0) -> 0 {
+        Jmp
     }
 
     @varargs Call {
         Call(0) -> 0
     }
 
-    @varargs Branch{
-        Brz(1) -> 0
-        Brnz(1) -> 0
+    @varargs PhiNode {
+        Phi(0) -> 1
     }
 }
 
@@ -181,6 +173,8 @@ fn gen_opcodes() {
 
     let opcode_cnt = opcodes.count();
     let opcode_idencies = 1u8..=(opcode_cnt as u8);
+    let opcode_print2 = opcode_print.clone();
+    let opcode_idents2 = opcode_idents.clone();
 
     let opcodes = quote! {
         #[derive(Clone, PartialEq, Eq, Copy, Hash)]
@@ -214,6 +208,17 @@ fn gen_opcodes() {
                 InstructionFormat::Binary,
                 #(InstructionFormat::#opcode_formats),*
         ];
+
+        impl std::str::FromStr for Opcode{
+            type Err = &'static str;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s{
+                    #(#opcode_print2 => Ok(Opcode::#opcode_idents2),)*
+                    _ => Err("Unkown opcode")
+                }
+            }
+        }
 
 
     };

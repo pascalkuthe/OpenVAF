@@ -25,6 +25,13 @@ extern "C" {
         else_bb: &'a BasicBlock,
     ) -> &'a Value;
 
+    pub fn LLVMBuildExtractValue<'a>(
+        arg1: &Builder<'a>,
+        AggVal: &'a Value,
+        Index: c_uint,
+        Name: *const c_char,
+    ) -> &'a Value;
+
     // Arithmetic
     pub fn LLVMBuildAdd<'a>(
         arg1: &Builder<'a>,

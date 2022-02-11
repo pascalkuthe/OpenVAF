@@ -15,66 +15,63 @@ use super::*;
 #[doc = r" There is also a method per instruction format. These methods all"]
 #[doc = r" return an `Inst`."]
 pub trait InstBuilder<'f>: InstBuilderBase<'f> {
-    fn unary(self, op: Opcode, arg: Value) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::Unary { op, arg };
+    fn unary(self, opcode: Opcode, arg: Value) -> (Inst, &'f mut DataFlowGraph) {
+        let data = InstructionData::Unary { opcode, arg };
         self.build(data)
     }
-    fn binary(self, op: Opcode, arg1: Value, arg2: Value) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::Binary { op, args: [arg1, arg2] };
+    fn binary(self, opcode: Opcode, arg1: Value, arg2: Value) -> (Inst, &'f mut DataFlowGraph) {
+        let data = InstructionData::Binary { opcode, args: [arg1, arg2] };
         self.build(data)
+    }
+    fn binary1(self, opcode: Opcode, arg1: Value, arg2: Value) -> Value {
+        let (inst, dfg) = self.binary(opcode, arg1, arg2);
+        dfg.first_result(inst)
     }
     fn branch(
         self,
-        op: Opcode,
-        args: ValueList,
-        destination: Block,
-        loop_tag: LoopTag,
+        cond: Value,
+        then_dst: Block,
+        else_dst: Block,
+        loop_entry: bool,
     ) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::Branch { op, args, destination, loop_tag };
+        let data = InstructionData::Branch { cond, then_dst, else_dst, loop_entry };
         self.build(data)
     }
-    fn jump(self, args: ValueList, destination: Block) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::Jump { args, destination };
-        self.build(data)
+    fn br(self, cond: Value, then_dst: Block, else_dst: Block) -> Inst {
+        self.branch(cond, then_dst, else_dst, false).0
     }
-    fn build_call(self, args: ValueList, func_ref: FuncRef) -> (Inst, &'f mut DataFlowGraph) {
+    fn br_loop(self, cond: Value, then_dst: Block, else_dst: Block) -> Inst {
+        self.branch(cond, then_dst, else_dst, true).0
+    }
+    fn jump(self, destination: Block) -> Inst {
+        let data = InstructionData::Jump { destination };
+        self.build(data).0
+    }
+    fn build_call(self, func_ref: FuncRef, args: ValueList) -> (Inst, &'f mut DataFlowGraph) {
         let data = InstructionData::Call { args, func_ref };
         self.build(data)
     }
-    fn call1(self, args: ValueList, func_ref: FuncRef) -> Value {
-        let (inst, dfg) = self.build_call(args, func_ref);
+    fn call(mut self, func_ref: FuncRef, args: &[Value]) -> Inst {
+        let pool = &mut self.data_flow_graph_mut().insts.value_lists;
+        let args = ValueList::from_slice(args, pool);
+        self.build_call(func_ref, args).0
+    }
+    fn call1(mut self, func_ref: FuncRef, args: &[Value]) -> Value {
+        let pool = &mut self.data_flow_graph_mut().insts.value_lists;
+        let args = ValueList::from_slice(args, pool);
+        let (inst, dfg) = self.build_call(func_ref, args);
         dfg.first_result(inst)
     }
-    fn build_fconst(self, imm: Ieee64) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::UnaryIeee64 { imm };
-        self.build(data)
-    }
-    fn build_iconst(self, imm: i32) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::UnaryInt { imm };
-        self.build(data)
-    }
-    fn build_bconst(self, imm: bool) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::UnaryBool { imm };
-        self.build(data)
-    }
-    fn build_sconst(self, imm: Spur) -> (Inst, &'f mut DataFlowGraph) {
-        let data = InstructionData::UnaryStr { imm };
-        self.build(data)
-    }
-    fn fconst(self, imm: Ieee64) -> Value {
-        let (inst, dfg) = self.build_fconst(imm);
-        dfg.first_result(inst)
-    }
-    fn iconst(self, imm: i32) -> Value {
-        let (inst, dfg) = self.build_iconst(imm);
-        dfg.first_result(inst)
-    }
-    fn bconst(self, imm: bool) -> Value {
-        let (inst, dfg) = self.build_bconst(imm);
-        dfg.first_result(inst)
-    }
-    fn sconst(self, imm: Spur) -> Value {
-        let (inst, dfg) = self.build_sconst(imm);
+    #[inline]
+    fn phi(mut self, edges: &[(Block, Value)]) -> Value {
+        let mut args = ValueList::new();
+        let mut blocks = PhiMap::new();
+        let dfg = self.data_flow_graph_mut();
+        for (i, (block, val)) in edges.iter().enumerate() {
+            args.push(*val, &mut dfg.insts.value_lists);
+            blocks.insert(*block, i as u32, &mut dfg.phi_forest, &());
+        }
+        let (inst, dfg) = self.build(PhiNode { args, blocks }.into());
         dfg.first_result(inst)
     }
     fn inot(self, arg0: Value) -> Value {
@@ -117,6 +114,86 @@ pub trait InstBuilder<'f>: InstBuilderBase<'f> {
         let (inst, dfg) = self.unary(Opcode::BFcast, arg0);
         dfg.first_result(inst)
     }
+    fn optbarrier(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::OptBarrier, arg0);
+        dfg.first_result(inst)
+    }
+    fn sqrt(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Sqrt, arg0);
+        dfg.first_result(inst)
+    }
+    fn exp(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Exp, arg0);
+        dfg.first_result(inst)
+    }
+    fn ln(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Ln, arg0);
+        dfg.first_result(inst)
+    }
+    fn log(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Log, arg0);
+        dfg.first_result(inst)
+    }
+    fn clog2(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Clog2, arg0);
+        dfg.first_result(inst)
+    }
+    fn floor(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Floor, arg0);
+        dfg.first_result(inst)
+    }
+    fn ceil(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Ceil, arg0);
+        dfg.first_result(inst)
+    }
+    fn sin(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Sin, arg0);
+        dfg.first_result(inst)
+    }
+    fn cos(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Cos, arg0);
+        dfg.first_result(inst)
+    }
+    fn tan(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Tan, arg0);
+        dfg.first_result(inst)
+    }
+    fn asin(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Asin, arg0);
+        dfg.first_result(inst)
+    }
+    fn acos(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Acos, arg0);
+        dfg.first_result(inst)
+    }
+    fn atan(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Atan, arg0);
+        dfg.first_result(inst)
+    }
+    fn sinh(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Sinh, arg0);
+        dfg.first_result(inst)
+    }
+    fn cosh(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Cosh, arg0);
+        dfg.first_result(inst)
+    }
+    fn tanh(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Tanh, arg0);
+        dfg.first_result(inst)
+    }
+    fn asinh(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Asinh, arg0);
+        dfg.first_result(inst)
+    }
+    fn acosh(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Acosh, arg0);
+        dfg.first_result(inst)
+    }
+    fn atanh(self, arg0: Value) -> Value {
+        let (inst, dfg) = self.unary(Opcode::Atanh, arg0);
+        dfg.first_result(inst)
+    }
     fn iadd(self, arg0: Value, arg1: Value) -> Value {
         let (inst, dfg) = self.binary(Opcode::Iadd, arg0, arg1);
         dfg.first_result(inst)
@@ -147,10 +224,6 @@ pub trait InstBuilder<'f>: InstBuilderBase<'f> {
     }
     fn ixor(self, arg0: Value, arg1: Value) -> Value {
         let (inst, dfg) = self.binary(Opcode::Ixor, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn inxor(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Inxor, arg0, arg1);
         dfg.first_result(inst)
     }
     fn iand(self, arg0: Value, arg1: Value) -> Value {
@@ -245,88 +318,12 @@ pub trait InstBuilder<'f>: InstBuilderBase<'f> {
         let (inst, dfg) = self.binary(Opcode::Bne, arg0, arg1);
         dfg.first_result(inst)
     }
-    fn sqrt(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Sqrt, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn exp(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Exp, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn ln(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Ln, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn log(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Log, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn clog2(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Clog2, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn floor(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Floor, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn ceil(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Ceil, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn sin(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Sin, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn cos(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Cos, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn tan(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Tan, arg0, arg1);
-        dfg.first_result(inst)
-    }
     fn hypot(self, arg0: Value, arg1: Value) -> Value {
         let (inst, dfg) = self.binary(Opcode::Hypot, arg0, arg1);
         dfg.first_result(inst)
     }
-    fn asin(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Asin, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn acos(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Acos, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn atan(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Atan, arg0, arg1);
-        dfg.first_result(inst)
-    }
     fn atan2(self, arg0: Value, arg1: Value) -> Value {
         let (inst, dfg) = self.binary(Opcode::Atan2, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn sinh(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Sinh, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn cosh(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Cosh, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn tanh(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Tanh, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn asinh(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Asinh, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn acosh(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Acosh, arg0, arg1);
-        dfg.first_result(inst)
-    }
-    fn atanh(self, arg0: Value, arg1: Value) -> Value {
-        let (inst, dfg) = self.binary(Opcode::Atanh, arg0, arg1);
         dfg.first_result(inst)
     }
     fn pow(self, arg0: Value, arg1: Value) -> Value {

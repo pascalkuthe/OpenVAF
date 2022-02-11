@@ -20,8 +20,10 @@
 //! format.
 
 use core::u32;
-use cranelift_entity::entity_impl;
 use std::fmt;
+use stdx::{impl_debug_display, impl_idx_from};
+
+// impl From<usize> for Block {}
 
 /// An opaque reference to a [basic block](https://en.wikipedia.org/wiki/Basic_block) in a
 /// [`Function`](super::function::Function).
@@ -32,7 +34,10 @@ use std::fmt;
 /// While the order is stable, it is arbitrary and does not necessarily resemble the layout order.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Block(u32);
-entity_impl!(Block, "block");
+impl_idx_from!(Block(u32));
+impl_debug_display! {
+    match Block {Block(i) => "block{}", i;}
+}
 
 impl Block {
     /// Create a new block reference from its number. This corresponds to the `blockNN` representation.
@@ -64,20 +69,54 @@ impl Block {
 /// While the order is stable, it is arbitrary.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Value(u32);
-entity_impl!(Value, "v");
+impl_idx_from!(Value(u32));
+impl_debug_display! {
+    match Value {Value(i) => "v{}", i;}
+}
 
 impl Value {
     /// Create a value from its number representation.
     /// This is the number in the `vNN` notation.
     ///
     /// This method is for use by the parser.
-    pub fn with_number(n: u32) -> Option<Self> {
+    pub const fn with_number(n: u32) -> Option<Self> {
         if n < u32::MAX / 2 {
             Some(Self(n))
         } else {
             None
         }
     }
+
+    /// Create a value from its number representation.
+    /// This is the number in the `vNN` notation.
+    pub const fn with_number_(n: u32) -> Self {
+        assert!(n < u32::MAX / 2);
+        Self(n)
+    }
+}
+
+/// An opaque reference to an SSA Use.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Use(u32);
+impl_idx_from!(Use(u32));
+impl_debug_display! {
+    match Use {Use(i) => "use{}", i;}
+}
+
+/// An opaque reference to an SSA Use.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Param(u32);
+impl_idx_from!(Param(u32));
+impl_debug_display! {
+    match Param {Param(i) => "param{}", i;}
+}
+
+/// An opaque reference to an SSA Use.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Tag(u32);
+impl_idx_from!(Tag(u32));
+impl_debug_display! {
+    match Tag {Tag(i) => "tag{}", i;}
 }
 
 /// An opaque reference to an instruction in a [`Function`](super::Function).
@@ -96,7 +135,10 @@ impl Value {
 /// While the order is stable, it is arbitrary and does not necessarily resemble the layout order.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Inst(u32);
-entity_impl!(Inst, "inst");
+impl_idx_from!(Inst(u32));
+impl_debug_display! {
+    match Inst {Inst(i) => "inst{}", i;}
+}
 
 /// An opaque reference to another [`Function`](super::Function).
 ///
@@ -107,7 +149,11 @@ entity_impl!(Inst, "inst");
 /// While the order is stable, it is arbitrary.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FuncRef(u32);
-entity_impl!(FuncRef, "fn");
+impl_idx_from!(FuncRef(u32));
+
+impl_debug_display! {
+    match FuncRef {FuncRef(i) => "inst{}", i;}
+}
 
 impl FuncRef {
     /// Create a new external function reference from its number.

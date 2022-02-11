@@ -1,0 +1,12 @@
+[package]
+name = "bforest"
+authors = ["DSPOM", "The Cranelift Project Developers"]
+version = "0.0.0"
+readme = "README.md"
+edition = "2021"
+
+[lib]
+doctest = false
+
+[dependencies]
+stdx = {version ="0.0.0", path = "../stdx"}

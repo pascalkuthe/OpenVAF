@@ -1,49 +1,137 @@
-use cfg::ControlFlowGraph;
-use cfg_opt::{remove_dead_data, simplify_branches, simplify_cfg};
-use hir_lower::{HirInterner, PlaceKind};
-use program_dependence::{use_def, ProgramDependenGraph};
+use std::iter;
 
-use crate::compiler_db::Function;
+use ahash::AHashSet;
+use bitset::BitSet;
+use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
+use lasso::Rodeo;
+use mir::{ControlFlowGraph, Function, ValueDef};
+use mir_autodiff::auto_diff;
+use mir_opt::{
+    agressive_dead_code_elimination, dead_code_elimination, inst_combine, simplify_cfg,
+    sparse_conditional_constant_propagation,
+};
 
-pub(crate) fn create_slice(
-    cfg: &ControlFlowGraph,
-    pdg: &ProgramDependenGraph,
-    intern: &HirInterner,
-    fun: &Function,
-    verify: bool,
-) -> (ControlFlowGraph, HirInterner) {
-    let place = intern.places.index(&PlaceKind::Var(fun.var)).unwrap();
+use crate::compiler_db::{CompilationDB, FuncSpec, ModelInfo};
 
-    let mut cfg = cfg.clone();
-    let mut intern = intern.clone();
+impl FuncSpec {
+    pub fn slice_mir(
+        &self,
+        func: &Function,
+        cfg: &ControlFlowGraph,
+        intern: &HirInterner,
+    ) -> (Function, ControlFlowGraph) {
+        let ret_val = intern.outputs[&PlaceKind::Var(self.var)];
+        let mut func = func.clone();
+        let mut cfg = cfg.clone();
 
-    // eliminate dead code
-    let mut live_code = use_def::DepthFirstSearch::new(pdg);
-    for var in &*fun.dependency_breaking {
-        if let Some(place) = intern.places.index(&PlaceKind::Var(*var)) {
-            if let Some(assigments) = pdg.interner().place_assigments.row(place) {
-                live_code.visited_assigments.union(assigments);
+        let depbreak_vars: Vec<_> = self
+            .dependency_breaking
+            .iter()
+            .map(|var| intern.params.raw[&ParamKind::HiddenState(*var)])
+            .collect();
+
+        for (val, var) in &intern.tagged_reads {
+            let new_val = if let Some(i) = self.dependency_breaking.iter().position(|it| it == var)
+            {
+                depbreak_vars[i]
+            } else if let ValueDef::Result(inst, _) = func.dfg.value_def(*val) {
+                func.dfg.instr_args(inst)[0]
+            } else {
+                continue;
+            };
+
+            func.dfg.replace_uses(*val, new_val)
+        }
+
+        simplify_cfg(&mut func, &mut cfg);
+
+        let mut live_vals = BitSet::new_empty(func.dfg.num_values());
+        live_vals.insert(ret_val);
+        agressive_dead_code_elimination(&mut func, &mut cfg, &live_vals);
+        simplify_cfg(&mut func, &mut cfg);
+
+        (func, cfg)
+    }
+}
+
+impl CompilationDB {
+    pub fn build_module_mir(
+        &self,
+        info: &ModelInfo,
+    ) -> (Function, HirInterner, Rodeo, ControlFlowGraph) {
+        let dep_break: AHashSet<_> = info
+            .functions
+            .iter()
+            .flat_map(|func| func.dependency_breaking.iter().copied())
+            .collect();
+
+        let outputs: AHashSet<_> = info.functions.iter().map(|func| func.var).collect();
+        let (mut func, mut intern, mut literals) =
+            MirBuilder::new(self, info.module.into(), &|kind| {
+                matches!(
+                    kind,
+                    PlaceKind::Var(var) if outputs.contains(&var)
+                )
+            })
+            .with_tagged_reads(dep_break)
+            .build();
+
+        // remove unused sideeffects
+        for (id, kind) in intern.callbacks.iter_enumerated() {
+            if let CallBackKind::CollapseHint(_, _) = kind {
+                func.dfg.signatures[id].has_sideeffects = false;
             }
         }
-    }
-    live_code.walk_place::<true>(place, pdg, &cfg);
-    for var in &*fun.dependency_breaking {
-        if let Some(place) = intern.places.index(&PlaceKind::Var(*var)) {
-            if let Some(assigments) = pdg.interner().place_assigments.row(place) {
-                live_code.visited_assigments.subtract(assigments);
+
+        intern.insert_var_init(self, &mut func, &mut literals);
+
+        let mut cfg = ControlFlowGraph::new();
+        cfg.compute(&func);
+
+        simplify_cfg(&mut func, &mut cfg);
+
+        for (param, (kind, _)) in intern.params.iter_enumerated() {
+            if matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
+                let changed = intern.callbacks.ensure(CallBackKind::Derivative(param)).1;
+                if changed {
+                    let signature = CallBackKind::Derivative(param).signature();
+                    func.import_function(signature);
+                }
             }
         }
+
+        let mut output_values = BitSet::new_empty(func.dfg.num_values());
+        output_values.extend(intern.outputs.values().copied());
+
+        dead_code_elimination(&mut func, &output_values);
+
+        auto_diff(&mut func, &cfg, intern.unkowns(), iter::empty());
+
+        sparse_conditional_constant_propagation(&mut func, &cfg);
+        inst_combine(&mut func);
+        simplify_cfg(&mut func, &mut cfg);
+
+        (func, intern, literals, cfg)
+        // (func, intern, literals, Vec::new(), cfg)
     }
-    live_code.remove_unvisited_from_cfg(&mut cfg, pdg.interner(), None);
-    simplify_branches(&mut cfg);
-    simplify_cfg(&mut cfg);
 
-    if verify {
-        cfg.assert_verified();
+    pub fn build_param_init_mir(
+        &self,
+        info: &ModelInfo,
+        literals: &mut Rodeo,
+    ) -> (Function, HirInterner) {
+        let mut func = Function::default();
+        let mut intern = HirInterner::default();
+
+        let params = info
+            .params
+            .keys()
+            .enumerate()
+            .map(|(i, param)| (ParamKind::Param(*param), func.dfg.make_param(i.into())));
+        intern.params.raw.extend(params);
+
+        intern.insert_param_init(self, &mut func, literals, true);
+
+        (func, intern)
     }
-
-    let (_, place_map, param_map, callback_map) = remove_dead_data(&mut cfg);
-    intern.map(&place_map, &param_map, &callback_map);
-
-    (cfg, intern)
 }

@@ -2,7 +2,7 @@
 //!
 //! The OpenVAF MIR represents the bodys of Verilog-A items as [SSA].
 //! This allows very efficent implementations of the various algorithms in the backend.
-//! The implementation in this crate is heavly inspired by the IR in [`cranelift`].
+//! The implementation in this crate is heavly inspired by the IR in [`cranelift`] and [`llvm`].
 //! However the focus of the MIR is on traditional algorithms pefromed at middle instead of the
 //! codegeneration. As a result the implementation is simplified:
 //!
@@ -18,6 +18,7 @@
 //! found in the `hir_lower` crate which is the only bridge between the various MIR crates and the HIR.
 //!
 //! [`cranelift`]: https://github.com/bytecodealliance/wasmtime/tree/main/cranelift
+//! [`llvm`]: https://github.com/llvm/llvm-project
 //! [SSA]: https://en.wikipedia.org/wiki/Static_single_assignment_form
 
 mod dfg;
@@ -28,32 +29,36 @@ mod layout;
 
 pub mod builder;
 pub mod cursor;
-
+pub mod flowgraph;
 pub mod write;
 
 use core::fmt;
-
-use cranelift_entity::SecondaryMap;
-pub use entities::{Block, FuncRef, Inst, Value};
-pub use immediates::Ieee64;
-pub use instructions::{InstructionData, InstructionFormat, Opcode, ValueList, ValueListPool};
 pub use lasso::{Interner, Spur};
 use stdx::impl_display;
+use typed_index_collections::TiVec;
 
-pub use crate::dfg::{DataFlowGraph, ValueDef, Values};
-pub use crate::layout::Layout;
+pub use crate::dfg::consts::*;
+pub use crate::dfg::{Const, DataFlowGraph, InstUseIter, UseCursor, UseIter, ValueDef};
+pub use crate::entities::{AnyEntity, Block, FuncRef, Inst, Param, Use, Value};
+pub use crate::flowgraph::ControlFlowGraph;
+pub use crate::immediates::Ieee64;
+pub use crate::instructions::{
+    InstructionData, InstructionFormat, Opcode, PhiNode, ValueList, ValueListPool,
+};
+pub use crate::layout::{InstCursor, InstIter, Layout};
 use crate::write::DummyResolver;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FunctionSignature {
-    name: String,
-    params: u16,
-    returns: u16,
+    pub name: String,
+    pub params: u16,
+    pub returns: u16,
+    pub has_sideeffects: bool,
 }
 
 impl_display! {
     match FunctionSignature{
-        FunctionSignature{name, params, returns} => "%{}({}) -> {}", name, params, returns;
+        FunctionSignature{name, params, returns, has_sideeffects} => "{}fn %{}({}) -> {}", if *has_sideeffects{""}else{"const "}, name, params, returns;
     }
 }
 
@@ -90,7 +95,7 @@ impl Function {
             name: String::new(),
             dfg: DataFlowGraph::new(),
             layout: Layout::new(),
-            srclocs: SecondaryMap::new(),
+            srclocs: TiVec::new(),
         }
     }
 
@@ -106,6 +111,11 @@ impl Function {
 
     pub fn to_debug_string(&self) -> String {
         format!("{:?}", self)
+    }
+
+    /// Adds a signature which can later be used to declare an external function import.
+    pub fn import_function(&mut self, signature: FunctionSignature) -> FuncRef {
+        self.dfg.signatures.push_and_get_key(signature)
     }
 }
 
@@ -128,7 +138,7 @@ impl fmt::Debug for Function {
 }
 
 /// Source locations for instructions.
-pub type SourceLocs = SecondaryMap<Inst, SourceLoc>;
+pub type SourceLocs = TiVec<Inst, SourceLoc>;
 
 /// A source location.
 ///
@@ -136,8 +146,8 @@ pub type SourceLocs = SecondaryMap<Inst, SourceLoc>;
 ///
 /// The default source location uses the all-ones bit pattern `!0`. It is used for instructions
 /// that can't be given a real source location.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SourceLoc(i32);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct SourceLoc(pub i32);
 
 impl SourceLoc {
     /// Create a new source location with the given bits.
@@ -156,18 +166,27 @@ impl SourceLoc {
     }
 }
 
-impl Default for SourceLoc {
-    fn default() -> Self {
-        Self(!0)
-    }
-}
-
 impl fmt::Display for SourceLoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_default() {
             write!(f, "@-")
         } else {
             write!(f, "@{:04x}", self.0)
+        }
+    }
+}
+
+impl Function {
+    pub fn remove_opt_barriers(&mut self) {
+        for inst in self.dfg.insts.iter() {
+            if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } = self.dfg.insts[inst]
+            {
+                if self.layout.inst_block(inst).is_some() {
+                    let res = self.dfg.first_result(inst);
+                    self.dfg.replace_uses(res, arg);
+                    self.layout.remove_inst(inst)
+                }
+            }
         }
     }
 }

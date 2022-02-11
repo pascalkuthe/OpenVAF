@@ -25,5 +25,7 @@ data = np.load('test_data.npz', allow_pickle=False)
 
 for fun in hl2.functions.values():
     res = fun.eval(**args)
-    assert np.allclose(res,data[fun.name], atol=1e-16)
+    delta = (res - data[fun.name]) != 0.0
+    if not np.allclose(res,data[fun.name], atol=1e-16):
+        print(f"assert failed for {fun.name}")
 

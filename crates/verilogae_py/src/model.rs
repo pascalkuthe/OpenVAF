@@ -1,5 +1,5 @@
 use std::ffi::CStr;
-use std::mem::{take, transmute};
+use std::mem::take;
 use std::os::raw::c_long;
 use std::ptr;
 use std::slice;
@@ -313,7 +313,7 @@ impl VaeParam {
             .iter()
             .zip(&int_data[int_param_cnt..])
             .zip(&int_data[2 * int_param_cnt..])
-            .zip(&flags)
+            .zip(&flags[real_param_cnt..])
             .enumerate()
         {
             let name = *param_names.add(i);
@@ -336,7 +336,9 @@ impl VaeParam {
         let param_descr = verilogae_str_param_descriptions(handle);
         let param_groups = verilogae_str_param_groups(handle);
 
-        for (i, (val, flags)) in str_data.iter().zip(&flags).enumerate() {
+        for (i, (val, flags)) in
+            str_data.iter().zip(&flags[(real_param_cnt + int_param_cnt)..]).enumerate()
+        {
             let name = *param_names.add(i);
             let unit = *param_units.add(i);
             let description = *param_descr.add(i);
@@ -430,7 +432,7 @@ impl VaeParam {
 
         if unlikely((flags & PARAM_FLAGS_INVALID) != 0) {
             let name = CStr::from_ptr(name).to_str().unwrap();
-            eprintln!("warning: default value for {}", name);
+            eprintln!("warning: default value for {} is out of bounds!", name);
         }
 
         let min_inclusive = PyBool_FromLong((flags & PARAM_FLAGS_MIN_INCLUSIVE) as c_long);
@@ -534,7 +536,7 @@ static mut VAE_FUNCTION_METHODS: [PyMethodDef; 2] = [
     // #[cfg(not(Py_3_8))]
     PyMethodDef {
         ml_name: "eval\0".as_ptr() as *const c_char,
-        ml_meth: unsafe { transmute::<PyCFunctionWithKeywords, Option<PyCFunction>>(VaeFun::eval) },
+        ml_meth: PyMethodDefPointer { PyCFunctionWithKeywords: VaeFun::eval },
         ml_flags: METH_VARARGS | METH_KEYWORDS,
         ml_doc: EVAL_DOC.as_ptr() as *const c_char,
     },

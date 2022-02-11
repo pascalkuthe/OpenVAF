@@ -1,14 +1,16 @@
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsStorage};
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
-use hir_def::nameres::{DefMap, LocalScopeId, ScopeDefItem};
+use hir_def::nameres::ScopeDefItem;
 use hir_ty::db::HirTyDatabase;
+use mir_build::FunctionBuilderContext;
 use parking_lot::RwLock;
 use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
 
-use crate::HirInterner;
+use crate::body::MirBuilder;
+use crate::PlaceKind;
 
 mod integration;
 mod units;
@@ -44,22 +46,28 @@ impl TestDataBase {
     pub fn vfs(&self) -> &RwLock<Vfs> {
         self.vfs.as_ref().unwrap()
     }
-    pub fn lower_and_check(&self) {
+
+    fn lower_and_check(&self) {
         let root_file = self.root_file();
         let def_map = self.def_map(root_file);
         let root_scope = def_map.root();
-        self.lower_and_check_rec(root_scope, &def_map);
-    }
-
-    fn lower_and_check_rec(&self, scope: LocalScopeId, def_map: &DefMap) {
-        for (_, declaration) in &def_map[scope].declarations {
+        let mut ctx = FunctionBuilderContext::default();
+        for (_, declaration) in &def_map[root_scope].declarations {
             if let ScopeDefItem::ModuleId(id) = *declaration {
-                HirInterner::lower_body(self, id.into());
-            }
-        }
+                let builder = MirBuilder::new(self, id.into(), &|kind| {
+                    matches!(
+                        kind,
+                        PlaceKind::Var(_)
+                            | PlaceKind::BranchVoltage(_)
+                            | PlaceKind::ImplicitBranchVoltage { .. }
+                            | PlaceKind::BranchCurrent(_)
+                            | PlaceKind::ImplicitBranchCurrent { .. }
+                    )
+                })
+                .with_ctx(&mut ctx);
 
-        for (_, child) in &def_map[scope].children {
-            self.lower_and_check_rec(*child, def_map)
+                builder.build();
+            }
         }
     }
 }

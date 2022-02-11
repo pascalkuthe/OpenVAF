@@ -3,10 +3,7 @@
 //! A `Builder` provides a convenient interface for inserting instructions into a Cranelift
 //! function. Many of its methods are generated from the meta language instruction definitions.
 
-use lasso::Spur;
-
-use crate::immediates::Ieee64;
-use crate::instructions::{LoopTag, ValueList};
+use crate::instructions::{PhiMap, PhiNode, ValueList};
 use crate::{Block, DataFlowGraph, FuncRef, Inst, InstructionData, Opcode, Value};
 
 #[cfg(test)]
@@ -191,7 +188,7 @@ impl<'f> InstBuilderBase<'f> for ReplaceBuilder<'f> {
 
     fn build(self, data: InstructionData) -> (Inst, &'f mut DataFlowGraph) {
         // Splat the new instruction on top of the old one.
-        self.dfg[self.inst] = data;
+        self.dfg.update_inst(self.inst, data);
 
         if !self.dfg.has_results(self.inst) {
             // The old result values were either detached or non-existent.

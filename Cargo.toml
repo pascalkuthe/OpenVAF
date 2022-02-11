@@ -8,6 +8,7 @@ exclude = ["exclude/*"]
 lto = "thin"
 incremental = true
 panic = "abort"
+debug = true
 
 
 [profile.dev]
@@ -23,9 +24,15 @@ rustc-hash.opt-level = 3
 ahash.opt-level = 3
 smol_str.opt-level = 3
 text-size.opt-level = 3
+indexmap.opt-level = 3
+hashbrown.opt-level = 3
+stdx.opt-level = 3
+bforest.opt-level = 3
+list_pool.opt-level = 3
+mir.opt-level = 2
+mir_build.opt-level = 2
+mir_opt.opt-level = 2
 
 
 [patch.crates-io]
 salsa = { git = 'https://github.com/DSPOM2/salsa'}
-pyo3-ffi = { git = 'https://github.com/DSPOM2/pyo3'}
-pyo3-build-config = { git = 'https://github.com/DSPOM2/pyo3'}

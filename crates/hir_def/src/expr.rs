@@ -43,6 +43,10 @@ impl_debug! {
 #[derive(Clone, Eq, PartialEq, Hash, Copy)]
 #[repr(transparent)]
 pub struct BitewiseF64(u64);
+
+pub const PZERO: BitewiseF64 = BitewiseF64(unsafe { transmute(0f64) });
+pub const NZERO: BitewiseF64 = BitewiseF64(unsafe { transmute(-0f64) });
+
 impl From<f64> for BitewiseF64 {
     #[inline(always)] // compiles to no op
     fn from(val: f64) -> Self {

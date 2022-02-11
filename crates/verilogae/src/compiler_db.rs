@@ -15,10 +15,12 @@ use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsPath, VfsStorage, STA
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::ScopeDefItem;
 use hir_def::{BranchId, Lookup, ModuleId, NodeId, ParamId, Path, ScopeId, Type, VarId};
+use hir_lower::CurrentKind;
 use hir_ty::db::{HirTyDB, HirTyDatabase};
 use hir_ty::lower::BranchKind;
 use hir_ty::{collect_diagnostics, collect_path, visit_relative_defs};
 use indexmap::IndexMap;
+use lasso::{Rodeo, Spur};
 use parking_lot::RwLock;
 use salsa::ParallelDatabase;
 use smol_str::SmolStr;
@@ -123,6 +125,29 @@ impl CompilationDB {
         res.set_global_lint_overwrites(root_file, overwrites);
         Ok(res)
     }
+
+    pub fn voltage_name(&self, hi: NodeId, lo: Option<NodeId>) -> String {
+        let mut name = format!("br_{}", &self.node_data(hi).name);
+        if let Some(lo) = lo {
+            name.push_str(&*self.node_data(lo).name)
+        }
+        name
+    }
+
+    pub fn current_name(&self, kind: CurrentKind) -> String {
+        match kind {
+            CurrentKind::ExplicitBranch(branch) => self.branch_data(branch).name.deref().to_owned(),
+            CurrentKind::ImplictBranch { hi, lo } => {
+                let mut name = format!(" {} ", &self.node_data(hi).name);
+                if let Some(lo) = lo {
+                    name.push_str(&*self.node_data(lo).name);
+                    name.push(' ');
+                }
+                name
+            }
+            CurrentKind::Port(port) => format!("< {} >", &self.node_data(port).name),
+        }
+    }
 }
 
 impl ParallelDatabase for CompilationDB {
@@ -191,7 +216,7 @@ impl Diagnostic for IllegalType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Function {
+pub struct FuncSpec {
     pub var: VarId,
     pub dependency_breaking: Box<[VarId]>,
     pub prefix: String,
@@ -207,8 +232,8 @@ pub struct ParamInfo {
 }
 
 pub struct ModelInfo {
-    pub params: IndexMap<ParamId, ParamInfo>,
-    pub functions: Vec<Function>,
+    pub params: IndexMap<ParamId, ParamInfo, ahash::RandomState>,
+    pub functions: Vec<FuncSpec>,
     pub var_names: AHashMap<VarId, SmolStr>,
     pub op_vars: Vec<SmolStr>,
     pub module: ModuleId,
@@ -392,12 +417,19 @@ impl ModelInfo {
                     Some(res.into_boxed_slice())
                 };
 
-                let resolved = resolved_retrieve_attr
-                    .entry(ast.syntax().text_range())
-                    .or_insert_with(|| (resolve_retrieve(), ast.has_attr("op_var")));
+                // TODO actually save description/units?
+
+                let resolved =
+                    resolved_retrieve_attr.entry(ast.syntax().text_range()).or_insert_with(|| {
+                        (
+                            resolve_retrieve(),
+                            // 3.2.1 Output variables
+                            path.len() == 1 && ast.has_attr("description") || ast.has_attr("units"),
+                        )
+                    });
 
                 if let Some(resolved) = &resolved.0 {
-                    functions.push(Function {
+                    functions.push(FuncSpec {
                         var,
                         dependency_breaking: resolved.clone(),
                         prefix: format!(
@@ -544,4 +576,58 @@ impl ModelInfo {
             optional_voltages,
         })
     }
+
+    pub(crate) fn intern_model(&self, db: &CompilationDB, literals: &mut Rodeo) -> InternedModel {
+        let params = self
+            .params
+            .values()
+            .map(|param| {
+                let name = literals.get_or_intern(&*param.name);
+                let unit = literals.get_or_intern(&param.unit);
+                let description = literals.get_or_intern(&param.description);
+                let group = literals.get_or_intern(&param.group);
+                InternedParam { name, unit, description, group, ty: &param.ty }
+            })
+            .collect();
+
+        let functions = self
+            .functions
+            .iter()
+            .map(|fun| {
+                let name = literals.get_or_intern(&*self.var_names[&fun.var]);
+                let prefix = literals.get_or_intern(&fun.prefix);
+                InternedFunction { name, prefix }
+            })
+            .collect();
+
+        let opvars = self.op_vars.iter().map(|name| literals.get_or_intern(&**name)).collect();
+
+        let nodes = self.ports.iter().map(|name| literals.get_or_intern(&**name)).collect();
+
+        let module_name = &*self.module.lookup(db).name(db);
+        let module_name = literals.get_or_intern(module_name);
+
+        InternedModel { params, opvars, nodes, functions, module_name }
+    }
+}
+
+pub struct InternedModel<'a> {
+    pub params: Vec<InternedParam<'a>>,
+    pub opvars: Vec<Spur>,
+    pub nodes: Vec<Spur>,
+    pub functions: Vec<InternedFunction>,
+    pub module_name: Spur,
+}
+
+pub struct InternedFunction {
+    pub name: Spur,
+    pub prefix: Spur,
+}
+
+pub struct InternedParam<'a> {
+    pub name: Spur,
+    pub unit: Spur,
+    pub description: Spur,
+    pub group: Spur,
+    pub ty: &'a Type,
 }

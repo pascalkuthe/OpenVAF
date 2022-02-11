@@ -8,13 +8,13 @@ use target::spec::Target;
 
 use crate::api::{NativePath, OptLevel, Opts, Slice};
 
-impl From<OptLevel> for codegen_llvm::OptLevel {
+impl From<OptLevel> for llvm::OptLevel {
     fn from(lvl: OptLevel) -> Self {
         match lvl {
-            OptLevel::None => codegen_llvm::OptLevel::None,
-            OptLevel::Less => codegen_llvm::OptLevel::Less,
-            OptLevel::Default => codegen_llvm::OptLevel::Default,
-            OptLevel::Aggressive => codegen_llvm::OptLevel::Aggressive,
+            OptLevel::None => llvm::OptLevel::None,
+            OptLevel::Less => llvm::OptLevel::Less,
+            OptLevel::Default => llvm::OptLevel::Default,
+            OptLevel::Aggressive => llvm::OptLevel::Aggressive,
         }
     }
 }

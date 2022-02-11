@@ -3,14 +3,14 @@
 //! The `write` module provides the `write_function` function which converts an IR `Function` to an
 //! equivalent textual form. This textual form can be read back by the `mir-reader` crate.
 
-#[cfg(test)]
-mod tests;
-
 use core::fmt::{self, Write};
-use cranelift_entity::SecondaryMap;
 
 use crate::entities::AnyEntity;
-use crate::{Block, DataFlowGraph, Function, Inst, Value};
+use crate::instructions::PhiNode;
+use crate::{Block, Const, DataFlowGraph, Function, Inst, InstructionData, Value, ValueDef};
+
+#[cfg(test)]
+mod tests;
 
 /// A `FuncWriter` used to decorate functions during printing.
 pub trait FuncWriter {
@@ -28,26 +28,52 @@ pub trait FuncWriter {
         &mut self,
         w: &mut dyn Write,
         func: &Function,
-        aliases: &SecondaryMap<Value, Vec<Value>>,
         inst: Inst,
         indent: usize,
-        interner: &dyn lasso::Resolver,
     ) -> fmt::Result;
 
     /// Write the preamble to `w`. By default, this uses `write_entity_definition`.
-    fn write_preamble(&mut self, w: &mut dyn Write, func: &Function) -> Result<bool, fmt::Error> {
-        self.super_preamble(w, func)
+    fn write_preamble(
+        &mut self,
+        w: &mut dyn Write,
+        func: &Function,
+        interner: &dyn lasso::Resolver,
+    ) -> Result<bool, fmt::Error> {
+        self.super_preamble(w, func, interner)
     }
 
     /// Default impl of `write_preamble`
-    fn super_preamble(&mut self, w: &mut dyn Write, func: &Function) -> Result<bool, fmt::Error> {
+    fn super_preamble(
+        &mut self,
+        w: &mut dyn Write,
+        func: &Function,
+        interner: &dyn lasso::Resolver,
+    ) -> Result<bool, fmt::Error> {
         let mut any = false;
 
         // Write out all signatures before functions since function declarations can refer to
         // signatures.
-        for (sig, sig_data) in &func.dfg.signatures {
+        for (sig, sig_data) in func.dfg.signatures.iter_enumerated() {
             any = true;
             self.write_entity_definition(w, func, sig.into(), &sig_data)?;
+        }
+
+        for val in func.dfg.values() {
+            match func.dfg.value_def(val) {
+                ValueDef::Const(Const::Float(def)) if func.dfg.uses(val).next().is_some() => {
+                    writeln!(w, "    {} = fconst {}", val, def)?
+                }
+                ValueDef::Const(Const::Int(def)) if func.dfg.uses(val).next().is_some() => {
+                    writeln!(w, "    {} = iconst {}", val, def)?
+                }
+                ValueDef::Const(Const::Str(def)) if func.dfg.uses(val).next().is_some() => {
+                    writeln!(w, "    {} = sconst {:?}", val, interner.resolve(&def))?
+                }
+                ValueDef::Const(Const::Bool(def)) if func.dfg.uses(val).next().is_some() => {
+                    writeln!(w, "    // {} = bconst {}", val, def)?
+                }
+                _ => (),
+            }
         }
 
         Ok(any)
@@ -85,12 +111,10 @@ impl FuncWriter for PlainWriter {
         &mut self,
         w: &mut dyn Write,
         func: &Function,
-        aliases: &SecondaryMap<Value, Vec<Value>>,
         inst: Inst,
         indent: usize,
-        interner: &dyn lasso::Resolver,
     ) -> fmt::Result {
-        write_instruction(w, func, aliases, inst, indent, interner)
+        write_instruction(w, func, inst, indent)
     }
 
     fn write_block_header(
@@ -114,18 +138,6 @@ pub fn write_function(
     decorate_function(&mut PlainWriter, w, func, interner)
 }
 
-/// Create a reverse-alias map from a value to all aliases having that value as a direct target
-fn alias_map(func: &Function) -> SecondaryMap<Value, Vec<Value>> {
-    let mut aliases = SecondaryMap::<_, Vec<_>>::new();
-    for v in func.dfg.values() {
-        // VADFS returns the immediate target of an alias
-        if let Some(k) = func.dfg.value_alias_dest_for_serialization(v) {
-            aliases[k].push(v);
-        }
-    }
-    aliases
-}
-
 /// Writes `func` to `w` as text.
 /// write_function_plain is passed as 'closure' to print instructions as text.
 /// pretty_function_error is passed as 'closure' to add error decoration.
@@ -136,15 +148,37 @@ pub fn decorate_function<FW: FuncWriter>(
     interner: &dyn lasso::Resolver,
 ) -> fmt::Result {
     write!(w, "function ")?;
-    write_spec(w, func)?;
-    writeln!(w, " {{")?;
-    let aliases = alias_map(func);
-    let mut any = func_w.write_preamble(w, func)?;
+    write!(w, "%{}", func.name)?;
+    write!(w, "(")?;
+
+    let mut params: Vec<(usize, Value)> = func
+        .dfg
+        .values()
+        .filter_map(|val| {
+            if let ValueDef::Param(def) = func.dfg.value_def(val) {
+                Some((def.into(), val))
+            } else {
+                None
+            }
+        })
+        .collect();
+    params.sort_by_key(|(pos, _)| *pos);
+    let mut seen = false;
+    for (_, val) in params {
+        if seen {
+            write!(w, ", ")?;
+        } else {
+            seen = true
+        }
+        write!(w, "{}", val)?;
+    }
+    writeln!(w, ") {{")?;
+    let mut any = func_w.write_preamble(w, func, interner)?;
     for block in &func.layout {
         if any {
             writeln!(w)?;
         }
-        decorate_block(func_w, w, func, &aliases, block, interner)?;
+        decorate_block(func_w, w, func, block)?;
         any = true;
     }
     writeln!(w, "}}")
@@ -152,19 +186,11 @@ pub fn decorate_function<FW: FuncWriter>(
 
 //----------------------------------------------------------------------
 //
-// Function spec.
-
-fn write_spec(w: &mut dyn Write, func: &Function) -> fmt::Result {
-    write!(w, "%{}", func.name)
-}
-
-//----------------------------------------------------------------------
-//
 // Basic blocks
 
-fn write_arg(w: &mut dyn Write, arg: Value) -> fmt::Result {
-    write!(w, "{}", arg)
-}
+// fn write_arg(w: &mut dyn Write, arg: Value) -> fmt::Result {
+//     write!(w, "{}", arg)
+// }
 
 /// Write out the basic block header, outdented:
 ///
@@ -174,47 +200,26 @@ fn write_arg(w: &mut dyn Write, arg: Value) -> fmt::Result {
 ///
 pub fn write_block_header(
     w: &mut dyn Write,
-    func: &Function,
+    _func: &Function,
     block: Block,
     indent: usize,
 ) -> fmt::Result {
     // The `indent` is the instruction indentation. block headers are 4 spaces out from that.
-    write!(w, "{1:0$}{2}", indent - 4, "", block)?;
-
-    let mut args = func.dfg.block_params(block).iter().cloned();
-    match args.next() {
-        None => return writeln!(w, ":"),
-        Some(arg) => {
-            write!(w, "(")?;
-            write_arg(w, arg)?;
-        }
-    }
-    // Remaining arguments.
-    for arg in args {
-        write!(w, ", ")?;
-        write_arg(w, arg)?;
-    }
-    writeln!(w, "):")
+    writeln!(w, "{1:0$}{2}:", indent - 4, "", block)
 }
 
 fn decorate_block<FW: FuncWriter>(
     func_w: &mut FW,
     w: &mut dyn Write,
     func: &Function,
-    aliases: &SecondaryMap<Value, Vec<Value>>,
     block: Block,
-    interner: &dyn lasso::Resolver,
 ) -> fmt::Result {
     // Indent all instructions if any srclocs are present.
-    let indent = if func.srclocs.is_empty() { 4 } else { 36 };
+    let indent = if func.srclocs.iter().all(|loc| loc.is_default()) { 4 } else { 36 };
 
     func_w.write_block_header(w, func, block, indent)?;
-    for a in func.dfg.block_params(block).iter().cloned() {
-        write_value_aliases(w, aliases, a, indent)?;
-    }
-
     for inst in func.layout.block_insts(block) {
-        func_w.write_instruction(w, func, aliases, inst, indent, interner)?;
+        func_w.write_instruction(w, func, inst, indent)?;
     }
 
     Ok(())
@@ -224,37 +229,30 @@ fn decorate_block<FW: FuncWriter>(
 //
 // Instructions
 
-/// Write out any aliases to the given target, including indirect aliases
-fn write_value_aliases(
-    w: &mut dyn Write,
-    aliases: &SecondaryMap<Value, Vec<Value>>,
-    target: Value,
-    indent: usize,
-) -> fmt::Result {
-    let mut todo_stack = vec![target];
-    while let Some(target) = todo_stack.pop() {
-        for &a in &aliases[target] {
-            writeln!(w, "{1:0$}{2} -> {3}", indent, "", a, target)?;
-            todo_stack.push(a);
-        }
-    }
+// /// Write out any aliases to the given target, including indirect aliases
+// fn write_value_aliases(
+//     w: &mut dyn Write,
+//     aliases: &SecondaryMap<Value, Vec<Value>>,
+//     target: Value,
+//     indent: usize,
+// ) -> fmt::Result {
+//     let mut todo_stack = vec![target];
+//     while let Some(target) = todo_stack.pop() {
+//         for &a in &aliases[target] {
+//             writeln!(w, "{1:0$}{2} -> {3}", indent, "", a, target)?;
+//             todo_stack.push(a);
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-fn write_instruction(
-    w: &mut dyn Write,
-    func: &Function,
-    aliases: &SecondaryMap<Value, Vec<Value>>,
-    inst: Inst,
-    indent: usize,
-    interner: &dyn lasso::Resolver,
-) -> fmt::Result {
+fn write_instruction(w: &mut dyn Write, func: &Function, inst: Inst, indent: usize) -> fmt::Result {
     // Prefix containing source location, encoding, and value locations.
     let mut s = String::with_capacity(16);
 
     // Source location goes first.
-    let srcloc = func.srclocs[inst];
+    let srcloc = func.srclocs.get(inst).copied().unwrap_or_default();
     if !srcloc.is_default() {
         write!(s, "{} ", srcloc)?;
     }
@@ -276,59 +274,60 @@ fn write_instruction(
         write!(w, " = ")?;
     }
 
-    let opcode = func.dfg[inst].opcode();
+    let opcode = func.dfg.insts[inst].opcode();
 
     write!(w, "{}", opcode)?;
 
-    write_operands(w, &func.dfg, inst, interner)?;
+    write_operands(w, &func.dfg, inst)?;
     writeln!(w)?;
 
-    // Value aliases come out on lines after the instruction defining the referent.
-    for r in func.dfg.inst_results(inst) {
-        write_value_aliases(w, aliases, *r, indent)?;
-    }
     Ok(())
 }
 
 /// Write the operands of `inst` to `w` with a prepended space.
-pub fn write_operands(
-    w: &mut dyn Write,
-    dfg: &DataFlowGraph,
-    inst: Inst,
-    interner: &dyn lasso::Resolver,
-) -> fmt::Result {
-    let pool = &dfg.value_lists;
-    use crate::instructions::InstructionData::*;
-    match dfg[inst] {
-        Unary { arg, .. } => write!(w, " {}", arg),
-        UnaryInt { imm } => write!(w, " {}", imm),
-        UnaryIeee64 { imm } => write!(w, " {}", imm),
-        UnaryBool { imm } => write!(w, " {}", imm),
-        UnaryStr { imm } => write!(w, " {:?}", interner.resolve(&imm)),
-        Binary { args, .. } => write!(w, " {}, {}", args[0], args[1]),
-        Jump { destination, ref args, .. } => {
-            write!(w, " {}", destination)?;
-            write_block_args(w, args.as_slice(pool))
+pub fn write_operands(w: &mut dyn Write, dfg: &DataFlowGraph, inst: Inst) -> fmt::Result {
+    let pool = &dfg.insts.value_lists;
+    match dfg.insts[inst] {
+        InstructionData::Unary { arg, .. } => write!(w, " {}", arg),
+        InstructionData::Binary { args, .. } => write!(w, " {}, {}", args[0], args[1]),
+        InstructionData::Jump { destination, .. } => {
+            write!(w, " {}", destination)
         }
-        Branch { destination, ref args, .. } => {
-            let args = args.as_slice(pool);
-            write!(w, " {}, {}", args[0], destination)?;
-            write_block_args(w, &args[1..])
+        InstructionData::Branch { then_dst, else_dst, cond, loop_entry, .. } => {
+            let tag = if loop_entry { "[loop]" } else { "" };
+            write!(w, " {}, {}{}, {}", cond, then_dst, tag, else_dst)
         }
-        Call { func_ref, ref args, .. } => {
+        InstructionData::Call { func_ref, ref args, .. } => {
             write!(w, " {}({})", func_ref, DisplayValues(args.as_slice(pool)))
+        }
+        InstructionData::PhiNode(PhiNode { args, blocks }) => {
+            let mut first = true;
+            let args = args.as_slice(&dfg.insts.value_lists);
+            for (block, i) in blocks.iter(&dfg.phi_forest) {
+                if first {
+                    first = false;
+                } else {
+                    write!(w, ",")?;
+                }
+
+                write!(w, " ")?;
+                write!(w, "[")?;
+                write!(w, "{}, {}", args[i as usize], block)?;
+                write!(w, "]")?;
+            }
+            Ok(())
         }
     }
 }
 
-/// Write block args using optional parantheses.
-fn write_block_args(w: &mut dyn Write, args: &[Value]) -> fmt::Result {
-    if args.is_empty() {
-        Ok(())
-    } else {
-        write!(w, "({})", DisplayValues(args))
-    }
-}
+// /// Write block args using optional parantheses.
+// fn write_block_args(w: &mut dyn Write, args: &[Value]) -> fmt::Result {
+//     if args.is_empty() {
+//         Ok(())
+//     } else {
+//         write!(w, "({})", DisplayValues(args))
+//     }
+// }
 
 /// Displayable slice of values.
 struct DisplayValues<'a>(&'a [Value]);

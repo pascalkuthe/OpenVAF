@@ -11,11 +11,12 @@ doctest = false
 
 [dependencies]
 stdx = { version = "0.0.0", path = "../stdx" }
-cfg = { version = "0.0.0", path = "../cfg" }
 hir_ty = { version = "0.0.0", path = "../hir_ty" }
 hir_def = { version = "0.0.0", path = "../hir_def" }
 syntax = {version = "0.0.0", path = "../syntax"}
 typed_indexmap = {version = "0.0.0", path = "../typed_indexmap"}
+mir = {version = "0.0.0", path = "../mir" }
+mir_build = {version = "0.0.0", path = "../mir_build" }
 
 ahash = "0.7"
 typed-index-collections = "3.0"

@@ -1,5 +1,6 @@
 pub mod iter;
 mod macros;
+pub mod packed_option;
 pub mod pretty;
 pub mod vec;
 

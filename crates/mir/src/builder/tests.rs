@@ -10,22 +10,23 @@ use crate::{Function, ValueDef};
 #[test]
 fn reuse_results() {
     let mut func = Function::new();
-    let block0 = func.dfg.make_block();
-    let arg0 = func.dfg.append_block_param(block0);
+    let block0 = func.layout.make_block();
+    let arg0 = func.dfg.make_param(0u32.into());
     let mut pos = FuncCursor::new(&mut func);
     pos.insert_block(block0);
 
-    let c0 = pos.ins().iconst(17);
+    let c0 = pos.func.dfg.iconst(17);
     let v0 = pos.ins().iadd(arg0, c0);
-    let iadd = pos.prev_inst().unwrap();
+    let v1 = pos.ins().imul(v0, c0);
+    let imul = pos.prev_inst().unwrap();
 
     // Detach v0 and reuse it for a different instruction.
-    pos.func.dfg.clear_results(iadd);
-    pos.ins().with_result(v0).iconst(3);
-    assert_eq!(pos.current_inst(), Some(iadd));
-    let iconst = pos.prev_inst().unwrap();
-    assert!(iadd != iconst);
-    assert_eq!(pos.func.dfg.value_def(v0), ValueDef::Result(iconst, 0));
+    pos.func.dfg.clear_results(imul);
+    pos.ins().with_result(v1).iadd(arg0, c0);
+    assert_eq!(pos.current_inst(), Some(imul));
+    let iadd = pos.prev_inst().unwrap();
+    assert!(imul != iadd);
+    assert_eq!(pos.func.dfg.value_def(v1), ValueDef::Result(iadd, 0));
 }
 
 #[test]
@@ -95,81 +96,88 @@ fn gen_instr_builder() {
         /// There is also a method per instruction format. These methods all
         /// return an `Inst`.
         pub trait InstBuilder<'f>: InstBuilderBase<'f> {
-            fn unary(self, op: Opcode, arg: Value) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::Unary { op, arg };
+            fn unary(self, opcode: Opcode, arg: Value) -> (Inst, &'f mut DataFlowGraph) {
+                let data = InstructionData::Unary { opcode, arg };
                 self.build(data)
             }
 
-            fn binary(self, op: Opcode, arg1: Value, arg2: Value) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::Binary { op, args: [arg1, arg2] };
+            fn binary(self, opcode: Opcode, arg1: Value, arg2: Value) -> (Inst, &'f mut DataFlowGraph) {
+                let data = InstructionData::Binary { opcode, args: [arg1, arg2] };
                 self.build(data)
+            }
+
+
+            fn binary1(self, opcode: Opcode, arg1: Value, arg2: Value) -> Value {
+                let (inst, dfg) = self.binary(opcode, arg1, arg2);
+                dfg.first_result(inst)
             }
 
             fn branch(
                 self,
-                op: Opcode,
-                args: ValueList,
-                destination: Block,
-                loop_tag: LoopTag,
+                cond: Value,
+                then_dst: Block,
+                else_dst: Block,
+                loop_entry: bool
             ) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::Branch { op, args, destination, loop_tag };
+                let data = InstructionData::Branch { cond, then_dst, else_dst, loop_entry };
                 self.build(data)
             }
 
-            fn jump(self, args: ValueList, destination: Block) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::Jump { args, destination };
-                self.build(data)
+            fn br(
+                self,
+                cond: Value,
+                then_dst: Block,
+                else_dst: Block,
+            ) -> Inst  {
+                self.branch(cond, then_dst, else_dst, false).0
             }
 
-            fn build_call(self, args: ValueList, func_ref: FuncRef) -> (Inst, &'f mut DataFlowGraph) {
+            fn br_loop(
+                self,
+                cond: Value,
+                then_dst: Block,
+                else_dst: Block,
+            ) -> Inst  {
+                self.branch(cond, then_dst, else_dst, true).0
+            }
+
+            fn jump(self, destination: Block) -> Inst {
+                let data = InstructionData::Jump { destination };
+                self.build(data).0
+            }
+
+            fn build_call(self, func_ref: FuncRef, args: ValueList) -> (Inst, &'f mut DataFlowGraph) {
                 let data = InstructionData::Call { args, func_ref };
                 self.build(data)
             }
 
-            fn call1(self, args: ValueList, func_ref: FuncRef) -> Value {
-                let (inst, dfg) = self.build_call(args, func_ref);
+            fn call(mut self, func_ref: FuncRef,  args: &[Value]) -> Inst {
+                let pool = &mut self.data_flow_graph_mut().insts.value_lists;
+                let args = ValueList::from_slice(args, pool);
+                self.build_call(func_ref, args).0
+            }
+
+
+            fn call1(mut self, func_ref: FuncRef, args: &[Value]) -> Value {
+                let pool = &mut self.data_flow_graph_mut().insts.value_lists;
+                let args = ValueList::from_slice(args, pool);
+                let (inst, dfg) = self.build_call(func_ref, args);
                 dfg.first_result(inst)
             }
 
-            fn build_fconst(self, imm: Ieee64) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::UnaryIeee64 { imm };
-                self.build(data)
-            }
-
-            fn build_iconst(self, imm: i32) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::UnaryInt { imm };
-                self.build(data)
-            }
-
-            fn build_bconst(self, imm: bool) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::UnaryBool { imm };
-                self.build(data)
-            }
-
-            fn build_sconst(self, imm: Spur) -> (Inst, &'f mut DataFlowGraph) {
-                let data = InstructionData::UnaryStr { imm };
-                self.build(data)
-            }
-
-            fn fconst(self, imm: Ieee64) -> Value {
-                let (inst, dfg) = self.build_fconst(imm);
+            #[inline]
+            fn phi(mut self, edges: &[(Block, Value)]) -> Value {
+                let mut args = ValueList::new();
+                let mut blocks = PhiMap::new();
+                let dfg = self.data_flow_graph_mut();
+                for (i, (block, val)) in edges.iter().enumerate() {
+                    args.push(*val, &mut dfg.insts.value_lists);
+                    blocks.insert(*block, i as u32, &mut dfg.phi_forest, &());
+                }
+                let (inst, dfg) = self.build(PhiNode { args, blocks }.into());
                 dfg.first_result(inst)
             }
 
-            fn iconst(self, imm: i32) -> Value {
-                let (inst, dfg) = self.build_iconst(imm);
-                dfg.first_result(inst)
-            }
-
-            fn bconst(self, imm: bool) -> Value {
-                let (inst, dfg) = self.build_bconst(imm);
-                dfg.first_result(inst)
-            }
-
-            fn sconst(self, imm: Spur) -> Value {
-                let (inst, dfg) = self.build_sconst(imm);
-                dfg.first_result(inst)
-            }
 
             #(#opcode_funcs)*
         }

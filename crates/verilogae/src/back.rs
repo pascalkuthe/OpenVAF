@@ -1,781 +1,811 @@
 use std::borrow::Borrow;
-use std::hash::Hash;
-use std::ops::Deref;
 use std::path::Path;
 
-use ahash::AHashMap;
-use backend::{
-    lltype, places, sim_param_opt_stub, sim_param_str_stub, sim_param_stub, stub_callbacks,
-};
-use basedb::Upcast;
-use cfg::{Callback, CfgParam, ControlFlowGraph, Operand, Terminator};
-use cfg_opt::{remove_dead_data, simplify_branches, simplify_cfg};
-use codegen_llvm::{Builder, CallbackFun, CodegenCx, LLVMBackend};
-use const_eval::conditional_const_propagation;
 use hir_def::db::HirDefDB;
-use hir_def::{Lookup, NodeId, ParamId, Type, VarId};
+use hir_def::Type;
 use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
 use lasso::Rodeo;
-use llvm::{IntPredicate, Value, UNNAMED};
-use salsa::Snapshot;
+use llvm::UNNAMED;
+use mir::{ControlFlowGraph, FuncRef, Function};
+use mir_llvm::{Builder, CallbackFun, CodegenCx, LLVMBackend};
 use stdx::iter::multiunzip;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
-use crate::compiler_db::{CompilationDB, Function, ModelInfo};
+use crate::compiler_db::{CompilationDB, FuncSpec, InternedModel, ModelInfo};
 
-pub fn param_stub_callbacks<'ll>(
-    cb: &TiSet<Callback, CallBackKind>,
+pub fn sim_param_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+    cx.const_callback(&[cx.ty_str()], cx.const_real(0.0))
+}
+
+pub fn sim_param_opt_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+    cx.const_return(&[cx.ty_str(), cx.ty_real()], 1)
+}
+
+pub fn sim_param_str_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+    let empty_str = cx.literals.get("").unwrap();
+    let empty_str = cx.const_str(empty_str);
+    let ty_str = cx.ty_str();
+    cx.const_callback(&[ty_str], empty_str)
+}
+
+pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
+    match ty {
+        Type::Real => cx.ty_real(),
+        Type::Integer => cx.ty_int(),
+        Type::String => cx.ty_str(),
+        Type::Array { ty, len } => cx.ty_array(lltype(&*ty, cx), *len),
+        Type::EmptyArray => cx.zst(),
+        Type::Bool => cx.ty_bool(),
+        Type::Void => cx.ty_void(),
+        Type::Err => unreachable!(),
+    }
+}
+
+pub fn stub_callbacks<'ll>(
+    cb: &TiSet<FuncRef, CallBackKind>,
     cx: &mut CodegenCx<'_, 'll>,
-    invalid_param_dst: &AHashMap<ParamId, &'ll Value>,
-) -> TiVec<Callback, CallbackFun<'ll>> {
-    let mut param_info_set_cb = None;
-    let mut param_info_unset_cb = None;
+    // invalid_param_dst: &AHashMap<ParamId, &'ll Value>,
+) -> TiVec<FuncRef, Option<CallbackFun<'ll>>> {
     cb.raw
         .iter()
-        .map(|kind| match kind {
-            CallBackKind::SimParam => sim_param_stub(cx),
-            CallBackKind::SimParamOpt => sim_param_opt_stub(cx),
-            CallBackKind::SimParamStr => sim_param_str_stub(cx),
-            CallBackKind::Derivative(_) => unreachable!("Derivative must not remain in final CFG!"),
-            CallBackKind::NodeDerivative(_) => {
-                unreachable!("Derivative must not remain in final CFG!")
-            }
-            CallBackKind::ParamInfo(kind, param) => {
-                let (set, mut bits) = match kind {
-                    ParamInfoKind::Invalid => (true, 0b100),
-                    ParamInfoKind::MinInclusive => (true, 0b001),
-                    ParamInfoKind::MaxInclusive => (true, 0b010),
-                    ParamInfoKind::MinExclusive => (false, 0b001),
-                    ParamInfoKind::MaxExclusive => (false, 0b010),
-                };
-
-                if !set {
-                    bits = !bits;
+        .map(|kind| {
+            let res = match kind {
+                CallBackKind::SimParam => sim_param_stub(cx),
+                CallBackKind::SimParamOpt => sim_param_opt_stub(cx),
+                CallBackKind::SimParamStr => sim_param_str_stub(cx),
+                CallBackKind::Derivative(_) | CallBackKind::NodeDerivative(_) => {
+                    cx.const_callback(&[cx.ty_real()], cx.const_real(0.0))
                 }
+                CallBackKind::ParamInfo(_, _) | CallBackKind::CollapseHint(_, _) => return None,
+            };
 
-                let cb = if set { &mut param_info_set_cb } else { &mut param_info_unset_cb };
-
-                let (fun, fun_ty) = match *cb {
-                    Some((fun_ty, fun)) => (fun_ty, fun),
-                    None => {
-                        let name = cx.local_callback_name();
-                        let fun_ty =
-                            cx.ty_func(&[cx.ptr_ty(cx.ty_c_bool()), cx.ty_c_bool()], cx.ty_void());
-                        let fun = cx.declare_int_fn(&name, fun_ty);
-                        unsafe {
-                            let bb = llvm::LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
-                            let builder = llvm::LLVMCreateBuilderInContext(cx.llcx);
-                            llvm::LLVMPositionBuilderAtEnd(builder, bb);
-                            let ptr = llvm::LLVMGetParam(fun, 0);
-                            let flag = llvm::LLVMGetParam(fun, 1);
-                            let val = llvm::LLVMBuildLoad2(builder, cx.ty_c_bool(), ptr, UNNAMED);
-                            let val = if set {
-                                llvm::LLVMBuildOr(builder, val, flag, UNNAMED)
-                            } else {
-                                llvm::LLVMBuildAnd(builder, val, flag, UNNAMED)
-                            };
-                            llvm::LLVMBuildStore(builder, val, ptr);
-                            llvm::LLVMBuildRetVoid(builder);
-                            llvm::LLVMDisposeBuilder(builder);
-                        }
-
-                        *cb = Some((fun, fun_ty));
-                        (fun, fun_ty)
-                    }
-                };
-                CallbackFun {
-                    fun_ty,
-                    fun,
-                    state: vec![invalid_param_dst[param], cx.const_u8(bits)].into_boxed_slice(),
-                }
-            }
+            Some(res)
         })
         .collect()
 }
 
-pub(crate) fn compile_model_info(
-    db: &Snapshot<CompilationDB>,
-    intern: Option<&HirInterner>,
-    info: &ModelInfo,
-    literals: &mut Rodeo,
-    backend: &LLVMBackend,
-    dst: &Path,
-) {
-    // ensure everything is interned so that we only need to resolve later
+pub struct CodegenCtx<'a, 't> {
+    pub model_info: &'a ModelInfo,
+    pub llbackend: &'a LLVMBackend<'t>,
+    pub literals: &'a mut Rodeo,
+}
 
-    #[allow(clippy::needless_collect)] // false positive
-    let param_info: Vec<_> = info
-        .params
-        .values()
-        .map(|param| {
-            let name = literals.get_or_intern(&*param.name);
-            let unit = literals.get_or_intern(&param.unit);
-            let description = literals.get_or_intern(&param.description);
-            let group = literals.get_or_intern(&param.group);
-            (name, unit, description, group, &param.ty)
-        })
-        .collect();
+struct Codegen<'a, 'b, 'll> {
+    db: &'a CompilationDB,
+    model_info: &'a ModelInfo,
+    intern: &'a HirInterner,
+    builder: &'b mut Builder<'a, 'a, 'll>,
+    func: &'a Function,
+    spec: &'a FuncSpec,
+}
 
-    if let Some(intern) = intern {
+impl<'ll> Codegen<'_, '_, 'll> {
+    unsafe fn read_depbreak(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value, ty: Type) {
+        let vars = self
+            .spec
+            .dependency_breaking
+            .iter()
+            .copied()
+            .filter(|var| self.db.var_data(*var).ty == ty);
+
+        for (i, var) in vars.clone().enumerate() {
+            if let Some(id) = self.intern.params.index(&ParamKind::HiddenState(var)) {
+                self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+            }
+        }
+
+        let global_name = format!("{}.depbreak.{}", self.spec.prefix, ty);
+        let names = vars.clone().map(|var| &*self.model_info.var_names[&var]);
+        self.export_names(names, &global_name);
+    }
+
+    unsafe fn read_str_params(&mut self, ptr: &'ll llvm::Value) {
+        let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
+            if let ParamKind::Param(param) = *kind {
+                (self.db.param_data(param).ty == Type::String).then(|| (id, param))
+            } else {
+                None
+            }
+        });
+
+        for (i, (id, _)) in params.clone().enumerate() {
+            let ptr = self.builder.cx.const_gep(ptr, &[self.builder.cx.const_usize(i)]);
+            self.builder.params[id] = Some(self.builder.load(self.builder.cx.ty_str(), ptr));
+        }
+
+        let global_name = format!("{}.params.{}", self.spec.prefix, Type::String);
+        let names = params.map(|(_, param)| &*self.model_info.params[&param].name);
+        self.export_names(names, &global_name);
+    }
+
+    unsafe fn read_params(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value, ty: Type) {
+        let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
+            if let ParamKind::Param(param) = kind {
+                (self.db.param_data(*param).ty == ty).then(|| (id, *param))
+            } else {
+                None
+            }
+        });
+
+        for (i, (id, _)) in params.clone().enumerate() {
+            self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+        }
+
+        let global_name = format!("{}.params.{}", self.spec.prefix, ty);
+        let names = params.clone().map(|(_, param)| &*self.model_info.params[&param].name);
+        self.export_names(names, &global_name);
+    }
+
+    unsafe fn read_voltages(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value) {
+        let voltages = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
+            if let ParamKind::Voltage { hi, lo } = kind {
+                Some((id, (*hi, *lo)))
+            } else {
+                None
+            }
+        });
+
+        let default_val = |(id, volt)| {
+            self.model_info
+                .optional_voltages
+                .get(&volt)
+                .map(|val| ((id, volt), self.builder.cx.const_real(*val)))
+        };
+
+        let (optional_voltages, default_vals): (Vec<_>, Vec<_>) =
+            voltages.clone().filter_map(default_val).unzip();
+
+        let non_optional_voltages: Vec<_> =
+            voltages.filter(|kind| default_val(*kind).is_none()).collect();
+
+        let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
+
+        for (i, (id, _)) in voltages.clone().enumerate() {
+            self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+        }
+
+        let global_name = format!("{}.voltages.default", self.spec.prefix);
+        self.builder.cx.export_array(
+            &global_name,
+            self.builder.cx.ty_real(),
+            &default_vals,
+            true,
+            true,
+        );
+
+        let global_name = format!("{}.voltages", self.spec.prefix);
+        let names = voltages.map(|(_, (hi, lo))| self.db.voltage_name(hi, lo));
+        self.export_names(names, &global_name);
+    }
+
+    unsafe fn read_currents(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value) {
+        let voltages = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
+            if let ParamKind::Current(kind) = kind {
+                Some((id, *kind))
+            } else {
+                None
+            }
+        });
+
+        let default_val = |(id, kind)| {
+            if let CurrentKind::ExplicitBranch(branch) = kind {
+                if let Some(val) = self.model_info.optional_currents.get(&branch) {
+                    return Some(((id, kind), self.builder.cx.const_real(*val)));
+                }
+            }
+            None
+        };
+
+        let (optional_voltages, default_vals): (Vec<_>, Vec<_>) =
+            voltages.clone().filter_map(default_val).unzip();
+
+        let non_optional_voltages: Vec<_> =
+            voltages.filter(|kind| default_val(*kind).is_none()).collect();
+
+        let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
+
+        for (i, (id, _)) in voltages.clone().enumerate() {
+            self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+        }
+
+        let global_name = format!("{}.currents.default", self.spec.prefix);
+        self.builder.cx.export_array(
+            &global_name,
+            self.builder.cx.ty_real(),
+            &default_vals,
+            true,
+            true,
+        );
+
+        let global_name = format!("{}.currents", self.spec.prefix);
+        let names = voltages.map(|(_, kind)| self.db.current_name(kind));
+        self.export_names(names, &global_name);
+    }
+
+    fn export_names<T: Borrow<str>>(&mut self, names: impl Iterator<Item = T>, global_name: &str) {
+        let cx = &mut self.builder.cx;
+        let names: Vec<_> = names
+            .map(|name| {
+                let name = name.borrow();
+                let name = cx.literals.get(name).unwrap();
+                cx.const_str(name)
+            })
+            .collect();
+        cx.export_array(global_name, cx.ty_str(), &names, true, true);
+    }
+
+    unsafe fn read_fat_ptr_at(
+        &mut self,
+        pos: usize,
+        offset: &'ll llvm::Value,
+        ptr: &'ll llvm::Value,
+    ) -> &'ll llvm::Value {
+        let builder = &mut self.builder;
+
+        // get correct ptrs from array
+        let fat_ptr = builder.gep(ptr, &[builder.cx.const_usize(pos)]);
+
+        let (ptr, meta) = builder.fat_ptr_to_parts(fat_ptr);
+        let ptr_ty = builder.cx.elem_ty(builder.cx.val_ty(ptr));
+
+        // get stride or scalar ptr by bitcasting
+        let stride_ptr = builder.ptrcast(meta, builder.cx.ptr_ty(builder.cx.ty_isize()));
+        let stride = builder.load(builder.cx.ty_isize(), stride_ptr);
+        let scalar_ptr = builder.ptrcast(meta, ptr_ty);
+
+        // load the array ptr and check if its a null ptr
+        let arr_ptr = builder.load(ptr_ty, ptr);
+        let is_arr_null = builder.is_null_ptr(arr_ptr);
+
+        // offset the array _ptr
+        let offset = builder.imul(stride, offset);
+        let arr_ptr = builder.gep(arr_ptr, &[offset]);
+
+        // if the array_ptr is null select the scalar_ptr otherwise select the arr_ptr
+        let ptr = builder.select(is_arr_null, scalar_ptr, arr_ptr);
+
+        //final load
+        builder.load(builder.cx.elem_ty(ptr_ty), ptr)
+    }
+}
+
+impl CodegenCtx<'_, '_> {
+    pub(crate) fn gen_func_obj(
+        &self,
+        db: &CompilationDB,
+        spec: &FuncSpec,
+        func: &Function,
+        cfg: &ControlFlowGraph,
+        intern: &HirInterner,
+        dst: &Path,
+    ) {
+        let ret_info = db.var_data(spec.var);
+
+        let module = unsafe { self.llbackend.new_module(&*ret_info.name).unwrap() };
+        let mut cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
+
+        let ret_ty = lltype(&ret_info.ty, &cx);
+
+        let fun_ty = cx.ty_func(
+            &[
+                cx.ty_isize(),                             // offset
+                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // voltages
+                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // curents
+                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // real paras
+                cx.ptr_ty(cx.fat_ptr(cx.ty_int(), true)),  // int paras
+                cx.ptr_ty(cx.fat_ptr(cx.ty_str(), true)),  // str paras
+                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // real dependency_breaking
+                cx.ptr_ty(cx.fat_ptr(cx.ty_int(), true)),  // int dependency_breaking
+                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // temperature
+                cx.ptr_ty(ret_ty),                         // ret
+            ],
+            cx.ty_void(),
+        );
+        let llfun = cx.declare_ext_fn(&spec.prefix, fun_ty);
+
+        // setup builder
+        let mut builder = Builder::new(&mut cx, func, llfun);
+
+        let mut codegen = Codegen {
+            db: &*db,
+            model_info: &*self.model_info,
+            intern: &*intern,
+            builder: &mut builder,
+            func: &*func,
+            spec: &*spec,
+        };
+
+        // read parameters
+
+        let offset = unsafe { llvm::LLVMGetParam(llfun, 0) };
+
+        let true_val = codegen.builder.cx.const_bool(true);
+        codegen.builder.params = intern
+            .params
+            .raw
+            .iter()
+            .map(|(kind, val)| {
+                if func.dfg.value_dead(*val) {
+                    return None;
+                }
+
+                let val = match kind {
+                    ParamKind::Param(_)
+                    | ParamKind::Voltage { .. }
+                    | ParamKind::Current(_)
+                    | ParamKind::HiddenState(_) => return None,
+                    ParamKind::Temperature => unsafe {
+                        let temperature = llvm::LLVMGetParam(llfun, 8);
+                        codegen.read_fat_ptr_at(0, offset, temperature)
+                    },
+                    ParamKind::ParamGiven { .. } | ParamKind::PortConnected { .. } => true_val,
+                    ParamKind::ParamSysFun(param) => {
+                        codegen.builder.cx.const_real(param.default_value())
+                    }
+                };
+
+                Some(val)
+            })
+            .collect();
+
+        let voltages = unsafe { llvm::LLVMGetParam(llfun, 1) };
+        unsafe { codegen.read_voltages(offset, voltages) };
+
+        let currents = unsafe { llvm::LLVMGetParam(llfun, 2) };
+        unsafe { codegen.read_currents(offset, currents) };
+
+        let real_params = unsafe { llvm::LLVMGetParam(llfun, 3) };
+        unsafe { codegen.read_params(offset, real_params, Type::Real) };
+
+        let int_params = unsafe { llvm::LLVMGetParam(llfun, 4) };
+        unsafe { codegen.read_params(offset, int_params, Type::Integer) };
+
+        let str_params = unsafe { llvm::LLVMGetParam(llfun, 5) };
+        unsafe { codegen.read_str_params(str_params) };
+
+        let real_dep_break = unsafe { llvm::LLVMGetParam(llfun, 6) };
+        unsafe { codegen.read_depbreak(offset, real_dep_break, Type::Real) };
+
+        let int_dep_break = unsafe { llvm::LLVMGetParam(llfun, 7) };
+        unsafe { codegen.read_depbreak(offset, int_dep_break, Type::Integer) };
+
+        // setup callbacks
+
+        codegen.builder.callbacks = stub_callbacks(&intern.callbacks, codegen.builder.cx);
+        drop(codegen);
+
+        let postorder: Vec<_> = cfg.postorder(func).collect();
+
+        std::fs::write("tmp_func", func.to_debug_string()).unwrap();
+
+        unsafe {
+            // the actual compiled function
+            builder.build_consts();
+            builder.build_cfg(&postorder);
+
+            // write the return value
+            builder.select_bb(postorder[0]);
+
+            let out = llvm::LLVMGetParam(llfun, 9);
+            let out = builder.gep(out, &[offset]);
+
+            let ret_val = intern.outputs[&PlaceKind::Var(spec.var)];
+            let ret_val = builder.values[ret_val].unwrap();
+
+            builder.store(out, ret_val);
+
+            builder.ret_void();
+        }
+
+        // build object file
+        drop(builder);
+        debug_assert!(module.verify_and_print(), "Invalid code generated");
+        module.optimize(self.llbackend);
+
+        module.emit_obect(dst).expect("code generation failed!")
+    }
+
+    pub(crate) fn ensure_names(&mut self, db: &CompilationDB, intern: &HirInterner) {
         for param in &intern.params.raw {
-            match param {
+            match param.0 {
                 ParamKind::Voltage { hi, lo } => {
-                    literals.get_or_intern(&voltage_name(db, *hi, *lo));
+                    self.literals.get_or_intern(&db.voltage_name(*hi, *lo));
                 }
                 ParamKind::Current(kind) => {
-                    literals.get_or_intern(&current_name(db, *kind));
+                    self.literals.get_or_intern(&db.current_name(*kind));
                 }
                 _ => (),
             }
         }
-    }
 
-    #[allow(clippy::needless_collect)] // false posivtive this is required to pass borrow check
-    let functions: Vec<_> = info
-        .functions
-        .iter()
-        .map(|fun| {
-            // ensure that all dependency breaking is interned
-            for dep in &*fun.dependency_breaking {
-                literals.get_or_intern(&*info.var_names[dep]);
-            }
-            (
-                literals.get_or_intern(&*info.var_names[&fun.var]),
-                literals.get_or_intern(&fun.prefix),
-            )
-        })
-        .collect();
-
-    #[allow(clippy::needless_collect)] // false posivtive this is required to pass borrow check
-    let op_vars: Vec<_> = info.op_vars.iter().map(|name| literals.get_or_intern(&**name)).collect();
-
-    #[allow(clippy::needless_collect)] // false posivtive this is required to pass borrow check
-    let nodes: Vec<_> = info.ports.iter().map(|name| literals.get_or_intern(&**name)).collect();
-
-    let module_name = literals.get_or_intern(&*info.module.lookup(db.upcast()).name(db.upcast()));
-
-    let mut cfg = ControlFlowGraph::default();
-    cfg.blocks.push(cfg::BasicBlockData {
-        phis: Default::default(),
-        instructions: Default::default(),
-        terminator: Some(Terminator::Ret),
-    });
-    let mut intern = HirInterner::default();
-
-    intern.params.raw.extend(info.params.keys().map(|param| ParamKind::Param(*param)));
-    intern.insert_param_init(&**db, literals, &mut cfg);
-
-    cfg.visit_operands_mut(|op| {
-        if let Operand::CfgParam(param) = *op {
-            if let ParamKind::Param(param) = intern.params[param] {
-                *op = intern.places.unwrap_index(&PlaceKind::Param(param)).into();
+        for func in &self.model_info.functions {
+            for dep in &*func.dependency_breaking {
+                self.literals.get_or_intern(&*self.model_info.var_names[dep]);
             }
         }
-    });
-
-    let (_, place_map, param_map, callback_map) = remove_dead_data(&mut cfg);
-    intern.map(&place_map, &param_map, &callback_map);
-    conditional_const_propagation(&mut cfg, &AHashMap::new());
-    simplify_branches(&mut cfg);
-    simplify_cfg(&mut cfg);
-    cfg.assert_verified();
-
-    let module = unsafe { backend.new_module("model_info").unwrap() };
-    let mut cx = unsafe { backend.new_ctx(literals, &module) };
-
-    let param_info: Vec<_> = param_info
-        .into_iter()
-        .map(|(name, unit, description, group, ty)| {
-            (
-                (
-                    cx.const_str(name),
-                    cx.const_str(unit),
-                    cx.const_str(description),
-                    cx.const_str(group),
-                ),
-                ty,
-            )
-        })
-        .collect();
-
-    let (fun_names, fun_symbols): (Vec<_>, Vec<_>) =
-        functions.into_iter().map(|(name, sym)| (cx.const_str(name), cx.const_str(sym))).unzip();
-
-    cx.export_array("functions", cx.ty_str(), &fun_names, true, true);
-    cx.export_array("functions.sym", cx.ty_str(), &fun_symbols, true, false);
-
-    let op_vars: Vec<_> = op_vars.into_iter().map(|name| cx.const_str(name)).collect();
-    cx.export_array("opvars", cx.ty_str(), &op_vars, true, true);
-
-    let nodes: Vec<_> = nodes.into_iter().map(|name| cx.const_str(name)).collect();
-    cx.export_array("nodes", cx.ty_str(), &nodes, true, true);
-
-    let module_name = cx.const_str(module_name);
-    cx.export_val("module_name", cx.ty_str(), module_name, true);
-
-    let (params, units, descriptions, groups): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
-        multiunzip(param_info.iter().filter_map(|(info, ty)| (*ty == &Type::Real).then(|| *info)));
-
-    cx.export_array("params.real", cx.ty_str(), &params, true, true);
-    cx.export_array("params.unit.real", cx.ty_str(), &units, true, false);
-    cx.export_array("params.desc.real", cx.ty_str(), &descriptions, true, false);
-    cx.export_array("params.group.real", cx.ty_str(), &groups, true, false);
-
-    let (params, units, descriptions, groups): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(
-        param_info.iter().filter_map(|(info, ty)| (*ty == &Type::Integer).then(|| *info)),
-    );
-
-    cx.export_array("params.integer", cx.ty_str(), &params, true, true);
-    cx.export_array("params.unit.integer", cx.ty_str(), &units, true, false);
-    cx.export_array("params.desc.integer", cx.ty_str(), &descriptions, true, false);
-    cx.export_array("params.group.integer", cx.ty_str(), &groups, true, false);
-
-    let (params, units, descriptions, groups): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(
-        param_info.iter().filter_map(|(info, ty)| (*ty == &Type::String).then(|| *info)),
-    );
-
-    cx.export_array("params.string", cx.ty_str(), &params, true, true);
-    cx.export_array("params.unit.string", cx.ty_str(), &units, true, false);
-    cx.export_array("params.desc.string", cx.ty_str(), &descriptions, true, false);
-    cx.export_array("params.group.string", cx.ty_str(), &groups, true, false);
-
-    let fun_ty = cx.ty_func(
-        &[
-            cx.ptr_ty(cx.ty_real()),   // real param values
-            cx.ptr_ty(cx.ty_int()),    // int param values
-            cx.ptr_ty(cx.ty_str()),    // str param values
-            cx.ptr_ty(cx.ty_real()),   // real param min
-            cx.ptr_ty(cx.ty_int()),    // int param min
-            cx.ptr_ty(cx.ty_real()),   // real param max
-            cx.ptr_ty(cx.ty_int()),    // int param max
-            cx.ptr_ty(cx.ty_c_bool()), // param_given/error
-        ],
-        cx.ty_void(),
-    );
-
-    let llfun = cx.declare_ext_fn("init_modelcard", fun_ty);
-
-    let param_val_real = unsafe { llvm::LLVMGetParam(llfun, 0) };
-    let param_val_int = unsafe { llvm::LLVMGetParam(llfun, 1) };
-    let param_val_str = unsafe { llvm::LLVMGetParam(llfun, 2) };
-    let param_min_real = unsafe { llvm::LLVMGetParam(llfun, 3) };
-    let param_min_int = unsafe { llvm::LLVMGetParam(llfun, 4) };
-    let param_max_real = unsafe { llvm::LLVMGetParam(llfun, 5) };
-    let param_max_int = unsafe { llvm::LLVMGetParam(llfun, 6) };
-    let param_flags = unsafe { llvm::LLVMGetParam(llfun, 7) };
-
-    let mut builder = Builder::new(&mut cx, &cfg, llfun);
-
-    let real_params =
-        info.params.keys().filter(|param| db.param_data(**param).ty == Type::Real).enumerate();
-    let int_params =
-        info.params.keys().filter(|param| db.param_data(**param).ty == Type::Integer).enumerate();
-
-    let str_params =
-        info.params.keys().filter(|param| db.param_data(**param).ty == Type::String).enumerate();
-
-    let param_given = real_params
-        .clone()
-        .chain(int_params.clone())
-        .chain(str_params.clone())
-        .map(|(i, param)| {
-            (*param, unsafe { builder.gep(param_flags, &[builder.cx.const_usize(i)]) })
-        })
-        .collect();
-
-    let real_params: AHashMap<_, _> = real_params
-        .map(|(i, param)| unsafe {
-            (
-                *param,
-                (
-                    builder.gep(param_val_real, &[builder.cx.const_usize(i)]),
-                    builder.gep(param_min_real, &[builder.cx.const_usize(i)]),
-                    builder.gep(param_max_real, &[builder.cx.const_usize(i)]),
-                ),
-            )
-        })
-        .collect();
-
-    let int_params: AHashMap<_, _> = int_params
-        .map(|(i, param)| unsafe {
-            (
-                *param,
-                (
-                    builder.gep(param_val_int, &[builder.cx.const_usize(i)]),
-                    builder.gep(param_min_int, &[builder.cx.const_usize(i)]),
-                    builder.gep(param_max_int, &[builder.cx.const_usize(i)]),
-                ),
-            )
-        })
-        .collect();
-
-    let str_params: AHashMap<_, _> = str_params
-        .map(|(i, param)| unsafe {
-            (*param, builder.gep(param_val_str, &[builder.cx.const_usize(i)]))
-        })
-        .collect();
-
-    builder.callbacks = param_stub_callbacks(&intern.callbacks, builder.cx, &param_given);
-
-    builder.places = places(db.deref(), &builder, intern.places.raw.iter(), |kind| match kind {
-        PlaceKind::Param(param) => real_params
-            .get(param)
-            .map(|(val, _, _)| (builder.cx.ty_real(), *val))
-            .or_else(|| int_params.get(param).map(|(val, _, _)| (builder.cx.ty_int(), *val)))
-            .or_else(|| str_params.get(param).map(|val| (builder.cx.ty_str(), *val))),
-
-        PlaceKind::ParamMin(param) => real_params
-            .get(param)
-            .map(|(_, min, _)| (builder.cx.ty_real(), *min))
-            .or_else(|| int_params.get(param).map(|(_, min, _)| (builder.cx.ty_int(), *min))),
-
-        PlaceKind::ParamMax(param) => real_params
-            .get(param)
-            .map(|(_, _, max)| (builder.cx.ty_real(), *max))
-            .or_else(|| int_params.get(param).map(|(_, _, max)| (builder.cx.ty_int(), *max))),
-        _ => None,
-    });
-
-    builder.params = intern
-        .params
-        .raw
-        .iter()
-        .map(|kind| match kind {
-            ParamKind::Param(_) => unreachable!(),
-            ParamKind::Voltage { .. } | ParamKind::Current(_) => {
-                unreachable!("const values must not depend upon current/voltage")
-            }
-            // not my problem if you do this
-            ParamKind::Temperature => builder.cx.const_real(293f64),
-            ParamKind::ParamGiven { param } => unsafe {
-                let c_bool = builder.load(builder.cx.ty_c_bool(), param_given[param]);
-                builder.int_cmp(c_bool, builder.cx.const_c_bool(false), IntPredicate::IntNE)
-            },
-            ParamKind::PortConnected { .. } => builder.cx.const_bool(true),
-            ParamKind::ParamSysFun(param) => builder.cx.const_real(param.default_value()),
-        })
-        .collect();
-
-    unsafe {
-        builder.build_cfg();
-        builder.build_returns(|builder, _| builder.ret_void())
     }
 
-    assert!(module.verify_and_print(), "generated invalid code");
-    module.optimize(backend);
-    module.emit_obect(dst).expect("code generation failed!");
-}
+    fn read_params<'ll>(
+        &self,
+        intern: &HirInterner,
+        ty: Type,
+        builder: &mut Builder<'_, '_, 'll>,
+        val_ptr: &'ll llvm::Value,
+        param_given_ptr: &'ll llvm::Value,
+        param_given_offset: usize,
+    ) -> usize {
+        let llty = lltype(&ty, builder.cx);
+        let mut offset = 0;
+        for (param, info) in self.model_info.params.iter() {
+            if info.ty != ty {
+                continue;
+            }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn compile_fun(
-    backend: &LLVMBackend,
-    db: &Snapshot<CompilationDB>,
-    model_info: &ModelInfo,
-    cfg: &mut ControlFlowGraph,
-    intern: &HirInterner,
-    literals: &Rodeo,
-    dst: &Path,
-    fun: &Function,
-    prefix: &str,
-) {
-    let ret = intern.places.index(&PlaceKind::Var(fun.var)).unwrap();
-    let ret_info = db.var_data(fun.var);
-    let module = unsafe { backend.new_module(&*ret_info.name).unwrap() };
-    let mut cx = unsafe { backend.new_ctx(literals, &module) };
+            let given_id = intern.params.unwrap_index(&ParamKind::ParamGiven { param: *param });
+            let given = unsafe {
+                let off = builder.cx.const_usize(param_given_offset + offset);
+                let ptr = builder.gep(param_given_ptr, &[off]);
+                let cbool = builder.load(builder.cx.ty_c_bool(), ptr);
+                builder.int_cmp(cbool, builder.cx.const_c_bool(false), llvm::IntPredicate::IntNE)
+            };
 
-    let ret_ty = lltype(&ret_info.ty, &cx);
+            let val_id = intern.params.unwrap_index(&ParamKind::Param(*param));
+            let val = unsafe {
+                let off = builder.cx.const_usize(offset);
+                let ptr = builder.gep(val_ptr, &[off]);
+                builder.load(llty, ptr)
+            };
 
-    let fun_ty = cx.ty_func(
-        &[
-            cx.ty_isize(),                             // offset
-            cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // voltages
-            cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // curents
-            cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // real paras
-            cx.ptr_ty(cx.fat_ptr(cx.ty_int(), true)),  // int paras
-            cx.ptr_ty(cx.fat_ptr(cx.ty_str(), true)),  // str paras
-            cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // real dependency_breaking
-            cx.ptr_ty(cx.fat_ptr(cx.ty_int(), true)),  // int dependency_breaking
-            cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // temperature
-            cx.ptr_ty(ret_ty),                         // ret
-        ],
-        cx.ty_void(),
-    );
-    let llfun = cx.declare_ext_fn(prefix, fun_ty);
-    let true_val = cx.const_bool(true);
+            builder.params[given_id] = Some(given);
+            builder.params[val_id] = Some(val);
+            offset += 1;
+        }
+        offset
+    }
 
-    let offset = unsafe { llvm::LLVMGetParam(llfun, 0) };
-    let voltages = unsafe { llvm::LLVMGetParam(llfun, 1) };
-    let currents = unsafe { llvm::LLVMGetParam(llfun, 2) };
-    let real_params = unsafe { llvm::LLVMGetParam(llfun, 3) };
-    let int_params = unsafe { llvm::LLVMGetParam(llfun, 4) };
-    let str_params = unsafe { llvm::LLVMGetParam(llfun, 5) };
-    let real_dep_break = unsafe { llvm::LLVMGetParam(llfun, 6) };
-    let int_dep_break = unsafe { llvm::LLVMGetParam(llfun, 7) };
-    let temperature = unsafe { llvm::LLVMGetParam(llfun, 8) };
-    let out = unsafe { llvm::LLVMGetParam(llfun, 9) };
+    fn write_params<'ll>(
+        &self,
+        intern: &HirInterner,
+        ty: Type,
+        builder: &Builder<'_, '_, 'll>,
+        val_ptr: &'ll llvm::Value,
+        bounds_ptrs: Option<(&'ll llvm::Value, &'ll llvm::Value)>,
+    ) {
+        for (i, (param, _)) in
+            self.model_info.params.iter().filter(|(_, info)| info.ty == ty).enumerate()
+        {
+            let param_val = intern.outputs[&PlaceKind::Param(*param)];
+            let param_val = builder.values[param_val].unwrap();
 
-    // setup builder
-    let mut builder = Builder::new(&mut cx, cfg, llfun);
+            unsafe {
+                let off = builder.cx.const_usize(i);
+                let ptr = builder.gep(val_ptr, &[off]);
+                builder.store(ptr, param_val)
+            };
 
-    // setup cfg params
+            if let Some((min_ptr, max_ptr)) = bounds_ptrs {
+                unsafe {
+                    let param_min = intern.outputs[&PlaceKind::ParamMin(*param)];
+                    let param_min = builder.values[param_min].unwrap();
+                    let off = builder.cx.const_usize(i);
+                    let ptr = builder.gep(min_ptr, &[off]);
+                    builder.store(ptr, param_min)
+                }
 
-    let voltages = unsafe {
-        map_voltages(db, model_info, &mut builder, prefix, &intern.params, offset, voltages)
-    };
-
-    let currents = unsafe {
-        map_currents(db, model_info, &mut builder, prefix, &intern.params, offset, currents)
-    };
-
-    let real_params = unsafe {
-        map_params(
-            db,
-            model_info,
-            &mut builder,
-            prefix,
-            &intern.params,
-            offset,
-            real_params,
-            &Type::Real,
-        )
-    };
-
-    let int_params = unsafe {
-        map_params(
-            db,
-            model_info,
-            &mut builder,
-            prefix,
-            &intern.params,
-            offset,
-            int_params,
-            &Type::Integer,
-        )
-    };
-
-    let str_params =
-        unsafe { map_str_params(db, model_info, &mut builder, prefix, &intern.params, str_params) };
-
-    let real_dep_break = unsafe {
-        map_dependecy_breaking(
-            db,
-            model_info,
-            &mut builder,
-            prefix,
-            &fun.dependency_breaking,
-            offset,
-            real_dep_break,
-            Type::Real,
-        )
-    };
-
-    let int_dep_break = unsafe {
-        map_dependecy_breaking(
-            db,
-            model_info,
-            &mut builder,
-            prefix,
-            &fun.dependency_breaking,
-            offset,
-            int_dep_break,
-            Type::Integer,
-        )
-    };
-
-    builder.places = places(db.deref(), &builder, intern.places.raw.iter(), |_| None);
-
-    for (var, val) in real_dep_break.into_iter().chain(int_dep_break) {
-        if let Some(place) = intern.places.index(&PlaceKind::Var(var)) {
-            unsafe { builder.store(builder.places[place].1, val) }
-        } else {
-            use std::io::Write;
-
-            let mut stderr = StandardStream::stderr(ColorChoice::Auto);
-            let _ = stderr.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true));
-            let _ = write!(&mut stderr, "warning");
-            let _ = stderr.set_color(&ColorSpec::new());
-            let name = &model_info.var_names[&fun.var];
-            let dep_name = &model_info.var_names[&var];
-            let _ = writeln!(
-                &mut stderr,
-                ":  function '{}' does not depend on variable '{}'",
-                name, dep_name
-            );
+                unsafe {
+                    let param_max = intern.outputs[&PlaceKind::ParamMax(*param)];
+                    let param_max = builder.values[param_max].unwrap();
+                    let off = builder.cx.const_usize(i);
+                    let ptr = builder.gep(max_ptr, &[off]);
+                    builder.store(ptr, param_max)
+                }
+            }
         }
     }
 
-    builder.callbacks = stub_callbacks(&intern.callbacks, builder.cx);
+    fn param_flag_cb<'ll>(
+        &self,
+        cx: &mut mir_llvm::CodegenCx<'_, 'll>,
+        set: bool,
+    ) -> (&'ll llvm::Value, &'ll llvm::Type) {
+        let name = cx.local_callback_name();
+        let fun_ty = cx.ty_func(&[cx.ptr_ty(cx.ty_c_bool()), cx.ty_c_bool()], cx.ty_void());
+        let fun = cx.declare_int_fn(&name, fun_ty);
+        unsafe {
+            let bb = llvm::LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
+            let builder = llvm::LLVMCreateBuilderInContext(cx.llcx);
+            llvm::LLVMPositionBuilderAtEnd(builder, bb);
+            let ptr = llvm::LLVMGetParam(fun, 0);
+            let flag = llvm::LLVMGetParam(fun, 1);
+            let val = llvm::LLVMBuildLoad2(builder, cx.ty_c_bool(), ptr, UNNAMED);
+            let val = if set {
+                llvm::LLVMBuildOr(builder, val, flag, UNNAMED)
+            } else {
+                llvm::LLVMBuildAnd(builder, val, flag, UNNAMED)
+            };
+            llvm::LLVMBuildStore(builder, val, ptr);
+            llvm::LLVMBuildRetVoid(builder);
+            llvm::LLVMDisposeBuilder(builder);
+        }
 
-    builder.params = intern
-        .params
-        .raw
-        .iter()
-        .map(|kind| match kind {
-            ParamKind::Param(param) => real_params
-                .get(param)
-                .or_else(|| int_params.get(param))
-                .copied()
-                .unwrap_or_else(|| str_params[param]),
-            ParamKind::Voltage { hi, lo } => voltages[&(*hi, *lo)],
-            ParamKind::Current(current) => currents[current],
-            ParamKind::Temperature => unsafe {
-                read_fat_ptr_at(&mut builder, 0, offset, temperature)
-            },
-            ParamKind::ParamGiven { .. } | ParamKind::PortConnected { .. } => true_val,
-            ParamKind::ParamSysFun(param) => builder.cx.const_real(param.default_value()),
-        })
-        .collect();
-
-    unsafe {
-        builder.build_cfg();
-        builder.build_returns(|builder, _| {
-            let fun_out = builder.gep(out, &[offset]);
-            let val = builder.operand(&Operand::Place(ret));
-            builder.store(fun_out, val);
-            builder.ret_void();
-        })
+        (fun, fun_ty)
     }
 
-    drop(builder);
-    debug_assert!(module.verify_and_print(), "Invalid code generated");
-    module.optimize(backend);
+    fn insert_param_info_callbacks<'ll>(
+        &self,
+        intern: &HirInterner,
+        builder: &mut Builder<'_, '_, 'll>,
+        param_flags: &'ll llvm::Value,
+        real_cnt: usize,
+        int_cnt: usize,
+    ) {
+        let mut real_off = 0;
+        let mut int_off = real_cnt;
+        let mut str_off = int_off + int_cnt;
 
-    module.emit_obect(dst).expect("code generation failed!")
-}
+        let param_info_set_cb = self.param_flag_cb(builder.cx, true);
+        let param_info_unset_cb = self.param_flag_cb(builder.cx, false);
+        for (param, info) in self.model_info.params.iter() {
+            let off = match info.ty {
+                Type::Real => &mut real_off,
+                Type::Integer => &mut int_off,
+                Type::String => &mut str_off,
+                _ => unreachable!(),
+            };
 
-#[allow(clippy::too_many_arguments)]
-unsafe fn map_dependecy_breaking<'ll>(
-    db: &Snapshot<CompilationDB>,
-    model_info: &ModelInfo,
-    builder: &mut Builder<'_, '_, 'll>,
-    prefix: &str,
-    dependency_breaking: &[VarId],
-    offset: &'ll llvm::Value,
-    ptr: &'ll llvm::Value,
-    ty: Type,
-) -> AHashMap<VarId, &'ll llvm::Value> {
-    let vars = dependency_breaking.iter().copied().filter(|var| db.var_data(*var).ty == ty);
-    let global_name = format!("{}.depbreak.{}", prefix, ty);
-    let names = vars.clone().map(|var| &*model_info.var_names[&var]);
-    export_names(builder.cx, names, &global_name);
-    mapping(vars, builder, offset, ptr)
-}
+            let dst = unsafe {
+                let off = builder.cx.const_usize(*off);
+                builder.gep(param_flags, &[off])
+            };
 
-unsafe fn map_str_params<'ll>(
-    db: &Snapshot<CompilationDB>,
-    model_info: &ModelInfo,
-    builder: &mut Builder<'_, '_, 'll>,
-    prefix: &str,
-    params: &TiSet<CfgParam, ParamKind>,
-    ptr: &'ll llvm::Value,
-) -> AHashMap<ParamId, &'ll llvm::Value> {
-    let kinds = params.raw.iter().filter_map(|kind| {
-        if let ParamKind::Param(param) = kind {
-            (db.param_data(*param).ty == Type::String).then(|| *param)
-        } else {
-            None
+            *off += 1;
+
+            for (kind, set, mut bits) in [
+                (ParamInfoKind::Invalid, true, 0b100),
+                (ParamInfoKind::MinInclusive, true, 0b001),
+                (ParamInfoKind::MaxInclusive, true, 0b010),
+                (ParamInfoKind::MinExclusive, false, 0b001),
+                (ParamInfoKind::MaxExclusive, false, 0b010),
+            ] {
+                let (fun, fun_ty) = if set {
+                    param_info_set_cb
+                } else {
+                    bits = !bits;
+                    param_info_unset_cb
+                };
+
+                let res = CallbackFun {
+                    fun_ty,
+                    fun,
+                    state: vec![dst, builder.cx.const_u8(bits)].into_boxed_slice(),
+                };
+
+                let cb = intern.callbacks.unwrap_index(&CallBackKind::ParamInfo(kind, *param));
+                builder.callbacks[cb] = Some(res)
+            }
         }
-    });
 
-    let global_name = format!("{}.params.{}", prefix, Type::String);
-    let names = kinds.clone().map(|param| &*model_info.params[&param].name);
-    export_names(builder.cx, names, &global_name);
-    kinds
-        .enumerate()
-        .map(|(i, key)| {
-            (key, unsafe {
-                let ptr = builder.cx.const_gep(ptr, &[builder.cx.const_usize(i)]);
-                builder.load(builder.cx.ty_str(), ptr)
+        assert_eq!(real_off, real_cnt);
+        assert_eq!(int_off, real_cnt + int_cnt);
+    }
+
+    pub(crate) fn compile_model_info(
+        &self,
+        dst: &Path,
+        interned_model: InternedModel,
+        param_init_func: Function,
+        param_init_intern: HirInterner,
+    ) {
+        let module = unsafe { self.llbackend.new_module("model_info").unwrap() };
+        let mut cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
+
+        let (fun_names, fun_symbols) = interned_model.functions(&mut cx);
+        cx.export_array("functions", cx.ty_str(), &fun_names, true, true);
+        cx.export_array("functions.sym", cx.ty_str(), &fun_symbols, true, false);
+
+        let op_vars = interned_model.opvars(&mut cx);
+        cx.export_array("opvars", cx.ty_str(), &op_vars, true, true);
+
+        let nodes = interned_model.nodes(&mut cx);
+        cx.export_array("nodes", cx.ty_str(), &nodes, true, true);
+
+        let module_name = cx.const_str(interned_model.module_name);
+        cx.export_val("module_name", cx.ty_str(), module_name, true);
+
+        interned_model.export_param_info(&mut cx, Type::Real);
+        interned_model.export_param_info(&mut cx, Type::Integer);
+        interned_model.export_param_info(&mut cx, Type::String);
+
+        let fun_ty = cx.ty_func(
+            &[
+                cx.ptr_ty(cx.ty_real()),   // real param values
+                cx.ptr_ty(cx.ty_int()),    // int param values
+                cx.ptr_ty(cx.ty_str()),    // str param values
+                cx.ptr_ty(cx.ty_real()),   // real param min
+                cx.ptr_ty(cx.ty_int()),    // int param min
+                cx.ptr_ty(cx.ty_real()),   // real param max
+                cx.ptr_ty(cx.ty_int()),    // int param max
+                cx.ptr_ty(cx.ty_c_bool()), // param_given/error
+            ],
+            cx.ty_void(),
+        );
+
+        let llfun = cx.declare_ext_fn("init_modelcard", fun_ty);
+
+        let mut builder = Builder::new(&mut cx, &param_init_func, llfun);
+
+        // read parameters
+
+        builder.params = param_init_intern
+            .params
+            .raw
+            .iter()
+            .map(|(kind, val)| {
+                if param_init_func.dfg.value_dead(*val) {
+                    return None;
+                }
+                let val = match kind {
+                    ParamKind::Voltage { .. }
+                    | ParamKind::Current(_)
+                    | ParamKind::HiddenState(_) => {
+                        unreachable!()
+                    }
+                    ParamKind::Param(_) | ParamKind::ParamGiven { .. } => return None,
+                    ParamKind::Temperature => builder.cx.const_real(293f64),
+                    ParamKind::PortConnected { .. } => builder.cx.const_bool(true),
+                    ParamKind::ParamSysFun(param) => builder.cx.const_real(param.default_value()),
+                };
+
+                Some(val)
             })
-        })
-        .collect()
-}
+            .collect();
 
-#[allow(clippy::too_many_arguments)]
-unsafe fn map_params<'ll>(
-    db: &Snapshot<CompilationDB>,
-    model_info: &ModelInfo,
-    builder: &mut Builder<'_, '_, 'll>,
-    prefix: &str,
-    params: &TiSet<CfgParam, ParamKind>,
-    offset: &'ll llvm::Value,
-    ptr: &'ll llvm::Value,
-    ty: &Type,
-) -> AHashMap<ParamId, &'ll llvm::Value> {
-    let kinds = params.raw.iter().filter_map(|kind| {
-        if let ParamKind::Param(param) = kind {
-            (&db.param_data(*param).ty == ty).then(|| *param)
-        } else {
-            None
+        let param_flags = unsafe { llvm::LLVMGetParam(llfun, 7) };
+
+        let param_val_real = unsafe { llvm::LLVMGetParam(llfun, 0) };
+        let real_cnt = self.read_params(
+            &param_init_intern,
+            Type::Real,
+            &mut builder,
+            param_val_real,
+            param_flags,
+            0,
+        );
+
+        let param_val_int = unsafe { llvm::LLVMGetParam(llfun, 1) };
+        let int_cnt = self.read_params(
+            &param_init_intern,
+            Type::Integer,
+            &mut builder,
+            param_val_int,
+            param_flags,
+            real_cnt,
+        );
+
+        let param_val_str = unsafe { llvm::LLVMGetParam(llfun, 2) };
+        self.read_params(
+            &param_init_intern,
+            Type::String,
+            &mut builder,
+            param_val_str,
+            param_flags,
+            int_cnt + real_cnt,
+        );
+
+        // insert callbacks
+
+        builder.callbacks = stub_callbacks(&param_init_intern.callbacks, builder.cx);
+        self.insert_param_info_callbacks(
+            &param_init_intern,
+            &mut builder,
+            param_flags,
+            real_cnt,
+            int_cnt,
+        );
+
+        let postorder: Vec<_> = {
+            let mut cfg = ControlFlowGraph::new();
+            cfg.compute(&param_init_func);
+            cfg.postorder(&param_init_func).collect()
+        };
+
+        unsafe {
+            // the actual compiled function
+            builder.build_consts();
+            builder.build_cfg(&postorder);
+
+            // write the return values
+            builder.select_bb(postorder[0]);
+
+            let param_min_real = llvm::LLVMGetParam(llfun, 3);
+            let param_max_real = llvm::LLVMGetParam(llfun, 5);
+            self.write_params(
+                &param_init_intern,
+                Type::Real,
+                &builder,
+                param_val_real,
+                Some((param_min_real, param_max_real)),
+            );
+
+            let param_min_int = llvm::LLVMGetParam(llfun, 4);
+            let param_max_int = llvm::LLVMGetParam(llfun, 6);
+            self.write_params(
+                &param_init_intern,
+                Type::Integer,
+                &builder,
+                param_val_int,
+                Some((param_min_int, param_max_int)),
+            );
+
+            self.write_params(&param_init_intern, Type::String, &builder, param_val_str, None);
+
+            builder.ret_void();
         }
-    });
 
-    let global_name = format!("{}.params.{}", prefix, ty);
-    let names = kinds.clone().map(|param| &*model_info.params[&param].name);
-    export_names(builder.cx, names, &global_name);
-    mapping(kinds, builder, offset, ptr)
-}
+        debug_assert!(module.verify_and_print(), "generated invalid code");
+        module.optimize(self.llbackend);
 
-fn voltage_name(db: &Snapshot<CompilationDB>, hi: NodeId, lo: Option<NodeId>) -> String {
-    let mut name = format!("br_{}", &db.node_data(hi).name);
-    if let Some(lo) = lo {
-        name.push_str(&*db.node_data(lo).name)
+        module.emit_obect(dst).expect("code generation failed!");
     }
-    name
 }
 
-unsafe fn map_voltages<'ll>(
-    db: &Snapshot<CompilationDB>,
-    model_info: &ModelInfo,
-    builder: &mut Builder<'_, '_, 'll>,
-    prefix: &str,
-    params: &TiSet<CfgParam, ParamKind>,
-    offset: &'ll llvm::Value,
-    ptr: &'ll llvm::Value,
-) -> AHashMap<(NodeId, Option<NodeId>), &'ll llvm::Value> {
-    let voltages = params.raw.iter().filter_map(|kind| {
-        if let ParamKind::Voltage { hi, lo } = kind {
-            Some((*hi, *lo))
-        } else {
-            None
-        }
-    });
+impl InternedModel<'_> {
+    fn functions<'ll>(
+        &self,
+        cx: &mut mir_llvm::CodegenCx<'_, 'll>,
+    ) -> (Vec<&'ll llvm::Value>, Vec<&'ll llvm::Value>) {
+        self.functions
+            .iter()
+            .map(|func| (cx.const_str(func.name), cx.const_str(func.prefix)))
+            .unzip()
+    }
 
-    let default_val = |voltage| {
-        model_info.optional_voltages.get(&voltage).map(|val| (voltage, builder.cx.const_real(*val)))
-    };
+    fn opvars<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>) -> Vec<&'ll llvm::Value> {
+        self.opvars.iter().map(|name| cx.const_str(*name)).collect()
+    }
 
-    let (optional_voltages, default_vals): (Vec<_>, Vec<_>) =
-        voltages.clone().filter_map(default_val).unzip();
+    fn nodes<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>) -> Vec<&'ll llvm::Value> {
+        self.nodes.iter().map(|name| cx.const_str(*name)).collect()
+    }
 
-    let global_name = format!("{}.voltages.default", prefix);
-    builder.cx.export_array(&global_name, builder.cx.ty_real(), &default_vals, true, true);
-
-    let non_optional_voltages: Vec<_> =
-        voltages.filter(|kind| default_val(*kind).is_none()).collect();
-
-    let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
-
-    let global_name = format!("{}.voltages", prefix);
-    let names = voltages.clone().map(|(hi, lo)| voltage_name(db, hi, lo));
-    export_names(builder.cx, names, &global_name);
-    mapping(voltages, builder, offset, ptr)
-}
-
-fn current_name(db: &Snapshot<CompilationDB>, kind: CurrentKind) -> String {
-    match kind {
-        CurrentKind::ExplicitBranch(branch) => db.branch_data(branch).name.deref().to_owned(),
-        CurrentKind::ImplictBranch { hi, lo } => {
-            let mut name = format!(" {} ", &db.node_data(hi).name);
-            if let Some(lo) = lo {
-                name.push_str(&*db.node_data(lo).name);
-                name.push(' ');
+    fn param_info<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>, ty: &Type) -> ParamInfo<'ll> {
+        let iter = self.params.iter().filter_map(|param| {
+            if ty == param.ty {
+                Some((
+                    cx.const_str(param.name),
+                    cx.const_str(param.unit),
+                    cx.const_str(param.description),
+                    cx.const_str(param.group),
+                ))
+            } else {
+                None
             }
-            name
-        }
-        CurrentKind::Port(port) => format!("< {} >", &db.node_data(port).name),
+        });
+        let (names, units, descriptions, groups) = multiunzip(iter);
+        ParamInfo { units, groups, names, descriptions }
+    }
+
+    fn export_param_info<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>, ty: Type) {
+        let params = self.param_info(cx, &ty);
+
+        let sym = format!("params.{}", ty);
+        cx.export_array(&sym, cx.ty_str(), &params.names, true, true);
+
+        let sym = format!("params.unit.{}", ty);
+        cx.export_array(&sym, cx.ty_str(), &params.units, true, false);
+
+        let sym = format!("params.desc.{}", ty);
+        cx.export_array(&sym, cx.ty_str(), &params.descriptions, true, false);
+
+        let sym = format!("params.group.{}", ty);
+        cx.export_array(&sym, cx.ty_str(), &params.groups, true, false);
     }
 }
 
-unsafe fn map_currents<'ll>(
-    db: &Snapshot<CompilationDB>,
-    model_info: &ModelInfo,
-    builder: &mut Builder<'_, '_, 'll>,
-    prefix: &str,
-    params: &TiSet<CfgParam, ParamKind>,
-    offset: &'ll llvm::Value,
-    ptr: &'ll llvm::Value,
-) -> AHashMap<CurrentKind, &'ll llvm::Value> {
-    let kinds = params.raw.iter().filter_map(|kind| {
-        if let ParamKind::Current(kind) = kind {
-            Some(*kind)
-        } else {
-            None
-        }
-    });
-
-    let default_val = |kind| {
-        if let CurrentKind::ExplicitBranch(branch) = kind {
-            if let Some(val) = model_info.optional_currents.get(&branch) {
-                return Some((kind, builder.cx.const_real(*val)));
-            }
-        }
-        None
-    };
-
-    let (optional_currents, default_vals): (Vec<_>, Vec<_>) =
-        kinds.clone().filter_map(default_val).unzip();
-
-    let global_name = format!("{}.currents.default", prefix);
-    builder.cx.export_array(&global_name, builder.cx.ty_real(), &default_vals, true, true);
-
-    let nonoptional_currents: Vec<_> = kinds.filter(|kind| default_val(*kind).is_none()).collect();
-
-    let currents = optional_currents.into_iter().chain(nonoptional_currents);
-
-    let global_name = format!("{}.currents", prefix);
-    let names = currents.clone().map(|kind| current_name(db, kind));
-    export_names(builder.cx, names, &global_name);
-    mapping(currents, builder, offset, ptr)
-}
-
-fn export_names<T: Borrow<str>>(
-    cx: &mut CodegenCx<'_, '_>,
-    names: impl Iterator<Item = T>,
-    global_name: &str,
-) {
-    let names: Vec<_> = names
-        .map(|name| {
-            let name = name.borrow();
-            let name = cx.literals.get(name).unwrap();
-            cx.const_str(name)
-        })
-        .collect();
-    cx.export_array(global_name, cx.ty_str(), &names, true, true);
-}
-
-fn mapping<'ll, T: Copy + Eq + Hash>(
-    fields: impl Iterator<Item = T>,
-    builder: &mut Builder<'_, '_, 'll>,
-    offset: &'ll llvm::Value,
-    ptr: &'ll llvm::Value,
-) -> AHashMap<T, &'ll llvm::Value> {
-    fields
-        .enumerate()
-        .map(|(i, key)| (key, unsafe { read_fat_ptr_at(builder, i, offset, ptr) }))
-        .collect()
-}
-
-unsafe fn read_fat_ptr_at<'ll>(
-    builder: &mut Builder<'_, '_, 'll>,
-    pos: usize,
-    offset: &'ll llvm::Value,
-    ptr: &'ll llvm::Value,
-) -> &'ll llvm::Value {
-    // get correct ptrs from array
-    let fat_ptr = builder.gep(ptr, &[builder.cx.const_usize(pos)]);
-
-    let (ptr, meta) = builder.fat_ptr_to_parts(fat_ptr);
-    let ptr_ty = builder.cx.elem_ty(builder.cx.val_ty(ptr));
-
-    // get stride or scalar ptr by bitcasting
-    let stride_ptr = builder.ptrcast(meta, builder.cx.ptr_ty(builder.cx.ty_isize()));
-    let stride = builder.load(builder.cx.ty_isize(), stride_ptr);
-    let scalar_ptr = builder.ptrcast(meta, ptr_ty);
-
-    // load the array ptr and check if its a null ptr
-    let arr_ptr = builder.load(ptr_ty, ptr);
-    let is_arr_null = builder.is_null_ptr(arr_ptr);
-
-    // offset the array _ptr
-    let offset = builder.imul(stride, offset);
-    let arr_ptr = builder.gep(arr_ptr, &[offset]);
-
-    // if the array_ptr is null select the scalar_ptr otherwise select the arr_ptr
-    let ptr = builder.select(is_arr_null, scalar_ptr, arr_ptr);
-
-    //final load
-    builder.load(builder.cx.elem_ty(ptr_ty), ptr)
+struct ParamInfo<'ll> {
+    names: Vec<&'ll llvm::Value>,
+    units: Vec<&'ll llvm::Value>,
+    descriptions: Vec<&'ll llvm::Value>,
+    groups: Vec<&'ll llvm::Value>,
 }

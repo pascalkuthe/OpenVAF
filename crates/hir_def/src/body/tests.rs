@@ -118,45 +118,16 @@ pub fn diode() {
     let expect = expect![[r#"
         analog begin: (Root)
 
-            if Rs < 0.001
-            begin: (Root)
-
-                V(br_ci_c, )<+0;
-                VT=0.000000000000000000000013806503 * $temperature() / 0.0000000000000000001602176462;
-                if Rs < 0.001
-                begin: (Root)
-
-                    vcrit=vte * log(vte / 1.4142135623730951 * Is, );
-                end
-                else
-                <missing>;
-            end
-            else
-            <missing>;
-            if Rs > 0.001
-            begin: (Root)
-
-                VT=0.000000000000000000000013806503 * $temperature() / 0.0000000000000000001602176462;
-                if Rs < 0.001
-                begin: (Root)
-
-                    vcrit=vte * log(vte / 1.4142135623730951 * Is, );
-                end
-                else
-                <missing>;
-            end
-            else
-            <missing>;
-            vte=VT * N;
-            vcrit=vte * log(vte / 1.4142135623730951 * Is, );
-            Vd=V(A, CI, );
+            VT=0.000000000000000000000013806503 * $temperature() / 0.0000000000000000001602176462;
+            Vd=V(br_a_ci, );
             Vr=V(br_ci_c, );
-            Id=Is * exp(Vd / vte, ) - 1;
+            Id=Is * exp(Vd / N * VT, ) - 1;
             vf=Vj * 1 - pow(3, -1 / M, );
             x=vf - Vd / VT;
             y=sqrt(x * x + 1.92, );
             Vd=vf - VT * x + y / 2;
             Qd=Cj0 * Vj * 1 - pow(1 - Vd / Vj, 1 - M, ) / 1 - M;
+            Cd=ddx(Qd, V(A, ), );
             I(br_a_ci, )<+Id + ddt(Qd, );
             I(br_ci_c, )<+Vr / Rs;
         end

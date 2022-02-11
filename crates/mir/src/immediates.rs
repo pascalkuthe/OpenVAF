@@ -280,6 +280,12 @@ impl From<u64> for Ieee64 {
     }
 }
 
+impl From<Ieee64> for f64 {
+    fn from(x: Ieee64) -> Self {
+        f64::from_bits(x.0)
+    }
+}
+
 impl Ieee64 {
     /// Create a new `Ieee64` containing the bits of `x`.
     pub fn with_bits(x: u64) -> Self {

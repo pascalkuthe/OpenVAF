@@ -262,6 +262,18 @@ impl_intern!(BranchId, BranchLoc, intern_branch, lookup_intern_branch);
 pub type VarLoc = ItemLoc<Var>;
 impl_intern!(VarId, VarLoc, intern_var, lookup_intern_var);
 
+impl From<u32> for VarId {
+    fn from(val: u32) -> Self {
+        VarId(val.into())
+    }
+}
+
+impl From<VarId> for u32 {
+    fn from(var: VarId) -> Self {
+        var.0.into()
+    }
+}
+
 pub type ParamLoc = ItemLoc<Param>;
 impl_intern!(ParamId, ParamLoc, intern_param, lookup_intern_param);
 

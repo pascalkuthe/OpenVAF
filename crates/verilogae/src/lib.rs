@@ -4,13 +4,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
-use backend::compile_to_cfg;
 use basedb::{BaseDB, VfsStorage};
-use codegen_llvm::LLVMBackend;
-use hir_lower::PlaceKind;
 use lasso::Rodeo;
 use linker::link;
-use program_dependence::{AssigmentInterner, ProgramDependenGraph};
+use mir_llvm::LLVMBackend;
 use salsa::ParallelDatabase;
 use stdx::iter::zip;
 use stdx::pretty;
@@ -91,7 +88,6 @@ impl CompilationDB {
         // display method
         let info = ModelInfo::collect(&db, &file, opts.module_name()?)?;
 
-        let db_snap = db.snapshot();
         let target = opts.target(local)?;
         let cg_opts: Vec<_> = opts.cg_flags().map(str::to_owned).collect();
         let backend = LLVMBackend::new(&cg_opts, &target, opts.opt_lvl.into());
@@ -105,20 +101,21 @@ impl CompilationDB {
         let mut object_files = vec![cache_dir.join(format!("{}_modelinfo.o", file))];
 
         if full_compile {
-            let (mut cfg, intern, mut literals) =
-                compile_to_cfg(&*db_snap, info.module, false, false, false, &mut |places, dst| {
-                    for fun in &info.functions {
-                        dst.insert(places.ensure(PlaceKind::Var(fun.var)).0);
-                    }
-                });
+            let (func, intern, mut literals, cfg) = db.build_module_mir(&info);
+            let interned_model = info.intern_model(&db, &mut literals);
+            let param_init = db.build_param_init_mir(&info, &mut literals);
 
-            back::compile_model_info(
-                &db_snap,
-                Some(&intern),
-                &info,
-                &mut literals,
-                &backend,
+            let mut cx = back::CodegenCtx {
+                model_info: &info,
+                llbackend: &backend,
+                literals: &mut literals,
+            };
+
+            cx.compile_model_info(
                 &object_files[0],
+                interned_model,
+                param_init.0,
+                param_init.1,
             );
 
             let dst_name = dst.file_name().to_owned().unwrap().to_string_lossy();
@@ -127,41 +124,39 @@ impl CompilationDB {
                     .iter()
                     .map(|fun| cache_dir.join(format!("{}{}.o", dst_name, fun.prefix))),
             );
-            cfg.cannonicalize_ret();
-            let assignments = AssigmentInterner::new(&cfg);
-            let pdg = ProgramDependenGraph::build(&assignments, &cfg);
+
+            // ensure all voltage/current names are in the interner so that the interner can be
+            // shared (readonly) betwenn threads
+            cx.ensure_names(&db, &intern);
 
             rayon_core::scope(|s| {
                 let db = db;
-                for (fun, file) in zip(&info.functions, &object_files[1..]) {
+                for (spec, file) in zip(&info.functions, &object_files[1..]) {
                     let db_snap = db.snapshot();
                     s.spawn(|_| {
                         let db_snap = db_snap;
-                        let (mut intern, cfg) =
-                            middle::create_slice(&cfg, &pdg, &intern, fun, true);
-                        back::compile_fun(
-                            &backend,
-                            &db_snap,
-                            &info,
-                            &mut intern,
-                            &cfg,
-                            &literals,
-                            file,
-                            fun,
-                            &fun.prefix,
-                        )
+                        let (func, cfg) = spec.slice_mir(&func, &cfg, &intern);
+                        cx.gen_func_obj(&db_snap, spec, &func, &cfg, &intern, file)
                     })
                 }
             })
         } else {
             let mut literals = Rodeo::default();
-            back::compile_model_info(
-                &db_snap,
-                None,
-                &info,
-                &mut literals,
-                &backend,
+
+            let interned_model = info.intern_model(&db, &mut literals);
+            let param_init = db.build_param_init_mir(&info, &mut literals);
+
+            let cx = back::CodegenCtx {
+                model_info: &info,
+                llbackend: &backend,
+                literals: &mut literals,
+            };
+
+            cx.compile_model_info(
                 &object_files[0],
+                interned_model,
+                param_init.0,
+                param_init.1,
             );
         }
 

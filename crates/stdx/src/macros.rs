@@ -137,6 +137,16 @@ macro_rules! impl_idx_from {
                 it.0 as usize
             }
         }
+
+        impl $crate::packed_option::ReservedValue for $ty {
+            fn reserved_value() -> Self {
+                $ty($raw::MAX)
+            }
+
+            fn is_reserved_value(&self) -> bool {
+                self.0 == $raw::MAX
+            }
+        }
     };
 }
 

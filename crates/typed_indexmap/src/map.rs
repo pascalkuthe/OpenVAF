@@ -1,9 +1,15 @@
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::iter;
 use std::marker::PhantomData;
 use std::ops::Index;
 
 use indexmap::IndexMap;
+
+pub type Iter<'a, I, K, V> = iter::Map<
+    iter::Enumerate<indexmap::map::Iter<'a, K, V>>,
+    fn((usize, (&'a K, &'a V))) -> (I, (&'a K, &'a V)),
+>;
 
 pub struct TiMap<I, K, V> {
     /// raw set property
@@ -84,19 +90,23 @@ where
 }
 
 impl<I: From<usize>, K, V> TiMap<I, K, V> {
-    pub fn iter_enumerated(&self) -> impl Iterator<Item = (I, (&K, &V))> {
+    pub fn iter_enumerated(&self) -> Iter<'_, I, K, V> {
         self.raw.iter().enumerate().map(|(index, val)| (index.into(), val))
     }
 }
 
 impl<I, K, V> TiMap<I, K, V>
 where
-    I: From<usize>,
+    I: From<usize> + Into<usize>,
     K: Eq + Hash,
     V: Eq,
 {
     pub fn index(&self, key: &K) -> Option<I> {
         self.raw.get_index_of(key).map(I::from)
+    }
+
+    pub fn unwrap_index(&self, key: &K) -> I {
+        self.raw.get_index_of(key).unwrap().into()
     }
 
     pub fn index_and_val(&self, key: &K) -> Option<(I, &V)> {
@@ -105,6 +115,10 @@ where
 
     pub fn contains_key(&self, key: &K) -> bool {
         self.raw.contains_key(key)
+    }
+
+    pub fn get_index(&self, index: I) -> Option<(&K, &V)> {
+        self.raw.get_index(index.into())
     }
 }
 
