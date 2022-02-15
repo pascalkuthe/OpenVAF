@@ -1,8 +1,0 @@
-[workspace]
-
-members = [
-    "osdi",
-  #  "osdi_derive",
-    "osdi_types",
-  #  "test"
-]
