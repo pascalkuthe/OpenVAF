@@ -403,6 +403,9 @@ impl CodegenCtx<'_, '_> {
         debug_assert!(module.verify_and_print(), "Invalid code generated");
         module.optimize(self.llbackend);
 
+        println!("{}", func.to_debug_string());
+        println!("{}", module.to_str());
+
         module.emit_obect(dst).expect("code generation failed!")
     }
 

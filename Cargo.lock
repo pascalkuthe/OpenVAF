@@ -603,6 +603,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
 
 [[package]]
+name = "osdi"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "arrayvec",
+ "basedb",
+ "bitset",
+ "expect-test",
+ "float-cmp",
+ "hir_def",
+ "hir_lower",
+ "hir_ty",
+ "lasso",
+ "llvm",
+ "mir",
+ "mir_autodiff",
+ "mir_interpret",
+ "mir_llvm",
+ "mir_opt",
+ "parking_lot",
+ "paths",
+ "proc-macro2",
+ "quote",
+ "salsa",
+ "sourcegen",
+ "stdx",
+ "syntax",
+ "target",
+ "typed-index-collections",
+ "typed_indexmap",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
