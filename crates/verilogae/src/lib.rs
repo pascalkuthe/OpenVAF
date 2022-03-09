@@ -111,12 +111,7 @@ impl CompilationDB {
                 literals: &mut literals,
             };
 
-            cx.compile_model_info(
-                &object_files[0],
-                interned_model,
-                param_init.0,
-                param_init.1,
-            );
+            cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
 
             let dst_name = dst.file_name().to_owned().unwrap().to_string_lossy();
             object_files.extend(
@@ -152,12 +147,7 @@ impl CompilationDB {
                 literals: &mut literals,
             };
 
-            cx.compile_model_info(
-                &object_files[0],
-                interned_model,
-                param_init.0,
-                param_init.1,
-            );
+            cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
         }
 
         link(&target, None, None, dst, |linker| {
