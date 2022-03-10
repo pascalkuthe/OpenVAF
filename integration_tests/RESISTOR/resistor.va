@@ -1,0 +1,21 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module resistor_va(A,B);
+    inout A, B;
+    electrical A,B;
+
+    branch (A,B) br_a_b;
+
+    (*desc= "Ohmic resistance", units = "Ohm" *) parameter real R = 0.0 from [0:inf];
+    (*desc= "Temperature coeff" *) parameter real zeta = 0.0 from [-20:20];
+    (*desc= "Reference Temp.", units = "Kelvin" *) parameter real tnom = 300.0 from [0:inf];
+
+    real res, vres;
+
+    analog begin
+        vres = V(br_a_b);
+        res = R*pow($temperature/tnom, zeta);
+        I(br_a_b) <+ vres / res;
+    end
+endmodule

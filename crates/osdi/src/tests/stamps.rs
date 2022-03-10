@@ -3,6 +3,66 @@ use float_cmp::assert_approx_eq;
 use sourcegen::project_root;
 
 #[test]
+fn resistor() {
+    // compile model and obtain:
+    // a data base that contains all info about the model available to the compiler
+    // the optimized MIR that represents the actual compiled code (including matrix entries)
+    // the interned string literals (unintersting)
+    let root_file = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
+    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
+
+    //define parameters
+    let r = 15.0;
+    let zeta = 1.0;
+    let tnom = 250.0;
+    let va = 1.0;
+    let vb = 0.0;
+
+    // prepare inputs
+    let temp = 298.5;
+    let mut params = AHashMap::default();
+    let mut node_voltages = AHashMap::default();
+
+    params.insert("R", r.into());
+    params.insert("zeta", zeta.into());
+    params.insert("tnom", tnom.into());
+
+    node_voltages.insert("A", va);
+    node_voltages.insert("B", vb);
+
+    // run the interpreter
+    let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
+    let stamps = mir.matrix.stamps(&db);
+
+    // read the matrix entries
+    let ia_va : f64  = result.read(stamps[&("A".to_owned(),"A".to_owned())]);
+    let ia_vb : f64  = result.read(stamps[&("A".to_owned(),"B".to_owned())]);
+    let ib_va : f64  = result.read(stamps[&("B".to_owned(),"A".to_owned())]);
+    let ib_vb : f64  = result.read(stamps[&("B".to_owned(),"B".to_owned())]);
+
+    // calculate the expected values for the stamps
+    let vab = va-vb;
+    let res = r*(temp/tnom).powf(zeta);
+    let ir = vab/res;
+    let g = ir/vab;
+
+    // Resistor current flows from A into B, resistor voltage = Va-Vb
+    let ia_va_expect = g;
+    let ia_vb_expect = -g;
+    let ib_vb_expect = g;
+    let ib_va_expect = -g;
+
+    // finally assert that the values are correct
+    let epsilon=1e-5;
+    assert_approx_eq!(f64, ia_va, ia_va_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ia_vb, ia_vb_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ib_vb, ib_vb_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ib_va, ib_va_expect, epsilon=epsilon);
+
+}
+
+
+#[test]
 fn diode() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
