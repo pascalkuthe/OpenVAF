@@ -19,6 +19,19 @@ Some highlights of OpenVAF include:
 * fast binary generation using LLVM
 * robust auto differentiation implementation
 
+# Compilation
+
+To build the project, simply run
+
+    cargo build
+
+, which will build the project. The command
+
+    cargo test
+
+will run the test cases.
+
+
 # Acknowledgement
 
 The architectures of the [rust-analyzer](https://github.com/rust-analyzer/rust-analyzer) and [rustc](https://github.com/rust-lang/rust/) have heavily inspired the design of this compiler.
