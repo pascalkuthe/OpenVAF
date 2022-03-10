@@ -1,6 +1,7 @@
 use std::ffi::c_void;
 use std::path::Path;
 
+use ahash::AHashMap;
 use hir_def::db::HirDefDB;
 use hir_lower::ParamKind;
 use lasso::{Rodeo, Spur};
@@ -81,6 +82,16 @@ fn compile_to_mir(path: &Path) -> (CompilationDB, AnalogBlockMir, Rodeo) {
 }
 
 impl JacobianMatrix {
+    fn stamps(&self, db: &dyn HirDefDB) -> AHashMap<(String, String), Value> {
+        zip(&self.entries.raw, &self.values)
+            .map(|(entry, val)| {
+                let row = db.node_data(entry.row).name.to_string();
+                let col = db.node_data(entry.col).name.to_string();
+                ((row, col), *val)
+            })
+            .collect()
+    }
+
     fn print(&self, db: &dyn HirDefDB) -> String {
         let mut res = String::new();
         for (entry, val) in zip(&self.entries.raw, &self.values) {
