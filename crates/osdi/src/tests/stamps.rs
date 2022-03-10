@@ -1,5 +1,4 @@
 use ahash::AHashMap;
-use expect_test::expect;
 use float_cmp::assert_approx_eq;
 use sourcegen::project_root;
 
@@ -7,59 +6,78 @@ use sourcegen::project_root;
 fn diode() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
-    // the optimised MIR that represents the actual compiled code (including matrix entries)
+    // the optimized MIR that represents the actual compiled code (including matrix entries)
     // the interned string literals (unintersting)
     let root_file = project_root().join("integration_tests").join("DIODE").join("diode.va");
     let (db, mir, mut literals) = super::compile_to_mir(&root_file);
 
-    // printout of the matrix entries
-    // (first entry is the current, second entry the voltage)
-    let matrix = expect![[r#"
-        (A, A) = v98
-        (A, CI) = v112
-        (CI, A) = v111
-        (CI, CI) = v120
-        (CI, C) = v121
-        (C, CI) = v122
-        (C, C) = v106
-    "#]];
-
-    // Note: this produces an error if the matrix changes
-    // You can update the string by running the test with UPDATE_EXPECT=1
-    matrix.assert_eq(&mir.matrix.print(&db));
+    //define parameters
+    let is = 1e-9;
+    let rs = 1.0;
+    let n = 1.0;
+    let cj0 = 1e-12;
+    let vj = 1.0;
+    let m = 0.5;
+    let va = 1.0;
+    let vci = 0.5;
+    let vc = 0.0;
 
     // prepare inputs
     let temp = 298.5;
     let mut params = AHashMap::default();
     let mut node_voltages = AHashMap::default();
 
-    params.insert("Is", 1e-9.into());
-    params.insert("Rs", 1.0.into());
-    params.insert("N", 1.0.into());
-    params.insert("Cj0", 1e-12.into());
-    params.insert("Vj", 1.0.into());
-    params.insert("M", 0.5.into());
+    params.insert("Is", is.into());
+    params.insert("Rs", rs.into());
+    params.insert("N", n.into());
+    params.insert("Cj0", cj0.into());
+    params.insert("Vj", vj.into());
+    params.insert("M", m.into());
 
-    node_voltages.insert("A", 1.0);
-    node_voltages.insert("CI", 0.5);
-    node_voltages.insert("C", 0.0);
+    node_voltages.insert("A", va);
+    node_voltages.insert("CI", vci);
+    node_voltages.insert("C", vc);
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
+    let stamps = mir.matrix.stamps(&db);
 
-    // now we can read the matrix entries
-    let ia_va: f64 = result.read(98u32.into());
-    let ia_vci: f64 = result.read(112u32.into());
-    // TODO ... add the remaining stamps
+    // read the matrix entries
+    let ia_va : f64  = result.read(stamps[&("A".to_owned(),"A".to_owned())]);
+    let ia_vci : f64  = result.read(stamps[&("A".to_owned(),"CI".to_owned())]);
+    let ici_va : f64  = result.read(stamps[&("CI".to_owned(),"A".to_owned())]);
+    let ici_vci : f64  = result.read(stamps[&("CI".to_owned(),"CI".to_owned())]);
+    let ici_vc : f64  = result.read(stamps[&("CI".to_owned(),"C".to_owned())]);
+    let ic_vci : f64  = result.read(stamps[&("C".to_owned(),"CI".to_owned())]);
+    let ic_vc : f64  = result.read(stamps[&("C".to_owned(),"C".to_owned())]);
 
-    // TODO calculate the expected values for the stamps
-    let ia_va_expect = 0.0;
-    let ia_vci_expect = 0.0;
-    // TODO ... add the remaining stamps
+    // calculate the expected values for the stamps
+    let pk =  1.3806503e-23;
+    let pq =  1.602176462e-19;
+    let vt = temp*pk/pq;
+    let vaci = va-vci;
+    let id = is * ((vaci / (n * vt)).exp() - 1.0);
+    let gd = id/vt;
+    let g = 1.0/rs;
+
+    // Diode current flows from Ci into A, diode voltage = Va-Vci
+    // Resistor current flows from C into Ci, resistor voltage = Vci-Vc
+    let ia_va_expect = gd;
+    let ia_vci_expect = -gd;
+    let ici_va_expect = -gd;
+    let ici_vci_expect = gd + g;
+    let ici_vc_expect = - g;
+    let ic_vci_expect = -g;
+    let ic_vc_expect = g;
 
     // finally assert that the values are correct
-    assert_approx_eq!(f64, ia_va, ia_va_expect);
-    // you can change tolerance if you need to (values shown here are default)
-    assert_approx_eq!(f64, ia_vci, ia_vci_expect, epsilon = f64::EPSILON, ulps = 4);
-    // TODO add remaining stamps
+    let epsilon=1e-5;
+    assert_approx_eq!(f64, ia_va, ia_va_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ia_vci, ia_vci_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ici_va, ici_va_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ici_vci, ici_vci_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ici_vc, ici_vc_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ic_vc, ic_vc_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ic_vci, ic_vci_expect, epsilon=epsilon);
+
 }
