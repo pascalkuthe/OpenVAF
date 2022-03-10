@@ -1,0 +1,25 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module cccs_va(Inp,Inm,Outp,Outm);
+    // ideal current controlled current source
+    inout Inp, Inm,Outp,Outm;
+    electrical Inp, Inm,Outp,Outm;
+
+    branch (Inp,Inm) br_in;
+    branch (Outp,Outm) br_out;
+
+    (*desc= "current amplification factor") parameter real G = 10 from [0:inf];
+    (*desc= "input Resistance", units = "Ohm" *) parameter real Rin = 1e9 from [-inf:inf];
+    (*desc= "output Resistance", units = "Ohm" *) parameter real Rout = 1e9 from [-inf:inf];
+
+    real Iin,Vout,Vin;
+
+    analog begin
+        Iin = I(br_in);
+        Vout = V(br_out);
+        Vin = V(br_in);
+        I(br_out) <+ Iin*G+Vout/Rout;
+        I(br_in) <+ Vin/Rin;
+    end
+endmodule

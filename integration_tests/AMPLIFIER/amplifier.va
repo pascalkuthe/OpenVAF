@@ -1,0 +1,33 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module amplifier_va(Inp,Inm,Outp,Outm);
+    // ideal amplifier that amplifies input voltage  Vin=Inp-Inm to Vout=Outp-Outm=Vin*G
+    // Z11 = Rin
+    // Z12 = 0
+    // Z22 = Rout
+    // Z21 = 2*sqrt(Rin*Rout)*G
+    inout Inp, Inm, Outp, Outm;
+    electrical Inp,Inm,Outp,Outm;
+
+    branch (Inp,Inm) br_inp_inm;
+    branch (Outp,Outm) br_outp_outm;
+
+
+    (*desc= "Ohmic input resistance", units = "Ohm" *) parameter real Rin = 1e9 from [0:inf];
+
+    (*desc= "Ohmic output resistance", units = "Ohm" *) parameter real Rout = 1e9 from [0:inf];
+
+    (*desc= "Voltage amplification factor"*) parameter real G = 10.0 from [0:inf];
+
+    real Vin, Vout;
+
+    analog begin
+        Vin = V(br_inp_inm);
+        Vout = G*Vin;
+        I(br_inp_inm) <+ Vin / Rin;
+        V(Outp) <+ Vout;
+        V(Outm) <+ V(Inm);
+        I(br_outp_outm) <+ Vout / Rout;
+    end
+endmodule

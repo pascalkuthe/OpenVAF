@@ -1,0 +1,21 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module cs_va(Np,Nm);
+    // ideal current source with parallel resistor
+    inout Np, Nm;
+    electrical Np,Nm;
+
+    branch (Np,Nm) br_np_nm;
+
+
+    (*desc= "Current", units = "Ampere" *) parameter real Io = 1 from [-inf:inf];
+    (*desc= "Output Resistance", units = "Ohm" *) parameter real R = 1e9 from [-inf:inf];
+
+    real Vcs;
+
+    analog begin
+        Vcs = V(br_np_nm);
+        I(br_np_nm) <+ Io+Vcs/R;
+    end
+endmodule
