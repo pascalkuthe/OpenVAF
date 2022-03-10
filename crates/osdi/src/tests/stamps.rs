@@ -240,7 +240,6 @@ fn vccs() {
     // calculate the expected values for the stamps
     let gin = 1.0/rin;
     let gout = 1.0/rout;
-    let vin = 1.0;
 
     // input resistor
     let ip_ip_expect = gin;
@@ -295,9 +294,11 @@ fn diode() {
     let cj0 = 1e-12;
     let vj = 1.0;
     let m = 0.5;
+    let rth = 1e3;
     let va = 1.0;
     let vci = 0.5;
     let vc = 0.0;
+    let vdtj = 10.0;
 
     // prepare inputs
     let temp = 298.5;
@@ -310,51 +311,120 @@ fn diode() {
     params.insert("Cj0", cj0.into());
     params.insert("Vj", vj.into());
     params.insert("M", m.into());
+    params.insert("Rth", rth.into());
 
     node_voltages.insert("A", va);
     node_voltages.insert("CI", vci);
     node_voltages.insert("C", vc);
+    node_voltages.insert("dT", vdtj);
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
     let stamps = mir.matrix.stamps(&db);
 
+    // let matrix = expect![[r#"
+    //     (A, dT) = v211
+    //     (CI, dT) = v240
+    //     (A, A) = v212
+    //     (A, CI) = v243
+    //     (CI, A) = v242
+    //     (CI, CI) = v257
+    //     (CI, C) = v258
+    //     (dT, dT) = v225
+    //     (dT, A) = v226
+    //     (dT, CI) = v249
+    //     (C, CI) = v259
+    //     (C, C) = v235
+    // "#]];
+
+    // // Note: this produces an error if the matrix changes
+    // // You can update the string by running the test with UPDATE_EXPECT=1
+    // matrix.assert_eq(&mir.matrix.print(&db));
+
+
     // read the matrix entries
     let ia_va : f64  = result.read(stamps[&("A".to_owned(),"A".to_owned())]);
     let ia_vci : f64  = result.read(stamps[&("A".to_owned(),"CI".to_owned())]);
+    let ia_dtj : f64  = result.read(stamps[&("A".to_owned(),"dT".to_owned())]);
     let ici_va : f64  = result.read(stamps[&("CI".to_owned(),"A".to_owned())]);
     let ici_vci : f64  = result.read(stamps[&("CI".to_owned(),"CI".to_owned())]);
     let ici_vc : f64  = result.read(stamps[&("CI".to_owned(),"C".to_owned())]);
+    let ici_dtj : f64  = result.read(stamps[&("CI".to_owned(),"dT".to_owned())]);
     let ic_vci : f64  = result.read(stamps[&("C".to_owned(),"CI".to_owned())]);
     let ic_vc : f64  = result.read(stamps[&("C".to_owned(),"C".to_owned())]);
+    let itj_dtj : f64  = result.read(stamps[&("dT".to_owned(),"dT".to_owned())]);
+    let itj_va : f64  = result.read(stamps[&("dT".to_owned(),"A".to_owned())]);
+    let itj_vci : f64  = result.read(stamps[&("dT".to_owned(),"CI".to_owned())]);
+    let itj_vc : f64  = result.read(stamps[&("dT".to_owned(),"C".to_owned())]);
 
     // calculate the expected values for the stamps
     let pk =  1.3806503e-23;
     let pq =  1.602176462e-19;
-    let vt = temp*pk/pq;
+    let t_dev = temp + vdtj;
+    let vt = t_dev*pk/pq;
+    let vt_tj = pk/pq;
     let vaci = va-vci;
+    let vcic = vci-vc;
+
     let id = is * ((vaci / (n * vt)).exp() - 1.0);
-    let gd = id/vt;
+    let gd = is/vt * (vaci / (n * vt)).exp();
+    let id_vt = - is * (vaci / (n * vt)).exp() * vaci/n/vt/vt;
+    let gdt = id_vt*vt_tj;
+
     let g = 1.0/rs;
+
+    let gt = 1.0/rth;
+
+    let ith     = id*vaci+ vcic.powf(2.0)/rs;
+    let ith_vtj = gdt*vaci;
+    let ith_vc  = 0.0-2.0*vcic/rs;
+    let ith_va  =  gd*vaci + id;
+    let ith_vci = -gd*vaci-id+2.0*vcic/rs;
 
     // Diode current flows from Ci into A, diode voltage = Va-Vci
     // Resistor current flows from C into Ci, resistor voltage = Vci-Vc
+
+    // stamp diode
     let ia_va_expect = gd;
     let ia_vci_expect = -gd;
     let ici_va_expect = -gd;
-    let ici_vci_expect = gd + g;
+    let ici_vci_expect = gd;
+
+    //diode thermal
+    let ia_vtj_expect = gdt;
+    let ici_vtj_expect = -gdt;
+
+    // stamp resistor
+    let ici_vci_expect = ici_vci_expect +   g;
     let ici_vc_expect = - g;
     let ic_vci_expect = -g;
     let ic_vc_expect = g;
 
+    //stamp rth flowing into T node dTj/rth
+    let it_vt_expect = gt;
+
+    //stamp ith flowing out of T node
+    let it_vt_expect  = it_vt_expect - ith_vtj;
+    let it_vci_expect = -ith_vci;
+    let it_vc_expect  = -ith_vc;
+    let it_va_expect  = - ith_va;
+
+    println!("{}", mir.func.to_debug_string());
+
     // finally assert that the values are correct
-    let epsilon=1e-5;
-    assert_approx_eq!(f64, ia_va, ia_va_expect, epsilon=epsilon);
-    assert_approx_eq!(f64, ia_vci, ia_vci_expect, epsilon=epsilon);
-    assert_approx_eq!(f64, ici_va, ici_va_expect, epsilon=epsilon);
+    let epsilon = 1e-5;
+    assert_approx_eq!(f64, ia_va  , ia_va_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ia_vci , ia_vci_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ia_dtj , ia_vtj_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ici_va , ici_va_expect, epsilon=epsilon);
     assert_approx_eq!(f64, ici_vci, ici_vci_expect, epsilon=epsilon);
-    assert_approx_eq!(f64, ici_vc, ici_vc_expect, epsilon=epsilon);
-    assert_approx_eq!(f64, ic_vc, ic_vc_expect, epsilon=epsilon);
-    assert_approx_eq!(f64, ic_vci, ic_vci_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ici_vc , ici_vc_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ici_dtj, ici_vtj_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ic_vc  , ic_vc_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, ic_vci , ic_vci_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, itj_dtj, it_vt_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, itj_va , it_va_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, itj_vc , it_vc_expect, epsilon=epsilon);
+    assert_approx_eq!(f64, itj_vci, it_vci_expect, epsilon=epsilon);
 
 }

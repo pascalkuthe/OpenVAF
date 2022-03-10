@@ -4,6 +4,14 @@
 use sourcegen::{project_root, skip_slow_tests};
 
 #[test]
+fn amplifier() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file = project_root().join("integration_tests").join("AMPLIFIER").join("amplifier.va");
+    super::full_compile(&root_file);
+}
+#[test]
 fn bsim3() {
     if skip_slow_tests() {
         return;
@@ -57,6 +65,23 @@ fn bsimsoi() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIMSOI").join("bsimsoi.va");
+    super::full_compile(&root_file);
+}
+#[test]
+fn cccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file = project_root().join("integration_tests").join("CCCS").join("cccs.va");
+    super::full_compile(&root_file);
+}
+#[test]
+fn current_source() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file =
+        project_root().join("integration_tests").join("CURRENT_SOURCE").join("current_source.va");
     super::full_compile(&root_file);
 }
 #[test]
@@ -129,5 +154,21 @@ fn psp() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("PSP").join("psp.va");
+    super::full_compile(&root_file);
+}
+#[test]
+fn resistor() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
+    super::full_compile(&root_file);
+}
+#[test]
+fn vccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file = project_root().join("integration_tests").join("VCCS").join("vccs.va");
     super::full_compile(&root_file);
 }

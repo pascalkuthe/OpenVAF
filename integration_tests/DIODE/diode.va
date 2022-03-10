@@ -1,12 +1,14 @@
 `include "constants.vams"
 `include "disciplines.vams"
 
-module diode_va(A,C);
-    inout A, C;
-    electrical A,C,CI;
+module diode_va(A,C,dT);
+    // simple diode with self-heating network
+    inout A, C, dT;
+    electrical A,C,CI,dT;
 
     branch (A,CI) br_a_ci;
     branch (CI,C) br_ci_c;
+    branch (dT )  br_sht; //self-heating
 
     (*desc= "Saturation current", units = "A"*) parameter real Is = 1e-14 from [0:inf];
 
@@ -20,19 +22,24 @@ module diode_va(A,C);
 
     (*desc= "Grading coefficient"*) parameter real M = 0.5 from [0:inf];
 
+    (*desc= "Thermal resistance", units = "K/W"*) parameter real Rth = 0 from [0:inf];
+
 
     real Vd, Vr, Qd;
 
     real Id;
     real Cd;
 
-    real VT,x,y,vf;
+    real VT,x,y,vf,Tdev,pterm;
 
     analog begin
-        VT = `P_K*$temperature /`P_Q;
+        Tdev = $temperature+V(br_sht);
+        VT = `P_K*Tdev/`P_Q;
         Vd = V(br_a_ci);
         Vr = V(br_ci_c);
         Id = Is * (exp(Vd / (N * VT)) - 1);
+        // dissipated power
+        pterm = Id*Vd + pow(Vr,2)/Rs;
         //junction capacitance
         //smoothing of voltage over cap
         vf   = Vj*(1 - pow(3, -1/M));
@@ -42,6 +49,7 @@ module diode_va(A,C);
         Qd   = Cj0*Vj * (1-pow(1-Vd/Vj, 1-M))/(1-M);
         Cd   = ddx(Qd,V(A));
         I(br_a_ci) <+ Id + ddt(Qd);
+        I(br_sht)  <+ V(br_sht)/Rth-pterm;
         I(br_ci_c) <+ Vr / Rs;
     end
 endmodule
