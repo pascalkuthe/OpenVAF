@@ -14,6 +14,8 @@ module diode_va(A,C,dT);
 
     (*desc= "Ohmic res", units = "Ohm" *) parameter real Rs = 0.0 from [0:inf];
 
+    (*desc= "Temperature coefficient of ohmic res"*) parameter real zetars = 0.0 from [-10:10];
+
     (*desc= "Emission coefficient"*) parameter real N = 1.0 from [0:inf];
 
     (*desc= "Junction capacitance", units = "F"*) parameter real Cj0 = 0.0 from [0:inf];
@@ -24,32 +26,40 @@ module diode_va(A,C,dT);
 
     (*desc= "Thermal resistance", units = "K/W"*) parameter real Rth = 0 from [0:inf];
 
+    (*desc= "Temperature coefficient of thermal res"*) parameter real zetarth = 0.0 from [-10:10];
+
+    (*desc= "Temperature coefficient of Is"*) parameter real zetais = 0.0 from [-10:10];
+
+    (*desc= "Reference temperature", units = "Kelvin"*) parameter real Tnom = 300 from [0:inf];
+
 
     real Vd, Vr, Qd;
 
     real Id;
     real Cd;
 
-    real VT,x,y,vf,Tdev,pterm;
+    real VT,x,y,vf,Tdev,pterm,rs_t, rth_t;
 
     analog begin
         Tdev = $temperature+V(br_sht);
         VT = `P_K*Tdev/`P_Q;
         Vd = V(br_a_ci);
         Vr = V(br_ci_c);
-        Id = Is * (exp(Vd / (N * VT)) - 1);
+        Id = Is * pow(Tdev/Tnom,zetais) * (exp(Vd / (N * VT)) - 1);
+        rs_t = Rs*pow(Tdev/Tnom,zetars);
+        rth_t = Rth*pow(Tdev/Tnom,zetarth);
         // dissipated power
-        pterm = Id*Vd + pow(Vr,2)/Rs;
+        pterm = Id*Vd + pow(Vr,2.0)/rs_t;
         //junction capacitance
         //smoothing of voltage over cap
-        vf   = Vj*(1 - pow(3, -1/M));
+        vf   = Vj*(1 - pow(3.0, -1/M));
         x    = (vf-Vd)/VT;
         y    = sqrt(x*x + 1.92);
         Vd   = vf-VT*(x + y)/(2);
         Qd   = Cj0*Vj * (1-pow(1-Vd/Vj, 1-M))/(1-M);
         Cd   = ddx(Qd,V(A));
         I(br_a_ci) <+ Id + ddt(Qd);
-        I(br_sht)  <+ V(br_sht)/Rth-pterm;
-        I(br_ci_c) <+ Vr / Rs;
+        I(br_sht)  <+ V(br_sht)/rth_t-pterm;
+        I(br_ci_c) <+ Vr / rs_t;
     end
 endmodule

@@ -290,6 +290,8 @@ fn diode() {
     //define parameters
     let is = 1e-9;
     let rs = 1.0;
+    let zetars = 5.0;
+    let zetarth = 2.0;
     let n = 1.0;
     let cj0 = 1e-12;
     let vj = 1.0;
@@ -299,6 +301,8 @@ fn diode() {
     let vci = 0.5;
     let vc = 0.0;
     let vdtj = 10.0;
+    let tnom = 350.0;
+    let zetais = 2.0;
 
     // prepare inputs
     let temp = 298.5;
@@ -312,6 +316,10 @@ fn diode() {
     params.insert("Vj", vj.into());
     params.insert("M", m.into());
     params.insert("Rth", rth.into());
+    params.insert("Tnom", tnom.into());
+    params.insert("zetars", zetars.into());
+    params.insert("zetarth", zetarth.into());
+    params.insert("zetais", zetais.into());
 
     node_voltages.insert("A", va);
     node_voltages.insert("CI", vci);
@@ -357,29 +365,39 @@ fn diode() {
     let itj_vci : f64  = result.read(stamps[&("dT".to_owned(),"CI".to_owned())]);
     let itj_vc : f64  = result.read(stamps[&("dT".to_owned(),"C".to_owned())]);
 
-    // calculate the expected values for the stamps
+    // calculate the expected values for the stamps:
+    // first some basic pre-calculations
     let pk =  1.3806503e-23;
     let pq =  1.602176462e-19;
     let t_dev = temp + vdtj;
+    let tdev_tnom = t_dev/tnom;
+    let rs_t = rs*tdev_tnom.powf(zetars);
+    let rth_t = rth*tdev_tnom.powf(zetarth);
+    let is_t = is*tdev_tnom.powf(zetais);
+    let rs_dt  = zetars *rs *tdev_tnom.powf(zetars-1.0 )/tnom;
+    let rth_dt = zetarth*rth*tdev_tnom.powf(zetarth-1.0)/tnom;
+    let is_dt = zetais*is*tdev_tnom.powf(zetais-1.0)/tnom;
     let vt = t_dev*pk/pq;
     let vt_tj = pk/pq;
     let vaci = va-vci;
     let vcic = vci-vc;
 
-    let id = is * ((vaci / (n * vt)).exp() - 1.0);
-    let gd = is/vt * (vaci / (n * vt)).exp();
-    let id_vt = - is * (vaci / (n * vt)).exp() * vaci/n/vt/vt;
-    let gdt = id_vt*vt_tj;
+    let id = is_t * ((vaci / (n * vt)).exp() - 1.0);
+    let gd = is_t/vt * (vaci / (n * vt)).exp();
+    let gdt = - is_t * (vaci / (n * vt)).exp() * vaci/n/vt/vt*vt_tj + 1.0 * ((vaci / (n * vt)).exp() - 1.0)*is_dt;
 
-    let g = 1.0/rs;
+    let irs = vcic/rs_t;
+    let g = 1.0/rs_t;
+    let grt = -irs/rs_t*rs_dt;
 
-    let gt = 1.0/rth;
+    let irth = vdtj/rth_t;
+    let gt = 1.0/rth_t - irth/rth_t*rth_dt;
 
-    let ith     = id*vaci+ vcic.powf(2.0)/rs;
-    let ith_vtj = gdt*vaci;
-    let ith_vc  = 0.0-2.0*vcic/rs;
+    let ith     = id*vaci+ vcic.powf(2.0)/rs_t;
+    let ith_vtj = gdt*vaci - vcic.powf(2.0)/rs_t/rs_t*rs_dt;
+    let ith_vc  = 0.0-2.0*vcic/rs_t;
     let ith_va  =  gd*vaci + id;
-    let ith_vci = -gd*vaci-id+2.0*vcic/rs;
+    let ith_vci = -gd*vaci-id+2.0*vcic/rs_t;
 
     // Diode current flows from Ci into A, diode voltage = Va-Vci
     // Resistor current flows from C into Ci, resistor voltage = Vci-Vc
@@ -399,6 +417,10 @@ fn diode() {
     let ici_vc_expect = - g;
     let ic_vci_expect = -g;
     let ic_vc_expect = g;
+
+    // resistor thermal
+    let ici_vtj_expect = ici_vtj_expect + grt;
+    let ic_vtj_expect = -grt;
 
     //stamp rth flowing into T node dTj/rth
     let it_vt_expect = gt;
