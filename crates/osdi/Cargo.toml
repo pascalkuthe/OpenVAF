@@ -38,6 +38,7 @@ parking_lot = "0.12"
 anyhow = "1"
 
 salsa = "0.17.0-pre.2"
+indexmap = "1.6"
 
 
 [dev-dependencies]

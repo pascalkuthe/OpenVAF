@@ -616,6 +616,7 @@ dependencies = [
  "hir_def",
  "hir_lower",
  "hir_ty",
+ "indexmap",
  "lasso",
  "llvm",
  "mir",

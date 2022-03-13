@@ -13,7 +13,6 @@ use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
 use stdx::format_to;
-use stdx::iter::zip;
 use target::spec::Target;
 use typed_index_collections::TiVec;
 
@@ -70,6 +69,7 @@ fn full_compile(path: &Path) {
     let db = CompilationDB::new(Path::new(path)).unwrap();
     let module = db.find_module(db.root_file);
     let (mir, literals) = AnalogBlockMir::new(&db, module);
+    println!("{}", mir.func.to_debug_string());
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, llvm::OptLevel::None);
     mir.to_bin(&db, &path.to_string_lossy(), &literals, &back);
@@ -84,7 +84,9 @@ fn compile_to_mir(path: &Path) -> (CompilationDB, AnalogBlockMir, Rodeo) {
 
 impl JacobianMatrix {
     fn stamps(&self, db: &dyn HirDefDB) -> AHashMap<(String, String), Value> {
-        zip(&self.entries.raw, &self.values)
+        self.entrys
+            .raw
+            .iter()
             .map(|(entry, val)| {
                 let row = db.node_data(entry.row).name.to_string();
                 let col = db.node_data(entry.col).name.to_string();
@@ -95,7 +97,7 @@ impl JacobianMatrix {
 
     fn print(&self, db: &dyn HirDefDB) -> String {
         let mut res = String::new();
-        for (entry, val) in zip(&self.entries.raw, &self.values) {
+        for (entry, val) in &self.entrys.raw {
             format_to!(
                 res,
                 "({}, {}) = {}\n",
@@ -109,7 +111,7 @@ impl JacobianMatrix {
     }
 
     fn print_with_nums(&self, db: &dyn HirDefDB, vals: &InterpreterState) {
-        for (entry, val) in zip(&self.entries.raw, &self.values) {
+        for (entry, val) in &self.entrys.raw {
             let num: f64 = vals.read(*val);
             println!(
                 "({}, {}) = {} = {}",

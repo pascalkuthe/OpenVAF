@@ -5,13 +5,13 @@ use hir_def::NodeId;
 use hir_lower::{CallBackKind, HirInterner, ParamKind, PlaceKind};
 use hir_ty::db::HirTyDB;
 use hir_ty::lower::BranchKind;
+use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::FuncCursor;
 use mir::{Function, Value, F_ZERO};
 use mir_autodiff::FirstOrderUnkown;
 use stdx::{impl_debug_display, impl_idx_from};
-use typed_index_collections::TiVec;
-use typed_indexmap::TiSet;
+use typed_indexmap::TiMap;
 
 use crate::compilation_db::CompilationDB;
 
@@ -29,8 +29,7 @@ impl_debug_display! {match MatrixEntryId{MatrixEntryId(id) => "j{id}";}}
 
 #[derive(Default, Debug)]
 pub(crate) struct JacobianMatrix {
-    pub entries: TiSet<MatrixEntryId, MatrixEntry>,
-    pub values: TiVec<MatrixEntryId, Value>,
+    pub entrys: TiMap<MatrixEntryId, MatrixEntry, Value>,
 }
 
 impl JacobianMatrix {
@@ -56,7 +55,7 @@ impl JacobianMatrix {
             };
 
             let hi_gnd = db.node_data(row_hi).is_gnd;
-            let lo_gnd = row_lo.map_or(false, |lo| db.node_data(lo).is_gnd);
+            let lo_gnd = row_lo.map_or(true, |lo| db.node_data(lo).is_gnd);
 
             for (param, (kind, _)) in intern.params.iter_enumerated() {
                 let (col_hi, col_lo) = match kind {
@@ -97,13 +96,13 @@ impl JacobianMatrix {
         func: &mut FuncCursor,
         output_values: &mut BitSet<Value>,
     ) {
-        for val in &mut self.values {
+        for val in self.entrys.raw.values_mut() {
             *val = func.ins().optbarrier(*val);
         }
 
         output_values.ensure(func.func.dfg.num_values() + 1);
 
-        for val in &self.values {
+        for val in self.entrys.raw.values() {
             output_values.insert(*val);
         }
     }
@@ -113,7 +112,7 @@ impl JacobianMatrix {
         func: &mut Function,
         output_values: &mut BitSet<Value>,
     ) {
-        for val in &mut self.values {
+        for val in self.entrys.raw.values_mut() {
             let inst = func.dfg.value_def(*val).unwrap_inst();
             output_values.remove(*val);
             *val = func.dfg.instr_args(inst)[0];
@@ -131,22 +130,21 @@ impl JacobianMatrix {
     ) {
         // no entrys for gnd nodes
 
-        let (entry, changed) = self.entries.ensure(MatrixEntry { row, col });
-        if changed {
-            if neg {
-                val = func.ins().fneg(val);
+        match self.entrys.raw.entry(MatrixEntry { row, col }) {
+            Entry::Occupied(dst) => {
+                let dst = dst.into_mut();
+                *dst = if neg { func.ins().fsub(*dst, val) } else { func.ins().fadd(*dst, val) }
             }
-            self.values.push(val)
-        } else {
-            let old = self.values[entry];
-            self.values[entry] =
-                if neg { func.ins().fsub(old, val) } else { func.ins().fadd(old, val) }
+            Entry::Vacant(dst) => {
+                if neg {
+                    val = func.ins().fneg(val);
+                }
+                dst.insert(val);
+            }
         }
     }
 
     pub(crate) fn sparsify(&mut self) {
-        let mut iter = self.values.iter();
-        self.entries.raw.retain(|_| iter.next() != Some(&F_ZERO));
-        self.values.retain(|val| *val != F_ZERO);
+        self.entrys.raw.retain(|_, val| *val != F_ZERO);
     }
 }
