@@ -11,12 +11,14 @@ use mir_opt::{
 
 use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
+use crate::residual::Residual;
 
 pub(crate) struct AnalogBlockMir {
     pub func: Function,
     pub intern: HirInterner,
     pub cfg: ControlFlowGraph,
     pub matrix: JacobianMatrix,
+    pub residual: Residual,
 }
 
 impl AnalogBlockMir {
@@ -88,6 +90,7 @@ impl AnalogBlockMir {
         let ad = auto_diff(&mut func, &cfg, intern.unkowns(), extra_derivatives);
 
         let mut matrix = JacobianMatrix::default();
+        let mut residual = Residual::default();
 
         let output_block = {
             let val = intern.outputs[0];
@@ -95,11 +98,13 @@ impl AnalogBlockMir {
             func.layout.inst_block(inst).unwrap()
         };
 
-        let mut cursor = FuncCursor::new(&mut func).at_last_inst(output_block);
+        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
 
         matrix.populate(db, &mut cursor, &intern, &ad);
+        residual.populate(db, &mut cursor, &intern);
         output_values.ensure(cursor.func.dfg.num_values() + 1);
         matrix.insert_opt_barries(&mut cursor, &mut output_values);
+        residual.insert_opt_barries(&mut cursor, &mut output_values);
 
         inst_combine(&mut func);
         sparse_conditional_constant_propagation(&mut func, &cfg);
@@ -109,8 +114,9 @@ impl AnalogBlockMir {
         inst_combine(&mut func);
 
         matrix.strip_opt_barries(&mut func, &mut output_values);
+        residual.strip_opt_barries(&mut func, &mut output_values);
         matrix.sparsify();
 
-        (AnalogBlockMir { func, intern, matrix, cfg }, literals)
+        (AnalogBlockMir { func, intern, matrix, cfg, residual }, literals)
     }
 }

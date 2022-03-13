@@ -7,6 +7,18 @@ use sourcegen::{project_root, skip_slow_tests};
 use crate::tests::TestDataBase;
 
 #[test]
+fn amplifier() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/amplifier.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("AMPLIFIER").join("amplifier.va");
+    vfs.add_virt_file("/amplifier.va", read(path).into());
+    drop(vfs);
+    db.lower_and_check();
+}
+#[test]
 fn asmhemt() {
     if skip_slow_tests() {
         return;
@@ -148,6 +160,31 @@ fn bsimsoi() {
     let mut vfs = db.vfs().write();
     let path = project_root().join("integration_tests").join("BSIMSOI").join("bsimsoi.va");
     vfs.add_virt_file("/bsimsoi.va", read(path).into());
+    drop(vfs);
+    db.lower_and_check();
+}
+#[test]
+fn cccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/cccs.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("CCCS").join("cccs.va");
+    vfs.add_virt_file("/cccs.va", read(path).into());
+    drop(vfs);
+    db.lower_and_check();
+}
+#[test]
+fn current_source() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/current_source.va", "");
+    let mut vfs = db.vfs().write();
+    let path =
+        project_root().join("integration_tests").join("CURRENT_SOURCE").join("current_source.va");
+    vfs.add_virt_file("/current_source.va", read(path).into());
     drop(vfs);
     db.lower_and_check();
 }
@@ -402,6 +439,30 @@ fn psp() {
     vfs.add_virt_file("/psp102e.va", read(path).into());
     let path = project_root().join("integration_tests").join("PSP").join("psp102e_nqs.va");
     vfs.add_virt_file("/psp102e_nqs.va", read(path).into());
+    drop(vfs);
+    db.lower_and_check();
+}
+#[test]
+fn resistor() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/resistor.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
+    vfs.add_virt_file("/resistor.va", read(path).into());
+    drop(vfs);
+    db.lower_and_check();
+}
+#[test]
+fn vccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/vccs.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("VCCS").join("vccs.va");
+    vfs.add_virt_file("/vccs.va", read(path).into());
     drop(vfs);
     db.lower_and_check();
 }

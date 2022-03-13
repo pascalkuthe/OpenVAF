@@ -9,6 +9,23 @@ use crate::db::HirDefDB;
 use crate::tests::TestDataBase;
 
 #[test]
+fn amplifier() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/amplifier.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("AMPLIFIER").join("amplifier.va");
+    vfs.add_virt_file("/amplifier.va", read(path).into());
+    drop(vfs);
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "");
+    let def_map = db.def_map(db.root_file());
+    let actual = def_map.dump(&db);
+    expect_file![project_root().join("integration_tests").join("AMPLIFIER").join("def_map.txt")]
+        .assert_eq(&actual);
+}
+#[test]
 fn asmhemt() {
     if skip_slow_tests() {
         return;
@@ -192,6 +209,44 @@ fn bsimsoi() {
     let actual = def_map.dump(&db);
     expect_file![project_root().join("integration_tests").join("BSIMSOI").join("def_map.txt")]
         .assert_eq(&actual);
+}
+#[test]
+fn cccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/cccs.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("CCCS").join("cccs.va");
+    vfs.add_virt_file("/cccs.va", read(path).into());
+    drop(vfs);
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "");
+    let def_map = db.def_map(db.root_file());
+    let actual = def_map.dump(&db);
+    expect_file![project_root().join("integration_tests").join("CCCS").join("def_map.txt")]
+        .assert_eq(&actual);
+}
+#[test]
+fn current_source() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/current_source.va", "");
+    let mut vfs = db.vfs().write();
+    let path =
+        project_root().join("integration_tests").join("CURRENT_SOURCE").join("current_source.va");
+    vfs.add_virt_file("/current_source.va", read(path).into());
+    drop(vfs);
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "");
+    let def_map = db.def_map(db.root_file());
+    let actual = def_map.dump(&db);
+    expect_file![project_root()
+        .join("integration_tests")
+        .join("CURRENT_SOURCE")
+        .join("def_map.txt")]
+    .assert_eq(&actual);
 }
 #[test]
 fn diode() {
@@ -490,5 +545,39 @@ fn psp() {
     let def_map = db.def_map(db.root_file());
     let actual = def_map.dump(&db);
     expect_file![project_root().join("integration_tests").join("PSP").join("def_map.txt")]
+        .assert_eq(&actual);
+}
+#[test]
+fn resistor() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/resistor.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
+    vfs.add_virt_file("/resistor.va", read(path).into());
+    drop(vfs);
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "");
+    let def_map = db.def_map(db.root_file());
+    let actual = def_map.dump(&db);
+    expect_file![project_root().join("integration_tests").join("RESISTOR").join("def_map.txt")]
+        .assert_eq(&actual);
+}
+#[test]
+fn vccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/vccs.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("VCCS").join("vccs.va");
+    vfs.add_virt_file("/vccs.va", read(path).into());
+    drop(vfs);
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "");
+    let def_map = db.def_map(db.root_file());
+    let actual = def_map.dump(&db);
+    expect_file![project_root().join("integration_tests").join("VCCS").join("def_map.txt")]
         .assert_eq(&actual);
 }

@@ -8,6 +8,23 @@ use sourcegen::{project_root, skip_slow_tests};
 use crate::tests::TestDataBase;
 
 #[test]
+fn amplifier() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/amplifier.va", Default::default());
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("AMPLIFIER").join("amplifier.va");
+    vfs.add_virt_file("/amplifier.va", read(path).into());
+    drop(vfs);
+    let (_, actual) = db.parse_and_check();
+    expect_file![project_root()
+        .join("integration_tests")
+        .join("AMPLIFIER")
+        .join("parser_diagnostics.log")]
+    .assert_eq(&actual);
+}
+#[test]
 fn asmhemt() {
     if skip_slow_tests() {
         return;
@@ -189,6 +206,41 @@ fn bsimsoi() {
     expect_file![project_root()
         .join("integration_tests")
         .join("BSIMSOI")
+        .join("parser_diagnostics.log")]
+    .assert_eq(&actual);
+}
+#[test]
+fn cccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/cccs.va", Default::default());
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("CCCS").join("cccs.va");
+    vfs.add_virt_file("/cccs.va", read(path).into());
+    drop(vfs);
+    let (_, actual) = db.parse_and_check();
+    expect_file![project_root()
+        .join("integration_tests")
+        .join("CCCS")
+        .join("parser_diagnostics.log")]
+    .assert_eq(&actual);
+}
+#[test]
+fn current_source() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/current_source.va", Default::default());
+    let mut vfs = db.vfs().write();
+    let path =
+        project_root().join("integration_tests").join("CURRENT_SOURCE").join("current_source.va");
+    vfs.add_virt_file("/current_source.va", read(path).into());
+    drop(vfs);
+    let (_, actual) = db.parse_and_check();
+    expect_file![project_root()
+        .join("integration_tests")
+        .join("CURRENT_SOURCE")
         .join("parser_diagnostics.log")]
     .assert_eq(&actual);
 }
@@ -488,6 +540,40 @@ fn psp() {
     expect_file![project_root()
         .join("integration_tests")
         .join("PSP")
+        .join("parser_diagnostics.log")]
+    .assert_eq(&actual);
+}
+#[test]
+fn resistor() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/resistor.va", Default::default());
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
+    vfs.add_virt_file("/resistor.va", read(path).into());
+    drop(vfs);
+    let (_, actual) = db.parse_and_check();
+    expect_file![project_root()
+        .join("integration_tests")
+        .join("RESISTOR")
+        .join("parser_diagnostics.log")]
+    .assert_eq(&actual);
+}
+#[test]
+fn vccs() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/vccs.va", Default::default());
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("VCCS").join("vccs.va");
+    vfs.add_virt_file("/vccs.va", read(path).into());
+    drop(vfs);
+    let (_, actual) = db.parse_and_check();
+    expect_file![project_root()
+        .join("integration_tests")
+        .join("VCCS")
         .join("parser_diagnostics.log")]
     .assert_eq(&actual);
 }

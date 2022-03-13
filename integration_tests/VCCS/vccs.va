@@ -9,7 +9,7 @@ module vccs_va(Inp,Inm,Outp,Outm);
     branch (Inp,Inm) br_in;
     branch (Outp,Outm) br_out;
 
-    (*desc= "transconductance") parameter real G = 10 from [0:inf];
+    (*desc= "transconductance"*) parameter real G = 10 from [0:inf];
     (*desc= "input Resistance", units = "Ohm" *) parameter real Rin = 1e9 from [-inf:inf];
     (*desc= "output Resistance", units = "Ohm" *) parameter real Rout = 1e9 from [-inf:inf];
 

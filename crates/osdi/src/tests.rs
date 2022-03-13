@@ -21,6 +21,7 @@ use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
 use crate::middle::AnalogBlockMir;
 
+#[rustfmt::skip]
 mod integration;
 mod stamps;
 
@@ -31,7 +32,7 @@ pub fn generate_integration_tests() {
     let test_impl = tests.into_iter().filter_map(|(test_name, _)| {
         // skip this test until we implement switch branches
         // TODO switch branches
-        if test_name == "ASMHEMT"{
+        if matches!(&*test_name, "ASMHEMT"|"AMPLIFIER"){
             return None
         }
 

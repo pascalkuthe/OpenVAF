@@ -4,14 +4,6 @@
 use sourcegen::{project_root, skip_slow_tests};
 
 #[test]
-fn amplifier() {
-    if skip_slow_tests() {
-        return;
-    }
-    let root_file = project_root().join("integration_tests").join("AMPLIFIER").join("amplifier.va");
-    super::full_compile(&root_file);
-}
-#[test]
 fn bsim3() {
     if skip_slow_tests() {
         return;
