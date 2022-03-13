@@ -19,17 +19,12 @@ impl_idx_from!(LocalNodeId(u32));
 impl_debug_display! {match LocalNodeId{LocalNodeId(id) => "j{id}";}}
 
 #[derive(Default, Debug)]
-pub(crate) struct Residual {
+pub struct Residual {
     pub elements: TiMap<LocalNodeId, NodeId, Value>,
 }
 
 impl Residual {
-    pub(crate) fn populate(
-        &mut self,
-        db: &CompilationDB,
-        func: &mut FuncCursor,
-        intern: &HirInterner,
-    ) {
+    pub fn populate(&mut self, db: &CompilationDB, func: &mut FuncCursor, intern: &HirInterner) {
         for (out_kind, val) in intern.outputs.iter() {
             let (hi, lo) = match out_kind {
                 PlaceKind::BranchVoltage(_) | PlaceKind::ImplicitBranchVoltage { .. } => {

@@ -13,7 +13,7 @@ use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
 use crate::residual::Residual;
 
-pub(crate) struct AnalogBlockMir {
+pub struct AnalogBlockMir {
     pub func: Function,
     pub intern: HirInterner,
     pub cfg: ControlFlowGraph,

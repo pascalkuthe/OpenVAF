@@ -12,7 +12,6 @@ use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
-use stdx::format_to;
 use target::spec::Target;
 use typed_index_collections::TiVec;
 
@@ -95,22 +94,7 @@ impl JacobianMatrix {
             .collect()
     }
 
-    fn print(&self, db: &dyn HirDefDB) -> String {
-        let mut res = String::new();
-        for (entry, val) in &self.entrys.raw {
-            format_to!(
-                res,
-                "({}, {}) = {}\n",
-                db.node_data(entry.row).name,
-                db.node_data(entry.col).name,
-                val
-            )
-        }
-
-        res
-    }
-
-    fn print_with_nums(&self, db: &dyn HirDefDB, vals: &InterpreterState) {
+    pub fn print_with_nums(&self, db: &dyn HirDefDB, vals: &InterpreterState) {
         for (entry, val) in &self.entrys.raw {
             let num: f64 = vals.read(*val);
             println!(

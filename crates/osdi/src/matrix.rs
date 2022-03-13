@@ -10,7 +10,7 @@ use mir::builder::InstBuilder;
 use mir::cursor::FuncCursor;
 use mir::{Function, Value, F_ZERO};
 use mir_autodiff::FirstOrderUnkown;
-use stdx::{impl_debug_display, impl_idx_from};
+use stdx::{impl_debug_display, impl_idx_from, format_to};
 use typed_indexmap::TiMap;
 
 use crate::compilation_db::CompilationDB;
@@ -28,7 +28,7 @@ impl_idx_from!(MatrixEntryId(u32));
 impl_debug_display! {match MatrixEntryId{MatrixEntryId(id) => "j{id}";}}
 
 #[derive(Default, Debug)]
-pub(crate) struct JacobianMatrix {
+pub struct JacobianMatrix {
     pub entrys: TiMap<MatrixEntryId, MatrixEntry, Value>,
 }
 
@@ -146,5 +146,22 @@ impl JacobianMatrix {
 
     pub(crate) fn sparsify(&mut self) {
         self.entrys.raw.retain(|_, val| *val != F_ZERO);
+    }
+}
+
+impl JacobianMatrix {
+    pub fn print(&self, db: &dyn HirDefDB) -> String {
+        let mut res = String::new();
+        for (entry, val) in &self.entrys.raw {
+            format_to!(
+                res,
+                "({}, {}) = {}\n",
+                db.node_data(entry.row).name,
+                db.node_data(entry.col).name,
+                val
+            )
+        }
+
+        res
     }
 }

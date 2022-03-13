@@ -15,7 +15,7 @@ use salsa::ParallelDatabase;
 use typed_index_collections::TiSlice;
 
 #[salsa::database(BaseDatabase, InternDatabase, HirDefDatabase, HirTyDatabase)]
-pub(crate) struct CompilationDB {
+pub struct CompilationDB {
     storage: salsa::Storage<CompilationDB>,
     pub vfs: Arc<RwLock<Vfs>>,
     pub root_file: FileId,
@@ -34,7 +34,7 @@ impl Upcast<dyn BaseDB> for CompilationDB {
 }
 
 impl CompilationDB {
-    pub(crate) fn new(root_file: &std::path::Path) -> Result<Self> {
+    pub fn new(root_file: &std::path::Path) -> Result<Self> {
         let mut vfs = Vfs::default();
         vfs.insert_std_lib();
 
@@ -109,7 +109,7 @@ impl VfsStorage for CompilationDB {
     }
 }
 
-pub(crate) fn abs_path(path: &Path) -> Result<AbsPathBuf> {
+pub fn abs_path(path: &Path) -> Result<AbsPathBuf> {
     let path = path.canonicalize().with_context(|| format!("failed to read {}", path.display()))?;
     let path = AbsPathBuf::assert(path);
     Ok(path.normalize())

@@ -59,7 +59,7 @@ pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
 }
 
 impl AnalogBlockMir {
-    pub(crate) fn to_bin(
+    pub fn to_bin(
         &self,
         db: &CompilationDB,
         name: &str,
