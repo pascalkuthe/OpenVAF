@@ -68,7 +68,6 @@ fn full_compile(path: &Path) {
     let db = CompilationDB::new(Path::new(path)).unwrap();
     let module = db.find_module(db.root_file);
     let (mir, literals) = AnalogBlockMir::new(&db, module);
-    println!("{}", mir.func.to_debug_string());
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, llvm::OptLevel::None);
     mir.to_bin(&db, &path.to_string_lossy(), &literals, &back);
