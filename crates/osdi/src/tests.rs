@@ -18,6 +18,7 @@ use typed_index_collections::TiVec;
 use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
 use crate::middle::AnalogBlockMir;
+use crate::Residual;
 
 #[rustfmt::skip]
 mod integration;
@@ -104,6 +105,19 @@ impl JacobianMatrix {
                 num
             )
         }
+    }
+}
+
+impl Residual {
+    fn entrys(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
+        self.elements
+            .raw
+            .iter()
+            .map(|(node, val)| {
+                let name = db.node_data(*node).name.to_string();
+                (name, *val)
+            })
+            .collect()
     }
 }
 
