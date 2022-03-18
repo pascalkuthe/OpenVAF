@@ -98,6 +98,7 @@ impl<'a> Interpreter<'a> {
                 let args = args.as_slice(&self.func.dfg.insts.value_lists);
                 let rets = self.func.dfg.inst_results(inst);
                 fun(&mut self.state, args, rets, data);
+                self.state.next_inst = self.func.layout.next_inst(inst);
                 return;
             }
         };
