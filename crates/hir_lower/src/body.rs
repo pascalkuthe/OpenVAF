@@ -1341,9 +1341,28 @@ impl LoweringCtx<'_, '_> {
                 self.func.ins().cosh(arg0)
             }
             // TODO implement limexp properly
-            BuiltIn::limexp | BuiltIn::exp => {
+            BuiltIn::exp => {
                 let arg0 = self.lower_expr(args[0]);
                 self.func.ins().exp(arg0)
+            }
+
+            BuiltIn::limexp => {
+                let arg0 = self.lower_expr(args[0]);
+                // let (state, store) = self.stateful_callback(CallBackKind::StoreState);
+                let cut_off = self.func.fconst(1e30f64.ln());
+                let off = self.func.fconst(1e30f64);
+
+                // let change = self.func.ins().fsub(arg0, state);
+                let linearize = self.func.ins().fgt(arg0, cut_off);
+                self.func.make_select(linearize, |func, linearize| {
+                    if linearize {
+                        let delta = func.ins().fsub(arg0, cut_off);
+                        let lin = func.ins().fmul(off, delta);
+                        func.ins().fadd(off, lin)
+                    } else {
+                        func.ins().exp(arg0)
+                    }
+                })
             }
             BuiltIn::floor => {
                 let arg0 = self.lower_expr(args[0]);
