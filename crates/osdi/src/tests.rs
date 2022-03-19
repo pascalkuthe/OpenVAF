@@ -82,8 +82,20 @@ fn compile_to_mir(path: &Path) -> (CompilationDB, AnalogBlockMir, Rodeo) {
 }
 
 impl JacobianMatrix {
-    fn stamps(&self, db: &dyn HirDefDB) -> AHashMap<(String, String), Value> {
-        self.entrys
+    fn resistive_stamps(&self, db: &dyn HirDefDB) -> AHashMap<(String, String), Value> {
+        self.resistive
+            .raw
+            .iter()
+            .map(|(entry, val)| {
+                let row = db.node_data(entry.row).name.to_string();
+                let col = db.node_data(entry.col).name.to_string();
+                ((row, col), *val)
+            })
+            .collect()
+    }
+
+    fn reactive_stamps(&self, db: &dyn HirDefDB) -> AHashMap<(String, String), Value> {
+        self.reactive
             .raw
             .iter()
             .map(|(entry, val)| {
@@ -95,7 +107,7 @@ impl JacobianMatrix {
     }
 
     pub fn print_with_nums(&self, db: &dyn HirDefDB, vals: &InterpreterState) {
-        for (entry, val) in &self.entrys.raw {
+        for (entry, val) in &self.resistive.raw {
             let num: f64 = vals.read(*val);
             println!(
                 "({}, {}) = {} = {}",
@@ -109,8 +121,19 @@ impl JacobianMatrix {
 }
 
 impl Residual {
-    fn entrys(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
-        self.elements
+    fn resistive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
+        self.resistive
+            .raw
+            .iter()
+            .map(|(node, val)| {
+                let name = db.node_data(*node).name.to_string();
+                (name, *val)
+            })
+            .collect()
+    }
+
+    fn reactive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
+        self.resistive
             .raw
             .iter()
             .map(|(node, val)| {

@@ -1,6 +1,6 @@
 use std::f64::{INFINITY, NEG_INFINITY};
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use hir_def::body::{Body, ConstraintKind, ConstraintValue, ParamConstraint};
 use hir_def::expr::{CaseCond, NZERO, PZERO};
 use hir_def::{
@@ -33,6 +33,7 @@ pub struct MirBuilder<'a> {
     is_output: &'a dyn Fn(PlaceKind) -> bool,
     tagged_reads: AHashSet<VarId>,
     ctx: Option<&'a mut FunctionBuilderContext>,
+    split_contribute: bool,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -41,7 +42,14 @@ impl<'a> MirBuilder<'a> {
         def: DefWithBodyId,
         is_output: &'a dyn Fn(PlaceKind) -> bool,
     ) -> MirBuilder<'a> {
-        MirBuilder { db, def, tagged_reads: AHashSet::new(), is_output, ctx: None }
+        MirBuilder {
+            db,
+            def,
+            tagged_reads: AHashSet::new(),
+            is_output,
+            ctx: None,
+            split_contribute: false,
+        }
     }
 
     pub fn tag_reads(&mut self, var: VarId) -> bool {
@@ -50,6 +58,14 @@ impl<'a> MirBuilder<'a> {
 
     pub fn with_tagged_reads(mut self, taged_vars: AHashSet<VarId>) -> Self {
         self.tagged_reads = taged_vars;
+        self
+    }
+    pub fn split_contributions(&mut self) {
+        self.split_contribute = true;
+    }
+
+    pub fn with_split_contributions(mut self) -> Self {
+        self.split_contribute = true;
         self
     }
 
@@ -81,6 +97,7 @@ impl<'a> MirBuilder<'a> {
         let body = self.db.body(self.def);
         let infere = self.db.inference_result(self.def);
         let mut places = TiSet::default();
+        let mut reactive_components = AHashMap::default();
 
         let mut ctx = LoweringCtx {
             db: self.db,
@@ -90,6 +107,7 @@ impl<'a> MirBuilder<'a> {
             infere: &infere,
             tagged_vars: &self.tagged_reads,
             places: &mut places,
+            reactive_component: self.split_contribute.then(|| &mut reactive_components),
         };
 
         ctx.lower_entry_stmts();
@@ -229,6 +247,7 @@ impl HirInterner {
                     body: &body,
                     infere: &infere,
                     tagged_vars: &AHashSet::default(),
+                    reactive_component: None,
                 };
 
                 let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
@@ -420,6 +439,7 @@ impl HirInterner {
             infere: &infere,
             tagged_vars: &AHashSet::new(),
             places: &mut TiSet::default(),
+            reactive_component: None,
         };
 
         let expr = body.stmts[body.entry_stmts[i]].unwrap_expr();
@@ -445,6 +465,7 @@ pub struct LoweringCtx<'a, 'c> {
     pub body: &'a Body,
     pub infere: &'a InferenceResult,
     pub tagged_vars: &'a AHashSet<VarId>,
+    pub reactive_component: Option<&'a mut AHashMap<ExprId, Value>>,
 }
 
 impl LoweringCtx<'_, '_> {
@@ -531,7 +552,7 @@ impl LoweringCtx<'_, '_> {
 
     pub fn lower_entry_stmts(&mut self) {
         for stmt in &*self.body.entry_stmts {
-            self.lower_stmt(*stmt)
+            self.lower_stmt(*stmt, None)
         }
     }
 
@@ -547,14 +568,15 @@ impl LoweringCtx<'_, '_> {
         self.func.ins().call(cb, &[]);
     }
 
-    pub fn lower_stmt(&mut self, stmt: StmtId) {
+    pub fn lower_stmt(&mut self, stmt: StmtId, reactive: Option<Value>) {
         match self.body.stmts[stmt] {
             Stmt::Empty | Stmt::Missing => (),
             Stmt::Expr(expr) => {
                 self.lower_expr(expr);
             }
-            Stmt::EventControl { .. } => {
+            Stmt::EventControl { body, .. } => {
                 // TODO handle porperly
+                self.lower_stmt(body, None);
             }
             Stmt::Assigment { val, assignment_kind, .. } => {
                 let mut val_ = if assignment_kind == AssignOp::Contribute
@@ -564,8 +586,22 @@ impl LoweringCtx<'_, '_> {
                     ) {
                     F_ZERO
                 } else {
-                    self.lower_expr(val)
+                    match reactive {
+                        Some(val) => val,
+                        None => {
+                            // be careful to not move this after the if as this has important
+                            // sideffects
+                            let val_ = self.lower_expr(val);
+                            if let Some(reactive) = &self.reactive_component {
+                                if let Some(val) = reactive.get(&val).copied() {
+                                    self.lower_stmt(stmt, Some(val))
+                                }
+                            }
+                            val_
+                        }
+                    }
                 };
+
                 if matches!(self.infere.assigment_destination[&stmt], AssignDst::Flow(_)) {
                     let mfactor = self.param(ParamKind::ParamSysFun(ParamSysFun::mfactor));
                     val_ = self.func.ins().fmul(val_, mfactor)
@@ -594,13 +630,11 @@ impl LoweringCtx<'_, '_> {
                         return self.collapse_hint(hi, lo)
                     }
 
-                    AssignDst::Flow(BranchWrite::Explicit(branch)) => {
-                        self.place(PlaceKind::BranchCurrent(branch))
-                    }
+                    AssignDst::Flow(BranchWrite::Explicit(branch)) => self
+                        .place(PlaceKind::BranchCurrent { branch, reactive: reactive.is_some() }),
 
-                    AssignDst::Potential(BranchWrite::Explicit(branch)) => {
-                        self.place(PlaceKind::BranchVoltage(branch))
-                    }
+                    AssignDst::Potential(BranchWrite::Explicit(branch)) => self
+                        .place(PlaceKind::BranchVoltage { branch, reactive: reactive.is_some() }),
 
                     // TODO verify no contributes between GND nodes
                     AssignDst::Flow(BranchWrite::Implict { hi, lo }) => self
@@ -608,7 +642,11 @@ impl LoweringCtx<'_, '_> {
                             &mut negate,
                             hi,
                             lo,
-                            |hi, lo| PlaceKind::ImplicitBranchCurrent { hi, lo },
+                            |hi, lo| PlaceKind::ImplicitBranchCurrent {
+                                hi,
+                                lo,
+                                reactive: reactive.is_some(),
+                            },
                             |hi, lo| ParamKind::Current(CurrentKind::ImplictBranch { hi, lo }),
                         ),
 
@@ -617,7 +655,11 @@ impl LoweringCtx<'_, '_> {
                             &mut negate,
                             hi,
                             lo,
-                            |hi, lo| PlaceKind::ImplicitBranchVoltage { hi, lo },
+                            |hi, lo| PlaceKind::ImplicitBranchVoltage {
+                                hi,
+                                lo,
+                                reactive: reactive.is_some(),
+                            },
                             |hi, lo| ParamKind::Voltage { hi, lo },
                         ),
                 };
@@ -633,13 +675,14 @@ impl LoweringCtx<'_, '_> {
             }
             Stmt::Block { ref body } => {
                 for stmt in body {
-                    self.lower_stmt(*stmt)
+                    self.lower_stmt(*stmt, None)
                 }
             }
             Stmt::If { cond, then_branch, else_branch } => {
                 let cond = self.lower_expr(cond);
                 self.func.make_cond(cond, |func, branch| {
                     let stmt = if branch { then_branch } else { else_branch };
+                    #[allow(clippy::needless_option_as_deref)]
                     LoweringCtx {
                         db: self.db,
                         data: self.data,
@@ -648,18 +691,19 @@ impl LoweringCtx<'_, '_> {
                         infere: self.infere,
                         tagged_vars: self.tagged_vars,
                         places: self.places,
+                        reactive_component: self.reactive_component.as_deref_mut(),
                     }
-                    .lower_stmt(stmt)
+                    .lower_stmt(stmt, None)
                 });
             }
             Stmt::ForLoop { init, cond, incr, body } => {
-                self.lower_stmt(init);
+                self.lower_stmt(init, None);
                 self.lower_loop(cond, |s| {
-                    s.lower_stmt(body);
-                    s.lower_stmt(incr);
+                    s.lower_stmt(body, None);
+                    s.lower_stmt(incr, None);
                 });
             }
-            Stmt::WhileLoop { cond, body } => self.lower_loop(cond, |s| s.lower_stmt(body)),
+            Stmt::WhileLoop { cond, body } => self.lower_loop(cond, |s| s.lower_stmt(body, None)),
             Stmt::Case { discr, ref case_arms } => self.lower_case(discr, case_arms),
         }
     }
@@ -711,7 +755,7 @@ impl LoweringCtx<'_, '_> {
             // lower the body
             let next = self.func.current_block();
             self.func.switch_to_block(body_head);
-            self.lower_stmt(*body);
+            self.lower_stmt(*body, None);
             self.func.ins().jump(end);
             self.func.switch_to_block(next);
         }
@@ -719,7 +763,7 @@ impl LoweringCtx<'_, '_> {
         if let Some(default_case) =
             case_arms.iter().find(|arm| matches!(arm.cond, CaseCond::Default))
         {
-            self.lower_stmt(default_case.body);
+            self.lower_stmt(default_case.body, None);
         }
 
         self.func.ensured_sealed();
@@ -768,8 +812,8 @@ impl LoweringCtx<'_, '_> {
                 | PlaceKind::ParamMax(_) => (),
 
                 // always zero initalized
-                PlaceKind::BranchVoltage(_)
-                | PlaceKind::BranchCurrent(_)
+                PlaceKind::BranchVoltage { .. }
+                | PlaceKind::BranchCurrent { .. }
                 | PlaceKind::ImplicitBranchVoltage { .. }
                 | PlaceKind::ImplicitBranchCurrent { .. } => {
                     let entry = self.func.func.layout.entry_block().unwrap();
@@ -792,6 +836,20 @@ impl LoweringCtx<'_, '_> {
         }
         func_ref
     }
+
+    // fn stateful_callback(
+    //     &mut self,
+    //     kind: impl FnOnce(StateId) -> CallBackKind,
+    // ) -> (Value, FuncRef) {
+    //     let state = self.data.state.len().into();
+    //     let kind = kind(state);
+    //     let (func_ref, changed) = self.data.callbacks.ensure(kind);
+    //     debug_assert!(changed);
+    //     let data = kind.signature();
+    //     self.func.import_function(data);
+    //     let state = self.param(ParamKind::StatePrev(state));
+    //     (state, func_ref)
+    // }
 
     fn lower_expr_as_lhs(&mut self, expr: ExprId, mut val: Value) {
         let place = match self.body.exprs[expr] {
@@ -1075,9 +1133,60 @@ impl LoweringCtx<'_, '_> {
             BinaryOp::BitwiseAnd => Opcode::Iand,
         };
 
-        let lhs = self.lower_expr(lhs);
-        let rhs = self.lower_expr(rhs);
-        let (inst, dfg) = self.func.ins().binary(op, lhs, rhs);
+        let lhs_ = self.lower_expr(lhs);
+        let rhs_ = self.lower_expr(rhs);
+
+        if let Some(reactive_component) = &mut self.reactive_component {
+            let lhs__ = reactive_component.get(&lhs).copied();
+            let rhs__ = reactive_component.get(&rhs).copied();
+            match (lhs__, rhs__, op) {
+                (Some(lhs), Some(rhs), Opcode::Fadd) => {
+                    let val = self.func.ins().fadd(lhs, rhs);
+                    reactive_component.insert(expr, val);
+                }
+
+                (Some(val), None, Opcode::Fadd | Opcode::Fsub)
+                | (None, Some(val), Opcode::Fadd) => {
+                    reactive_component.insert(expr, val);
+                }
+
+                (None, Some(val), Opcode::Fsub) => {
+                    let val = self.func.ins().fneg(val);
+                    reactive_component.insert(expr, val);
+                }
+
+                (None, Some(rhs_), Opcode::Fmul) => {
+                    let val = self.func.ins().fmul(lhs_, rhs_);
+                    reactive_component.insert(expr, val);
+                }
+
+                (Some(lhs_), None, Opcode::Fmul) => {
+                    let val = self.func.ins().fmul(lhs_, rhs_);
+                    reactive_component.insert(expr, val);
+                }
+
+                (Some(lhs_), None, Opcode::Fdiv) => {
+                    let val = self.func.ins().fdiv(lhs_, rhs_);
+                    reactive_component.insert(expr, val);
+                }
+
+                (lhs_, rhs_, op) => {
+                    if (lhs_.is_some() || rhs_.is_some()) && cfg!(debug_assertions) {
+                        unreachable!(
+                            "wtf {} ({:?}) {:?}({:?}) {:?}  ({:?})",
+                            op,
+                            &self.body.exprs[expr],
+                            lhs_,
+                            &self.body.exprs[lhs],
+                            rhs_,
+                            &self.body.exprs[rhs]
+                        );
+                    }
+                }
+            }
+        }
+
+        let (inst, dfg) = self.func.ins().binary(op, lhs_, rhs_);
         dfg.first_result(inst)
     }
 
@@ -1098,6 +1207,7 @@ impl LoweringCtx<'_, '_> {
         mut lower_else_val: impl FnMut(&mut LoweringCtx) -> Value,
     ) -> Value {
         self.func.make_select(cond, |func, branch| {
+            #[allow(clippy::needless_option_as_deref)]
             let mut ctx = LoweringCtx {
                 db: self.db,
                 data: self.data,
@@ -1106,6 +1216,7 @@ impl LoweringCtx<'_, '_> {
                 infere: self.infere,
                 tagged_vars: self.tagged_vars,
                 places: self.places,
+                reactive_component: self.reactive_component.as_deref_mut(),
             };
             if branch {
                 lower_then_val(&mut ctx)
@@ -1144,6 +1255,7 @@ impl LoweringCtx<'_, '_> {
         let ret_place = self.place(PlaceKind::FunctionReturn { fun });
         self.func.def_var(ret_place, init);
 
+        #[allow(clippy::needless_option_as_deref)]
         let mut ctx = LoweringCtx {
             db: self.db,
             data: self.data,
@@ -1152,6 +1264,7 @@ impl LoweringCtx<'_, '_> {
             infere: &infere,
             tagged_vars: self.tagged_vars,
             places: self.places,
+            reactive_component: None,
         };
 
         ctx.lower_entry_stmts();
@@ -1325,8 +1438,15 @@ impl LoweringCtx<'_, '_> {
             | BuiltIn::noise_table_log
             | BuiltIn::white_noise
             | BuiltIn::flicker_noise
-            | BuiltIn::abstime
-            | BuiltIn::ddt => F_ZERO,
+            | BuiltIn::abstime => F_ZERO,
+
+            BuiltIn::ddt => {
+                let arg0 = self.lower_expr(args[0]);
+                if let Some(reactive_component) = &mut self.reactive_component {
+                    reactive_component.insert(expr, arg0);
+                }
+                F_ZERO
+            }
 
             BuiltIn::idt | BuiltIn::idtmod => match *signature.unwrap() {
                 IDT_NO_IC => F_ZERO,

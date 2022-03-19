@@ -27,12 +27,13 @@ impl AnalogBlockMir {
             matches!(
                 kind,
                 // PlaceKind::Var(_)
-                PlaceKind::BranchVoltage(_)
+                PlaceKind::BranchVoltage { .. }
                     | PlaceKind::ImplicitBranchVoltage { .. }
-                    | PlaceKind::BranchCurrent(_)
+                    | PlaceKind::BranchCurrent { .. }
                     | PlaceKind::ImplicitBranchCurrent { .. }
             )
         })
+        .with_split_contributions()
         .build();
 
         // TODO enable hidden state or warn
@@ -64,9 +65,9 @@ impl AnalogBlockMir {
             .filter_map(|(kind, val)| {
                 if matches!(
                     kind,
-                    PlaceKind::BranchVoltage(_)
+                    PlaceKind::BranchVoltage { .. }
                         | PlaceKind::ImplicitBranchVoltage { .. }
-                        | PlaceKind::BranchCurrent(_)
+                        | PlaceKind::BranchCurrent { .. }
                         | PlaceKind::ImplicitBranchCurrent { .. }
                 ) {
                     Some(*val)

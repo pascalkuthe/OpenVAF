@@ -4,7 +4,7 @@ use std::vec;
 use hir_def::{BranchId, FunctionId, LocalFunctionArgId, NodeId, ParamId, ParamSysFun, VarId};
 use indexmap::IndexMap;
 use mir::{DataFlowGraph, FuncRef, FunctionSignature, Param, Value, F_ONE};
-use stdx::{impl_debug, impl_idx_from};
+// use stdx::{impl_debug, impl_idx_from};
 use typed_indexmap::{map, TiMap, TiSet};
 
 pub use crate::body::MirBuilder;
@@ -52,15 +52,23 @@ pub enum PlaceKind {
         fun: FunctionId,
         arg: LocalFunctionArgId,
     },
-    BranchVoltage(BranchId),
-    BranchCurrent(BranchId),
+    BranchVoltage {
+        branch: BranchId,
+        reactive: bool,
+    },
+    BranchCurrent {
+        branch: BranchId,
+        reactive: bool,
+    },
     ImplicitBranchVoltage {
         hi: NodeId,
         lo: Option<NodeId>,
+        reactive: bool,
     },
     ImplicitBranchCurrent {
         hi: NodeId,
         lo: Option<NodeId>,
+        reactive: bool,
     },
     /// A parameter during param initiliztion is mutable (write default in case its not given)
     Param(ParamId),
@@ -92,6 +100,7 @@ pub enum CallBackKind {
     NodeDerivative(NodeId),
     ParamInfo(ParamInfoKind, ParamId),
     CollapseHint(NodeId, Option<NodeId>),
+    // StoreState(StateId),
 }
 
 impl CallBackKind {
@@ -139,14 +148,21 @@ impl CallBackKind {
                 returns: 0,
                 has_sideeffects: true,
             },
+            // CallBackKind::Ddt => FunctionSignature {
+            //     name: "ddt".to_owned(),
+            //     params: 1,
+            //     returns: 1,
+            //     has_sideeffects: false,
+            // },
+            // CallBackKind::StoreState(state) => FunctionSignature {
+            //     name: format!("store_{:?})", state),
+            //     params: 1,
+            //     returns: 0,
+            //     has_sideeffects: true,
+            // },
         }
     }
 }
-
-#[derive(PartialEq, Eq, Clone, Copy, Hash)]
-pub struct CfgNodeId(u32);
-impl_idx_from!(CfgNodeId(u32));
-impl_debug!(match CfgNodeId{node => "node{}",node.0;});
 
 pub struct FunctionMetadata {
     pub outputs: IndexMap<PlaceKind, Value>,
@@ -162,6 +178,7 @@ pub struct HirInterner {
     pub outputs: IndexMap<PlaceKind, Value, ahash::RandomState>,
     pub params: TiMap<Param, ParamKind, Value>,
     pub callbacks: TiSet<FuncRef, CallBackKind>,
+    // pub state: TiSet<StateId, FuncRef>,
 }
 
 pub type LiveParams<'a> = FilterMap<
@@ -221,3 +238,8 @@ impl HirInterner {
     //         callback_map.raw.iter().map(|callbacks| self.callbacks[*callbacks].clone()).collect();
     // }
 }
+
+// #[derive(PartialEq, Eq, Clone, Copy, Hash)]
+// pub struct StateId(u32);
+// impl_idx_from!(StateId(u32));
+// impl_debug!(match StateId{id => "state{}",id.0;});

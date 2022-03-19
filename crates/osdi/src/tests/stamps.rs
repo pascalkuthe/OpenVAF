@@ -32,7 +32,7 @@ fn resistor() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db);
 
     // read the matrix entries
     let ia_va: f64 = result.read(stamps[&("A".to_owned(), "A".to_owned())]);
@@ -87,7 +87,7 @@ fn current_source() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db);
 
     // read the matrix entries
     let ip_vp: f64 = result.read(stamps[&("Np".to_owned(), "Np".to_owned())]);
@@ -145,7 +145,7 @@ fn cccs() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db);
 
     // read the matrix entries
     let op_op: f64 = result.read(stamps[&("Outp".to_owned(), "Outp".to_owned())]);
@@ -215,7 +215,7 @@ fn vccs() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db);
 
     // read the matrix entries
     let ip_ip: f64 = result.read(stamps[&("Inp".to_owned(), "Inp".to_owned())]);
@@ -321,7 +321,7 @@ fn diode() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db);
 
     // let matrix = expect![[r#"
     //     (A, dT) = v211
@@ -340,7 +340,7 @@ fn diode() {
 
     // // Note: this produces an error if the matrix changes
     // // You can update the string by running the test with UPDATE_EXPECT=1
-    // matrix.assert_eq(&mir.matrix.print(&db));
+    // matrix.assert_eq(&mir.matrix.print_resistive_stamps(&db));
 
     // read the matrix entries
     let ia_va: f64 = result.read(stamps[&("A".to_owned(), "A".to_owned())]);
@@ -423,8 +423,6 @@ fn diode() {
     let it_vci_expect = -ith_vci;
     let it_vc_expect = -ith_vc;
     let it_va_expect = -ith_va;
-
-    println!("{}", mir.func.to_debug_string());
 
     // finally assert that the values are correct
     let epsilon = 1e-5;

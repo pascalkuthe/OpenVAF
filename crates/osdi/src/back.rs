@@ -69,7 +69,7 @@ impl AnalogBlockMir {
         let module = unsafe { backend.new_module(name).unwrap() };
         let mut cx = unsafe { backend.new_ctx(literals, &module) };
 
-        let ret_arr_ty = cx.ty_array(cx.ty_real(), self.matrix.entrys.len() as u32);
+        let ret_arr_ty = cx.ty_array(cx.ty_real(), self.matrix.resistive.len() as u32);
         let ret_ty = cx.ptr_ty(ret_arr_ty);
         let arg_tys: Vec<_> = once(ret_ty)
             .chain(self.intern.params.raw.iter().filter_map(|(pkind, val)| {
@@ -119,7 +119,7 @@ impl AnalogBlockMir {
             builder.build_cfg(&postorder);
             builder.select_bb(postorder[0]);
             let dst = llvm::LLVMGetParam(llfunc, 0);
-            for (i, val) in self.matrix.entrys.raw.values().enumerate() {
+            for (i, val) in self.matrix.resistive.raw.values().enumerate() {
                 let dst = builder.gep(dst, &[builder.cx.const_usize(0), builder.cx.const_usize(i)]);
                 let val = builder.values[*val].unwrap();
                 builder.store(dst, val);

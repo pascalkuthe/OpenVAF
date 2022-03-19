@@ -47,9 +47,9 @@ fn check_with_diagnostics(src: &str, diagnostics: Expect, body: Expect) {
         matches!(
             kind,
             PlaceKind::Var(_)
-                | PlaceKind::BranchVoltage(_)
+                | PlaceKind::BranchVoltage { .. }
                 | PlaceKind::ImplicitBranchVoltage { .. }
-                | PlaceKind::BranchCurrent(_)
+                | PlaceKind::BranchCurrent { .. }
                 | PlaceKind::ImplicitBranchCurrent { .. }
         )
     })

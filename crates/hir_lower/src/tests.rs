@@ -58,9 +58,9 @@ impl TestDataBase {
                     matches!(
                         kind,
                         PlaceKind::Var(_)
-                            | PlaceKind::BranchVoltage(_)
+                            | PlaceKind::BranchVoltage { .. }
                             | PlaceKind::ImplicitBranchVoltage { .. }
-                            | PlaceKind::BranchCurrent(_)
+                            | PlaceKind::BranchCurrent { .. }
                             | PlaceKind::ImplicitBranchCurrent { .. }
                     )
                 })
