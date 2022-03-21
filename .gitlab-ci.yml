@@ -1,0 +1,64 @@
+cache: &global_cache
+  key: "$CI_PIPELINE_ID"
+  paths:
+    - target
+  policy: pull
+
+stages:
+  - build
+  - check
+  - deploy
+
+variables:
+  CI: 1
+  RUST_BACK_TRACE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+  CARGO_HOME: /cargo
+  RUSTUP_HOME: /multirust
+  RUSTC_WRAPPER: sccache
+  SCCACHE_DIR: "/sccache_dir"
+  mirror_ssh: $mirror_ssh
+  mirror_ssh: $mirror_ssh_pub
+
+build:
+  stage: build
+  script:
+    - export PATH="/cargo/bin:/llvm/bin:${PATH}"
+    - cargo test --no-run 
+  cache:
+    <<: *global_cache
+    policy: push
+
+rustfmt:
+  stage: check 
+  script:
+    - export PATH="/cargo/bin:/llvm/bin:${PATH}"
+    - cargo fmt --all -- --check
+
+clippy:
+  stage: check
+  cache:
+    <<: *global_cache
+  script:
+    - export PATH="/cargo/bin:/llvm/bin:${PATH}"
+    - cargo clippy -- -D warnings
+
+test:
+  stage: check    
+  cache:
+    <<: *global_cache
+  script:
+    - export PATH="/cargo/bin:/llvm/bin:${PATH}"
+    - cargo test
+
+mirror:
+  stage: deploy
+  only:
+    - master
+  script:
+  - mkdir .ssh
+  - cp "${mirror_ssh}" ~/.ssh/mirror_ssh
+  - cp "${mirror_ssh_pub}" ~/.ssh/mirror_ssh.pub
+  - git remote add sourcehut git@git.sr.ht:~dspom/OpenVAF
+  - git push --prune sourcehut +refs/remotes/origin/*:refs/heads/* +refs/tags/*:refs/tags/
