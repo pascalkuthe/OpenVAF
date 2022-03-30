@@ -2,7 +2,7 @@
 
 [![license](https://img.shields.io/badge/license-GPL%203.0-brightgreen)](https://gitlab.com/DSPOM/OpenVAF/-/blob/master/LICENSE)
 ![maintaince](https://img.shields.io/badge/maintenance-actively--developed-informational)
-[![builds.sr.ht status](https://builds.sr.ht/~dspom/OpenVAF.svg)](https://builds.sr.ht/~dspom/OpenVAF?)
+[![pipeline status](https://gitlab.com/DSPOM/OpenVAF/badges/master/pipeline.svg)](https://gitlab.com/DSPOM/OpenVAF/-/commits/master)
 ![coverage](https://img.shields.io/badge/coverage-68%25-yellowgreen)
 
 OpenVAF is a Verilog-A compiler. The OpenVAF Project is not executable by itself

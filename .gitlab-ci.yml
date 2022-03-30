@@ -7,7 +7,6 @@ cache: &global_cache
 stages:
   - build
   - check
-  - deploy
 
 variables:
   CI: 1
@@ -18,8 +17,6 @@ variables:
   RUSTUP_HOME: /multirust
   RUSTC_WRAPPER: sccache
   SCCACHE_DIR: "/sccache_dir"
-  mirror_ssh: $mirror_ssh
-  mirror_ssh: $mirror_ssh_pub
 
 build:
   stage: build
@@ -51,14 +48,3 @@ test:
   script:
     - export PATH="/cargo/bin:/llvm/bin:${PATH}"
     - cargo test
-
-mirror:
-  stage: deploy
-  only:
-    - master
-  script:
-  - mkdir .ssh
-  - cp "${mirror_ssh}" ~/.ssh/mirror_ssh
-  - cp "${mirror_ssh_pub}" ~/.ssh/mirror_ssh.pub
-  - git remote add sourcehut git@git.sr.ht:~dspom/OpenVAF
-  - git push --prune sourcehut +refs/remotes/origin/*:refs/heads/* +refs/tags/*:refs/tags/
