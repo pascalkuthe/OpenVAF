@@ -8,8 +8,8 @@ use hir_ty::lower::BranchKind;
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::FuncCursor;
-use mir::{Function, Value, F_ZERO};
-use mir_autodiff::FirstOrderUnkown;
+use mir::{FuncRef, Function, Value, F_ZERO};
+use mir_autodiff::{FirstOrderUnkown, FirstOrderUnkownInfo};
 use stdx::{format_to, impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
@@ -40,6 +40,7 @@ impl JacobianMatrix {
         func: &mut FuncCursor,
         intern: &HirInterner,
         derivatives: &AHashMap<(Value, FirstOrderUnkown), Value>,
+        derivative_info: &TiMap<FirstOrderUnkown, FuncRef, FirstOrderUnkownInfo>,
     ) {
         for (out_kind, rhs) in intern.outputs.iter() {
             let (row_hi, row_lo, reactive) = match *out_kind {
@@ -57,8 +58,8 @@ impl JacobianMatrix {
                 _ => continue,
             };
 
-            let hi_gnd = db.node_data(row_hi).is_gnd;
-            let lo_gnd = row_lo.map_or(true, |lo| db.node_data(lo).is_gnd);
+            let row_hi_gnd = db.node_data(row_hi).is_gnd;
+            let row_lo_gnd = row_lo.map_or(true, |lo| db.node_data(lo).is_gnd);
 
             for (param, (kind, _)) in intern.params.iter_enumerated() {
                 let (col_hi, col_lo) = match kind {
@@ -66,26 +67,37 @@ impl JacobianMatrix {
                     // ParamKind::Current(_) => TODO voltage contribute
                     _ => continue,
                 };
-                let unkown =
-                    u32::from(intern.callbacks.unwrap_index(&CallBackKind::Derivative(param)));
-                let unkown = FirstOrderUnkown::from(unkown);
+
+                let callback = intern.callbacks.unwrap_index(&CallBackKind::Derivative(param));
+                let unkown = derivative_info.unwrap_index(&callback);
                 if let Some(ddx) = derivatives.get(&(*rhs, unkown)).copied() {
                     if ddx == F_ZERO {
                         continue;
                     }
 
-                    if !hi_gnd {
-                        self.ensure_entry(func, row_hi, col_hi, ddx, false, reactive);
+                    let col_hi_gnd = db.node_data(col_hi).is_gnd;
+                    let col_lo_gnd = col_lo.map_or(true, |lo| db.node_data(lo).is_gnd);
+
+                    if !row_hi_gnd {
+                        if !col_hi_gnd {
+                            self.ensure_entry(func, row_hi, col_hi, ddx, false, reactive);
+                        }
                         if let Some(col_lo) = col_lo {
-                            self.ensure_entry(func, row_hi, col_lo, ddx, true, reactive);
+                            if !col_lo_gnd {
+                                self.ensure_entry(func, row_hi, col_lo, ddx, true, reactive);
+                            }
                         }
                     }
 
                     if let Some(row_lo) = row_lo {
-                        if !lo_gnd {
-                            self.ensure_entry(func, row_lo, col_hi, ddx, true, reactive);
+                        if !row_lo_gnd {
+                            if !col_hi_gnd {
+                                self.ensure_entry(func, row_lo, col_hi, ddx, true, reactive);
+                            }
                             if let Some(col_lo) = col_lo {
-                                self.ensure_entry(func, row_lo, col_lo, ddx, false, reactive);
+                                if !col_lo_gnd {
+                                    self.ensure_entry(func, row_lo, col_lo, ddx, false, reactive);
+                                }
                             }
                         }
                     }

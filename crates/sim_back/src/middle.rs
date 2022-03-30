@@ -87,8 +87,9 @@ impl EvalMir {
             .collect();
 
         dead_code_elimination(&mut func, &output_values);
+        let unkowns = intern.unkowns().collect();
 
-        let ad = auto_diff(&mut func, &cfg, intern.unkowns(), extra_derivatives);
+        let ad = auto_diff(&mut func, &cfg, &unkowns, extra_derivatives);
 
         let mut matrix = JacobianMatrix::default();
         let mut residual = Residual::default();
@@ -101,13 +102,15 @@ impl EvalMir {
 
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
 
-        matrix.populate(db, &mut cursor, &intern, &ad);
+        matrix.populate(db, &mut cursor, &intern, &ad, &unkowns);
         residual.populate(db, &mut cursor, &intern);
+
         output_values.ensure(cursor.func.dfg.num_values() + 1);
         matrix.insert_opt_barries(&mut cursor, &mut output_values);
         residual.insert_opt_barries(&mut cursor, &mut output_values);
 
         inst_combine(&mut func);
+
         sparse_conditional_constant_propagation(&mut func, &cfg);
         dead_code_elimination(&mut func, &output_values);
         simplify_cfg(&mut func, &mut cfg);

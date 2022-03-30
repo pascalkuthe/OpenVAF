@@ -43,10 +43,13 @@ impl Debug for DerivativeFmt<'_> {
 fn check(src: &str, data_flow_result: Expect) {
     let (func, _) = parse_function(src).unwrap();
 
-    let mut unkowns = Unkowns::new([
+    let unkowns_ = [
         (0u32.into(), vec![(10u32.into(), F_ONE)].into_boxed_slice()),
         (1u32.into(), vec![(11u32.into(), F_ONE)].into_boxed_slice()),
-    ]);
+    ]
+    .into_iter()
+    .collect();
+    let mut unkowns = Unkowns::new(&unkowns_);
 
     let res = LiveDerivatives::build(&func, &mut unkowns, []);
     let printer = DerivativeFmt { func: &func, derivatives: &res.derivatives };

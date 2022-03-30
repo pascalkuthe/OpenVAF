@@ -105,7 +105,7 @@ impl CompilationDB {
 
         dead_code_elimination(&mut func, &output_values);
 
-        auto_diff(&mut func, &cfg, intern.unkowns(), iter::empty());
+        auto_diff(&mut func, &cfg, &intern.unkowns().collect(), iter::empty());
 
         sparse_conditional_constant_propagation(&mut func, &cfg);
         inst_combine(&mut func);

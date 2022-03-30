@@ -45,12 +45,12 @@ pub fn build_derivatives(
 
 type CacheData = [PackedOption<Value>; 2];
 
-pub(crate) struct DerivativeBuilder<'a> {
+pub(crate) struct DerivativeBuilder<'a, 'u> {
     func: &'a mut Function,
     cfg: &'a ControlFlowGraph,
 
     live_derivatives: &'a LiveDerivatives,
-    unkowns: &'a Unkowns,
+    unkowns: &'a Unkowns<'u>,
 
     derivative_values: AHashMap<(Value, FirstOrderUnkown), Value>,
     dst: (Inst, SourceLoc),
@@ -58,7 +58,7 @@ pub(crate) struct DerivativeBuilder<'a> {
     phis: Vec<(Inst, Unkown)>,
 }
 
-impl<'f> InstInserterBase<'f> for &'f mut DerivativeBuilder<'_> {
+impl<'f> InstInserterBase<'f> for &'f mut DerivativeBuilder<'_, '_> {
     fn data_flow_graph(&self) -> &mir::DataFlowGraph {
         &self.func.dfg
     }
@@ -80,7 +80,7 @@ impl<'f> InstInserterBase<'f> for &'f mut DerivativeBuilder<'_> {
     }
 }
 
-impl<'a> DerivativeBuilder<'a> {
+impl<'a, 'u> DerivativeBuilder<'a, 'u> {
     /// generates all derivatives and stores them in `self.derivative_values`
     ///
     /// Phi nodes are only cloned so that they have a return value that can be stored in
@@ -212,7 +212,7 @@ impl<'a> DerivativeBuilder<'a> {
             .to_owned()
     }
 
-    fn ins(&mut self) -> InsertBuilder<&mut DerivativeBuilder<'a>> {
+    fn ins(&mut self) -> InsertBuilder<&mut DerivativeBuilder<'a, 'u>> {
         InsertBuilder::new(self)
     }
 

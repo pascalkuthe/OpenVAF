@@ -15,9 +15,11 @@ fn check_simple(src: &str, data_flow_result: Expect) {
     let unkowns = [
         (0u32.into(), vec![(10u32.into(), F_ONE)].into_boxed_slice()),
         (1u32.into(), vec![(11u32.into(), F_ONE)].into_boxed_slice()),
-    ];
+    ]
+    .into_iter()
+    .collect();
 
-    auto_diff(&mut func, &cfg, unkowns, []);
+    auto_diff(&mut func, &cfg, &unkowns, []);
     data_flow_result.assert_eq(&func.to_debug_string());
 }
 
@@ -29,9 +31,11 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
     let unkowns = [
         (0u32.into(), vec![(10u32.into(), F_ONE)].into_boxed_slice()),
         (1u32.into(), vec![(11u32.into(), F_ONE)].into_boxed_slice()),
-    ];
+    ]
+    .into_iter()
+    .collect();
 
-    auto_diff(&mut func, &cfg, unkowns, []);
+    auto_diff(&mut func, &cfg, &unkowns, []);
     let mut interpret = Interpreter::new(
         &func,
         TiSlice::from_ref(&[]),

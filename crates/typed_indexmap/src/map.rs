@@ -140,3 +140,9 @@ impl<I, K, V> From<IndexMap<K, V, ahash::RandomState>> for TiMap<I, K, V> {
         TiMap { raw, _marker: PhantomData }
     }
 }
+
+impl<I, K: Hash + Eq, V> FromIterator<(K, V)> for TiMap<I, K, V> {
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        Self { raw: iter.into_iter().collect(), _marker: PhantomData }
+    }
+}

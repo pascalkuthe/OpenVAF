@@ -2,7 +2,6 @@ use std::fmt::Debug;
 use std::iter;
 use std::mem::take;
 
-use indexmap::IndexMap;
 use mir::{FuncRef, Value, F_ZERO};
 use stdx::{impl_debug, impl_idx_from};
 use typed_indexmap::{TiMap, TiSet};
@@ -37,13 +36,13 @@ pub struct NthOrderUnkownInfo {
     base: FirstOrderUnkown,
 }
 
-pub struct Unkowns {
-    pub first_order_unkowns: TiMap<FirstOrderUnkown, FuncRef, FirstOrderUnkownInfo>,
+pub struct Unkowns<'a> {
+    pub first_order_unkowns: &'a TiMap<FirstOrderUnkown, FuncRef, FirstOrderUnkownInfo>,
     higher_order_unkowns: TiSet<NthOrderUnkown, NthOrderUnkownInfo>,
     buf: Vec<FirstOrderUnkown>,
 }
 
-impl Unkowns {
+impl<'a> Unkowns<'a> {
     pub fn len(&self) -> usize {
         self.first_order_unkowns.len() + self.higher_order_unkowns.len()
     }
@@ -52,10 +51,11 @@ impl Unkowns {
         self.len() == 0
     }
 
-    pub fn new(unkowns: impl IntoIterator<Item = (FuncRef, FirstOrderUnkownInfo)>) -> Unkowns {
-        let first_order_unkowns: IndexMap<_, _, ahash::RandomState> = unkowns.into_iter().collect();
+    pub fn new(
+        first_order_unkowns: &'a TiMap<FirstOrderUnkown, FuncRef, FirstOrderUnkownInfo>,
+    ) -> Unkowns<'a> {
         Self {
-            first_order_unkowns: first_order_unkowns.into(),
+            first_order_unkowns,
             higher_order_unkowns: TiSet::default(),
             // don't expect more than 8. th order derivative in most code
             buf: Vec::with_capacity(8),

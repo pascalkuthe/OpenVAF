@@ -1,4 +1,5 @@
 use ahash::AHashMap;
+use expect_test::expect;
 use float_cmp::assert_approx_eq;
 use sourcegen::project_root;
 
@@ -335,20 +336,34 @@ fn diode() {
     let _rhs = mir.residual.resistive_entries(&db);
     let _rhs_react = mir.residual.reactive_entries(&db);
 
-    // let matrix = expect![[r#"
-    //     (A, dT) = v211
-    //     (CI, dT) = v240
-    //     (A, A) = v212
-    //     (A, CI) = v243
-    //     (CI, A) = v242
-    //     (CI, CI) = v257
-    //     (CI, C) = v258
-    //     (dT, dT) = v225
-    //     (dT, A) = v226
-    //     (dT, CI) = v249
-    //     (C, CI) = v259
-    //     (C, C) = v235
-    // "#]];
+    let matrix_res = expect![[r#"
+        (A, dT) = v355
+        (CI, dT) = v431
+        (A, A) = v356
+        (A, CI) = v422
+        (CI, A) = v421
+        (CI, CI) = v436
+        (CI, C) = v437
+        (dT, dT) = v381
+        (dT, A) = v382
+        (dT, CI) = v428
+        (dT, C) = v429
+        (C, dT) = v432
+        (C, CI) = v438
+        (C, C) = v405
+    "#]];
+
+    let matrix_react = expect![[r#"
+        (A, dT) = v347
+        (CI, dT) = v411
+        (A, A) = v348
+        (A, CI) = v414
+        (CI, A) = v413
+        (CI, CI) = v348
+    "#]];
+
+    matrix_res.assert_eq(&mir.matrix.print_resistive_stamps(&db));
+    matrix_react.assert_eq(&mir.matrix.print_reactive_stamps(&db));
 
     // // Note: this produces an error if the matrix changes
     // // You can update the string by running the test with UPDATE_EXPECT=1
@@ -451,4 +466,549 @@ fn diode() {
     assert_approx_eq!(f64, itj_va, it_va_expect, epsilon = epsilon);
     assert_approx_eq!(f64, itj_vc, it_vc_expect, epsilon = epsilon);
     assert_approx_eq!(f64, itj_vci, it_vci_expect, epsilon = epsilon);
+}
+
+#[test]
+fn hicum() {
+    // compile model and obtain:
+    // a data base that contains all info about the model available to the compiler
+    // the optimized MIR that represents the actual compiled code (including matrix entries)
+    // the interned string literals (unintersting)
+    let root_file = project_root().join("integration_tests").join("HICUML2").join("hicuml2.va");
+    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
+
+    ///////////////////////////////////////
+    //define modelcard
+    //Transfer current
+    let c10 = 2.0E-30;
+    let qp0 = 2.0E-30;
+    let ich = 0.0;
+    let hf0 = 1.0;
+    let hfe = 1.0;
+    let hfc = 1.0;
+    let hjei = 1.0;
+    let ahjei = 0.0;
+    let rhjei = 1.0;
+    let hjci = 1.0;
+
+    //Base-Emitter diode currents
+    let ibeis = 1.0E-15;
+    let mbei = 1.0;
+    let ireis = 0.0;
+    let mrei = 2.0;
+    let ibeps = 0.0;
+    let mbep = 1.0;
+    let ireps = 0.0;
+    let mrep = 2.0;
+    let mcf = 1.0;
+
+    //Transit time for excess recombination current at b-c barrier
+    let tbhrec = 0.0;
+
+    //Base-Collector diode currents
+    let ibcis = 1.0E-15;
+    let mbci = 1.0;
+    let ibcxs = 0.0;
+    let mbcx = 1.0;
+
+    //Base-Emitter tunneling current
+    let ibets = 0.0;
+    let abet = 40;
+    let tunode = 1;
+
+    //Base-Collector avalanche current
+    let favl = 0.0;
+    let qavl = 0.0;
+    let kavl = 0.0;
+    let alfav = 0.0;
+    let alqav = 0.0;
+    let alkav = 0.0;
+
+    //Series resistances
+    let rbi0 = 0.0;
+    let rbx = 0.0;
+    let fgeo = 0.655;
+    let fdqr0 = 0.0;
+    let fcrbi = 0.0;
+    let fqi = 1.0;
+    let re = 0.0;
+    let rcx = 0.0;
+
+    //Substrate transistor
+    let itss = 0.0;
+    let msf = 1.0;
+    let iscs = 0.0;
+    let msc = 1.0;
+    let tsf = 0.0;
+
+    //Intra-device substrate coupling
+    let rsu = 0.0;
+    let csu = 0.0;
+
+    //Depletion Capacitances
+    let cjei0 = 1.0E-15;
+    let vdei = 0.9;
+    let zei = 0.5;
+    let ajei = 2.5;
+    let cjep0 = 1.0E-15;
+    let vdep = 0.9;
+    let zep = 0.5;
+    let ajep = 2.5;
+    let cjci0 = 1.0E-15;
+    let vdci = 0.7;
+    let zci = 0.4;
+    let vptci = 100;
+    let cjcx0 = 1.0E-15;
+    let vdcx = 0.7;
+    let zcx = 0.4;
+    let vptcx = 100;
+    let fbcpar = 0.0;
+    let fbepar = 1.0;
+    let cjs0 = 0.0;
+    let vds = 0.6;
+    let zs = 0.5;
+    let vpts = 100;
+    let cscp0 = 0.0;
+    let vdsp = 0.6;
+    let zsp = 0.5;
+    let vptsp = 100;
+
+    //Diffusion Capacitances
+    let t0 = 0.0;
+    let dt0h = 0.0;
+    let tbvl = 0.0;
+    let tef0 = 0.0;
+    let gtfe = 1.0;
+    let thcs = 0.0;
+    let ahc = 0.1;
+    let fthc = 0.0;
+    let rci0 = 150;
+    let vlim = 0.5;
+    let vces = 0.1;
+    let vpt = 100.0;
+    let aick = 1e-3;
+    let delck = 2.0;
+    let tr = 0.0;
+    let vcbar = 0.0;
+    let icbar = 0.0;
+    let acbar = 0.01;
+
+    //Isolation Capacitances
+    let cbepar = 0.0;
+    let cbcpar = 0.0;
+
+    //Non-quasi-static Effect
+    let alqf = 0.167;
+    let alit = 0.333;
+    let flnqs = 0;
+
+    //Noise
+    let kf = 0.0;
+    let af = 2.0;
+    let cfbe = -1;
+    let flcono = 0;
+
+    let kfre = 0.0;
+    let afre = 2.0;
+
+    //Lateral Geometry Scaling (at high current densities)
+    let latb = 0.0;
+    let latl = 0.0;
+
+    //Temperature dependence
+    let vgb = 1.17;
+    let alt0 = 0.0;
+    let kt0 = 0.0;
+    let zetaci = 0.0;
+    let alvs = 0.0;
+    let alces = 0.0;
+    let zetarbi = 0.0;
+    let zetarbx = 0.0;
+    let zetarcx = 0.0;
+    let zetare = 0.0;
+    let zetacx = 1.0;
+    let vge = 1.17;
+    let vgc = 1.17;
+    let vgs = 1.17;
+    let f1vg = -1.023;
+    let f2vg = 4.321;
+    let zetact = 3.0;
+    let zetabet = 3.5;
+    let alb = 0.0;
+    let dvgbe = 0;
+    let zetahjei = 1;
+    let zetavgbe = 1;
+
+    //Self-Heating
+    let flsh = 0;
+    let rth = 0.0;
+    let zetarth = 0.0;
+    let alrth = 0.0;
+    let cth = 0.0;
+
+    //Compatibility with V2.1
+    let flcomp = 0.0;
+
+    //Circuit simulator specific parameters
+    let tnom = 27.0;
+    let dt = 0.0;
+    let typpe = 1;
+    //end modelcard
+    ///////////////////////////////////////
+
+    //define node potentials
+    let vc = 1.0;
+    let vci = 0.9;
+    let vb = 1.0;
+    let vbp = 0.95;
+    let vbi = 0.9;
+    let vei = 0.1;
+    let ve = 0.0;
+    let vs = 0.0;
+    let vsi = 0.01;
+    let vtnode = 0.0;
+    let vxf1 = 0.0;
+    let vxf2 = 0.0;
+    let vxf = 0.0;
+    let vn1 = 0.0;
+    let vn2 = 0.0;
+
+    // prepare inputs
+    let temp = 298.5;
+    let mut params = AHashMap::default();
+    let mut node_voltages = AHashMap::default();
+
+    // insert modelcard
+    params.insert("c10", c10.into());
+    params.insert("qp0", qp0.into());
+    params.insert("ich", ich.into());
+    params.insert("hf0", hf0.into());
+    params.insert("hfe", hfe.into());
+    params.insert("hfc", hfc.into());
+    params.insert("hjei", hjei.into());
+    params.insert("ahjei", ahjei.into());
+    params.insert("rhjei", rhjei.into());
+    params.insert("hjci", hjci.into());
+
+    //Base-Emitter diode currents
+    params.insert("ibeis", ibeis.into());
+    params.insert("mbei", mbei.into());
+    params.insert("ireis", ireis.into());
+    params.insert("mrei", mrei.into());
+    params.insert("ibeps", ibeps.into());
+    params.insert("mbep", mbep.into());
+    params.insert("ireps", ireps.into());
+    params.insert("mrep", mrep.into());
+    params.insert("mcf", mcf.into());
+
+    //Transit time for excess recombination current at b-c barrier
+    params.insert("tbhrec", tbhrec.into());
+
+    //Base-Collector diode currents
+    params.insert("ibcis", ibcis.into());
+    params.insert("mbci", mbci.into());
+    params.insert("ibcxs", ibcxs.into());
+    params.insert("mbcx", mbcx.into());
+
+    //Base-Emitter tunneling current
+    params.insert("ibets", ibets.into());
+    params.insert("abet", abet.into());
+    params.insert("tunode", tunode.into());
+
+    //Base-Collector avalanche current
+    params.insert("favl", favl.into());
+    params.insert("qavl", qavl.into());
+    params.insert("kavl", kavl.into());
+    params.insert("alfav", alfav.into());
+    params.insert("alqav", alqav.into());
+    params.insert("alkav", alkav.into());
+
+    //Series resistances
+    params.insert("rbi0", rbi0.into());
+    params.insert("rbx", rbx.into());
+    params.insert("fgeo", fgeo.into());
+    params.insert("fdqr0", fdqr0.into());
+    params.insert("fcrbi", fcrbi.into());
+    params.insert("fqi", fqi.into());
+    params.insert("re", re.into());
+    params.insert("rcx", rcx.into());
+
+    //Substrate transistor
+    params.insert("itss", itss.into());
+    params.insert("msf", msf.into());
+    params.insert("iscs", iscs.into());
+    params.insert("msc", msc.into());
+    params.insert("tsf", tsf.into());
+
+    //Intra-device substrate coupling
+    params.insert("rsu", rsu.into());
+    params.insert("csu", csu.into());
+
+    //Depletion Capacitances
+    params.insert("cjei0", cjei0.into());
+    params.insert("vdei", vdei.into());
+    params.insert("zei", zei.into());
+    params.insert("ajei", ajei.into());
+    params.insert("cjep0", cjep0.into());
+    params.insert("vdep", vdep.into());
+    params.insert("zep", zep.into());
+    params.insert("ajep", ajep.into());
+    params.insert("cjci0", cjci0.into());
+    params.insert("vdci", vdci.into());
+    params.insert("zci", zci.into());
+    params.insert("vptci", vptci.into());
+    params.insert("cjcx0", cjcx0.into());
+    params.insert("vdcx", vdcx.into());
+    params.insert("zcx", zcx.into());
+    params.insert("vptcx", vptcx.into());
+    params.insert("fbcpar", fbcpar.into());
+    params.insert("fbepar", fbepar.into());
+    params.insert("cjs0", cjs0.into());
+    params.insert("vds", vds.into());
+    params.insert("zs", zs.into());
+    params.insert("vpts", vpts.into());
+    params.insert("cscp0", cscp0.into());
+    params.insert("vdsp", vdsp.into());
+    params.insert("zsp", zsp.into());
+    params.insert("vptsp", vptsp.into());
+
+    //Diffusion Capacitances
+    params.insert("t0", t0.into());
+    params.insert("dt0h", dt0h.into());
+    params.insert("tbvl", tbvl.into());
+    params.insert("tef0", tef0.into());
+    params.insert("gtfe", gtfe.into());
+    params.insert("thcs", thcs.into());
+    params.insert("ahc", ahc.into());
+    params.insert("fthc", fthc.into());
+    params.insert("rci0", rci0.into());
+    params.insert("vlim", vlim.into());
+    params.insert("vces", vces.into());
+    params.insert("vpt", vpt.into());
+    params.insert("aick", aick.into());
+    params.insert("delck", delck.into());
+    params.insert("tr", tr.into());
+    params.insert("vcbar", vcbar.into());
+    params.insert("icbar", icbar.into());
+    params.insert("acbar", acbar.into());
+
+    //Isolation Capacitances
+    params.insert("cbepar", cbepar.into());
+    params.insert("cbcpar", cbcpar.into());
+
+    //Non-quasi-static Effect
+    params.insert("alqf", alqf.into());
+    params.insert("alit", alit.into());
+    params.insert("flnqs", flnqs.into());
+
+    //Noise
+    params.insert("kf", kf.into());
+    params.insert("af", af.into());
+    params.insert("cfbe", cfbe.into());
+    params.insert("flcono", flcono.into());
+
+    params.insert("kfre", kfre.into());
+    params.insert("afre", afre.into());
+
+    //Lateral Geometry Scaling (at high current densities)
+    params.insert("latb", latb.into());
+    params.insert("latl", latl.into());
+
+    //Temperature dependence
+    params.insert("vgb", vgb.into());
+    params.insert("alt0", alt0.into());
+    params.insert("kt0", kt0.into());
+    params.insert("zetaci", zetaci.into());
+    params.insert("alvs", alvs.into());
+    params.insert("alces", alces.into());
+    params.insert("zetarbi", zetarbi.into());
+    params.insert("zetarbx", zetarbx.into());
+    params.insert("zetarcx", zetarcx.into());
+    params.insert("zetare", zetare.into());
+    params.insert("zetacx", zetacx.into());
+    params.insert("vge", vge.into());
+    params.insert("vgc", vgc.into());
+    params.insert("vgs", vgs.into());
+    params.insert("f1vg", f1vg.into());
+    params.insert("f2vg", f2vg.into());
+    params.insert("zetact", zetact.into());
+    params.insert("zetabet", zetabet.into());
+    params.insert("alb", alb.into());
+    params.insert("dvgbe", dvgbe.into());
+    params.insert("zetahjei", zetahjei.into());
+    params.insert("zetavgbe", zetavgbe.into());
+
+    //Self-Heating
+    params.insert("flsh", flsh.into());
+    params.insert("rth", rth.into());
+    params.insert("zetarth", zetarth.into());
+    params.insert("alrth", alrth.into());
+    params.insert("cth", cth.into());
+
+    //Compatibility with V2.1
+    params.insert("flcomp", flcomp.into());
+
+    //Circuit simulator specific parameters
+    params.insert("tnom", tnom.into());
+    params.insert("dt", dt.into());
+    params.insert("type", typpe.into());
+
+    // define node voltages
+    node_voltages.insert("c", vc);
+    node_voltages.insert("ci", vci);
+    node_voltages.insert("b", vb);
+    node_voltages.insert("bp", vbp);
+    node_voltages.insert("bi", vbi);
+    node_voltages.insert("ei", vei);
+    node_voltages.insert("e", ve);
+    node_voltages.insert("s", vs);
+    node_voltages.insert("si", vsi);
+    node_voltages.insert("tnode", vtnode);
+    node_voltages.insert("xf1", vxf1);
+    node_voltages.insert("xf2", vxf2);
+    node_voltages.insert("xf", vxf);
+    node_voltages.insert("n1", vn1);
+    node_voltages.insert("n2", vn2);
+
+    // run the interpreter
+    let _result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
+    let _stamps_res = mir.matrix.resistive_stamps(&db);
+    let _stamps_react = mir.matrix.reactive_stamps(&db);
+    let _rhs_res = mir.residual.resistive_entries(&db);
+    let _rhs_react = mir.residual.reactive_entries(&db);
+
+    let matrix_res = expect![[r#"
+        (bi, bi) = v171982
+        (bi, ei) = v171952
+        (ei, bi) = v172967
+        (ei, ei) = v173166
+        (bi, ci) = v171956
+        (ei, ci) = v172968
+        (bi, bp) = v171981
+        (ei, bp) = v172131
+        (bi, tnode) = v171978
+        (ei, tnode) = v173160
+        (ei, e) = v173167
+        (ei, xf2) = v171606
+        (bi, n1) = v171259
+        (ei, n1) = v173845
+        (ei, n2) = v173968
+        (ci, bi) = v172969
+        (ci, ei) = v172966
+        (ci, ci) = v173085
+        (ci, bp) = v171807
+        (ci, si) = v172747
+        (ci, c) = v173086
+        (ci, tnode) = v173076
+        (ci, xf2) = v168067
+        (ci, n2) = v171197
+        (bp, bi) = v172121
+        (bp, ei) = v172130
+        (bp, ci) = v172400
+        (bp, bp) = v172391
+        (bp, b) = v171910
+        (bp, si) = v167033
+        (bp, tnode) = v172406
+        (b, bp) = v171909
+        (b, b) = v165629
+        (b, tnode) = v165625
+        (si, ci) = v172746
+        (si, bp) = v172393
+        (si, si) = v173279
+        (si, s) = v173280
+        (si, tnode) = v172753
+        (c, ci) = v173087
+        (c, c) = v168386
+        (c, tnode) = v173077
+        (e, ei) = v173168
+        (e, tnode) = v173161
+        (e, e) = v168579
+        (s, si) = v173281
+        (s, s) = v168752
+        (tnode, bi) = v173401
+        (tnode, ei) = v173402
+        (tnode, ci) = v173404
+        (tnode, bp) = v173407
+        (tnode, b) = v169068
+        (tnode, si) = v169062
+        (tnode, c) = v173405
+        (tnode, tnode) = v169064
+        (tnode, e) = v173403
+        (xf1, bi) = v173458
+        (xf1, ei) = v173457
+        (xf1, ci) = v173459
+        (xf1, tnode) = v169096
+        (xf1, xf1) = v169101
+        (xf1, xf2) = v169102
+        (xf2, bi) = v173524
+        (xf2, ei) = v173523
+        (xf2, ci) = v173525
+        (xf2, tnode) = v169224
+        (xf2, xf1) = v169229
+        (xf2, xf2) = v169230
+        (xf, bi) = v173590
+        (xf, ei) = v173589
+        (xf, ci) = v173591
+        (xf, tnode) = v169352
+        (xf, xf) = v169359
+        (n1, n1) = v171323
+        (n2, n2) = v171229
+    "#]];
+
+    let matrix_react = expect![[r#"
+        (ci, bi) = v172643
+        (ci, ei) = v167606
+        (b, ci) = v171657
+        (ci, ci) = v172832
+        (ci, bp) = v171730
+        (b, b) = v172517
+        (ci, b) = v171658
+        (ci, si) = v172831
+        (b, tnode) = v165333
+        (ci, tnode) = v172836
+        (b, e) = v172518
+        (bp, bi) = v172065
+        (bp, ei) = v172216
+        (bp, ci) = v172041
+        (bp, bp) = v172609
+        (bp, tnode) = v172234
+        (bp, e) = v172610
+        (bi, bi) = v173692
+        (bi, ei) = v173689
+        (bi, ci) = v173693
+        (bi, bp) = v172066
+        (bi, tnode) = v173716
+        (bi, xf) = v166914
+        (bi, n1) = v171291
+        (bi, n2) = v171293
+        (ei, bi) = v173694
+        (ei, ei) = v173691
+        (ei, ci) = v173695
+        (ei, bp) = v172217
+        (ei, tnode) = v173717
+        (ei, xf) = v172344
+        (ei, n1) = v173757
+        (ei, n2) = v173759
+        (e, bp) = v172611
+        (e, b) = v172519
+        (e, e) = v172612
+        (si, ci) = v172830
+        (si, si) = v173367
+        (si, s) = v173368
+        (si, tnode) = v167837
+        (s, si) = v173369
+        (s, s) = v173370
+        (s, c) = v172908
+        (c, s) = v172944
+        (c, c) = v167964
+        (s, tnode) = v167965
+        (c, tnode) = v172910
+        (tnode, tnode) = v169032
+        (xf1, xf1) = v169165
+        (xf2, xf2) = v169294
+        (xf, xf) = v169423
+    "#]];
+
+    matrix_res.assert_eq(&mir.matrix.print_resistive_stamps(&db));
+    matrix_react.assert_eq(&mir.matrix.print_reactive_stamps(&db));
 }
