@@ -1,5 +1,5 @@
 [package]
-name = "osdi"
+name = "sim_back"
 version = "0.0.0"
 authors = ["DSPOM"]
 edition = "2021"

@@ -33,12 +33,16 @@ fn resistor() {
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
     let stamps = mir.matrix.resistive_stamps(&db);
+    let rhs = mir.residual.resistive_entries(&db);
 
     // read the matrix entries
     let ia_va: f64 = result.read(stamps[&("A".to_owned(), "A".to_owned())]);
     let ia_vb: f64 = result.read(stamps[&("A".to_owned(), "B".to_owned())]);
     let ib_va: f64 = result.read(stamps[&("B".to_owned(), "A".to_owned())]);
     let ib_vb: f64 = result.read(stamps[&("B".to_owned(), "B".to_owned())]);
+
+    let i_a = result.read(rhs["A"]);
+    let i_b = result.read(rhs["B"]);
 
     // calculate the expected values for the stamps
     let vab = va - vb;
@@ -58,6 +62,9 @@ fn resistor() {
     assert_approx_eq!(f64, ia_vb, ia_vb_expect, epsilon = epsilon);
     assert_approx_eq!(f64, ib_vb, ib_vb_expect, epsilon = epsilon);
     assert_approx_eq!(f64, ib_va, ib_va_expect, epsilon = epsilon);
+
+    assert_approx_eq!(f64, i_b, -ir);
+    assert_approx_eq!(f64, i_a, ir);
 }
 
 #[test]
@@ -322,6 +329,11 @@ fn diode() {
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
     let stamps = mir.matrix.resistive_stamps(&db);
+    // TODO check reactive component
+    // TODO check RHS
+    let _stamps_react = mir.matrix.reactive_stamps(&db);
+    let _rhs = mir.residual.resistive_entries(&db);
+    let _rhs_react = mir.residual.reactive_entries(&db);
 
     // let matrix = expect![[r#"
     //     (A, dT) = v211

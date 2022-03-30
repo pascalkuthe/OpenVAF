@@ -10,7 +10,7 @@ use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
 use crate::compilation_db::CompilationDB;
-use crate::middle::AnalogBlockMir;
+use crate::middle::EvalMir;
 
 pub fn sim_param_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
     cx.const_callback(&[cx.ty_str()], cx.const_real(0.0))
@@ -58,7 +58,7 @@ pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
     }
 }
 
-impl AnalogBlockMir {
+impl EvalMir {
     pub fn to_bin(
         &self,
         db: &CompilationDB,

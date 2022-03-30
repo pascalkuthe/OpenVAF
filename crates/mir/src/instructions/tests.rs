@@ -157,14 +157,13 @@ opcodes! {
 
 #[test]
 fn gen_opcodes() {
-    let opcodes = INSTRUCTION_FORMATS.iter().map(|format| format.opcodes.iter()).flatten();
+    let opcodes = INSTRUCTION_FORMATS.iter().flat_map(|format| format.opcodes.iter());
 
     let formats: Vec<_> =
         INSTRUCTION_FORMATS.iter().map(|format| format_ident!("{}", format.name)).collect();
 
     let opcode_formats = zip(INSTRUCTION_FORMATS, &formats)
-        .map(|(format, ident)| format.opcodes.iter().map(move |_| ident))
-        .flatten();
+        .flat_map(|(format, ident)| format.opcodes.iter().map(move |_| ident));
 
     let opcode_idents = opcodes.clone().map(|code| format_ident!("{}", code.name));
     let opcode_print = opcodes.clone().map(|code| code.name.to_lowercase());

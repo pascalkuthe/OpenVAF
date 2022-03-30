@@ -189,11 +189,9 @@ impl Layout {
         debug_assert!(self.first_inst(block).is_none(), "block must be empty.");
 
         // Clear the `block` node and extract links.
-        let prev;
-        let next;
         let n = &mut self.blocks[block];
-        prev = n.prev;
-        next = n.next;
+        let prev = n.prev;
+        let next = n.next;
         n.prev = None.into();
         n.next = None.into();
 

@@ -17,7 +17,7 @@ use typed_index_collections::TiVec;
 
 use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
-use crate::middle::AnalogBlockMir;
+use crate::middle::EvalMir;
 use crate::Residual;
 
 #[rustfmt::skip]
@@ -27,7 +27,7 @@ mod stamps;
 #[test]
 pub fn generate_integration_tests() {
     let tests = collect_integration_tests();
-    let file = project_root().join("crates/osdi/src/tests/integration.rs");
+    let file = project_root().join("crates/sim_back/src/tests/integration.rs");
     let test_impl = tests.into_iter().filter_map(|(test_name, _)| {
         // skip this test until we implement switch branches
         // TODO switch branches
@@ -68,16 +68,16 @@ pub fn generate_integration_tests() {
 fn full_compile(path: &Path) {
     let db = CompilationDB::new(Path::new(path)).unwrap();
     let module = db.find_module(db.root_file);
-    let (mir, literals) = AnalogBlockMir::new(&db, module);
+    let (mir, literals) = EvalMir::new(&db, module);
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, llvm::OptLevel::None);
     mir.to_bin(&db, &path.to_string_lossy(), &literals, &back);
 }
 
-fn compile_to_mir(path: &Path) -> (CompilationDB, AnalogBlockMir, Rodeo) {
+fn compile_to_mir(path: &Path) -> (CompilationDB, EvalMir, Rodeo) {
     let db = CompilationDB::new(Path::new(path)).unwrap();
     let module = db.find_module(db.root_file);
-    let (mir, literals) = AnalogBlockMir::new(&db, module);
+    let (mir, literals) = EvalMir::new(&db, module);
     (db, mir, literals)
 }
 
@@ -144,7 +144,7 @@ impl Residual {
     }
 }
 
-impl AnalogBlockMir {
+impl EvalMir {
     pub fn interpret(
         &self,
         db: &CompilationDB,

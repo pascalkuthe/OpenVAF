@@ -13,7 +13,7 @@ use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
 use crate::residual::Residual;
 
-pub struct AnalogBlockMir {
+pub struct EvalMir {
     pub func: Function,
     pub intern: HirInterner,
     pub cfg: ControlFlowGraph,
@@ -21,8 +21,8 @@ pub struct AnalogBlockMir {
     pub residual: Residual,
 }
 
-impl AnalogBlockMir {
-    pub fn new(db: &CompilationDB, module: ModuleId) -> (AnalogBlockMir, Rodeo) {
+impl EvalMir {
+    pub fn new(db: &CompilationDB, module: ModuleId) -> (EvalMir, Rodeo) {
         let (mut func, mut intern, mut literals) = MirBuilder::new(db, module.into(), &|kind| {
             matches!(
                 kind,
@@ -118,6 +118,6 @@ impl AnalogBlockMir {
         residual.strip_opt_barries(&mut func, &mut output_values);
         matrix.sparsify();
 
-        (AnalogBlockMir { func, intern, matrix, cfg, residual }, literals)
+        (EvalMir { func, intern, matrix, cfg, residual }, literals)
     }
 }

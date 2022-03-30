@@ -76,10 +76,9 @@ fn gen_instr_builder() {
     let opcode_funcs = INSTRUCTION_FORMATS
         .iter()
         .filter(|format| format.name == "Binary" || format.name == "Unary")
-        .map(|format| {
+        .flat_map(|format| {
             format.opcodes.iter().map(|opcode| InstrBuilderFunc { format: format.name, opcode })
-        })
-        .flatten();
+        });
 
     let builder = quote! {
         /// Convenience methods for building instructions.
