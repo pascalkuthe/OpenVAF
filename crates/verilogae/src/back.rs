@@ -390,7 +390,7 @@ impl CodegenCtx<'_, '_> {
             let out = llvm::LLVMGetParam(llfun, 9);
             let out = builder.gep(out, &[offset]);
 
-            let ret_val = intern.outputs[&PlaceKind::Var(spec.var)];
+            let ret_val = intern.outputs[&PlaceKind::Var(spec.var)].unwrap();
             let ret_val = builder.values[ret_val].unwrap();
 
             builder.store(out, ret_val);
@@ -402,9 +402,6 @@ impl CodegenCtx<'_, '_> {
         drop(builder);
         debug_assert!(module.verify_and_print(), "Invalid code generated");
         module.optimize(self.llbackend);
-
-        println!("{}", func.to_debug_string());
-        println!("{}", module.to_str());
 
         module.emit_obect(dst).expect("code generation failed!")
     }
@@ -478,7 +475,7 @@ impl CodegenCtx<'_, '_> {
         for (i, (param, _)) in
             self.model_info.params.iter().filter(|(_, info)| info.ty == ty).enumerate()
         {
-            let param_val = intern.outputs[&PlaceKind::Param(*param)];
+            let param_val = intern.outputs[&PlaceKind::Param(*param)].unwrap();
             let param_val = builder.values[param_val].unwrap();
 
             unsafe {
@@ -489,7 +486,7 @@ impl CodegenCtx<'_, '_> {
 
             if let Some((min_ptr, max_ptr)) = bounds_ptrs {
                 unsafe {
-                    let param_min = intern.outputs[&PlaceKind::ParamMin(*param)];
+                    let param_min = intern.outputs[&PlaceKind::ParamMin(*param)].unwrap();
                     let param_min = builder.values[param_min].unwrap();
                     let off = builder.cx.const_usize(i);
                     let ptr = builder.gep(min_ptr, &[off]);
@@ -497,7 +494,7 @@ impl CodegenCtx<'_, '_> {
                 }
 
                 unsafe {
-                    let param_max = intern.outputs[&PlaceKind::ParamMax(*param)];
+                    let param_max = intern.outputs[&PlaceKind::ParamMax(*param)].unwrap();
                     let param_max = builder.values[param_max].unwrap();
                     let off = builder.cx.const_usize(i);
                     let ptr = builder.gep(max_ptr, &[off]);

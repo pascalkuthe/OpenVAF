@@ -5,15 +5,14 @@ use ahash::AHashMap;
 use hir_def::db::HirDefDB;
 use hir_lower::ParamKind;
 use lasso::{Rodeo, Spur};
-use mir::Value;
-use mir_interpret::{Data, Interpreter, InterpreterState};
-use mir_llvm::LLVMBackend;
+use mir::{FuncRef, Function, Param, Value};
+use mir_interpret::{Data, Func, Interpreter, InterpreterState};
 use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
 use target::spec::Target;
-use typed_index_collections::TiVec;
+use typed_index_collections::{TiSlice, TiVec};
 
 use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
@@ -67,17 +66,17 @@ pub fn generate_integration_tests() {
 
 fn full_compile(path: &Path) {
     let db = CompilationDB::new(Path::new(path)).unwrap();
-    let module = db.find_module(db.root_file);
-    let (mir, literals) = EvalMir::new(&db, module);
+    let modules = db.collect_modules(&path.display()).unwrap();
+    let (mir, literals) = EvalMir::new(&db, &modules[0]);
     let target = Target::host_target().unwrap();
-    let back = LLVMBackend::new(&[], &target, llvm::OptLevel::None);
-    mir.to_bin(&db, &path.to_string_lossy(), &literals, &back);
+    // let back = LLVMBackend::new(&[], &target, llvm::OptLevel::Aggressive);
+    mir.to_bin(&db, &literals, &target);
 }
 
 fn compile_to_mir(path: &Path) -> (CompilationDB, EvalMir, Rodeo) {
     let db = CompilationDB::new(Path::new(path)).unwrap();
-    let module = db.find_module(db.root_file);
-    let (mir, literals) = EvalMir::new(&db, module);
+    let modules = db.collect_modules(&path.display()).unwrap();
+    let (mir, literals) = EvalMir::new(&db, &modules[0]);
     (db, mir, literals)
 }
 
@@ -149,14 +148,14 @@ impl EvalMir {
         &self,
         db: &CompilationDB,
         literals: &mut Rodeo,
-        params: &ahash::AHashMap<&str, Data>,
-        node_voltages: &ahash::AHashMap<&str, f64>,
+        params: &AHashMap<&str, Data>,
+        node_voltages: &AHashMap<&str, f64>,
         temp: f64,
     ) -> InterpreterState {
         let empty_str = literals.get_or_intern_static("");
         let val = Box::leak(Box::new(empty_str));
 
-        let dummy_call: TiVec<_, _> = self
+        let dummy_calls: TiVec<_, _> = self
             .intern
             .callbacks
             .raw
@@ -206,12 +205,13 @@ impl EvalMir {
                 (res, ptr)
             })
             .collect();
-        let params: TiVec<_, _> = self
+
+        let mut params: TiVec<_, _> = self
             .intern
             .params
             .raw
-            .keys()
-            .map(|kind| match kind {
+            .iter()
+            .map(|(kind, _)| match kind {
                 ParamKind::Param(param) => params[&*db.param_data(*param).name],
                 ParamKind::Voltage { hi, lo } => (node_voltages[&*db.node_data(*hi).name]
                     - lo.map_or(0f64, |lo| node_voltages[&*db.node_data(lo).name]))
@@ -222,7 +222,27 @@ impl EvalMir {
                 ParamKind::Current(_) | ParamKind::HiddenState(_) => Data::UNDEF,
             })
             .collect();
-        let mut interpreter = Interpreter::new(&self.func, dummy_call.as_slice(), &params);
+
+        let instance_init = self.interpret_func(&self.init_inst_func, params.clone(), &dummy_calls);
+
+        let off = params.len();
+        params.extend((0..self.init_inst_cache_slots.len()).map(|_| Data::UNDEF));
+        for (&val, &pos) in &self.init_inst_cache_vals {
+            if !instance_init.read::<Data>(val).is_undef() {
+                params.raw[pos as usize + off] = instance_init.read(val);
+            }
+        }
+
+        self.interpret_func(&self.eval_func, params, &dummy_calls)
+    }
+
+    fn interpret_func(
+        &self,
+        func: &Function,
+        params: TiVec<Param, Data>,
+        calls: &TiSlice<FuncRef, (Func, *mut c_void)>,
+    ) -> InterpreterState {
+        let mut interpreter = Interpreter::new(func, calls, &params);
         interpreter.run();
         interpreter.state
     }

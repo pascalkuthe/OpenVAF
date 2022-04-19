@@ -74,8 +74,8 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn eval(&mut self, inst: Inst) {
-        let inst_data = self.func.dfg.insts[inst];
-        let (opcode, args) = match inst_data {
+        let inst_data = &self.func.dfg.insts[inst];
+        let (opcode, args) = match *inst_data {
             mir::InstructionData::Unary { opcode, ref arg } => (opcode, slice::from_ref(arg)),
             mir::InstructionData::Binary { opcode, ref args } => (opcode, args.as_slice()),
             mir::InstructionData::Branch { cond, then_dst, else_dst, .. } => {
@@ -83,7 +83,7 @@ impl<'a> Interpreter<'a> {
                 self.jmp(inst, dst);
                 return;
             }
-            mir::InstructionData::PhiNode(phi) => {
+            mir::InstructionData::PhiNode(ref phi) => {
                 let val = self.func.dfg.phi_edge_val(phi, self.state.prev_bb).unwrap();
                 let res = self.func.dfg.first_result(inst);
                 self.state.vals[res] = self.state.vals[val];
@@ -93,7 +93,7 @@ impl<'a> Interpreter<'a> {
                 self.jmp(inst, destination);
                 return;
             }
-            mir::InstructionData::Call { func_ref, args } => {
+            mir::InstructionData::Call { func_ref, ref args } => {
                 let (fun, data) = self.calls[func_ref];
                 let args = args.as_slice(&self.func.dfg.insts.value_lists);
                 let rets = self.func.dfg.inst_results(inst);

@@ -257,10 +257,10 @@ impl DataFlowGraph {
     }
 
     pub fn update_inst_uses(&mut self, inst: Inst) {
-        let data = self.insts.declarations[inst];
+        let data = self.insts.declarations[inst].clone();
         let pool = &mut self.insts.use_lists;
 
-        let uses = self.insts.uses[inst];
+        let uses = self.insts.uses[inst].clone();
         let args = self.insts.declarations[inst].arguments(&self.insts.value_lists);
         let mut args = args.iter().copied();
 

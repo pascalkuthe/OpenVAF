@@ -260,8 +260,9 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
 
     pub fn ensure_enabled(&mut self, min_domain_size: usize) {
         if self.domain_size < min_domain_size {
-            let last_pos = self.words.len() - 1;
+            let len = self.words.len();
             if let Some(last) = self.words.last_mut() {
+                let last_pos = len - 1;
                 for i in self.domain_size..min_domain_size {
                     let (pos, word) = word_index_and_mask(i);
                     if pos != last_pos {

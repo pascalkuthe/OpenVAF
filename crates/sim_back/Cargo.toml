@@ -31,7 +31,6 @@ target = { version = "0.0.0", path = "../target" }
 
 typed-index-collections = "3.0"
 ahash = "0.7"
-arrayvec = "0.7"
 lasso = {version = "0.6", features = ["ahash"]}
 parking_lot = "0.12"
 
@@ -39,6 +38,9 @@ anyhow = "1"
 
 salsa = "0.17.0-pre.2"
 indexmap = "1.6"
+smol_str = "0.1.22"
+
+# rayon-core = "1"
 
 
 [dev-dependencies]

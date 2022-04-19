@@ -40,6 +40,8 @@ pub struct FunctionBuilder<'a> {
     /// Source location to assign to all new instructions.
     srcloc: mir::SourceLoc,
 
+    tag_writes: bool,
+
     func_ctx: &'a mut FunctionBuilderContext,
     position: Block,
     end: Block,
@@ -115,7 +117,7 @@ impl<'short, 'long> InstBuilderBase<'short> for FuncInstBuilder<'short, 'long> {
         // We only insert the Block in the layout when an instruction is added to it
         self.builder.ensure_inserted_block();
 
-        let inst = self.builder.func.dfg.make_inst(data);
+        let inst = self.builder.func.dfg.make_inst(data.clone());
         self.builder.func.dfg.make_inst_results(inst);
         self.builder.func.layout.append_inst_to_bb(inst, self.block);
         self.builder.func.srclocs.push(self.builder.srcloc);
@@ -177,6 +179,7 @@ impl<'a> FunctionBuilder<'a> {
         func: &'a mut Function,
         interner: &'a mut Rodeo,
         func_ctx: &'a mut FunctionBuilderContext,
+        tag_writes: bool,
     ) -> Self {
         debug_assert!(func_ctx.is_empty());
         let (entry, end) = if let Some(entry) = func.layout.entry_block() {
@@ -199,8 +202,15 @@ impl<'a> FunctionBuilder<'a> {
             (entry, exit)
         };
 
-        let mut res =
-            Self { func, srcloc: Default::default(), interner, func_ctx, position: entry, end };
+        let mut res = Self {
+            func,
+            srcloc: Default::default(),
+            interner,
+            func_ctx,
+            position: entry,
+            end,
+            tag_writes,
+        };
         res.seal_block(entry);
         res
     }
@@ -359,12 +369,18 @@ impl<'a> FunctionBuilder<'a> {
     /// Register a new definition of a user variable. The type of the value must be
     /// the same as the type registered for the variable.
     pub fn def_var(&mut self, var: Place, val: Value) {
+        if self.tag_writes {
+            self.func.dfg.set_tag(val, Some(u32::from(var).into()));
+        }
         self.func_ctx.ssa.def_var(var, val, self.position);
     }
 
     /// Register a new definition of a user variable. The type of the value must be
     /// the same as the type registered for the variable.
     pub fn def_var_at(&mut self, var: Place, val: Value, bb: Block) {
+        if self.tag_writes {
+            self.func.dfg.set_tag(val, Some(u32::from(var).into()));
+        }
         self.func_ctx.ssa.def_var(var, val, bb);
     }
 

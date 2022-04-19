@@ -4,6 +4,7 @@ use std::iter;
 use std::marker::PhantomData;
 use std::ops::Index;
 
+use ahash::RandomState;
 use indexmap::IndexMap;
 
 pub type Iter<'a, I, K, V> = iter::Map<
@@ -11,6 +12,7 @@ pub type Iter<'a, I, K, V> = iter::Map<
     fn((usize, (&'a K, &'a V))) -> (I, (&'a K, &'a V)),
 >;
 
+#[repr(transparent)]
 pub struct TiMap<I, K, V> {
     /// raw set property
     pub raw: IndexMap<K, V, ahash::RandomState>,
@@ -76,6 +78,13 @@ impl<I, K, V> TiMap<I, K, V> {
 
     pub fn last(&self) -> Option<(&K, &V)> {
         self.raw.last()
+    }
+
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            raw: IndexMap::with_capacity_and_hasher(cap, RandomState::new()),
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -144,5 +153,13 @@ impl<I, K, V> From<IndexMap<K, V, ahash::RandomState>> for TiMap<I, K, V> {
 impl<I, K: Hash + Eq, V> FromIterator<(K, V)> for TiMap<I, K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         Self { raw: iter.into_iter().collect(), _marker: PhantomData }
+    }
+}
+
+impl<I, K, V> AsRef<TiMap<I, K, V>> for IndexMap<K, V, RandomState> {
+    fn as_ref(&self) -> &TiMap<I, K, V> {
+        let ptr = self as *const IndexMap<K, V, RandomState> as *const TiMap<I, K, V>;
+        // safety: this is save because of repr(transparent)
+        unsafe { &*ptr }
     }
 }

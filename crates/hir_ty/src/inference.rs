@@ -822,16 +822,19 @@ impl Ctx<'_> {
                 new_candidates.clone_from(&canditates);
                 canditates.retain(|candidate| {
                     zip(&arg_types, signatures[*candidate].args.as_ref())
-                        .all(|(ty, req)| ty.as_ref().map_or(false, |ty| ty.satisfies_exact(req)))
+                        .all(|(ty, req)| ty.as_ref().map_or(false, |ty| ty.satisfies_semantic(req)))
                 });
 
-                if cfg!(debug_assert) && canditates.len() != 1 {
-                    let sig: Vec<_> =
-                        canditates.iter().map(|canditate| &signatures[*canditate]).collect();
-                    eprintln!(
-                        "ambigous signature {:?} all match {:?} (using first variant)",
-                        sig, arg_types
-                    );
+                if canditates.len() > 1 {
+                    new_candidates.clone_from(&canditates);
+                    canditates.retain(|candidate| {
+                        zip(&arg_types, signatures[*candidate].args.as_ref()).all(|(ty, req)| {
+                            ty.as_ref().map_or(false, |ty| ty.satisfies_exact(req))
+                        })
+                    });
+                    if canditates.is_empty() {
+                        canditates = new_candidates;
+                    }
                 } else if canditates.is_empty() {
                     let sig: Vec<_> =
                         new_candidates.iter().map(|canditate| &signatures[*canditate]).collect();
@@ -841,6 +844,15 @@ impl Ctx<'_> {
                         sig, arg_types
                     );
                 }
+
+                /*if canditates.len() != 1 {
+                    let sig: Vec<_> =
+                        canditates.iter().map(|canditate| &signatures[*canditate]).collect();
+                    println!(
+                        "ambigous signature {:?} all match {:?} (using first variant)",
+                        sig, arg_types
+                    );
+                } else*/
 
                 canditates[0]
             }
@@ -868,7 +880,7 @@ impl Ctx<'_> {
         ty: Ty,
         req: Cow<'static, [TyRequirement]>,
     ) -> Option<usize> {
-        let fun = if EXACT { Ty::satisfies_exact } else { Ty::satisfies_with_conversion };
+        let fun = if EXACT { Ty::satisfies_semantic } else { Ty::satisfies_with_conversion };
 
         let res = req.iter().position(|req| fun(&ty, req));
         match res {

@@ -232,6 +232,7 @@ impl<'ll> Builder<'_, '_, 'll> {
     }
 
     /// # Safety
+    /// # Safety
     /// Must not be called if any block already contain any non-phi instruction (eg must not be
     /// called twice)
     pub unsafe fn build_cfg(&mut self, blocks: &[Block]) {
@@ -245,7 +246,7 @@ impl<'ll> Builder<'_, '_, 'll> {
             let (blocks, vals): (Vec<_>, Vec<_>) = self
                 .func
                 .dfg
-                .phi_edges(phi)
+                .phi_edges(&phi)
                 .map(|(bb, val)| (self.blocks[bb].unwrap(), self.values[val].unwrap()))
                 .unzip();
 
@@ -257,6 +258,14 @@ impl<'ll> Builder<'_, '_, 'll> {
         unsafe {
             llvm::LLVMPositionBuilderAtEnd(self.llbuilder, self.blocks[bb].unwrap());
         }
+    }
+
+    pub fn select_bb_before_terminator(&self, bb: Block) {
+        let bb = self.blocks[bb].unwrap();
+        unsafe {
+            let inst = llvm::LLVMGetLastInstruction(bb);
+            llvm::LLVMPositionBuilder(self.llbuilder, bb, inst);
+        };
     }
 
     /// # Safety
@@ -306,13 +315,13 @@ impl<'ll> Builder<'_, '_, 'll> {
                 );
                 return;
             }
-            mir::InstructionData::PhiNode(phi) => {
+            mir::InstructionData::PhiNode(ref phi) => {
                 // TODO does this always produce a valid value?
                 let first_val =
                     self.func.dfg.phi_edges(phi).find_map(|(_, val)| self.values[val]).unwrap();
                 let ty = self.cx.val_ty(first_val);
                 let llval = llvm::LLVMBuildPhi(self.llbuilder, ty, UNNAMED);
-                self.unfinished_phis.push((phi, llval));
+                self.unfinished_phis.push((phi.clone(), llval));
                 let res = self.func.dfg.first_result(inst);
                 self.values[res] = Some(llval);
                 return;
@@ -321,7 +330,7 @@ impl<'ll> Builder<'_, '_, 'll> {
                 llvm::LLVMBuildBr(self.llbuilder, self.blocks[destination].unwrap());
                 return;
             }
-            mir::InstructionData::Call { func_ref, args } => {
+            mir::InstructionData::Call { func_ref, ref args } => {
                 let callback = if let Some(res) = self.callbacks[func_ref].as_ref() {
                     res
                 } else {
@@ -436,10 +445,6 @@ impl<'ll> Builder<'_, '_, 'll> {
                 llvm::LLVMBuildFAdd(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Fsub => {
-                if self.values[args[0]].is_none() {
-                    println!("{}", self.func.to_debug_string());
-                    println!("{}", self.func.dfg.display_inst(inst))
-                }
                 let lhs = self.values[args[0]].unwrap();
                 let rhs = self.values[args[1]].unwrap();
                 llvm::LLVMBuildFSub(self.llbuilder, lhs, rhs, UNNAMED)

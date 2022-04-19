@@ -29,7 +29,7 @@ pub type UseListPool = list_pool::ListPool<Use>;
 pub type PhiForest = bforest::MapForest<Block, u32>;
 pub type PhiMap = bforest::Map<Block, u32>;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum InstructionData {
     Unary { opcode: Opcode, arg: Value },
     Binary { opcode: Opcode, args: [Value; 2] },
@@ -52,8 +52,8 @@ fn instruction_data_size() {
 }
 
 impl InstructionData {
-    pub fn unwrap_phi(&self) -> PhiNode {
-        if let InstructionData::PhiNode(node) = *self {
+    pub fn unwrap_phi(&self) -> &PhiNode {
+        if let InstructionData::PhiNode(node) = self {
             node
         } else {
             unreachable!()
@@ -161,7 +161,7 @@ impl InstructionData {
                 Self::Call { func_ref: r_func_ref, args: r_args },
             ) => l_func_ref == r_func_ref && l_args.as_slice(val_pool) == r_args.as_slice(val_pool),
 
-            (Self::PhiNode(lnode), Self::PhiNode(rnode)) => lnode.eq(*rnode, val_pool, forest),
+            (Self::PhiNode(lnode), Self::PhiNode(rnode)) => lnode.eq(rnode, val_pool, forest),
 
             _ => false,
         }
@@ -279,7 +279,7 @@ impl OpcodeConstraints {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PhiNode {
     pub args: ValueList,
     pub blocks: PhiMap,
@@ -287,7 +287,7 @@ pub struct PhiNode {
 
 impl PhiNode {
     #[inline]
-    pub fn eq(self, other: Self, val_pool: &ValueListPool, forest: &PhiForest) -> bool {
+    pub fn eq(&self, other: &Self, val_pool: &ValueListPool, forest: &PhiForest) -> bool {
         let l_edges = self.edges(val_pool, forest);
         let r_edges = other.edges(val_pool, forest);
         l_edges.eq(r_edges)
@@ -295,7 +295,7 @@ impl PhiNode {
 
     #[inline]
     pub fn hash<H: std::hash::Hasher>(
-        self,
+        &self,
         state: &mut H,
         val_pool: &ValueListPool,
         forest: &PhiForest,
@@ -308,7 +308,7 @@ impl PhiNode {
 
     #[inline]
     pub fn edge_val(
-        self,
+        &self,
         block: Block,
         val_pool: &ValueListPool,
         forest: &PhiForest,
@@ -318,12 +318,12 @@ impl PhiNode {
     }
 
     #[inline]
-    pub fn edge_operand(self, block: Block, forest: &PhiForest) -> Option<u32> {
+    pub fn edge_operand(&self, block: Block, forest: &PhiForest) -> Option<u32> {
         self.blocks.get(block, forest, &())
     }
 
     #[inline]
-    pub fn edges<'a>(self, value_lists: &'a ValueListPool, forest: &'a PhiForest) -> PhiEdges<'a> {
+    pub fn edges<'a>(&self, value_lists: &'a ValueListPool, forest: &'a PhiForest) -> PhiEdges<'a> {
         let args = self.args.as_slice(value_lists);
         PhiEdges { iter: self.blocks.iter(forest), args }
     }
@@ -341,5 +341,29 @@ impl Iterator for PhiEdges<'_> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(move |(block, pos)| (block, self.args[pos as usize]))
+    }
+}
+
+impl Opcode {
+    #[inline]
+    pub fn is_commutative(self) -> bool {
+        matches!(
+            self,
+            Opcode::Fmul
+                | Opcode::Fadd
+                | Opcode::Iand
+                | Opcode::Ixor
+                | Opcode::Ior
+                | Opcode::Iadd
+                | Opcode::Imul
+                | Opcode::Ieq
+                | Opcode::Feq
+                | Opcode::Beq
+                | Opcode::Seq
+                | Opcode::Ine
+                | Opcode::Fne
+                | Opcode::Bne
+                | Opcode::Sne
+        )
     }
 }

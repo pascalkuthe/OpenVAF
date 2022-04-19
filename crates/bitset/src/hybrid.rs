@@ -28,7 +28,7 @@ pub enum HybridBitSet<T> {
     Dense(BitSet<T>),
 }
 
-impl<T: Clone> Clone for HybridBitSet<T> {
+impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> Clone for HybridBitSet<T> {
     fn clone(&self) -> Self {
         match self {
             Self::Sparse(arg0) => Self::Sparse(arg0.clone()),
@@ -37,8 +37,14 @@ impl<T: Clone> Clone for HybridBitSet<T> {
     }
 
     fn clone_from(&mut self, source: &Self) {
-        if let (HybridBitSet::Dense(dst), HybridBitSet::Dense(source)) = (&mut *self, source) {
-            dst.clone_from(source)
+        if let HybridBitSet::Dense(dst) = self {
+            match source {
+                HybridBitSet::Sparse(src) => {
+                    dst.clear();
+                    dst.reverse_union_sparse(src);
+                }
+                HybridBitSet::Dense(src) => dst.clone_from(src),
+            }
         } else {
             *self = source.clone()
         }
@@ -184,6 +190,25 @@ where
             HybridBitSet::Sparse(sparse) => HybridIter::Sparse(sparse.iter()),
             HybridBitSet::Dense(dense) => HybridIter::Dense(dense.iter()),
         }
+    }
+
+    pub fn intersect(&mut self, other: &HybridBitSet<T>) {
+        let (src, other) = match (&mut *self, other) {
+            (HybridBitSet::Dense(dst), HybridBitSet::Dense(src)) => {
+                dst.intersect(src);
+                return;
+            }
+            (HybridBitSet::Sparse(src), other) => (&*src, other),
+            (other, HybridBitSet::Sparse(src)) => (src, &*other),
+        };
+
+        let mut res = SparseBitSet::new_empty();
+        for src in src.iter() {
+            if other.contains(*src) {
+                res.elems.push(*src)
+            }
+        }
+        *self = HybridBitSet::Sparse(res)
     }
 }
 

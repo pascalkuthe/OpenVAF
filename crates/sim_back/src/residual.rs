@@ -1,7 +1,7 @@
 use bitset::BitSet;
 use hir_def::db::HirDefDB;
-use hir_def::NodeId;
-use hir_lower::{HirInterner, PlaceKind};
+use hir_def::{NodeId, ParamSysFun};
+use hir_lower::{HirInterner, ParamKind, PlaceKind};
 use hir_ty::db::HirTyDB;
 use hir_ty::lower::BranchKind;
 use indexmap::map::Entry;
@@ -25,7 +25,12 @@ pub struct Residual {
 }
 
 impl Residual {
-    pub fn populate(&mut self, db: &CompilationDB, func: &mut FuncCursor, intern: &HirInterner) {
+    pub fn populate(
+        &mut self,
+        db: &CompilationDB,
+        func: &mut FuncCursor,
+        intern: &mut HirInterner,
+    ) {
         for (out_kind, val) in intern.outputs.iter() {
             let (hi, lo, reactive) = match *out_kind {
                 PlaceKind::BranchVoltage { .. } | PlaceKind::ImplicitBranchVoltage { .. } => {
@@ -42,17 +47,24 @@ impl Residual {
                 _ => continue,
             };
 
+            let val = val.unwrap();
+
             let hi_gnd = db.node_data(hi).is_gnd;
             let lo_gnd = lo.map_or(true, |lo| db.node_data(lo).is_gnd);
             if !hi_gnd {
-                self.add_entry(func, hi, *val, false, reactive)
+                self.add_entry(func, hi, val, false, reactive)
             }
 
             if !lo_gnd {
                 if let Some(lo) = lo {
-                    self.add_entry(func, lo, *val, true, reactive)
+                    self.add_entry(func, lo, val, true, reactive)
                 }
             }
+        }
+
+        let mfactor = intern.ensure_param(func.func, ParamKind::ParamSysFun(ParamSysFun::mfactor));
+        for val in self.resistive.raw.values_mut().chain(self.reactive.raw.values_mut()) {
+            *val = func.ins().fmul(*val, mfactor)
         }
     }
 
@@ -128,7 +140,6 @@ impl Residual {
             }
         }
     }
-
     // pub(crate) fn sparsify(&mut self) {
     //     self.elements.raw.retain(|_, val| *val != F_ZERO);
     // }

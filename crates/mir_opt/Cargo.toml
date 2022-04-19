@@ -21,6 +21,7 @@ bitset = {version = "0.0.0", path = "../bitset" }
 typed-index-collections = "3.0"
 ahash = "0.7"
 hashbrown = {version = "0.12", features = ["raw"]}
+indexmap = "1.6"
 
 [dev-dependencies]
 expect-test = "1.1"

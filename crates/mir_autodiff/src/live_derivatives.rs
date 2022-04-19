@@ -1,6 +1,6 @@
 use bitset::{BitSet, HybridBitSet, SparseBitMatrix};
 use mir::{
-    DataFlowGraph, FuncRef, Function, Inst, InstUseIter, InstructionData, Use, Value, ValueDef,
+    DataFlowGraph, Function, Inst, InstUseIter, InstructionData, Opcode, Use, Value, ValueDef,
 };
 
 use crate::unkowns::{Unkown, Unkowns};
@@ -10,72 +10,116 @@ mod tests;
 
 #[derive(Debug, Clone)]
 pub struct LiveDerivatives {
-    pub derivatives: SparseBitMatrix<Inst, Unkown>,
-    pub post_order: Vec<Inst>,
+    pub mat: SparseBitMatrix<Inst, Unkown>,
 }
 
 impl LiveDerivatives {
     pub fn build(
         func: &Function,
         unkowns: &mut Unkowns,
-        extra_derivatives: impl IntoIterator<Item = (Value, FuncRef)>,
+        extra_derivatives: &[(Value, mir::Unkown)],
     ) -> LiveDerivatives {
         let mut derivative_params = BitSet::new_empty(func.dfg.num_values());
 
-        for (_, params) in unkowns.first_order_unkowns.raw.iter() {
-            for (param, _) in params.iter() {
-                derivative_params.insert(*param);
-            }
+        for param in unkowns.first_order_unkowns.raw.iter() {
+            derivative_params.insert(*param);
         }
 
-        let mut derivatives = SparseBitMatrix::new(func.dfg.num_values(), unkowns.len());
+        let mut mat = SparseBitMatrix::new(func.dfg.num_values(), unkowns.len());
 
-        for (val, func_ref) in extra_derivatives {
-            if let ValueDef::Result(inst, _) = func.dfg.value_def(val) {
-                let unkown = unkowns.first_order_unkowns.index(&func_ref).unwrap();
-                derivatives.insert(inst, unkown.into());
+        for (val, unkown) in extra_derivatives {
+            if let ValueDef::Result(inst, _) = func.dfg.value_def(*val) {
+                mat.insert(inst, (*unkown).into());
             }
         }
 
         // finding the live derivatives is a simple post order visit
         // the union of the derivatives of the uses then form the live derivatives
-        // However for cycels this doesn't work because not all uses can be visited before
+        // However for cycels this doesn't work because not all uses can be visited before.
         //
-        // for now simply running a fixpoint iteration is the only valid solution here
-        // Even for complex models we at most end up with 5 iterations which is fine (this loop
+        // For now simply running a fixpoint iteration is the only valid solution here.
+        // Even for complex models we required 5 iterations at most which is fine (this loop
         // isn't very performance intensive)
         //
         // If it becomes a problem we might look into only reprocessing users of cycels
 
-        let mut post_order: Vec<_> = Postorder::new(&func.dfg, &derivative_params).collect();
+        let post_order: Vec<_> = Postorder::new(&func.dfg, &derivative_params).collect();
+        let mut live_derivatives = LiveDerivatives { mat };
+
         loop {
             let mut changed = false;
 
             for inst in post_order.iter().copied() {
-                let mut dst = HybridBitSet::new_empty();
-                for val in func.dfg.inst_results(inst) {
-                    for use_ in func.dfg.uses(*val) {
-                        let user = func.dfg.use_to_operand(use_).0;
-                        if let Some(row) = derivatives.row(user) {
-                            dst.union(row, unkowns.len());
-                        }
-                    }
+                let opcode = func.dfg.insts[inst].opcode();
+                let no_derivative = matches!(
+                    opcode,
+                    Opcode::Ineg
+                        | Opcode::Iadd
+                        | Opcode::Isub
+                        | Opcode::Imul
+                        | Opcode::Idiv
+                        | Opcode::Ishl
+                        | Opcode::Ishr
+                        | Opcode::IFcast
+                        | Opcode::BIcast
+                        | Opcode::IBcast
+                        | Opcode::FBcast
+                        | Opcode::BFcast
+                        | Opcode::FIcast
+                        | Opcode::Irem
+                        | Opcode::Inot
+                        | Opcode::Ixor
+                        | Opcode::Iand
+                        | Opcode::Ior
+                        | Opcode::Clog2
+                        | Opcode::Frem
+                        | Opcode::Floor
+                        | Opcode::Ceil
+                        | Opcode::Bnot
+                        | Opcode::Ilt
+                        | Opcode::Igt
+                        | Opcode::Flt
+                        | Opcode::Fgt
+                        | Opcode::Ile
+                        | Opcode::Ige
+                        | Opcode::Fle
+                        | Opcode::Fge
+                        | Opcode::Ieq
+                        | Opcode::Feq
+                        | Opcode::Seq
+                        | Opcode::Beq
+                        | Opcode::Ine
+                        | Opcode::Fne
+                        | Opcode::Sne
+                        | Opcode::Bne
+                        | Opcode::Br
+                        | Opcode::Jmp
+                );
+
+                if no_derivative {
+                    continue;
                 }
-
+                // zero no need to store the derivative
+                let mut dst = live_derivatives.compute_inst(inst, func, unkowns);
                 if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
-                    if let Some(ddx_unkown) = unkowns.callback_unkown(func_ref) {
+                    if unkowns.ddx_calls.contains_key(&func_ref) {
                         let old = dst.clone();
-                        for unkown in old.iter() {
-                            let higher_order = unkowns.raise_order(unkown, ddx_unkown);
-                            dst.insert_growable(higher_order, unkowns.len());
-                        }
+                        let (pos_unkowns, neg_unkowns) = &unkowns.ddx_calls[&func_ref];
+                        for ddx_unkown in pos_unkowns.iter().chain(neg_unkowns.iter()) {
+                            for unkown in old.iter() {
+                                let higher_order = unkowns.raise_order(unkown, ddx_unkown);
+                                dst.insert_growable(higher_order, unkowns.len());
+                            }
 
-                        dst.insert(ddx_unkown.into(), unkowns.len());
+                            dst.insert(ddx_unkown.into(), unkowns.len());
+                        }
+                    } else {
+                        continue; // TODO call derivatives
                     }
                 }
 
                 if !dst.is_empty() {
-                    let old = derivatives.ensure_row(inst);
+                    let old = live_derivatives.mat.ensure_row(inst);
                     if old != &dst {
                         changed = true;
                         *old = dst;
@@ -88,13 +132,30 @@ impl LiveDerivatives {
             }
         }
 
-        post_order.retain(|inst| derivatives.row(*inst).is_some());
-
-        LiveDerivatives { derivatives, post_order }
+        // post_order.retain(|inst| live_derivatives.mat.row(*inst).is_some());
+        live_derivatives
     }
 
     pub fn of_inst(&self, inst: Inst) -> Option<&HybridBitSet<Unkown>> {
-        self.derivatives.row(inst)
+        self.mat.row(inst)
+    }
+
+    pub fn compute_inst(
+        &self,
+        inst: Inst,
+        func: &Function,
+        unkowns: &Unkowns,
+    ) -> HybridBitSet<Unkown> {
+        let mut dst = HybridBitSet::new_empty();
+        for val in func.dfg.inst_results(inst) {
+            for use_ in func.dfg.uses(*val) {
+                let user = func.dfg.use_to_operand(use_).0;
+                if let Some(row) = self.mat.row(user) {
+                    dst.union(row, unkowns.len());
+                }
+            }
+        }
+        dst
     }
 }
 

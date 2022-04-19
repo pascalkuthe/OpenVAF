@@ -22,7 +22,7 @@ use basedb::{AstId, ErasedAstId, FileId};
 use item_tree::Node;
 use nameres::diagnostics::PathResolveError;
 use nameres::{DefMap, DefMapSource, ResolvedPath, ScopeDefItemKind};
-use stdx::impl_from;
+use stdx::{impl_debug_display, impl_from};
 use syntax::ast::{self, BlockStmt};
 use syntax::name::Name;
 use syntax::{AstNode, AstPtr};
@@ -291,7 +291,26 @@ pub struct NodeLoc {
 
 pub type LocalNodeId = Idx<Node>;
 
-impl_intern!(NodeId, NodeLoc, intern_node, lookup_intern_node);
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(salsa::InternId);
+
+impl_debug_display!(match NodeId{ NodeId(id) => "node{:?}", id;});
+
+impl_intern_key!(NodeId);
+
+impl Intern for NodeLoc {
+    type ID = NodeId;
+    fn intern(self, db: &dyn db::HirDefDB) -> NodeId {
+        db.intern_node(self)
+    }
+}
+
+impl Lookup for NodeId {
+    type Data = NodeLoc;
+    fn lookup(&self, db: &dyn db::HirDefDB) -> NodeLoc {
+        db.lookup_intern_node(*self)
+    }
+}
 
 impl NodeLoc {
     pub fn ast_id(self, db: &dyn HirDefDB) -> ErasedAstId {

@@ -11,10 +11,12 @@ doctest = false
 
 [dependencies]
 stdx = { version = "0.0.0", path = "../stdx" }
-hir_ty = { version = "0.0.0", path = "../hir_ty" }
-hir_def = { version = "0.0.0", path = "../hir_def" }
-syntax = {version = "0.0.0", path = "../syntax"}
+bitset = {version = "0.0.0", path = "../bitset"}
 typed_indexmap = {version = "0.0.0", path = "../typed_indexmap"}
+
+syntax = {version = "0.0.0", path = "../syntax"}
+hir_def = { version = "0.0.0", path = "../hir_def" }
+hir_ty = { version = "0.0.0", path = "../hir_ty" }
 mir = {version = "0.0.0", path = "../mir" }
 mir_build = {version = "0.0.0", path = "../mir_build" }
 

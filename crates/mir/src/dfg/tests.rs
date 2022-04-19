@@ -16,7 +16,7 @@ fn make_inst() {
     dfg.make_inst_results(inst);
     assert_eq!(inst.to_string(), "inst0");
     expect![[r#"
-        "v14 = fadd v3, v13"
+        "v15 = fadd v3, v14"
     "#]]
     .assert_debug_eq(&dfg.display_inst(inst).to_string());
 

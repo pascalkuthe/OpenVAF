@@ -32,6 +32,7 @@ pub struct MirBuilder<'a> {
     def: DefWithBodyId,
     is_output: &'a dyn Fn(PlaceKind) -> bool,
     tagged_reads: AHashSet<VarId>,
+    tag_writes: bool,
     ctx: Option<&'a mut FunctionBuilderContext>,
     split_contribute: bool,
 }
@@ -49,6 +50,7 @@ impl<'a> MirBuilder<'a> {
             is_output,
             ctx: None,
             split_contribute: false,
+            tag_writes: false,
         }
     }
 
@@ -60,6 +62,16 @@ impl<'a> MirBuilder<'a> {
         self.tagged_reads = taged_vars;
         self
     }
+
+    pub fn tag_writes(&mut self) {
+        self.tag_writes = true;
+    }
+
+    pub fn with_tagged_writes(mut self) -> Self {
+        self.tag_writes = true;
+        self
+    }
+
     pub fn split_contributions(&mut self) {
         self.split_contribute = true;
     }
@@ -92,7 +104,7 @@ impl<'a> MirBuilder<'a> {
             &mut ctx_
         };
 
-        let mut builder = FunctionBuilder::new(&mut func, &mut literals, ctx);
+        let mut builder = FunctionBuilder::new(&mut func, &mut literals, ctx, self.tag_writes);
 
         let body = self.db.body(self.def);
         let infere = self.db.inference_result(self.def);
@@ -115,13 +127,13 @@ impl<'a> MirBuilder<'a> {
 
         interner.outputs = places
             .iter_enumerated()
-            .filter_map(|(place, kind)| {
+            .map(|(place, kind)| {
                 if is_output(*kind) {
                     let val = builder.use_var(place);
                     let val = builder.ins().optbarrier(val);
-                    Some((*kind, val))
+                    (*kind, val.into())
                 } else {
-                    None
+                    (*kind, None.into())
                 }
             })
             .collect();
@@ -174,7 +186,7 @@ impl HirInterner {
             }
         }
         let mut ctx = FunctionBuilderContext::default();
-        let mut builder = FunctionBuilder::new(func, literals, &mut ctx);
+        let mut builder = FunctionBuilder::new(func, literals, &mut ctx, false);
         for (kind, param) in self.params.raw.iter() {
             if let ParamKind::HiddenState(var) = *kind {
                 if builder.func.dfg.value_dead(*param) {
@@ -188,11 +200,6 @@ impl HirInterner {
         if let Some(term) = term {
             builder.func.layout.append_inst_to_bb(term, builder.current_block())
         }
-    }
-
-    pub fn ensure_param(&mut self, func: &mut Function, kind: ParamKind) -> Value {
-        let len = self.params.len();
-        *self.params.raw.entry(kind).or_insert_with(|| func.dfg.make_param(len.into()))
     }
 
     pub fn insert_param_init(
@@ -217,7 +224,7 @@ impl HirInterner {
         let i_neg_inf = func.dfg.iconst(i32::MIN);
 
         let mut ctx = FunctionBuilderContext::default();
-        let mut builder = FunctionBuilder::new(func, literals, &mut ctx);
+        let mut builder = FunctionBuilder::new(func, literals, &mut ctx, false);
 
         for (kind, param_val) in self.params.raw.clone() {
             if let ParamKind::Param(param) = kind {
@@ -237,7 +244,7 @@ impl HirInterner {
                     }
                 });
 
-                self.outputs.insert(PlaceKind::Param(param), param_val);
+                self.outputs.insert(PlaceKind::Param(param), param_val.into());
 
                 let mut ctx = LoweringCtx {
                     db,
@@ -383,8 +390,8 @@ impl HirInterner {
                         _ => unreachable!(),
                     });
 
-                    ctx.data.outputs.insert(PlaceKind::ParamMin(param), min);
-                    ctx.data.outputs.insert(PlaceKind::ParamMax(param), max);
+                    ctx.data.outputs.insert(PlaceKind::ParamMin(param), min.into());
+                    ctx.data.outputs.insert(PlaceKind::ParamMax(param), max.into());
                     precomputed_vals
                 } else {
                     vec![]
@@ -601,11 +608,6 @@ impl LoweringCtx<'_, '_> {
                         }
                     }
                 };
-
-                if matches!(self.infere.assigment_destination[&stmt], AssignDst::Flow(_)) {
-                    let mfactor = self.param(ParamKind::ParamSysFun(ParamSysFun::mfactor));
-                    val_ = self.func.ins().fmul(val_, mfactor)
-                }
 
                 let mut negate = false;
 

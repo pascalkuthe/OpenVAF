@@ -72,6 +72,7 @@ pub mod consts {
         pub const F_LOG10_E: f64 = LOG10_E;
         pub const F_TWO: f64 = 2.0;
         pub const N_ONE: i32 = -1;
+        pub const F_TEN: f64 = 10.0;
     }
 }
 
@@ -167,6 +168,11 @@ impl ValueDef {
     }
 
     #[inline]
+    pub fn unwrap_result(&self) -> (Inst, usize) {
+        self.result().expect("Value is not an instruction result")
+    }
+
+    #[inline]
     pub fn unwrap_const(&self) -> Const {
         self.as_const().expect("Value is not a constant")
     }
@@ -181,6 +187,15 @@ impl ValueDef {
     pub fn inst(&self) -> Option<Inst> {
         match *self {
             Self::Result(inst, _) => Some(inst),
+            _ => None,
+        }
+    }
+
+    /// Get the instruction where the value was defined, if any.
+    #[inline]
+    pub fn result(&self) -> Option<(Inst, usize)> {
+        match *self {
+            Self::Result(inst, i) => Some((inst, i)),
             _ => None,
         }
     }
@@ -210,6 +225,16 @@ pub enum Const {
     Int(i32),
     Str(Spur),
     Bool(bool),
+}
+
+impl Const {
+    pub fn unwrap_f64(self) -> f64 {
+        if let Const::Float(val) = self {
+            val.into()
+        } else {
+            unreachable!("Const is not a float!")
+        }
+    }
 }
 
 /// Handling values.
@@ -272,7 +297,7 @@ impl DfgValues {
 
     /// Allocate an extended value entry.
     pub fn make_param_at(&mut self, param: Param, val: Value) {
-        self.defs[val] = ValueData::new(ValueDataType::Param { param }, None.into());
+        self.defs[val].ty = ValueDataType::Param { param };
     }
 
     /// Get an iterator over all values.

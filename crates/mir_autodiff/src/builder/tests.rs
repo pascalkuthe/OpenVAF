@@ -1,6 +1,7 @@
+use bitset::HybridBitSet;
 use expect_test::{expect, Expect};
 use float_cmp::{ApproxEq, F64Margin};
-use mir::{ControlFlowGraph, F_ONE};
+use mir::{ControlFlowGraph, DerivativeInfo};
 use mir_interpret::{Data, Interpreter};
 use mir_reader::parse_function;
 use typed_index_collections::TiSlice;
@@ -12,14 +13,22 @@ fn check_simple(src: &str, data_flow_result: Expect) {
     let mut cfg = ControlFlowGraph::new();
     cfg.compute(&func);
 
-    let unkowns = [
-        (0u32.into(), vec![(10u32.into(), F_ONE)].into_boxed_slice()),
-        (1u32.into(), vec![(11u32.into(), F_ONE)].into_boxed_slice()),
+    let unkowns = [10u32.into(), 11u32.into()].into_iter().collect();
+
+    let mut call1 = HybridBitSet::new_empty();
+    call1.insert(0u32.into(), 2);
+    let mut call2 = HybridBitSet::new_empty();
+    call2.insert(1u32.into(), 2);
+    let ddx_calls = [
+        (0u32.into(), (call1, HybridBitSet::new_empty())),
+        (1u32.into(), (call2, HybridBitSet::new_empty())),
     ]
     .into_iter()
     .collect();
 
-    auto_diff(&mut func, &cfg, &unkowns, []);
+    let unkowns = DerivativeInfo { unkowns, ddx_calls };
+
+    auto_diff(&mut func, &cfg, &unkowns, &[]);
     data_flow_result.assert_eq(&func.to_debug_string());
 }
 
@@ -28,14 +37,22 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
     let mut cfg = ControlFlowGraph::new();
     cfg.compute(&func);
 
-    let unkowns = [
-        (0u32.into(), vec![(10u32.into(), F_ONE)].into_boxed_slice()),
-        (1u32.into(), vec![(11u32.into(), F_ONE)].into_boxed_slice()),
+    let unkowns = [10u32.into(), 11u32.into()].into_iter().collect();
+
+    let mut call1 = HybridBitSet::new_empty();
+    call1.insert(0u32.into(), 2);
+    let mut call2 = HybridBitSet::new_empty();
+    call2.insert(1u32.into(), 2);
+    let ddx_calls = [
+        (0u32.into(), (call1, HybridBitSet::new_empty())),
+        (1u32.into(), (call2, HybridBitSet::new_empty())),
     ]
     .into_iter()
     .collect();
 
-    auto_diff(&mut func, &cfg, &unkowns, []);
+    let unkowns = DerivativeInfo { unkowns, ddx_calls };
+
+    auto_diff(&mut func, &cfg, &unkowns, &[]);
     let mut interpret = Interpreter::new(
         &func,
         TiSlice::from_ref(&[]),

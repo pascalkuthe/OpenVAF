@@ -6,6 +6,11 @@ use crate::{BasicBlock, Bool, Builder, Context, IntPredicate, RealPredicate, Typ
 extern "C" {
     pub fn LLVMCreateBuilderInContext(ctx: &Context) -> &mut Builder<'_>;
     pub fn LLVMPositionBuilderAtEnd<'a>(builder: &Builder<'a>, block: &'a BasicBlock);
+    pub fn LLVMPositionBuilder<'a>(
+        builder: &Builder<'a>,
+        block: &'a BasicBlock,
+        inst: Option<&'a Value>,
+    );
     pub fn LLVMGetInsertBlock<'a>(builder: &Builder<'a>) -> &'a BasicBlock;
     pub fn LLVMDisposeBuilder<'a>(builder: &'a mut Builder<'a>);
 

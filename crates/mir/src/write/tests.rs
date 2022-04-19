@@ -19,11 +19,11 @@ fn basic() {
     cursor.ins().isub(v6, v5);
 
     let expected = expect![[r#"
-        function %foo(v13, v14) {
-            v15 = iconst 3
+        function %foo(v14, v15) {
+            v16 = iconst 3
         block0:
-            v16 = iadd v13, v14
-            v17 = isub v16, v15
+            v17 = iadd v14, v15
+            v18 = isub v17, v16
         }
     "#]];
     expected.assert_eq(&func.to_debug_string());

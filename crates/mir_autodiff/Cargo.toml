@@ -19,6 +19,7 @@ workqueue = {version = "0.0.0", path = "../workqueue" }
 bitset = {version = "0.0.0", path = "../bitset" }
 typed_indexmap = { version = "0.0.0", path = "../typed_indexmap" }
 arena = { version = "0.0.0", path = "../arena" }
+arrayvec = "0.7"
 
 indexmap = "1.6"
 typed-index-collections = "3.0"

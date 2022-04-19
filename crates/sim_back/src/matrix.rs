@@ -1,15 +1,14 @@
 use ahash::AHashMap;
 use bitset::BitSet;
 use hir_def::db::HirDefDB;
-use hir_def::NodeId;
-use hir_lower::{CallBackKind, HirInterner, ParamKind, PlaceKind};
+use hir_def::{NodeId, ParamSysFun};
+use hir_lower::{HirInterner, ParamKind, PlaceKind};
 use hir_ty::db::HirTyDB;
 use hir_ty::lower::BranchKind;
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::FuncCursor;
-use mir::{FuncRef, Function, Value, F_ZERO};
-use mir_autodiff::{FirstOrderUnkown, FirstOrderUnkownInfo};
+use mir::{DerivativeInfo, Function, Unkown, Value, F_ZERO};
 use stdx::{format_to, impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
@@ -38,9 +37,9 @@ impl JacobianMatrix {
         &mut self,
         db: &CompilationDB,
         func: &mut FuncCursor,
-        intern: &HirInterner,
-        derivatives: &AHashMap<(Value, FirstOrderUnkown), Value>,
-        derivative_info: &TiMap<FirstOrderUnkown, FuncRef, FirstOrderUnkownInfo>,
+        intern: &mut HirInterner,
+        derivatives: &AHashMap<(Value, Unkown), Value>,
+        derivative_info: &DerivativeInfo,
     ) {
         for (out_kind, rhs) in intern.outputs.iter() {
             let (row_hi, row_lo, reactive) = match *out_kind {
@@ -58,19 +57,23 @@ impl JacobianMatrix {
                 _ => continue,
             };
 
+            let rhs = rhs.unwrap();
+
             let row_hi_gnd = db.node_data(row_hi).is_gnd;
             let row_lo_gnd = row_lo.map_or(true, |lo| db.node_data(lo).is_gnd);
 
-            for (param, (kind, _)) in intern.params.iter_enumerated() {
+            for (kind, val) in intern.params.raw.iter() {
+                if func.func.dfg.value_dead(*val) {
+                    continue;
+                }
                 let (col_hi, col_lo) = match kind {
                     ParamKind::Voltage { hi, lo } => (*hi, *lo),
                     // ParamKind::Current(_) => TODO voltage contribute
                     _ => continue,
                 };
 
-                let callback = intern.callbacks.unwrap_index(&CallBackKind::Derivative(param));
-                let unkown = derivative_info.unwrap_index(&callback);
-                if let Some(ddx) = derivatives.get(&(*rhs, unkown)).copied() {
+                let unkown = derivative_info.unkowns.unwrap_index(val);
+                if let Some(ddx) = derivatives.get(&(rhs, unkown)).copied() {
                     if ddx == F_ZERO {
                         continue;
                     }
@@ -103,6 +106,11 @@ impl JacobianMatrix {
                     }
                 }
             }
+        }
+
+        let mfactor = intern.ensure_param(func.func, ParamKind::ParamSysFun(ParamSysFun::mfactor));
+        for val in self.resistive.raw.values_mut().chain(self.reactive.raw.values_mut()) {
+            *val = func.ins().fmul(*val, mfactor)
         }
     }
 

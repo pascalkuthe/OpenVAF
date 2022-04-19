@@ -94,8 +94,8 @@ impl<'a> SimplifyCfg<'a> {
 
         let mut cursor = self.func.layout.block_inst_cursor(bb);
         while let Some(inst) = cursor.next(&self.func.layout) {
-            if let InstructionData::PhiNode(phi) = self.func.dfg.insts[inst] {
-                let mut edges = self.func.dfg.phi_edges(phi);
+            if let InstructionData::PhiNode(phi) = self.func.dfg.insts[inst].clone() {
+                let mut edges = self.func.dfg.phi_edges(&phi);
                 let phi_val = self.func.dfg.first_result(inst);
                 if let Some((_, first_val)) = edges.find(|it| it.1 != phi_val) {
                     if edges.all(|(_, val)| val == first_val || val == phi_val) {
@@ -127,14 +127,14 @@ impl<'a> SimplifyCfg<'a> {
         // This is worstcase O(n_phis^2) which is faster for smaller phis
         let mut cursor = self.func.layout.block_inst_cursor(bb);
         while let Some(inst) = cursor.head {
-            if let InstructionData::PhiNode(phi1) = self.func.dfg.insts[inst] {
+            if let InstructionData::PhiNode(phi1) = self.func.dfg.insts[inst].clone() {
                 let val = self.func.dfg.first_result(inst);
                 let mut cursor2 = cursor;
                 cursor2.next(&self.func.layout);
                 while let Some(inst2) = cursor2.next(&self.func.layout) {
                     // cursor2.next(&self.func.layout);
-                    if let InstructionData::PhiNode(phi2) = self.func.dfg.insts[inst2] {
-                        if self.func.dfg.phi_eq(phi1, phi2) {
+                    if let InstructionData::PhiNode(phi2) = &self.func.dfg.insts[inst2] {
+                        if self.func.dfg.phi_eq(&phi1, phi2) {
                             let duplicate_val = self.func.dfg.first_result(inst2);
                             for use_ in self.func.dfg.uses(duplicate_val) {
                                 let inst = self.func.dfg.use_to_operand(use_).0;
@@ -445,17 +445,18 @@ impl<'a> SimplifyCfg<'a> {
 
         // check that the sucessors phis can be merged
         for inst in self.func.layout.block_insts(dst) {
-            if let InstructionData::PhiNode(phi) = self.func.dfg.insts[inst] {
+            if let InstructionData::PhiNode(phi) = self.func.dfg.insts[inst].clone() {
                 // prepare for update
-                let val = self.func.dfg.phi_edge_val(phi, src).unwrap();
+                let val = self.func.dfg.phi_edge_val(&phi, src).unwrap();
 
                 if let ValueDef::Result(src_inst, _) = self.func.dfg.value_def(val) {
-                    if let InstructionData::PhiNode(src_phi) = self.func.dfg.insts[src_inst] {
+                    if let InstructionData::PhiNode(src_phi) = self.func.dfg.insts[src_inst].clone()
+                    {
                         if self.func.layout.inst_block(src_inst) == Some(src) {
                             // the value depends on the predecessor (its a phi)
 
-                            let can_merge = self.func.dfg.phi_edges(src_phi).all(|(bb, val)| {
-                                self.func.dfg.phi_edge_val(phi, bb).map_or(true, |it| it == val)
+                            let can_merge = self.func.dfg.phi_edges(&src_phi).all(|(bb, val)| {
+                                self.func.dfg.phi_edge_val(&phi, bb).map_or(true, |it| it == val)
                             });
                             if can_merge {
                                 continue;
@@ -470,7 +471,7 @@ impl<'a> SimplifyCfg<'a> {
                 let can_merge = self
                     .cfg
                     .pred_iter(src)
-                    .all(|bb| self.func.dfg.phi_edge_val(phi, bb).map_or(true, |it| it == val));
+                    .all(|bb| self.func.dfg.phi_edge_val(&phi, bb).map_or(true, |it| it == val));
 
                 if !can_merge {
                     return;
@@ -482,13 +483,14 @@ impl<'a> SimplifyCfg<'a> {
 
         // actually merge the phis
         for inst in self.func.layout.block_insts(dst) {
-            if let InstructionData::PhiNode(mut phi) = self.func.dfg.insts[inst] {
+            if let InstructionData::PhiNode(mut phi) = self.func.dfg.insts[inst].clone() {
                 // prepare for update
                 self.func.dfg.zap_inst(inst);
                 let (old_val, _) = self.func.dfg.try_remove_phi_edge(&mut phi, inst, src).unwrap();
 
                 if let ValueDef::Result(src_inst, _) = self.func.dfg.value_def(old_val) {
-                    if let InstructionData::PhiNode(src_phi) = self.func.dfg.insts[src_inst] {
+                    if let InstructionData::PhiNode(src_phi) = self.func.dfg.insts[src_inst].clone()
+                    {
                         if self.func.layout.inst_block(src_inst) == Some(src) {
                             // merge phis...
 
@@ -544,11 +546,13 @@ impl<'a> SimplifyCfg<'a> {
         for pred in self.cfg.pred_iter(src) {
             let term = self.func.layout.last_inst(pred).unwrap();
             match &mut self.func.dfg.insts[term] {
-                InstructionData::Branch { ref mut then_dst, .. } if *then_dst == src => {
-                    *then_dst = dst;
+                InstructionData::Branch { then_dst: ref mut destination, .. }
+                | InstructionData::Branch { else_dst: ref mut destination, .. }
+                    if *destination == src =>
+                {
+                    *destination = dst;
                 }
-                InstructionData::Jump { ref mut destination }
-                | InstructionData::Branch { else_dst: ref mut destination, .. } => {
+                InstructionData::Jump { ref mut destination } => {
                     debug_assert_eq!(*destination, src);
                     *destination = dst;
                 }

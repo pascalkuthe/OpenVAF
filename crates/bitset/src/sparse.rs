@@ -43,11 +43,11 @@ impl<T> SparseBitSet<T>
 where
     T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
-    pub(super) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.elems.len()
     }
 
-    pub(super) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.elems.is_empty()
     }
 

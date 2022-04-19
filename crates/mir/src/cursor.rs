@@ -139,18 +139,6 @@ pub trait Cursor {
     }
 
     /// Rebuild this cursor positioned at the last instruction in `block`.
-    ///
-    /// This is intended to be used as a builder method:
-    ///
-    /// ```
-    /// # use cranelift_codegen::{Function, Block, Inst};
-    /// # use cranelift_codegen::cursor::{Cursor, FuncCursor};
-    /// fn edit_func(func: &mut Function, block: Block) {
-    ///     let mut pos = FuncCursor::new(func).at_last_inst(block);
-    ///
-    ///     // Use `pos`...
-    /// }
-    /// ```
     fn at_last_inst(mut self, block: Block) -> Self
     where
         Self: Sized,
@@ -160,18 +148,6 @@ pub trait Cursor {
     }
 
     /// Rebuild this cursor positioned after `inst`.
-    ///
-    /// This is intended to be used as a builder method:
-    ///
-    /// ```
-    /// # use cranelift_codegen::{Function, Block, Inst};
-    /// # use cranelift_codegen::cursor::{Cursor, FuncCursor};
-    /// fn edit_func(func: &mut Function, inst: Inst) {
-    ///     let mut pos = FuncCursor::new(func).after_inst(inst);
-    ///
-    ///     // Use `pos`...
-    /// }
-    /// ```
     fn after_inst(mut self, inst: Inst) -> Self
     where
         Self: Sized,
@@ -588,6 +564,26 @@ impl<'f> FuncCursor<'f> {
     /// Create an instruction builder that inserts an instruction at the current position.
     pub fn ins(&mut self) -> InsertBuilder<&mut FuncCursor<'f>> {
         InsertBuilder::new(self)
+    }
+
+    /// Rebuild this cursor positioned after `inst`.
+    /// If `inst` is a phi instruction this function will advance until the following instruction
+    /// is not a phi instruction.
+    ///
+    /// This is intended for situtions where an instruction will be inserted after the definition
+    /// of an unkown value.
+    pub fn after_inst_no_phi(self, mut inst: Inst) -> Self
+    where
+        Self: Sized,
+    {
+        while let Some(next) = self.func.layout.next_inst(inst) {
+            if self.func.dfg.insts[next].is_phi() {
+                inst = next;
+            } else {
+                break;
+            }
+        }
+        self.after_inst(inst)
     }
 }
 

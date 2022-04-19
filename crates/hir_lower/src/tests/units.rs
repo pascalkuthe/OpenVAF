@@ -83,59 +83,59 @@ module test;
 endmodule
     "#;
     let mir = expect![[r#"
-        function %(v13, v17, v21, v30) {
+        function %(v14, v18, v22, v31) {
             v4 = iconst 0
             v5 = iconst 1
-            v20 = fconst 0x1.920c49ba5e354p1
-            v23 = iconst 2
-            v25 = iconst 3
+            v21 = fconst 0x1.920c49ba5e354p1
+            v24 = iconst 2
+            v26 = iconst 3
                                         block0:
-        @0002                               v14 = ilt v13, v4
-        @0002                               br v14, block2, block3
+        @0002                               v15 = ilt v14, v4
+        @0002                               br v15, block2, block3
 
                                         block2:
-        @0002                               v15 = ineg v13
+        @0002                               v16 = ineg v14
         @0002                               jmp block4
 
                                         block3:
         @0002                               jmp block4
 
                                         block4:
-        @0002                               v16 = phi [v15, block2], [v13, block3]
-        @0004                               v18 = iadd v16, v17
-        @0005                               v19 = ieq v4, v18
-                                            br v19, block6, block7
+        @0002                               v17 = phi [v16, block2], [v14, block3]
+        @0004                               v19 = iadd v17, v18
+        @0005                               v20 = ieq v4, v19
+                                            br v20, block6, block7
 
                                         block6:
                                             jmp block5
 
                                         block7:
-        @0008                               v22 = ieq v5, v18
-                                            br v22, block8, block9
+        @0008                               v23 = ieq v5, v19
+                                            br v23, block8, block9
 
                                         block9:
-        @0009                               v24 = ieq v23, v18
-                                            br v24, block8, block10
+        @0009                               v25 = ieq v24, v19
+                                            br v25, block8, block10
 
                                         block10:
-        @000a                               v26 = ieq v25, v18
-                                            br v26, block8, block11
+        @000a                               v27 = ieq v26, v19
+                                            br v27, block8, block11
 
                                         block8:
-        @000c                               v27 = ifcast v13
-        @000e                               v28 = fdiv v27, v20
-        @0011                               v29 = sin v28
+        @000c                               v28 = ifcast v14
+        @000e                               v29 = fdiv v28, v21
+        @0011                               v30 = sin v29
                                             jmp block5
 
                                         block11:
-        @0013                               v31 = ifcast v4
+        @0013                               v32 = ifcast v4
                                             jmp block5
 
                                         block5:
-                                            v34 = phi [v30, block6], [v29, block8], [v30, block11]
-                                            v32 = phi [v20, block6], [v28, block8], [v31, block11]
-                                            v33 = optbarrier v32
-                                            v36 = optbarrier v34
+                                            v35 = phi [v31, block6], [v30, block8], [v31, block11]
+                                            v33 = phi [v21, block6], [v29, block8], [v32, block11]
+                                            v34 = optbarrier v33
+                                            v37 = optbarrier v35
                                             jmp block1
 
                                         block1:

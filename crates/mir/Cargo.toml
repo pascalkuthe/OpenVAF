@@ -17,6 +17,7 @@ typed-index-collections = "3.0"
 lasso = {version = "0.6", features = ["ahash"]}
 ahash = "0.7"
 bitset = {version = "0.0.0", path = "../bitset" }
+typed_indexmap = { version = "0.0.0", path = "../typed_indexmap" }
 
 [dev-dependencies]
 expect-test = "1.1"

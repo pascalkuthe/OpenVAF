@@ -31,13 +31,14 @@ fn process(
         && !func.dfg.inst_results(inst).iter().any(|res| output_values.contains(*res))
     {
         func.dfg.zap_inst(inst);
+        func.layout.remove_inst(inst);
+
         // arguments might be dead now :)
         for arg in func.dfg.instr_args(inst) {
             if let ValueDef::Result(inst, _) = func.dfg.value_def(*arg) {
                 workque.insert(inst);
             }
         }
-        func.layout.remove_inst(inst)
     } else {
         // instruction is still live and might be visited again
         workque.set.remove(inst);

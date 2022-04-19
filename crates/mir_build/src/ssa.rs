@@ -257,6 +257,7 @@ impl SSABuilder {
             }
         } else {
             let val = func.dfg.make_invalid_value_for_parser();
+            func.dfg.set_tag(val, Some(u32::from(var).into()));
             data.undef_phis.push((var, val));
             // Define the operandless param added above to prevent lookup cycles.
             self.def_var(var, val, block);
@@ -473,6 +474,7 @@ impl SSABuilder {
 
                 let mut args = ValueList::new();
                 let mut blocks = Map::new();
+
                 let iter = self.ssa_blocks[dest_block].predecessors.iter().map(|pred_block| {
                     // We already did a full `use_var` above, so we can do just the fast path.
                     let pred_val = self.variables[var][*pred_block].unwrap();

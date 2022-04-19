@@ -2,13 +2,22 @@ use std::fmt::Debug;
 use std::iter;
 use std::mem::take;
 
-use mir::{FuncRef, Value, F_ZERO};
+use ahash::AHashMap;
+use bitset::HybridBitSet;
+use mir::{DerivativeInfo, FuncRef, Value};
 use stdx::{impl_debug, impl_idx_from};
-use typed_indexmap::{TiMap, TiSet};
+use typed_indexmap::TiSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
 pub struct Unkown(u32);
 impl_idx_from!(Unkown(u32));
+
+impl Unkown {
+    pub fn assert_first_order(self) -> FirstOrderUnkown {
+        self.0.into()
+    }
+}
 
 impl From<FirstOrderUnkown> for Unkown {
     fn from(unkown: FirstOrderUnkown) -> Unkown {
@@ -20,15 +29,11 @@ impl_debug! {match Unkown{
     Unkown(raw) => "unkown{}",raw;
 }}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FirstOrderUnkown(u32);
-impl_idx_from!(FirstOrderUnkown(u32));
+pub use mir::Unkown as FirstOrderUnkown;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NthOrderUnkown(u32);
 impl_idx_from!(NthOrderUnkown(u32));
-
-pub type FirstOrderUnkownInfo = Box<[(Value, Value)]>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NthOrderUnkownInfo {
@@ -37,8 +42,10 @@ pub struct NthOrderUnkownInfo {
 }
 
 pub struct Unkowns<'a> {
-    pub first_order_unkowns: &'a TiMap<FirstOrderUnkown, FuncRef, FirstOrderUnkownInfo>,
-    higher_order_unkowns: TiSet<NthOrderUnkown, NthOrderUnkownInfo>,
+    pub first_order_unkowns: &'a TiSet<FirstOrderUnkown, Value>,
+    pub ddx_calls:
+        &'a AHashMap<FuncRef, (HybridBitSet<FirstOrderUnkown>, HybridBitSet<FirstOrderUnkown>)>,
+    pub higher_order_unkowns: TiSet<NthOrderUnkown, NthOrderUnkownInfo>,
     buf: Vec<FirstOrderUnkown>,
 }
 
@@ -51,26 +58,18 @@ impl<'a> Unkowns<'a> {
         self.len() == 0
     }
 
-    pub fn new(
-        first_order_unkowns: &'a TiMap<FirstOrderUnkown, FuncRef, FirstOrderUnkownInfo>,
-    ) -> Unkowns<'a> {
+    pub fn new(info: &'a DerivativeInfo) -> Unkowns<'a> {
         Self {
-            first_order_unkowns,
+            first_order_unkowns: &info.unkowns,
+            ddx_calls: &info.ddx_calls,
             higher_order_unkowns: TiSet::default(),
             // don't expect more than 8. th order derivative in most code
             buf: Vec::with_capacity(8),
         }
     }
 
-    // pub fn new(unkowns: TiMap<NthOrderUnkownInfo, Callback, FirstOrderUnkownInfo>) -> Unkowns {
-    //     Unkowns { first_order_unkowns: unkowns, higher_order_unkowns: UnsafeCell::new(Vec::new()) }
-    // }
-
-    pub fn param_derivative(&self, param: Value, unkown: FirstOrderUnkown) -> Value {
-        self.first_order_unkowns[unkown]
-            .iter()
-            .find(|(it, _)| *it == param)
-            .map_or(F_ZERO, |(_, val)| *val)
+    pub fn is_unkown(&self, param: Value, unkown: FirstOrderUnkown) -> bool {
+        self.first_order_unkowns[unkown] == param
     }
 
     pub fn previous_order(&self, unkown: Unkown) -> Option<Unkown> {
@@ -133,9 +132,5 @@ impl<'a> Unkowns<'a> {
         self.buf = prev_orders;
 
         curr
-    }
-
-    pub fn callback_unkown(&self, callback: FuncRef) -> Option<FirstOrderUnkown> {
-        self.first_order_unkowns.index(&callback)
     }
 }

@@ -1,9 +1,13 @@
 use std::iter::FilterMap;
-use std::vec;
 
+use ahash::AHashMap;
+use bitset::HybridBitSet;
 use hir_def::{BranchId, FunctionId, LocalFunctionArgId, NodeId, ParamId, ParamSysFun, VarId};
 use indexmap::IndexMap;
-use mir::{DataFlowGraph, FuncRef, FunctionSignature, Param, Value, F_ONE};
+use mir::{
+    DataFlowGraph, DerivativeInfo, FuncRef, Function, FunctionSignature, Param, Unkown, Value,
+};
+use stdx::packed_option::PackedOption;
 // use stdx::{impl_debug, impl_idx_from};
 use typed_indexmap::{map, TiMap, TiSet};
 
@@ -175,7 +179,7 @@ pub struct FunctionMetadata {
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct HirInterner {
     pub tagged_reads: IndexMap<Value, VarId, ahash::RandomState>,
-    pub outputs: IndexMap<PlaceKind, Value, ahash::RandomState>,
+    pub outputs: IndexMap<PlaceKind, PackedOption<Value>, ahash::RandomState>,
     pub params: TiMap<Param, ParamKind, Value>,
     pub callbacks: TiSet<FuncRef, CallBackKind>,
     // pub state: TiSet<StateId, FuncRef>,
@@ -187,27 +191,171 @@ pub type LiveParams<'a> = FilterMap<
 >;
 
 impl HirInterner {
-    pub fn unkowns(&self) -> impl Iterator<Item = (FuncRef, Box<[(Value, Value)]>)> + '_ {
-        self.callbacks.iter_enumerated().filter_map(|(cb, kind)| match kind {
-            CallBackKind::Derivative(param) => {
-                Some((cb, vec![(self.params[*param], F_ONE)].into_boxed_slice()))
+    fn contains_ddx(
+        ddx_calls: &mut AHashMap<FuncRef, (HybridBitSet<Unkown>, HybridBitSet<Unkown>)>,
+        func: &Function,
+        callbacks: &TiSet<FuncRef, CallBackKind>,
+        ddx: &CallBackKind,
+        val: Unkown,
+        neg: bool,
+    ) -> bool {
+        if let Some(ddx) = callbacks.index(ddx) {
+            let (pos_dst, neg_dst) = ddx_calls.entry(ddx).or_default();
+            if neg {
+                neg_dst.insert(val, func.dfg.num_values());
+            } else {
+                pos_dst.insert(val, func.dfg.num_values());
             }
-            CallBackKind::NodeDerivative(node) => Some((
-                cb,
-                self.params
-                    .raw
-                    .iter()
-                    .filter_map(|(kind, value)| match kind {
-                        ParamKind::Voltage { hi, .. } if hi == node => Some((*value, F_ONE)),
-                        ParamKind::Voltage { lo: Some(lo), .. } if lo == node => {
-                            Some((*value, F_ONE))
-                        }
-                        _ => None,
-                    })
-                    .collect(),
-            )),
-            _ => None,
-        })
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn unkowns<'a>(
+        &'a mut self,
+        func: &'a mut Function,
+        sim_derivatives: bool,
+    ) -> DerivativeInfo {
+        let mut unknowns = TiSet::default();
+        let mut ddx_calls = AHashMap::new();
+        // let mut nodes: AHashMap<NodeId, HybridBitSet<Value>> = AHashMap::new();
+        // let mut required_nodes: IndexSet<NodeId, RandomState> = IndexSet::default();
+        for (param, (kind, &val)) in self.params.iter_enumerated() {
+            if func.dfg.value_dead(val) {
+                continue;
+            }
+
+            let param_required = Self::contains_ddx(
+                &mut ddx_calls,
+                func,
+                &self.callbacks,
+                &CallBackKind::Derivative(param),
+                unknowns.len().into(),
+                false,
+            );
+
+            let mut node_required = |node, neg| {
+                Self::contains_ddx(
+                    &mut ddx_calls,
+                    func,
+                    &self.callbacks,
+                    &CallBackKind::NodeDerivative(node),
+                    unknowns.len().into(),
+                    neg,
+                )
+            };
+
+            let required = match *kind {
+                ParamKind::Voltage { hi, lo: Some(lo) } => {
+                    sim_derivatives | node_required(hi, false) | node_required(lo, true)
+                }
+                ParamKind::Voltage { hi, lo: None } => sim_derivatives | node_required(hi, false),
+                ParamKind::Current(_) => sim_derivatives,
+                _ => param_required,
+            };
+
+            if required {
+                unknowns.insert(val);
+            }
+        }
+
+        //         let mut i = 0;
+        //         while let Some(&node) = required_nodes.get_index(i) {
+        //             for val in nodes[&node].iter() {
+        //                 let (hi, lo) = unknowns[&val].unwrap();
+        //                 let next = if hi == node { lo } else { hi };
+        //                 required_nodes.insert(next);
+        //             }
+
+        //             i += 1;
+        //         }
+
+        //         let mut i = 0;
+        //         let mut res = TiMap::with_capacity(unknowns.len());
+        //         let mut nodes = HybridBitSet::new_empty();
+
+        //         while let Some((&val, &diff)) = unknowns.get_index(i) {
+        //             let mut actual_diff = None;
+        //             if let Some((hi, lo)) = diff {
+        //                 if required_nodes.contains(&hi) {
+        //                     let hi_ = ParamKind::Voltage { hi, lo: None };
+        //                     let lo_ = ParamKind::Voltage { hi: lo, lo: None };
+
+        //                     let (hi_, changed) = Self::ensure_param_(&mut self.params, func, hi_);
+        //                     if changed {
+        //                         unknowns.insert(hi_, None);
+        //                         Self::contains_ddx(
+        //                             &mut ddx_calls,
+        //                             func,
+        //                             &self.callbacks,
+        //                             &CallBackKind::NodeDerivative(hi),
+        //                             hi_,
+        //                         );
+        //                     }
+        //                     let (lo_, changed) = Self::ensure_param_(&mut self.params, func, lo_);
+        //                     if changed {
+        //                         unknowns.insert(lo_, None);
+        //                         Self::contains_ddx(
+        //                             &mut ddx_calls,
+        //                             func,
+        //                             &self.callbacks,
+        //                             &CallBackKind::NodeDerivative(lo),
+        //                             lo_,
+        //                         );
+        //                     }
+
+        //                     let lo_ = unknowns.get_index_of(&lo_).unwrap().into();
+        //                     let hi_ = unknowns.get_index_of(&hi_).unwrap().into();
+
+        //                     nodes.insert_growable(hi_, unknowns.len());
+        //                     nodes.insert_growable(lo_, unknowns.len());
+
+        //                     actual_diff = Some((hi_, lo_));
+        //                 }
+        //             }
+
+        //             i += 1;
+        //             res.insert(val, actual_diff);
+        //         }
+
+        DerivativeInfo { unkowns: unknowns, ddx_calls }
+    }
+
+    pub fn is_param_live(&self, func: &Function, kind: &ParamKind) -> bool {
+        if let Some(val) = self.params.raw.get(kind) {
+            !func.dfg.value_dead(*val)
+        } else {
+            false
+        }
+    }
+
+    pub fn is_param_live_(
+        params: &TiMap<Param, ParamKind, Value>,
+        func: &Function,
+        kind: &ParamKind,
+    ) -> bool {
+        if let Some(val) = params.raw.get(kind) {
+            !func.dfg.value_dead(*val)
+        } else {
+            false
+        }
+    }
+
+    pub fn ensure_param(&mut self, func: &mut Function, kind: ParamKind) -> Value {
+        Self::ensure_param_(&mut self.params, func, kind).0
+    }
+
+    pub(crate) fn ensure_param_(
+        params: &mut TiMap<Param, ParamKind, Value>,
+        func: &mut Function,
+        kind: ParamKind,
+    ) -> (Value, bool) {
+        let len = params.len();
+        let entry = params.raw.entry(kind);
+        let changed = matches!(entry, indexmap::map::Entry::Vacant(_));
+        let val = *entry.or_insert_with(|| func.dfg.make_param(len.into()));
+        (val, changed)
     }
 
     pub fn live_params<'a>(

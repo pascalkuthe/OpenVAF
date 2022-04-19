@@ -32,18 +32,21 @@ pub mod cursor;
 pub mod flowgraph;
 pub mod write;
 
+use ahash::AHashMap;
+use bitset::HybridBitSet;
 use core::fmt;
 pub use lasso::{Interner, Spur};
-use stdx::impl_display;
+use stdx::{impl_debug, impl_display, impl_idx_from};
 use typed_index_collections::TiVec;
+use typed_indexmap::TiSet;
 
 pub use crate::dfg::consts::*;
-pub use crate::dfg::{Const, DataFlowGraph, InstUseIter, UseCursor, UseIter, ValueDef};
+pub use crate::dfg::{Const, DataFlowGraph, DfgValues, InstUseIter, UseCursor, UseIter, ValueDef};
 pub use crate::entities::{AnyEntity, Block, FuncRef, Inst, Param, Use, Value};
 pub use crate::flowgraph::ControlFlowGraph;
 pub use crate::immediates::Ieee64;
 pub use crate::instructions::{
-    InstructionData, InstructionFormat, Opcode, PhiNode, ValueList, ValueListPool,
+    InstructionData, InstructionFormat, Opcode, PhiMap, PhiNode, ValueList, ValueListPool,
 };
 pub use crate::layout::{InstCursor, InstIter, Layout};
 use crate::write::DummyResolver;
@@ -190,3 +193,16 @@ impl Function {
         }
     }
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct DerivativeInfo {
+    pub unkowns: TiSet<Unkown, Value>,
+    pub ddx_calls: AHashMap<FuncRef, (HybridBitSet<Unkown>, HybridBitSet<Unkown>)>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Unkown(pub u32);
+impl_idx_from!(Unkown(u32));
+
+impl_debug!(match Unkown{Unkown(raw) => "unkown{}",raw;});

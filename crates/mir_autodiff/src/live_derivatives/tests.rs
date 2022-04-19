@@ -1,8 +1,8 @@
 use std::fmt::{self, Debug};
 
-use bitset::SparseBitMatrix;
+use bitset::{HybridBitSet, SparseBitMatrix};
 use expect_test::{expect, Expect};
-use mir::{Function, Inst, Value, F_ONE};
+use mir::{DerivativeInfo, Function, Inst, Value};
 use mir_reader::parse_function;
 
 use crate::unkowns::Unkown;
@@ -43,16 +43,24 @@ impl Debug for DerivativeFmt<'_> {
 fn check(src: &str, data_flow_result: Expect) {
     let (func, _) = parse_function(src).unwrap();
 
-    let unkowns_ = [
-        (0u32.into(), vec![(10u32.into(), F_ONE)].into_boxed_slice()),
-        (1u32.into(), vec![(11u32.into(), F_ONE)].into_boxed_slice()),
+    let unkowns = [10u32.into(), 11u32.into()].into_iter().collect();
+
+    let mut call1 = HybridBitSet::new_empty();
+    call1.insert(0u32.into(), 2);
+    let mut call2 = HybridBitSet::new_empty();
+    call2.insert(1u32.into(), 2);
+    let ddx_calls = [
+        (0u32.into(), (call1, HybridBitSet::new_empty())),
+        (1u32.into(), (call2, HybridBitSet::new_empty())),
     ]
     .into_iter()
     .collect();
-    let mut unkowns = Unkowns::new(&unkowns_);
 
-    let res = LiveDerivatives::build(&func, &mut unkowns, []);
-    let printer = DerivativeFmt { func: &func, derivatives: &res.derivatives };
+    let derivative_info = DerivativeInfo { unkowns, ddx_calls };
+    let mut unkowns = Unkowns::new(&derivative_info);
+
+    let res = LiveDerivatives::build(&func, &mut unkowns, &[]);
+    let printer = DerivativeFmt { func: &func, derivatives: &res.mat };
 
     let actual = format!("{:#?}", printer);
     data_flow_result.assert_eq(&actual);

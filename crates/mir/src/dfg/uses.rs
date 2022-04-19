@@ -287,6 +287,10 @@ impl DataFlowGraph {
     pub fn replace_uses(&mut self, dest: Value, src: Value) {
         debug_assert_ne!(dest, src);
 
+        if self.values.tag(src).is_none() {
+            self.values.set_tag(dest, self.values.tag(dest))
+        }
+
         // replace values in instructions
         let mut cursor = self.values.uses_head_cursor(dest);
         while let Some(use_) = cursor.advance(&self.values) {

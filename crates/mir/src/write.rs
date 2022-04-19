@@ -287,7 +287,7 @@ fn write_instruction(w: &mut dyn Write, func: &Function, inst: Inst, indent: usi
 /// Write the operands of `inst` to `w` with a prepended space.
 pub fn write_operands(w: &mut dyn Write, dfg: &DataFlowGraph, inst: Inst) -> fmt::Result {
     let pool = &dfg.insts.value_lists;
-    match dfg.insts[inst] {
+    match dfg.insts[inst].clone() {
         InstructionData::Unary { arg, .. } => write!(w, " {}", arg),
         InstructionData::Binary { args, .. } => write!(w, " {}, {}", args[0], args[1]),
         InstructionData::Jump { destination, .. } => {

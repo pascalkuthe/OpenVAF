@@ -13,7 +13,7 @@ pub union Data {
 }
 
 impl Data {
-    pub const UNDEF: Data = Data { raw: [0; 8] };
+    pub const UNDEF: Data = Data { raw: [u8::MAX; 8] };
 
     pub fn f64(self) -> f64 {
         self.into()
@@ -33,6 +33,10 @@ impl Data {
 
     pub fn from_f64_slice(data: &[f64]) -> &[Data] {
         unsafe { transmute(data) }
+    }
+
+    pub fn is_undef(&self) -> bool {
+        unsafe { self.raw == [u8::MAX; 8] }
     }
 }
 

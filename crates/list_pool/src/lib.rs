@@ -58,7 +58,7 @@ use stdx::packed_option::ReservedValue;
 ///
 /// The index stored in an `ListHandle` points to part 2, the list elements. The value 0 is
 /// reserved for the empty list which isn't allocated in the vector.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ListHandle<T: ReservedValue> {
     index: u32,
     unused: PhantomData<T>,
@@ -250,9 +250,9 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
 
     /// Get the number of elements in the list.
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(self, pool: &ListPool<T>) -> usize {
+    pub fn len(&self, pool: &ListPool<T>) -> usize {
         // Both the empty list and any invalidated old lists will return `None`.
-        pool.len_of(self).unwrap_or(0)
+        pool.len_of(self.clone()).unwrap_or(0)
     }
 
     /// Returns `true` if the list is valid
@@ -262,21 +262,21 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
     }
 
     /// Get the list as a slice.
-    pub fn as_slice(self, pool: &ListPool<T>) -> &[T] {
+    pub fn as_slice<'a>(&self, pool: &'a ListPool<T>) -> &'a [T] {
         let idx = self.index as usize;
-        match pool.len_of(self) {
+        match pool.len_of(self.clone()) {
             None => &[],
             Some(len) => &pool.data[idx..idx + len],
         }
     }
 
     /// Get a single element from the list.
-    pub fn get(self, index: usize, pool: &ListPool<T>) -> Option<T> {
+    pub fn get(&self, index: usize, pool: &ListPool<T>) -> Option<T> {
         self.as_slice(pool).get(index).cloned()
     }
 
     /// Get the first element from the list.
-    pub fn first(self, pool: &ListPool<T>) -> Option<T> {
+    pub fn first(&self, pool: &ListPool<T>) -> Option<T> {
         if self.is_empty() {
             None
         } else {
@@ -287,7 +287,7 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
     /// Get the list as a mutable slice.
     pub fn as_mut_slice<'a>(&'a mut self, pool: &'a mut ListPool<T>) -> &'a mut [T] {
         let idx = self.index as usize;
-        match pool.len_of(*self) {
+        match pool.len_of(self.clone()) {
             None => &mut [],
             Some(len) => &mut pool.data[idx..idx + len],
         }
@@ -299,8 +299,8 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
     }
 
     /// Create a deep clone of the list, which does not alias the original list.
-    pub fn deep_clone(self, pool: &mut ListPool<T>) -> Self {
-        match pool.len_of(self) {
+    pub fn deep_clone(&self, pool: &mut ListPool<T>) -> Self {
+        match pool.len_of(self.clone()) {
             None => Self::new(),
             Some(len) => {
                 let src = self.index as usize;
@@ -318,7 +318,7 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
     /// The memory used by the list is put back in the pool.
     pub fn clear(&mut self, pool: &mut ListPool<T>) {
         let idx = self.index as usize;
-        match pool.len_of(*self) {
+        match pool.len_of(self.clone()) {
             None => debug_assert_eq!(idx, 0, "Invalid pool"),
             Some(len) => pool.free(idx - 1, sclass_for_length(len)),
         }
@@ -337,7 +337,7 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
     /// Returns the index where the element was inserted.
     pub fn push(&mut self, element: T, pool: &mut ListPool<T>) -> usize {
         let idx = self.index as usize;
-        match pool.len_of(*self) {
+        match pool.len_of(self.clone()) {
             None => {
                 // This is an empty list. Allocate a block and set length=1.
                 debug_assert_eq!(idx, 0, "Invalid pool");
@@ -373,7 +373,7 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
         let idx = self.index as usize;
         let new_len;
         let block;
-        match pool.len_of(*self) {
+        match pool.len_of(self.clone()) {
             None => {
                 // This is an empty list. Allocate a block.
                 debug_assert_eq!(idx, 0, "Invalid pool");
@@ -510,7 +510,7 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
             return;
         }
 
-        if let Some(len) = pool.len_of(*self) {
+        if let Some(len) = pool.len_of(self.clone()) {
             if len <= new_len {
                 return;
             }

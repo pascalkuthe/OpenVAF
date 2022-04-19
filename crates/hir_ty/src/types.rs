@@ -33,6 +33,23 @@ impl TyRequirement {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+enum TyEquivalence {
+    Conversion,
+    Semantic,
+    Exact,
+}
+
+impl TyEquivalence {
+    fn compare_ty(self, ty1: &Type, ty2: &Type) -> bool {
+        match self {
+            TyEquivalence::Conversion => ty1.is_convertable_to(ty2),
+            TyEquivalence::Semantic => ty1.is_semantically_equivalent(ty2),
+            TyEquivalence::Exact => ty1 == ty2,
+        }
+    }
+}
+
 impl_display! {
     match TyRequirement{
         TyRequirement::Val(ty) => "{} value",ty;
@@ -121,15 +138,19 @@ impl Ty {
         }
     }
 
-    pub fn satisfies_exact(&self, requirement: &TyRequirement) -> bool {
-        self.satisfies::<false>(requirement)
+    pub fn satisfies_semantic(&self, requirement: &TyRequirement) -> bool {
+        self.satisfies(requirement, TyEquivalence::Semantic)
     }
 
     pub fn satisfies_with_conversion(&self, requirement: &TyRequirement) -> bool {
-        self.satisfies::<true>(requirement)
+        self.satisfies(requirement, TyEquivalence::Conversion)
     }
 
-    fn satisfies<const ALLOW_CONVERSION: bool>(&self, requirement: &TyRequirement) -> bool {
+    pub fn satisfies_exact(&self, requirement: &TyRequirement) -> bool {
+        self.satisfies(requirement, TyEquivalence::Exact)
+    }
+
+    fn satisfies(&self, requirement: &TyRequirement, equiv: TyEquivalence) -> bool {
         match (self, requirement) {
             (
                 Ty::Val(_)
@@ -162,13 +183,7 @@ impl Ty {
                 | Ty::FuntionVar { ty: ty1, .. },
                 TyRequirement::Val(ty2),
             )
-            | (Ty::Literal(ty1), TyRequirement::Literal(ty2)) => {
-                if ALLOW_CONVERSION {
-                    ty1.is_convertable_to(ty2)
-                } else {
-                    ty1.is_semantically_equivalent(ty2)
-                }
-            }
+            | (Ty::Literal(ty1), TyRequirement::Literal(ty2)) => equiv.compare_ty(ty1, ty2),
 
             (
                 Ty::Val(ty)
@@ -184,13 +199,7 @@ impl Ty {
             (
                 Ty::Val(Type::Array { ty: ref ty1, .. }),
                 TyRequirement::ArrayAnyLength { ty: ty2 },
-            ) => {
-                if ALLOW_CONVERSION {
-                    ty1.is_convertable_to(ty2)
-                } else {
-                    ty1.is_semantically_equivalent(ty2)
-                }
-            }
+            ) => equiv.compare_ty(ty1, ty2),
 
             // No conversion for explicit references
             (

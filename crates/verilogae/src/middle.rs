@@ -1,5 +1,3 @@
-use std::iter;
-
 use ahash::AHashSet;
 use bitset::BitSet;
 use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
@@ -7,8 +5,8 @@ use lasso::Rodeo;
 use mir::{ControlFlowGraph, Function, ValueDef};
 use mir_autodiff::auto_diff;
 use mir_opt::{
-    agressive_dead_code_elimination, dead_code_elimination, inst_combine, simplify_cfg,
-    sparse_conditional_constant_propagation,
+    agressive_dead_code_elimination, dead_code_elimination, inst_combine, postdom_frontiers,
+    simplify_cfg, sparse_conditional_constant_propagation,
 };
 
 use crate::compiler_db::{CompilationDB, FuncSpec, ModelInfo};
@@ -20,7 +18,7 @@ impl FuncSpec {
         cfg: &ControlFlowGraph,
         intern: &HirInterner,
     ) -> (Function, ControlFlowGraph) {
-        let ret_val = intern.outputs[&PlaceKind::Var(self.var)];
+        let ret_val = intern.outputs[&PlaceKind::Var(self.var)].unwrap();
         let mut func = func.clone();
         let mut cfg = cfg.clone();
 
@@ -45,9 +43,13 @@ impl FuncSpec {
 
         simplify_cfg(&mut func, &mut cfg);
 
-        let mut live_vals = BitSet::new_empty(func.dfg.num_values());
-        live_vals.insert(ret_val);
-        agressive_dead_code_elimination(&mut func, &mut cfg, &live_vals);
+        let control_dep = postdom_frontiers(&cfg, &func);
+        agressive_dead_code_elimination(
+            &mut func,
+            &mut cfg,
+            &|val, _| val == ret_val,
+            &control_dep,
+        );
         simplify_cfg(&mut func, &mut cfg);
 
         (func, cfg)
@@ -101,11 +103,12 @@ impl CompilationDB {
         }
 
         let mut output_values = BitSet::new_empty(func.dfg.num_values());
-        output_values.extend(intern.outputs.values().copied());
+        output_values.extend(intern.outputs.values().filter_map(|it| it.expand()));
 
         dead_code_elimination(&mut func, &output_values);
 
-        auto_diff(&mut func, &cfg, &intern.unkowns().collect(), iter::empty());
+        let unkowns = intern.unkowns(&mut func, false);
+        auto_diff(&mut func, &cfg, &unkowns, &[]);
 
         sparse_conditional_constant_propagation(&mut func, &cfg);
         inst_combine(&mut func);

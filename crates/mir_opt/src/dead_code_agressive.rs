@@ -1,41 +1,36 @@
 use bitset::BitSet;
 use mir::{Block, ControlFlowGraph, Function, Inst, InstructionData, Value, ValueDef};
 
-use crate::post_dominators::{postdom_frontiers, PostDominanceFrontiers};
+use crate::post_dominators::PostDominanceFrontiers;
 
 pub fn agressive_dead_code_elimination(
     func: &mut Function,
     cfg: &mut ControlFlowGraph,
-    live_vals: &BitSet<Value>,
+    is_live: &dyn Fn(Value, &Function) -> bool,
+    pdom_frontiers: &PostDominanceFrontiers,
 ) {
-    let pdom_frontiers = postdom_frontiers(cfg, func);
-    let mut live_insts = BitSet::new_empty(func.dfg.num_insts());
-
-    let inst_work_list: Vec<_> = func
-        .dfg
-        .insts
-        .iter()
-        .filter(|&inst| {
-            func.layout.inst_block(inst).is_some()
-                && (func.dfg.has_sideeffects(inst, false)
-                    || func.dfg.inst_results(inst).iter().any(|val| live_vals.contains(*val)))
-                && live_insts.insert(inst)
-        })
-        .collect();
-
     let mut live_blocks = BitSet::new_empty(func.layout.num_blocks());
     live_blocks.insert(func.layout.entry_block().unwrap());
     let mut adce = AgressiveDeadCode {
-        pdom_frontiers: &pdom_frontiers,
-        live_insts,
+        pdom_frontiers,
+        live_insts: BitSet::new_empty(func.dfg.num_insts()),
         live_blocks,
         live_predecessors: BitSet::new_empty(func.layout.num_blocks()),
         live_control_flow: BitSet::new_empty(func.layout.num_blocks()),
-        inst_work_list,
+        inst_work_list: Vec::new(),
         bb_work_list: Vec::with_capacity(64),
         func,
         cfg,
     };
+
+    for inst in func.dfg.insts.iter() {
+        if func.layout.inst_block(inst).is_some()
+            && (func.dfg.has_sideeffects(inst, false)
+                || func.dfg.inst_results(inst).iter().any(|val| is_live(*val, func)))
+        {
+            adce.mark_inst_live(inst);
+        }
+    }
 
     adce.solve();
 

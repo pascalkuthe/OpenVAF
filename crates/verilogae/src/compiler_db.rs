@@ -424,7 +424,7 @@ impl ModelInfo {
                         (
                             resolve_retrieve(),
                             // 3.2.1 Output variables
-                            path.len() == 1 && ast.has_attr("description") || ast.has_attr("units"),
+                            path.is_empty() && ast.has_attr("description") || ast.has_attr("units"),
                         )
                     });
 
