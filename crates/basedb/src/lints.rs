@@ -3,21 +3,22 @@ use std::sync::Arc;
 
 use indexmap::IndexMap;
 use stdx::{impl_debug_display, impl_idx_from};
+use vfs::FileId;
 
 use crate::{BaseDB, ErasedAstId};
 
 /// Lints can be set to different levls
 /// This enum represents these levls
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LintLevel {
-    // /// Same as `Deny` but can not be overwritten by attributes later
-    // Forbid,
-    /// Generates an error and will cause an error upon generating user diagnostics
-    Deny,
-    /// A warning
-    Warn,
     /// Lints set to allow will not be displayed
     Allow,
+    /// A warning
+    Warn,
+    /// Generates an error and will cause an error upon generating user diagnostics
+    Deny,
+    // /// Same as `Deny` but can not be overwritten by attributes later
+    // Forbid,
 }
 
 impl LintLevel {
@@ -46,6 +47,15 @@ impl Display for LintLevel {
 pub struct LintSrc {
     pub overwrite: Option<LintLevel>,
     pub ast: Option<ErasedAstId>,
+}
+
+impl LintSrc {
+    pub fn lvl(&self, lint: Lint, root_file: FileId, db: &dyn BaseDB) -> (LintLevel, bool) {
+        match self.overwrite {
+            Some(lvl) => (lvl, false),
+            None => db.lint_lvl(lint, root_file, self.ast),
+        }
+    }
 }
 
 impl From<ErasedAstId> for LintSrc {
@@ -161,5 +171,7 @@ pub mod builtin {
         pub const non_standard_code = LintData{default_lvl: Warn, documentation_id: 11};
         pub const vams_keyword_compat = LintData{default_lvl: Warn, documentation_id: 12};
         pub const non_standard_analog_operator = LintData{default_lvl: Deny, documentation_id: 13};
+        pub const const_simparam = LintData{default_lvl: Allow, documentation_id: 14};
+        pub const variant_const_simparam = LintData{default_lvl: Warn, documentation_id: 15};
     }
 }

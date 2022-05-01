@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::{fmt, fs, mem};
 
-use xshell::cmd;
+use xshell::{cmd, Shell};
 
 pub fn list_rust_files(dir: &Path) -> Vec<PathBuf> {
     let mut res = list_files(dir);
@@ -134,7 +134,8 @@ impl fmt::Display for Location {
 pub fn reformat(text: String) -> String {
     // ensure_rustfmt();
     let rustfmt_toml = project_root().join("rustfmt.toml");
-    let mut stdout = cmd!("rustfmt --config-path {rustfmt_toml} --config fn_single_line=true")
+    let sh = Shell::new().unwrap();
+    let mut stdout = cmd!(sh, "rustfmt --config-path {rustfmt_toml} --config fn_single_line=true")
         .stdin(text)
         .read()
         .unwrap();

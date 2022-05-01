@@ -8,7 +8,7 @@ rust-version = "1.56"
 
 [dependencies]
 anyhow = "1.0"
-xshell = "0.1"
+xshell = "0.2"
 xflags = "0.2"
 md5 = "0.7"
 base_n = {version="1",path = "../lib/base_n"}

@@ -118,23 +118,59 @@ pub fn diode() {
     let expect = expect![[r#"
         analog begin: (Root)
 
-            Tdev=$temperature() + V(br_sht, );
+            if Rth > minr
+            begin: (Root)
+
+                Tdev=$temperature() + V(br_sht, );
+            end
+            else
+            begin: (Root)
+
+                Tdev=$temperature();
+            end
             VT=0.000000000000000000000013806503 * Tdev / 0.0000000000000000001602176462;
-            Vd=V(br_a_ci, );
-            Vr=V(br_ci_c, );
-            Id=Is * pow(Tdev / Tnom, zetais, ) * exp(Vd / N * VT, ) - 1;
+            Is_t=Is * exp(ln(Tdev / Tnom, ) * zetais / N + Tdev / Tnom - 1 * ea / VT * N, );
             rs_t=Rs * pow(Tdev / Tnom, zetars, );
             rth_t=Rth * pow(Tdev / Tnom, zetarth, );
-            pterm=Id * Vd + pow(Vr, 2, ) / rs_t;
+            Vd=V(br_a_ci, );
+            Vr=V(br_ci_c, );
+            Id=Is_t * limexp(Vd / N * VT, ) - 1;
             vf=Vj * 1 - pow(3, -1 / M, );
             x=vf - Vd / VT;
             y=sqrt(x * x + 1.92, );
-            Vd=vf - VT * x + y / 2;
-            Qd=Cj0 * Vj * 1 - pow(1 - Vd / Vj, 1 - M, ) / 1 - M;
-            Cd=ddx(Qd, V(A, ), );
-            I(br_a_ci, )<+Id + ddt(Qd, );
-            I(br_sht, )<+V(br_sht, ) / rth_t - pterm;
-            I(br_ci_c, )<+Vr / rs_t;
+            Vd_smooth=vf - VT * x + y / 2;
+            Qd=Cj0 * Vj * 1 - pow(1 - Vd_smooth / Vj, 1 - M, ) / 1 - M;
+            I(br_a_ci, )<+Id + ddt(Qd, ) + $simparam("<literal>", 0.000000000001, ) * Vd;
+            if Rs > minr
+            begin: (Root)
+
+                I(br_ci_c, )<+Vr / rs_t;
+            end
+            else
+            begin: (Root)
+
+                V(br_ci_c, )<+0;
+            end
+            if Rth > minr
+            begin: (Root)
+
+                pterm=Id * Vd;
+                if Rs > minr
+                begin: (Root)
+
+                    pterm=pterm + pow(Vr, 2, ) / rs_t;
+                end
+                else
+                <missing>;
+                I(br_sht, )<+V(br_sht, ) / rth_t - pterm;
+            end
+            else
+            begin: (Root)
+
+                V(br_sht, )<+0;
+            end
+            cd=ddx(Qd, V(A, ), );
+            gd=ddx(Id, V(A, ), );
         end
     "#]];
     check(&src, expect)

@@ -231,12 +231,13 @@ impl Ctx {
         let mut nodes = TiVec::new();
         let mut items = Vec::new();
         if let Some(ports) = decl.module_ports() {
-            self.lower_module_ports(ports, &mut nodes, &mut items, ast_id);
+            self.lower_module_ports(ports, &mut nodes, &mut items);
         }
 
+        let num_ports = nodes.len() as u32;
         self.lower_module_items(decl.module_items(), &mut nodes, &mut items);
 
-        let res = Module { name, nodes, items, ast_id };
+        let res = Module { name, nodes, items, ast_id, num_ports };
         Some(self.tree.data.modules.push_and_get_key(res))
     }
 
@@ -361,16 +362,16 @@ impl Ctx {
         ports: ast::ModulePorts,
         nodes: &mut TiVec<LocalNodeId, Node>,
         dst: &mut Vec<ModuleItem>,
-        module: AstId<ast::ModuleDecl>,
     ) {
         for port in ports.ports() {
+            let ast_id = self.source_ast_id_map.ast_id(&port);
             match port.kind() {
                 ast::ModulePortKind::Name(name) => {
                     let name = name.as_name();
                     if nodes.iter().all(|node| node.name != name) {
                         let node = nodes.push_and_get_key(Node {
                             name,
-                            ast_id: module.into(),
+                            ast_id: ast_id.into(),
                             decls: Vec::new(),
                         });
                         dst.push(node.into())

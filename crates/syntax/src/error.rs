@@ -82,6 +82,12 @@ pub enum SyntaxError {
         name: String,
     },
 
+    PortNotDeclaredInModule {
+        head: TextRange,
+        pos: TextRange,
+        name: String,
+    },
+
     MixedModuleHead {
         module_ports: AstPtr<ast::ModulePorts>,
     },
@@ -128,5 +134,6 @@ impl_display! {
         IllegalBodyPorts{..} => "ports declared in module head and body";
         IllegalNetType{found,..} => "{} nets are currently not supported!",found;
         RangeConstraintForNonNumericParameter{param,..} => "non-numeric parameter '{}' has range bounds", param;
+        PortNotDeclaredInModule{name,..} => "port '{name}' was not declared in the module head";
     }
 }

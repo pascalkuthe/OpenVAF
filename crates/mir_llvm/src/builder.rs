@@ -3,7 +3,7 @@ use std::slice;
 use arrayvec::ArrayVec;
 use libc::c_uint;
 use llvm::{LLVMBuildExtractValue, UNNAMED};
-use mir::{Block, FuncRef, Function, Inst, Opcode, Param, PhiNode, Value, F_ZERO, ZERO};
+use mir::{Block, FuncRef, Function, Inst, Opcode, Param, PhiNode, Value, ValueDef, F_ZERO, ZERO};
 use typed_index_collections::TiVec;
 
 use crate::callbacks::CallbackFun;
@@ -12,7 +12,7 @@ use crate::CodegenCx;
 // All Builders must have an llfn associated with them
 #[must_use]
 pub struct Builder<'a, 'cx, 'll> {
-    llbuilder: &'ll mut llvm::Builder<'ll>,
+    pub llbuilder: &'a mut llvm::Builder<'ll>,
     pub cx: &'a mut CodegenCx<'cx, 'll>,
     pub func: &'a Function,
     pub blocks: TiVec<Block, Option<&'ll llvm::BasicBlock>>,
@@ -222,9 +222,9 @@ impl<'ll> Builder<'_, '_, 'll> {
     pub fn build_consts(&mut self) {
         for val in self.func.dfg.values() {
             match self.func.dfg.value_def(val) {
-                mir::ValueDef::Result(_, _) => (),
-                mir::ValueDef::Param(param) => self.values[val] = self.params[param],
-                mir::ValueDef::Const(const_val) => {
+                ValueDef::Result(_, _) | ValueDef::Invalid => (),
+                ValueDef::Param(param) => self.values[val] = self.params[param],
+                ValueDef::Const(const_val) => {
                     self.values[val] = Some(self.cx.const_val(&const_val))
                 }
             }

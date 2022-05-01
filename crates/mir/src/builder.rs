@@ -61,7 +61,7 @@ use core::marker::PhantomData;
 /// builder with some additional facilities for creating instructions that reuse existing values as
 /// their results.
 pub struct InsertBuilder<'f, IIB: InstInserterBase<'f>> {
-    inserter: IIB,
+    pub inserter: IIB,
     unused: PhantomData<&'f u32>,
 }
 

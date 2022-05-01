@@ -9,18 +9,19 @@
 //! `.cargo/config`.
 mod build_py;
 mod flags;
-mod vendor;
+// mod vendor;
 
 use std::env;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use xshell::pushd;
+use xshell::Shell;
 
-mod cache;
+// mod cache;
 
 fn main() -> Result<()> {
-    let _d = pushd(project_root())?;
+    let mut sh = Shell::new()?;
+    sh.change_dir(project_root());
 
     let flags = flags::Xtask::from_env()?;
     match flags.subcommand {
@@ -28,9 +29,9 @@ fn main() -> Result<()> {
             println!("{}", flags::Xtask::HELP);
             Ok(())
         }
-        flags::XtaskCmd::Cache(cmd) => cmd.run(),
-        flags::XtaskCmd::Vendor(cmd) => cmd.run(),
-        flags::XtaskCmd::Verilogae(cmd) => cmd.run(),
+        // flags::XtaskCmd::Cache(cmd) => cmd.run(),
+        // flags::XtaskCmd::Vendor(cmd) => cmd.run(),
+        flags::XtaskCmd::Verilogae(cmd) => cmd.run(&mut sh),
     }
 }
 

@@ -4,6 +4,7 @@ use hir_def::db::HirDefDB;
 use hir_def::nameres::ScopeDefItem;
 use hir_ty::db::HirTyDB;
 use hir_ty::validation::{BodyValidationDiagnostic, TypeValidationDiagnostic};
+use lasso::Rodeo;
 use stdx::format_to;
 
 use crate::body::MirBuilder;
@@ -43,20 +44,27 @@ fn check_with_diagnostics(src: &str, diagnostics: Expect, body: Expect) {
 
     diagnostics.assert_eq(&actual);
 
-    let res = MirBuilder::new(&db, def, &|kind| {
-        matches!(
-            kind,
-            PlaceKind::Var(_)
-                | PlaceKind::BranchVoltage { .. }
-                | PlaceKind::ImplicitBranchVoltage { .. }
-                | PlaceKind::BranchCurrent { .. }
-                | PlaceKind::ImplicitBranchCurrent { .. }
-        )
-    })
-    .build();
+    let mut empty_iter = [].into_iter();
 
-    eprintln!("{:#?}", res.1);
-    body.assert_eq(&res.0.to_debug_string());
+    let mut literals = Rodeo::new();
+    let mir = MirBuilder::new(
+        &db,
+        def,
+        &|kind| {
+            matches!(
+                kind,
+                PlaceKind::Var(_)
+                    | PlaceKind::BranchVoltage { .. }
+                    | PlaceKind::ImplicitBranchVoltage { .. }
+                    | PlaceKind::BranchCurrent { .. }
+                    | PlaceKind::ImplicitBranchCurrent { .. }
+            )
+        },
+        &mut empty_iter,
+    )
+    .build(&mut literals);
+
+    body.assert_eq(&mir.0.to_debug_string());
 }
 
 fn check(src: &str, cfg: Expect) {

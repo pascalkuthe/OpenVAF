@@ -25,7 +25,7 @@ use ahash::AHashMap;
 use arena::{Arena, Idx, IdxRange};
 use basedb::{AstId, ErasedAstId, FileId};
 use stdx::impl_from_typed;
-use syntax::ast::{self, BlockStmt};
+use syntax::ast::{self, BlockStmt, NameRef};
 use syntax::name::Name;
 use syntax::AstNode;
 use typed_index_collections::TiVec;
@@ -235,6 +235,7 @@ item_tree_nodes! {
 pub struct Module {
     pub name: Name,
     pub nodes: TiVec<LocalNodeId, Node>,
+    pub num_ports: u32,
     pub items: Vec<ModuleItem>,
     pub ast_id: AstId<ast::ModuleDecl>,
 }
@@ -441,6 +442,18 @@ impl NodeTypeDecl {
         match self {
             NodeTypeDecl::Net(net) => &tree[net].discipline,
             NodeTypeDecl::Port(port) => &tree[port].discipline,
+        }
+    }
+
+    pub fn discipline_src(self, db: &dyn HirDefDB, root_file: FileId) -> Option<NameRef> {
+        let ast_id_map = db.ast_id_map(root_file);
+        let tree = db.item_tree(root_file);
+        let ast = db.parse(root_file).syntax_node();
+        match self {
+            NodeTypeDecl::Net(net) => ast_id_map.get(tree[net].ast_id).to_node(&ast).discipline(),
+            NodeTypeDecl::Port(port) => {
+                ast_id_map.get(tree[port].ast_id).to_node(&ast).discipline()
+            }
         }
     }
 

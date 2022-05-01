@@ -4,8 +4,8 @@ use basedb::{BaseDB, FileId, Upcast};
 
 use crate::body::{Body, BodySourceMap, ParamExprs};
 use crate::data::{
-    AliasParamData, BranchData, DisciplineData, FunctionData, NatureData, NodeData, ParamData,
-    VarData,
+    AliasParamData, BranchData, DisciplineData, FunctionData, ModuleData, NatureData, NodeData,
+    ParamData, VarData,
 };
 use crate::item_tree::ItemTree;
 use crate::nameres::{DefMap, ScopeOrigin};
@@ -97,6 +97,9 @@ pub trait HirDefDB: InternDB + Upcast<dyn BaseDB> {
 
     #[salsa::invoke(AliasParamData::alias_data_query)]
     fn alias_data(&self, param: AliasParamId) -> Arc<AliasParamData>;
+
+    #[salsa::invoke(ModuleData::module_data_query)]
+    fn module_data(&self, module: ModuleId) -> Arc<ModuleData>;
 
     #[salsa::transparent]
     fn find_module(&self, root_file: FileId) -> ModuleId;

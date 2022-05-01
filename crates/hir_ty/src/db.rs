@@ -4,8 +4,8 @@ use basedb::Upcast;
 use hir_def::db::HirDefDB;
 use hir_def::nameres::{ResolvedPath, ScopeDefItem};
 use hir_def::{
-    AliasParamId, BranchId, DefWithBodyId, DisciplineId, Lookup, NatureAttrId, NatureId, ParamId,
-    Type,
+    AliasParamId, BranchId, DefWithBodyId, DisciplineId, Lookup, NatureAttrId, NatureId, NodeId,
+    ParamId, Type,
 };
 
 use crate::inference::InferenceResult;
@@ -29,6 +29,9 @@ pub trait HirTyDB: HirDefDB + Upcast<dyn HirDefDB> {
 
     #[salsa::cycle(resolve_alias_recover)]
     fn resolve_alias(&self, id: AliasParamId) -> Option<ParamId>;
+
+    #[salsa::transparent]
+    fn node_discipline(&self, node: NodeId) -> Option<DisciplineId>;
 }
 
 fn nature_attr_ty(db: &dyn HirTyDB, id: NatureAttrId) -> Option<Type> {
@@ -66,4 +69,11 @@ fn resolve_alias(db: &dyn HirTyDB, id: AliasParamId) -> Option<ParamId> {
         ResolvedPath::ScopeDefItem(ScopeDefItem::AliasParamId(alias)) => db.resolve_alias(alias),
         _ => None,
     }
+}
+
+fn node_discipline(db: &dyn HirTyDB, node: NodeId) -> Option<DisciplineId> {
+    let def_map = node.lookup(db.upcast()).module.lookup(db.upcast()).scope.def_map(db.upcast());
+    let node = db.node_data(node);
+    let discipline = node.discipline.as_ref()?;
+    def_map.resolve_local_item_in_scope(def_map.root(), discipline).ok()
 }

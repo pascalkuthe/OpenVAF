@@ -659,28 +659,33 @@ fn second_order_pow() {
     let expect = expect![[r#"
         function %bar(v10) {
             inst0 = const fn %ddx_v10(1) -> 1
+            v3 = fconst 0.0
             v6 = fconst 0x1.0000000000000p0
 
         block0:
             v12 = pow v10, v10
-            v101 = fdiv v10, v10
-            v102 = fmul v101, v12
-            v103 = ln v10
-            v104 = fmul v103, v12
-            v105 = fadd v102, v104
-            v106 = fmul v10, v10
-            v107 = fdiv v6, v10
-            v108 = fdiv v10, v106
-            v109 = fsub v107, v108
-            v110 = fmul v109, v12
-            v111 = fmul v105, v101
-            v112 = fadd v110, v111
-            v113 = fdiv v6, v10
-            v114 = fmul v113, v12
-            v115 = fmul v105, v103
-            v116 = fadd v114, v115
-            v117 = fadd v112, v116
-            v100 = optbarrier v117
+            v101 = fsub v10, v6
+            v102 = pow v10, v101
+            v103 = fmul v102, v10
+            v104 = ln v10
+            v105 = fmul v104, v12
+            v106 = fadd v103, v105
+            v107 = fsub v101, v6
+            v108 = pow v10, v107
+            v109 = fmul v108, v101
+            v110 = ln v10
+            v111 = fmul v110, v102
+            v112 = fsub v6, v3
+            v113 = fmul v112, v111
+            v114 = fadd v109, v113
+            v115 = fmul v114, v10
+            v116 = fadd v115, v102
+            v117 = fdiv v6, v10
+            v118 = fmul v117, v12
+            v119 = fmul v106, v104
+            v120 = fadd v118, v119
+            v121 = fadd v116, v120
+            v100 = optbarrier v121
         }
     "#]];
 

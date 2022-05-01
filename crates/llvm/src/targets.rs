@@ -50,8 +50,10 @@ extern "C" {
     pub fn LLVMOffsetOfElement(TD: &TargetData, struct_ty: &Type, elem: c_uint) -> c_ulonglong;
 
     pub fn LLVMCreateTargetData(StringRep: *const c_char) -> &'static mut TargetData;
-
     pub fn LLVMDisposeTargetData(target_data: &'static mut TargetData);
+
+    pub fn LLVMABISizeOfType(data: &TargetData, ty: &Type) -> c_ulonglong;
+    pub fn LLVMABIAlignmentOfType(data: &TargetData, ty: &Type) -> c_uint;
 }
 
 pub fn handle_cpu_name(name: &str) -> LLVMString {

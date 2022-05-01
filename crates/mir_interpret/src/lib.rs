@@ -2,7 +2,7 @@ use std::ffi::c_void;
 use std::mem::size_of_val;
 use std::slice;
 
-use mir::{Block, FuncRef, Function, Inst, Opcode, Param, Value};
+use mir::{Block, FuncRef, Function, Inst, Opcode, Param, Value, ValueDef};
 use typed_index_collections::{TiSlice, TiVec};
 
 pub use crate::data::Data;
@@ -47,9 +47,9 @@ impl<'a> Interpreter<'a> {
             .dfg
             .values()
             .map(|val| match func.dfg.value_def(val) {
-                mir::ValueDef::Result(_, _) => Data::UNDEF,
-                mir::ValueDef::Param(param) => args[param],
-                mir::ValueDef::Const(val) => val.into(),
+                ValueDef::Result(_, _) | ValueDef::Invalid => Data::UNDEF,
+                ValueDef::Param(param) => args[param],
+                ValueDef::Const(val) => val.into(),
             })
             .collect();
 

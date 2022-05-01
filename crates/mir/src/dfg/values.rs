@@ -146,6 +146,7 @@ pub(super) enum ValueDataType {
         val: Spur,
     },
     Alias(Value),
+    Invalid,
     True,
     False,
 }
@@ -158,6 +159,7 @@ pub enum ValueDef {
     /// Value is the n'th parameter to a function.
     Param(Param),
     Const(Const),
+    Invalid,
 }
 
 impl ValueDef {
@@ -252,6 +254,7 @@ impl DfgValues {
         };
 
         consts::init(&mut res);
+        res.defs[GRAVESTONE].ty = ValueDataType::Invalid;
 
         // normalize to plus zero for consts
         res.real_consts.insert((-0f64).into(), F_ZERO);
@@ -323,7 +326,27 @@ impl DfgValues {
             ValueDataType::Iconst { val } => ValueDef::Const(Const::Int(val)),
             ValueDataType::Sconst { val } => ValueDef::Const(Const::Str(val)),
             ValueDataType::True => ValueDef::Const(Const::Bool(true)),
-            ValueDataType::False | ValueDataType::Alias(_) => ValueDef::Const(Const::Bool(false)),
+            ValueDataType::False => ValueDef::Const(Const::Bool(false)),
+            ValueDataType::Alias(_) | ValueDataType::Invalid => ValueDef::Invalid,
+        }
+    }
+
+    /// Get the definition of a value.
+    ///
+    /// This is either the instruction that defined it or the Block that has the value as an
+    /// parameter.
+    #[inline]
+    pub fn def_allow_alias(&self, v: Value) -> ValueDef {
+        match self.defs[v].ty {
+            ValueDataType::Inst { inst, num } => ValueDef::Result(inst, num as usize),
+            ValueDataType::Param { param } => ValueDef::Param(param),
+            ValueDataType::Fconst { val } => ValueDef::Const(Const::Float(val)),
+            ValueDataType::Iconst { val } => ValueDef::Const(Const::Int(val)),
+            ValueDataType::Sconst { val } => ValueDef::Const(Const::Str(val)),
+            ValueDataType::True => ValueDef::Const(Const::Bool(true)),
+            ValueDataType::False => ValueDef::Const(Const::Bool(false)),
+            ValueDataType::Alias(alias) => self.def_allow_alias(alias),
+            ValueDataType::Invalid => ValueDef::Invalid,
         }
     }
 
@@ -429,11 +452,11 @@ impl DataFlowGraph {
 
             if let Some(first) = stack.get(0) {
                 self.replace_uses(*first, val);
-
-                for it in stack.drain(..) {
+                for it in stack[1..].iter().copied() {
                     let dst = unsafe { self.values.defs.get_unchecked_mut(it) };
                     dst.ty = ValueDataType::Alias(val);
                 }
+                stack.clear();
             }
         }
     }

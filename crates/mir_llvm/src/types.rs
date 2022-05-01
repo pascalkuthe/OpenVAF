@@ -15,8 +15,16 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { llvm::LLVMArrayType(self.ty_real(), 2) }
     }
 
+    pub fn ty_aint(&self, bits: u32) -> &'ll Type {
+        unsafe { llvm::LLVMIntTypeInContext(self.llcx, bits) }
+    }
+
     pub fn ty_int(&self) -> &'ll Type {
         unsafe { llvm::LLVMInt32TypeInContext(self.llcx) }
+    }
+
+    pub fn ty_int64(&self) -> &'ll Type {
+        unsafe { llvm::LLVMInt64TypeInContext(self.llcx) }
     }
 
     pub fn ty_long(&self) -> &'ll Type {
@@ -47,7 +55,9 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
     }
 
     pub fn ty_void_ptr(&self) -> &'ll Type {
-        self.ptr_ty(self.zst())
+        // its really an opaque pointer so who cares...
+        // TOOD move to opaque pointers
+        self.ptr_ty(self.ty_c_bool())
     }
 
     pub fn ty_func(&self, args: &[&'ll Type], ret: &'ll Type) -> &'ll Type {
@@ -60,10 +70,6 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn ty_array(&self, ty: &'ll Type, len: u32) -> &'ll Type {
         unsafe { llvm::LLVMArrayType(ty, len) }
-    }
-
-    pub fn zst(&self) -> &'ll Type {
-        unsafe { llvm::LLVMIntTypeInContext(self.llcx, 0) }
     }
 
     pub fn ptr_ty(&self, elem: &'ll Type) -> &'ll Type {
@@ -98,11 +104,11 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         llvm::LLVMConstGEP(ptr, indicies.as_ptr(), indicies.len() as u32)
     }
 
-    pub fn const_zst(&self) -> &'ll Value {
-        self.const_undef(self.zst())
+    pub fn const_int(&self, val: i32) -> &'ll Value {
+        unsafe { llvm::LLVMConstInt(self.ty_int(), val as u64, True) }
     }
 
-    pub fn const_int(&self, val: i32) -> &'ll Value {
+    pub fn const_unsigned_int(&self, val: u32) -> &'ll Value {
         unsafe { llvm::LLVMConstInt(self.ty_int(), val as u64, True) }
     }
 
@@ -132,6 +138,16 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn const_arr(&self, elem_ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
         unsafe { llvm::LLVMConstArray(elem_ty, vals.as_ptr(), vals.len() as u32) }
+    }
+
+    pub fn const_anon_struct(&self, vals: &[&'ll Value]) -> &'ll Value {
+        unsafe {
+            llvm::LLVMConstStructInContext(self.llcx, vals.as_ptr(), vals.len() as u32, False)
+        }
+    }
+
+    pub fn const_struct(&self, ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
+        unsafe { llvm::LLVMConstNamedStruct(ty, vals.as_ptr(), vals.len() as u32) }
     }
 
     pub fn const_null(&self, t: &'ll Type) -> &'ll Value {

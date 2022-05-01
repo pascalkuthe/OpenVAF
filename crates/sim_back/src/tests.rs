@@ -11,7 +11,7 @@ use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
-use target::spec::Target;
+// use target::spec::Target;
 use typed_index_collections::{TiSlice, TiVec};
 
 use crate::compilation_db::CompilationDB;
@@ -19,8 +19,6 @@ use crate::matrix::JacobianMatrix;
 use crate::middle::EvalMir;
 use crate::Residual;
 
-#[rustfmt::skip]
-mod integration;
 mod stamps;
 
 #[test]
@@ -64,19 +62,21 @@ pub fn generate_integration_tests() {
     ensure_file_contents(&file, &file_string);
 }
 
-fn full_compile(path: &Path) {
-    let db = CompilationDB::new(Path::new(path)).unwrap();
-    let modules = db.collect_modules(&path.display()).unwrap();
-    let (mir, literals) = EvalMir::new(&db, &modules[0]);
-    let target = Target::host_target().unwrap();
-    // let back = LLVMBackend::new(&[], &target, llvm::OptLevel::Aggressive);
-    mir.to_bin(&db, &literals, &target);
-}
+// fn full_compile(path: &Path) {
+//     let db = CompilationDB::new(Path::new(path)).unwrap();
+//     let modules = db.collect_modules(&path.display()).unwrap();
+//     let mut literals = Rodeo::new();
+//     let mir = EvalMir::new(&db, &modules[0], &mut literals);
+//     let target = Target::host_target().unwrap();
+//     // let back = LLVMBackend::new(&[], &target, llvm::OptLevel::Aggressive);
+//     mir.to_bin(&db, &literals, &target);
+// }
 
 fn compile_to_mir(path: &Path) -> (CompilationDB, EvalMir, Rodeo) {
     let db = CompilationDB::new(Path::new(path)).unwrap();
     let modules = db.collect_modules(&path.display()).unwrap();
-    let (mir, literals) = EvalMir::new(&db, &modules[0]);
+    let mut literals = Rodeo::new();
+    let mir = EvalMir::new(&db, &modules[0], &mut literals);
     (db, mir, literals)
 }
 
@@ -156,7 +156,7 @@ impl EvalMir {
         let val = Box::leak(Box::new(empty_str));
 
         let dummy_calls: TiVec<_, _> = self
-            .intern
+            .eval_intern
             .callbacks
             .raw
             .iter()
@@ -207,7 +207,7 @@ impl EvalMir {
             .collect();
 
         let mut params: TiVec<_, _> = self
-            .intern
+            .eval_intern
             .params
             .raw
             .iter()
@@ -229,7 +229,7 @@ impl EvalMir {
         params.extend((0..self.init_inst_cache_slots.len()).map(|_| Data::UNDEF));
         for (&val, &pos) in &self.init_inst_cache_vals {
             if !instance_init.read::<Data>(val).is_undef() {
-                params.raw[pos as usize + off] = instance_init.read(val);
+                params.raw[usize::from(pos) + off] = instance_init.read(val);
             }
         }
 

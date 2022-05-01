@@ -17,7 +17,7 @@ extern "C" {
     pub fn LLVMSetSourceFileName(module: &Module, name: *const c_char, len: size_t);
 
     pub fn LLVMSetDataLayout(module: &Module, DataLayoutStr: *const c_char);
-
+    pub fn LLVMLinkModules2(dst: &Module, src: &Module) -> Bool;
     // /// Returns the module flags as an array of flag-key-value triples.  The caller is responsible for freeing this array by calling LLVMDisposeModuleFlagsMetadata.
     // pub fn LLVMCopyModuleFlagsMetadata(
     //     module: &Module,
@@ -116,6 +116,7 @@ extern "C" {
         Action: VerifierFailureAction,
         OutMessage: Option<&mut MaybeUninit<LLVMString>>,
     ) -> Bool;
+
 }
 
 pub fn function_iter(module: &Module) -> impl Iterator<Item = &Value> + '_ {

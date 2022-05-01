@@ -197,6 +197,8 @@ fn diode() {
     let mut vfs = db.vfs().write();
     let path = project_root().join("integration_tests").join("DIODE").join("diode.va");
     vfs.add_virt_file("/diode.va", read(path).into());
+    let path = project_root().join("integration_tests").join("DIODE").join("diode2.va");
+    vfs.add_virt_file("/diode2.va", read(path).into());
     drop(vfs);
     db.lower_and_check();
 }
@@ -251,6 +253,19 @@ fn ekv() {
     let mut vfs = db.vfs().write();
     let path = project_root().join("integration_tests").join("EKV").join("ekv.va");
     vfs.add_virt_file("/ekv.va", read(path).into());
+    drop(vfs);
+    db.lower_and_check();
+}
+#[test]
+fn ekv_longchannel() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/ekv_longchannel.va", "");
+    let mut vfs = db.vfs().write();
+    let path =
+        project_root().join("integration_tests").join("EKV_LONGCHANNEL").join("ekv_longchannel.va");
+    vfs.add_virt_file("/ekv_longchannel.va", read(path).into());
     drop(vfs);
     db.lower_and_check();
 }

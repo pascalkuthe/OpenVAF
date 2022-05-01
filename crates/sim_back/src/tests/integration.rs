@@ -101,6 +101,15 @@ fn ekv() {
     super::full_compile(&root_file);
 }
 #[test]
+fn ekv_longchannel() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file =
+        project_root().join("integration_tests").join("EKV_LONGCHANNEL").join("ekv_longchannel.va");
+    super::full_compile(&root_file);
+}
+#[test]
 fn hicuml2() {
     if skip_slow_tests() {
         return;

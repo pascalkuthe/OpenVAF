@@ -8,7 +8,7 @@ use hir_ty::lower::BranchKind;
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::FuncCursor;
-use mir::{DerivativeInfo, Function, Unkown, Value, F_ZERO};
+use mir::{DerivativeInfo, Function, InstructionData, Opcode, Unkown, Value, F_ZERO};
 use stdx::{format_to, impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
@@ -57,7 +57,17 @@ impl JacobianMatrix {
                 _ => continue,
             };
 
-            let rhs = rhs.unwrap();
+            let mut rhs = rhs.unwrap();
+
+            while let Some(inst) = func.func.dfg.value_def(rhs).inst() {
+                if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } =
+                    func.func.dfg.insts[inst]
+                {
+                    rhs = arg;
+                } else {
+                    break;
+                }
+            }
 
             let row_hi_gnd = db.node_data(row_hi).is_gnd;
             let row_lo_gnd = row_lo.map_or(true, |lo| db.node_data(lo).is_gnd);

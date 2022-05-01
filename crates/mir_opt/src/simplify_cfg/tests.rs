@@ -99,7 +99,6 @@ pub fn chained_trivial_phi() {
 
     let expect = expect![[r#"
         function %bar(v4) {
-            // v0 = bconst false
             v5 = iconst 42
             v6 = iconst 23
         block0:
@@ -154,7 +153,6 @@ pub fn const_terminator() {
 
     let expect = expect![[r#"
         function %bar(v4) {
-            // v0 = bconst false
             v5 = iconst 42
             v6 = iconst 23
         block0:
@@ -224,7 +222,6 @@ pub fn duplicate_phis_set() {
 
     let expect = expect![[r#"
         function %bar(v4) {
-            // v0 = bconst false
             v5 = iconst 42
             v6 = iconst 23
         block0:

@@ -44,7 +44,7 @@ pub fn preprocess(sources: &dyn SourceProvider, file: FileId) -> Preprocess {
         Err(FileReadError::Io(error)) => (
             vec![],
             vec![PreprocessorDiagnostic::FileNotFound {
-                file: sources.file_path(file),
+                file: sources.file_path(file).to_string(),
                 error,
                 span: None,
             }],

@@ -1,0 +1,67 @@
+[package]
+name = "osdi"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+
+[dependencies]
+
+stdx = { version = "0.0.0", path = "../stdx" }
+typed_indexmap = {version = "0.0.0", path = "../typed_indexmap"}
+bitset = {version = "0.0.0", path = "../bitset"}
+paths = {version = "0.0", path = "../paths"}
+
+syntax = {version = "0.0.0", path = "../syntax"}
+basedb = { version = "0.0.0", path = "../basedb" }
+hir_def = { version = "0.0.0", path = "../hir_def" }
+hir_lower = {version ="0.0.0", path ="../hir_lower"}
+hir_ty = { version = "0.0.0", path = "../hir_ty" }
+sim_back = { version = "0.0.0", path = "../sim_back" }
+
+mir = { version = "0.0.0", path = "../mir" }
+mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
+mir_autodiff = { version = "0.0.0", path = "../mir_autodiff" }
+mir_opt = { version = "0.0.0", path = "../mir_opt" }
+
+llvm = { version = "0.0.0", path = "../llvm" }
+target = { version = "0.0.0", path = "../target" }
+
+typed-index-collections = "3.0"
+ahash = "0.7"
+lasso = {version = "0.6", features = ["ahash"]}
+parking_lot = "0.12"
+
+anyhow = "1"
+
+salsa = "0.17.0-pre.2"
+indexmap = "1.6"
+smol_str = "0.1.22"
+
+base_n = {version = "1", path="../../lib/base_n"}
+# rayon-core = "1"
+
+
+[build-dependencies]
+
+xshell = "0.2.1"
+sourcegen = {version ="0.0.0", path ="../sourcegen"}
+
+[dev-dependencies]
+
+
+xshell = "0.2.1"
+sourcegen = {version ="0.0.0", path ="../sourcegen"}
+proc-macro2 = "1.0"
+quote = "1.0"
+
+
+expect-test = "1.1"
+
+mir_interpret = {version = "0.0.0", path = "../mir_interpret" }
+float-cmp =  "0.9"
+
+

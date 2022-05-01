@@ -1,6 +1,7 @@
 use ::libc::{c_char, c_uint};
 
 use crate::{BasicBlock, Bool, Builder, Context, IntPredicate, RealPredicate, Type, Value};
+pub use LLVMBuildInBoundsGEP2 as LLVMBuildGEP2;
 
 // Core->Instruction Builders
 extern "C" {
@@ -17,6 +18,15 @@ extern "C" {
     // Terminators
     pub fn LLVMBuildRetVoid<'a>(builder: &Builder<'a>) -> &'a Value;
     pub fn LLVMBuildRet<'a>(builder: &Builder<'a>, val: &'a Value) -> &'a Value;
+    pub fn LLVMBuildSwitch<'a>(
+        builder: &Builder<'a>,
+        val: &'a Value,
+        default_block: &'a BasicBlock,
+        num_case: c_uint,
+    ) -> &'a Value;
+
+    pub fn LLVMAddCase<'a>(switch: &'a Value, val: &'a Value, bb: &'a BasicBlock);
+
     // pub fn LLVMBuildAggregateRet(
     //     builder: &Builder<'a>,
     //     RetVals: *mut &'a Value,
@@ -251,7 +261,7 @@ extern "C" {
         Name: *const c_char,
     ) -> &'a Value;
 
-    pub fn LLVMBuildGEP2<'a>(
+    pub fn LLVMBuildInBoundsGEP2<'a>(
         B: &Builder<'a>,
         Ty: &'a Type,
         Pointer: &'a Value,
@@ -397,6 +407,13 @@ extern "C" {
         builder: &Builder<'a>,
         LHS: &'a Value,
         RHS: &'a Value,
+        Name: *const c_char,
+    ) -> &'a Value;
+
+    pub fn LVMBuildArrayMalloc<'a>(
+        builder: &Builder<'a>,
+        ty: &'a Type,
+        val: &'a Value,
         Name: *const c_char,
     ) -> &'a Value;
 }

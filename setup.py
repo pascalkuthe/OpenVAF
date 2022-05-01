@@ -8,7 +8,7 @@ from setuptools_rust.extension import Strip
 extension = RustExtension(
     "verilogae.verilogae", 
     path = "crates/verilogae_py/Cargo.toml",
-    rust_version=">=1.57",
+    rust_version=">=1.58",
     binding=Binding.NoBinding,
     strip=Strip.All,
 )

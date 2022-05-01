@@ -1,7 +1,7 @@
 use std::ffi::CString;
 
 use libc::c_char;
-use llvm::{False, Type, Value};
+use llvm::{False, LLVMTypeOf, Type, Value};
 
 use crate::CodegenCx;
 
@@ -50,6 +50,20 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             self,
             name,
             llvm::CallConv::FastCallConv,
+            llvm::UnnamedAddr::Global,
+            fn_type,
+        );
+        unsafe { llvm::LLVMSetLinkage(fun, llvm::Linkage::InternalLinkage) }
+        fun
+    }
+
+    /// Declare a internal function.
+    pub fn declare_int_c_fn(&self, name: &str, fn_type: &'ll Type) -> &'ll Value {
+        // Function addresses are never significant, allowing functions to be merged.
+        let fun = declare_raw_fn(
+            self,
+            name,
+            llvm::CallConv::CCallConv,
             llvm::UnnamedAddr::Global,
             fn_type,
         );
@@ -124,6 +138,42 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
             res
         }
+    }
+
+    pub fn global_const(&self, ty: &'ll Type, val: &'ll Value) -> &'ll Value {
+        unsafe {
+            let res = self.define_private_global(ty);
+            llvm::LLVMSetInitializer(res, val);
+            llvm::LLVMSetUnnamedAddress(res, llvm::UnnamedAddr::No);
+            llvm::LLVMSetGlobalConstant(res, llvm::True);
+            res
+        }
+    }
+
+    pub fn const_arr_ptr(&mut self, elem_ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
+        for (i, val) in vals.iter().enumerate() {
+            assert_eq!(
+                unsafe { LLVMTypeOf(val) } as *const Type,
+                elem_ty as *const Type,
+                "val {i} not eq"
+            )
+        }
+
+        let val = self.const_arr(elem_ty, vals);
+        let ty = self.ty_array(elem_ty, vals.len() as u32);
+
+        let sym = Self::generate_local_symbol_name(&mut self.local_gen_sym_counter, "arr");
+        let global = self
+            .define_global(&sym, ty)
+            .unwrap_or_else(|| unreachable!("symbol {} already defined", sym));
+
+        unsafe {
+            llvm::LLVMSetInitializer(global, val);
+            llvm::LLVMSetGlobalConstant(global, llvm::True);
+            llvm::LLVMSetLinkage(global, llvm::Linkage::InternalLinkage);
+        }
+
+        self.ptrcast(global, self.ptr_ty(elem_ty))
     }
 
     pub fn export_array(

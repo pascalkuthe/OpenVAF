@@ -8,19 +8,19 @@ xflags::xflags! {
             optional -h, --help
         }
 
-        cmd vendor{
-            optional --force
-            optional --no_upload
-            optional --check
-        }
+        // cmd vendor{
+        //     optional --force
+        //     optional --no_upload
+        //     optional --check
+        // }
 
-        cmd cache {
-            cmd prepare{}
-            cmd create{}
-            cmd upload{}
-            cmd fetch{}
-            cmd update{}
-        }
+        // cmd cache {
+        //     cmd prepare{}
+        //     cmd create{}
+        //     cmd upload{}
+        //     cmd fetch{}
+        //     cmd update{}
+        // }
 
         cmd verilogae{
             cmd build{
@@ -50,8 +50,6 @@ pub struct Xtask {
 #[derive(Debug)]
 pub enum XtaskCmd {
     Help(Help),
-    Vendor(Vendor),
-    Cache(Cache),
     Verilogae(Verilogae),
 }
 
@@ -59,42 +57,6 @@ pub enum XtaskCmd {
 pub struct Help {
     pub help: bool,
 }
-
-#[derive(Debug)]
-pub struct Vendor {
-    pub force: bool,
-    pub no_upload: bool,
-    pub check: bool,
-}
-
-#[derive(Debug)]
-pub struct Cache {
-    pub subcommand: CacheCmd,
-}
-
-#[derive(Debug)]
-pub enum CacheCmd {
-    Prepare(Prepare),
-    Create(Create),
-    Upload(Upload),
-    Fetch(Fetch),
-    Update(Update),
-}
-
-#[derive(Debug)]
-pub struct Prepare;
-
-#[derive(Debug)]
-pub struct Create;
-
-#[derive(Debug)]
-pub struct Upload;
-
-#[derive(Debug)]
-pub struct Fetch;
-
-#[derive(Debug)]
-pub struct Update;
 
 #[derive(Debug)]
 pub struct Verilogae {

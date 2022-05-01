@@ -253,6 +253,8 @@ fn diode() {
     let mut vfs = db.vfs().write();
     let path = project_root().join("integration_tests").join("DIODE").join("diode.va");
     vfs.add_virt_file("/diode.va", read(path).into());
+    let path = project_root().join("integration_tests").join("DIODE").join("diode2.va");
+    vfs.add_virt_file("/diode2.va", read(path).into());
     drop(vfs);
     let actual = db.lower_and_check();
     expect_file![project_root()
@@ -322,6 +324,24 @@ fn ekv() {
     expect_file![project_root()
         .join("integration_tests")
         .join("EKV")
+        .join("inference_diagnostics.log")]
+    .assert_eq(&actual);
+}
+#[test]
+fn ekv_longchannel() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/ekv_longchannel.va", "");
+    let mut vfs = db.vfs().write();
+    let path =
+        project_root().join("integration_tests").join("EKV_LONGCHANNEL").join("ekv_longchannel.va");
+    vfs.add_virt_file("/ekv_longchannel.va", read(path).into());
+    drop(vfs);
+    let actual = db.lower_and_check();
+    expect_file![project_root()
+        .join("integration_tests")
+        .join("EKV_LONGCHANNEL")
         .join("inference_diagnostics.log")]
     .assert_eq(&actual);
 }

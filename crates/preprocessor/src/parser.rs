@@ -171,9 +171,10 @@ impl<'a, 'd> Parser<'a, 'd> {
         let range = start..self.full_token_pos;
         if save {
             self.dst.extend(self.full_tokens[range].iter().filter_map(|token| {
-                let (kind, range) =
-                    Self::convert_lexer_token(*token, self.offset, self.src, err, self.ctx)?;
+                let res =
+                    Self::convert_lexer_token(*token, self.offset, self.src, err, self.ctx);
                 self.offset += token.len;
+                let (kind, range) = res?;
                 Some(crate::Token { span: CtxSpan { range, ctx: self.ctx }, kind })
             }))
         } else {
@@ -205,6 +206,7 @@ impl<'a, 'd> Parser<'a, 'd> {
                 }
             }
         }
+
         syntax.map(|kind| (kind, range))
     }
     fn save_tokens_to_macro(
@@ -214,9 +216,10 @@ impl<'a, 'd> Parser<'a, 'd> {
         err: &mut Vec<PreprocessorDiagnostic>,
     ) {
         dst.extend(self.full_tokens[range].iter().filter_map(|token| {
-            let (kind, range) =
-                Self::convert_lexer_token(*token, self.offset, self.src, err, self.ctx)?;
+            let res =
+                Self::convert_lexer_token(*token, self.offset, self.src, err, self.ctx);
             self.offset += token.len;
+            let (kind, range) = res?;
             Some(ParsedToken { kind: kind.into(), range })
         }))
     }

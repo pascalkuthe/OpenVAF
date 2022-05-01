@@ -37,7 +37,7 @@ COPY --from=llvm-builder /llvm /llvm
 # Use an explicit version to actually install the version we require instead of using the cache
 # It would be even cooler to invalidate the cache depending on when the official rust image changes,
 # but I don't know how to do that
-RUN curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain 1.58.0 -y
+RUN curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain 1.60.0 -y
 
 RUN python3.7 -m pip install --no-cache-dir setuptools-rust numpy\
     && python3.8 -m pip install --no-cache-dir setuptools-rust numpy \

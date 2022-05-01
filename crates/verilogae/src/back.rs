@@ -35,7 +35,7 @@ pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
         Type::Integer => cx.ty_int(),
         Type::String => cx.ty_str(),
         Type::Array { ty, len } => cx.ty_array(lltype(&*ty, cx), *len),
-        Type::EmptyArray => cx.zst(),
+        Type::EmptyArray => cx.ty_array(cx.ty_int(), 0),
         Type::Bool => cx.ty_bool(),
         Type::Void => cx.ty_void(),
         Type::Err => unreachable!(),

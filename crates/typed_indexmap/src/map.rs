@@ -91,10 +91,15 @@ impl<I, K, V> TiMap<I, K, V> {
 impl<I, K, V> TiMap<I, K, V>
 where
     K: Eq + Hash,
-    V: Eq,
+    I: From<usize>,
 {
     pub fn insert(&mut self, key: K, val: V) -> Option<V> {
         self.raw.insert(key, val)
+    }
+
+    pub fn insert_full(&mut self, key: K, val: V) -> (I, Option<V>) {
+        let (pos, old) = self.raw.insert_full(key, val);
+        (pos.into(), old)
     }
 }
 
@@ -108,7 +113,6 @@ impl<I, K, V> TiMap<I, K, V>
 where
     I: From<usize> + Into<usize>,
     K: Eq + Hash,
-    V: Eq,
 {
     pub fn index(&self, key: &K) -> Option<I> {
         self.raw.get_index_of(key).map(I::from)

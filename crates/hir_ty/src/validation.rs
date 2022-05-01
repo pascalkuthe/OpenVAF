@@ -2,7 +2,9 @@ mod body;
 mod types;
 
 use basedb::diagnostics::{Diagnostic, Label, LabelStyle, Report};
-use basedb::AstIdMap;
+use basedb::lints::builtin::{const_simparam, variant_const_simparam};
+use basedb::lints::{Lint, LintSrc};
+use basedb::{AstIdMap, BaseDB, FileId};
 pub use body::BodyValidationDiagnostic;
 use hir_def::body::BodySourceMap;
 use hir_def::{
@@ -42,6 +44,30 @@ impl BodyValidationDiagnosticWrapped<'_> {
 }
 
 impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
+    fn lint(&self, root_file: FileId, db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
+        match *self.diag {
+            BodyValidationDiagnostic::ConstSimparam { known: false, stmt, .. } => {
+                let src1 = self.body_sm.lint_src(stmt, const_simparam);
+                let (lvl1, _) = src1.lvl(const_simparam, root_file, db);
+                let src2 = self.body_sm.lint_src(stmt, variant_const_simparam);
+                let (lvl2, _) = src2.lvl(variant_const_simparam, root_file, db);
+
+                let res = if lvl2 > lvl1 {
+                    (variant_const_simparam, src2)
+                } else {
+                    (const_simparam, src1)
+                };
+                Some(res)
+            }
+
+            BodyValidationDiagnostic::ConstSimparam { known: true, stmt, .. } => {
+                let src = self.body_sm.lint_src(stmt, const_simparam);
+                Some((const_simparam, src))
+            }
+            _ => None,
+        }
+    }
+
     fn build_report(&self, root_file: basedb::FileId, db: &dyn basedb::BaseDB) -> Report {
         match self.diag {
             BodyValidationDiagnostic::ExpectedPort { expr, node } => {
@@ -270,7 +296,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                 let FileSpan { range, file } = self.expr_src(*expr);
 
                 let mut res = Report::error().with_labels(vec![Label {
-                    style: LabelStyle::Secondary,
+                    style: LabelStyle::Primary,
                     file_id: file,
                     range: range.into(),
                     message: "not allowed here".to_owned(),
@@ -334,6 +360,58 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     }
                 }
             }
+            BodyValidationDiagnostic::ConstSimparam { known, expr, .. } => {
+                let FileSpan { range, file } = self.expr_src(*expr);
+
+                let mut res = Report::warning()
+                    .with_message(
+                        "call to $simparam in a constant is evaluted before the simulation"
+                            .to_owned(),
+                    )
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: file,
+                        range: range.into(),
+                        message: "call to $simparam in a constant".to_owned(),
+                    }]);
+
+                if !known {
+                    res = res.with_notes(vec![
+                        "help: the value of paramaeters like \"gmin\' or \"sourceScaleFactor\" may vary between iterations"
+                            .to_owned(),
+                    ])
+                }
+
+                res
+            }
+        }
+    }
+
+    fn to_report(&self, root_file: FileId, db: &dyn BaseDB) -> Option<Report> {
+        if let Some((lint, lint_src)) = self.lint(root_file, db) {
+            let (lvl, is_default) = match lint_src.overwrite {
+                Some(lvl) => (lvl, false),
+                None => db.lint_lvl(lint, root_file, lint_src.ast),
+            };
+            let basedb::lints::LintData { name, documentation_id, .. } = db.lint_data(lint);
+
+            let seververity = match lvl {
+                basedb::lints::LintLevel::Deny => basedb::diagnostics::Severity::Error,
+                basedb::lints::LintLevel::Warn => basedb::diagnostics::Severity::Warning,
+                basedb::lints::LintLevel::Allow => return None,
+            };
+
+            let mut report = self.build_report(root_file, db);
+
+            if is_default {
+                let hint = format!("{} is set to {} by default", name, lvl);
+                report.notes.push(hint)
+            }
+
+            report.severity = seververity;
+            Some(report.with_code(format!("L{:03}", documentation_id)))
+        } else {
+            Some(self.build_report(root_file, db))
         }
     }
 }
@@ -380,7 +458,7 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
     fn build_report(&self, _root_file: basedb::FileId, _db: &dyn basedb::BaseDB) -> Report {
         match *self.diag {
             TypeValidationDiagnostic::PathError { ref err, src } => {
-                let src = self.parse.to_file_span(self.map.get_syntax(src).range(), self.sm);
+                let src = self.parse.to_file_span(src.range(), self.sm);
 
                 Report::error()
                     .with_labels(vec![Label {
@@ -452,9 +530,56 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
                         style: LabelStyle::Primary,
                         file_id: src.file,
                         range: src.range.into(),
-                        message: format!("'{}' is first declared here", name),
+                        message: format!("'{}' is declared here without direction", name),
                     }])
                     .with_message(format!("no direction declared for port '{}'", name))
+            }
+            TypeValidationDiagnostic::ExpectedPort { node, src } => {
+                let src = self.parse.to_file_span(self.map.get_syntax(src).range(), self.sm);
+                let decl = node.lookup(self.db.upcast()).ast_ptr(self.db.upcast());
+                let decl = self.parse.to_file_span(self.map.get_syntax(decl).range(), self.sm);
+                let node = self.db.node_data(node);
+                let name = &node.name;
+
+                Report::error()
+                    .with_labels(vec![
+                        Label {
+                            style: LabelStyle::Primary,
+                            file_id: src.file,
+                            range: src.range.into(),
+                            message: format!("'{}' is not a port", name),
+                        },
+                        Label {
+                            style: LabelStyle::Secondary,
+                            file_id: decl.file,
+                            range: decl.range.into(),
+                            message: format!("info: '{}' was declared here", name),
+                        },
+                    ])
+                    .with_notes(vec![
+                        "help: prefix one of the declarations with inout, input or output"
+                            .to_owned(),
+                    ])
+                    .with_message(format!(
+                        "expected a port reference but no direction was declared for net '{}",
+                        name
+                    ))
+            }
+            TypeValidationDiagnostic::NodeWithoutDiscipline { decl, ref name } => {
+                let src = self.parse.to_file_span(self.map.get_syntax(decl).range(), self.sm);
+
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: src.file,
+                        range: src.range.into(),
+                        message: format!("'{name}' is missing a discipline"),
+                    }])
+                    .with_message(format!("no discipline for net '{name}'"))
+                    .with_notes(vec![
+                        format!("info: disciplineless nets are digital and therefore not supprted in Verilog-A"),
+                        format!("help: add a discipline with 'electrical {name}'"),
+                    ])
             }
         }
     }

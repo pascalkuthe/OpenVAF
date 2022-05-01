@@ -7,21 +7,21 @@ use hir_ty::lower::BranchKind;
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::FuncCursor;
-use mir::{Function, Value};
+use mir::{Function, InstructionData, Opcode, Value, F_ZERO};
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
 use crate::compilation_db::CompilationDB;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub struct LocalNodeId(u32);
-impl_idx_from!(LocalNodeId(u32));
-impl_debug_display! {match LocalNodeId{LocalNodeId(id) => "j{id}";}}
+pub struct ResidualId(u32);
+impl_idx_from!(ResidualId(u32));
+impl_debug_display! {match ResidualId{ResidualId(id) => "res{id}";}}
 
 #[derive(Default, Debug)]
 pub struct Residual {
-    pub resistive: TiMap<LocalNodeId, NodeId, Value>,
-    pub reactive: TiMap<LocalNodeId, NodeId, Value>,
+    pub resistive: TiMap<ResidualId, NodeId, Value>,
+    pub reactive: TiMap<ResidualId, NodeId, Value>,
 }
 
 impl Residual {
@@ -47,7 +47,16 @@ impl Residual {
                 _ => continue,
             };
 
-            let val = val.unwrap();
+            let mut val = val.unwrap();
+            while let Some(inst) = func.func.dfg.value_def(val).inst() {
+                if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } =
+                    func.func.dfg.insts[inst]
+                {
+                    val = arg;
+                } else {
+                    break;
+                }
+            }
 
             let hi_gnd = db.node_data(hi).is_gnd;
             let lo_gnd = lo.map_or(true, |lo| db.node_data(lo).is_gnd);
@@ -74,7 +83,7 @@ impl Residual {
         output_values: &mut BitSet<Value>,
     ) {
         fn insert_opt_barries(
-            entries: &mut TiMap<LocalNodeId, NodeId, Value>,
+            entries: &mut TiMap<ResidualId, NodeId, Value>,
             func: &mut FuncCursor,
             output_values: &mut BitSet<Value>,
         ) {
@@ -99,7 +108,7 @@ impl Residual {
         output_values: &mut BitSet<Value>,
     ) {
         fn strip_opt_barries(
-            entries: &mut TiMap<LocalNodeId, NodeId, Value>,
+            entries: &mut TiMap<ResidualId, NodeId, Value>,
             func: &mut Function,
             output_values: &mut BitSet<Value>,
         ) {
@@ -140,7 +149,9 @@ impl Residual {
             }
         }
     }
-    // pub(crate) fn sparsify(&mut self) {
-    //     self.elements.raw.retain(|_, val| *val != F_ZERO);
-    // }
+
+    pub(crate) fn sparsify(&mut self) {
+        self.resistive.raw.retain(|_, val| *val != F_ZERO);
+        self.reactive.raw.retain(|_, val| *val != F_ZERO);
+    }
 }

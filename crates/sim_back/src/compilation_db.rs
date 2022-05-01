@@ -14,7 +14,7 @@ use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsPath, VfsStorage, STA
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::ScopeDefItem;
 use hir_def::{Lookup, ModuleId, ParamId, Type, VarId};
-use hir_ty::db::HirTyDatabase;
+use hir_ty::db::{HirTyDB, HirTyDatabase};
 use hir_ty::{collect_diagnostics, collect_path, visit_relative_defs};
 use indexmap::IndexMap;
 use parking_lot::RwLock;
@@ -193,22 +193,23 @@ impl Diagnostic for IllegalExpr {
     }
 }
 
-struct IllegalType {
+struct UnkownType<'a> {
     range: TextRange,
     allowed: &'static str,
+    found: &'a str,
 }
 
-impl Diagnostic for IllegalType {
+impl Diagnostic for UnkownType<'_> {
     fn build_report(&self, root_file: FileId, db: &dyn BaseDB) -> Report {
         let FileSpan { range, file } =
             db.parse(root_file).to_file_span(self.range, &db.sourcemap(root_file));
-        Report::error()
-            .with_message(format!("VerilogAE only supports {}", self.allowed))
+        Report::warning()
+            .with_message(format!("unkown type \"{}\" {}", self.found, self.allowed))
             .with_labels(vec![Label {
                 style: LabelStyle::Primary,
                 file_id: file,
                 range: range.into(),
-                message: "unsupported type".to_owned(),
+                message: "unkown type".to_owned(),
             }])
     }
 }
@@ -216,10 +217,12 @@ impl Diagnostic for IllegalType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamInfo {
     pub name: SmolStr,
+    pub alias: Vec<SmolStr>,
     pub unit: String,
     pub description: String,
     pub group: String,
     pub ty: Type,
+    pub is_instance: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -240,7 +243,7 @@ impl ModuleInfo {
     fn collect(db: &CompilationDB, module: ModuleId, sink: &mut ConsoleSink) -> ModuleInfo {
         let root_file = db.root_file;
 
-        let mut params = IndexMap::default();
+        let mut params: IndexMap<ParamId, ParamInfo, ahash::RandomState> = IndexMap::default();
         let mut op_vars = IndexMap::default();
 
         let parse = db.parse(root_file);
@@ -334,12 +337,28 @@ impl ModuleInfo {
 
                 let resolve_param_info = || {
                     let ty = db.param_data(param).ty.clone();
+                    let type_ = resolve_str_attr(sink, &ast, "type");
+                    let is_instance = match type_.as_deref() {
+                        Some("instance") => true,
+                        Some("model") | None => false,
+                        Some(found) => {
+                            let diag = UnkownType {
+                                range,
+                                allowed: "expected \"model\" or \"instance\"",
+                                found,
+                            };
+                            sink.add_diagnostic(&diag, root_file, db);
+                            false
+                        }
+                    };
                     ParamInfo {
                         name: SmolStr::new_inline(""),
+                        alias: Vec::new(),
                         unit: resolve_str_attr(sink, &ast, "units").unwrap_or_default(),
                         description: resolve_str_attr(sink, &ast, "desc").unwrap_or_default(),
                         group: resolve_str_attr(sink, &ast, "group").unwrap_or_default(),
                         ty,
+                        is_instance,
                     }
                 };
 
@@ -347,7 +366,26 @@ impl ModuleInfo {
                     resolved_param_attrs.entry(range).or_insert_with(resolve_param_info).clone();
 
                 info.name = collect_path(path, name);
+                if let Some(old) = params.remove(&param) {
+                    info.alias = old.alias;
+                }
                 params.insert(param, info);
+            }
+
+            ScopeDefItem::AliasParamId(alias) => {
+                let param = db.resolve_alias(alias).unwrap();
+                let dst = params.entry(param).or_insert_with(|| ParamInfo {
+                    name: SmolStr::new_inline(""),
+                    alias: Vec::new(),
+                    unit: String::new(),
+                    description: String::new(),
+                    group: String::new(),
+                    ty: Type::Err,
+                    is_instance: false,
+                });
+
+                let name = collect_path(path, &db.alias_data(alias).name);
+                dst.alias.push(name)
             }
 
             // ScopeDefItem::NodeId(node) => {

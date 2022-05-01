@@ -1,44 +1,45 @@
 use std::process::Command;
 
 use anyhow::{bail, Result};
-use xshell::{cmd, cwd, pushd, read_dir, rm_rf};
+use xshell::{cmd, Shell};
 
 use crate::flags::Verilogae;
 
 impl Verilogae {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, sh: &mut Shell) -> Result<()> {
         match self.subcommand {
-            crate::flags::VerilogaeCmd::Build(cmd) => cmd.run(),
-            crate::flags::VerilogaeCmd::Test(cmd) => cmd.run(),
-            crate::flags::VerilogaeCmd::Publish(cmd) => cmd.run(),
+            crate::flags::VerilogaeCmd::Build(cmd) => cmd.run(sh),
+            crate::flags::VerilogaeCmd::Test(cmd) => cmd.run(sh),
+            crate::flags::VerilogaeCmd::Publish(cmd) => cmd.run(sh),
         }
     }
 }
 
 impl crate::flags::Build {
-    fn run(self) -> Result<()> {
-        cmd!("cargo build --release -p verilogae").env("RUSTFLAGS", "-C strip=symbols").run()?;
+    fn run(self, sh: &mut Shell) -> Result<()> {
+        let _env = sh.push_env("RUSTFLAGS", "-C strip=symbols");
+        cmd!(sh, "cargo build --release -p verilogae").run()?;
         if self.force {
-            rm_rf("wheels")?;
-        } else if read_dir("wheels").map_or(false, |dir| !dir.is_empty()) {
+            sh.remove_path("wheels")?;
+        } else if sh.read_dir("wheels").map_or(false, |dir| !dir.is_empty()) {
             bail!("wheels folder must be empty")
         }
 
         let pythons = find_py();
         let ld_lib_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-        let ld_lib_path = format!("{}:{}/target/release", ld_lib_path, cwd()?.to_str().unwrap());
+        let ld_lib_path =
+            format!("{}:{}/target/release", ld_lib_path, sh.current_dir().to_str().unwrap());
         for (py, _tag) in &pythons {
-            cmd!("{py} -m pip wheel . -w ./wheels --no-deps")
+            cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
                 .env("PYO3_PYTHON", &py)
-                .env("RUSTFLAGS", "-C strip=symbols")
                 .env("LD_LIBRARY_PATH", &ld_lib_path)
                 .run()?;
             // cmd!("auditwheel repair "$whl" -w /io/dist/")
         }
 
         if self.manylinux {
-            for file in read_dir("wheels")? {
-                cmd!("auditwheel repair {file} -w wheels")
+            for file in sh.read_dir("wheels")? {
+                cmd!(sh, "auditwheel repair {file} -w wheels")
                     .env("LD_LIBRARY_PATH", &ld_lib_path)
                     .run()?;
                 std::fs::remove_file(file)?;
@@ -46,10 +47,10 @@ impl crate::flags::Build {
         }
 
         if self.install {
-            for file in read_dir("wheels")? {
+            for file in sh.read_dir("wheels")? {
                 for (py, tag) in &pythons {
                     if file.to_str().unwrap().contains(&*tag) {
-                        cmd!("{py} -m pip install --force-reinstall {file}").run()?;
+                        cmd!(sh, "{py} -m pip install --force-reinstall {file}").run()?;
                         break;
                     }
                 }
@@ -61,11 +62,11 @@ impl crate::flags::Build {
 }
 
 impl crate::flags::Test {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, sh: &mut Shell) -> Result<()> {
         for (py, _tag) in find_py() {
-            let _dir1 = pushd("verilogae")?;
-            let _dir2 = pushd("tests")?;
-            cmd!("{py} test_hicum.py").run()?;
+            let _dir1 = sh.push_dir("verilogae");
+            let _dir2 = sh.push_dir("tests");
+            cmd!(sh, "{py} test_hicum.py").run()?;
         }
 
         Ok(())
@@ -73,10 +74,10 @@ impl crate::flags::Test {
 }
 
 impl crate::flags::Publish {
-    pub fn run(self) -> Result<()> {
-        crate::flags::Build { force: true, manylinux: true, install: true }.run()?;
-        let files = read_dir("wheels")?;
-        cmd!("twine upload {files...}").run()?;
+    pub fn run(self, sh: &mut Shell) -> Result<()> {
+        crate::flags::Build { force: true, manylinux: true, install: true }.run(sh)?;
+        let files = sh.read_dir("wheels")?;
+        cmd!(sh, "twine upload {files...}").run()?;
         Ok(())
     }
 }

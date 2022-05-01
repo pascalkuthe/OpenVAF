@@ -67,25 +67,48 @@ fn validate_net_type_token(node: SyntaxNode, errors: &mut Vec<SyntaxError>) {
 
 fn validate_module(module: ast::ModuleDecl, errors: &mut Vec<SyntaxError>) {
     let ports = if let Some(ports) = module.module_ports() { ports } else { return };
-    let has_decl = validate_module_ports(&ports, errors);
-    if !has_decl {
-        return;
-    }
-    let body_ports: Vec<_> = module.body_ports().map(|port| port.syntax().text_range()).collect();
-    if !body_ports.is_empty() {
-        errors.push(SyntaxError::IllegalBodyPorts { head: ports.syntax().text_range(), body_ports })
+    match validate_module_ports(&ports, errors) {
+        Some((true, _)) => {
+            let body_ports: Vec<_> =
+                module.body_ports().map(|port| port.syntax().text_range()).collect();
+            if !body_ports.is_empty() {
+                errors.push(SyntaxError::IllegalBodyPorts {
+                    head: ports.syntax().text_range(),
+                    body_ports,
+                })
+            }
+        }
+        Some((false, names)) => {
+            for port in module.body_ports() {
+                if let Some(decl) = port.port_decl() {
+                    for name in decl.names() {
+                        if names.binary_search_by(|locs| locs[0].text().cmp(&name.text())).is_err()
+                        {
+                            errors.push(SyntaxError::PortNotDeclaredInModule {
+                                head: ports.syntax().text_range(),
+                                pos: name.syntax().text_range(),
+                                name: name.text().to_owned(),
+                            })
+                        }
+                    }
+                }
+            }
+        }
+        None => (),
     }
 }
 
-fn validate_module_ports(ports: &ModulePorts, errors: &mut Vec<SyntaxError>) -> bool {
+fn validate_module_ports(
+    ports: &ModulePorts,
+    errors: &mut Vec<SyntaxError>,
+) -> Option<(bool, Vec<Vec<ast::Name>>)> {
     let mut names: Vec<Vec<ast::Name>> = Vec::new();
     let mut has_decl = false;
     for port in ports.ports() {
         if let ModulePortKind::Name(name) = port.kind() {
-            if let Some(dst) = names.iter_mut().find(|locs| locs[0].text() == name.text()) {
-                dst.push(name.clone())
-            } else {
-                names.push(vec![name.clone()])
+            match names.binary_search_by(|locs| locs[0].text().cmp(&name.text())) {
+                Ok(pos) => names[pos].push(name.clone()),
+                Err(pos) => names.insert(pos, vec![name.clone()]),
             }
         } else {
             has_decl = true
@@ -95,21 +118,21 @@ fn validate_module_ports(ports: &ModulePorts, errors: &mut Vec<SyntaxError>) -> 
     if !names.is_empty() && has_decl {
         errors.push(SyntaxError::MixedModuleHead { module_ports: AstPtr::new(ports) });
         // Don't lint body ports when the head is ambigous
-        return false;
+        return None;
     }
 
-    for locs in names {
+    for locs in &names {
         if locs.len() == 1 {
             continue;
         }
         let name = locs[0].text().to_owned();
         errors.push(SyntaxError::DuplicatePort {
-            pos: locs.into_iter().map(|it| it.syntax().text_range()).collect(),
+            pos: locs.iter().map(|it| it.syntax().text_range()).collect(),
             name,
         })
     }
 
-    has_decl
+    Some((has_decl, names))
 }
 
 fn is_valid_inf_position(s: SyntaxNode) -> bool {

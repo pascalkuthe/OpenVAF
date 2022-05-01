@@ -1,7 +1,7 @@
 mod ssa;
 
 use lasso::Rodeo;
-use mir::builder::{InstBuilder, InstBuilderBase};
+use mir::builder::{InsertBuilder, InstBuilder, InstInserterBase};
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{
     Block, DataFlowGraph, FuncRef, Function, FunctionSignature, Inst, InstructionData, Param, Value,
@@ -94,14 +94,20 @@ impl<'short, 'long> FuncInstBuilder<'short, 'long> {
     fn new(builder: &'short mut FunctionBuilder<'long>, block: Block) -> Self {
         Self { builder, block }
     }
+}
 
-    pub fn ret(self) -> Inst {
-        let exit = self.builder.func.layout.last_block().unwrap();
+pub trait RetBuilder {
+    fn ret(self) -> Inst;
+}
+
+impl<'short, 'long> RetBuilder for InsertBuilder<'short, FuncInstBuilder<'short, 'long>> {
+    fn ret(self) -> Inst {
+        let exit = self.inserter.builder.func.layout.last_block().unwrap();
         self.jump(exit)
     }
 }
 
-impl<'short, 'long> InstBuilderBase<'short> for FuncInstBuilder<'short, 'long> {
+impl<'short, 'long> InstInserterBase<'short> for FuncInstBuilder<'short, 'long> {
     fn data_flow_graph(&self) -> &DataFlowGraph {
         &self.builder.func.dfg
     }
@@ -113,16 +119,14 @@ impl<'short, 'long> InstBuilderBase<'short> for FuncInstBuilder<'short, 'long> {
     // This implementation is richer than `InsertBuilder` because we use the data of the
     // instruction being inserted to add related info to the DFG and the SSA building system,
     // and perform debug sanity checks.
-    fn build(self, data: InstructionData) -> (Inst, &'short mut DataFlowGraph) {
+    fn insert_built_inst(self, inst: Inst) -> &'short mut DataFlowGraph {
         // We only insert the Block in the layout when an instruction is added to it
         self.builder.ensure_inserted_block();
 
-        let inst = self.builder.func.dfg.make_inst(data.clone());
-        self.builder.func.dfg.make_inst_results(inst);
         self.builder.func.layout.append_inst_to_bb(inst, self.block);
         self.builder.func.srclocs.push(self.builder.srcloc);
 
-        match data {
+        match self.builder.func.dfg.insts[inst] {
             InstructionData::Branch { then_dst, else_dst, .. } => {
                 self.builder.declare_successor(then_dst);
                 self.builder.declare_successor(else_dst);
@@ -135,7 +139,7 @@ impl<'short, 'long> InstBuilderBase<'short> for FuncInstBuilder<'short, 'long> {
             _ => (),
         }
 
-        (inst, &mut self.builder.func.dfg)
+        &mut self.builder.func.dfg
     }
 }
 
@@ -182,25 +186,15 @@ impl<'a> FunctionBuilder<'a> {
         tag_writes: bool,
     ) -> Self {
         debug_assert!(func_ctx.is_empty());
-        let (entry, end) = if let Some(entry) = func.layout.entry_block() {
-            // assuming exit is present and seperate from entry
-            for _bb in 0..func.layout.num_blocks() {
-                func_ctx.blocks.push(BlockData { filled: false, pristine: true });
-                func_ctx.ssa.declare_block();
-            }
-            (entry, func.layout.last_block().unwrap())
-        } else {
-            // entry and exit are always empty to allow for easy prepending/appending
-            let entry = func.layout.append_new_block();
-            func_ctx.blocks.push(BlockData { filled: false, pristine: true });
-            func_ctx.ssa.declare_block();
 
-            let exit = func.layout.append_new_block();
-            func_ctx.blocks.push(BlockData { filled: false, pristine: true });
-            func_ctx.ssa.declare_block();
+        // entry and exit are always empty to allow for easy prepending/appending
+        let entry = func.layout.append_new_block();
+        func_ctx.blocks.push(BlockData { filled: false, pristine: true });
+        func_ctx.ssa.declare_block();
 
-            (entry, exit)
-        };
+        let exit = func.layout.append_new_block();
+        func_ctx.blocks.push(BlockData { filled: false, pristine: true });
+        func_ctx.ssa.declare_block();
 
         let mut res = Self {
             func,
@@ -208,11 +202,70 @@ impl<'a> FunctionBuilder<'a> {
             interner,
             func_ctx,
             position: entry,
-            end,
+            end: exit,
             tag_writes,
         };
         res.seal_block(entry);
         res
+    }
+
+    /// Creates a new FunctionBuilder structure that will operate on a `Function` using a
+    /// `FunctionBuilderContext`.
+    pub fn edit(
+        func: &'a mut Function,
+        interner: &'a mut Rodeo,
+        func_ctx: &'a mut FunctionBuilderContext,
+        tag_writes: bool,
+    ) -> (Self, Inst) {
+        debug_assert!(func_ctx.is_empty());
+        let mut entry = if let Some(entry) = func.layout.entry_block() {
+            entry
+        } else {
+            // edit() with an empty function is the same as creating a new function
+            let builder = Self::new(func, interner, func_ctx, tag_writes);
+            let term =
+                builder.func.dfg.make_inst(InstructionData::Jump { destination: builder.end });
+            return (builder, term);
+        };
+
+        let mut exit = func.layout.last_block().unwrap();
+
+        if exit == entry {
+            exit = func.layout.append_new_block();
+            FuncCursor::new(func).at_bottom(entry).ins().jump(exit);
+        }
+
+        let term = match func.layout.first_inst(entry) {
+            Some(term) if Some(term) == func.layout.last_inst(entry) => {
+                func.layout.remove_inst(term);
+                term
+            }
+
+            Some(_) => {
+                let old_entry = entry;
+                entry = func.layout.make_block();
+                func.layout.insert_block(entry, old_entry);
+                func.dfg.make_inst(InstructionData::Jump { destination: old_entry })
+            }
+            None => func.dfg.make_inst(InstructionData::Jump { destination: exit }),
+        };
+
+        for _bb in 0..func.layout.num_blocks() {
+            func_ctx.blocks.push(BlockData { filled: false, pristine: true });
+            func_ctx.ssa.declare_block();
+        }
+
+        let mut res = Self {
+            func,
+            srcloc: Default::default(),
+            interner,
+            func_ctx,
+            position: entry,
+            end: exit,
+            tag_writes,
+        };
+        res.seal_block(entry);
+        (res, term)
     }
 
     pub fn set_end(&mut self, end: Block) {
@@ -390,8 +443,8 @@ impl<'a> FunctionBuilder<'a> {
     }
     /// Returns an object with the [`InstBuilder`](cranelift_codegen::ir::InstBuilder)
     /// trait that allows to conveniently append an instruction to the current `Block` being built.
-    pub fn ins<'short>(&'short mut self) -> FuncInstBuilder<'short, 'a> {
-        FuncInstBuilder::new(self, self.position)
+    pub fn ins<'short>(&'short mut self) -> InsertBuilder<'short, FuncInstBuilder<'short, 'a>> {
+        InsertBuilder::new(FuncInstBuilder::new(self, self.position))
     }
 
     /// Make sure that the current block is inserted in the layout.

@@ -323,7 +323,7 @@ impl DFSMapping {
         let inst = match func.dfg.value_def(val) {
             ValueDef::Result(inst, _) => inst,
             ValueDef::Param(param) => return 1 + u32::from(param),
-            ValueDef::Const(_) => return 0,
+            ValueDef::Const(_) | ValueDef::Invalid => return 0,
         };
 
         match self.inst_to_dfs[inst].expand() {
@@ -476,6 +476,8 @@ impl GVN {
             ValueDef::Param(_) | ValueDef::Const(_) => {
                 return Some(ExprResult::Expr(GVNExpression::new_const(val)))
             }
+
+            ValueDef::Invalid => unreachable!(),
         };
 
         self.class_map.inst_class[inst].expand().map(ExprResult::Simplified)

@@ -15,4 +15,4 @@ doctest = false
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-xshell = "0.1"
+xshell = "0.2.1"

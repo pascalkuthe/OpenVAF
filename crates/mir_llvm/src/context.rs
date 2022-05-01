@@ -1,14 +1,19 @@
+use std::ffi::CString;
+
 use ahash::AHashMap;
 use lasso::{Rodeo, Spur};
 use libc::{c_char, c_uint};
-use llvm::{Type, Value};
+use llvm::support::LLVMString;
+use llvm::{
+    LLVMCreateMemoryBufferWithMemoryRange, LLVMGetNamedFunction, LLVMLinkModules2,
+    LLVMParseBitcodeInContext2, Type, Value,
+};
 use target::spec::Target;
 
 pub struct CodegenCx<'a, 'll> {
     pub llmod: &'ll llvm::Module,
     pub llcx: &'ll llvm::Context,
 
-    // ty_isize: &'ll Type,
     pub target: &'a Target,
     pub literals: &'a Rodeo,
     str_lit_cache: AHashMap<Spur, &'ll Value>,
@@ -34,6 +39,43 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             // ty_isize,
             target,
         }
+    }
+
+    pub fn get_func_by_name(&self, name: &str) -> Option<&'ll llvm::Value> {
+        let name = CString::new(name).unwrap();
+        unsafe { LLVMGetNamedFunction(self.llmod, name.as_ptr()) }
+    }
+
+    pub fn include_bitcode(&mut self, bitcode: &[u8]) {
+        let sym =
+            Self::generate_local_symbol_name(&mut self.local_gen_sym_counter, "bitcode_buffer");
+        let sym = CString::new(sym).unwrap();
+        unsafe {
+            let buff = LLVMCreateMemoryBufferWithMemoryRange(
+                bitcode.as_ptr() as *const c_char,
+                bitcode.len(),
+                sym.as_ptr(),
+                llvm::False,
+            );
+            let mut module = None;
+            assert!(
+                LLVMParseBitcodeInContext2(self.llcx, buff, &mut module) == llvm::False,
+                "failed to parse bitcode"
+            );
+            assert!(
+                LLVMLinkModules2(self.llmod, module.unwrap()) == llvm::False,
+                "failed to link parsed bitcode"
+            );
+        }
+    }
+
+    pub fn to_str(&self) -> LLVMString {
+        unsafe { LLVMString::new(llvm::LLVMPrintModuleToString(self.llmod)) }
+    }
+
+    pub fn const_str_uninterned(&mut self, lit: &str) -> &'ll Value {
+        let lit = self.literals.get(lit).unwrap();
+        self.const_str(lit)
     }
 
     pub fn const_str(&mut self, lit: Spur) -> &'ll Value {

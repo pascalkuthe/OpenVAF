@@ -266,7 +266,7 @@ impl Diagnostic for SyntaxError {
                         style: LabelStyle::Primary,
                         file_id,
                         range: (*range).into(),
-                        message: "only one body per function is ".to_owned(),
+                        message: "only one body per function is allowed".to_owned(),
                     })
                     .collect();
 
@@ -405,24 +405,25 @@ impl Diagnostic for SyntaxError {
                 }
             }
             SyntaxError::DuplicatePort { ref pos, ref name } => {
-                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, pos);
-                let ranges = &ranges[1..];
-                let inital = ranges[0];
+                let spans: Vec<_> =
+                    pos.iter().map(|range| parse.to_file_span(*range, &sm)).collect();
+                let inital = spans[0];
+                let spans = &spans[1..];
 
-                let mut labels: Vec<_> = ranges
+                let mut labels: Vec<_> = spans
                     .iter()
                     .map(|range| Label {
                         style: LabelStyle::Primary,
-                        file_id,
-                        range: (*range).into(),
+                        file_id: range.file,
+                        range: range.range.into(),
                         message: "..redeclared here".to_owned(),
                     })
                     .collect();
 
                 labels.push(Label {
                     style: LabelStyle::Secondary,
-                    file_id,
-                    range: inital.into(),
+                    file_id: inital.file,
+                    range: inital.range.into(),
                     message: format!("{} first declared here", name),
                 });
 
@@ -464,32 +465,29 @@ impl Diagnostic for SyntaxError {
                 ])
             }
             SyntaxError::IllegalBodyPorts { head, ref body_ports } => {
-                let mut ranges = vec![head];
-                ranges.extend(body_ports);
-
-                let (file_id, ranges) = text_range_list_to_unified_spans(&sm, &parse, &ranges);
-                let head = ranges[0];
-                let body_ports = &ranges[1..];
+                let body_ports: Vec<_> =
+                    body_ports.iter().map(|range| parse.to_file_span(*range, &sm)).collect();
+                let head = parse.to_file_span(head, &sm);
 
                 let mut labels: Vec<_> = body_ports
                     .iter()
-                    .map(|range| Label {
+                    .map(|span| Label {
                         style: LabelStyle::Primary,
-                        file_id,
-                        range: (*range).into(),
+                        file_id: span.file,
+                        range: span.range.into(),
                         message: "illegal port declaration".to_owned(),
                     })
                     .collect();
 
                 labels.push(Label {
                     style: LabelStyle::Secondary,
-                    file_id,
-                    range: head.into(),
+                    file_id: head.file,
+                    range: head.range.into(),
                     message: "info: ports already declared in header...".to_owned(),
                 });
 
                 Report::error().with_labels(labels).with_notes(vec![
-                    "either place all port declaration in the header".to_owned(),
+                    "help: either place all port declaration in the header".to_owned(),
                     "or palce all port declarations in the body ".to_owned(),
                 ])
             }
@@ -518,6 +516,27 @@ impl Diagnostic for SyntaxError {
                         message: "help: expected real or integer".to_owned(),
                     },
                 ])
+            }
+            SyntaxError::PortNotDeclaredInModule { head, pos, ref name } => {
+                let pos = parse.to_file_span(pos, &sm);
+                let head = parse.to_file_span(head, &sm);
+
+                let labels: Vec<_> = vec![
+                    Label {
+                        style: LabelStyle::Secondary,
+                        file_id: head.file,
+                        range: head.range.into(),
+                        message: format!("help: add '{name}' here"),
+                    },
+                    Label {
+                        style: LabelStyle::Primary,
+                        file_id: pos.file,
+                        range: pos.range.into(),
+                        message: "port not declared in module head".to_owned(),
+                    },
+                ];
+
+                Report::error().with_labels(labels)
             }
         };
 

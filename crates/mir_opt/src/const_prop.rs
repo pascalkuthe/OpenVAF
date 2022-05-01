@@ -15,7 +15,7 @@ pub fn sparse_conditional_constant_propagation(func: &mut Function, cfg: &Contro
     let vals = (0..func.dfg.num_values())
         .map(|val| match func.dfg.value_def(val.into()) {
             ValueDef::Const(_) => FlatSet::Elem(val.into()),
-            ValueDef::Param(_) => FlatSet::Top,
+            ValueDef::Param(_) | ValueDef::Invalid => FlatSet::Top,
             ValueDef::Result(_, _) => FlatSet::Bottom,
         })
         .collect();

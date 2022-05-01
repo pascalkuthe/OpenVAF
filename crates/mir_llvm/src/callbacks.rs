@@ -2,6 +2,7 @@ use llvm::UNNAMED;
 
 use crate::CodegenCx;
 
+#[derive(Clone)]
 pub struct CallbackFun<'ll> {
     pub fun_ty: &'ll llvm::Type,
     pub fun: &'ll llvm::Value,
@@ -25,6 +26,21 @@ impl<'ll> CodegenCx<'_, 'll> {
             let builder = llvm::LLVMCreateBuilderInContext(self.llcx);
             llvm::LLVMPositionBuilderAtEnd(builder, bb);
             llvm::LLVMBuildRet(builder, val);
+            llvm::LLVMDisposeBuilder(builder);
+        }
+
+        CallbackFun { fun_ty, fun, state: Box::new([]) }
+    }
+
+    pub fn trivial_callbacks(&mut self, args: &[&'ll llvm::Type]) -> CallbackFun<'ll> {
+        let name = self.local_callback_name();
+        let fun_ty = self.ty_func(args, self.ty_void());
+        let fun = self.declare_int_fn(&name, fun_ty);
+        unsafe {
+            let bb = llvm::LLVMAppendBasicBlockInContext(self.llcx, fun, UNNAMED);
+            let builder = llvm::LLVMCreateBuilderInContext(self.llcx);
+            llvm::LLVMPositionBuilderAtEnd(builder, bb);
+            llvm::LLVMBuildRetVoid(builder);
             llvm::LLVMDisposeBuilder(builder);
         }
 

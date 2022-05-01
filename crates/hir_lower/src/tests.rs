@@ -2,6 +2,7 @@ use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsStorage};
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::ScopeDefItem;
 use hir_ty::db::HirTyDatabase;
+use lasso::Rodeo;
 use mir_build::FunctionBuilderContext;
 use parking_lot::RwLock;
 use quote::{format_ident, quote};
@@ -54,19 +55,25 @@ impl TestDataBase {
         let mut ctx = FunctionBuilderContext::default();
         for (_, declaration) in &def_map[root_scope].declarations {
             if let ScopeDefItem::ModuleId(id) = *declaration {
-                let builder = MirBuilder::new(self, id.into(), &|kind| {
-                    matches!(
-                        kind,
-                        PlaceKind::Var(_)
-                            | PlaceKind::BranchVoltage { .. }
-                            | PlaceKind::ImplicitBranchVoltage { .. }
-                            | PlaceKind::BranchCurrent { .. }
-                            | PlaceKind::ImplicitBranchCurrent { .. }
-                    )
-                })
+                let mut required_vars = [].into_iter();
+                let builder = MirBuilder::new(
+                    self,
+                    id.into(),
+                    &|kind| {
+                        matches!(
+                            kind,
+                            PlaceKind::Var(_)
+                                | PlaceKind::BranchVoltage { .. }
+                                | PlaceKind::ImplicitBranchVoltage { .. }
+                                | PlaceKind::BranchCurrent { .. }
+                                | PlaceKind::ImplicitBranchCurrent { .. }
+                        )
+                    },
+                    &mut required_vars,
+                )
                 .with_ctx(&mut ctx);
 
-                builder.build();
+                builder.build(&mut Rodeo::new());
             }
         }
     }

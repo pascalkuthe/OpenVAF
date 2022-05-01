@@ -87,6 +87,7 @@ pub(crate) fn has_id_map_entry(kind: SyntaxKind) -> bool {
             || ast::DisciplineAttr::can_cast(kind)
             || ast::PortDecl::can_cast(kind)
             || ast::ModuleItem::can_cast(kind)
+            || ast::ModulePort::can_cast(kind)
             || ast::AnalogBehaviour::can_cast(kind)
     }
 }

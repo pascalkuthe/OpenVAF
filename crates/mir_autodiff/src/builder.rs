@@ -501,10 +501,12 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
             //     lhs_cache
             // }
 
-            // pow(x,y) -> (y/x * x' + ln(x) * y') * pow(x,y)
+            // pow(x,y) -> pow(x,y-1)*x'*y + ln(x) * y' * pow(x,y)
             Opcode::Pow => {
-                let y_x = self.ins().fdiv(arg1, arg0);
-                let lhs_cache = self.ins().fmul(y_x, res);
+                // this formulation is important for numeric stability in case x=0 numeric stability :/
+                let y_m1 = self.ins().fsub(arg1, F_ONE);
+                let y_pow_m1 = self.ins().pow(arg0, y_m1);
+                let lhs_cache = self.ins().fmul(y_pow_m1, arg1);
 
                 let ln_x = self.ins().ln(arg0);
                 let rhs_cache = self.ins().fmul(ln_x, res);

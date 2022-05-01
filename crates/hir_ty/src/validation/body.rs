@@ -3,8 +3,8 @@ use std::mem::replace;
 use arrayvec::ArrayVec;
 use hir_def::body::Body;
 use hir_def::{
-    BranchId, BuiltIn, DefWithBodyId, Expr, ExprId, FunctionArgLoc, Lookup, NodeId, ParamId, Path,
-    Stmt, StmtId, VarId,
+    BranchId, BuiltIn, DefWithBodyId, Expr, ExprId, FunctionArgLoc, Literal, Lookup, NodeId,
+    ParamId, Path, Stmt, StmtId, VarId,
 };
 use stdx::impl_display;
 use syntax::ast::AssignOp;
@@ -67,6 +67,12 @@ pub enum BodyValidationDiagnostic {
     },
 
     IllegalCtxAccess(IllegalCtxAccess),
+
+    ConstSimparam {
+        known: bool,
+        expr: ExprId,
+        stmt: StmtId,
+    },
 }
 
 impl BodyValidationDiagnostic {
@@ -155,7 +161,7 @@ impl BodyValidator<'_> {
     fn validate_stmt(&mut self, stmt: StmtId) {
         let cond = match self.body.stmts[stmt] {
             Stmt::Assigment { dst, val, assignment_kind } => {
-                self.validate_expr(val);
+                self.validate_expr(val, stmt);
 
                 if assignment_kind == AssignOp::Contribute && !self.ctx.allow_contribute() {
                     self.diagnostics
@@ -163,7 +169,7 @@ impl BodyValidator<'_> {
                 }
                 // avoid duplicate errors
                 else if self.infer.assigment_destination.contains_key(&stmt) {
-                    self.validate_assigment_dst(dst);
+                    self.validate_assigment_dst(dst, stmt);
                 }
 
                 return;
@@ -182,7 +188,7 @@ impl BodyValidator<'_> {
             Stmt::Missing | Stmt::Empty => return,
 
             Stmt::Expr(e) => {
-                self.validate_expr(e);
+                self.validate_expr(e, stmt);
                 return;
             }
 
@@ -192,7 +198,7 @@ impl BodyValidator<'_> {
             | Stmt::Case { discr: cond, .. } => cond,
         };
 
-        self.validate_condition(cond, |s| {
+        self.validate_condition(cond, stmt, |s| {
             s.body.stmts[stmt].walk_child_stmts(|stmt| s.validate_stmt(stmt))
         });
     }
@@ -200,6 +206,7 @@ impl BodyValidator<'_> {
     fn validate_condition(
         &mut self,
         cond: ExprId,
+        stmt: StmtId,
         f: impl FnOnce(&mut Self),
     ) -> Option<Box<[ExprId]>> {
         if self.ctx == BodyCtx::AnalogBlock || self.ctx == BodyCtx::Conditional {
@@ -208,6 +215,7 @@ impl BodyValidator<'_> {
                 parent: self,
                 cond_diagnostic_sink: Some(&mut non_const_access),
                 write: false,
+                stmt,
             }
             .validate_expr(cond);
 
@@ -220,19 +228,21 @@ impl BodyValidator<'_> {
                 return Some(replace(&mut self.non_const_dominator, non_const_dominator));
             }
         } else {
-            self.validate_expr(cond);
+            self.validate_expr(cond, stmt);
         }
 
         f(self);
         None
     }
 
-    fn validate_expr(&mut self, expr: ExprId) {
-        ExprValidator { parent: self, cond_diagnostic_sink: None, write: false }.validate_expr(expr)
+    fn validate_expr(&mut self, expr: ExprId, stmt: StmtId) {
+        ExprValidator { parent: self, cond_diagnostic_sink: None, write: false, stmt }
+            .validate_expr(expr)
     }
 
-    fn validate_assigment_dst(&mut self, expr: ExprId) {
-        ExprValidator { parent: self, cond_diagnostic_sink: None, write: true }.validate_expr(expr)
+    fn validate_assigment_dst(&mut self, expr: ExprId, stmt: StmtId) {
+        ExprValidator { parent: self, cond_diagnostic_sink: None, write: true, stmt }
+            .validate_expr(expr)
     }
 }
 
@@ -240,6 +250,7 @@ struct ExprValidator<'a, 'b> {
     parent: &'a mut BodyValidator<'b>,
     cond_diagnostic_sink: Option<&'a mut Vec<ExprId>>,
     write: bool,
+    stmt: StmtId,
 }
 
 impl ExprValidator<'_, '_> {
@@ -282,15 +293,18 @@ impl ExprValidator<'_, '_> {
             Expr::Select { cond, then_val, else_val } => {
                 // false positive see https://github.com/rust-lang/rust-clippy/issues/8047
                 #[allow(clippy::needless_option_as_deref)]
-                if let Some(non_const_dominators) = self.parent.validate_condition(cond, |s| {
-                    let mut validator = ExprValidator {
-                        parent: s,
-                        cond_diagnostic_sink: self.cond_diagnostic_sink.as_deref_mut(),
-                        write: false,
-                    };
-                    validator.validate_expr(then_val);
-                    validator.validate_expr(else_val);
-                }) {
+                if let Some(non_const_dominators) =
+                    self.parent.validate_condition(cond, self.stmt, |s| {
+                        let mut validator = ExprValidator {
+                            parent: s,
+                            cond_diagnostic_sink: self.cond_diagnostic_sink.as_deref_mut(),
+                            write: false,
+                            stmt: self.stmt,
+                        };
+                        validator.validate_expr(then_val);
+                        validator.validate_expr(else_val);
+                    })
+                {
                     if let Some(sink) = &mut self.cond_diagnostic_sink {
                         sink.extend(non_const_dominators.to_vec())
                     }
@@ -451,6 +465,36 @@ impl ExprValidator<'_, '_> {
                     }
                 }
             }
+
+            (func @ (BuiltIn::simparam | BuiltIn::simparam_str), _) => {
+                if self.parent.ctx == BodyCtx::Const {
+                    let known = if let Expr::Literal(Literal::String(name)) =
+                        &self.parent.body.exprs[args[0]]
+                    {
+                        matches!(
+                            (func, &**name),
+                            (
+                                BuiltIn::simparam,
+                                "minr"
+                                    | "imelt"
+                                    | "scale"
+                                    | "simulatorSubversion"
+                                    | "simulatorVersion"
+                                    | "tnom"
+                            ) | (BuiltIn::simparam_str, "cwd" | "module" | "instance" | "path")
+                        )
+                    } else {
+                        false
+                    };
+
+                    self.parent.diagnostics.push(BodyValidationDiagnostic::ConstSimparam {
+                        known,
+                        expr,
+                        stmt: self.stmt,
+                    });
+                }
+            }
+
             (BuiltIn::absdelay, Some(ABSDELAY_MAX))
             | (BuiltIn::transition, Some(TRANSITION_DELAY_RISET_FALLT_TOL))
             | (BuiltIn::ddt, Some(DDT_TOL))

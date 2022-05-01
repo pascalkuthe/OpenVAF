@@ -53,7 +53,7 @@ pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
         Type::Integer => cx.ty_int(),
         Type::String => cx.ty_str(),
         Type::Array { ty, len } => cx.ty_array(lltype(&*ty, cx), *len),
-        Type::EmptyArray => cx.zst(),
+        Type::EmptyArray => cx.ty_array(cx.ty_int(), 0),
         Type::Bool => cx.ty_bool(),
         Type::Void => cx.ty_void(),
         Type::Err => unreachable!(),
@@ -76,7 +76,7 @@ impl EvalMir {
         self.func_to_bin(
             &self.init_inst_func,
             &self.init_inst_cfg,
-            &self.intern.params,
+            &self.eval_intern.params,
             db1,
             literals,
             &backend,
@@ -88,7 +88,7 @@ impl EvalMir {
         self.func_to_bin(
             &self.eval_func,
             &self.eval_cfg,
-            &self.intern.params,
+            &self.eval_intern.params,
             db2,
             literals,
             &backend,
@@ -125,7 +125,7 @@ impl EvalMir {
             }
             FuncKind::InstanceInit => {
                 let ret_tys: Vec<_> =
-                    self.init_inst_cache_slots.iter().map(|(_, ty)| lltype(ty, &cx)).collect();
+                    self.init_inst_cache_slots.raw.iter().map(|(_, ty)| lltype(ty, &cx)).collect();
 
                 let ret_struct_ty = cx.struct_ty(name, &ret_tys);
                 cx.ptr_ty(ret_struct_ty)
@@ -151,7 +151,7 @@ impl EvalMir {
             .collect();
 
         if kind == FuncKind::Eval {
-            arg_tys.extend(self.init_inst_cache_slots.iter().map(|(_, ty)| lltype(ty, &cx)));
+            arg_tys.extend(self.init_inst_cache_slots.raw.iter().map(|(_, ty)| lltype(ty, &cx)));
         }
 
         let fun_ty = cx.ty_func(&arg_tys, cx.ty_void());
@@ -160,7 +160,7 @@ impl EvalMir {
         let mut builder = Builder::new(&mut cx, func, llfunc);
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
-        builder.callbacks = callbacks(&self.intern.callbacks, builder.cx);
+        builder.callbacks = callbacks(&self.eval_intern.callbacks, builder.cx);
 
         let mut i = 1;
         builder.params = params
@@ -210,7 +210,7 @@ impl EvalMir {
                         let inst = func.dfg.value_def(val).unwrap_inst();
                         let bb = func.layout.inst_block(inst).unwrap();
                         builder.select_bb_before_terminator(bb);
-                        let dst = builder.struct_gep(dst, i);
+                        let dst = builder.struct_gep(dst, i.into());
                         let val_ = builder.values[val];
                         builder.store(dst, val_.unwrap());
                     }

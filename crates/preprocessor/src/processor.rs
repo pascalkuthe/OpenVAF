@@ -212,7 +212,10 @@ impl<'a> Processor<'a> {
                             }
                             Err((FileReadError::Io(kind), file)) => {
                                 err.push(PreprocessorDiagnostic::FileNotFound {
-                                    file: file.unwrap(),
+                                    file: file.map_or_else(
+                                        || file_name.to_owned(),
+                                        |path| path.to_string(),
+                                    ),
                                     error: kind,
                                     span: Some(span),
                                 })

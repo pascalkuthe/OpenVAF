@@ -27,7 +27,7 @@ const DISCIPLINE_RECOVERY_SET: TokenSet =
 fn discipline(p: &mut Parser, m: Marker) {
     p.bump(T![discipline]);
     name_r(p, TokenSet::new(&[T![;]]));
-    p.expect(T![;]);
+    p.eat(T![;]);
     while !p.at_ts(DISCIPLINE_RECOVERY_SET) {
         let m = p.start();
         path(p);
@@ -51,7 +51,7 @@ fn nature(p: &mut Parser, m: Marker) {
     if p.eat(T![:]) {
         name_ref_r(p, TokenSet::unique(T![;]));
     }
-    p.expect(T![;]);
+    p.eat(T![;]);
     while !p.at_ts(NATURE_RECOVERY_SET) {
         let m = p.start();
 

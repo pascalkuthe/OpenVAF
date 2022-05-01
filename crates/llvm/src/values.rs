@@ -94,7 +94,7 @@ extern "C" {
     // pub fn LLVMGetAsString(C: &'a Value, Length: *mut ::libc::size_t) -> *const ::libc::c_char;
     pub fn LLVMConstStructInContext<'a>(
         C: &'a Context,
-        ConstantVals: *mut &'a Value,
+        ConstantVals: *const &'a Value,
         Count: c_uint,
         Packed: Bool,
     ) -> &'a Value;
@@ -105,7 +105,7 @@ extern "C" {
     ) -> &'a Value;
     pub fn LLVMConstNamedStruct<'a>(
         ty: &'a Type,
-        ConstantVals: *mut &'a Value,
+        ConstantVals: *const &'a Value,
         Count: c_uint,
     ) -> &'a Value;
     // pub fn LLVMGetElementAsConstant(C: &'a Value, idx: ::libc::c_uint) -> &'a Value;

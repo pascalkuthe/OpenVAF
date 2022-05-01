@@ -1,11 +1,12 @@
 use std::f64::{INFINITY, NEG_INFINITY};
+use std::mem::replace;
 
 use ahash::{AHashMap, AHashSet};
 use hir_def::body::{Body, ConstraintKind, ConstraintValue, ParamConstraint};
 use hir_def::expr::{CaseCond, NZERO, PZERO};
 use hir_def::{
-    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, NodeId, ParamSysFun, Stmt,
-    StmtId, Type, VarId,
+    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, NodeId, ParamId, ParamSysFun,
+    Stmt, StmtId, Type, VarId,
 };
 use hir_ty::builtin::{
     ABS_INT, ABS_REAL, DDX_POT, IDT_NO_IC, MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH,
@@ -19,7 +20,7 @@ use hir_ty::types::{Ty as HirTy, BOOL_EQ, INT_EQ, INT_OP, REAL_EQ, REAL_OP, STR_
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
 use mir::{FuncRef, Function, Opcode, Value, FALSE, F_ZERO, GRAVESTONE, TRUE, ZERO};
-use mir_build::{FunctionBuilder, FunctionBuilderContext, Place};
+use mir_build::{FunctionBuilder, FunctionBuilderContext, Place, RetBuilder};
 use stdx::iter::zip;
 use stdx::packed_option::ReservedValue;
 use typed_indexmap::TiSet;
@@ -31,6 +32,7 @@ pub struct MirBuilder<'a> {
     db: &'a dyn HirTyDB,
     def: DefWithBodyId,
     is_output: &'a dyn Fn(PlaceKind) -> bool,
+    required_vars: &'a mut dyn Iterator<Item = VarId>,
     tagged_reads: AHashSet<VarId>,
     tag_writes: bool,
     ctx: Option<&'a mut FunctionBuilderContext>,
@@ -42,12 +44,14 @@ impl<'a> MirBuilder<'a> {
         db: &'a dyn HirTyDB,
         def: DefWithBodyId,
         is_output: &'a dyn Fn(PlaceKind) -> bool,
+        required_vars: &'a mut dyn Iterator<Item = VarId>,
     ) -> MirBuilder<'a> {
         MirBuilder {
             db,
             def,
             tagged_reads: AHashSet::new(),
             is_output,
+            required_vars,
             ctx: None,
             split_contribute: false,
             tag_writes: false,
@@ -91,10 +95,9 @@ impl<'a> MirBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> (Function, HirInterner, Rodeo) {
+    pub fn build(self, literals: &mut Rodeo) -> (Function, HirInterner) {
         let mut func = Function::default();
         let mut interner = HirInterner::default();
-        let mut literals = Rodeo::new();
 
         let mut ctx_;
         let ctx = if let Some(ctx) = self.ctx {
@@ -104,7 +107,7 @@ impl<'a> MirBuilder<'a> {
             &mut ctx_
         };
 
-        let mut builder = FunctionBuilder::new(&mut func, &mut literals, ctx, self.tag_writes);
+        let mut builder = FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
 
         let body = self.db.body(self.def);
         let infere = self.db.inference_result(self.def);
@@ -123,14 +126,21 @@ impl<'a> MirBuilder<'a> {
         };
 
         ctx.lower_entry_stmts();
+
+        for var in self.required_vars {
+            ctx.place(PlaceKind::Var(var));
+        }
+
         let is_output = self.is_output;
 
         interner.outputs = places
             .iter_enumerated()
             .map(|(place, kind)| {
                 if is_output(*kind) {
-                    let val = builder.use_var(place);
-                    let val = builder.ins().optbarrier(val);
+                    let mut val = builder.use_var(place);
+                    if builder.func.dfg.values.def_allow_alias(val).inst().is_some() {
+                        val = builder.ins().optbarrier(val);
+                    }
                     (*kind, val.into())
                 } else {
                     (*kind, None.into())
@@ -141,7 +151,7 @@ impl<'a> MirBuilder<'a> {
         builder.ins().ret();
         builder.finalize();
 
-        (func, interner, literals)
+        (func, interner)
     }
 }
 
@@ -177,17 +187,9 @@ impl CmpOps {
 
 impl HirInterner {
     pub fn insert_var_init(&mut self, db: &dyn HirTyDB, func: &mut Function, literals: &mut Rodeo) {
-        let mut term = func.layout.entry_block().and_then(|bb| func.layout.last_inst(bb));
-        if let Some(last_inst) = term {
-            if func.dfg.insts[last_inst].is_terminator() {
-                func.layout.remove_inst(last_inst);
-            } else {
-                term = None;
-            }
-        }
         let mut ctx = FunctionBuilderContext::default();
-        let mut builder = FunctionBuilder::new(func, literals, &mut ctx, false);
-        for (kind, param) in self.params.raw.iter() {
+        let (mut builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
+        for (kind, param) in self.params.clone().raw.iter() {
             if let ParamKind::HiddenState(var) = *kind {
                 if builder.func.dfg.value_dead(*param) {
                     continue;
@@ -197,9 +199,8 @@ impl HirInterner {
             }
         }
 
-        if let Some(term) = term {
-            builder.func.layout.append_inst_to_bb(term, builder.current_block())
-        }
+        builder.ensured_sealed();
+        builder.func.layout.append_inst_to_bb(term, builder.current_block())
     }
 
     pub fn insert_param_init(
@@ -208,228 +209,226 @@ impl HirInterner {
         func: &mut Function,
         literals: &mut Rodeo,
         build_min_max: bool,
+        params: &[ParamId],
     ) {
-        let mut term = func.layout.entry_block().and_then(|bb| func.layout.last_inst(bb));
-        if let Some(last_inst) = term {
-            if func.dfg.insts[last_inst].is_terminator() {
-                func.layout.remove_inst(last_inst);
-            } else {
-                term = None;
-            }
-        }
-
         let f_neg_inf = func.dfg.fconst(NEG_INFINITY.into());
         let f_inf = func.dfg.fconst(INFINITY.into());
         let i_inf = func.dfg.iconst(i32::MAX);
         let i_neg_inf = func.dfg.iconst(i32::MIN);
 
         let mut ctx = FunctionBuilderContext::default();
-        let mut builder = FunctionBuilder::new(func, literals, &mut ctx, false);
+        let (mut builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
 
-        for (kind, param_val) in self.params.raw.clone() {
-            if let ParamKind::Param(param) = kind {
-                let param_given = self.ensure_param(builder.func, ParamKind::ParamGiven { param });
+        for param in params.iter().copied() {
+            let mut param_val = self.ensure_param(builder.func, ParamKind::Param(param));
+            let param_given = self.ensure_param(builder.func, ParamKind::ParamGiven { param });
 
-                let body = db.body(param.into());
-                let infere = db.inference_result(param.into());
-                let info = db.param_exprs(param);
-                let data = db.param_data(param).clone();
-                let ty = &data.ty;
+            let body = db.body(param.into());
+            let infere = db.inference_result(param.into());
+            let info = db.param_exprs(param);
+            let data = db.param_data(param).clone();
+            let ty = &data.ty;
 
-                let param_val = builder.make_select(param_given, |builder, param_given| {
-                    if param_given {
-                        param_val
-                    } else {
-                        self.lower_expr_body(db, param.into(), 0, builder)
-                    }
+            // create a temporary to hold onto the uses
+            let new_val = builder.make_param(0u32.into());
+            builder.func.dfg.replace_uses(param_val, new_val);
+
+            let (then_src, else_src) = builder.make_cond(param_given, |builder, param_given| {
+                if param_given {
+                    param_val
+                } else {
+                    self.lower_expr_body(db, param.into(), 0, builder)
+                }
+            });
+
+            builder.ins().with_result(new_val).phi(&[then_src, else_src]);
+
+            // we purposfull insert these reversed here (new val into params and old val into
+            // outputs). This ensures that the code generated for other parameters uses the
+            // correct value. After code generation is complete we swap these two again
+            self.params.insert(ParamKind::Param(param), new_val);
+            self.outputs.insert(PlaceKind::Param(param), param_val.into());
+            param_val = new_val;
+
+            let mut ctx = LoweringCtx {
+                db,
+                data: self,
+                func: &mut builder,
+                places: &mut TiSet::default(),
+                body: &body,
+                infere: &infere,
+                tagged_vars: &AHashSet::default(),
+                reactive_component: None,
+            };
+
+            let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
+
+            let ops = CmpOps::from_ty(ty);
+
+            let precomuted_vals = if build_min_max {
+                let min_inclusive =
+                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
+
+                let max_inclusive =
+                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param));
+
+                let min_exclusive =
+                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param));
+
+                let max_exclusive =
+                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param));
+
+                let mut bounds = None;
+
+                let precomputed_vals = info
+                    .bounds
+                    .iter()
+                    .filter_map(|bound| {
+                        if matches!(bound.kind, ConstraintKind::Exclude) {
+                            return None;
+                        }
+                        let (val0, val1) = match bound.val {
+                            ConstraintValue::Value(val) => {
+                                let val = ctx.lower_expr(val);
+
+                                if let Some((min, max)) = bounds {
+                                    let is_min = ctx.func.ins().binary1(ops.le.unwrap(), val, min);
+                                    let min = ctx.func.make_select(is_min, |builder, is_min| {
+                                        if is_min {
+                                            builder.ins().call(min_inclusive, &[]);
+                                            val
+                                        } else {
+                                            min
+                                        }
+                                    });
+
+                                    let is_max = ctx.func.ins().binary1(ops.le.unwrap(), max, val);
+                                    let max = ctx.func.make_select(is_max, |builder, is_max| {
+                                        if is_max {
+                                            builder.ins().call(max_inclusive, &[]);
+                                            val
+                                        } else {
+                                            min
+                                        }
+                                    });
+
+                                    bounds = Some((min, max));
+                                } else if ops.le.is_some() {
+                                    bounds = Some((val, val));
+                                    ctx.func.ins().call(min_inclusive, &[]);
+                                    ctx.func.ins().call(max_inclusive, &[]);
+                                }
+                                (val, Value::reserved_value())
+                            }
+                            ConstraintValue::Range(range) => {
+                                let start = ctx.lower_expr(range.start);
+                                let end = ctx.lower_expr(range.end);
+
+                                if let Some((min, max)) = bounds {
+                                    let (op, call) = if range.start_inclusive {
+                                        (ops.le.unwrap(), min_inclusive)
+                                    } else {
+                                        (ops.lt.unwrap(), min_exclusive)
+                                    };
+
+                                    let is_min = ctx.func.ins().binary1(op, start, min);
+                                    let min = ctx.func.make_select(is_min, |builder, is_min| {
+                                        if is_min {
+                                            builder.ins().call(call, &[]);
+                                            start
+                                        } else {
+                                            min
+                                        }
+                                    });
+
+                                    let (op, call) = if range.end_inclusive {
+                                        (ops.le.unwrap(), max_inclusive)
+                                    } else {
+                                        (ops.lt.unwrap(), max_exclusive)
+                                    };
+
+                                    let is_max = ctx.func.ins().binary1(op, max, end);
+                                    let max = ctx.func.make_select(is_max, |builder, is_max| {
+                                        if is_max {
+                                            builder.ins().call(call, &[]);
+                                            start
+                                        } else {
+                                            min
+                                        }
+                                    });
+
+                                    bounds = Some((min, max));
+                                } else {
+                                    if range.start_inclusive {
+                                        ctx.func.ins().call(min_inclusive, &[]);
+                                    } else {
+                                        ctx.func.ins().call(min_exclusive, &[]);
+                                    }
+
+                                    if range.start_inclusive {
+                                        ctx.func.ins().call(max_inclusive, &[]);
+                                    } else {
+                                        ctx.func.ins().call(max_exclusive, &[]);
+                                    }
+
+                                    bounds = Some((start, end));
+                                }
+
+                                (start, end)
+                            }
+                        };
+
+                        Some((val0, val1))
+                    })
+                    .collect();
+
+                let (min, max) = bounds.unwrap_or_else(|| match ty {
+                    Type::Real => (f_neg_inf, f_inf),
+                    Type::Integer => (i_neg_inf, i_inf),
+                    _ => unreachable!(),
                 });
 
-                self.outputs.insert(PlaceKind::Param(param), param_val.into());
+                ctx.data.outputs.insert(PlaceKind::ParamMin(param), min.into());
+                ctx.data.outputs.insert(PlaceKind::ParamMax(param), max.into());
+                precomputed_vals
+            } else {
+                vec![]
+            };
 
-                let mut ctx = LoweringCtx {
-                    db,
-                    data: self,
-                    func: &mut builder,
-                    places: &mut TiSet::default(),
-                    body: &body,
-                    infere: &infere,
-                    tagged_vars: &AHashSet::default(),
-                    reactive_component: None,
-                };
+            // first from bounds (here we also get min/max from)
 
-                let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
+            ctx.check_param(
+                param_val,
+                &info.bounds,
+                &precomuted_vals,
+                ConstraintKind::From,
+                ops,
+                invalid,
+            );
 
-                let ops = CmpOps::from_ty(ty);
-
-                let precomuted_vals = if build_min_max {
-                    let min_inclusive =
-                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
-
-                    let max_inclusive =
-                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param));
-
-                    let min_exclusive =
-                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param));
-
-                    let max_exclusive =
-                        ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param));
-
-                    let mut bounds = None;
-
-                    let precomputed_vals = info
-                        .bounds
-                        .iter()
-                        .filter_map(|bound| {
-                            if matches!(bound.kind, ConstraintKind::Exclude) {
-                                return None;
-                            }
-                            let (val0, val1) = match bound.val {
-                                ConstraintValue::Value(val) => {
-                                    let val = ctx.lower_expr(val);
-
-                                    if let Some((min, max)) = bounds {
-                                        let is_min =
-                                            ctx.func.ins().binary1(ops.le.unwrap(), val, min);
-                                        let min =
-                                            ctx.func.make_select(is_min, |builder, is_min| {
-                                                if is_min {
-                                                    builder.ins().call(min_inclusive, &[]);
-                                                    val
-                                                } else {
-                                                    min
-                                                }
-                                            });
-
-                                        let is_max =
-                                            ctx.func.ins().binary1(ops.le.unwrap(), max, val);
-                                        let max =
-                                            ctx.func.make_select(is_max, |builder, is_max| {
-                                                if is_max {
-                                                    builder.ins().call(max_inclusive, &[]);
-                                                    val
-                                                } else {
-                                                    min
-                                                }
-                                            });
-
-                                        bounds = Some((min, max));
-                                    } else if ops.le.is_some() {
-                                        bounds = Some((val, val));
-                                        ctx.func.ins().call(min_inclusive, &[]);
-                                        ctx.func.ins().call(max_inclusive, &[]);
-                                    }
-                                    (val, Value::reserved_value())
-                                }
-                                ConstraintValue::Range(range) => {
-                                    let start = ctx.lower_expr(range.start);
-                                    let end = ctx.lower_expr(range.end);
-
-                                    if let Some((min, max)) = bounds {
-                                        let (op, call) = if range.start_inclusive {
-                                            (ops.le.unwrap(), min_inclusive)
-                                        } else {
-                                            (ops.lt.unwrap(), min_exclusive)
-                                        };
-
-                                        let is_min = ctx.func.ins().binary1(op, start, min);
-                                        let min =
-                                            ctx.func.make_select(is_min, |builder, is_min| {
-                                                if is_min {
-                                                    builder.ins().call(call, &[]);
-                                                    start
-                                                } else {
-                                                    min
-                                                }
-                                            });
-
-                                        let (op, call) = if range.end_inclusive {
-                                            (ops.le.unwrap(), max_inclusive)
-                                        } else {
-                                            (ops.lt.unwrap(), max_exclusive)
-                                        };
-
-                                        let is_max = ctx.func.ins().binary1(op, max, end);
-                                        let max =
-                                            ctx.func.make_select(is_max, |builder, is_max| {
-                                                if is_max {
-                                                    builder.ins().call(call, &[]);
-                                                    start
-                                                } else {
-                                                    min
-                                                }
-                                            });
-
-                                        bounds = Some((min, max));
-                                    } else {
-                                        if range.start_inclusive {
-                                            ctx.func.ins().call(min_inclusive, &[]);
-                                        } else {
-                                            ctx.func.ins().call(min_exclusive, &[]);
-                                        }
-
-                                        if range.start_inclusive {
-                                            ctx.func.ins().call(max_inclusive, &[]);
-                                        } else {
-                                            ctx.func.ins().call(max_exclusive, &[]);
-                                        }
-
-                                        bounds = Some((start, end));
-                                    }
-
-                                    (start, end)
-                                }
-                            };
-
-                            Some((val0, val1))
-                        })
-                        .collect();
-
-                    let (min, max) = bounds.unwrap_or_else(|| match ty {
-                        Type::Real => (f_neg_inf, f_inf),
-                        Type::Integer => (i_neg_inf, i_inf),
-                        _ => unreachable!(),
-                    });
-
-                    ctx.data.outputs.insert(PlaceKind::ParamMin(param), min.into());
-                    ctx.data.outputs.insert(PlaceKind::ParamMax(param), max.into());
-                    precomputed_vals
-                } else {
-                    vec![]
-                };
-
-                // first from bounds (here we also get min/max from)
-
-                ctx.check_param(
-                    param_val,
-                    &info.bounds,
-                    &precomuted_vals,
-                    ConstraintKind::From,
-                    ops,
-                    invalid,
-                );
-
-                ctx.check_param(
-                    param_val,
-                    &info.bounds,
-                    &precomuted_vals,
-                    ConstraintKind::Exclude,
-                    ops,
-                    invalid,
-                );
-            }
+            ctx.check_param(
+                param_val,
+                &info.bounds,
+                &precomuted_vals,
+                ConstraintKind::Exclude,
+                ops,
+                invalid,
+            );
         }
 
-        let exit_bb = builder.func.layout.last_block().unwrap();
-        builder.ins().jump(exit_bb);
+        builder.ensured_sealed();
+        builder.func.layout.append_inst_to_bb(term, builder.current_block());
 
-        if let Some(term) = term {
-            builder.func.layout.append_inst_to_bb(term, builder.current_block())
+        for param in params.iter().copied() {
+            let val = &mut self.params.raw[&ParamKind::Param(param)];
+            *val = replace(&mut self.outputs[&PlaceKind::Param(param)], Some(*val).into())
+                .unwrap_unchecked();
         }
     }
 
     /// Lowers a body
     fn lower_expr_body(
-        &self,
+        &mut self,
         db: &dyn HirTyDB,
         def: DefWithBodyId,
         i: usize,
@@ -440,7 +439,7 @@ impl HirInterner {
 
         let mut ctx = LoweringCtx {
             db,
-            data: &mut Self::default(),
+            data: self,
             func,
             body: &body,
             infere: &infere,
@@ -834,7 +833,8 @@ impl LoweringCtx<'_, '_> {
         let (func_ref, changed) = self.data.callbacks.ensure(kind);
         if changed {
             let data = kind.signature();
-            self.func.import_function(data);
+            let sig = self.func.import_function(data);
+            debug_assert_eq!(func_ref, sig);
         }
         func_ref
     }

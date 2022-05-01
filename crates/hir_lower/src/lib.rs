@@ -118,7 +118,7 @@ impl CallBackKind {
             },
             CallBackKind::SimParamOpt => FunctionSignature {
                 name: "simparam_opt".to_owned(),
-                params: 1,
+                params: 2,
                 returns: 1,
                 has_sideeffects: false,
             },
@@ -152,12 +152,6 @@ impl CallBackKind {
                 returns: 0,
                 has_sideeffects: true,
             },
-            // CallBackKind::Ddt => FunctionSignature {
-            //     name: "ddt".to_owned(),
-            //     params: 1,
-            //     returns: 1,
-            //     has_sideeffects: false,
-            // },
             // CallBackKind::StoreState(state) => FunctionSignature {
             //     name: format!("store_{:?})", state),
             //     params: 1,

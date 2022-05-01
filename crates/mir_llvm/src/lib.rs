@@ -1,10 +1,13 @@
 use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::path::Path;
+use std::ptr;
 
 use lasso::Rodeo;
+use libc::c_void;
 use llvm::support::LLVMString;
 pub use llvm::OptLevel;
+use llvm::{LLVMGetDiagInfoDescription, LLVMGetDiagInfoSeverity};
 use target::spec::Target;
 
 mod builder;
@@ -70,6 +73,15 @@ impl Drop for LLVMBackend<'_> {
     }
 }
 
+extern "C" fn diagnostic_handler(info: &llvm::DiagnosticInfo, _: *mut c_void) {
+    let severity = unsafe { LLVMGetDiagInfoSeverity(info) };
+    if !cfg!(debug_assertions) && severity != llvm::DiagnosticSeverity::Error {
+        return;
+    }
+    let msg = unsafe { LLVMString::new(LLVMGetDiagInfoDescription(info)) };
+    println!("LLVM({severity:?}): {msg}")
+}
+
 pub struct ModuleLlvm {
     llcx: &'static mut llvm::Context,
     // must be a raw pointer because the reference must not outlife self/the context
@@ -81,6 +93,8 @@ impl ModuleLlvm {
     unsafe fn new(name: &str, target: &Target, lvl: OptLevel) -> Result<ModuleLlvm, LLVMString> {
         let llcx = llvm::LLVMContextCreate();
         let target_data_layout = target.data_layout.clone();
+
+        llvm::LLVMContextSetDiagnosticHandler(llcx, Some(diagnostic_handler), ptr::null_mut());
 
         let name = CString::new(name).unwrap();
         let llmod = llvm::LLVMModuleCreateWithNameInContext(name.as_ptr(), llcx);

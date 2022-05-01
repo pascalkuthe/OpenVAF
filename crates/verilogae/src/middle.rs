@@ -68,15 +68,20 @@ impl CompilationDB {
             .collect();
 
         let outputs: AHashSet<_> = info.functions.iter().map(|func| func.var).collect();
-        let (mut func, mut intern, mut literals) =
-            MirBuilder::new(self, info.module.into(), &|kind| {
+        let mut literals = Rodeo::new();
+        let (mut func, mut intern) = MirBuilder::new(
+            self,
+            info.module.into(),
+            &|kind| {
                 matches!(
                     kind,
                     PlaceKind::Var(var) if outputs.contains(&var)
                 )
-            })
-            .with_tagged_reads(dep_break)
-            .build();
+            },
+            &mut outputs.iter().copied(),
+        )
+        .with_tagged_reads(dep_break)
+        .build(&mut literals);
 
         // remove unused sideeffects
         for (id, kind) in intern.callbacks.iter_enumerated() {
@@ -126,14 +131,8 @@ impl CompilationDB {
         let mut func = Function::default();
         let mut intern = HirInterner::default();
 
-        let params = info
-            .params
-            .keys()
-            .enumerate()
-            .map(|(i, param)| (ParamKind::Param(*param), func.dfg.make_param(i.into())));
-        intern.params.raw.extend(params);
-
-        intern.insert_param_init(self, &mut func, literals, true);
+        let params: Vec<_> = info.params.keys().copied().collect();
+        intern.insert_param_init(self, &mut func, literals, true, &params);
 
         (func, intern)
     }

@@ -24,10 +24,7 @@ pub trait Diagnostic {
 
     fn to_report(&self, root_file: FileId, db: &dyn BaseDB) -> Option<Report> {
         if let Some((lint, lint_src)) = self.lint(root_file, db) {
-            let (lvl, is_default) = match lint_src.overwrite {
-                Some(lvl) => (lvl, false),
-                None => db.lint_lvl(lint, root_file, lint_src.ast),
-            };
+            let (lvl, is_default) = lint_src.lvl(lint, root_file, db);
             let LintData { name, documentation_id, .. } = db.lint_data(lint);
 
             let seververity = match lvl {

@@ -1,5 +1,5 @@
 use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat};
-use xshell::cmd;
+use xshell::{cmd, Shell};
 
 #[test]
 fn gen_ffi() {
@@ -13,19 +13,20 @@ fn gen_ffi() {
     // we don't actually use this to compile code and the generated code is all handchecked and commit
     // the vcs
 
+    let sh = Shell::new().unwrap();
+    let _env = sh.push_env("RUSTC_BOOTSTRAP", "1");
+
     let cpp_cfg = project_root().join("crates/verilogae_ffi/cppbindgen.toml");
     let cpp_header = project_root().join("include/verilogae.hpp");
-    let cpp_header_content =
-        cmd!("cbindgen {vae_dir} -c {cpp_cfg}").env("RUSTC_BOOTSTRAP", "1").read().unwrap();
+    let cpp_header_content = cmd!(sh, "cbindgen {vae_dir} -c {cpp_cfg}").read().unwrap();
     ensure_file_contents(&cpp_header, &cpp_header_content);
 
     let c_cfg = project_root().join("crates/verilogae_ffi/cbindgen.toml");
     let c_header = project_root().join("include/verilogae.h");
-    let c_header_content =
-        cmd!("cbindgen {vae_dir} -c {c_cfg}").env("RUSTC_BOOTSTRAP", "1").read().unwrap();
+    let c_header_content = cmd!(sh, "cbindgen {vae_dir} -c {c_cfg}").read().unwrap();
     ensure_file_contents(&c_header, &c_header_content);
 
-    let res = cmd!("bindgen {cpp_header} --no-layout-tests --disable-name-namespacing --allowlist-function vae::verilogae_.*
+    let res = cmd!(sh, "bindgen {cpp_header} --no-layout-tests --disable-name-namespacing --allowlist-function vae::verilogae_.*
 --rustified-enum vae::OptLevel --blacklist-type=vae::NativePath --blacklist-type=vae::FatPtr --blacklist-type=vae::Meta  --allowlist-var=vae::PARAM_FLAGS.* --disable-header-comment").read().unwrap();
     let mut off = 0;
     for line in res.split_terminator('\n') {

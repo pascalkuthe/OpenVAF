@@ -16,6 +16,8 @@
 //! Furthermore the types/functions exported here are reduced to only those actually used in OpenVAF to
 //! further imporve compile times
 
+use std::fmt;
+
 use libc::{c_char, c_uint, c_void};
 
 use crate::util::InvariantOpaque;
@@ -23,6 +25,7 @@ use crate::util::InvariantOpaque;
 mod util;
 
 pub mod basic_block;
+mod bitcode;
 pub mod builder;
 pub mod context;
 pub mod initialization;
@@ -34,6 +37,7 @@ pub mod types;
 pub mod values;
 
 pub use basic_block::*;
+pub use bitcode::*;
 pub use builder::*;
 pub use context::*;
 pub use initialization::*;
@@ -51,11 +55,21 @@ pub const False: Bool = 0;
 // TODO move to opaqute times when stabilized
 // BLOCK https://github.com/rust-lang/rust/issues/43467
 
-#[derive(Debug)]
-pub enum LLVMMemoryBuffer {}
+pub enum MemoryBuffer {}
 
-#[derive(Debug)]
+impl fmt::Debug for MemoryBuffer {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
 pub enum Context {}
+
+impl fmt::Debug for Context {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
 
 #[repr(C)]
 pub struct Builder<'a>(InvariantOpaque<'a>);
@@ -63,26 +77,68 @@ pub struct Builder<'a>(InvariantOpaque<'a>);
 #[repr(C)]
 pub struct PassManager<'a>(InvariantOpaque<'a>);
 
-#[derive(Debug)]
 pub enum Type {}
 
-#[derive(Debug)]
+impl fmt::Debug for Type {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
 pub enum Value {}
 
-#[derive(Debug)]
+impl fmt::Debug for Value {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
 pub enum BasicBlock {}
 
-#[derive(Debug)]
+impl fmt::Debug for BasicBlock {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
 pub enum Module {}
 
-#[derive(Debug)]
+impl fmt::Debug for Module {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
 pub enum PassRegistry {}
 
-#[derive(Debug)]
+impl fmt::Debug for PassRegistry {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
 pub enum PassManagerBuilder {}
 
-#[derive(Debug)]
+impl fmt::Debug for PassManagerBuilder {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
 pub enum Target {}
+
+impl fmt::Debug for Target {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+pub enum DiagnosticInfo {}
+
+impl fmt::Debug for DiagnosticInfo {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub enum TargetData {}
@@ -221,6 +277,15 @@ pub enum IntPredicate {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub enum DiagnosticSeverity {
+    Error = 0,
+    Warning = 1,
+    Remark = 2,
+    Note = 3,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RealPredicate {
     RealPredicateFalse = 0,
@@ -247,9 +312,8 @@ pub const LLVMAttributeFunctionIndex: ::libc::c_uint = !0; // -1
 /// number from 1 to N.
 pub type LLVMAttributeIndex = ::libc::c_uint;
 
-// pub type LLVMDiagnosticHandler =
-//     Option<extern "C" fn(arg1: &LLVMDiagnosticInfo, arg2: *mut c_void)>;
-pub type LLVMYieldCallback = Option<extern "C" fn(arg1: &Context, arg2: *mut c_void)>;
+pub type DiagnosticHandler = Option<extern "C" fn(diag: &DiagnosticInfo, ctx: *mut c_void)>;
+pub type LLVMYieldCallback = Option<extern "C" fn(arg1: &Context, ctx: *mut c_void)>;
 
 pub fn get_version() -> (u32, u32, u32) {
     // Can be called without initializing LLVM

@@ -10,7 +10,7 @@ pub enum PreprocessorDiagnostic {
     MacroArgumentCountMissmatch { expected: usize, found: usize, span: CtxSpan },
     MacroNotFound { name: String, span: CtxSpan },
     MacroRecursion { name: String, span: CtxSpan },
-    FileNotFound { file: VfsPath, error: io::ErrorKind, span: Option<CtxSpan> },
+    FileNotFound { file: String, error: io::ErrorKind, span: Option<CtxSpan> },
     InvalidTextFormat { span: Option<CtxSpan>, file: VfsPath, err: InvalidTextFormatErr },
     UnexpectedEof { expected: &'static str, span: CtxSpan },
     MissingOrUnexpectedToken { expected: &'static str, expected_at: CtxSpan, span: CtxSpan },
