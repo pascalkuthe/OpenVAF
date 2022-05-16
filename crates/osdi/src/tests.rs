@@ -12,7 +12,7 @@ mod sourcegen;
 fn diode() {
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, OptLevel::None);
-    let path = project_root().join("integration_tests/EKV_LONGCHANNEL/ekv_longchannel.va");
+    let path = project_root().join("integration_tests/DIODE/diode.va");
     let base = Path::new("diode");
     let obj = base.with_extension("o");
     let out = base.with_extension("osdi");

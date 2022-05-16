@@ -84,11 +84,13 @@ impl_debug_display! {match EvalOutputSlot{EvalOutputSlot(id) => "out{id}";}}
 pub struct OsdiInstanceData<'ll> {
     pub param_given: &'ll llvm::Type,
     pub jacobian_ptr: &'ll llvm::Type,
+    pub jacobian_ptr_react: &'ll llvm::Type,
     pub node_mapping: &'ll llvm::Type,
     pub collapsed: &'ll llvm::Type,
     pub params: IndexMap<OsdiInstanceParam, &'ll llvm::Type, RandomState>,
     pub eval_outputs: TiMap<EvalOutputSlot, Value, &'ll llvm::Type>,
     pub cache_slots: TiVec<CacheSlot, &'ll llvm::Type>,
+    pub jacobian_ptr_react_off: TiVec<OsdiMatrixId, Option<u32>>,
 
     pub residual_resist: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
     pub residual_react: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
@@ -183,6 +185,22 @@ impl<'ll> OsdiInstanceData<'ll> {
 
         let param_given = bitfield::arr_ty(params.len() as u32, cx);
         let jacobian_ptr = cx.ty_array(cx.ptr_ty(ty_f64), cgunit.matrix_ids.len() as u32);
+        let mut num_react = 0;
+        let jacobian_ptr_react_off = cgunit
+            .matrix_ids
+            .raw
+            .iter()
+            .map(|entry| {
+                if cgunit.mir.matrix.reactive.contains_key(&entry.to_middle(&cgunit.node_ids)) {
+                    let id = num_react;
+                    num_react += 1;
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let jacobian_ptr_react = cx.ty_array(cx.ptr_ty(ty_f64), num_react);
         let node_mapping = cx.ty_array(ty_u32, cgunit.node_ids.len() as u32);
         let collapsed = cx.ty_array(cx.ty_c_bool(), cgunit.mir.collapse.len() as u32);
         let temperature = cx.ty_real();
@@ -194,7 +212,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let fields: Vec<_> = [
             param_given,
             jacobian_ptr,
-            jacobian_ptr,
+            jacobian_ptr_react,
             node_mapping,
             collapsed,
             temperature,
@@ -224,6 +242,8 @@ impl<'ll> OsdiInstanceData<'ll> {
             matrix_react,
             residual_resist,
             residual_react,
+            jacobian_ptr_react,
+            jacobian_ptr_react_off,
         }
     }
 
@@ -668,9 +688,11 @@ impl<'ll> OsdiInstanceData<'ll> {
         let field = if reactive { JACOBIAN_PTR_REACT } else { JACOBIAN_PTR_RESIST };
         let ptr = LLVMBuildStructGEP2(llbuilder, self.ty, ptr, field, UNNAMED);
         let zero = cx.const_int(0);
-        let entry = cx.const_unsigned_int(entry.into());
-        let ptr =
-            LLVMBuildGEP2(llbuilder, self.jacobian_ptr, ptr, [zero, entry].as_ptr(), 2, UNNAMED);
+        let entry =
+            if reactive { self.jacobian_ptr_react_off[entry].unwrap() } else { entry.into() };
+        let entry = cx.const_unsigned_int(entry);
+        let ty = if reactive { self.jacobian_ptr_react } else { self.jacobian_ptr };
+        let ptr = LLVMBuildGEP2(llbuilder, ty, ptr, [zero, entry].as_ptr(), 2, UNNAMED);
         let dst = LLVMBuildLoad2(llbuilder, cx.ptr_ty(cx.ty_real()), ptr, UNNAMED);
         let old = LLVMBuildLoad2(llbuilder, cx.ty_real(), dst, UNNAMED);
         let val = LLVMBuildFAdd(llbuilder, old, val, UNNAMED);
