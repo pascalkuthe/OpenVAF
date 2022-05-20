@@ -137,7 +137,9 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
             for opvar_idx in 0..inst_data.opvars.len() {
                 let bb = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
                 LLVMPositionBuilderAtEnd(llbuilder, bb);
-                let case = cx.const_unsigned_int((model_data.params.len() + inst_data.params.len() + opvar_idx) as u32);
+                let case = cx.const_unsigned_int(
+                    (model_data.params.len() + inst_data.params.len() + opvar_idx) as u32,
+                );
                 LLVMAddCase(switch_opvar, case, bb);
 
                 let (ptr, _) =

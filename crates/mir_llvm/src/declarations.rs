@@ -27,6 +27,10 @@ pub fn declare_raw_fn<'ll>(
 }
 
 impl<'a, 'll> CodegenCx<'a, 'll> {
+    // pub fn target_cpu_attr(&self) -> &'ll Attribute {
+    //     create_attr_string_value(self.llcx, "target-cpu", self.target_cpu)
+    // }
+
     /// Declare a C ABI function.
     ///
     /// Only use this for foreign function ABIs and glue. For Rust functions use

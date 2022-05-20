@@ -1,4 +1,5 @@
-use std::{cell::RefCell, path::PathBuf, sync::Arc};
+use std::sync::Arc;
+use std::{cell::RefCell, path::PathBuf};
 
 use expect_test::expect_file;
 use vfs::{FileId, Vfs, VfsPath};
@@ -24,7 +25,7 @@ impl SourceProvider for TestSourceProvider {
         self.include_dirs.clone()
     }
 
-    fn macro_flags(&self, _file_root: FileId) -> Arc<[std::sync::Arc<str>]> {
+    fn macro_flags(&self, _file_root: FileId) -> Arc<[Arc<str>]> {
         Arc::new([])
     }
 

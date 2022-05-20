@@ -38,8 +38,8 @@ impl Opts {
         }
     }
 
-    pub(crate) fn target(&self, local: bool) -> Result<Target> {
-        let mut target = if self.target_cpu.ptr.is_null() {
+    pub(crate) fn target(&self) -> Result<Target> {
+        let target = if self.target_cpu.ptr.is_null() {
             Target::host_target().unwrap()
         } else {
             let raw = unsafe { slice::from_raw_parts(self.target.ptr, self.target.len) };
@@ -49,12 +49,6 @@ impl Opts {
                 None => bail!("specified target not found"),
             }
         };
-
-        if let Some(cpu) = self.target_cpu()? {
-            target.options.cpu = cpu.to_owned();
-        } else if local {
-            target.options.cpu = "native".to_owned();
-        }
 
         Ok(target)
     }

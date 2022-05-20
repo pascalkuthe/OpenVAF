@@ -45,7 +45,7 @@ flavor_mappings! {
 
 pub type LinkArgs = BTreeMap<LinkerFlavor, Vec<String>>;
 
-/// Everything `rustc` knows about how to compile for a specific target.
+/// Everything `openvaf` knows about how to compile for a specific target.
 ///
 /// Every field here must be specified, and has no default value.
 #[derive(PartialEq, Clone, Debug)]
@@ -127,8 +127,8 @@ macro_rules! supported_targets {
     ( $(($( $triple:literal, )+ $module:ident ),)+ ) => {
         $ ( mod $ module; ) +
 
-        // /// List of supported targets
-        // const TARGETS: &[&str] = &[$($($triple),+),+];
+        /// List of supported targets
+        const TARGETS: &[&str] = &[$($($triple),+),+];
 
         fn load_specific(target: &str) -> Option<Target> {
             match target {
@@ -144,23 +144,22 @@ macro_rules! supported_targets {
             }
         }
 
-        // pub fn get_targets() -> impl Iterator<Item = String> {
-        //     TARGETS.iter().filter_map(|t| -> Option<String> {
-        //         load_specific(t).map(|t|t.to_string())
-        //     })
-        // }
+        pub fn get_targets() -> impl Iterator<Item = &'static str> {
+            TARGETS.iter().copied()
+        }
     }
 }
 
+// TODO musl support
 supported_targets!(
-    ("x86_64-apple-darwin", x86_64_apple_darwin),
-    ("x86_64-pc-windows-msvc", x86_64_pc_windows_msvc),
     ("x86_64-unknown-linux-gnu", x86_64_unknown_linux_gnu),
-    ("x86_64-unknown-linux-musl", x86_64_unknown_linux_musl),
-    ("aarch64-apple-darwin", aarch64_apple_darwin),
-    ("aarch64-pc-windows-msvc", aarch64_pc_windows_msvc),
+    // ("x86_64-unknown-linux-musl", x86_64_unknown_linux_musl),
+    ("x86_64-pc-windows-msvc", x86_64_pc_windows_msvc),
+    ("x86_64-apple-darwin", x86_64_apple_darwin),
     ("aarch64-unknown-linux-gnu", aarch64_unknown_linux_gnu),
-    ("aarch64-unknown-linux-musl", aarch64_unknown_linux_musl),
+    // ("aarch64-unknown-linux-musl", aarch64_unknown_linux_musl),
+    ("aarch64-pc-windows-msvc", aarch64_pc_windows_msvc),
+    ("aarch64-apple-darwin", aarch64_apple_darwin),
 );
 
 impl Target {

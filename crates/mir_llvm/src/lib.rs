@@ -1,5 +1,6 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
+use std::os::raw::c_char;
 use std::path::Path;
 use std::ptr;
 
@@ -7,7 +8,10 @@ use lasso::Rodeo;
 use libc::c_void;
 use llvm::support::LLVMString;
 pub use llvm::OptLevel;
-use llvm::{LLVMGetDiagInfoDescription, LLVMGetDiagInfoSeverity};
+use llvm::{
+    LLVMDisposeMessage, LLVMGetDiagInfoDescription, LLVMGetDiagInfoSeverity,
+    LLVMGetHostCPUFeatures, LLVMGetHostCPUName,
+};
 use target::spec::Target;
 
 mod builder;
@@ -26,12 +30,72 @@ pub use context::CodegenCx;
 
 pub struct LLVMBackend<'t> {
     target: &'t Target,
+    target_cpu: String,
+    features: String,
     opt_lvl: OptLevel,
     builder: Option<&'static mut llvm::PassManagerBuilder>,
 }
 
 impl<'t> LLVMBackend<'t> {
-    pub fn new(cg_opts: &[String], target: &'t Target, opt_lvl: OptLevel) -> LLVMBackend<'t> {
+    pub fn new(
+        cg_opts: &[String],
+        target: &'t Target,
+        mut target_cpu: String,
+        target_features: &[String],
+        opt_lvl: OptLevel,
+    ) -> LLVMBackend<'t> {
+        if target_cpu == "generic" {
+            target_cpu = target.options.cpu.clone();
+        }
+
+        let mut features = vec![];
+        if target_cpu == "native" {
+            let features_string = unsafe {
+                let ptr = LLVMGetHostCPUFeatures();
+                let features_string = if !ptr.is_null() {
+                    CStr::from_ptr(ptr)
+                        .to_str()
+                        .unwrap_or_else(|e| {
+                            unreachable!("LLVM returned a non-utf8 features string: {}", e);
+                        })
+                        .to_owned()
+                } else {
+                    unreachable!(
+                        "could not allocate host CPU features, LLVM returned a `null` string"
+                    );
+                };
+
+                LLVMDisposeMessage(ptr as *mut c_char);
+
+                features_string
+            };
+            features.extend(features_string.split(',').map(String::from));
+
+            target_cpu = unsafe {
+                let ptr = LLVMGetHostCPUName();
+                let cpu = if !ptr.is_null() {
+                    CStr::from_ptr(ptr)
+                        .to_str()
+                        .unwrap_or_else(|e| {
+                            unreachable!("LLVM returned a non-utf8 features string: {}", e);
+                        })
+                        .to_owned()
+                } else {
+                    unreachable!(
+                        "could not allocate host CPU features, LLVM returned a `null` string"
+                    );
+                };
+
+                LLVMDisposeMessage(ptr as *mut c_char);
+
+                cpu
+            };
+        }
+
+        features
+            .extend(target.options.features.split(',').filter(|v| !v.is_empty()).map(String::from));
+        features.extend(target_features.iter().cloned());
+
         // TODO add target options here if we ever have any
         llvm::initialization::init(cg_opts, &[]);
         let builder = unsafe {
@@ -41,7 +105,13 @@ impl<'t> LLVMBackend<'t> {
             builder
         };
 
-        LLVMBackend { target, opt_lvl, builder: Some(builder) }
+        LLVMBackend {
+            target,
+            opt_lvl,
+            builder: Some(builder),
+            target_cpu,
+            features: features.join(","),
+        }
     }
 
     /// # Safety
@@ -49,7 +119,7 @@ impl<'t> LLVMBackend<'t> {
     /// This function calls the LLVM-C Api which may not be entirely safe.
     /// Exercise caution!
     pub unsafe fn new_module(&self, name: &str) -> Result<ModuleLlvm, LLVMString> {
-        ModuleLlvm::new(name, self.target, self.opt_lvl)
+        ModuleLlvm::new(name, self.target, &self.target_cpu, &self.features, self.opt_lvl)
     }
 
     /// # Safety
@@ -61,7 +131,7 @@ impl<'t> LLVMBackend<'t> {
         literals: &'a Rodeo,
         module: &'ll ModuleLlvm,
     ) -> CodegenCx<'a, 'll> {
-        CodegenCx::new(literals, module, self.target)
+        CodegenCx::new(literals, module, self.target, &self.target_cpu)
     }
 }
 
@@ -90,7 +160,13 @@ pub struct ModuleLlvm {
 }
 
 impl ModuleLlvm {
-    unsafe fn new(name: &str, target: &Target, lvl: OptLevel) -> Result<ModuleLlvm, LLVMString> {
+    unsafe fn new(
+        name: &str,
+        target: &Target,
+        target_cpu: &str,
+        features: &str,
+        lvl: OptLevel,
+    ) -> Result<ModuleLlvm, LLVMString> {
         let llcx = llvm::LLVMContextCreate();
         let target_data_layout = target.data_layout.clone();
 
@@ -105,8 +181,8 @@ impl ModuleLlvm {
 
         let tm = llvm::create_target(
             &target.llvm_target,
-            &target.options.cpu,
-            &target.options.features,
+            target_cpu,
+            features,
             lvl,
             llvm::RelocMode::PIC,
             llvm::CodeModel::Default,

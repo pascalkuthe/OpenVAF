@@ -103,13 +103,20 @@ impl VfsPath {
     }
 
     /// Returns `self`'s base name and file extension.
-    pub fn name_and_extension(&self) -> Option<(&str, Option<&str>)> {
+    pub fn stem_and_extension(&self) -> Option<(&str, Option<&str>)> {
         match &self.0 {
             VfsPathRepr::PathBuf(p) => Some((
                 p.file_stem()?.to_str()?,
                 p.extension().and_then(|extension| extension.to_str()),
             )),
-            VfsPathRepr::VirtualPath(p) => p.name_and_extension(),
+            VfsPathRepr::VirtualPath(p) => p.stem_and_extension(),
+        }
+    }
+
+    pub fn name(&self) -> Option<String> {
+        match &self.0 {
+            VfsPathRepr::PathBuf(p) => Some(p.file_name()?.to_string_lossy().into_owned()),
+            VfsPathRepr::VirtualPath(p) => Some(p.name()?.to_owned()),
         }
     }
 
@@ -386,7 +393,20 @@ impl VirtualPath {
     /// # Note
     /// The extension will not contains `.`. This means `"/foo/bar.baz.rs"` will
     /// return `Some(("bar.baz", Some("rs"))`.
-    fn name_and_extension(&self) -> Option<(&str, Option<&str>)> {
+    fn stem_and_extension(&self) -> Option<(&str, Option<&str>)> {
+        let file_name = self.name()?;
+        let mut file_stem_and_extension = file_name.rsplitn(2, '.');
+        let extension = file_stem_and_extension.next();
+        let file_stem = file_stem_and_extension.next();
+
+        match (file_stem, extension) {
+            (None, None) => None,
+            (None | Some(""), Some(_)) => Some((file_name, None)),
+            (Some(file_stem), extension) => Some((file_stem, extension)),
+        }
+    }
+
+    fn name(&self) -> Option<&str> {
         let file_path = if self.0.ends_with('/') { &self.0[..&self.0.len() - 1] } else { &self.0 };
         let file_name = match file_path.rfind('/') {
             Some(position) => &file_path[position + 1..],
@@ -396,15 +416,7 @@ impl VirtualPath {
         if file_name.is_empty() {
             None
         } else {
-            let mut file_stem_and_extension = file_name.rsplitn(2, '.');
-            let extension = file_stem_and_extension.next();
-            let file_stem = file_stem_and_extension.next();
-
-            match (file_stem, extension) {
-                (None, None) => None,
-                (None | Some(""), Some(_)) => Some((file_name, None)),
-                (Some(file_stem), extension) => Some((file_stem, extension)),
-            }
+            Some(file_name)
         }
     }
 }

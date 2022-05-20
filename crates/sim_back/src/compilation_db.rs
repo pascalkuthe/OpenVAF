@@ -1,11 +1,11 @@
-use std::fmt::Display;
 use std::fs;
 use std::intrinsics::transmute;
 use std::iter::once;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use ahash::AHashMap;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use basedb::diagnostics::{
     Config, ConsoleSink, Diagnostic, DiagnosticSink, Label, LabelStyle, Report,
 };
@@ -46,11 +46,15 @@ impl Upcast<dyn BaseDB> for CompilationDB {
 }
 
 impl CompilationDB {
-    pub fn new(root_file: &std::path::Path) -> Result<Self> {
+    pub fn new(
+        root_file: AbsPathBuf,
+        include_dirs: &[AbsPathBuf],
+        macro_flags: &[String],
+        lints: &[(String, LintLevel)],
+    ) -> Result<Self> {
         let mut vfs = Vfs::default();
         vfs.insert_std_lib();
 
-        let root_file = abs_path(root_file)?;
         let contents = fs::read(&root_file);
         let root_file = vfs.ensure_file_id(root_file.into());
         vfs.set_file_contents(root_file, contents.into());
@@ -59,37 +63,49 @@ impl CompilationDB {
             Self { storage: salsa::Storage::default(), vfs: Arc::new(RwLock::new(vfs)), root_file };
 
         let include_dirs: Result<Arc<[_]>> = once(Ok(VfsPath::new_virtual_path("/std".to_owned())))
-            // .chain(opts.include_dirs().map(|it| Ok(VfsPath::from(it?))))
+            .chain(include_dirs.iter().map(|it| Ok(VfsPath::from(it.clone()))))
             .collect();
         res.set_include_dirs(root_file, include_dirs?);
 
         let macro_flags: Vec<_> = STANDARD_FLAGS
             .into_iter()
-            // .chain(opts.macro_flags())
+            .chain(macro_flags.iter().map(String::deref))
             .map(Arc::from)
             .collect();
         res.set_macro_flags(root_file, Arc::from(macro_flags));
 
         res.set_plugin_lints(&[]);
-        let overwrites = res.empty_global_lint_overwrites();
-        // let registry = res.lint_registry();
+        let mut overwrites = res.empty_global_lint_overwrites();
+        let registry = res.lint_registry();
 
-        // let allow_lints = zip(opts.allow_lints(), repeat(LintLevel::Allow));
-        // let warn_lints = zip(opts.warn_lints(), repeat(LintLevel::Warn));
-        // let deny_lints = zip(opts.deny_lints(), repeat(LintLevel::Deny));
+        fn replace_lvl(
+            overwrites: &mut TiSlice<Lint, Option<LintLevel>>,
+            registry: &basedb::lints::LintRegistry,
+            replaced_lvl: LintLevel,
+            new_lvl: LintLevel,
+        ) {
+            for (lint, dst) in overwrites.iter_mut_enumerated() {
+                let old_lvl = dst.unwrap_or_else(|| registry.lint_data(lint).default_lvl);
+                if old_lvl == replaced_lvl {
+                    *dst = Some(new_lvl)
+                }
+            }
+        }
 
-        //         let mut sink = ConsoleSink::new(Config::default(), &res);
-        //         for (lint, lvl) in allow_lints.chain(warn_lints).chain(deny_lints) {
-        //             if let Some(lint) = registry.lint_from_name(lint) {
-        //                 overwrites[lint] = Some(lvl)
-        //             } else {
-        //                 sink.print_simple_message(
-        //                     Severity::Warning,
-        //                     format!("no lint named '{}' was found!", lint),
-        //                 )
-        //             }
-        //         }
-        //         drop(sink);
+        for (lint, lvl) in lints {
+            match &**lint {
+                "all" => overwrites.raw.fill(Some(*lvl)),
+                "warnings" => replace_lvl(&mut overwrites, &registry, LintLevel::Warn, *lvl),
+                "errors" => replace_lvl(&mut overwrites, &registry, LintLevel::Deny, *lvl),
+                lint => {
+                    if let Some(lint) = registry.lint_from_name(lint) {
+                        overwrites[lint] = Some(*lvl)
+                    } else {
+                        bail!("unkown lint {lint}")
+                    }
+                }
+            }
+        }
 
         let overwrites: Arc<[_]> = Arc::from(overwrites.as_ref());
         let overwrites = unsafe {
@@ -100,16 +116,18 @@ impl CompilationDB {
         Ok(res)
     }
 
-    pub fn collect_modules(&self, file_name: &impl Display) -> Result<Vec<ModuleInfo>> {
+    pub fn collect_modules(&self) -> Option<Vec<ModuleInfo>> {
         let root_file = self.root_file;
+        let file_name =
+            self.vfs.read().file_path(root_file).name().unwrap_or_else(|| String::from("~.va"));
 
         let mut sink = ConsoleSink::new(Config::default(), self.upcast());
         sink.add_diagnostics(&*self.preprocess(root_file).diagnostics, root_file, self);
         sink.add_diagnostics(self.parse(root_file).errors(), root_file, self);
         collect_diagnostics(self, root_file, &mut sink);
 
-        if sink.summary(file_name) {
-            bail!("compiation failed");
+        if sink.summary(&file_name) {
+            return None;
         }
 
         let root_def_map = self.def_map(root_file);
@@ -127,18 +145,14 @@ impl CompilationDB {
                 .copied()
                 .collect();
 
-        if modules.is_empty() {
-            bail!("No modules found")
-        }
-
         let res =
             modules.iter().map(|module| ModuleInfo::collect(self, *module, &mut sink)).collect();
 
-        if sink.summary(file_name) {
-            bail!("compilation failed");
+        if sink.summary(&file_name) {
+            return None;
         }
 
-        Ok(res)
+        Some(res)
     }
 }
 
@@ -160,12 +174,6 @@ impl VfsStorage for CompilationDB {
     fn vfs(&self) -> &RwLock<Vfs> {
         &self.vfs
     }
-}
-
-pub fn abs_path(path: &std::path::Path) -> Result<AbsPathBuf> {
-    let path = path.canonicalize().with_context(|| format!("failed to read {}", path.display()))?;
-    let path = AbsPathBuf::assert(path);
-    Ok(path.normalize())
 }
 
 struct IllegalExpr {

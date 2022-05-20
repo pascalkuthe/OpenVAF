@@ -7,7 +7,7 @@ use llvm::{
     UnnamedAddr,
 };
 use mir_llvm::{CodegenCx, LLVMBackend};
-use sim_back::{CompilationDB, EvalMir};
+use sim_back::{CompilationDB, EvalMir, ModuleInfo};
 use stdx::iter::zip;
 use stdx::{impl_debug_display, impl_idx_from};
 use target::spec::Target;
@@ -33,18 +33,22 @@ mod tests;
 
 const OSDI_VERSION: (u32, u32) = (0, 3);
 
-pub fn compile(path: &Path, dst: &Path, target: &Target, back: &LLVMBackend) {
-    let db = CompilationDB::new(path).unwrap();
-    let modules = db.collect_modules(&path.display()).unwrap();
+pub fn compile(
+    db: &CompilationDB,
+    modules: &[ModuleInfo],
+    dst: &Path,
+    target: &Target,
+    back: &LLVMBackend,
+) {
     let mut literals = Rodeo::new();
     let mir: Vec<_> =
-        modules.iter().map(|module| EvalMir::new(&db, module, &mut literals)).collect();
-    let name = path.file_stem().unwrap().to_string_lossy();
+        modules.iter().map(|module| EvalMir::new(db, module, &mut literals)).collect();
+    let name = dst.file_stem().unwrap().to_string_lossy();
     let llmod = unsafe { back.new_module(&*name).unwrap() };
 
-    let mut cg_units: Vec<_> = zip(&modules, &mir)
+    let mut cg_units: Vec<_> = zip(modules, &mir)
         .map(|(module, mir)| {
-            let unit = OsdiCompilationUnit::new(&db, mir, module);
+            let unit = OsdiCompilationUnit::new(db, mir, module);
             unit.intern_names(&mut literals);
             unit
         })
@@ -95,7 +99,6 @@ pub fn compile(path: &Path, dst: &Path, target: &Target, back: &LLVMBackend) {
 
     llmod.optimize(back);
 
-    println!("{}", llmod.to_str());
     assert_eq!(llmod.emit_obect(dst), Ok(()))
 }
 

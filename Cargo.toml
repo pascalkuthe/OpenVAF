@@ -15,7 +15,7 @@ debug = true
 # Disabling debug info speeds up builds a bunch,
 # and we don't rely on it for debugging that much.
 debug = true
-panic = "abort"
+# panic = "abort"
 
 [profile.dev.package]
 # These speed up local tests.

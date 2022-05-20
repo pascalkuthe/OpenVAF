@@ -41,7 +41,8 @@ extern "C" {
     //     ErrorMessage: *mut *mut ::libc::c_char,
     //     OutMemBuf: *mut LLVMMemoryBufferRef,
     // ) -> LLVMBool;
-    fn LLVMGetHostCPUName() -> *const c_char;
+    pub fn LLVMGetHostCPUName() -> *const c_char;
+    pub fn LLVMGetHostCPUFeatures() -> *const c_char;
 
     /// Normalize a target triple. The result needs to be disposed with LLVMDisposeMessage.
     fn LLVMNormalizeTargetTriple(triple: *const c_char) -> *mut c_char;
@@ -56,16 +57,6 @@ extern "C" {
     pub fn LLVMABIAlignmentOfType(data: &TargetData, ty: &Type) -> c_uint;
 }
 
-pub fn handle_cpu_name(name: &str) -> LLVMString {
-    if name != "native" {
-        return LLVMString::create_from_str(name);
-    }
-
-    unsafe {
-        let ptr = LLVMGetHostCPUName();
-        LLVMString::new(ptr)
-    }
-}
 
 /// # Safety
 ///
@@ -90,7 +81,7 @@ pub unsafe fn create_target(
         return Err(LLVMString::new(err_string.assume_init()));
     }
 
-    let cpu = handle_cpu_name(cpu);
+    let cpu = LLVMString::create_from_str(cpu);
     let features = CString::new(features).unwrap();
     let target = target.unwrap();
 

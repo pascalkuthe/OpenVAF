@@ -15,6 +15,7 @@ pub struct CodegenCx<'a, 'll> {
     pub llcx: &'ll llvm::Context,
 
     pub target: &'a Target,
+    pub target_cpu: &'a str,
     pub literals: &'a Rodeo,
     str_lit_cache: AHashMap<Spur, &'ll Value>,
     pub(crate) intrinsics: AHashMap<&'static str, (&'ll Type, &'ll Value)>,
@@ -26,6 +27,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         literals: &'a Rodeo,
         llvm_module: &'ll crate::ModuleLlvm,
         target: &'a Target,
+        target_cpu: &'a str,
     ) -> CodegenCx<'a, 'll> {
         // let ty_isize =
         //     unsafe { llvm::LLVMIntTypeInContext(llvm_module.llcx, target.pointer_width) };
@@ -36,6 +38,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             literals,
             intrinsics: AHashMap::new(),
             local_gen_sym_counter: 0,
+            target_cpu,
             // ty_isize,
             target,
         }

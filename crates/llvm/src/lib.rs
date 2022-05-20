@@ -24,8 +24,9 @@ use crate::util::InvariantOpaque;
 
 mod util;
 
+pub mod attributes;
 pub mod basic_block;
-mod bitcode;
+pub mod bitcode;
 pub mod builder;
 pub mod context;
 pub mod initialization;
@@ -36,6 +37,7 @@ pub mod targets;
 pub mod types;
 pub mod values;
 
+pub use attributes::*;
 pub use basic_block::*;
 pub use bitcode::*;
 pub use builder::*;
@@ -88,6 +90,14 @@ impl fmt::Debug for Type {
 pub enum Value {}
 
 impl fmt::Debug for Value {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
+}
+
+pub enum Attribute {}
+
+impl fmt::Debug for Attribute {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Ok(())
     }

@@ -4,6 +4,7 @@ use hir_def::db::HirDefDB;
 use hir_def::Type;
 use hir_lower::{CallBackKind, ParamKind};
 use lasso::Rodeo;
+use llvm::OptLevel;
 use mir::{ControlFlowGraph, FuncRef, Function, Param, Value};
 use mir_llvm::{Builder, CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use salsa::ParallelDatabase;
@@ -72,7 +73,7 @@ impl EvalMir {
         let db2 = db.snapshot();
         // rayon_core::join(
         // || {
-        let backend = LLVMBackend::new(&[], target, llvm::OptLevel::Aggressive);
+        let backend = LLVMBackend::new(&[], target, OptLevel::Aggressive);
         self.func_to_bin(
             &self.init_inst_func,
             &self.init_inst_cfg,
@@ -84,7 +85,7 @@ impl EvalMir {
         );
         // },
         // || {
-        let backend = LLVMBackend::new(&[], target, llvm::OptLevel::Aggressive);
+        let backend = LLVMBackend::new(&[], target, OptLevel::Aggressive);
         self.func_to_bin(
             &self.eval_func,
             &self.eval_cfg,

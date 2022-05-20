@@ -7,6 +7,7 @@ use hir_lower::ParamKind;
 use lasso::{Rodeo, Spur};
 use mir::{FuncRef, Function, Param, Value};
 use mir_interpret::{Data, Func, Interpreter, InterpreterState};
+use paths::AbsPathBuf;
 use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
@@ -73,8 +74,9 @@ pub fn generate_integration_tests() {
 // }
 
 fn compile_to_mir(path: &Path) -> (CompilationDB, EvalMir, Rodeo) {
-    let db = CompilationDB::new(Path::new(path)).unwrap();
-    let modules = db.collect_modules(&path.display()).unwrap();
+    let path = AbsPathBuf::assert(path.canonicalize().unwrap());
+    let db = CompilationDB::new(path, &[], &[], &[]).unwrap();
+    let modules = db.collect_modules().unwrap();
     let mut literals = Rodeo::new();
     let mir = EvalMir::new(&db, &modules[0], &mut literals);
     (db, mir, literals)

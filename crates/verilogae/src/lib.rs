@@ -88,9 +88,15 @@ impl CompilationDB {
         // display method
         let info = ModelInfo::collect(&db, &file, opts.module_name()?)?;
 
-        let target = opts.target(local)?;
+        let target_cpu = match opts.target_cpu()? {
+            Some(cpu) => cpu,
+            None if local => "native",
+            None => "generic",
+        };
         let cg_opts: Vec<_> = opts.cg_flags().map(str::to_owned).collect();
-        let backend = LLVMBackend::new(&cg_opts, &target, opts.opt_lvl.into());
+        let target = opts.target()?;
+        let backend =
+            LLVMBackend::new(&cg_opts, &target, target_cpu.to_owned(), &[], opts.opt_lvl.into());
         let cache_dir = opts.cache_dir()?;
 
         std::fs::create_dir_all(&cache_dir).unwrap();

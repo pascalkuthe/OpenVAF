@@ -206,7 +206,6 @@ impl EvalMir {
             }
         }
 
-
         let mut op_dependent: Vec<Value> = intern
             .params
             .raw
@@ -245,7 +244,6 @@ impl EvalMir {
         let mut init_inst_cfg = cfg.clone();
 
         let mut init_inst_cache: IndexSet<_, ahash::RandomState> = IndexSet::default();
-
 
         for inst in func.dfg.insts.iter() {
             let bb = if let Some(bb) = init_inst_func.layout.inst_block(inst) {

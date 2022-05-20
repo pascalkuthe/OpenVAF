@@ -191,7 +191,6 @@ impl AbsPath {
     pub fn display(&self) -> std::path::Display<'_> {
         self.0.display()
     }
-    #[deprecated(note = "use std::fs::metadata().is_ok() instead")]
     pub fn exists(&self) -> bool {
         self.0.exists()
     }

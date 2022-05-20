@@ -207,14 +207,16 @@ impl Diagnostic for PreprocessorDiagnostic {
 
                         notes.push(help);
 
-                        let replaced = if dst.len() > 10{
+                        let replaced = if dst.len() > 10 {
                             format!("\n\'{dst}\'")
-                        }else{
+                        } else {
                             format!(" \'{dst}\'")
                         };
-                        let info = format!("info: replacing these lookalikes with ascii yields:{replaced}");
+                        let info = format!(
+                            "info: replacing these lookalikes with ascii yields:{replaced}"
+                        );
                         notes.push(info);
-                    }else{
+                    } else {
                         notes = vec!["help: you have used unicode characters but Verilog-A only allows ascii".to_owned()];
                     }
                 }

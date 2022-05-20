@@ -158,16 +158,16 @@ pub mod builtin {
 
     declare_lints! {
         @OFFSET 0;
-        pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: 1};
-        pub const constant_overflow = LintData{default_lvl: Deny, documentation_id: 2};
-        pub const infinte_loop = LintData{default_lvl: Deny, documentation_id: 3};
+        // pub const standard_nature_constants = LintData{default_lvl: Warn, documentation_id: 1};
+        // pub const constant_overflow = LintData{default_lvl: Deny, documentation_id: 2};
+        // pub const infinte_loop = LintData{default_lvl: Deny, documentation_id: 3};
         pub const macro_overwritten = LintData{default_lvl: Warn, documentation_id: 4};
-        pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id:5};
-        pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: 6};
-        pub const noise_derivative = LintData{default_lvl: Warn, documentation_id: 7};
+        // pub const attribute_overwritten = LintData{default_lvl: Warn, documentation_id:5};
+        // pub const rounding_derivative = LintData{default_lvl: Warn, documentation_id: 6};
+        // pub const noise_derivative = LintData{default_lvl: Warn, documentation_id: 7};
         pub const lint_not_found = LintData{default_lvl: Deny, documentation_id: 8};
         pub const lint_level_owerwrite = LintData{default_lvl: Warn, documentation_id: 9};
-        pub const useless_function_call = LintData{default_lvl: Warn, documentation_id: 10};
+        // pub const useless_function_call = LintData{default_lvl: Warn, documentation_id: 10};
         pub const non_standard_code = LintData{default_lvl: Warn, documentation_id: 11};
         pub const vams_keyword_compat = LintData{default_lvl: Warn, documentation_id: 12};
         pub const non_standard_analog_operator = LintData{default_lvl: Deny, documentation_id: 13};
