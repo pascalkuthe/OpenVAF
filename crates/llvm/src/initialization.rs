@@ -78,7 +78,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
         // Set the llvm "program name" to make usage and invalid argument messages more clear.
         add(concat!(env!("COMPILER_NAME"), " -Cllvm-args=\"...\" with"), true);
         // if sess.time_llvm_passes() {
-        //     add("-time-passes", false);
+            add("-time-passes", false);
         // }
         // if sess.print_llvm_passes() {
         //     add("-debug-pass=Structure", false);
@@ -98,6 +98,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
         if crate::get_version() < (13, 0, 0) {
             add("-enable-machine-outliner=never", false);
         }
+
         for arg in args {
             add(&(*arg), true);
         }
@@ -124,7 +125,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
     LLVMParseCommandLineOptions(
         llvm_args.len() as c_int,
         llvm_args.as_ptr(),
-        b"\0".as_ptr() as *const i8,
+        b"".as_ptr() as *const i8,
     );
 }
 

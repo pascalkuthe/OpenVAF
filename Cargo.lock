@@ -708,6 +708,7 @@ dependencies = [
  "paths",
  "proc-macro2",
  "quote",
+ "rayon-core",
  "salsa",
  "sim_back",
  "smol_str",

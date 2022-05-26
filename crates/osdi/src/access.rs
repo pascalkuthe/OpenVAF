@@ -4,20 +4,25 @@ use llvm::{
     LLVMBuildICmp, LLVMBuildPointerCast, LLVMBuildRet, LLVMBuildSwitch, LLVMCreateBuilderInContext,
     LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd, UNNAMED,
 };
-use mir_llvm::CodegenCx;
 
 use crate::compilation_unit::OsdiCompilationUnit;
 use crate::metadata::osdi_0_3::{ACCESS_FLAG_INSTANCE, ACCESS_FLAG_SET};
 
-impl<'ll> OsdiCompilationUnit<'_, 'll> {
-    pub fn access_function(&self, cx: &mut CodegenCx<'_, 'll>) -> &'ll llvm::Value {
+impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
+    pub fn access_function_prototype(&self) -> &'ll llvm::Value {
+        let cx = &self.cx;
         let void_ptr = cx.ty_void_ptr();
         let uint32_t = cx.ty_int();
         let fun_ty = cx.ty_func(&[void_ptr, void_ptr, uint32_t, uint32_t], void_ptr);
-        let name = &format!("access_{}", &self.sym,);
-        let llfunc = cx.declare_int_c_fn(name, fun_ty);
-        let inst_data = self.inst_data();
-        let model_data = self.model_data();
+        let name = &format!("access_{}", &self.module.sym);
+        cx.declare_ext_fn(name, fun_ty)
+    }
+
+    pub fn access_function(&mut self) -> &'ll llvm::Value {
+        let llfunc = self.access_function_prototype();
+        let OsdiCompilationUnit { inst_data, model_data, cx, .. } = &self;
+
+        let void_ptr = cx.ty_void_ptr();
 
         unsafe {
             let entry = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
@@ -129,12 +134,15 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                 LLVMBuildRet(llbuilder, ptr);
             }
 
+            let null_ptr = cx.const_null_ptr(void_ptr);
+
             // opvars
             LLVMPositionBuilderAtEnd(llbuilder, opvar_bb);
             let switch_opvar =
                 LLVMBuildSwitch(llbuilder, param_id, err_exit, inst_data.opvars.len() as u32);
 
             for opvar_idx in 0..inst_data.opvars.len() {
+                let OsdiCompilationUnit { inst_data, model_data, cx, .. } = &self;
                 let bb = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
                 LLVMPositionBuilderAtEnd(llbuilder, bb);
                 let case = cx.const_unsigned_int(
@@ -142,8 +150,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                 );
                 LLVMAddCase(switch_opvar, case, bb);
 
-                let (ptr, _) =
-                    inst_data.nth_opvar_ptr(cx, self, opvar_idx as u32, inst, model, llbuilder);
+                let (ptr, _) = self.nth_opvar_ptr(opvar_idx as u32, inst, model, llbuilder);
                 let ptr = LLVMBuildPointerCast(llbuilder, ptr, void_ptr, UNNAMED);
 
                 LLVMBuildRet(llbuilder, ptr);
@@ -151,7 +158,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
 
             //return NULL on unkown id
             LLVMPositionBuilderAtEnd(llbuilder, err_exit);
-            LLVMBuildRet(llbuilder, cx.const_null_ptr(void_ptr));
+            LLVMBuildRet(llbuilder, null_ptr);
 
             LLVMDisposeBuilder(llbuilder);
         }

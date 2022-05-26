@@ -211,7 +211,7 @@ pub enum Linkage {
     WeakAnyLinkage = 5,
     WeakODRLinkage = 6,
     AppendingLinkage = 7,
-    InternalLinkage = 8,
+    Internal = 8,
     PrivateLinkage = 9,
     DLLImportLinkage = 10,
     DLLExportLinkage = 11,

@@ -80,17 +80,6 @@ impl AgressiveDeadCode<'_> {
                 for arg in self.func.dfg.instr_args(inst) {
                     if let ValueDef::Result(def, _) = self.func.dfg.value_def(*arg) {
                         self.mark_inst_live(def);
-
-                        if matches!(self.func.dfg.insts[def], InstructionData::PhiNode(_)) {
-                            let bb = self.func.layout.inst_block(def).unwrap();
-                            if self.live_predecessors.insert(bb) {
-                                for pred in self.cfg.pred_iter(bb) {
-                                    if self.live_control_flow.insert(pred) {
-                                        self.bb_work_list.push(pred)
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -114,6 +103,18 @@ impl AgressiveDeadCode<'_> {
             self.inst_work_list.push(inst);
             let bb = self.func.layout.inst_block(inst).unwrap();
             self.mark_bb_live(bb);
+
+            if matches!(self.func.dfg.insts[inst], InstructionData::PhiNode(_)) {
+                let bb = self.func.layout.inst_block(inst).unwrap();
+                if self.live_predecessors.insert(bb) {
+                    for pred in self.cfg.pred_iter(bb) {
+                        if self.live_control_flow.insert(pred) {
+                            self.bb_work_list.push(pred)
+                        }
+                    }
+                }
+            }
+
             true
         } else {
             false

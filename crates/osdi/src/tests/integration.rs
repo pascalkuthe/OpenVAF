@@ -9,7 +9,7 @@ fn bsim3() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIM3").join("bsim3.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn bsim4() {
@@ -17,7 +17,7 @@ fn bsim4() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIM4").join("bsim4.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn bsim6() {
@@ -25,7 +25,7 @@ fn bsim6() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIM6").join("bsim6.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn bsimbulk() {
@@ -33,7 +33,7 @@ fn bsimbulk() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIMBULK").join("bsimbulk.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn bsimcmg() {
@@ -41,7 +41,7 @@ fn bsimcmg() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIMCMG").join("bsimcmg.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn bsimimg() {
@@ -49,7 +49,7 @@ fn bsimimg() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIMIMG").join("bsimimg.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn bsimsoi() {
@@ -57,7 +57,7 @@ fn bsimsoi() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("BSIMSOI").join("bsimsoi.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn cccs() {
@@ -65,7 +65,7 @@ fn cccs() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("CCCS").join("cccs.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn current_source() {
@@ -74,7 +74,7 @@ fn current_source() {
     }
     let root_file =
         project_root().join("integration_tests").join("CURRENT_SOURCE").join("current_source.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn diode() {
@@ -82,7 +82,7 @@ fn diode() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("DIODE").join("diode.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn diode_cmc() {
@@ -90,7 +90,7 @@ fn diode_cmc() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("DIODE_CMC").join("diode_cmc.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn ekv() {
@@ -98,7 +98,7 @@ fn ekv() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("EKV").join("ekv.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn ekv_longchannel() {
@@ -107,7 +107,7 @@ fn ekv_longchannel() {
     }
     let root_file =
         project_root().join("integration_tests").join("EKV_LONGCHANNEL").join("ekv_longchannel.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn hicuml2() {
@@ -115,7 +115,7 @@ fn hicuml2() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("HICUML2").join("hicuml2.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn hisim2() {
@@ -123,7 +123,7 @@ fn hisim2() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("HiSIM2").join("hisim2.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn hisimhv() {
@@ -131,7 +131,7 @@ fn hisimhv() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("HiSIMHV").join("hisimhv.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn hisimsotb() {
@@ -139,7 +139,7 @@ fn hisimsotb() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("HiSIMSOTB").join("hisimsotb.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn mvsg_cmc() {
@@ -147,7 +147,7 @@ fn mvsg_cmc() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("MVSG_CMC").join("mvsg_cmc.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn psp() {
@@ -155,7 +155,7 @@ fn psp() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("PSP").join("psp.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn resistor() {
@@ -163,7 +163,7 @@ fn resistor() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }
 #[test]
 fn vccs() {
@@ -171,5 +171,5 @@ fn vccs() {
         return;
     }
     let root_file = project_root().join("integration_tests").join("VCCS").join("vccs.va");
-    super::full_compile(&root_file);
+    super::test_compile(&root_file);
 }

@@ -421,6 +421,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
         self.osdi_descriptor = Some(ty);
     }
 }
+#[derive(Clone)]
 pub struct OsdiTys<'ll> {
     pub osdi_sim_paras: &'ll llvm::Type,
     pub osdi_init_error_payload: &'ll llvm::Type,

@@ -385,16 +385,19 @@ impl EvalMir {
             .iter()
             .filter_map(|(param, info)| info.is_instance.then(|| *param))
             .collect();
-        init_inst_intern.insert_param_init(db, &mut init_inst_func, literals, false, &inst_params);
+        init_inst_intern.insert_param_init(
+            db,
+            &mut init_inst_func,
+            literals,
+            false,
+            true,
+            &inst_params,
+        );
         init_inst_cfg.compute(&init_inst_func);
 
         let mut init_model_func = Function::default();
 
-        let inst_params: Vec<_> = module
-            .params
-            .iter()
-            .filter_map(|(param, info)| (!info.is_instance).then(|| *param))
-            .collect();
+        let model_params: Vec<_> = module.params.keys().copied().collect();
 
         let mut init_model_intern = HirInterner::default();
 
@@ -403,8 +406,15 @@ impl EvalMir {
             &mut init_model_func,
             literals,
             false,
-            &inst_params,
+            true,
+            &model_params,
         );
+
+        let mut init_model_cfg = ControlFlowGraph::new();
+        init_model_cfg.compute(&init_model_func);
+        simplify_cfg(&mut init_model_func, &mut init_model_cfg);
+        sparse_conditional_constant_propagation(&mut init_model_func, &init_model_cfg);
+        simplify_cfg(&mut init_model_func, &mut init_model_cfg);
 
         EvalMir {
             init_inst_func,

@@ -107,7 +107,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe {
             llvm::LLVMSetInitializer(global, val);
             llvm::LLVMSetGlobalConstant(global, llvm::True);
-            llvm::LLVMSetLinkage(global, llvm::Linkage::InternalLinkage);
+            llvm::LLVMSetLinkage(global, llvm::Linkage::Internal);
         }
         let res = self.ptrcast(global, self.ty_str());
         self.str_lit_cache.insert(lit, res);

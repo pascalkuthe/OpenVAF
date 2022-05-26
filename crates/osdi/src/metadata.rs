@@ -5,11 +5,11 @@ use hir_def::{Lookup, Type};
 use hir_ty::db::HirTyDB;
 use lasso::Rodeo;
 use llvm::{LLVMABISizeOfType, LLVMOffsetOfElement, TargetData};
-use mir_llvm::CodegenCx;
 use sim_back::matrix::MatrixEntry;
+use sim_back::CompilationDB;
 use smol_str::SmolStr;
 
-use crate::compilation_unit::OsdiCompilationUnit;
+use crate::compilation_unit::{OsdiCompilationUnit, OsdiModule};
 use crate::inst_data::{
     OsdiInstanceParam, COLLAPSED, JACOBIAN_PTR_REACT, JACOBIAN_PTR_RESIST, NODE_MAPPING,
 };
@@ -25,8 +25,9 @@ use crate::ty_len;
 #[allow(unused_parens, dead_code)]
 pub mod osdi_0_3;
 
-impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
+impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     pub fn param_opvar(&self) -> Vec<OsdiParamOpvar> {
+        let OsdiCompilationUnit { inst_data, model_data, module, .. } = self;
         fn para_ty_flags(ty: &Type) -> u32 {
             match ty.base_type() {
                 Type::Real => PARA_TY_REAL,
@@ -36,7 +37,7 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
             }
         }
 
-        let inst_params = self.inst_data().params.keys().map(|param| {
+        let inst_params = inst_data.params.keys().map(|param| {
             match param {
                 OsdiInstanceParam::Builtin(builtin) => OsdiParamOpvar {
                     // TODO alias
@@ -48,7 +49,7 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
                     len: 0,
                 },
                 OsdiInstanceParam::User(param) => {
-                    let param = &self.module.params[param];
+                    let param = &module.base.params[param];
 
                     let flags = para_ty_flags(&param.ty) | PARA_KIND_INST;
                     OsdiParamOpvar {
@@ -66,8 +67,8 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
             }
         });
 
-        let model_params = self.model_data().params.keys().filter_map(|param| {
-            let param = &self.module.params[param];
+        let model_params = model_data.params.keys().filter_map(|param| {
+            let param = &module.base.params[param];
             if param.is_instance {
                 return None;
             }
@@ -83,8 +84,8 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
             Some(param_opvar)
         });
 
-        let opvars = self.inst_data().opvars.keys().map(|opvar| {
-            let opvar = &self.module.op_vars[opvar];
+        let opvars = inst_data.opvars.keys().map(|opvar| {
+            let opvar = &module.base.op_vars[opvar];
             // TODO inst params
             let flags = para_ty_flags(&opvar.ty) | PARA_KIND_OPVAR;
             OsdiParamOpvar {
@@ -100,29 +101,28 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
         inst_params.chain(model_params).chain(opvars).collect()
     }
 
-    pub fn nodes(&self, target_data: &TargetData) -> Vec<OsdiNode> {
-        self.node_ids
+    pub fn nodes(&self, target_data: &TargetData, db: &CompilationDB) -> Vec<OsdiNode> {
+        let OsdiCompilationUnit { inst_data, module, .. } = self;
+        module
+            .node_ids
             .iter_enumerated()
             .map(|(id, node)| {
                 // TODO flows
-                let discipline = self.db.node_discipline(*node).unwrap();
-                let discipline = self.db.discipline_info(discipline);
+                let discipline = db.node_discipline(*node).unwrap();
+                let discipline = db.discipline_info(discipline);
 
-                let inst_data = self.inst_data();
                 let resist_residual_off =
                     inst_data.residual_off(id, false, target_data).unwrap_or(u32::MAX);
                 let react_residual_off =
                     inst_data.residual_off(id, true, target_data).unwrap_or(u32::MAX);
                 OsdiNode {
-                    name: self.db.node_data(*node).name.to_string(),
-                    units: self
-                        .db
+                    name: db.node_data(*node).name.to_string(),
+                    units: db
                         .nature_info(discipline.potential.unwrap())
                         .units
                         .as_ref()
                         .map_or_else(String::new, String::clone),
-                    residual_units: self
-                        .db
+                    residual_units: db
                         .nature_info(discipline.flow.unwrap())
                         .units
                         .as_ref()
@@ -135,24 +135,9 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
             .collect()
     }
 
-    pub fn intern_node_strs(&self, intern: &mut Rodeo) {
-        for node in self.node_ids.raw.iter() {
-            intern.get_or_intern(&*self.db.node_data(*node).name);
-
-            let discipline = self.db.node_discipline(*node).unwrap();
-            let discipline = self.db.discipline_info(discipline);
-            if let Some(units) = self.db.nature_info(discipline.potential.unwrap()).units.as_ref() {
-                intern.get_or_intern(units);
-            }
-            if let Some(units) = self.db.nature_info(discipline.flow.unwrap()).units.as_ref() {
-                intern.get_or_intern(units);
-            }
-        }
-    }
-
     fn is_const(&self, entry: MatrixEntry, reactive: bool) -> bool {
-        let matrix = &self.mir.matrix;
-        let func = &self.mir.eval_func;
+        let matrix = &self.module.mir.matrix;
+        let func = &self.module.mir.eval_func;
         let matrix = if reactive { &matrix.reactive } else { &matrix.resistive };
         if let Some(val) = matrix.raw.get(&entry) {
             func.dfg.value_def(*val).inst().is_none()
@@ -162,18 +147,19 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
     }
 
     pub fn jacobian_entries(&self, target_data: &TargetData) -> Vec<OsdiJacobianEntry> {
+        let OsdiCompilationUnit { inst_data, module, .. } = self;
         let mut jacobian_ptr_react_offset =
-            unsafe { LLVMOffsetOfElement(target_data, self.inst_data().ty, JACOBIAN_PTR_REACT) }
-                as u32;
+            unsafe { LLVMOffsetOfElement(target_data, inst_data.ty, JACOBIAN_PTR_REACT) } as u32;
 
-        self.matrix_ids
+        module
+            .matrix_ids
             .raw
             .iter()
             .map(|entry| {
                 let mut flags = 0;
                 let mut react_ptr_off = u32::MAX;
 
-                let entry_ = entry.to_middle(&self.node_ids);
+                let entry_ = entry.to_middle(&module.node_ids);
                 if self.is_const(entry_, false) {
                     flags |= JACOBIAN_ENTRY_RESIST_CONST
                 }
@@ -182,11 +168,11 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
                     flags |= JACOBIAN_ENTRY_REACT_CONST
                 }
 
-                if self.mir.matrix.resistive.contains_key(&entry_) {
+                if module.mir.matrix.resistive.contains_key(&entry_) {
                     flags |= JACOBIAN_ENTRY_RESIST;
                 }
 
-                if self.mir.matrix.reactive.contains_key(&entry_) {
+                if module.mir.matrix.reactive.contains_key(&entry_) {
                     flags |= JACOBIAN_ENTRY_REACT;
                     react_ptr_off = jacobian_ptr_react_offset;
                     jacobian_ptr_react_offset += 8;
@@ -201,26 +187,27 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
     }
 
     pub fn collapsible(&self) -> Vec<OsdiNodePair> {
-        self.mir
+        self.module
+            .mir
             .collapse
             .raw
             .iter()
             .map(|(hi, lo)| {
-                let node_1 = self.node_ids.unwrap_index(hi).0;
-                let node_2 = lo.map_or(u32::MAX, |lo| self.node_ids.unwrap_index(&lo).0);
+                let node_1 = self.module.node_ids.unwrap_index(hi).0;
+                let node_2 = lo.map_or(u32::MAX, |lo| self.module.node_ids.unwrap_index(&lo).0);
                 OsdiNodePair { node_1, node_2 }
             })
             .collect()
     }
 
     pub fn descriptor(
-        &self,
-        cx: &mut CodegenCx<'_, 'll>,
+        &mut self,
         target_data: &llvm::TargetData,
+        db: &CompilationDB,
     ) -> OsdiDescriptor<'ll> {
         let collapsible = self.collapsible();
-        let inst_data = self.inst_data();
-        let model_data = self.model_data();
+        let OsdiCompilationUnit { ref inst_data, ref model_data, module, .. } = *self;
+
         unsafe {
             let node_mapping_offset =
                 LLVMOffsetOfElement(target_data, inst_data.ty, NODE_MAPPING) as u32;
@@ -230,14 +217,14 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
             let collapsed_offset = LLVMOffsetOfElement(target_data, inst_data.ty, COLLAPSED) as u32;
 
             let instance_size = LLVMABISizeOfType(target_data, inst_data.ty) as u32;
-            let model_size = LLVMABISizeOfType(target_data, self.model_data().ty) as u32;
+            let model_size = LLVMABISizeOfType(target_data, model_data.ty) as u32;
 
             OsdiDescriptor {
-                name: self.module.id.lookup(self.db).name(self.db).to_string(),
-                num_nodes: self.node_ids.len() as u32,
-                num_terminals: self.num_terminals,
-                nodes: self.nodes(target_data),
-                num_jacobian_entries: self.matrix_ids.len() as u32,
+                name: module.base.id.lookup(db).name(db).to_string(),
+                num_nodes: module.node_ids.len() as u32,
+                num_terminals: module.num_terminals,
+                nodes: self.nodes(target_data, db),
+                num_jacobian_entries: module.matrix_ids.len() as u32,
                 jacobian_entries: self.jacobian_entries(target_data),
                 num_collapsible: collapsible.len() as u32,
                 collapsible,
@@ -256,18 +243,35 @@ impl<'a, 'll> OsdiCompilationUnit<'a, 'll> {
                 jacobian_ptr_resist_offset,
                 instance_size,
                 model_size,
-                access: self.access_function(cx),
-                setup_model: self.setup_model(cx),
-                setup_instance: self.setup_instance(cx),
-                eval: self.eval(cx),
-                load_noise: self.load_noise(cx),
-                load_residual_resist: self.load_residual(cx, false),
-                load_residual_react: self.load_residual(cx, true),
-                load_spice_rhs_dc: self.load_spice_rhs(cx, false),
-                load_spice_rhs_tran: self.load_spice_rhs(cx, true),
-                load_jacobian_resist: self.load_jacobian(cx, JacobianLoadType::Resist),
-                load_jacobian_react: self.load_jacobian(cx, JacobianLoadType::React),
-                load_jacobian_tran: self.load_jacobian(cx, JacobianLoadType::Tran),
+                access: self.access_function_prototype(),
+                setup_model: self.setup_model_prototype(),
+                setup_instance: self.setup_instance_prototype(),
+                eval: self.eval_prototype(),
+                load_noise: self.load_noise(),
+                load_residual_resist: self.load_residual(false),
+                load_residual_react: self.load_residual(true),
+                load_spice_rhs_dc: self.load_spice_rhs(false),
+                load_spice_rhs_tran: self.load_spice_rhs(true),
+                load_jacobian_resist: self.load_jacobian(JacobianLoadType::Resist),
+                load_jacobian_react: self.load_jacobian(JacobianLoadType::React),
+                load_jacobian_tran: self.load_jacobian(JacobianLoadType::Tran),
+            }
+        }
+    }
+}
+
+impl OsdiModule<'_> {
+    pub fn intern_node_strs(&self, intern: &mut Rodeo, db: &CompilationDB) {
+        for node in self.node_ids.raw.iter() {
+            intern.get_or_intern(&*db.node_data(*node).name);
+
+            let discipline = db.node_discipline(*node).unwrap();
+            let discipline = db.discipline_info(discipline);
+            if let Some(units) = db.nature_info(discipline.potential.unwrap()).units.as_ref() {
+                intern.get_or_intern(units);
+            }
+            if let Some(units) = db.nature_info(discipline.flow.unwrap()).units.as_ref() {
+                intern.get_or_intern(units);
             }
         }
     }

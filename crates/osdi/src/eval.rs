@@ -5,21 +5,22 @@ use llvm::{
     LLVMAppendBasicBlockInContext, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCondBr, LLVMBuildICmp,
     LLVMPositionBuilderAtEnd, UNNAMED,
 };
-use mir_llvm::{Builder, CodegenCx};
+use mir_llvm::{Builder, BuilderVal};
 use typed_index_collections::TiVec;
 
-use crate::compilation_unit::OsdiCompilationUnit;
+use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
 use crate::inst_data::OsdiInstanceParam;
 use crate::metadata::osdi_0_3::{
     CALC_OP, CALC_REACT_JACOBIAN, CALC_REACT_RESIDUAL, CALC_RESIST_JACOBIAN, CALC_RESIST_RESIDUAL,
 };
 
-impl<'ll> OsdiCompilationUnit<'_, 'll> {
-    pub fn eval(&self, cx: &mut CodegenCx<'_, 'll>) -> &'ll llvm::Value {
-        let name = &format!("eval_{}", &self.sym);
+impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
+    pub fn eval_prototype(&self) -> &'ll llvm::Value {
+        let name = &format!("eval_{}", &self.module.sym);
+        let cx = &self.cx;
 
         let ty_void_ptr = cx.ty_void_ptr();
-        let simparam_ptr_ty = cx.ptr_ty(self.tys().osdi_sim_paras);
+        let simparam_ptr_ty = cx.ptr_ty(self.tys.osdi_sim_paras);
 
         let fun_ty = cx.ty_func(
             &[
@@ -32,18 +33,31 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
             ],
             cx.ty_int(),
         );
-        let llfunc = cx.declare_int_c_fn(name, fun_ty);
+        cx.declare_ext_fn(name, fun_ty)
+    }
 
-        let func = &self.mir.eval_func;
-        let cfg = &self.mir.eval_cfg;
-        let intern = &self.mir.eval_intern;
+    pub fn eval(&mut self) -> &'ll llvm::Value {
+        let llfunc = self.eval_prototype();
+        let OsdiCompilationUnit { inst_data, model_data, cx, module, .. } = self;
+        // unsafe {
+        //     let build = LLVMCreateBuilderInContext(cx.llcx);
+
+        //     let entry = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
+        //     LLVMPositionBuilderAtEnd(build, entry);
+
+        //     LLVMBuildRet(build, cx.const_int(0));
+        //     LLVMDisposeBuilder(build);
+        //     return llfunc;
+        // }
+
+        let func = &module.mir.eval_func;
+        let cfg = &module.mir.eval_cfg;
+        let intern = &module.mir.eval_intern;
 
         let mut builder = Builder::new(cx, func, llfunc);
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
         // builder.callbacks = callbacks(&self.intern.callbacks, builder.cx);
-        let inst_data = self.inst_data();
-        let model_data = self.model_data();
 
         let handle = unsafe { llvm::LLVMGetParam(llfunc, 0) };
         let instance = unsafe {
@@ -61,7 +75,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
         unsafe { builder.store(ret_flags, builder.cx.const_int(0)) };
 
         let connected_ports = unsafe { inst_data.load_connected_ports(&builder, instance) };
-        let voltages: AHashMap<_, _> = self
+        let voltages: AHashMap<_, _> = module
             .node_ids
             .iter_enumerated()
             .map(|(node_id, node)| unsafe {
@@ -83,7 +97,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
             .iter()
             .map(|(kind, val)| {
                 if func.dfg.value_dead(*val) && !inst_data.eval_outputs.contains_key(val) {
-                    return None;
+                    return BuilderVal::Undef;
                 }
 
                 let val = unsafe {
@@ -117,7 +131,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                                         inst_data,
                                         builder.cx,
                                         OsdiInstanceParam::User(param),
-                                        instance,
+                                        model,
                                         builder.llbuilder,
                                     );
 
@@ -129,7 +143,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                             }
                         }
                         ParamKind::PortConnected { port } => {
-                            let id = self.node_ids.unwrap_index(&port);
+                            let id = module.node_ids.unwrap_index(&port);
                             let id = builder.cx.const_unsigned_int(id.into());
                             builder.int_cmp(id, connected_ports, IntULT)
                         }
@@ -143,34 +157,42 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                         ParamKind::HiddenState(_) => unreachable!(), // TODO  hidden state
                     }
                 };
-                Some(val)
+                BuilderVal::Eager(val)
             })
             .collect();
 
-        let cache_vals = (0..self.mir.init_inst_cache_vals.len()).map(|i| unsafe {
+        let cache_vals = (0..module.mir.init_inst_cache_slots.len()).map(|i| unsafe {
             let slot = i.into();
             let val = inst_data.load_cache_slot(builder.llbuilder, slot, instance);
-            Some(val)
+            BuilderVal::Eager(val)
         });
 
         params.extend(cache_vals);
         builder.params = params;
 
-        builder.callbacks =
-            self.general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
+        builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
 
         unsafe {
             builder.build_consts();
             builder.build_cfg(&postorder);
         }
 
+        let exit_bb = *postorder
+            .iter()
+            .find(|bb| {
+                func.layout
+                    .last_inst(**bb)
+                    .map_or(true, |term| !func.dfg.insts[term].is_terminator())
+            })
+            .unwrap();
+
         // store parameters
-        builder.select_bb(postorder[0]);
+        builder.select_bb(exit_bb);
 
         unsafe {
             for reactive in [false, true] {
-                let matrix = &self.mir.matrix;
-                let residual = &self.mir.residual;
+                let matrix = &module.mir.matrix;
+                let residual = &module.mir.residual;
                 let (matrix, matrix_flag, residual, residual_flag) = if reactive {
                     (&matrix.reactive, CALC_REACT_JACOBIAN, &residual.reactive, CALC_REACT_RESIDUAL)
                 } else {
@@ -183,20 +205,20 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                 };
 
                 let store_matrix = |builder: &mut Builder<'_, '_, 'll>| {
-                    for (id, entry) in self.matrix_ids.iter_enumerated() {
-                        let entry = entry.to_middle(&self.node_ids);
+                    for (id, entry) in module.matrix_ids.iter_enumerated() {
+                        let entry = entry.to_middle(&module.node_ids);
                         if let Some(val) = matrix.raw.get(&entry) {
                             inst_data.store_jacobian(id, instance, *val, builder, reactive)
                         }
                     }
                 };
 
-                self.build_store_results(&mut builder, llfunc, flags, matrix_flag, &store_matrix);
+                Self::build_store_results(&mut builder, llfunc, flags, matrix_flag, &store_matrix);
 
                 let store_residual = |builder: &mut Builder<'_, '_, 'll>| {
-                    for (id, node) in self.node_ids.iter_enumerated() {
+                    for (id, node) in module.node_ids.iter_enumerated() {
                         if let Some(val) = residual.raw.get(node) {
-                            let val = builder.values[*val].unwrap();
+                            let val = builder.values[*val].get(builder);
                             inst_data.store_residual(
                                 id,
                                 instance,
@@ -208,7 +230,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                     }
                 };
 
-                self.build_store_results(
+                Self::build_store_results(
                     &mut builder,
                     llfunc,
                     flags,
@@ -224,7 +246,7 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
                 }
             };
 
-            self.build_store_results(&mut builder, llfunc, flags, CALC_OP, &store_opvars);
+            Self::build_store_results(&mut builder, llfunc, flags, CALC_OP, &store_opvars);
 
             let ret_flags = builder.load(builder.cx.ty_int(), ret_flags);
             builder.ret(ret_flags);
@@ -234,7 +256,6 @@ impl<'ll> OsdiCompilationUnit<'_, 'll> {
     }
 
     unsafe fn build_store_results(
-        &self,
         builder: &mut Builder<'_, '_, 'll>,
         llfunc: &'ll llvm::Value,
         flags: &'ll llvm::Value,

@@ -10,7 +10,7 @@ use llvm::support::LLVMString;
 pub use llvm::OptLevel;
 use llvm::{
     LLVMDisposeMessage, LLVMGetDiagInfoDescription, LLVMGetDiagInfoSeverity,
-    LLVMGetHostCPUFeatures, LLVMGetHostCPUName,
+    LLVMGetHostCPUFeatures, LLVMGetHostCPUName, LLVMPassManagerBuilderDispose,
 };
 use target::spec::Target;
 
@@ -24,7 +24,7 @@ mod callbacks;
 #[cfg(test)]
 mod tests;
 
-pub use builder::Builder;
+pub use builder::{Builder, BuilderVal, MemLoc};
 pub use callbacks::CallbackFun;
 pub use context::CodegenCx;
 
@@ -32,8 +32,6 @@ pub struct LLVMBackend<'t> {
     target: &'t Target,
     target_cpu: String,
     features: String,
-    opt_lvl: OptLevel,
-    builder: Option<&'static mut llvm::PassManagerBuilder>,
 }
 
 impl<'t> LLVMBackend<'t> {
@@ -42,7 +40,6 @@ impl<'t> LLVMBackend<'t> {
         target: &'t Target,
         mut target_cpu: String,
         target_features: &[String],
-        opt_lvl: OptLevel,
     ) -> LLVMBackend<'t> {
         if target_cpu == "generic" {
             target_cpu = target.options.cpu.clone();
@@ -98,28 +95,19 @@ impl<'t> LLVMBackend<'t> {
 
         // TODO add target options here if we ever have any
         llvm::initialization::init(cg_opts, &[]);
-        let builder = unsafe {
-            let builder = llvm::LLVMPassManagerBuilderCreate();
-            llvm::pass_manager_builder_set_opt_lvl(builder, opt_lvl);
-            llvm::LLVMPassManagerBuilderSetSizeLevel(builder, 0);
-            builder
-        };
-
-        LLVMBackend {
-            target,
-            opt_lvl,
-            builder: Some(builder),
-            target_cpu,
-            features: features.join(","),
-        }
+        LLVMBackend { target, target_cpu, features: features.join(",") }
     }
 
     /// # Safety
     ///
     /// This function calls the LLVM-C Api which may not be entirely safe.
     /// Exercise caution!
-    pub unsafe fn new_module(&self, name: &str) -> Result<ModuleLlvm, LLVMString> {
-        ModuleLlvm::new(name, self.target, &self.target_cpu, &self.features, self.opt_lvl)
+    pub unsafe fn new_module(
+        &self,
+        name: &str,
+        opt_lvl: OptLevel,
+    ) -> Result<ModuleLlvm, LLVMString> {
+        ModuleLlvm::new(name, self.target, &self.target_cpu, &self.features, opt_lvl)
     }
 
     /// # Safety
@@ -136,11 +124,7 @@ impl<'t> LLVMBackend<'t> {
 }
 
 impl Drop for LLVMBackend<'_> {
-    fn drop(&mut self) {
-        if let Some(builder) = self.builder.take() {
-            unsafe { llvm::LLVMPassManagerBuilderDispose(builder) }
-        }
-    }
+    fn drop(&mut self) {}
 }
 
 extern "C" fn diagnostic_handler(info: &llvm::DiagnosticInfo, _: *mut c_void) {
@@ -157,6 +141,7 @@ pub struct ModuleLlvm {
     // must be a raw pointer because the reference must not outlife self/the context
     llmod_raw: *const llvm::Module,
     tm: &'static mut llvm::TargetMachine,
+    opt_lvl: OptLevel,
 }
 
 impl ModuleLlvm {
@@ -165,7 +150,7 @@ impl ModuleLlvm {
         target: &Target,
         target_cpu: &str,
         features: &str,
-        lvl: OptLevel,
+        opt_lvl: OptLevel,
     ) -> Result<ModuleLlvm, LLVMString> {
         let llcx = llvm::LLVMContextCreate();
         let target_data_layout = target.data_layout.clone();
@@ -183,13 +168,13 @@ impl ModuleLlvm {
             &target.llvm_target,
             target_cpu,
             features,
-            lvl,
+            opt_lvl,
             llvm::RelocMode::PIC,
             llvm::CodeModel::Default,
         )?;
         let llmod_raw = llmod as _;
 
-        Ok(ModuleLlvm { llcx, llmod_raw, tm })
+        Ok(ModuleLlvm { llcx, llmod_raw, tm, opt_lvl })
     }
 
     pub fn to_str(&self) -> LLVMString {
@@ -200,10 +185,13 @@ impl ModuleLlvm {
         unsafe { &*self.llmod_raw }
     }
 
-    pub fn optimize(&self, backend: &LLVMBackend) {
-        let builder = backend.builder.as_ref().unwrap();
+    pub fn optimize(&self) {
         let llmod = self.llmod();
+
         unsafe {
+            let builder = llvm::LLVMPassManagerBuilderCreate();
+            llvm::pass_manager_builder_set_opt_lvl(builder, self.opt_lvl);
+            llvm::LLVMPassManagerBuilderSetSizeLevel(builder, 0);
             let fpm = llvm::LLVMCreateFunctionPassManagerForModule(llmod);
             llvm::LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpm);
             llvm::run_function_pass_manager(fpm, llmod);
@@ -213,6 +201,7 @@ impl ModuleLlvm {
             llvm::LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
             llvm::LLVMRunPassManager(mpm, llmod);
             llvm::LLVMDisposePassManager(mpm);
+            LLVMPassManagerBuilderDispose(builder);
         }
     }
 

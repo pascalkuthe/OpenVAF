@@ -2,12 +2,92 @@ use std::slice;
 
 use arrayvec::ArrayVec;
 use libc::c_uint;
-use llvm::{LLVMBuildExtractValue, UNNAMED};
+use llvm::{
+    LLVMBuildExtractValue, LLVMBuildICmp, LLVMBuildLoad2, LLVMBuildStore, LLVMGetReturnType,
+    UNNAMED,
+};
 use mir::{Block, FuncRef, Function, Inst, Opcode, Param, PhiNode, Value, ValueDef, F_ZERO, ZERO};
 use typed_index_collections::TiVec;
 
 use crate::callbacks::CallbackFun;
 use crate::CodegenCx;
+
+#[derive(Clone)]
+pub struct MemLoc<'ll> {
+    pub ptr: &'ll llvm::Value,
+    pub ptr_ty: &'ll llvm::Type,
+    pub ty: &'ll llvm::Type,
+    pub indicies: Box<[&'ll llvm::Value]>,
+}
+
+impl<'ll> MemLoc<'ll> {
+    /// # Safety
+    ///
+    /// ptr_ty, ty and indicies must be valid for ptr
+    pub unsafe fn read(&self, llbuilder: &llvm::Builder<'ll>) -> &'ll llvm::Value {
+        let ptr = self.to_ptr(llbuilder);
+        LLVMBuildLoad2(llbuilder, self.ty, ptr, UNNAMED)
+    }
+
+    /// # Safety
+    ///
+    /// ptr_ty and indicies must be valid for ptr
+    pub unsafe fn to_ptr(&self, llbuilder: &llvm::Builder<'ll>) -> &'ll llvm::Value {
+        let mut ptr = self.ptr;
+        if !self.indicies.is_empty() {
+            ptr = llvm::LLVMBuildGEP2(
+                llbuilder,
+                self.ptr_ty,
+                ptr,
+                self.indicies.as_ptr(),
+                self.indicies.len() as u32,
+                UNNAMED,
+            );
+        }
+        ptr
+    }
+}
+
+#[derive(Clone)]
+pub enum BuilderVal<'ll> {
+    Undef,
+    Eager(&'ll llvm::Value),
+    Load(Box<MemLoc<'ll>>),
+    Call(Box<CallbackFun<'ll>>),
+}
+
+impl<'ll> From<&'ll llvm::Value> for BuilderVal<'ll> {
+    fn from(val: &'ll llvm::Value) -> Self {
+        BuilderVal::Eager(val)
+    }
+}
+
+impl<'ll> BuilderVal<'ll> {
+    /// # Safety
+    ///
+    /// For Self::Load and Self::Call, the values must be valid
+    pub unsafe fn get(&self, builder: &Builder<'_, '_, 'll>) -> &'ll llvm::Value {
+        match self {
+            BuilderVal::Undef => unreachable!("attempted to read undefined value"),
+            BuilderVal::Eager(val) => val,
+            BuilderVal::Load(loc) => loc.read(builder.llbuilder),
+            BuilderVal::Call(call) => builder.call(call.fun_ty, call.fun, &*call.state),
+        }
+    }
+
+    /// # Safety
+    ///
+    /// For Self::Load and Self::Call, the values must be valid
+    pub unsafe fn get_ty(&self, builder: &Builder<'_, '_, 'll>) -> Option<&'ll llvm::Type> {
+        let ty = match self {
+            BuilderVal::Undef => return None,
+            BuilderVal::Eager(val) => builder.cx.val_ty(val),
+            BuilderVal::Load(loc) => loc.ty,
+            BuilderVal::Call(call) => LLVMGetReturnType(call.fun_ty),
+        };
+        Some(ty)
+    }
+}
 
 // All Builders must have an llfn associated with them
 #[must_use]
@@ -16,8 +96,8 @@ pub struct Builder<'a, 'cx, 'll> {
     pub cx: &'a mut CodegenCx<'cx, 'll>,
     pub func: &'a Function,
     pub blocks: TiVec<Block, Option<&'ll llvm::BasicBlock>>,
-    pub values: TiVec<Value, Option<&'ll llvm::Value>>,
-    pub params: TiVec<Param, Option<&'ll llvm::Value>>,
+    pub values: TiVec<Value, BuilderVal<'ll>>,
+    pub params: TiVec<Param, BuilderVal<'ll>>,
     pub callbacks: TiVec<FuncRef, Option<CallbackFun<'ll>>>,
     pub prepend_pos: &'ll llvm::BasicBlock,
     pub unfinished_phis: Vec<(PhiNode, &'ll llvm::Value)>,
@@ -58,7 +138,7 @@ impl<'a, 'cx, 'll> Builder<'a, 'cx, 'll> {
             cx,
             func: mir_func,
             blocks,
-            values: vec![None; mir_func.dfg.num_values()].into(),
+            values: vec![BuilderVal::Undef; mir_func.dfg.num_values()].into(),
             params: Default::default(),
             callbacks: Default::default(),
             fun: llfunc,
@@ -223,16 +303,16 @@ impl<'ll> Builder<'_, '_, 'll> {
         for val in self.func.dfg.values() {
             match self.func.dfg.value_def(val) {
                 ValueDef::Result(_, _) | ValueDef::Invalid => (),
-                ValueDef::Param(param) => self.values[val] = self.params[param],
+                ValueDef::Param(param) => self.values[val] = self.params[param].clone(),
                 ValueDef::Const(const_val) => {
-                    self.values[val] = Some(self.cx.const_val(&const_val))
+                    self.values[val] = self.cx.const_val(&const_val).into();
                 }
             }
         }
     }
 
     /// # Safety
-    /// # Safety
+    ///
     /// Must not be called if any block already contain any non-phi instruction (eg must not be
     /// called twice)
     pub unsafe fn build_cfg(&mut self, blocks: &[Block]) {
@@ -242,16 +322,21 @@ impl<'ll> Builder<'_, '_, 'll> {
             self.build_bb(*bb)
         }
 
-        for (phi, llval) in self.unfinished_phis.drain(..) {
+        for (phi, llval) in self.unfinished_phis.iter() {
             let (blocks, vals): (Vec<_>, Vec<_>) = self
                 .func
                 .dfg
-                .phi_edges(&phi)
-                .map(|(bb, val)| (self.blocks[bb].unwrap(), self.values[val].unwrap()))
+                .phi_edges(phi)
+                .map(|(bb, val)| {
+                    self.select_bb_before_terminator(bb);
+                    (self.blocks[bb].unwrap(), self.values[val].get(self))
+                })
                 .unzip();
 
             llvm::LLVMAddIncoming(llval, vals.as_ptr(), blocks.as_ptr(), vals.len() as c_uint);
         }
+
+        self.unfinished_phis.clear();
     }
 
     pub fn select_bb(&self, bb: Block) {
@@ -309,7 +394,7 @@ impl<'ll> Builder<'_, '_, 'll> {
             mir::InstructionData::Branch { cond, then_dst, else_dst, .. } => {
                 llvm::LLVMBuildCondBr(
                     self.llbuilder,
-                    self.values[cond].unwrap(),
+                    self.values[cond].get(self),
                     self.blocks[then_dst].unwrap(),
                     self.blocks[else_dst].unwrap(),
                 );
@@ -317,13 +402,16 @@ impl<'ll> Builder<'_, '_, 'll> {
             }
             mir::InstructionData::PhiNode(ref phi) => {
                 // TODO does this always produce a valid value?
-                let first_val =
-                    self.func.dfg.phi_edges(phi).find_map(|(_, val)| self.values[val]).unwrap();
-                let ty = self.cx.val_ty(first_val);
+                let ty = self
+                    .func
+                    .dfg
+                    .phi_edges(phi)
+                    .find_map(|(_, val)| self.values[val].get_ty(self))
+                    .unwrap();
                 let llval = llvm::LLVMBuildPhi(self.llbuilder, ty, UNNAMED);
                 self.unfinished_phis.push((phi.clone(), llval));
                 let res = self.func.dfg.first_result(inst);
-                self.values[res] = Some(llval);
+                self.values[res] = llval.into();
                 return;
             }
             mir::InstructionData::Jump { destination } => {
@@ -338,21 +426,22 @@ impl<'ll> Builder<'_, '_, 'll> {
                 };
 
                 let args = args.as_slice(&self.func.dfg.insts.value_lists);
+
                 let operands: Vec<_> = callback
                     .state
                     .iter()
                     .copied()
-                    .chain(args.iter().map(|operand| self.values[*operand].unwrap()))
+                    .chain(args.iter().map(|operand| self.values[*operand].get(self)))
                     .collect();
                 let res = self.call(callback.fun_ty, callback.fun, &operands);
                 let inst_res = self.func.dfg.inst_results(inst);
                 match inst_res {
                     [] => (),
-                    [val] => self.values[*val] = Some(res),
+                    [val] => self.values[*val] = res.into(),
                     vals => {
                         for (i, val) in vals.iter().enumerate() {
                             let res = LLVMBuildExtractValue(self.llbuilder, res, i as u32, UNNAMED);
-                            self.values[*val] = Some(res);
+                            self.values[*val] = res.into();
                         }
                     }
                 }
@@ -362,106 +451,106 @@ impl<'ll> Builder<'_, '_, 'll> {
 
         let val = match opcode {
             Opcode::Inot | Opcode::Bnot => {
-                let arg = self.values[args[0]].unwrap();
+                let arg = self.values[args[0]].get(self);
                 llvm::LLVMBuildNot(self.llbuilder, arg, UNNAMED)
             }
 
             Opcode::Ineg => {
-                let arg = self.values[args[0]].unwrap();
+                let arg = self.values[args[0]].get(self);
                 llvm::LLVMBuildNeg(self.llbuilder, arg, UNNAMED)
             }
             Opcode::Fneg => {
-                let arg = self.values[args[0]].unwrap();
+                let arg = self.values[args[0]].get(self);
                 llvm::LLVMBuildFNeg(self.llbuilder, arg, UNNAMED)
             }
             Opcode::IFcast => {
-                let arg = self.values[args[0]].unwrap();
+                let arg = self.values[args[0]].get(self);
                 llvm::LLVMBuildSIToFP(self.llbuilder, arg, self.cx.ty_real(), UNNAMED)
             }
             Opcode::BFcast => {
-                let arg = self.values[args[0]].unwrap();
+                let arg = self.values[args[0]].get(self);
                 llvm::LLVMBuildUIToFP(self.llbuilder, arg, self.cx.ty_real(), UNNAMED)
             }
             Opcode::BIcast => {
-                let arg = self.values[args[0]].unwrap();
+                let arg = self.values[args[0]].get(self);
                 llvm::LLVMBuildIntCast2(self.llbuilder, arg, self.cx.ty_int(), llvm::False, UNNAMED)
             }
             Opcode::IBcast => self.build_int_cmp(&[args[0], ZERO], llvm::IntPredicate::IntNE),
             Opcode::FBcast => self.build_real_cmp(&[args[0], F_ZERO], llvm::RealPredicate::RealONE),
             Opcode::Iadd => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildAdd(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Isub => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildSub(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Imul => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildMul(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Idiv => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildSDiv(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Irem => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildSRem(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Ishl => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildShl(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Ishr => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildLShr(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Ixor => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildXor(self.llbuilder, lhs, rhs, UNNAMED)
             }
 
             Opcode::Iand => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildAnd(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Ior => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildOr(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Fadd => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildFAdd(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Fsub => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildFSub(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Fmul => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildFMul(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Fdiv => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildFDiv(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Frem => {
-                let lhs = self.values[args[0]].unwrap();
-                let rhs = self.values[args[1]].unwrap();
+                let lhs = self.values[args[0]].get(self);
+                let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildFRem(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Ilt => self.build_int_cmp(args, llvm::IntPredicate::IntSLT),
@@ -505,12 +594,12 @@ impl<'ll> Builder<'_, '_, 'll> {
             Opcode::Acosh => self.intrinsic(args, "acosh"),
             Opcode::Atanh => self.intrinsic(args, "atanh"),
             Opcode::Pow => self.intrinsic(args, "llvm.pow.f64"),
-            Opcode::OptBarrier => self.values[args[0]].unwrap(),
+            Opcode::OptBarrier => self.values[args[0]].get(self),
             Opcode::Br | Opcode::Jmp | Opcode::Call | Opcode::Phi => unreachable!(),
         };
 
         let res = self.func.dfg.first_result(inst);
-        self.values[res] = Some(val);
+        self.values[res] = val.into();
 
         if matches!(
             opcode,
@@ -561,19 +650,19 @@ impl<'ll> Builder<'_, '_, 'll> {
         let res = self.intrinsic(args, "strcmp");
         let predicate = if invert { llvm::IntPredicate::IntNE } else { llvm::IntPredicate::IntEQ };
 
-        llvm::LLVMBuildICmp(self.llbuilder, predicate, res, self.cx.const_int(0), UNNAMED)
+        LLVMBuildICmp(self.llbuilder, predicate, res, self.cx.const_int(0), UNNAMED)
     }
 
     /// # Safety
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn store(&self, ptr: &'ll llvm::Value, val: &'ll llvm::Value) {
-        llvm::LLVMBuildStore(self.llbuilder, val, ptr);
+        LLVMBuildStore(self.llbuilder, val, ptr);
     }
 
     /// # Safety
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn load(&self, ty: &'ll llvm::Type, ptr: &'ll llvm::Value) -> &'ll llvm::Value {
-        llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED)
+        LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED)
     }
 
     /// # Safety
@@ -599,7 +688,7 @@ impl<'ll> Builder<'_, '_, 'll> {
         let ty = llvm::LLVMTypeOf(ptr);
         let null_ptr = self.cx.const_null_ptr(ty);
 
-        llvm::LLVMBuildICmp(self.llbuilder, llvm::IntPredicate::IntEQ, null_ptr, ptr, UNNAMED)
+        LLVMBuildICmp(self.llbuilder, llvm::IntPredicate::IntEQ, null_ptr, ptr, UNNAMED)
     }
 
     /// # Safety
@@ -609,8 +698,8 @@ impl<'ll> Builder<'_, '_, 'll> {
         args: &[Value],
         predicate: llvm::IntPredicate,
     ) -> &'ll llvm::Value {
-        let lhs = self.values[args[0]].unwrap();
-        let rhs = self.values[args[1]].unwrap();
+        let lhs = self.values[args[0]].get(self);
+        let rhs = self.values[args[1]].get(self);
         self.int_cmp(lhs, rhs, predicate)
     }
 
@@ -622,7 +711,7 @@ impl<'ll> Builder<'_, '_, 'll> {
         rhs: &'ll llvm::Value,
         predicate: llvm::IntPredicate,
     ) -> &'ll llvm::Value {
-        llvm::LLVMBuildICmp(self.llbuilder, predicate, lhs, rhs, UNNAMED)
+        LLVMBuildICmp(self.llbuilder, predicate, lhs, rhs, UNNAMED)
     }
 
     /// # Safety
@@ -632,8 +721,8 @@ impl<'ll> Builder<'_, '_, 'll> {
         args: &[Value],
         predicate: llvm::RealPredicate,
     ) -> &'ll llvm::Value {
-        let lhs = self.values[args[0]].unwrap();
-        let rhs = self.values[args[1]].unwrap();
+        let lhs = self.values[args[0]].get(self);
+        let rhs = self.values[args[1]].get(self);
         self.real_cmp(lhs, rhs, predicate)
     }
 
@@ -651,7 +740,7 @@ impl<'ll> Builder<'_, '_, 'll> {
     unsafe fn intrinsic(&mut self, args: &[Value], name: &'static str) -> &'ll llvm::Value {
         let (ty, fun) =
             self.cx.intrinsic(name).unwrap_or_else(|| unreachable!("intrinsic {} not found", name));
-        let args: ArrayVec<_, 2> = args.iter().map(|arg| self.values[*arg].unwrap()).collect();
+        let args: ArrayVec<_, 2> = args.iter().map(|arg| self.values[*arg].get(self)).collect();
 
         llvm::LLVMBuildCall2(self.llbuilder, ty, fun, args.as_ptr(), args.len() as u32, UNNAMED)
     }

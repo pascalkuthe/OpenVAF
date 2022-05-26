@@ -11,7 +11,7 @@ pub type Report = codespan_reporting::diagnostic::Diagnostic<FileId>;
 pub type Label = codespan_reporting::diagnostic::Label<FileId>;
 
 pub use codespan_reporting::diagnostic::{LabelStyle, Severity};
-pub use codespan_reporting::term::Config;
+pub use codespan_reporting::term::{Config, Chars};
 use syntax::sourcemap::{CtxSpan, FileSpan, SourceMap};
 use syntax::{Parse, SourceFile, TextRange};
 

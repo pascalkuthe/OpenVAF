@@ -7,7 +7,7 @@ use std::sync::Arc;
 use ahash::AHashMap;
 use anyhow::{bail, Result};
 use basedb::diagnostics::{
-    Config, ConsoleSink, Diagnostic, DiagnosticSink, Label, LabelStyle, Report,
+    Chars, Config, ConsoleSink, Diagnostic, DiagnosticSink, Label, LabelStyle, Report,
 };
 use basedb::lints::{Lint, LintLevel};
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsPath, VfsStorage, STANDARD_FLAGS};
@@ -121,7 +121,35 @@ impl CompilationDB {
         let file_name =
             self.vfs.read().file_path(root_file).name().unwrap_or_else(|| String::from("~.va"));
 
-        let mut sink = ConsoleSink::new(Config::default(), self.upcast());
+        let mut config = Config { chars: Chars::ascii(), ..Config::default() };
+        config.styles.header_error.set_intense(false);
+        config.styles.header_warning.set_intense(false);
+        config.styles.header_help.set_intense(false);
+        config.styles.header_bug.set_intense(false);
+        config.styles.header_note.set_intense(false);
+
+
+        config.styles.note_bullet.set_bold(true).set_intense(true);
+        config.styles.line_number.set_bold(true).set_intense(true);
+        config.styles.source_border.set_bold(true).set_intense(true);
+        config.styles.primary_label_bug.set_bold(true);
+        config.styles.primary_label_note.set_bold(true);
+        config.styles.primary_label_help.set_bold(true);
+        config.styles.primary_label_error.set_bold(true);
+        config.styles.primary_label_warning.set_bold(true);
+        config.styles.secondary_label.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        // config.styles.note_bullet.set_bold(true);
+        let mut sink = ConsoleSink::new(config, self.upcast());
         sink.add_diagnostics(&*self.preprocess(root_file).diagnostics, root_file, self);
         sink.add_diagnostics(self.parse(root_file).errors(), root_file, self);
         collect_diagnostics(self, root_file, &mut sink);

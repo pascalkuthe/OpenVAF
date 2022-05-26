@@ -377,13 +377,22 @@ impl CodegenCtx<'_, '_> {
 
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
+        let exit_bb = *postorder
+            .iter()
+            .find(|bb| {
+                func.layout
+                    .last_inst(**bb)
+                    .map_or(true, |term| !func.dfg.insts[term].is_terminator())
+            })
+            .unwrap();
+
         unsafe {
             // the actual compiled function
             builder.build_consts();
             builder.build_cfg(&postorder);
 
             // write the return value
-            builder.select_bb(postorder[0]);
+            builder.select_bb(exit_bb);
 
             let out = llvm::LLVMGetParam(llfun, 9);
             let out = builder.gep(out, &[offset]);

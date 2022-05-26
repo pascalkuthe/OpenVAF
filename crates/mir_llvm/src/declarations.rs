@@ -57,7 +57,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             llvm::UnnamedAddr::Global,
             fn_type,
         );
-        unsafe { llvm::LLVMSetLinkage(fun, llvm::Linkage::InternalLinkage) }
+        unsafe { llvm::LLVMSetLinkage(fun, llvm::Linkage::Internal) }
         fun
     }
 
@@ -71,7 +71,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             llvm::UnnamedAddr::Global,
             fn_type,
         );
-        unsafe { llvm::LLVMSetLinkage(fun, llvm::Linkage::InternalLinkage) }
+        unsafe { llvm::LLVMSetLinkage(fun, llvm::Linkage::Internal) }
         fun
     }
 
@@ -174,7 +174,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe {
             llvm::LLVMSetInitializer(global, val);
             llvm::LLVMSetGlobalConstant(global, llvm::True);
-            llvm::LLVMSetLinkage(global, llvm::Linkage::InternalLinkage);
+            llvm::LLVMSetLinkage(global, llvm::Linkage::Internal);
         }
 
         self.ptrcast(global, self.ptr_ty(elem_ty))

@@ -1,5 +1,5 @@
 use ahash::RandomState;
-use hir_def::{Lookup, ParamId, ParamSysFun, VarId};
+use hir_def::{ParamId, ParamSysFun, VarId};
 use hir_lower::{ParamKind, PlaceKind};
 use indexmap::IndexMap;
 use llvm::{
@@ -7,13 +7,13 @@ use llvm::{
     LLVMOffsetOfElement, LLVMSetFastMath, TargetData, UNNAMED,
 };
 use mir::{Const, Param, Value, ValueDef};
-use mir_llvm::CodegenCx;
+use mir_llvm::{CodegenCx, MemLoc};
 use sim_back::CacheSlot;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiMap;
 
-use crate::compilation_unit::OsdiCompilationUnit;
+use crate::compilation_unit::{OsdiCompilationUnit, OsdiModule};
 use crate::{bitfield, lltype, OsdiMatrixId, OsdiNodeId};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -40,7 +40,7 @@ pub enum EvalOutput {
 
 impl EvalOutput {
     fn new<'ll>(
-        cgunit: &OsdiCompilationUnit<'_, 'll>,
+        cgunit: &OsdiModule<'_>,
         val: Value,
         eval_outputs: &mut TiMap<EvalOutputSlot, Value, &'ll llvm::Type>,
         requires_slot: bool,
@@ -101,7 +101,7 @@ pub struct OsdiInstanceData<'ll> {
 }
 
 impl<'ll> OsdiInstanceData<'ll> {
-    pub fn new(cgunit: &OsdiCompilationUnit<'_, 'll>, cx: &CodegenCx<'_, 'll>) -> Self {
+    pub fn new(cgunit: &OsdiModule<'_>, cx: &CodegenCx<'_, 'll>) -> Self {
         let ty_f64 = cx.ty_real();
         let ty_u32 = cx.ty_int();
 
@@ -115,7 +115,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             None
         });
 
-        let user_inst_params = cgunit.module.params.iter().filter_map(|(param, info)| {
+        let user_inst_params = cgunit.base.params.iter().filter_map(|(param, info)| {
             info.is_instance.then(|| (OsdiInstanceParam::User(*param), lltype(&info.ty, cx)))
         });
 
@@ -124,7 +124,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let mut eval_outputs = TiMap::default();
 
         let opvars = cgunit
-            .module
+            .base
             .op_vars
             .iter()
             .map(|(var, info)| {
@@ -224,7 +224,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         .chain(eval_outputs.raw.values().copied())
         .collect();
 
-        let name = cgunit.module.id.lookup(cgunit.db).name(cgunit.db);
+        let name = &cgunit.sym;
         let name = format!("osdi_inst_data_{name}");
         let ty = cx.struct_ty(&name, &fields);
 
@@ -271,6 +271,29 @@ impl<'ll> OsdiInstanceData<'ll> {
         (ptr, ty)
     }
 
+    pub fn nth_param_loc(
+        &self,
+        cx: &CodegenCx<'_, 'll>,
+        pos: u32,
+        ptr: &'ll llvm::Value,
+    ) -> MemLoc {
+        let ty = self.params.get_index(pos as usize).unwrap().1;
+        let elem = NUM_CONST_FIELDS + pos as u32;
+        let indicies = vec![cx.const_int(0), cx.const_unsigned_int(elem)].into_boxed_slice();
+        MemLoc { ptr, ptr_ty: self.ty, ty, indicies }
+    }
+
+    pub fn param_loc(
+        &self,
+        cx: &CodegenCx<'_, 'll>,
+        param: OsdiInstanceParam,
+        ptr: &'ll llvm::Value,
+    ) -> Option<MemLoc> {
+        let pos = self.params.get_index_of(&param)? as u32;
+        let res = self.nth_param_loc(cx, pos, ptr);
+        Some(res)
+    }
+
     pub unsafe fn read_param(
         &self,
         param: OsdiInstanceParam,
@@ -315,60 +338,6 @@ impl<'ll> OsdiInstanceData<'ll> {
     //     Some((ptr, ty))
     // }
 
-    pub unsafe fn nth_opvar_ptr(
-        &self,
-        cx: &mut CodegenCx<'_, 'll>,
-        cgunit: &OsdiCompilationUnit<'_, 'll>,
-        pos: u32,
-        inst_ptr: &'ll llvm::Value,
-        model_ptr: &'ll llvm::Value,
-        llbuilder: &llvm::Builder<'ll>,
-    ) -> (&'ll llvm::Value, &'ll llvm::Type) {
-        match *self.opvars.get_index(pos as usize).unwrap().1 {
-            EvalOutput::Calculated(slot) => self.eval_output_slot_ptr(llbuilder, inst_ptr, slot),
-            EvalOutput::Const(val, slot) => {
-                let (ptr, ty) = self.eval_output_slot_ptr(llbuilder, inst_ptr, slot.unwrap());
-                LLVMBuildStore(llbuilder, cx.const_val(&val), ptr);
-                (ptr, ty)
-            }
-            EvalOutput::Param(param) => {
-                let intern = &cgunit.mir.eval_intern;
-                if let Some((kind, _)) = intern.params.get_index(param) {
-                    match *kind {
-                        ParamKind::Param(param) => self
-                            .param_ptr(OsdiInstanceParam::User(param), inst_ptr, llbuilder)
-                            .unwrap_or_else(|| {
-                                cgunit.model_data().param_ptr(param, model_ptr, llbuilder).unwrap()
-                            }),
-                        ParamKind::Temperature => (
-                            LLVMBuildStructGEP2(
-                                llbuilder,
-                                cx.ty_real(),
-                                inst_ptr,
-                                TEMPERATURE,
-                                UNNAMED,
-                            ),
-                            cx.ty_real(),
-                        ),
-                        ParamKind::ParamSysFun(func) => self
-                            .param_ptr(OsdiInstanceParam::Builtin(func), inst_ptr, llbuilder)
-                            .unwrap(),
-
-                        ParamKind::HiddenState(_) => todo!("hidden state"),
-
-                        ParamKind::Voltage { .. }
-                        | ParamKind::Current(_)
-                        | ParamKind::PortConnected { .. }
-                        | ParamKind::ParamGiven { .. } => unreachable!(),
-                    }
-                } else {
-                    let slot = u32::from(param) - cgunit.mir.eval_intern.params.len() as u32;
-                    self.cache_slot_ptr(llbuilder, slot.into(), inst_ptr)
-                }
-            }
-        }
-    }
-
     pub fn residual_off(
         &self,
         node: OsdiNodeId,
@@ -394,7 +363,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         builder: &mir_llvm::Builder<'_, '_, 'll>,
     ) {
         if let EvalOutput::Calculated(slot) = self.opvars.get_index(pos as usize).unwrap().1 {
-            let val = builder.values[val].unwrap();
+            let val = builder.values[val].get(builder);
             self.store_eval_output(*slot, inst_ptr, val, builder.llbuilder)
         }
     }
@@ -433,60 +402,6 @@ impl<'ll> OsdiInstanceData<'ll> {
     ) {
         let (ptr, _) = self.eval_output_slot_ptr(llbuilder, ptr, slot);
         LLVMBuildStore(llbuilder, val, ptr);
-    }
-
-    unsafe fn load_eval_output(
-        &self,
-        cx: &mut CodegenCx<'_, 'll>,
-        cgunit: &OsdiCompilationUnit<'_, 'll>,
-        output: EvalOutput,
-        inst_ptr: &'ll llvm::Value,
-        model_ptr: &'ll llvm::Value,
-        llbuilder: &llvm::Builder<'ll>,
-    ) -> &'ll llvm::Value {
-        let (ptr, ty) = match output {
-            EvalOutput::Calculated(slot) => self.eval_output_slot_ptr(llbuilder, inst_ptr, slot),
-            EvalOutput::Const(val, _) => {
-                return cx.const_val(&val);
-            }
-            EvalOutput::Param(param) => {
-                let intern = &cgunit.mir.eval_intern;
-                if let Some((kind, _)) = intern.params.get_index(param) {
-                    match *kind {
-                        ParamKind::Param(param) => self
-                            .param_ptr(OsdiInstanceParam::User(param), inst_ptr, llbuilder)
-                            .unwrap_or_else(|| {
-                                cgunit.model_data().param_ptr(param, model_ptr, llbuilder).unwrap()
-                            }),
-                        ParamKind::Temperature => (
-                            LLVMBuildStructGEP2(
-                                llbuilder,
-                                cx.ty_real(),
-                                inst_ptr,
-                                TEMPERATURE,
-                                UNNAMED,
-                            ),
-                            cx.ty_real(),
-                        ),
-                        ParamKind::ParamSysFun(func) => self
-                            .param_ptr(OsdiInstanceParam::Builtin(func), inst_ptr, llbuilder)
-                            .unwrap(),
-
-                        ParamKind::HiddenState(_) => todo!("hidden state"),
-
-                        ParamKind::Voltage { .. }
-                        | ParamKind::Current(_)
-                        | ParamKind::PortConnected { .. }
-                        | ParamKind::ParamGiven { .. } => unreachable!(),
-                    }
-                } else {
-                    let slot = u32::from(param) - cgunit.mir.eval_intern.params.len() as u32;
-                    self.cache_slot_ptr(llbuilder, slot.into(), inst_ptr)
-                }
-            }
-        };
-
-        LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED)
     }
 
     pub unsafe fn store_eval_output(
@@ -645,22 +560,6 @@ impl<'ll> OsdiInstanceData<'ll> {
         LLVMBuildStore(llbuilder, val, dst);
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn load_jacobian(
-        &self,
-        cx: &mut CodegenCx<'_, 'll>,
-        cgunit: &OsdiCompilationUnit<'_, 'll>,
-        entry: OsdiMatrixId,
-        inst_ptr: &'ll llvm::Value,
-        model_ptr: &'ll llvm::Value,
-        llbuilder: &llvm::Builder<'ll>,
-        reactive: bool,
-    ) -> Option<&'ll llvm::Value> {
-        let matrix = if reactive { &self.matrix_react } else { &self.matrix_resist };
-        let val = self.load_eval_output(cx, cgunit, matrix[entry]?, inst_ptr, model_ptr, llbuilder);
-        Some(val)
-    }
-
     pub unsafe fn store_jacobian(
         &self,
         entry: OsdiMatrixId,
@@ -671,7 +570,7 @@ impl<'ll> OsdiInstanceData<'ll> {
     ) {
         let matrix = if reactive { &self.matrix_react } else { &self.matrix_resist };
         if let EvalOutput::Calculated(slot) = matrix[entry].unwrap() {
-            let val = builder.values[val].unwrap();
+            let val = builder.values[val].get(builder);
             self.store_eval_output(slot, inst_ptr, val, builder.llbuilder)
         }
     }
@@ -788,5 +687,132 @@ impl<'ll> OsdiInstanceData<'ll> {
     ) {
         let ptr = builder.typed_struct_gep(self.ty, ptr, CONNTEDED_PORTS);
         builder.store(ptr, val)
+    }
+}
+
+impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
+    unsafe fn load_eval_output(
+        &mut self,
+        output: EvalOutput,
+        inst_ptr: &'ll llvm::Value,
+        model_ptr: &'ll llvm::Value,
+        llbuilder: &llvm::Builder<'ll>,
+    ) -> &'ll llvm::Value {
+        let OsdiCompilationUnit { inst_data, model_data, cx, module, .. } = self;
+        let (ptr, ty) = match output {
+            EvalOutput::Calculated(slot) => {
+                inst_data.eval_output_slot_ptr(llbuilder, inst_ptr, slot)
+            }
+            EvalOutput::Const(val, _) => {
+                return cx.const_val(&val);
+            }
+            EvalOutput::Param(param) => {
+                let intern = &module.mir.eval_intern;
+                if let Some((kind, _)) = intern.params.get_index(param) {
+                    match *kind {
+                        ParamKind::Param(param) => inst_data
+                            .param_ptr(OsdiInstanceParam::User(param), inst_ptr, llbuilder)
+                            .unwrap_or_else(|| {
+                                model_data.param_ptr(param, model_ptr, llbuilder).unwrap()
+                            }),
+                        ParamKind::Temperature => (
+                            LLVMBuildStructGEP2(
+                                llbuilder,
+                                cx.ty_real(),
+                                inst_ptr,
+                                TEMPERATURE,
+                                UNNAMED,
+                            ),
+                            cx.ty_real(),
+                        ),
+                        ParamKind::ParamSysFun(func) => inst_data
+                            .param_ptr(OsdiInstanceParam::Builtin(func), inst_ptr, llbuilder)
+                            .unwrap(),
+
+                        ParamKind::HiddenState(_) => todo!("hidden state"),
+
+                        ParamKind::Voltage { .. }
+                        | ParamKind::Current(_)
+                        | ParamKind::PortConnected { .. }
+                        | ParamKind::ParamGiven { .. } => unreachable!(),
+                    }
+                } else {
+                    let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;
+                    inst_data.cache_slot_ptr(llbuilder, slot.into(), inst_ptr)
+                }
+            }
+        };
+
+        LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED)
+    }
+
+    pub unsafe fn load_jacobian_inst(
+        &mut self,
+        entry: OsdiMatrixId,
+        inst_ptr: &'ll llvm::Value,
+        model_ptr: &'ll llvm::Value,
+        llbuilder: &llvm::Builder<'ll>,
+        reactive: bool,
+    ) -> Option<&'ll llvm::Value> {
+        let matrix =
+            if reactive { &self.inst_data.matrix_react } else { &self.inst_data.matrix_resist };
+        let entry = matrix[entry]?;
+        let val = self.load_eval_output(entry, inst_ptr, model_ptr, llbuilder);
+        Some(val)
+    }
+
+    pub unsafe fn nth_opvar_ptr(
+        &mut self,
+        pos: u32,
+        inst_ptr: &'ll llvm::Value,
+        model_ptr: &'ll llvm::Value,
+        llbuilder: &llvm::Builder<'ll>,
+    ) -> (&'ll llvm::Value, &'ll llvm::Type) {
+        let OsdiCompilationUnit { inst_data, model_data, cx, module, .. } = self;
+        match *inst_data.opvars.get_index(pos as usize).unwrap().1 {
+            EvalOutput::Calculated(slot) => {
+                inst_data.eval_output_slot_ptr(llbuilder, inst_ptr, slot)
+            }
+            EvalOutput::Const(val, slot) => {
+                let (ptr, ty) = inst_data.eval_output_slot_ptr(llbuilder, inst_ptr, slot.unwrap());
+                LLVMBuildStore(llbuilder, cx.const_val(&val), ptr);
+                (ptr, ty)
+            }
+            EvalOutput::Param(param) => {
+                let intern = &module.mir.eval_intern;
+                if let Some((kind, _)) = intern.params.get_index(param) {
+                    match *kind {
+                        ParamKind::Param(param) => inst_data
+                            .param_ptr(OsdiInstanceParam::User(param), inst_ptr, llbuilder)
+                            .unwrap_or_else(|| {
+                                model_data.param_ptr(param, model_ptr, llbuilder).unwrap()
+                            }),
+                        ParamKind::Temperature => (
+                            LLVMBuildStructGEP2(
+                                llbuilder,
+                                cx.ty_real(),
+                                inst_ptr,
+                                TEMPERATURE,
+                                UNNAMED,
+                            ),
+                            cx.ty_real(),
+                        ),
+                        ParamKind::ParamSysFun(func) => inst_data
+                            .param_ptr(OsdiInstanceParam::Builtin(func), inst_ptr, llbuilder)
+                            .unwrap(),
+
+                        ParamKind::HiddenState(_) => todo!("hidden state"),
+
+                        ParamKind::Voltage { .. }
+                        | ParamKind::Current(_)
+                        | ParamKind::PortConnected { .. }
+                        | ParamKind::ParamGiven { .. } => unreachable!(),
+                    }
+                } else {
+                    let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;
+                    inst_data.cache_slot_ptr(llbuilder, slot.into(), inst_ptr)
+                }
+            }
+        }
     }
 }

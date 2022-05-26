@@ -42,7 +42,7 @@ indexmap = "1.6"
 smol_str = "0.1.22"
 
 base_n = {version = "1", path="../../lib/base_n"}
-# rayon-core = "1"
+rayon-core = "1"
 
 
 [build-dependencies]

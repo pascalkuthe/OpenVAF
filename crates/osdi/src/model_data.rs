@@ -1,10 +1,10 @@
 use ahash::RandomState;
-use hir_def::{Lookup, ParamId};
+use hir_def::ParamId;
 use indexmap::IndexMap;
 use llvm::{LLVMBuildLoad2, LLVMBuildStore, LLVMBuildStructGEP2, Value, UNNAMED};
-use mir_llvm::CodegenCx;
+use mir_llvm::{CodegenCx, MemLoc};
 
-use crate::compilation_unit::OsdiCompilationUnit;
+use crate::compilation_unit::OsdiModule;
 use crate::inst_data::{OsdiInstanceData, OsdiInstanceParam};
 use crate::{bitfield, lltype};
 
@@ -17,10 +17,14 @@ pub struct OsdiModelData<'ll> {
 }
 
 impl<'ll> OsdiModelData<'ll> {
-    pub fn new(cgunit: &OsdiCompilationUnit<'_, 'll>, cx: &CodegenCx<'_, 'll>) -> Self {
-        let inst_params = &cgunit.inst_data().params;
+    pub fn new(
+        cgunit: &OsdiModule<'_>,
+        cx: &CodegenCx<'_, 'll>,
+        inst_data: &OsdiInstanceData<'ll>,
+    ) -> Self {
+        let inst_params = &inst_data.params;
         let params: IndexMap<_, _, _> = cgunit
-            .module
+            .base
             .params
             .iter()
             .filter_map(|(param, info)| {
@@ -38,11 +42,35 @@ impl<'ll> OsdiModelData<'ll> {
         fields.extend(params.values().copied());
         fields.extend(inst_params.values());
 
-        let name = cgunit.module.id.lookup(cgunit.db).name(cgunit.db);
+        let name = &cgunit.sym;
         let name = format!("osdi_model_data_{name}");
         let ty = cx.struct_ty(&name, &fields);
 
         OsdiModelData { param_given, params, ty }
+    }
+
+    pub fn nth_param_loc(
+        &self,
+        cx: &CodegenCx<'_, 'll>,
+        pos: u32,
+        ptr: &'ll llvm::Value,
+    ) -> MemLoc<'ll> {
+        let ty = self.params.get_index(pos as usize).unwrap().1;
+        let elem = NUM_CONST_FIELDS + pos as u32;
+        let indicies =
+            vec![cx.const_unsigned_int(0), cx.const_unsigned_int(elem)].into_boxed_slice();
+        MemLoc { ptr, ptr_ty: self.ty, ty, indicies }
+    }
+
+    pub fn param_loc(
+        &self,
+        cx: &CodegenCx<'_, 'll>,
+        param: ParamId,
+        ptr: &'ll llvm::Value,
+    ) -> Option<MemLoc> {
+        let pos = self.params.get_index_of(&param)? as u32;
+        let res = self.nth_param_loc(cx, pos, ptr);
+        Some(res)
     }
 
     pub unsafe fn param_ptr(

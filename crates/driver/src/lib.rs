@@ -39,14 +39,19 @@ pub fn run(matches: ArgMatches) -> Result<i32> {
         opts.output
     };
 
-    let back =
-        LLVMBackend::new(&opts.codegen_opts, &opts.target, opts.target_cpu, &[], opts.opt_lvl);
-    let obj_file: &Path = opts.input.as_ref();
-    let obj_file = obj_file.with_extension("o");
-    osdi::compile(&db, &modules, obj_file.as_path(), &opts.target, &back);
-    link(&opts.target, None, None, out.as_ref(), |linker| linker.add_object(obj_file.as_path()))
-        .context("linking failed!")?;
-    std::fs::remove_file(obj_file).context("failed to delete intermediate compile artifact")?;
+    let back = LLVMBackend::new(&opts.codegen_opts, &opts.target, opts.target_cpu, &[]);
+    let paths =
+        osdi::compile(&db, &modules, opts.input.as_ref(), &opts.target, &back, true, opts.opt_lvl);
+    link(&opts.target, None, None, out.as_ref(), |linker| {
+        for path in &paths {
+            linker.add_object(path);
+        }
+    })
+    .context("linking failed!")?;
+
+    // for obj_file in paths {
+    //     std::fs::remove_file(obj_file).context("failed to delete intermediate compile artifact")?;
+    // }
 
     let seconds = Instant::elapsed(&start).as_secs_f64();
     let mut stderr = StandardStream::stderr(ColorChoice::Auto);

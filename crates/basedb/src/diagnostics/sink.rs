@@ -107,7 +107,9 @@ impl<'a> ConsoleSink<'a> {
         if self.warning_cnt != 0 {
             let message = format!("`{}` generated {} warning", target_name, self.warning_cnt);
             self.print_simple_message(Severity::Warning, message);
+            self.warning_cnt = 0;
         }
+
 
         false
     }

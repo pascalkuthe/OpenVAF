@@ -8,11 +8,6 @@ use lasso::{Rodeo, Spur};
 use mir::{FuncRef, Function, Param, Value};
 use mir_interpret::{Data, Func, Interpreter, InterpreterState};
 use paths::AbsPathBuf;
-use quote::{format_ident, quote};
-use sourcegen::{
-    add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
-};
-// use target::spec::Target;
 use typed_index_collections::{TiSlice, TiVec};
 
 use crate::compilation_db::CompilationDB;
@@ -21,57 +16,6 @@ use crate::middle::EvalMir;
 use crate::Residual;
 
 mod stamps;
-
-#[test]
-pub fn generate_integration_tests() {
-    let tests = collect_integration_tests();
-    let file = project_root().join("crates/sim_back/src/tests/integration.rs");
-    let test_impl = tests.into_iter().filter_map(|(test_name, _)| {
-        // skip this test until we implement switch branches
-        // TODO switch branches
-        if matches!(&*test_name, "ASMHEMT"|"AMPLIFIER"){
-            return None
-        }
-
-        let test_case = format_ident!("{}", test_name.to_lowercase());
-        let root_file_name = format!("{}.va", test_name.to_lowercase());
-
-        let res = quote! {
-            #[test]
-            fn #test_case(){
-                if skip_slow_tests(){
-                    return
-                }
-
-                let root_file = project_root().join("integration_tests").join(#test_name).join(#root_file_name);
-                super::full_compile(&root_file);
-            }
-        };
-
-        Some(res)
-    });
-
-    let header = "
-        use sourcegen::{skip_slow_tests, project_root};
-    ";
-
-    let file_string = quote!(
-        #(#test_impl)*
-    );
-    let file_string = format!("{}\n{}", header, file_string);
-    let file_string = add_preamble("generate_integration_tests", reformat(file_string));
-    ensure_file_contents(&file, &file_string);
-}
-
-// fn full_compile(path: &Path) {
-//     let db = CompilationDB::new(Path::new(path)).unwrap();
-//     let modules = db.collect_modules(&path.display()).unwrap();
-//     let mut literals = Rodeo::new();
-//     let mir = EvalMir::new(&db, &modules[0], &mut literals);
-//     let target = Target::host_target().unwrap();
-//     // let back = LLVMBackend::new(&[], &target, llvm::OptLevel::Aggressive);
-//     mir.to_bin(&db, &literals, &target);
-// }
 
 fn compile_to_mir(path: &Path) -> (CompilationDB, EvalMir, Rodeo) {
     let path = AbsPathBuf::assert(path.canonicalize().unwrap());

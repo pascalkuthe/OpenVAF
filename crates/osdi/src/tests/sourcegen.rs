@@ -546,6 +546,8 @@ fn gen_tys<'a>(tys: &IndexMap<&'a str, OsdiStruct<'a>, RandomState>) -> String {
     let structs = tys.values().map(|it| OsdiStructInterp { info: it, lut: tys });
     quote!(
         #(#structs)*
+
+        #[derive(Clone)]
         pub struct OsdiTys<'ll>{
             #(pub #fields : &'ll llvm::Type),*
         }
