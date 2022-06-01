@@ -13,7 +13,8 @@ use typed_index_collections::{TiSlice, TiVec};
 use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
 use crate::middle::EvalMir;
-use crate::Residual;
+use crate::residual::Residual;
+use crate::SimUnkown;
 
 mod stamps;
 
@@ -31,10 +32,16 @@ impl JacobianMatrix {
         self.resistive
             .raw
             .iter()
-            .map(|(entry, val)| {
-                let row = db.node_data(entry.row).name.to_string();
-                let col = db.node_data(entry.col).name.to_string();
-                ((row, col), *val)
+            .filter_map(|(entry, val)| {
+                if let (SimUnkown::KirchoffLaw(row), SimUnkown::KirchoffLaw(col)) =
+                    (entry.row, entry.col)
+                {
+                    let row = db.node_data(row).name.to_string();
+                    let col = db.node_data(col).name.to_string();
+                    Some(((row, col), *val))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -43,10 +50,16 @@ impl JacobianMatrix {
         self.reactive
             .raw
             .iter()
-            .map(|(entry, val)| {
-                let row = db.node_data(entry.row).name.to_string();
-                let col = db.node_data(entry.col).name.to_string();
-                ((row, col), *val)
+            .filter_map(|(entry, val)| {
+                if let (SimUnkown::KirchoffLaw(row), SimUnkown::KirchoffLaw(col)) =
+                    (entry.row, entry.col)
+                {
+                    let row = db.node_data(row).name.to_string();
+                    let col = db.node_data(col).name.to_string();
+                    Some(((row, col), *val))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -54,13 +67,18 @@ impl JacobianMatrix {
     pub fn print_with_nums(&self, db: &dyn HirDefDB, vals: &InterpreterState) {
         for (entry, val) in &self.resistive.raw {
             let num: f64 = vals.read(*val);
-            println!(
-                "({}, {}) = {} = {}",
-                db.node_data(entry.row).name,
-                db.node_data(entry.col).name,
-                val,
-                num
-            )
+
+            if let (SimUnkown::KirchoffLaw(row), SimUnkown::KirchoffLaw(col)) =
+                (entry.row, entry.col)
+            {
+                println!(
+                    "({}, {}) = {} = {}",
+                    db.node_data(row).name,
+                    db.node_data(col).name,
+                    val,
+                    num
+                )
+            }
         }
     }
 }
@@ -70,20 +88,28 @@ impl Residual {
         self.resistive
             .raw
             .iter()
-            .map(|(node, val)| {
-                let name = db.node_data(*node).name.to_string();
-                (name, *val)
+            .filter_map(|(unkown, val)| {
+                if let SimUnkown::KirchoffLaw(node) = unkown {
+                    let name = db.node_data(*node).name.to_string();
+                    Some((name, *val))
+                } else {
+                    None
+                }
             })
             .collect()
     }
 
     fn reactive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
-        self.resistive
+        self.reactive
             .raw
             .iter()
-            .map(|(node, val)| {
-                let name = db.node_data(*node).name.to_string();
-                (name, *val)
+            .filter_map(|(unkown, val)| {
+                if let SimUnkown::KirchoffLaw(node) = unkown {
+                    let name = db.node_data(*node).name.to_string();
+                    Some((name, *val))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -146,6 +172,13 @@ impl EvalMir {
                          _rets: &[Value],
                          _ptr: *mut c_void| {}
                     }
+                    hir_lower::CallBackKind::Print { .. } => {
+                        |_state: &mut InterpreterState,
+                         _args: &[Value],
+                         _rets: &[Value],
+                         _ptr: *mut c_void| {}
+                    }
+                    hir_lower::CallBackKind::BoundStep => todo!(),
                 };
 
                 (res, ptr)
@@ -166,6 +199,8 @@ impl EvalMir {
                 ParamKind::ParamGiven { .. } | ParamKind::PortConnected { .. } => true.into(),
                 ParamKind::ParamSysFun(param) => param.default_value().into(),
                 ParamKind::Current(_) | ParamKind::HiddenState(_) => Data::UNDEF,
+                ParamKind::Abstime | ParamKind::ImplicitUnkown(_) => 0f64.into(),
+                ParamKind::EnableIntegration => false.into(),
             })
             .collect();
 

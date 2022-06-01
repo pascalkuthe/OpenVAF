@@ -67,7 +67,7 @@ impl<'ll> OsdiModelData<'ll> {
         cx: &CodegenCx<'_, 'll>,
         param: ParamId,
         ptr: &'ll llvm::Value,
-    ) -> Option<MemLoc> {
+    ) -> Option<MemLoc<'ll>> {
         let pos = self.params.get_index_of(&param)? as u32;
         let res = self.nth_param_loc(cx, pos, ptr);
         Some(res)
@@ -110,16 +110,16 @@ impl<'ll> OsdiModelData<'ll> {
         (ptr, ty)
     }
 
-    pub unsafe fn read_param(
-        &self,
-        param: ParamId,
-        ptr: &'ll llvm::Value,
-        llbuilder: &llvm::Builder<'ll>,
-    ) -> Option<&'ll llvm::Value> {
-        let (ptr, ty) = self.param_ptr(param, ptr, llbuilder)?;
-        let val = LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED);
-        Some(val)
-    }
+    // pub unsafe fn read_param(
+    //     &self,
+    //     param: ParamId,
+    //     ptr: &'ll llvm::Value,
+    //     llbuilder: &llvm::Builder<'ll>,
+    // ) -> Option<&'ll llvm::Value> {
+    //     let (ptr, ty) = self.param_ptr(param, ptr, llbuilder)?;
+    //     let val = LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED);
+    //     Some(val)
+    // }
 
     pub unsafe fn store_nth_param(
         &self,
@@ -132,15 +132,15 @@ impl<'ll> OsdiModelData<'ll> {
         LLVMBuildStore(llbuilder, val, ptr);
     }
 
-    pub unsafe fn read_nth_param(
-        &self,
-        param: u32,
-        ptr: &'ll llvm::Value,
-        llbuilder: &llvm::Builder<'ll>,
-    ) -> &'ll llvm::Value {
-        let (ptr, ty) = self.nth_param_ptr(param, ptr, llbuilder);
-        LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED)
-    }
+    // pub unsafe fn read_nth_param(
+    //     &self,
+    //     param: u32,
+    //     ptr: &'ll llvm::Value,
+    //     llbuilder: &llvm::Builder<'ll>,
+    // ) -> &'ll llvm::Value {
+    //     let (ptr, ty) = self.nth_param_ptr(param, ptr, llbuilder);
+    //     LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED)
+    // }
 
     pub unsafe fn read_nth_inst_param(
         &self,

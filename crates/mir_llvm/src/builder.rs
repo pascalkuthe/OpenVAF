@@ -48,6 +48,12 @@ impl<'ll> MemLoc<'ll> {
     }
 }
 
+impl<'ll> From<MemLoc<'ll>> for BuilderVal<'ll> {
+    fn from(loc: MemLoc<'ll>) -> Self {
+        BuilderVal::Load(Box::new(loc))
+    }
+}
+
 #[derive(Clone)]
 pub enum BuilderVal<'ll> {
     Undef,

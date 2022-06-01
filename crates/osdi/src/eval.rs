@@ -1,5 +1,5 @@
 use ahash::AHashMap;
-use hir_lower::{ParamKind, PlaceKind};
+use hir_lower::{ParamKind, PlaceInfo, PlaceKind};
 use llvm::IntPredicate::{IntNE, IntULT};
 use llvm::{
     LLVMAppendBasicBlockInContext, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCondBr, LLVMBuildICmp,
@@ -102,11 +102,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
                 let val = unsafe {
                     match *kind {
-                        ParamKind::Param(param) => inst_data
-                            .read_param(OsdiInstanceParam::User(param), instance, builder.llbuilder)
-                            .unwrap_or_else(|| {
-                                model_data.read_param(param, model, builder.llbuilder).unwrap()
-                            }),
+                        ParamKind::Param(param) => {
+                            return inst_data
+                                .param_loc(builder.cx, OsdiInstanceParam::User(param), instance)
+                                .unwrap_or_else(|| {
+                                    model_data.param_loc(builder.cx, param, model).unwrap()
+                                })
+                                .into()
+                        }
                         ParamKind::Voltage { hi, lo } => {
                             let hi = voltages[&hi];
                             if let Some(lo) = lo {
@@ -154,7 +157,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 builder.llbuilder,
                             )
                             .unwrap(),
-                        ParamKind::HiddenState(_) => unreachable!(), // TODO  hidden state
+                        ParamKind::HiddenState(_) => unreachable!(),
+                        ParamKind::Abstime => todo!(), // TODO  hidden state
                     }
                 };
                 BuilderVal::Eager(val)
@@ -241,7 +245,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             let store_opvars = |builder: &mut Builder<'_, '_, 'll>| {
                 for (i, var) in inst_data.opvars.keys().enumerate() {
-                    let val = intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
+                    let val =
+                        intern.outputs[&PlaceInfo::new(PlaceKind::Var(*var))].unwrap_unchecked();
                     inst_data.store_nth_opvar(i as u32, instance, val, builder);
                 }
             };

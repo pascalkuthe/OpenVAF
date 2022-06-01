@@ -1,3 +1,5 @@
+#![allow(clippy::needless_option_as_deref)]
+
 use std::f64::{INFINITY, NEG_INFINITY};
 use std::mem::replace;
 
@@ -9,9 +11,11 @@ use hir_def::{
     Stmt, StmtId, Type, VarId,
 };
 use hir_ty::builtin::{
-    ABS_INT, ABS_REAL, DDX_POT, IDT_NO_IC, MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH,
-    NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, SIMPARAM_DEFAULT,
-    SIMPARAM_NO_DEFAULT,
+    ABS_INT, ABS_REAL, DDX_POT, IDTMOD_IC, IDTMOD_IC_MODULUS, IDTMOD_IC_MODULUS_OFFSET,
+    IDTMOD_IC_MODULUS_OFFSET_NATURE, IDTMOD_IC_MODULUS_OFFSET_TOL, IDTMOD_NO_IC, IDT_IC,
+    IDT_IC_ASSERT, IDT_IC_ASSERT_NATURE, IDT_IC_ASSERT_TOL, IDT_NO_IC, MAX_INT, MAX_REAL,
+    NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
+    SIMPARAM_DEFAULT, SIMPARAM_NO_DEFAULT,
 };
 use hir_ty::db::HirTyDB;
 use hir_ty::inference::{AssignDst, BranchWrite, InferenceResult, ResolvedFun};
@@ -23,10 +27,14 @@ use mir::{Block, FuncRef, Function, Opcode, Value, FALSE, F_ZERO, GRAVESTONE, TR
 use mir_build::{FunctionBuilder, FunctionBuilderContext, Place, RetBuilder};
 use stdx::iter::zip;
 use stdx::packed_option::ReservedValue;
+use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
-use crate::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
-use syntax::ast::{AssignOp, BinaryOp, UnaryOp};
+use crate::{
+    CallBackKind, CurrentKind, Dim, DimKind, DisplayKind, HirInterner, IdtKind, ImplicitEquation,
+    ImplicitEquationKind, ParamInfoKind, ParamKind, PlaceKind, REACTIVE_DIM, RESISTIVE_DIM,
+};
+use syntax::ast::{BinaryOp, UnaryOp};
 
 pub struct MirBuilder<'a> {
     db: &'a dyn HirTyDB,
@@ -110,9 +118,20 @@ impl<'a> MirBuilder<'a> {
         let mut builder = FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
 
         let body = self.db.body(self.def);
+        let path = if let DefWithBodyId::ModuleId(module) = self.def {
+            self.db.module_data(module).name.to_string()
+        } else {
+            String::new()
+        };
         let infere = self.db.inference_result(self.def);
         let mut places = TiSet::default();
-        let mut reactive_components = AHashMap::default();
+        let mut extra_dims = TiVec::new();
+        if self.split_contribute {
+            interner.dims.push(DimKind::Resistive);
+            interner.dims.push(DimKind::Reactive);
+            extra_dims.push(AHashMap::default());
+            extra_dims.push(AHashMap::default());
+        }
 
         let mut ctx = LoweringCtx {
             db: self.db,
@@ -122,7 +141,10 @@ impl<'a> MirBuilder<'a> {
             infere: &infere,
             tagged_vars: &self.tagged_reads,
             places: &mut places,
-            reactive_component: self.split_contribute.then(|| &mut reactive_components),
+            extra_dims: self.split_contribute.then(|| &mut extra_dims),
+            path: &path,
+            contribute_rhs: false,
+            op_dependent_execution: false,
         };
 
         ctx.lower_entry_stmts();
@@ -249,7 +271,10 @@ impl HirInterner {
                             body: &body,
                             infere: &infere,
                             tagged_vars: &AHashSet::default(),
-                            reactive_component: None,
+                            extra_dims: None,
+                            path: "",
+                            contribute_rhs: false,
+                            op_dependent_execution: false,
                         };
 
                         let invalid =
@@ -290,7 +315,10 @@ impl HirInterner {
                             body: &body,
                             infere: &infere,
                             tagged_vars: &AHashSet::default(),
-                            reactive_component: None,
+                            extra_dims: None,
+                            path: "",
+                            contribute_rhs: false,
+                            op_dependent_execution: false,
                         };
 
                         let invalid =
@@ -345,9 +373,12 @@ impl HirInterner {
                 func: &mut builder,
                 places: &mut TiSet::default(),
                 body: &body,
+                path: "",
                 infere: &infere,
                 tagged_vars: &AHashSet::default(),
-                reactive_component: None,
+                extra_dims: None,
+                contribute_rhs: false,
+                op_dependent_execution: false,
             };
 
             let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
@@ -476,6 +507,7 @@ impl HirInterner {
                 });
 
                 ctx.data.outputs.insert(PlaceKind::ParamMin(param), min.into());
+
                 ctx.data.outputs.insert(PlaceKind::ParamMax(param), max.into());
                 precomputed_vals
             } else {
@@ -535,11 +567,14 @@ impl HirInterner {
             db,
             data: self,
             func,
+            path: "",
             body: &body,
             infere: &infere,
             tagged_vars: &AHashSet::new(),
             places: &mut TiSet::default(),
-            reactive_component: None,
+            extra_dims: None,
+            contribute_rhs: false,
+            op_dependent_execution: false,
         };
 
         let expr = body.stmts[body.entry_stmts[i]].unwrap_expr();
@@ -563,12 +598,16 @@ pub struct LoweringCtx<'a, 'c> {
     pub places: &'a mut TiSet<Place, PlaceKind>,
     pub func: &'a mut FunctionBuilder<'c>,
     pub body: &'a Body,
+    pub path: &'a str,
     pub infere: &'a InferenceResult,
     pub tagged_vars: &'a AHashSet<VarId>,
-    pub reactive_component: Option<&'a mut AHashMap<ExprId, Value>>,
+    pub extra_dims: Option<&'a mut TiVec<Dim, AHashMap<ExprId, Value>>>,
+    pub contribute_rhs: bool,
+    pub op_dependent_execution: bool,
 }
 
 impl LoweringCtx<'_, '_> {
+    #[allow(clippy::too_many_arguments)]
     fn check_param(
         &mut self,
         param_val: Value,
@@ -657,7 +696,7 @@ impl LoweringCtx<'_, '_> {
 
     pub fn lower_entry_stmts(&mut self) {
         for stmt in &*self.body.entry_stmts {
-            self.lower_stmt(*stmt, None)
+            self.lower_stmt(*stmt)
         }
     }
 
@@ -673,7 +712,7 @@ impl LoweringCtx<'_, '_> {
         self.func.ins().call(cb, &[]);
     }
 
-    pub fn lower_stmt(&mut self, stmt: StmtId, reactive: Option<Value>) {
+    pub fn lower_stmt(&mut self, stmt: StmtId) {
         match self.body.stmts[stmt] {
             Stmt::Empty | Stmt::Missing => (),
             Stmt::Expr(expr) => {
@@ -681,43 +720,21 @@ impl LoweringCtx<'_, '_> {
             }
             Stmt::EventControl { body, .. } => {
                 // TODO handle porperly
-                self.lower_stmt(body, None);
+                self.lower_stmt(body);
             }
-            Stmt::Assigment { val, assignment_kind, .. } => {
-                let mut val_ = if assignment_kind == AssignOp::Contribute
-                    && matches!(
-                        self.body.exprs[val],
-                        Expr::Literal(Literal::Int(0) | Literal::Float(PZERO | NZERO)),
-                    ) {
-                    F_ZERO
-                } else {
-                    match reactive {
-                        Some(val) => val,
-                        None => {
-                            // be careful to not move this after the if as this has important
-                            // sideffects
-                            let val_ = self.lower_expr(val);
-                            if let Some(reactive) = &self.reactive_component {
-                                if let Some(val) = reactive.get(&val).copied() {
-                                    self.lower_stmt(stmt, Some(val))
-                                }
-                            }
-                            val_
-                        }
-                    }
-                };
-
-                let mut negate = false;
+            Stmt::Assigment { val, .. } => {
+                let is_collapse = matches!(
+                    self.body.exprs[val],
+                    Expr::Literal(Literal::Int(0) | Literal::Float(PZERO | NZERO)),
+                ) && !self.op_dependent_execution;
 
                 let place = match self.infere.assigment_destination[&stmt] {
-                    AssignDst::Var(var) => self.place(PlaceKind::Var(var)),
-                    AssignDst::FunVar { fun, arg: None } => {
-                        self.place(PlaceKind::FunctionReturn { fun })
-                    }
+                    AssignDst::Var(var) => PlaceKind::Var(var),
+                    AssignDst::FunVar { fun, arg: None } => PlaceKind::FunctionReturn(fun),
                     AssignDst::FunVar { arg: Some(arg), fun } => {
-                        self.place(PlaceKind::FunctionArg { fun, arg })
+                        PlaceKind::FunctionArg { fun, arg }
                     }
-                    AssignDst::Potential(BranchWrite::Explicit(branch)) if val_ == F_ZERO => {
+                    AssignDst::Potential(BranchWrite::Named(branch)) if is_collapse => {
                         let (hi, lo) = match self.db.branch_info(branch).unwrap().kind {
                             // TODO check in frontend
                             BranchKind::PortFlow(_) => unreachable!(),
@@ -726,63 +743,32 @@ impl LoweringCtx<'_, '_> {
                         };
                         return self.collapse_hint(hi, lo);
                     }
-                    AssignDst::Potential(BranchWrite::Implict { hi, lo }) if val_ == F_ZERO => {
+
+                    AssignDst::Potential(BranchWrite::Unnamed { hi, lo }) if is_collapse => {
                         return self.collapse_hint(hi, lo)
                     }
 
-                    AssignDst::Flow(BranchWrite::Explicit(branch)) => self
-                        .place(PlaceKind::BranchCurrent { branch, reactive: reactive.is_some() }),
-
-                    AssignDst::Potential(BranchWrite::Explicit(branch)) => self
-                        .place(PlaceKind::BranchVoltage { branch, reactive: reactive.is_some() }),
-
                     // TODO verify no contributes between GND nodes
-                    AssignDst::Flow(BranchWrite::Implict { hi, lo }) => self
-                        .lower_contribute_implict_branch(
-                            &mut negate,
-                            hi,
-                            lo,
-                            |hi, lo| PlaceKind::ImplicitBranchCurrent {
-                                hi,
-                                lo,
-                                reactive: reactive.is_some(),
-                            },
-                            |hi, lo| ParamKind::Current(CurrentKind::ImplictBranch { hi, lo }),
-                        ),
+                    AssignDst::Flow(kind) => return self.contribute(false, kind, val),
+                    AssignDst::Potential(kind) => return self.contribute(true, kind, val),
+                };
 
-                    AssignDst::Potential(BranchWrite::Implict { hi, lo }) => self
-                        .lower_contribute_implict_branch(
-                            &mut negate,
-                            hi,
-                            lo,
-                            |hi, lo| PlaceKind::ImplicitBranchVoltage {
-                                hi,
-                                lo,
-                                reactive: reactive.is_some(),
-                            },
-                            |hi, lo| ParamKind::Voltage { hi, lo },
-                        ),
-                };
-                if assignment_kind == AssignOp::Contribute {
-                    let old = self.func.use_var(place);
-                    val_ = if negate {
-                        self.func.ins().fsub(old, val_)
-                    } else {
-                        self.func.ins().fadd(old, val_)
-                    };
-                };
+                let val_ = self.lower_expr(val);
+                let place = self.place(place);
                 self.func.def_var(place, val_)
             }
+
             Stmt::Block { ref body } => {
                 for stmt in body {
-                    self.lower_stmt(*stmt, None)
+                    self.lower_stmt(*stmt)
                 }
             }
             Stmt::If { cond, then_branch, else_branch } => {
                 let cond = self.lower_expr(cond);
                 self.func.make_cond(cond, |func, branch| {
                     let stmt = if branch { then_branch } else { else_branch };
-                    #[allow(clippy::needless_option_as_deref)]
+                    let op_dependent_execution =
+                        self.op_dependent_execution || func.op_dependent_vals.contains(cond);
                     LoweringCtx {
                         db: self.db,
                         data: self.data,
@@ -791,19 +777,22 @@ impl LoweringCtx<'_, '_> {
                         infere: self.infere,
                         tagged_vars: self.tagged_vars,
                         places: self.places,
-                        reactive_component: self.reactive_component.as_deref_mut(),
+                        extra_dims: self.extra_dims.as_deref_mut(),
+                        path: "",
+                        contribute_rhs: false,
+                        op_dependent_execution,
                     }
-                    .lower_stmt(stmt, None)
+                    .lower_stmt(stmt)
                 });
             }
             Stmt::ForLoop { init, cond, incr, body } => {
-                self.lower_stmt(init, None);
+                self.lower_stmt(init);
                 self.lower_loop(cond, |s| {
-                    s.lower_stmt(body, None);
-                    s.lower_stmt(incr, None);
+                    s.lower_stmt(body);
+                    s.lower_stmt(incr);
                 });
             }
-            Stmt::WhileLoop { cond, body } => self.lower_loop(cond, |s| s.lower_stmt(body, None)),
+            Stmt::WhileLoop { cond, body } => self.lower_loop(cond, |s| s.lower_stmt(body)),
             Stmt::Case { discr, ref case_arms } => self.lower_case(discr, case_arms),
         }
     }
@@ -818,6 +807,8 @@ impl LoweringCtx<'_, '_> {
             ty => unreachable!("Invalid type {}", ty),
         };
         let discr = self.lower_expr(discr);
+        let old = self.op_dependent_execution;
+        self.op_dependent_execution = old || self.func.op_dependent_vals.contains(discr);
 
         let end = self.func.create_block();
 
@@ -838,6 +829,9 @@ impl LoweringCtx<'_, '_> {
 
                 // Lower the condition (val == discriminant)
                 let val_ = self.lower_expr(*val);
+                self.op_dependent_execution =
+                    self.op_dependent_execution || self.func.op_dependent_vals.contains(val_);
+
                 let old_loc = self.func.get_srcloc();
                 self.func.set_srcloc(mir::SourceLoc::new(u32::from(*val) as i32 + 1));
                 let cond = self.func.ins().binary1(discr_op, val_, discr);
@@ -855,7 +849,7 @@ impl LoweringCtx<'_, '_> {
             // lower the body
             let next = self.func.current_block();
             self.func.switch_to_block(body_head);
-            self.lower_stmt(*body, None);
+            self.lower_stmt(*body);
             self.func.ins().jump(end);
             self.func.switch_to_block(next);
         }
@@ -863,14 +857,16 @@ impl LoweringCtx<'_, '_> {
         if let Some(default_case) =
             case_arms.iter().find(|arm| matches!(arm.cond, CaseCond::Default))
         {
-            self.lower_stmt(default_case.body, None);
+            self.lower_stmt(default_case.body);
         }
 
         self.func.ensured_sealed();
         self.func.ins().jump(end);
 
         self.func.seal_block(end);
-        self.func.switch_to_block(end)
+        self.func.switch_to_block(end);
+
+        self.op_dependent_execution = old;
     }
 
     fn lower_loop(&mut self, cond: ExprId, lower_body: impl FnOnce(&mut Self)) {
@@ -882,6 +878,9 @@ impl LoweringCtx<'_, '_> {
         self.func.switch_to_block(loop_cond_head);
 
         let cond = self.lower_expr(cond);
+        let old = self.op_dependent_execution;
+        self.op_dependent_execution = old || self.func.op_dependent_vals.contains(cond);
+
         self.func.ins().br_loop(cond, loop_body_head, loop_end);
         self.func.seal_block(loop_body_head);
         self.func.seal_block(loop_end);
@@ -893,16 +892,77 @@ impl LoweringCtx<'_, '_> {
         self.func.seal_block(loop_cond_head);
 
         self.func.switch_to_block(loop_end);
+
+        self.op_dependent_execution = old;
     }
 
     fn place(&mut self, kind: PlaceKind) -> Place {
-        let (place, inserted) = self.places.ensure(kind);
+        Self::place_(self.func, self.data, self.places, kind)
+    }
+
+    fn contribute(&mut self, voltage_src: bool, mut kind: BranchWrite, val: ExprId) {
+        let mut negate = false;
+        if let BranchWrite::Unnamed { hi, lo } = &mut kind {
+            self.lower_contribute_unnamed_branch(&mut negate, hi, lo, voltage_src)
+        }
+        let place = PlaceKind::IsVoltageSrc(kind);
+        let (place, inserted) = self.places.ensure(place);
+        if inserted {
+            let entry = self.func.func.layout.entry_block().unwrap();
+            self.func.def_var_at(place, voltage_src.into(), entry);
+        }
+
+        self.func.def_var(place, voltage_src.into());
+
+        self.contribute_rhs = self.extra_dims.is_some();
+        let val_ = self.lower_expr_(val);
+        self.contribute_rhs = false;
+
+        let mut add_contribute = |mut val, dim| {
+            if val == F_ZERO {
+                return;
+            }
+
+            let compl_place = PlaceKind::Contribute { dst: kind, dim, voltage_src: !voltage_src };
+            if let Some(place) = self.places.index(&compl_place) {
+                self.func.def_var(place, F_ZERO);
+            }
+            let place = PlaceKind::Contribute { dst: kind, dim, voltage_src };
+            let place = Self::place_(self.func, self.data, self.places, place);
+            let old = self.func.use_var(place);
+            val = if negate {
+                self.func.ins().fsub(old, val)
+            } else if old == F_ZERO {
+                val
+            } else {
+                self.func.ins().fadd(old, val)
+            };
+            self.func.def_var(place, val);
+        };
+
+        add_contribute(val_, RESISTIVE_DIM);
+        if let Some(extra_dims) = self.extra_dims.as_deref_mut() {
+            for (dim, vals) in extra_dims.iter_enumerated() {
+                if let Some(val) = vals.get(&val) {
+                    add_contribute(*val, dim);
+                }
+            }
+        }
+    }
+
+    fn place_(
+        func: &mut FunctionBuilder,
+        intern: &mut HirInterner,
+        places: &mut TiSet<Place, PlaceKind>,
+        kind: PlaceKind,
+    ) -> Place {
+        let (place, inserted) = places.ensure(kind);
         if inserted {
             match kind {
                 PlaceKind::Var(var) => {
-                    let hidden_state = self.param(ParamKind::HiddenState(var));
-                    let entry = self.func.func.layout.entry_block().unwrap();
-                    self.func.def_var_at(place, hidden_state, entry);
+                    let hidden_state = intern.ensure_param(func.func, ParamKind::HiddenState(var));
+                    let entry = func.func.layout.entry_block().unwrap();
+                    func.def_var_at(place, hidden_state, entry);
                 }
                 // always initalized
                 PlaceKind::FunctionReturn { .. }
@@ -912,12 +972,16 @@ impl LoweringCtx<'_, '_> {
                 | PlaceKind::ParamMax(_) => (),
 
                 // always zero initalized
-                PlaceKind::BranchVoltage { .. }
-                | PlaceKind::BranchCurrent { .. }
-                | PlaceKind::ImplicitBranchVoltage { .. }
-                | PlaceKind::ImplicitBranchCurrent { .. } => {
-                    let entry = self.func.func.layout.entry_block().unwrap();
-                    self.func.def_var_at(place, F_ZERO, entry);
+                PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => {
+                    let entry = func.func.layout.entry_block().unwrap();
+                    func.def_var_at(place, F_ZERO, entry);
+                }
+                PlaceKind::CollapseImplicitEquation(_) => {
+                    let entry = func.func.layout.entry_block().unwrap();
+                    func.def_var_at(place, TRUE, entry);
+                }
+                PlaceKind::IsVoltageSrc(_) => {
+                    unreachable!()
                 }
             }
         }
@@ -925,39 +989,25 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn param(&mut self, kind: ParamKind) -> Value {
-        self.data.ensure_param(self.func.func, kind)
+        let (val, changed) =
+            HirInterner::ensure_param_(&mut self.data.params, self.func.func, kind);
+        if changed && matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
+            self.func.op_dependent_vals.ensure(self.func.func.dfg.num_values());
+            self.func.op_dependent_vals.insert(val);
+        }
+        val
     }
 
     fn callback(&mut self, kind: CallBackKind) -> FuncRef {
-        let (func_ref, changed) = self.data.callbacks.ensure(kind);
-        if changed {
-            let data = kind.signature();
-            let sig = self.func.import_function(data);
-            debug_assert_eq!(func_ref, sig);
-        }
-        func_ref
+        callback_(self.data, self.func, kind)
     }
 
-    // fn stateful_callback(
-    //     &mut self,
-    //     kind: impl FnOnce(StateId) -> CallBackKind,
-    // ) -> (Value, FuncRef) {
-    //     let state = self.data.state.len().into();
-    //     let kind = kind(state);
-    //     let (func_ref, changed) = self.data.callbacks.ensure(kind);
-    //     debug_assert!(changed);
-    //     let data = kind.signature();
-    //     self.func.import_function(data);
-    //     let state = self.param(ParamKind::StatePrev(state));
-    //     (state, func_ref)
-    // }
-
-    fn lower_expr_as_lhs(&mut self, expr: ExprId, mut val: Value) {
-        let place = match self.body.exprs[expr] {
+    fn lower_expr_as_lhs(&mut self, expr: ExprId) -> Place {
+        match self.body.exprs[expr] {
             hir_def::Expr::Path { port: false, .. } => match self.infere.expr_types[expr] {
                 HirTy::Var(_, var) => self.place(PlaceKind::Var(var)),
                 HirTy::FuntionVar { fun, arg: None, .. } => {
-                    self.place(PlaceKind::FunctionReturn { fun })
+                    self.place(PlaceKind::FunctionReturn(fun))
                 }
                 HirTy::FuntionVar { arg: Some(arg), fun, .. } => {
                     self.place(PlaceKind::FunctionArg { fun, arg })
@@ -965,17 +1015,24 @@ impl LoweringCtx<'_, '_> {
                 _ => unreachable!(),
             },
             _ => unreachable!(),
-        };
+        }
+    }
 
-        if let Some(src) = self.infere.casts.get(&expr) {
-            let dst = self.infere.expr_types[expr].to_value().unwrap();
-            val = self.insert_cast(val, src, &dst)
-        };
-
-        self.func.def_var(place, val)
+    pub fn lower_expr_maybe_linear(&mut self, expr: ExprId, is_linear: bool) -> Value {
+        let new = self.contribute_rhs & is_linear;
+        let old = replace(&mut self.contribute_rhs, new);
+        let val = self.lower_expr_(expr);
+        self.contribute_rhs = old;
+        val
     }
 
     pub fn lower_expr(&mut self, expr: ExprId) -> Value {
+        let old = replace(&mut self.contribute_rhs, false);
+        let val = self.lower_expr_(expr);
+        self.contribute_rhs = old;
+        val
+    }
+    pub fn lower_expr_(&mut self, expr: ExprId) -> Value {
         let old_loc = self.func.get_srcloc();
         self.func.set_srcloc(mir::SourceLoc::new(u32::from(expr) as i32 + 1));
 
@@ -991,7 +1048,7 @@ impl LoweringCtx<'_, '_> {
                     val
                 }
                 HirTy::FuntionVar { fun, arg: None, .. } => {
-                    let place = self.place(PlaceKind::FunctionReturn { fun });
+                    let place = self.place(PlaceKind::FunctionReturn(fun));
                     self.func.use_var(place)
                 }
                 HirTy::FuntionVar { arg: Some(arg), fun, .. } => {
@@ -1009,7 +1066,41 @@ impl LoweringCtx<'_, '_> {
             }
             hir_def::Expr::UnaryOp { expr: arg, op } => self.lower_unary_op(expr, arg, op),
             hir_def::Expr::Select { cond, then_val, else_val } => {
-                self.lower_select(cond, |s| s.lower_expr(then_val), |s| s.lower_expr(else_val))
+                let cond = self.lower_expr(cond);
+                let (mut then_src, mut else_src) = self.func.make_cond(cond, |func, then| {
+                    #[allow(clippy::needless_option_as_deref)]
+                    let mut ctx = LoweringCtx {
+                        db: self.db,
+                        data: self.data,
+                        func,
+                        body: self.body,
+                        infere: self.infere,
+                        tagged_vars: self.tagged_vars,
+                        places: self.places,
+                        extra_dims: self.extra_dims.as_deref_mut(),
+                        path: self.path,
+                        contribute_rhs: self.contribute_rhs,
+                        op_dependent_execution: self.op_dependent_execution,
+                    };
+                    let expr = if then { then_val } else { else_val };
+                    ctx.lower_expr(expr)
+                });
+
+                if self.contribute_rhs {
+                    if let Some(extra_dims) = self.extra_dims.as_deref_mut() {
+                        for vals in extra_dims {
+                            let then_val = vals.get(&then_val).copied();
+                            let else_val = vals.get(&else_val).copied();
+                            if then_val.is_none() && else_val.is_none() {
+                                continue;
+                            }
+                            then_src.1 = then_val.unwrap_or(F_ZERO);
+                            else_src.1 = else_val.unwrap_or(F_ZERO);
+                            self.func.ins().phi(&[then_src, else_src]);
+                        }
+                    }
+                }
+                self.func.ins().phi(&[then_src, else_src])
             }
             hir_def::Expr::Call { ref args, .. } => match self.infere.resolved_calls[&expr] {
                 ResolvedFun::User(fun) => self.lower_user_fun(fun, args),
@@ -1064,7 +1155,11 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn lower_unary_op(&mut self, expr: ExprId, arg: ExprId, op: UnaryOp) -> Value {
-        let arg_ = self.lower_expr(arg);
+        let is_linear = (op == UnaryOp::Neg
+            && Expr::Literal(Literal::Inf) != self.body.exprs[arg]
+            && self.infere.resolved_signatures[&expr] == REAL_OP)
+            || op == UnaryOp::Identity;
+        let arg_ = self.lower_expr_maybe_linear(arg, is_linear);
         match op {
             UnaryOp::BitNegate => self.func.ins().ineg(arg_),
             UnaryOp::Not => self.func.ins().bnot(arg_),
@@ -1078,12 +1173,35 @@ impl LoweringCtx<'_, '_> {
                     }
                 }
                 match self.infere.resolved_signatures[&expr] {
-                    REAL_OP => self.func.ins().fneg(arg_),
+                    REAL_OP => {
+                        if self.contribute_rhs {
+                            if let Some(extra_dims) = self.extra_dims.as_deref_mut() {
+                                for vals in extra_dims {
+                                    if let Some(val) = vals.get(&arg) {
+                                        let val = self.func.ins().fneg(*val);
+                                        vals.insert(expr, val);
+                                    }
+                                }
+                            }
+                        }
+                        self.func.ins().fneg(arg_)
+                    }
                     INT_OP => self.func.ins().ineg(arg_),
                     _ => unreachable!(),
                 }
             }
-            UnaryOp::Identity => arg_,
+            UnaryOp::Identity => {
+                if self.contribute_rhs {
+                    if let Some(extra_dims) = self.extra_dims.as_deref_mut() {
+                        for vals in extra_dims {
+                            if let Some(val) = vals.get(&arg).copied() {
+                                vals.insert(expr, val);
+                            }
+                        }
+                    }
+                }
+                arg_
+            }
         }
     }
 
@@ -1135,33 +1253,42 @@ impl LoweringCtx<'_, '_> {
         }
     }
 
-    fn lower_contribute_implict_branch(
+    fn lower_contribute_unnamed_branch(
         &mut self,
         negate: &mut bool,
-        hi: NodeId,
-        lo: Option<NodeId>,
-        kind: impl Fn(NodeId, Option<NodeId>) -> PlaceKind,
-        param_kind: impl Fn(NodeId, Option<NodeId>) -> ParamKind,
-    ) -> Place {
-        let hi = self.node(hi);
-        let lo = lo.and_then(|lo| self.node(lo));
-        match (hi, lo) {
-            (Some(hi), None) => self.place(kind(hi, None)),
+        hi: &mut NodeId,
+        lo: &mut Option<NodeId>,
+        voltage_src: bool,
+    ) {
+        let hi_ = self.node(*hi);
+        let lo_ = lo.and_then(|lo| self.node(lo));
+        (*hi, *lo) = match (hi_, lo_) {
+            (Some(hi), None) => (hi, None),
             (None, Some(lo)) => {
                 *negate = true;
-                self.place(kind(lo, None))
+                (lo, None)
             }
             (Some(hi), Some(lo)) => {
-                if self.data.params.contains_key(&param_kind(lo, Some(hi))) {
-                    *negate = true;
-                    self.place(kind(lo, Some(hi)))
+                let param_kind = if voltage_src {
+                    ParamKind::Voltage { hi: lo, lo: Some(hi) }
                 } else {
-                    self.param(param_kind(hi, Some(lo)));
-                    self.place(kind(hi, Some(lo)))
+                    ParamKind::Current(CurrentKind::Unnamed { hi: lo, lo: Some(hi) })
+                };
+                if self.data.params.contains_key(&param_kind) {
+                    *negate = true;
+                    (lo, Some(hi))
+                } else {
+                    let param_kind = if voltage_src {
+                        ParamKind::Voltage { hi, lo: Some(lo) }
+                    } else {
+                        ParamKind::Current(CurrentKind::Unnamed { hi, lo: Some(lo) })
+                    };
+                    self.param(param_kind);
+                    (hi, Some(lo))
                 }
             }
             (None, None) => unreachable!(),
-        }
+        };
     }
 
     fn lower_bin_op(&mut self, expr: ExprId, lhs: ExprId, rhs: ExprId, op: BinaryOp) -> Value {
@@ -1234,61 +1361,102 @@ impl LoweringCtx<'_, '_> {
             BinaryOp::BitwiseAnd => Opcode::Iand,
         };
 
-        let lhs_ = self.lower_expr(lhs);
-        let rhs_ = self.lower_expr(rhs);
+        if self.contribute_rhs {
+            match op {
+                Opcode::Fadd => {
+                    let lhs_ = self.lower_expr_(lhs);
+                    let rhs_ = self.lower_expr_(rhs);
+                    let res = self.func.ins().fadd(lhs_, rhs_);
+                    for dim in self.extra_dims.as_deref_mut().unwrap() {
+                        let lhs = dim.get(&lhs).copied();
+                        let rhs = dim.get(&rhs).copied();
+                        match (lhs, rhs) {
+                            (None, None) => (),
+                            (Some(val), None) | (None, Some(val)) => {
+                                dim.insert(expr, val);
+                            }
 
-        if let Some(reactive_component) = &mut self.reactive_component {
-            let lhs__ = reactive_component.get(&lhs).copied();
-            let rhs__ = reactive_component.get(&rhs).copied();
-            match (lhs__, rhs__, op) {
-                (Some(lhs), Some(rhs), Opcode::Fadd) => {
-                    let val = self.func.ins().fadd(lhs, rhs);
-                    reactive_component.insert(expr, val);
+                            (Some(lhs), Some(rhs)) => {
+                                let val = self.func.ins().fadd(lhs, rhs);
+                                dim.insert(expr, val);
+                            }
+                        }
+                    }
+
+                    return res;
                 }
+                Opcode::Fsub => {
+                    let lhs_ = self.lower_expr_(lhs);
+                    let rhs_ = self.lower_expr_(rhs);
+                    let res = self.func.ins().fadd(lhs_, rhs_);
+                    for dim in self.extra_dims.as_deref_mut().unwrap() {
+                        let lhs = dim.get(&lhs).copied();
+                        let rhs = dim.get(&rhs).copied();
+                        match (lhs, rhs) {
+                            (None, None) => (),
+                            (Some(val), None) => {
+                                dim.insert(expr, val);
+                            }
 
-                (Some(val), None, Opcode::Fadd | Opcode::Fsub)
-                | (None, Some(val), Opcode::Fadd) => {
-                    reactive_component.insert(expr, val);
+                            (None, Some(val)) => {
+                                let val = self.func.ins().fneg(val);
+                                dim.insert(expr, val);
+                            }
+
+                            (Some(lhs), Some(rhs)) => {
+                                let val = self.func.ins().fsub(lhs, rhs);
+                                dim.insert(expr, val);
+                            }
+                        }
+                    }
+
+                    return res;
                 }
+                Opcode::Fmul | Opcode::Fdiv => {
+                    let mut lhs_ = self.lower_expr_(lhs);
+                    let has_extra_dims = self
+                        .extra_dims
+                        .as_deref_mut()
+                        .unwrap()
+                        .iter()
+                        .any(|vals| vals.contains_key(&lhs));
+                    let is_op_dependent =
+                        has_extra_dims | self.func.op_dependent_vals.contains(lhs_);
+                    if is_op_dependent {
+                        let rhs_ = self.lower_expr(rhs);
+                        if self.func.op_dependent_vals.contains(rhs_) {
+                            lhs_ = self.lower_expr(lhs);
+                        } else if has_extra_dims {
+                            for dim_vals in self.extra_dims.as_deref_mut().unwrap() {
+                                if let Some(val) = dim_vals.get(&lhs).copied() {
+                                    let val = self.func.ins().binary1(op, val, rhs_);
+                                    dim_vals.insert(expr, val);
+                                }
+                            }
+                        }
 
-                (None, Some(val), Opcode::Fsub) => {
-                    let val = self.func.ins().fneg(val);
-                    reactive_component.insert(expr, val);
-                }
-
-                (None, Some(rhs_), Opcode::Fmul) => {
-                    let val = self.func.ins().fmul(lhs_, rhs_);
-                    reactive_component.insert(expr, val);
-                }
-
-                (Some(lhs_), None, Opcode::Fmul) => {
-                    let val = self.func.ins().fmul(lhs_, rhs_);
-                    reactive_component.insert(expr, val);
-                }
-
-                (Some(lhs_), None, Opcode::Fdiv) => {
-                    let val = self.func.ins().fdiv(lhs_, rhs_);
-                    reactive_component.insert(expr, val);
-                }
-
-                (lhs_, rhs_, op) => {
-                    if (lhs_.is_some() || rhs_.is_some()) && cfg!(debug_assertions) {
-                        unreachable!(
-                            "wtf {} ({:?}) {:?}({:?}) {:?}  ({:?})",
-                            op,
-                            &self.body.exprs[expr],
-                            lhs_,
-                            &self.body.exprs[lhs],
-                            rhs_,
-                            &self.body.exprs[rhs]
-                        );
+                        return self.func.ins().binary1(op, lhs_, rhs_);
+                    } else if op == Opcode::Fmul {
+                        let rhs_ = self.lower_expr_(rhs);
+                        for dim_vals in self.extra_dims.as_deref_mut().unwrap() {
+                            if let Some(val) = dim_vals.get(&rhs).copied() {
+                                let val = self.func.ins().binary1(op, lhs_, val);
+                                dim_vals.insert(expr, val);
+                            }
+                        }
+                        return self.func.ins().fmul(lhs_, rhs_);
+                    } else {
+                        let rhs_ = self.lower_expr(rhs);
+                        return self.func.ins().fdiv(lhs_, rhs_);
                     }
                 }
+                _ => (),
             }
         }
 
-        let (inst, dfg) = self.func.ins().binary(op, lhs_, rhs_);
-        dfg.first_result(inst)
+        let lhs_ = self.lower_expr(lhs);
+        let rhs_ = self.lower_expr(rhs);
+        self.func.ins().binary1(op, lhs_, rhs_)
     }
 
     fn lower_select(
@@ -1317,7 +1485,10 @@ impl LoweringCtx<'_, '_> {
                 infere: self.infere,
                 tagged_vars: self.tagged_vars,
                 places: self.places,
-                reactive_component: self.reactive_component.as_deref_mut(),
+                extra_dims: self.extra_dims.as_deref_mut(),
+                path: self.path,
+                contribute_rhs: self.contribute_rhs,
+                op_dependent_execution: self.op_dependent_execution,
             };
             if branch {
                 lower_then_val(&mut ctx)
@@ -1327,13 +1498,52 @@ impl LoweringCtx<'_, '_> {
         })
     }
 
+    fn lower_cond_with<T>(
+        &mut self,
+        cond: Value,
+        mut lower_body: impl FnMut(&mut LoweringCtx, bool) -> T,
+    ) -> ((Block, T), (Block, T)) {
+        self.func.make_cond(cond, |func, branch| {
+            #[allow(clippy::needless_option_as_deref)]
+            let mut ctx = LoweringCtx {
+                db: self.db,
+                data: self.data,
+                func,
+                body: self.body,
+                infere: self.infere,
+                tagged_vars: self.tagged_vars,
+                places: self.places,
+                extra_dims: self.extra_dims.as_deref_mut(),
+                path: self.path,
+                contribute_rhs: self.contribute_rhs,
+                op_dependent_execution: self.op_dependent_execution,
+            };
+            lower_body(&mut ctx, branch)
+        })
+    }
+
+    fn lower_multi_select<const N: usize>(
+        &mut self,
+        cond: Value,
+        lower_body: impl FnMut(&mut LoweringCtx, bool) -> [Value; N],
+    ) -> [Value; N] {
+        let ((then_bb, mut then_vals), (else_bb, else_vals)) =
+            self.lower_cond_with(cond, lower_body);
+        for (then_val, else_val) in zip(&mut then_vals, else_vals) {
+            *then_val = self.func.ins().phi(&[(then_bb, *then_val), (else_bb, else_val)]);
+        }
+        then_vals
+    }
+
     fn lower_user_fun(&mut self, fun: FunctionId, args: &[ExprId]) -> Value {
         let info = self.db.function_data(fun);
+        let mut path = self.path.to_owned();
+        path.push_str(&*info.name);
 
         let body = self.db.body(fun.into());
         let infere = self.db.inference_result(fun.into());
 
-        // TODO do not inline functions!
+        // TODO do not inline functions?
         for ((arg, info), expr) in zip(info.args.iter_enumerated(), args) {
             let place = self.place(PlaceKind::FunctionArg { fun, arg });
             let init = if info.is_input {
@@ -1345,7 +1555,8 @@ impl LoweringCtx<'_, '_> {
                     ty => unreachable!("invalid function arg type {:?}", ty),
                 }
             };
-            self.func.def_var(place, init)
+
+            self.func.def_var(place, init);
         }
 
         let init = match &info.return_ty {
@@ -1353,7 +1564,7 @@ impl LoweringCtx<'_, '_> {
             Type::Integer => ZERO,
             ty => unreachable!("invalid function return type {:?}", ty),
         };
-        let ret_place = self.place(PlaceKind::FunctionReturn { fun });
+        let ret_place = self.place(PlaceKind::FunctionReturn(fun));
         self.func.def_var(ret_place, init);
 
         #[allow(clippy::needless_option_as_deref)]
@@ -1362,10 +1573,14 @@ impl LoweringCtx<'_, '_> {
             data: self.data,
             func: self.func,
             body: &body,
+            path: self.path,
             infere: &infere,
             tagged_vars: self.tagged_vars,
             places: self.places,
-            reactive_component: None,
+            extra_dims: None,
+            // can not contain contribute so doesn't matter
+            contribute_rhs: false,
+            op_dependent_execution: false,
         };
 
         ctx.lower_entry_stmts();
@@ -1373,13 +1588,103 @@ impl LoweringCtx<'_, '_> {
         // write outputs back to original (including possibly required cast)
         for ((arg, info), expr) in zip(info.args.iter_enumerated(), args) {
             if info.is_output {
-                let place = self.place(PlaceKind::FunctionArg { fun, arg });
-                let val = self.func.use_var(place);
-                self.lower_expr_as_lhs(*expr, val);
+                let src_place = self.place(PlaceKind::FunctionArg { fun, arg });
+                let dst_place = self.lower_expr_as_lhs(*expr);
+
+                let mut val = self.func.use_var(src_place);
+
+                if let Some(src) = self.infere.casts.get(expr) {
+                    let dst = self.infere.expr_types[*expr].to_value().unwrap();
+                    val = self.insert_cast(val, src, &dst)
+                }
+
+                self.func.def_var(dst_place, val);
             }
         }
 
         self.func.use_var(ret_place)
+    }
+
+    fn implicit_eqation(&mut self, kind: ImplicitEquationKind) -> (ImplicitEquation, Value) {
+        let equation = self.data.implicit_equations.push_and_get_key(kind);
+        let place = self.place(PlaceKind::CollapseImplicitEquation(equation));
+        self.func.def_var(place, FALSE);
+        let val = self.param(ParamKind::ImplicitUnkown(equation));
+        (equation, val)
+    }
+
+    fn define_resist_residual(&mut self, residual_val: Value, equation: ImplicitEquation) {
+        let place = PlaceKind::ImplicitResidual { equation, dim: RESISTIVE_DIM };
+        let place = self.place(place);
+        self.func.def_var(place, residual_val);
+    }
+
+    fn define_react_residual(&mut self, residual_val: Value, equation: ImplicitEquation) {
+        let place = PlaceKind::ImplicitResidual { equation, dim: REACTIVE_DIM };
+        let place = self.place(place);
+        self.func.def_var(place, residual_val);
+    }
+
+    fn lower_integral(&mut self, kind: IdtKind, args: &[ExprId]) -> Value {
+        let (equation, val) = self.implicit_eqation(ImplicitEquationKind::Idt(kind));
+
+        let mut enable_integral = self.param(ParamKind::EnableIntegration);
+        let residual = if kind.has_ic() {
+            if kind.has_assert() {
+                enable_integral = self.lower_select_with(
+                    enable_integral,
+                    |s| {
+                        let assert = s.lower_expr_(args[2]);
+                        s.func.ins().feq(assert, F_ZERO)
+                    },
+                    |_| FALSE,
+                )
+            }
+
+            self.lower_multi_select(enable_integral, |ctx, branch| {
+                if branch {
+                    if kind.has_modulus() {
+                        let modulus = ctx.lower_expr(args[2]);
+                        let (min, max) = if kind.has_offset() {
+                            let offset = ctx.lower_expr(args[2]);
+                            (offset, ctx.func.ins().fadd(offset, modulus))
+                        } else {
+                            (F_ZERO, modulus)
+                        };
+                        let too_large = ctx.func.ins().fgt(val, max);
+                        ctx.lower_multi_select(too_large, |ctx, too_large| {
+                            if too_large {
+                                [ctx.func.ins().fsub(val, min), F_ZERO]
+                            } else {
+                                let too_small = ctx.func.ins().flt(val, min);
+                                ctx.lower_multi_select(too_small, |ctx, too_small| {
+                                    if too_small {
+                                        [ctx.func.ins().fsub(val, min), F_ZERO]
+                                    } else {
+                                        let arg = ctx.lower_expr(args[0]);
+                                        [ctx.func.ins().fneg(arg), val]
+                                    }
+                                })
+                            }
+                        })
+                    } else {
+                        let arg = ctx.lower_expr(args[0]);
+                        [ctx.func.ins().fneg(arg), val]
+                    }
+                } else {
+                    let ic = ctx.lower_expr_(args[1]);
+                    [ctx.func.ins().fsub(val, ic), F_ZERO]
+                }
+            })
+        } else {
+            let arg = self.lower_expr(args[0]);
+            [self.func.ins().fneg(arg), val]
+        };
+
+        self.define_resist_residual(residual[0], equation);
+        self.define_resist_residual(residual[1], equation);
+
+        val
     }
 
     fn lower_builtin(&mut self, expr: ExprId, builtin: BuiltIn, args: &[ExprId]) -> Value {
@@ -1531,20 +1836,36 @@ impl LoweringCtx<'_, '_> {
                 self.func.ins().pow(arg0, arg1)
             }
 
-            // TODO implement properly
-            BuiltIn::display
-            | BuiltIn::strobe
-            | BuiltIn::write
-            | BuiltIn::monitor
-            | BuiltIn::debug
-            | BuiltIn::stop
-            | BuiltIn::warning
-            | BuiltIn::error
-            | BuiltIn::info
-            | BuiltIn::finish => GRAVESTONE,
+            BuiltIn::write => {
+                self.ins_display(DisplayKind::Display, false, args);
+                GRAVESTONE
+            }
+            BuiltIn::display | BuiltIn::strobe | BuiltIn::monitor => {
+                self.ins_display(DisplayKind::Display, true, args);
+                GRAVESTONE
+            }
+            BuiltIn::debug => {
+                self.ins_display(DisplayKind::Debug, true, args);
+
+                GRAVESTONE
+            }
+
+            BuiltIn::warning => {
+                self.ins_display(DisplayKind::Warn, true, args);
+                GRAVESTONE
+            }
+            BuiltIn::error => {
+                self.ins_display(DisplayKind::Error, true, args);
+                GRAVESTONE
+            }
+            BuiltIn::info => {
+                self.ins_display(DisplayKind::Info, true, args);
+                GRAVESTONE
+            }
+            BuiltIn::finish | BuiltIn::stop => GRAVESTONE,
 
             BuiltIn::fatal => {
-                //TODO terminate
+                self.ins_display(DisplayKind::Fatal, true, args);
                 self.func.ins().ret();
 
                 let unreachable_bb = self.func.create_block();
@@ -1552,42 +1873,84 @@ impl LoweringCtx<'_, '_> {
                 self.func.seal_block(unreachable_bb);
                 GRAVESTONE
             }
-            BuiltIn::analysis => FALSE,
+            BuiltIn::analysis => TRUE,
             BuiltIn::ac_stim
             | BuiltIn::noise_table
             | BuiltIn::noise_table_log
             | BuiltIn::white_noise
-            | BuiltIn::flicker_noise
-            | BuiltIn::abstime => F_ZERO,
+            | BuiltIn::flicker_noise => F_ZERO,
 
-            BuiltIn::ddt => {
+            BuiltIn::abstime => self.param(ParamKind::Abstime),
+
+            BuiltIn::ddt if self.contribute_rhs => {
+                self.contribute_rhs = false;
                 let arg0 = self.lower_expr(args[0]);
-                if let Some(reactive_component) = &mut self.reactive_component {
-                    reactive_component.insert(expr, arg0);
+                self.contribute_rhs = true;
+                if self.func.op_dependent_vals.contains(arg0) {
+                    if let Some(extra_dims) = &mut self.extra_dims {
+                        extra_dims[REACTIVE_DIM].insert(expr, arg0);
+                    }
                 }
                 F_ZERO
             }
 
-            BuiltIn::idt | BuiltIn::idtmod => match *signature.unwrap() {
-                IDT_NO_IC => F_ZERO,
-                _ => self.lower_expr(args[1]),
-            },
+            BuiltIn::ddt => {
+                if self.extra_dims.is_some() {
+                    let arg0 = self.lower_expr(args[0]);
+                    if self.func.op_dependent_vals.contains(arg0) {
+                        let (equation, val) = self.implicit_eqation(ImplicitEquationKind::Ddt);
+                        self.define_resist_residual(val, equation);
+                        let react_residual = self.func.ins().fneg(val);
+                        self.define_react_residual(react_residual, equation);
+                        return val;
+                    }
+                }
+                F_ZERO
+            }
+            BuiltIn::idt | BuiltIn::idtmod if self.extra_dims.is_none() => {
+                match *signature.unwrap() {
+                    IDT_NO_IC => F_ZERO, // fair enough approximation
+                    _ => self.lower_expr_(args[1]),
+                }
+            }
 
-            // For benchmark
-            // BuiltIn::idt | BuiltIn::idtmod | BuiltIn::ddt => match *signature.unwrap() {
-            //     IDT_NO_IC => F_ZERO,
-            //     _ => self.lower_expr(args[0]),
-            // },
+            BuiltIn::idt => {
+                let kind = match_signature! {
+                    signature:
+                        IDT_NO_IC => IdtKind::Basic,
+                        IDT_IC => IdtKind::Ic,
+                        // we currently do not support tolerance
+                        IDT_IC_ASSERT | IDT_IC_ASSERT_TOL | IDT_IC_ASSERT_NATURE => IdtKind::Assert
+                };
+
+                self.lower_integral(kind, args)
+            }
+
+            BuiltIn::idtmod => {
+                let kind = match_signature! {
+                    signature:
+                        IDTMOD_NO_IC => IdtKind::Basic,
+                        IDTMOD_IC => IdtKind::Ic,
+                        IDTMOD_IC_MODULUS => IdtKind::Modulus,
+                        // we currently do not support tolerance
+                        IDTMOD_IC_MODULUS_OFFSET
+                        | IDTMOD_IC_MODULUS_OFFSET_TOL
+                        | IDTMOD_IC_MODULUS_OFFSET_NATURE => IdtKind::ModulusOffset
+                };
+
+                self.lower_integral(kind, args)
+            }
+
             BuiltIn::slew | BuiltIn::transition | BuiltIn::absdelay => self.lower_expr(args[0]),
             BuiltIn::flow => {
                 let res = match_signature! {
                     signature:
                         NATURE_ACCESS_NODES|NATURE_ACCESS_NODE_GND => self.nodes_from_args(
                             args,
-                            |hi, lo| ParamKind::Current(CurrentKind::ImplictBranch{hi,lo})
+                            |hi, lo| ParamKind::Current(CurrentKind::Unnamed{hi,lo})
                         ),
                         NATURE_ACCESS_BRANCH => self.param(ParamKind::Current(
-                        CurrentKind::ExplicitBranch(self.infere.expr_types[args[0]].unwrap_branch())
+                        CurrentKind::Branch(self.infere.expr_types[args[0]].unwrap_branch())
                     )),
                         NATURE_ACCESS_PORT_FLOW => self.param(ParamKind::Current(
                             CurrentKind::Port(self.infere.expr_types[args[0]].unwrap_port_flow())
@@ -1612,13 +1975,13 @@ impl LoweringCtx<'_, '_> {
                 const KB: f64 = 1.3806488e-23;
                 const Q: f64 = 1.602176565e-19;
 
-                let vt = self.func.fconst(KB / Q);
+                let fac = self.func.fconst(KB / Q);
                 let temp = match args.get(0) {
                     Some(temp) => self.lower_expr(*temp),
                     None => self.param(ParamKind::Temperature),
                 };
 
-                self.func.ins().fmul(vt, temp)
+                self.func.ins().fmul(fac, temp)
             }
 
             BuiltIn::ddx => {
@@ -1638,9 +2001,11 @@ impl LoweringCtx<'_, '_> {
             BuiltIn::temperature => self.param(ParamKind::Temperature),
             BuiltIn::simparam => {
                 let call = match_signature!(signature: SIMPARAM_NO_DEFAULT => CallBackKind::SimParam,SIMPARAM_DEFAULT => CallBackKind::SimParamOpt);
+
+                let is_opt = call == CallBackKind::SimParamOpt;
                 let func_ref = self.callback(call);
                 let arg0 = self.lower_expr(args[0]);
-                if call == CallBackKind::SimParamOpt {
+                if is_opt {
                     let arg1 = self.lower_expr(args[1]);
                     self.func.ins().call1(func_ref, &[arg0, arg1])
                 } else {
@@ -1658,7 +2023,15 @@ impl LoweringCtx<'_, '_> {
             BuiltIn::port_connected => self.param(ParamKind::PortConnected {
                 port: self.infere.expr_types[args[0]].unwrap_node(),
             }),
+            // TODO boundstep
+            BuiltIn::bound_step => {
+                let cb = self.callback(CallBackKind::BoundStep);
+                let step_size = self.lower_expr(args[0]);
+                self.func.ins().call(cb, &[step_size]);
+                GRAVESTONE
+            }
             _ => todo!(),
+            // TODO files
             // BuiltIn::fclose => todo!(),
             // BuiltIn::fopen => todo!(),
             // BuiltIn::fdisplay => todo!(),
@@ -1703,9 +2076,8 @@ impl LoweringCtx<'_, '_> {
             // BuiltIn::test_plusargs => todo!(),
             // BuiltIn::value_plusargs => todo!(),
             // BuiltIn::limit => todo!(),
-            // BuiltIn::bound_step => todo!(),
 
-            // // TODO transforms
+            // // TODO impelement?
             // // TODO what is the DC value?
             // BuiltIn::zi_nd => todo!(),
             // BuiltIn::zi_np => todo!(),
@@ -1715,9 +2087,107 @@ impl LoweringCtx<'_, '_> {
             // BuiltIn::laplace_np => todo!(),
             // BuiltIn::laplace_zd => todo!(),
             // BuiltIn::laplace_zp => todo!(),
-
-            // // TODO is this correct DC behaviour_
             // BuiltIn::last_crossing => return 0f64.into(),
         }
     }
+
+    fn resolved_ty(&self, expr: ExprId) -> Type {
+        self.infere
+            .casts
+            .get(&expr)
+            .cloned()
+            .unwrap_or_else(|| self.infere.expr_types[expr].to_value().unwrap())
+    }
+
+    fn ins_display(&mut self, kind: DisplayKind, newline: bool, args: &[ExprId]) {
+        let mut fmt_lit = String::new();
+        let mut call_args = vec![GRAVESTONE];
+        let mut arg_tys = Vec::new();
+
+        let mut i = 0;
+
+        while let Some(expr) = args.get(i) {
+            i += 1;
+            if let Expr::Literal(Literal::String(ref lit)) = self.body.exprs[*expr] {
+                fmt_lit.reserve(lit.len());
+                let mut last_percent = false;
+                for c in lit.chars() {
+                    if last_percent {
+                        match c {
+                            '%' => fmt_lit.push_str("%%"),
+                            'm' | 'M' => {
+                                fmt_lit.push_str(self.path);
+                            }
+                            'l' | 'L' => {
+                                // TODO support properly
+                                fmt_lit.push_str("__.__");
+                            }
+                            _ => {
+                                let ty = self.resolved_ty(args[i]);
+                                arg_tys.push(ty);
+                                call_args.push(self.lower_expr(args[i]));
+                                i += 1;
+                            }
+                        }
+                        last_percent = false
+                    } else if c == '%' {
+                        last_percent = true;
+                    } else {
+                        fmt_lit.push(c)
+                    }
+                }
+            } else {
+                let ty = self.resolved_ty(*expr);
+                match ty {
+                    Type::Real => fmt_lit.push_str("%f"),
+                    Type::Integer => fmt_lit.push_str("%d"),
+                    Type::String => {
+                        // if i == 0 {
+                        //     TODO warn
+                        // }
+                        fmt_lit.push_str("%s")
+                    }
+                    Type::Void => {
+                        fmt_lit.push(' ');
+                        continue;
+                    }
+                    _ => unreachable!(),
+                }
+
+                arg_tys.push(ty);
+                call_args.push(self.lower_expr(*expr));
+            }
+        }
+        if newline {
+            fmt_lit.push('\n');
+        }
+
+        call_args[0] = self.func.sconst(&fmt_lit);
+        let callback = CallBackKind::Print { kind, arg_tys: arg_tys.into_boxed_slice() };
+        let func_ref = self.callback(callback);
+        self.func.ins().call(func_ref, &call_args);
+    }
+}
+
+/* TODO display typecheck
+while let Some(c) = chars.next(){
+         if c == '%'{
+             match chars.next(){
+                 '%' => ()
+                 'h'|'d'|
+
+             }
+         }
+
+         lit.push(ch)
+     }*/
+
+fn callback_(intern: &mut HirInterner, func: &mut FunctionBuilder, kind: CallBackKind) -> FuncRef {
+    let data = kind.signature();
+    let (func_ref, changed) = intern.callbacks.ensure(kind);
+    if changed {
+        let sig = func.func.import_function(data);
+        debug_assert_eq!(func_ref, sig);
+    }
+    func_ref
 }

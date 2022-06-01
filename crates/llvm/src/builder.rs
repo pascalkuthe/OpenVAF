@@ -159,13 +159,17 @@ extern "C" {
     pub fn LLVMBuildNot<'a>(builder: &Builder<'a>, V: &'a Value, Name: *const c_char) -> &'a Value;
 
     // Memory
-    // pub fn LLVMBuildMalloc(builder: &Builder<'a>, ty: &'a Type, Name: *const c_char) -> &'a Value;
-    // pub fn LLVMBuildArrayMalloc(
-    //     builder: &Builder<'a>,
-    //     ty: &'a Type,
-    //     Val: &'a Value,
-    //     Name: *const c_char,
-    // ) -> &'a Value;
+    pub fn LLVMBuildMalloc<'a>(
+        builder: &Builder<'a>,
+        ty: &'a Type,
+        Name: *const c_char,
+    ) -> &'a Value;
+    pub fn LLVMBuildArrayMalloc<'a>(
+        builder: &Builder<'a>,
+        ty: &'a Type,
+        len: &'a Value,
+        Name: *const c_char,
+    ) -> &'a Value;
     // pub fn LLVMBuildMemSet(
     //     B: &Builder,
     //     Ptr: &'a Value,

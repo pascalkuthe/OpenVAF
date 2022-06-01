@@ -110,7 +110,6 @@ impl<'a> ConsoleSink<'a> {
             self.warning_cnt = 0;
         }
 
-
         false
     }
 

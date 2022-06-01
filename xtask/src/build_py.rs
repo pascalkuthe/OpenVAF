@@ -29,7 +29,6 @@ impl crate::flags::Build {
         let ld_lib_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
         let ld_lib_path =
             format!("{}:{}/target/release", ld_lib_path, sh.current_dir().to_str().unwrap());
-        println!("{}", ld_lib_path);
         for (py, _tag) in &pythons {
             cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
                 .env("PYO3_PYTHON", &py)
@@ -40,15 +39,22 @@ impl crate::flags::Build {
 
         if self.manylinux {
             for file in sh.read_dir("wheels")? {
-                cmd!(sh, "auditwheel -v repair {file}  -w wheels")
+                cmd!(sh, "auditwheel repair {file}  -w wheels")
                     .env("LD_LIBRARY_PATH", &ld_lib_path)
                     .run()?;
                 std::fs::remove_file(file)?;
+            }
+        } else {
+            for file in sh.read_dir("wheels")? {
+                cmd!(sh, "auditwheel repair {file}  -w wheels --plat linux_x86_64")
+                    .env("LD_LIBRARY_PATH", &ld_lib_path)
+                    .run()?;
             }
         }
 
         if self.install {
             for file in sh.read_dir("wheels")? {
+                println!("{file:?}");
                 for (py, tag) in &pythons {
                     if file.to_str().unwrap().contains(&*tag) {
                         cmd!(sh, "{py} -m pip install --force-reinstall {file}").run()?;

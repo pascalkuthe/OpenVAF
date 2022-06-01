@@ -1,11 +1,13 @@
 #include "llvm/IR/Instructions.h"
+#include <llvm/IR/Attributes.h>
+#include <llvm/IR/Function.h>
 
 using namespace llvm;
 
 // Enable some fast-math flags for an operation
 // These flags are used for derivatives by default because they only change
-// the rounding behaviour which is not relevant for automatically generated code (derivatives in
-// OpneVAF)
+// the rounding behaviour which is not relevant for automatically generated code
+// (derivatives in OpneVAF)
 //
 // https://llvm.org/docs/LangRef.html#fast-math-flags
 extern "C" void LLVMSetPartialFastMath(LLVMValueRef V) {
@@ -18,8 +20,8 @@ extern "C" void LLVMSetPartialFastMath(LLVMValueRef V) {
 
 // Enable some fast-math flags for an operation
 // These flags are used for derivatives by default because they only change
-// the rounding behaviour which is not relevant for automatically generated code (derivatives in
-// OpneVAF)
+// the rounding behaviour which is not relevant for automatically generated code
+// (derivatives in OpenVAF)
 //
 // https://llvm.org/docs/LangRef.html#fast-math-flags
 extern "C" void LLVMSetFastMath(LLVMValueRef V) {
@@ -28,4 +30,8 @@ extern "C" void LLVMSetFastMath(LLVMValueRef V) {
   }
 }
 
-
+extern "C" void LLVMPurgeAttrs(LLVMValueRef V) {
+  if (auto func = dyn_cast<Function>(unwrap<Value>(V))) {
+    func->setAttributes(AttributeList());
+  }
+}

@@ -9,19 +9,14 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         }
 
         macro_rules! ifn {
-            ($name:expr, fn() -> $ret:expr) => (
+            ($name:expr, fn($($arg:expr),* ;...) -> $ret:expr) => (
                 if name == $name {
-                    return Some(self.insert_intrinsic($name, Some(&[]), $ret));
-                }
-            );
-            ($name:expr, fn(...) -> $ret:expr) => (
-                if name == $name {
-                    return Some(self.insert_intrinsic($name, None, $ret));
+                    return Some(self.insert_intrinsic($name, &[$($arg),*], $ret, true));
                 }
             );
             ($name:expr, fn($($arg:expr),*) -> $ret:expr) => (
                 if name == $name {
-                    return Some(self.insert_intrinsic($name, Some(&[$($arg),*]), $ret));
+                    return Some(self.insert_intrinsic($name, &[$($arg),*], $ret, false));
                 }
             );
         }
@@ -29,6 +24,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         // let void = self.ty_void();
         let t_bool = self.ty_bool();
         let t_i32 = self.ty_int();
+        let t_isize = self.ty_isize();
         let t_f64 = self.ty_real();
         let t_str = self.ty_str();
 
@@ -60,11 +56,12 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
         if name == "hypot" {
             let name = if self.target.options.is_like_msvc { "_hypot" } else { "hypot" };
-            return Some(self.insert_intrinsic(name, Some(&[t_f64]), t_f64));
+            return Some(self.insert_intrinsic(name, &[t_f64], t_f64, false));
         }
 
         ifn!("strcmp", fn(t_str, t_str) -> t_bool);
         ifn!("llvm.llround.i32.f64", fn(t_f64) -> t_i32);
+        ifn!("snprintf", fn(t_str, t_isize, t_str; ...) -> t_i32);
 
         // ifn!("llvm.lifetime.start.p0i8", fn(t_i64, i8p) -> void);
         // ifn!("llvm.lifetime.end.p0i8", fn(t_i64, i8p) -> void);
@@ -93,15 +90,13 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
     fn insert_intrinsic(
         &mut self,
         name: &'static str,
-        args: Option<&[&'ll llvm::Type]>,
+        args: &[&'ll llvm::Type],
         ret: &'ll llvm::Type,
+        variadic: bool,
     ) -> (&'ll llvm::Type, &'ll llvm::Value) {
-        let fn_ty = if let Some(args) = args {
-            self.ty_func(args, ret)
-        } else {
-            self.ty_variadic_func(&[], ret)
-        };
-        let f = self.declare_ext_fn(name, fn_ty);
+        let fn_ty =
+            if variadic { self.ty_variadic_func(&[], ret) } else { self.ty_func(args, ret) };
+        let f = self.get_func_by_name(name).unwrap_or_else(|| self.declare_ext_fn(name, fn_ty));
         self.intrinsics.insert(name, (fn_ty, f));
         (fn_ty, f)
     }

@@ -2,13 +2,18 @@ use std::iter::FilterMap;
 
 use ahash::AHashMap;
 use bitset::HybridBitSet;
-use hir_def::{BranchId, FunctionId, LocalFunctionArgId, NodeId, ParamId, ParamSysFun, VarId};
+use hir_def::{
+    BranchId, FunctionId, LocalFunctionArgId, NodeId, ParamId, ParamSysFun, Type, VarId,
+};
+use hir_ty::inference::BranchWrite;
 use indexmap::IndexMap;
+use lasso::Spur;
 use mir::{
     DataFlowGraph, DerivativeInfo, FuncRef, Function, FunctionSignature, Param, Unkown, Value,
 };
 use stdx::packed_option::PackedOption;
-// use stdx::{impl_debug, impl_idx_from};
+use stdx::{impl_debug_display, impl_idx_from};
+use typed_index_collections::TiVec;
 use typed_indexmap::{map, TiMap, TiSet};
 
 pub use crate::body::MirBuilder;
@@ -18,16 +23,39 @@ mod body;
 #[cfg(test)]
 mod tests;
 
+// pub enum BranchKind{
+//     Explicit(BranchId),
+//     Implicit(BranchId),
+// }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ImplicitEquationKind {
+    Ddt,
+    Idt(IdtKind),
+    NoiseSrc,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CurrentKind {
-    ExplicitBranch(BranchId),
-    ImplictBranch { hi: NodeId, lo: Option<NodeId> },
+    Branch(BranchId),
+    Unnamed { hi: NodeId, lo: Option<NodeId> },
     Port(NodeId),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+impl From<BranchWrite> for CurrentKind {
+    fn from(kind: BranchWrite) -> Self {
+        match kind {
+            BranchWrite::Named(branch) => CurrentKind::Branch(branch),
+            BranchWrite::Unnamed { hi, lo } => CurrentKind::Unnamed { hi, lo },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParamKind {
     Param(ParamId),
+    Abstime,
+    EnableIntegration,
     Voltage { hi: NodeId, lo: Option<NodeId> },
     Current(CurrentKind),
     Temperature,
@@ -35,6 +63,7 @@ pub enum ParamKind {
     PortConnected { port: NodeId },
     ParamSysFun(ParamSysFun),
     HiddenState(VarId),
+    ImplicitUnkown(ImplicitEquation),
 }
 
 impl ParamKind {
@@ -47,43 +76,63 @@ impl ParamKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IdtKind {
+    Basic,
+    Ic,
+    Assert,
+    Modulus,
+    ModulusOffset,
+}
+
+impl IdtKind {
+    pub const fn num_params(self) -> u16 {
+        match self {
+            IdtKind::Basic => 1,
+            IdtKind::Ic => 2,
+            IdtKind::Assert | IdtKind::Modulus => 3,
+            IdtKind::ModulusOffset => 4,
+        }
+    }
+    pub const fn has_ic(self) -> bool {
+        !matches!(self, IdtKind::Basic)
+    }
+
+    pub const fn has_assert(self) -> bool {
+        matches!(self, IdtKind::Assert)
+    }
+
+    pub const fn has_modulus(self) -> bool {
+        matches!(self, IdtKind::Modulus | IdtKind::ModulusOffset)
+    }
+
+    pub const fn has_offset(self) -> bool {
+        matches!(self, IdtKind::ModulusOffset)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlaceKind {
     Var(VarId),
-    FunctionReturn {
-        fun: FunctionId,
-    },
+    FunctionReturn(FunctionId),
     FunctionArg {
         fun: FunctionId,
         arg: LocalFunctionArgId,
     },
-    BranchVoltage {
-        branch: BranchId,
-        reactive: bool,
+    Contribute {
+        dst: BranchWrite,
+        dim: Dim,
+        voltage_src: bool,
     },
-    BranchCurrent {
-        branch: BranchId,
-        reactive: bool,
+    ImplicitResidual {
+        equation: ImplicitEquation,
+        dim: Dim,
     },
-    ImplicitBranchVoltage {
-        hi: NodeId,
-        lo: Option<NodeId>,
-        reactive: bool,
-    },
-    ImplicitBranchCurrent {
-        hi: NodeId,
-        lo: Option<NodeId>,
-        reactive: bool,
-    },
+    CollapseImplicitEquation(ImplicitEquation),
+    IsVoltageSrc(BranchWrite),
     /// A parameter during param initiliztion is mutable (write default in case its not given)
     Param(ParamId),
     ParamMin(ParamId),
     ParamMax(ParamId),
-}
-
-impl From<VarId> for PlaceKind {
-    fn from(var: VarId) -> PlaceKind {
-        PlaceKind::Var(var)
-    }
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
@@ -96,7 +145,20 @@ pub enum ParamInfoKind {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
+pub enum DisplayKind {
+    Debug,
+    Display,
+    Info,
+    Warn,
+    Error,
+    Fatal,
+    Monitor,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CallBackKind {
+    BoundStep,
+    Print { kind: DisplayKind, arg_tys: Box<[Type]> },
     SimParam,
     SimParamOpt,
     SimParamStr,
@@ -147,11 +209,29 @@ impl CallBackKind {
                 has_sideeffects: true,
             },
             CallBackKind::CollapseHint(hi, lo) => FunctionSignature {
-                name: format!("collapse_{:?}_{:?})", hi, lo),
+                name: format!("collapse_{:?}_{:?}", hi, lo),
                 params: 0,
                 returns: 0,
                 has_sideeffects: true,
             },
+            CallBackKind::Print { kind, arg_tys: args } => FunctionSignature {
+                name: format!("{:?})", kind),
+                params: args.len() as u16 + 1,
+                returns: 0,
+                has_sideeffects: true,
+            },
+            CallBackKind::BoundStep => FunctionSignature {
+                name: "$bound_step".to_owned(),
+                params: 1,
+                returns: 0,
+                has_sideeffects: true,
+            },
+            // CallBackKind::ExplicitDdt(_) => FunctionSignature {
+            //     name: "ddt!".to_owned(),
+            //     params: 1,
+            //     returns: 1,
+            //     has_sideeffects: false,
+            // },
             // CallBackKind::StoreState(state) => FunctionSignature {
             //     name: format!("store_{:?})", state),
             //     params: 1,
@@ -162,10 +242,30 @@ impl CallBackKind {
     }
 }
 
-pub struct FunctionMetadata {
-    pub outputs: IndexMap<PlaceKind, Value>,
-    pub params: TiMap<Param, ParamKind, Value>,
-    pub callbacks: TiSet<FuncRef, CallBackKind>,
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Dim(u32);
+impl_idx_from!(Dim(u32));
+impl_debug_display! {
+    match Dim {Dim(i) => "dim{}", i;}
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ImplicitEquation(u32);
+impl_idx_from!(ImplicitEquation(u32));
+impl_debug_display! {
+    match ImplicitEquation {ImplicitEquation(i) => "inode{}", i;}
+}
+
+pub const RESISTIVE_DIM: Dim = Dim(0u32);
+pub const REACTIVE_DIM: Dim = Dim(1u32);
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum DimKind {
+    Resistive,
+    Reactive,
+    WhiteNoise(Spur),
+    FlickrNoise(Spur),
+    TableNoise(Spur),
 }
 
 /// A mapping between abstractions used in the MIR and the corresponding
@@ -176,7 +276,8 @@ pub struct HirInterner {
     pub outputs: IndexMap<PlaceKind, PackedOption<Value>, ahash::RandomState>,
     pub params: TiMap<Param, ParamKind, Value>,
     pub callbacks: TiSet<FuncRef, CallBackKind>,
-    // pub state: TiSet<StateId, FuncRef>,
+    pub dims: TiVec<Dim, DimKind>,
+    pub implicit_equations: TiVec<ImplicitEquation, ImplicitEquationKind>,
 }
 
 pub type LiveParams<'a> = FilterMap<
@@ -242,10 +343,10 @@ impl HirInterner {
 
             let required = match *kind {
                 ParamKind::Voltage { hi, lo: Some(lo) } => {
-                    sim_derivatives | node_required(hi, false) | node_required(lo, true)
+                    sim_derivatives || node_required(hi, false) | node_required(lo, true)
                 }
-                ParamKind::Voltage { hi, lo: None } => sim_derivatives | node_required(hi, false),
-                ParamKind::Current(_) => sim_derivatives,
+                ParamKind::Voltage { hi, lo: None } => sim_derivatives || node_required(hi, false),
+                ParamKind::Current(_) | ParamKind::ImplicitUnkown(_) => sim_derivatives,
                 _ => param_required,
             };
 
@@ -340,7 +441,7 @@ impl HirInterner {
         Self::ensure_param_(&mut self.params, func, kind).0
     }
 
-    pub(crate) fn ensure_param_(
+    pub fn ensure_param_(
         params: &mut TiMap<Param, ParamKind, Value>,
         func: &mut Function,
         kind: ParamKind,

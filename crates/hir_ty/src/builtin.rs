@@ -228,7 +228,16 @@ bultins! {
         fn IDT_IC(Val(Real),Val(Real)) -> Real;
         fn IDT_IC_ASSERT(Val(Real),Val(Real),Val(Real)) -> Real;
         fn IDT_IC_ASSERT_TOL(Val(Real),Val(Real),Val(Real),Val(Real)) -> Real;
-        fn IDT_IC_NATURE_TOL(Val(Real),Val(Real),Val(Real),Nature) -> Real;
+        fn IDT_IC_ASSERT_NATURE(Val(Real),Val(Real),Val(Real),Nature) -> Real;
+    }
+
+    IDTMOD = const {
+        fn IDTMOD_NO_IC(Val(Real)) -> Real;
+        fn IDTMOD_IC(Val(Real),Val(Real)) -> Real;
+        fn IDTMOD_IC_MODULUS(Val(Real),Val(Real),Val(Real)) -> Real;
+        fn IDTMOD_IC_MODULUS_OFFSET(Val(Real),Val(Real),Val(Real),Val(Real)) -> Real;
+        fn IDTMOD_IC_MODULUS_OFFSET_TOL(Val(Real),Val(Real),Val(Real),Val(Real), Val(Real)) -> Real;
+        fn IDTMOD_IC_MODULUS_OFFSET_NATURE(Val(Real),Val(Real),Val(Real),Val(Real), Val(Real)) -> Real;
     }
 
     // all laplace fitlers have the same signature
@@ -491,5 +500,4 @@ copied_builtins! {
     ANALOG_PORT_ALIAS = ANALOG_NODE_ALIAS
 
     POTENTIAL = FLOW
-    IDTMOD = IDT
 }

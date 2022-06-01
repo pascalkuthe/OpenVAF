@@ -78,7 +78,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
         // Set the llvm "program name" to make usage and invalid argument messages more clear.
         add(concat!(env!("COMPILER_NAME"), " -Cllvm-args=\"...\" with"), true);
         // if sess.time_llvm_passes() {
-            add("-time-passes", false);
+        add("-time-passes", false);
         // }
         // if sess.print_llvm_passes() {
         //     add("-debug-pass=Structure", false);

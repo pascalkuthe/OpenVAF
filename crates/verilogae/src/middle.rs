@@ -1,6 +1,6 @@
 use ahash::AHashSet;
 use bitset::BitSet;
-use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
+use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind, PlaceInfo};
 use lasso::Rodeo;
 use mir::{ControlFlowGraph, Function, ValueDef};
 use mir_autodiff::auto_diff;
@@ -18,7 +18,9 @@ impl FuncSpec {
         cfg: &ControlFlowGraph,
         intern: &HirInterner,
     ) -> (Function, ControlFlowGraph) {
-        let ret_val = intern.outputs[&PlaceKind::Var(self.var)].unwrap();
+        let ret_val = intern.outputs
+            [&PlaceInfo { kind: PlaceKind::Var(self.var), dim: None.into() }]
+            .unwrap();
         let mut func = func.clone();
         let mut cfg = cfg.clone();
 
@@ -72,9 +74,9 @@ impl CompilationDB {
         let (mut func, mut intern) = MirBuilder::new(
             self,
             info.module.into(),
-            &|kind| {
+            &|info| {
                 matches!(
-                    kind,
+                    info.kind,
                     PlaceKind::Var(var) if outputs.contains(&var)
                 )
             },
@@ -132,7 +134,7 @@ impl CompilationDB {
         let mut intern = HirInterner::default();
 
         let params: Vec<_> = info.params.keys().copied().collect();
-        intern.insert_param_init(self, &mut func, literals, true, &params);
+        intern.insert_param_init(self, &mut func, literals, true, false, &params);
 
         (func, intern)
     }

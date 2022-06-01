@@ -8,7 +8,7 @@
 //! <https://link.springer.com/content/pdf/10.1007/978-3-642-37051-9_6.pdf>
 
 use bforest::Map;
-use bitset::HybridBitSet;
+use bitset::{BitSet, HybridBitSet};
 use mir::builder::InstBuilderBase;
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{Block, Function, PhiNode, Value, ValueList, GRAVESTONE};
@@ -170,7 +170,13 @@ impl SSABuilder {
     /// If the variable has never been defined in this blocks or recursively in its predecessors,
     /// this method will silently create an initializer that might contain invalid data. You are
     /// responsible for making sure that you initialize your variables.
-    pub fn use_var(&mut self, func: &mut Function, var: Place, block: Block) -> Value {
+    pub fn use_var(
+        &mut self,
+        func: &mut Function,
+        flags: &mut BitSet<Value>,
+        var: Place,
+        block: Block,
+    ) -> Value {
         // First, try Local Value Numbering (Algorithm 1 in the paper).
         // If the variable already has a known Value in this block, use that.
         if let Some(var_defs) = self.variables.get(var) {
@@ -185,9 +191,9 @@ impl SSABuilder {
         debug_assert!(self.results.is_empty());
 
         // Prepare the 'calls' and 'results' stacks for the state machine.
-        self.use_var_nonlocal(func, var, block);
+        self.use_var_nonlocal(func, flags, var, block);
 
-        self.run_state_machine(func, var)
+        self.run_state_machine(func, flags, var)
     }
 
     /// There are two conditions for being able to optimize the lookup of a non local var:
@@ -236,7 +242,13 @@ impl SSABuilder {
     /// Resolve the minimal SSA Value of `var` in `block` by traversing predecessors.
     ///
     /// This function sets up state for `run_state_machine()` but does not execute it.
-    fn use_var_nonlocal(&mut self, func: &mut Function, var: Place, block: Block) {
+    fn use_var_nonlocal(
+        &mut self,
+        func: &mut Function,
+        flags: &mut BitSet<Value>,
+        var: Place,
+        block: Block,
+    ) {
         let optimize_var_lookup = self.can_optimize_var_lookup(block, func.layout.num_blocks());
         let data = &mut self.ssa_blocks[block];
         if data.sealed {
@@ -248,6 +260,8 @@ impl SSABuilder {
             } else {
                 // Break potential cycles by eagerly adding a sentinel value
                 let val = func.dfg.make_invalid_value_for_parser();
+                flags.ensure(func.dfg.num_values());
+                flags.insert(val); // conservitive: treat unkown values as op dependent
 
                 // Define the operandless param added above to prevent lookup cycles.
                 self.def_var(var, val, block);
@@ -257,6 +271,8 @@ impl SSABuilder {
             }
         } else {
             let val = func.dfg.make_invalid_value_for_parser();
+            flags.ensure(func.dfg.num_values());
+            flags.insert(val); // conservitive: treat unkown values as op dependent
             func.dfg.set_tag(val, Some(u32::from(var).into()));
             data.undef_phis.push((var, val));
             // Define the operandless param added above to prevent lookup cycles.
@@ -313,8 +329,8 @@ impl SSABuilder {
     /// take into account the Phi function placed by the SSA algorithm.
     ///
     /// Returns the list of newly created blocks for critical edge splitting.
-    pub fn seal_block(&mut self, block: Block, func: &mut Function) {
-        self.seal_one_block(block, func);
+    pub fn seal_block(&mut self, block: Block, func: &mut Function, flags: &mut BitSet<Value>) {
+        self.seal_one_block(block, func, flags);
     }
 
     /// Completes the global value numbering for all unsealed `Block`s in `func`.
@@ -323,20 +339,20 @@ impl SSABuilder {
     /// translation, but for frontends where this is impractical to do, this
     /// function can be used at the end of translating all blocks to ensure
     /// that everything is sealed.
-    pub fn seal_all_blocks(&mut self, func: &mut Function) {
+    pub fn seal_all_blocks(&mut self, func: &mut Function, flags: &mut BitSet<Value>) {
         // Seal all `Block`s currently in the function. This can entail splitting
         // and creation of new blocks, however such new blocks are sealed on
         // the fly, so we don't need to account for them here.
         for block in self.ssa_blocks.keys() {
             if !self.is_sealed(block) {
-                self.seal_one_block(block, func);
+                self.seal_one_block(block, func, flags);
             }
         }
     }
 
     /// Helper function for `seal_block` and
     /// `seal_all_blocks`.
-    fn seal_one_block(&mut self, block: Block, func: &mut Function) {
+    fn seal_one_block(&mut self, block: Block, func: &mut Function, flags: &mut BitSet<Value>) {
         let block_data = &mut self.ssa_blocks[block];
         debug_assert!(!block_data.sealed, "Attempting to seal {} which is already sealed.", block);
 
@@ -347,7 +363,7 @@ impl SSABuilder {
         // For each undef var we look up values in the predecessors and create a block parameter
         // only if necessary.
         for (var, val) in undef_vars {
-            self.predecessors_lookup(func, val, var, block);
+            self.predecessors_lookup(func, flags, val, var, block);
         }
         self.mark_block_sealed(block);
     }
@@ -387,6 +403,7 @@ impl SSABuilder {
     fn predecessors_lookup(
         &mut self,
         func: &mut Function,
+        flags: &mut BitSet<Value>,
         sentinel: Value,
         var: Place,
         block: Block,
@@ -396,7 +413,7 @@ impl SSABuilder {
         // self.side_effects may be non-empty here so that callers can
         // accumulate side effects over multiple calls.
         self.begin_predecessors_lookup(sentinel, block);
-        self.run_state_machine(func, var)
+        self.run_state_machine(func, flags, var)
     }
 
     /// Set up state for `run_state_machine()` to initiate non-local use lookups
@@ -415,6 +432,7 @@ impl SSABuilder {
     fn finish_predecessors_lookup(
         &mut self,
         func: &mut Function,
+        flags: &mut BitSet<Value>,
         sentinel: Value,
         var: Place,
         dest_block: Block,
@@ -465,6 +483,9 @@ impl SSABuilder {
                     // Cycle detected. Break it by creating a GRAVESTONE
                     resolved = GRAVESTONE;
                 }
+                if flags.contains(resolved) {
+                    flags.insert(sentinel);
+                }
                 func.dfg.values.make_alias_at(resolved, sentinel);
                 resolved
             }
@@ -475,9 +496,12 @@ impl SSABuilder {
                 let mut args = ValueList::new();
                 let mut blocks = Map::new();
 
+                let mut op_dependent = false;
+
                 let iter = self.ssa_blocks[dest_block].predecessors.iter().map(|pred_block| {
                     // We already did a full `use_var` above, so we can do just the fast path.
                     let pred_val = self.variables[var][*pred_block].unwrap();
+                    op_dependent = op_dependent || flags.contains(pred_val);
                     let i = args.push(pred_val, &mut func.dfg.insts.value_lists) as u32;
                     (*pred_block, i)
                 });
@@ -486,6 +510,10 @@ impl SSABuilder {
                     debug_assert_eq!(old, None);
                     it
                 });
+
+                if op_dependent {
+                    flags.insert(sentinel);
+                }
 
                 FuncCursor::new(func)
                     .at_first_insertion_point(dest_block)
@@ -520,7 +548,12 @@ impl SSABuilder {
     /// `use_var` in each predecessor. To avoid risking running out of callstack
     /// space, we keep an explicit stack and use a small state machine rather
     /// than literal recursion.
-    fn run_state_machine(&mut self, func: &mut Function, var: Place) -> Value {
+    fn run_state_machine(
+        &mut self,
+        func: &mut Function,
+        flags: &mut BitSet<Value>,
+        var: Place,
+    ) -> Value {
         // Process the calls scheduled in `self.calls` until it is empty.
         while let Some(call) = self.calls.pop() {
             match call {
@@ -533,13 +566,13 @@ impl SSABuilder {
                             continue;
                         }
                     }
-                    self.use_var_nonlocal(func, var, ssa_block);
+                    self.use_var_nonlocal(func, flags, var, ssa_block);
                 }
                 Call::FinishSealedOnePredecessor(ssa_block) => {
                     self.finish_sealed_one_predecessor(var, ssa_block);
                 }
                 Call::FinishPredecessorsLookup(sentinel, dest_block) => {
-                    self.finish_predecessors_lookup(func, sentinel, var, dest_block);
+                    self.finish_predecessors_lookup(func, flags, sentinel, var, dest_block);
                 }
             }
         }

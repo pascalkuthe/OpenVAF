@@ -62,11 +62,7 @@ impl TestDataBase {
                     &|kind| {
                         matches!(
                             kind,
-                            PlaceKind::Var(_)
-                                | PlaceKind::BranchVoltage { .. }
-                                | PlaceKind::ImplicitBranchVoltage { .. }
-                                | PlaceKind::BranchCurrent { .. }
-                                | PlaceKind::ImplicitBranchCurrent { .. }
+                            PlaceKind::Contribute { .. } | PlaceKind::ImplicitResidual { .. }
                         )
                     },
                     &mut required_vars,

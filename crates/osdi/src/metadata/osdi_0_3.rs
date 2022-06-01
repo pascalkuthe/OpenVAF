@@ -30,11 +30,14 @@ pub const EVAL_RET_FLAG_LIM: u32 = 1;
 pub const EVAL_RET_FLAG_FATAL: u32 = 2;
 pub const EVAL_RET_FLAG_FINISH: u32 = 4;
 pub const EVAL_RET_FLAG_STOP: u32 = 8;
+pub const LOG_LVL_MASK: u32 = 8;
 pub const LOG_LVL_DEBUG: u32 = 0;
-pub const LOG_LVL_INFO: u32 = 1;
-pub const LOG_LVL_WARN: u32 = 2;
-pub const LOG_LVL_ERR: u32 = 3;
-pub const LOG_LVL_FATAL: u32 = 4;
+pub const LOG_LVL_DISPLAY: u32 = 1;
+pub const LOG_LVL_INFO: u32 = 2;
+pub const LOG_LVL_WARN: u32 = 3;
+pub const LOG_LVL_ERR: u32 = 4;
+pub const LOG_LVL_FATAL: u32 = 5;
+pub const LOG_FMT_ERR: u32 = 16;
 pub const INIT_ERR_OUT_OF_BOUNDS: u32 = 1;
 
 impl OsdiTyBuilder<'_, '_, '_> {

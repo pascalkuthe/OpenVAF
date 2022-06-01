@@ -1,7 +1,7 @@
 use std::ffi::CString;
 
 use libc::c_uint;
-use llvm::{False, True, Type, Value};
+use llvm::{False, LLVMInt8TypeInContext, True, Type, Value};
 use mir::Const;
 
 use crate::CodegenCx;
@@ -17,6 +17,10 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn ty_aint(&self, bits: u32) -> &'ll Type {
         unsafe { llvm::LLVMIntTypeInContext(self.llcx, bits) }
+    }
+
+    pub fn ty_i8(&self) -> &'ll Type {
+        unsafe { LLVMInt8TypeInContext(self.llcx) }
     }
 
     pub fn ty_int(&self) -> &'ll Type {

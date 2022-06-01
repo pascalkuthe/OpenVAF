@@ -50,14 +50,14 @@ fn check_with_diagnostics(src: &str, diagnostics: Expect, body: Expect) {
     let mir = MirBuilder::new(
         &db,
         def,
-        &|kind| {
+        &|info| {
             matches!(
-                kind,
+                info.kind,
                 PlaceKind::Var(_)
-                    | PlaceKind::BranchVoltage { .. }
-                    | PlaceKind::ImplicitBranchVoltage { .. }
-                    | PlaceKind::BranchCurrent { .. }
-                    | PlaceKind::ImplicitBranchCurrent { .. }
+                    | PlaceKind::BranchVoltage(_)
+                    | PlaceKind::UnnamedBranchVoltage { .. }
+                    | PlaceKind::BranchCurrent(_)
+                    | PlaceKind::UnnamedBranchCurrent { .. }
             )
         },
         &mut empty_iter,
@@ -91,10 +91,10 @@ module test;
 endmodule
     "#;
     let mir = expect![[r#"
-        function %(v14, v18, v22, v31) {
+        function %(v14, v18, v21, v30) {
             v4 = iconst 0
             v5 = iconst 1
-            v21 = fconst 0x1.920c49ba5e354p1
+            v22 = fconst 0x1.920c49ba5e354p1
             v24 = iconst 2
             v26 = iconst 3
                                         block0:
@@ -131,8 +131,8 @@ endmodule
 
                                         block8:
         @000c                               v28 = ifcast v14
-        @000e                               v29 = fdiv v28, v21
-        @0011                               v30 = sin v29
+        @000e                               v29 = fdiv v28, v22
+        @0011                               v31 = sin v29
                                             jmp block5
 
                                         block11:
@@ -140,8 +140,8 @@ endmodule
                                             jmp block5
 
                                         block5:
-                                            v35 = phi [v31, block6], [v30, block8], [v31, block11]
-                                            v33 = phi [v21, block6], [v29, block8], [v32, block11]
+                                            v35 = phi [v30, block6], [v31, block8], [v30, block11]
+                                            v33 = phi [v22, block6], [v29, block8], [v32, block11]
                                             v34 = optbarrier v33
                                             v37 = optbarrier v35
                                             jmp block1

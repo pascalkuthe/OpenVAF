@@ -24,7 +24,7 @@ use crate::builtin::{
 };
 use crate::db::HirTyDB;
 use crate::diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch};
-use crate::lower::{BranchTy, DisciplineAccess};
+use crate::lower::{BranchKind, BranchTy, DisciplineAccess};
 use crate::types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement};
 
 #[cfg(test)]
@@ -45,10 +45,23 @@ pub enum AssignDst {
     Potential(BranchWrite),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub enum BranchWrite {
-    Explicit(BranchId),
-    Implict { hi: NodeId, lo: Option<NodeId> },
+    Named(BranchId),
+    Unnamed { hi: NodeId, lo: Option<NodeId> },
+}
+
+impl BranchWrite {
+    pub fn nodes(self, db: &dyn HirTyDB) -> (NodeId, Option<NodeId>) {
+        match self {
+            BranchWrite::Named(branch) => match db.branch_info(branch).unwrap().kind {
+                BranchKind::Nodes(hi, lo) => (hi, Some(lo)),
+                BranchKind::NodeGnd(hi) => (hi, None),
+                BranchKind::PortFlow(_) => unreachable!(),
+            },
+            BranchWrite::Unnamed { hi, lo } => (hi, lo),
+        }
+    }
 }
 
 impl AssignDst {
@@ -200,14 +213,14 @@ impl Ctx<'_> {
                 let mut args = Vec::new();
                 self.body.exprs[expr].walk_child_exprs(|e| args.push(&self.result.expr_types[e]));
                 let kind = match *self.result.resolved_signatures.get(&expr)? {
-                    NATURE_ACCESS_BRANCH => BranchWrite::Explicit(args[0].unwrap_branch()),
-                    NATURE_ACCESS_NODES => BranchWrite::Implict {
+                    NATURE_ACCESS_BRANCH => BranchWrite::Named(args[0].unwrap_branch()),
+                    NATURE_ACCESS_NODES => BranchWrite::Unnamed {
                         hi: args[0].unwrap_node(),
                         lo: Some(args[1].unwrap_node()),
                     },
 
                     NATURE_ACCESS_NODE_GND => {
-                        BranchWrite::Implict { hi: args[0].unwrap_node(), lo: None }
+                        BranchWrite::Unnamed { hi: args[0].unwrap_node(), lo: None }
                     }
 
                     NATURE_ACCESS_PORT_FLOW => {
@@ -951,6 +964,10 @@ impl Ctx<'_> {
             }
         }
     }
+
+    // fn collect_fmt_literal(&mut self, stmt: StmtId, args: &[ExprId]){
+    //     self.body
+    // }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

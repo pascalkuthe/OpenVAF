@@ -192,6 +192,7 @@ impl ModuleLlvm {
             let builder = llvm::LLVMPassManagerBuilderCreate();
             llvm::pass_manager_builder_set_opt_lvl(builder, self.opt_lvl);
             llvm::LLVMPassManagerBuilderSetSizeLevel(builder, 0);
+
             let fpm = llvm::LLVMCreateFunctionPassManagerForModule(llmod);
             llvm::LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpm);
             llvm::run_function_pass_manager(fpm, llmod);
@@ -201,6 +202,7 @@ impl ModuleLlvm {
             llvm::LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
             llvm::LLVMRunPassManager(mpm, llmod);
             llvm::LLVMDisposePassManager(mpm);
+
             LLVMPassManagerBuilderDispose(builder);
         }
     }

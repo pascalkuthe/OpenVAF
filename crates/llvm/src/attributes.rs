@@ -3,7 +3,7 @@ use libc::c_char;
 /**
  * Create a string attribute.
  */
-use crate::{Attribute, Context};
+use crate::{Attribute, Context, Value};
 
 extern "C" {
     fn LLVMCreateStringAttribute(
@@ -13,9 +13,15 @@ extern "C" {
         val: *const c_char,
         val_len: u32,
     ) -> &Attribute;
+
+    pub fn LLVMPurgeAttrs(val: &Value);
 }
 
-pub fn create_attr_string_value<'ll>(llcx: &'ll Context, attr: &str, value: &str) -> &'ll Attribute {
+pub fn create_attr_string_value<'ll>(
+    llcx: &'ll Context,
+    attr: &str,
+    value: &str,
+) -> &'ll Attribute {
     unsafe {
         LLVMCreateStringAttribute(
             llcx,

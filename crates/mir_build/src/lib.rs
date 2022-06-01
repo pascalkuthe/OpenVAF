@@ -1,5 +1,6 @@
 mod ssa;
 
+use bitset::BitSet;
 use lasso::Rodeo;
 use mir::builder::{InsertBuilder, InstBuilder, InstInserterBase};
 use mir::cursor::{Cursor, FuncCursor};
@@ -45,6 +46,8 @@ pub struct FunctionBuilder<'a> {
     func_ctx: &'a mut FunctionBuilderContext,
     position: Block,
     end: Block,
+
+    pub op_dependent_vals: BitSet<Value>,
 }
 
 #[derive(Clone, Default)]
@@ -136,8 +139,28 @@ impl<'short, 'long> InstInserterBase<'short> for FuncInstBuilder<'short, 'long> 
                 self.builder.declare_successor(destination);
                 self.builder.fill_current_block()
             }
+
+            InstructionData::Binary { args: [arg0, arg1], .. } => {
+                let op_dependent = &mut self.builder.op_dependent_vals;
+                op_dependent.ensure(self.builder.func.dfg.num_values() + 1);
+                if op_dependent.contains(arg0) || op_dependent.contains(arg1) {
+                    let res = self.builder.func.dfg.first_result(inst);
+                    op_dependent.insert(res);
+                }
+            }
+
+            InstructionData::Unary { arg, .. } => {
+                let op_dependent = &mut self.builder.op_dependent_vals;
+                op_dependent.ensure(self.builder.func.dfg.num_values() + 1);
+                if op_dependent.contains(arg) {
+                    let res = self.builder.func.dfg.first_result(inst);
+                    op_dependent.insert(res);
+                }
+            }
             _ => (),
         }
+        // let is_op_dependent = self.builder.func.dfg.instr_args(inst).iter().any(|arg| self.builder.op_dependent_vals.contains(elem));
+        // if
 
         &mut self.builder.func.dfg
     }
@@ -197,6 +220,7 @@ impl<'a> FunctionBuilder<'a> {
         func_ctx.ssa.declare_block();
 
         let mut res = Self {
+            op_dependent_vals: BitSet::new_empty(func.dfg.num_values()),
             func,
             srcloc: Default::default(),
             interner,
@@ -256,6 +280,7 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         let mut res = Self {
+            op_dependent_vals: BitSet::new_empty(func.dfg.num_values()),
             func,
             srcloc: Default::default(),
             interner,
@@ -392,7 +417,7 @@ impl<'a> FunctionBuilder<'a> {
     /// created. Forgetting to call this method on every block will cause inconsistencies in the
     /// produced functions.
     pub fn seal_block(&mut self, block: Block) {
-        self.func_ctx.ssa.seal_block(block, self.func);
+        self.func_ctx.ssa.seal_block(block, self.func, &mut self.op_dependent_vals);
     }
 
     pub fn ensured_sealed(&mut self) {
@@ -409,14 +434,14 @@ impl<'a> FunctionBuilder<'a> {
     /// function can be used at the end of translating all blocks to ensure
     /// that everything is sealed.
     pub fn seal_all_blocks(&mut self) {
-        self.func_ctx.ssa.seal_all_blocks(self.func);
+        self.func_ctx.ssa.seal_all_blocks(self.func, &mut self.op_dependent_vals);
     }
 
     /// Returns the Cranelift IR value corresponding to the utilization at the current program
     /// position of a previously defined user variable.
     pub fn use_var(&mut self, var: Place) -> Value {
         self.ensure_inserted_block();
-        self.func_ctx.ssa.use_var(self.func, var, self.position)
+        self.func_ctx.ssa.use_var(self.func, &mut self.op_dependent_vals, var, self.position)
     }
 
     /// Register a new definition of a user variable. The type of the value must be

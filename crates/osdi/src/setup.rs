@@ -1,4 +1,4 @@
-use hir_lower::{CallBackKind, ParamInfoKind, ParamKind, PlaceKind};
+use hir_lower::{CallBackKind, ParamInfoKind, ParamKind, PlaceInfo, PlaceKind};
 
 use llvm::IntPredicate::IntSLT;
 use llvm::{
@@ -102,8 +102,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let i = i as u32;
 
             let dst = intern.params.unwrap_index(&ParamKind::Param(param));
-            // let val = unsafe { model_data.read_nth_param(i, model, builder.llbuilder) };
-            // builder.params[dst] = BuilderVal::Eager(val);
             let loc = model_data.nth_param_loc(builder.cx, i, model);
             builder.params[dst] = BuilderVal::Load(Box::new(loc));
 
@@ -205,7 +203,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         // store parameters
         for (i, param) in model_data.params.keys().enumerate() {
-            let val = intern.outputs[&PlaceKind::Param(*param)].unwrap_unchecked();
+            let val = intern.outputs[&PlaceInfo::new(PlaceKind::Param(*param))].unwrap_unchecked();
             let inst = func.dfg.value_def(val).unwrap_inst();
             let bb = func.layout.inst_block(inst).unwrap();
             builder.select_bb_before_terminator(bb);
@@ -338,8 +336,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let i = i as u32;
 
             if let Some(dst) = intern.params.index(&ParamKind::Param(param)) {
-                // let val = unsafe { model_data.read_nth_param(i, model, builder.llbuilder) };
-                // builder.params[dst] = BuilderVal::Eager(val);
                 let loc = model_data.nth_param_loc(builder.cx, i, model);
                 builder.params[dst] = BuilderVal::Load(Box::new(loc));
             }
@@ -450,9 +446,13 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let val = match param {
                 OsdiInstanceParam::Builtin(_) => continue,
                 OsdiInstanceParam::User(param) => {
-                    intern.outputs[&PlaceKind::Param(*param)].unwrap_unchecked()
+                    intern.outputs[&PlaceInfo::new(PlaceKind::Param(*param))].unwrap_unchecked()
                 }
             };
+
+            let inst = func.dfg.value_def(val).unwrap_inst();
+            let bb = func.layout.inst_block(inst).unwrap();
+            builder.select_bb_before_terminator(bb);
 
             unsafe {
                 let val = builder.values[val].get(&builder);

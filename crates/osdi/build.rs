@@ -26,7 +26,7 @@ fn main() {
         let out_dir = env::var_os("OUT_DIR").unwrap();
         let out_file = Path::new(&out_dir).join(&format!("stdlib_{version_str}.bc"));
         println!("cargo:rerun-if-changed={}", file.display());
-        cmd!(sh, "clang -emit-llvm -O3 -D{def_name} -o {out_file} -c {src_file}")
+        cmd!(sh, "clang -emit-llvm -O0 -D{def_name} -o {out_file} -c {src_file}")
             .run()
             .expect("failed to generate bitcode");
     }

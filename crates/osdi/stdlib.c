@@ -11,14 +11,16 @@
 #include "stdlib.h"
 #include "string.h"
 
-int log_msg(void *handle, uint32_t lvl, const char *restrict fmt, ...) {
-  FILE *dst = osdi_init_log_message(handle, lvl);
-  va_list ap;
-  va_start(ap, fmt);
-  int ret = vfprintf(dst, fmt, ap);
-  osdi_finish_log_message(handle, dst, lvl);
-  va_end(ap);
-  return ret;
+char *concat(const char *s1, const char *s2) {
+  const size_t len1 = strlen(s1);
+  const size_t len2 = strlen(s2);
+  char *result = malloc(len1 + len2 + 1);
+  if (result == NULL) {
+    return NULL;
+  }
+  memcpy(result, s1, len1);
+  memcpy(result + len1, s2, len2 + 1);
+  return result;
 }
 
 double simparam(void *params_, void *handle, uint32_t *flags, char *name) {
@@ -29,7 +31,12 @@ double simparam(void *params_, void *handle, uint32_t *flags, char *name) {
     }
   }
   *flags |= EVAL_RET_FLAG_FATAL;
-  log_msg(handle, LOG_LVL_FATAL, "unkown $simparam %s", name);
+  char *msg = concat("unkown $simparam", name);
+  if (msg == NULL) {
+    osdi_log(handle, "unkown $simparam %s", LOG_LVL_FATAL | LOG_FMT_ERR);
+  } else {
+    osdi_log(handle, msg, LOG_LVL_FATAL);
+  }
   return 0.0;
 }
 
@@ -43,6 +50,9 @@ double simparam_opt(void *params_, char *name, double default_val) {
   return default_val;
 }
 
+
+extern int strcmp (const char *__s1, const char *__s2);
+
 char *simparam_str(void *params_, void *handle, uint32_t *flags, char *name) {
   OsdiSimParas *params = params_;
   for (int i = 0; params->names[i]; i++) {
@@ -51,8 +61,15 @@ char *simparam_str(void *params_, void *handle, uint32_t *flags, char *name) {
     }
   }
   *flags |= EVAL_RET_FLAG_FATAL;
-  log_msg(handle, LOG_LVL_FATAL, "unkown $simparam_str %s", name);
-  return "";
+
+  char *msg = concat("unkown $simparam_str", name);
+  if (msg == NULL) {
+    osdi_log(handle, "unkown $simparam_str %s", LOG_LVL_FATAL | LOG_FMT_ERR);
+  } else {
+    osdi_log(handle, msg, LOG_LVL_FATAL);
+  }
+
+  return "�";
 }
 
 void push_error(OsdiInitError **dst, uint32_t *len, uint32_t *cap,
@@ -64,8 +81,6 @@ void push_error(OsdiInitError **dst, uint32_t *len, uint32_t *cap,
     *cap = 2 * (*len);
     *dst = realloc(*dst, *cap * sizeof(OsdiInitError));
   }
-
-  printf("len %i\n", *len);
 
   (*dst)[*len] = err;
   *len += 1;

@@ -31,7 +31,6 @@ mod tests;
 
 const OSDI_VERSION: (u32, u32) = (0, 3);
 
-#[allow(clippy::too_many_arguments)]
 pub fn compile(
     db: &CompilationDB,
     modules: &[ModuleInfo],
@@ -69,54 +68,61 @@ pub fn compile(
 
     let db = db.snapshot();
 
+    let main_file = dst.with_extension("o");
+
     rayon_core::scope(|scope| {
         let db = db;
+        let literals_ = &literals;
+        let target_data_ = &target_data;
+        let paths = &paths;
+
         for (i, module) in modules.iter().enumerate() {
-            let literals_ = &literals;
-            let target_data_ = &target_data;
             scope.spawn(move |_| {
                 let access = format!("access_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&access, opt_lvl).unwrap() };
                 let mut cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
                 let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+
                 cguint.access_function();
+                debug_assert!(llmod.verify_and_print());
+
                 if emit {
-                    let num = base_n::encode((i * 4 + 1) as u128, CASE_INSENSITIVE);
-                    let extension = format!("o{num}");
-                    let path = dst.with_extension(extension);
+                    let path = &paths[i * 4];
                     llmod.optimize();
                     assert_eq!(llmod.emit_obect(&*path), Ok(()))
                 }
             });
 
             scope.spawn(move |_| {
-                let access = format!("setup_model_{}", &module.sym);
-                let llmod = unsafe { back.new_module(&access, opt_lvl).unwrap() };
+                let name = format!("setup_model_{}", &module.sym);
+                let llmod = unsafe { back.new_module(&name, opt_lvl).unwrap() };
                 let mut cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
                 let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+
                 cguint.setup_model();
+                debug_assert!(llmod.verify_and_print());
+
                 if emit {
-                    let num = base_n::encode((i * 4 + 2) as u128, CASE_INSENSITIVE);
-                    let extension = format!("o{num}");
-                    let path = dst.with_extension(extension);
+                    let path = &paths[i * 4 + 1];
                     // llmod.optimize();
                     assert_eq!(llmod.emit_obect(&*path), Ok(()))
                 }
             });
 
             scope.spawn(move |_| {
-                let access = format!("setup_instance_{}", &module.sym);
-                let llmod = unsafe { back.new_module(&access, opt_lvl).unwrap() };
+                let name = format!("setup_instance_{}", &module.sym);
+                let llmod = unsafe { back.new_module(&name, opt_lvl).unwrap() };
                 let mut cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
                 let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+
                 cguint.setup_instance();
+                debug_assert!(llmod.verify_and_print());
+
                 if emit {
-                    let num = base_n::encode((i * 4 + 3) as u128, CASE_INSENSITIVE);
-                    let extension = format!("o{num}");
-                    let path = dst.with_extension(extension);
+                    let path = &paths[i * 4 + 2];
                     llmod.optimize();
                     assert_eq!(llmod.emit_obect(&*path), Ok(()))
                 }
@@ -128,15 +134,16 @@ pub fn compile(
                 let mut cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
                 let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+
                 cguint.eval();
+                debug_assert!(llmod.verify_and_print());
+
                 if emit {
-                    let num = base_n::encode((i * 4 + 4) as u128, CASE_INSENSITIVE);
-                    let extension = format!("o{num}");
-                    let path = dst.with_extension(extension);
+                    let path = &paths[i * 4 + 3];
                     llmod.optimize();
                     assert_eq!(llmod.emit_obect(&*path), Ok(()))
                 }
-            })
+            });
         }
 
         let llmod = unsafe { back.new_module(&*name, opt_lvl).unwrap() };
@@ -174,17 +181,15 @@ pub fn compile(
 
         // debug_assert!(llmod.verify_and_print());
 
-        let main_file = dst.with_extension("o");
         if emit {
             // println!("{}", llmod.to_str());
             llmod.optimize();
             // println!("{}", llmod.to_str());
             assert_eq!(llmod.emit_obect(&*main_file), Ok(()))
         }
-
-        paths.push(main_file);
     });
 
+    paths.push(main_file);
     unsafe { LLVMDisposeTargetData(target_data) };
     paths
 }

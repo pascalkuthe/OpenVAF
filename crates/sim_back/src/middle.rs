@@ -59,10 +59,9 @@ impl EvalMir {
             db,
             module.id.into(),
             &|kind| match kind {
-                PlaceKind::BranchVoltage { .. }
-                | PlaceKind::ImplicitBranchVoltage { .. }
-                | PlaceKind::BranchCurrent { .. }
-                | PlaceKind::ImplicitBranchCurrent { .. } => true,
+                PlaceKind::Contribute { .. }
+                | PlaceKind::ImplicitResidual { .. }
+                | PlaceKind::IsVoltageSrc(_) => true,
                 PlaceKind::Var(var) => module.op_vars.contains_key(&var),
                 _ => false,
             },
@@ -93,36 +92,6 @@ impl EvalMir {
         let mut output_values = BitSet::new_empty(func.dfg.num_values());
         output_values.extend(intern.outputs.values().copied().filter_map(PackedOption::expand));
 
-        let unkowns = intern.unkowns(&mut func, true);
-
-        let extra_derivatives: Vec<_> = intern
-            .outputs
-            .iter()
-            .filter_map(|(kind, val)| {
-                if matches!(
-                    kind,
-                    PlaceKind::BranchVoltage { .. }
-                        | PlaceKind::ImplicitBranchVoltage { .. }
-                        | PlaceKind::BranchCurrent { .. }
-                        | PlaceKind::ImplicitBranchCurrent { .. }
-                ) {
-                    Some(val.expand()?)
-                } else {
-                    None
-                }
-            })
-            .flat_map(|val| {
-                let unkowns = &unkowns;
-                intern.live_params(&func.dfg).filter_map(move |(_, kind, param)| {
-                    if matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
-                        Some((val, unkowns.unkowns.unwrap_index(&param)))
-                    } else {
-                        None
-                    }
-                })
-            })
-            .collect();
-
         dead_code_elimination(&mut func, &output_values);
         sparse_conditional_constant_propagation(&mut func, &cfg);
         inst_combine(&mut func);
@@ -135,12 +104,7 @@ impl EvalMir {
         gvn.remove_unnecessary_insts(&mut func, &dom_tree);
         gvn.clear(&mut func);
 
-        let ad = auto_diff(&mut func, &cfg, &unkowns, &extra_derivatives);
-
-        let mut matrix = JacobianMatrix::default();
-        let mut residual = Residual::default();
-
-        let output_block = {
+        let mut output_block = {
             let inst = intern
                 .outputs
                 .values()
@@ -149,23 +113,30 @@ impl EvalMir {
             func.layout.inst_block(inst).unwrap()
         };
 
-        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
-
-        matrix.populate(db, &mut cursor, &mut intern, &ad, &unkowns);
-        residual.populate(db, &mut cursor, &mut intern);
-
-        output_values.ensure(cursor.func.dfg.num_values() + 1);
         output_values.clear();
-
-        matrix.insert_opt_barries(&mut cursor, &mut output_values);
-        residual.insert_opt_barries(&mut cursor, &mut output_values);
-
-        for (kind, out_val) in intern.outputs.iter_mut() {
+        for (kind, val) in intern.outputs.iter() {
             if matches!(kind, PlaceKind::Var(var) if module.op_vars.contains_key(var)) {
-                let val = out_val.unwrap_unchecked();
-                output_values.insert(val);
+                output_values.insert(val.unwrap_unchecked());
             }
         }
+
+        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
+        let mut residual = Residual::default();
+        residual.populate(db, &mut cursor, &mut intern);
+        output_block = cursor.current_block().unwrap();
+
+        let unkowns = intern.unkowns(&mut func, true);
+        let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &unkowns);
+        let ad = auto_diff(&mut func, &cfg, &unkowns, &extra_derivatives);
+
+        let mut matrix = JacobianMatrix::default();
+        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
+        matrix.populate(&mut cursor, &mut intern, &residual.resistive, false, &ad, &unkowns);
+        matrix.populate(&mut cursor, &mut intern, &residual.reactive, true, &ad, &unkowns);
+
+        output_values.ensure(cursor.func.dfg.num_values() + 1);
+        matrix.insert_opt_barries(&mut cursor, &mut output_values);
+        residual.insert_opt_barries(&mut cursor, &mut output_values);
 
         sparse_conditional_constant_propagation(&mut func, &cfg);
         simplify_cfg(&mut func, &mut cfg);
@@ -192,7 +163,7 @@ impl EvalMir {
         residual.sparsify();
 
         for (kind, out_val) in intern.outputs.iter_mut() {
-            if matches!(kind, PlaceKind::Var(var) if module.op_vars.contains_key(var)) {
+            if matches!(&kind, PlaceKind::Var(var) if module.op_vars.contains_key(var)) {
                 let val = out_val.unwrap_unchecked();
                 if let Some(inst) = func.dfg.value_def(val).inst() {
                     if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } =
@@ -328,20 +299,21 @@ impl EvalMir {
                     let idx = usize::from(tag);
                     match *intern.outputs.get_index(idx).unwrap().0 {
                         PlaceKind::Var(var) => db.var_data(var).ty.clone(),
-                        PlaceKind::FunctionReturn { fun } => {
-                            db.function_data(fun).return_ty.clone()
-                        }
+                        PlaceKind::FunctionReturn(fun) => db.function_data(fun).return_ty.clone(),
                         PlaceKind::FunctionArg { fun, arg } => {
                             db.function_data(fun).args[arg].ty.clone()
                         }
-                        PlaceKind::BranchVoltage { .. }
-                        | PlaceKind::BranchCurrent { .. }
-                        | PlaceKind::ImplicitBranchVoltage { .. }
-                        | PlaceKind::ImplicitBranchCurrent { .. } => Type::Real,
+
+                        PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => {
+                            Type::Real
+                        }
                         PlaceKind::ParamMin(_) | PlaceKind::ParamMax(_) => {
                             unreachable!()
                         }
                         PlaceKind::Param(_) => unreachable!(),
+                        PlaceKind::CollapseImplicitEquation(_) | PlaceKind::IsVoltageSrc(_) => {
+                            Type::Bool
+                        }
                     }
                 } else {
                     Type::Real

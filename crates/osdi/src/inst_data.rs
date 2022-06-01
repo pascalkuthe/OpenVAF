@@ -1,6 +1,6 @@
 use ahash::RandomState;
 use hir_def::{ParamId, ParamSysFun, VarId};
-use hir_lower::{ParamKind, PlaceKind};
+use hir_lower::{ParamKind, PlaceKind, PlaceInfo};
 use indexmap::IndexMap;
 use llvm::{
     LLVMBuildFAdd, LLVMBuildGEP2, LLVMBuildLoad2, LLVMBuildStore, LLVMBuildStructGEP2,
@@ -128,7 +128,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             .op_vars
             .iter()
             .map(|(var, info)| {
-                let val = cgunit.mir.eval_intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
+                let val = cgunit.mir.eval_intern.outputs[&PlaceInfo::new(PlaceKind::Var(*var))].unwrap_unchecked();
                 let ty = lltype(&info.ty, cx);
                 let pos = EvalOutput::new(cgunit, val, &mut eval_outputs, true, ty);
                 (*var, pos)
@@ -276,7 +276,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         cx: &CodegenCx<'_, 'll>,
         pos: u32,
         ptr: &'ll llvm::Value,
-    ) -> MemLoc {
+    ) -> MemLoc<'ll> {
         let ty = self.params.get_index(pos as usize).unwrap().1;
         let elem = NUM_CONST_FIELDS + pos as u32;
         let indicies = vec![cx.const_int(0), cx.const_unsigned_int(elem)].into_boxed_slice();
@@ -288,7 +288,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         cx: &CodegenCx<'_, 'll>,
         param: OsdiInstanceParam,
         ptr: &'ll llvm::Value,
-    ) -> Option<MemLoc> {
+    ) -> Option<MemLoc<'ll>> {
         let pos = self.params.get_index_of(&param)? as u32;
         let res = self.nth_param_loc(cx, pos, ptr);
         Some(res)
@@ -735,6 +735,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         | ParamKind::Current(_)
                         | ParamKind::PortConnected { .. }
                         | ParamKind::ParamGiven { .. } => unreachable!(),
+                        ParamKind::Abstime => todo!()
                     }
                 } else {
                     let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;
@@ -807,6 +808,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         | ParamKind::Current(_)
                         | ParamKind::PortConnected { .. }
                         | ParamKind::ParamGiven { .. } => unreachable!(),
+                        ParamKind::Abstime => todo!(),
                     }
                 } else {
                     let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;

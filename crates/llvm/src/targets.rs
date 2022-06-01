@@ -57,7 +57,6 @@ extern "C" {
     pub fn LLVMABIAlignmentOfType(data: &TargetData, ty: &Type) -> c_uint;
 }
 
-
 /// # Safety
 ///
 /// This function calls the LLVM C interface and may emit unsafety for invalid inputs.

@@ -5,7 +5,7 @@ use stdx::impl_display;
 // use stdx::impl_display;
 use syntax::ast;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Err,
     Real,

@@ -3,11 +3,13 @@ use std::path::Path;
 
 use hir_def::db::HirDefDB;
 use hir_def::Type;
-use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
+use hir_lower::{
+    CallBackKind, CurrentKind, HirInterner, IdtKind, ParamInfoKind, ParamKind, PlaceInfo, PlaceKind,
+};
 use lasso::Rodeo;
-use llvm::UNNAMED;
+use llvm::{OptLevel, UNNAMED};
 use mir::{ControlFlowGraph, FuncRef, Function};
-use mir_llvm::{Builder, CallbackFun, CodegenCx, LLVMBackend};
+use mir_llvm::{Builder, BuilderVal, CallbackFun, CodegenCx, LLVMBackend};
 use stdx::iter::multiunzip;
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
@@ -54,10 +56,20 @@ pub fn stub_callbacks<'ll>(
                 CallBackKind::SimParam => sim_param_stub(cx),
                 CallBackKind::SimParamOpt => sim_param_opt_stub(cx),
                 CallBackKind::SimParamStr => sim_param_str_stub(cx),
-                CallBackKind::Derivative(_) | CallBackKind::NodeDerivative(_) => {
+                CallBackKind::Idt(IdtKind::Basic)
+                | CallBackKind::Derivative(_)
+                | CallBackKind::NodeDerivative(_)
+                | CallBackKind::ExplicitDdt => {
                     cx.const_callback(&[cx.ty_real()], cx.const_real(0.0))
                 }
-                CallBackKind::ParamInfo(_, _) | CallBackKind::CollapseHint(_, _) => return None,
+                CallBackKind::Print { .. }
+                | CallBackKind::ParamInfo(_, _)
+                | CallBackKind::CollapseHint(_, _) => return None,
+                CallBackKind::BoundStep => todo!(),
+                CallBackKind::Idt(kind) => {
+                    let args = vec![cx.ty_real(); kind.num_params() as usize];
+                    cx.const_return(&args, 1)
+                }
             };
 
             Some(res)
@@ -69,6 +81,7 @@ pub struct CodegenCtx<'a, 't> {
     pub model_info: &'a ModelInfo,
     pub llbackend: &'a LLVMBackend<'t>,
     pub literals: &'a mut Rodeo,
+    pub opt_lvl: OptLevel,
 }
 
 struct Codegen<'a, 'b, 'll> {
@@ -91,7 +104,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
 
         for (i, var) in vars.clone().enumerate() {
             if let Some(id) = self.intern.params.index(&ParamKind::HiddenState(var)) {
-                self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+                self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
             }
         }
 
@@ -111,7 +124,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
 
         for (i, (id, _)) in params.clone().enumerate() {
             let ptr = self.builder.cx.const_gep(ptr, &[self.builder.cx.const_usize(i)]);
-            self.builder.params[id] = Some(self.builder.load(self.builder.cx.ty_str(), ptr));
+            self.builder.params[id] = self.builder.load(self.builder.cx.ty_str(), ptr).into();
         }
 
         let global_name = format!("{}.params.{}", self.spec.prefix, Type::String);
@@ -129,7 +142,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
         });
 
         for (i, (id, _)) in params.clone().enumerate() {
-            self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+            self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
         }
 
         let global_name = format!("{}.params.{}", self.spec.prefix, ty);
@@ -162,7 +175,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
         let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
 
         for (i, (id, _)) in voltages.clone().enumerate() {
-            self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+            self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
         }
 
         let global_name = format!("{}.voltages.default", self.spec.prefix);
@@ -189,7 +202,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
         });
 
         let default_val = |(id, kind)| {
-            if let CurrentKind::ExplicitBranch(branch) = kind {
+            if let CurrentKind::Branch(branch) = kind {
                 if let Some(val) = self.model_info.optional_currents.get(&branch) {
                     return Some(((id, kind), self.builder.cx.const_real(*val)));
                 }
@@ -206,7 +219,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
         let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
 
         for (i, (id, _)) in voltages.clone().enumerate() {
-            self.builder.params[id] = Some(self.read_fat_ptr_at(i, offset, ptr));
+            self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
         }
 
         let global_name = format!("{}.currents.default", self.spec.prefix);
@@ -282,7 +295,7 @@ impl CodegenCtx<'_, '_> {
     ) {
         let ret_info = db.var_data(spec.var);
 
-        let module = unsafe { self.llbackend.new_module(&*ret_info.name).unwrap() };
+        let module = unsafe { self.llbackend.new_module(&*ret_info.name, self.opt_lvl).unwrap() };
         let mut cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let ret_ty = lltype(&ret_info.ty, &cx);
@@ -327,14 +340,14 @@ impl CodegenCtx<'_, '_> {
             .iter()
             .map(|(kind, val)| {
                 if func.dfg.value_dead(*val) {
-                    return None;
+                    return BuilderVal::Undef;
                 }
 
                 let val = match kind {
                     ParamKind::Param(_)
                     | ParamKind::Voltage { .. }
                     | ParamKind::Current(_)
-                    | ParamKind::HiddenState(_) => return None,
+                    | ParamKind::HiddenState(_) => return BuilderVal::Undef,
                     ParamKind::Temperature => unsafe {
                         let temperature = llvm::LLVMGetParam(llfun, 8);
                         codegen.read_fat_ptr_at(0, offset, temperature)
@@ -343,9 +356,10 @@ impl CodegenCtx<'_, '_> {
                     ParamKind::ParamSysFun(param) => {
                         codegen.builder.cx.const_real(param.default_value())
                     }
+                    ParamKind::Abstime => codegen.builder.cx.const_real(0.0),
                 };
 
-                Some(val)
+                val.into()
             })
             .collect();
 
@@ -397,8 +411,10 @@ impl CodegenCtx<'_, '_> {
             let out = llvm::LLVMGetParam(llfun, 9);
             let out = builder.gep(out, &[offset]);
 
-            let ret_val = intern.outputs[&PlaceKind::Var(spec.var)].unwrap();
-            let ret_val = builder.values[ret_val].unwrap();
+            let ret_val = intern.outputs
+                [&PlaceInfo { kind: PlaceKind::Var(spec.var), dim: None.into() }]
+                .unwrap();
+            let ret_val = builder.values[ret_val].get(&builder);
 
             builder.store(out, ret_val);
 
@@ -408,7 +424,7 @@ impl CodegenCtx<'_, '_> {
         // build object file
         drop(builder);
         debug_assert!(module.verify_and_print(), "Invalid code generated");
-        module.optimize(self.llbackend);
+        module.optimize();
 
         module.emit_obect(dst).expect("code generation failed!")
     }
@@ -464,8 +480,8 @@ impl CodegenCtx<'_, '_> {
                 builder.load(llty, ptr)
             };
 
-            builder.params[given_id] = Some(given);
-            builder.params[val_id] = Some(val);
+            builder.params[given_id] = given.into();
+            builder.params[val_id] = val.into();
             offset += 1;
         }
         offset
@@ -482,8 +498,10 @@ impl CodegenCtx<'_, '_> {
         for (i, (param, _)) in
             self.model_info.params.iter().filter(|(_, info)| info.ty == ty).enumerate()
         {
-            let param_val = intern.outputs[&PlaceKind::Param(*param)].unwrap();
-            let param_val = builder.values[param_val].unwrap();
+            let param_val = intern.outputs
+                [&PlaceInfo { kind: PlaceKind::Param(*param), dim: None.into() }]
+                .unwrap();
+            let param_val = unsafe { builder.values[param_val].get(builder) };
 
             unsafe {
                 let off = builder.cx.const_usize(i);
@@ -493,16 +511,20 @@ impl CodegenCtx<'_, '_> {
 
             if let Some((min_ptr, max_ptr)) = bounds_ptrs {
                 unsafe {
-                    let param_min = intern.outputs[&PlaceKind::ParamMin(*param)].unwrap();
-                    let param_min = builder.values[param_min].unwrap();
+                    let param_min = intern.outputs
+                        [&PlaceInfo { kind: PlaceKind::ParamMin(*param), dim: None.into() }]
+                        .unwrap();
+                    let param_min = builder.values[param_min].get(builder);
                     let off = builder.cx.const_usize(i);
                     let ptr = builder.gep(min_ptr, &[off]);
                     builder.store(ptr, param_min)
                 }
 
                 unsafe {
-                    let param_max = intern.outputs[&PlaceKind::ParamMax(*param)].unwrap();
-                    let param_max = builder.values[param_max].unwrap();
+                    let param_max = intern.outputs
+                        [&PlaceInfo { kind: PlaceKind::ParamMax(*param), dim: None.into() }]
+                        .unwrap();
+                    let param_max = builder.values[param_max].get(builder);
                     let off = builder.cx.const_usize(i);
                     let ptr = builder.gep(max_ptr, &[off]);
                     builder.store(ptr, param_max)
@@ -604,7 +626,7 @@ impl CodegenCtx<'_, '_> {
         param_init_func: Function,
         param_init_intern: HirInterner,
     ) {
-        let module = unsafe { self.llbackend.new_module("model_info").unwrap() };
+        let module = unsafe { self.llbackend.new_module("model_info", self.opt_lvl).unwrap() };
         let mut cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let (fun_names, fun_symbols) = interned_model.functions(&mut cx);
@@ -650,7 +672,7 @@ impl CodegenCtx<'_, '_> {
             .iter()
             .map(|(kind, val)| {
                 if param_init_func.dfg.value_dead(*val) {
-                    return None;
+                    return BuilderVal::Undef;
                 }
                 let val = match kind {
                     ParamKind::Voltage { .. }
@@ -658,13 +680,14 @@ impl CodegenCtx<'_, '_> {
                     | ParamKind::HiddenState(_) => {
                         unreachable!()
                     }
-                    ParamKind::Param(_) | ParamKind::ParamGiven { .. } => return None,
+                    ParamKind::Param(_) | ParamKind::ParamGiven { .. } => return BuilderVal::Undef,
                     ParamKind::Temperature => builder.cx.const_real(293f64),
                     ParamKind::PortConnected { .. } => builder.cx.const_bool(true),
                     ParamKind::ParamSysFun(param) => builder.cx.const_real(param.default_value()),
+                    ParamKind::Abstime => builder.cx.const_real(0.0),
                 };
 
-                Some(val)
+                val.into()
             })
             .collect();
 
@@ -751,7 +774,7 @@ impl CodegenCtx<'_, '_> {
         }
 
         debug_assert!(module.verify_and_print(), "generated invalid code");
-        module.optimize(self.llbackend);
+        module.optimize();
 
         module.emit_obect(dst).expect("code generation failed!");
     }

@@ -1,9 +1,14 @@
 use hir_def::db::HirDefDB;
-use hir_def::NodeId;
-use hir_lower::{CallBackKind, HirInterner};
+use hir_def::{NodeId, Type};
+use hir_lower::{CallBackKind, DisplayKind, HirInterner};
 use lasso::Rodeo;
-use llvm::Linkage;
-use llvm::{LLVMIsDeclaration, LLVMSetLinkage, LLVMSetUnnamedAddress, UnnamedAddr};
+use llvm::{
+    IntPredicate, LLVMAddIncoming, LLVMAppendBasicBlockInContext, LLVMBuildAdd,
+    LLVMBuildArrayMalloc, LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildICmp,
+    LLVMBuildPhi, LLVMGetParam, LLVMIsDeclaration, LLVMPositionBuilderAtEnd, LLVMSetLinkage,
+    LLVMSetUnnamedAddress, UnnamedAddr, UNNAMED,
+};
+use llvm::{LLVMPurgeAttrs, Linkage};
 use mir::FuncRef;
 use mir_llvm::{CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use salsa::InternKey;
@@ -13,9 +18,12 @@ use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
 use crate::inst_data::OsdiInstanceData;
-use crate::metadata::osdi_0_3::{OsdiTys, STDLIB_BITCODE};
+use crate::metadata::osdi_0_3::{
+    OsdiTys, LOG_FMT_ERR, LOG_LVL_DEBUG, LOG_LVL_DISPLAY, LOG_LVL_ERR, LOG_LVL_FATAL, LOG_LVL_INFO,
+    LOG_LVL_WARN, STDLIB_BITCODE,
+};
 use crate::model_data::OsdiModelData;
-use crate::{OsdiMatrixId, OsdiNodeId};
+use crate::{lltype, OsdiMatrixId, OsdiNodeId};
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub struct OsdiMatrixEntry {
@@ -36,8 +44,10 @@ pub fn new_codegen<'a, 'll>(
 ) -> CodegenCx<'a, 'll> {
     let mut cx = unsafe { back.new_ctx(literals, llmod) };
     cx.include_bitcode(STDLIB_BITCODE);
+
     for fun in llvm::function_iter(llmod.llmod()) {
         unsafe {
+            LLVMPurgeAttrs(fun);
             if LLVMIsDeclaration(fun) != llvm::False {
                 continue;
             }
@@ -64,8 +74,8 @@ impl<'a, 'b, 'll> OsdiCompilationUnit<'a, 'b, 'll> {
         cx: &'a mut CodegenCx<'b, 'll>,
         tys: &'a OsdiTys<'ll>,
     ) -> OsdiCompilationUnit<'a, 'b, 'll> {
-        let inst_data = OsdiInstanceData::new(module, &cx);
-        let model_data = OsdiModelData::new(module, &cx, &inst_data);
+        let inst_data = OsdiInstanceData::new(module, cx);
+        let model_data = OsdiModelData::new(module, cx, &inst_data);
         OsdiCompilationUnit { inst_data, model_data, tys, cx, module }
     }
 }
@@ -178,8 +188,92 @@ pub fn general_callbacks<'ll>(
                     builder.cx.const_callback(&[builder.cx.ty_real()], zero)
                 }
                 CallBackKind::ParamInfo(_, _) | CallBackKind::CollapseHint(_, _) => return None,
+                CallBackKind::Print { kind, arg_tys } => {
+                    let (fun, fun_ty) = print_callback(builder.cx, *kind, arg_tys);
+                    CallbackFun { fun_ty, fun, state: Box::new([handle]) }
+                }
+                CallBackKind::BoundStep => return None,
+                CallBackKind::ExplicitDdt => {
+                    builder.cx.const_callback(&[builder.cx.ty_real()], builder.cx.const_real(0.0))
+                }
+                CallBackKind::Idt(kind) => builder.cx.const_callback(
+                    &vec![builder.cx.ty_real(); kind.num_params() as usize],
+                    builder.cx.const_real(0.0),
+                ),
             };
             Some(cb)
         })
         .collect()
+}
+
+fn print_callback<'ll>(
+    cx: &mut CodegenCx<'_, 'll>,
+    kind: DisplayKind,
+    arg_tys: &[Type],
+) -> (&'ll llvm::Value, &'ll llvm::Type) {
+    let mut args = vec![cx.ty_void_ptr(), cx.ty_str()];
+    args.extend(arg_tys.iter().map(|ty| lltype(ty, cx)));
+    let fun_ty = cx.ty_func(&args, cx.ty_void());
+    let name = cx.local_callback_name();
+    let fun = cx.declare_int_fn(&name, fun_ty);
+    unsafe {
+        let entry_bb = LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
+        let alloc_bb = LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
+        let write_bb = LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
+        let err_bb = LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
+        let exit_bb = LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
+        let llbuilder = llvm::LLVMCreateBuilderInContext(cx.llcx);
+
+        LLVMPositionBuilderAtEnd(llbuilder, entry_bb);
+        let handle = LLVMGetParam(fun, 0);
+        let fmt_lit = LLVMGetParam(fun, 1);
+        let mut args = vec![cx.const_null_ptr(cx.ty_str()), cx.const_usize(0)];
+        args.extend((1..(2 + arg_tys.len())).map(|arg| LLVMGetParam(fun, arg as u32)));
+        let (fun_ty, fun) = cx.intrinsic("snprintf").unwrap();
+        let len = LLVMBuildCall2(llbuilder, fun_ty, fun, args.as_ptr(), args.len() as u32, UNNAMED);
+        let is_err = LLVMBuildICmp(llbuilder, IntPredicate::IntSLT, len, cx.const_int(0), UNNAMED);
+        LLVMBuildCondBr(llbuilder, is_err, err_bb, alloc_bb);
+
+        LLVMPositionBuilderAtEnd(llbuilder, alloc_bb);
+        let data_len = LLVMBuildAdd(llbuilder, len, cx.const_int(1), UNNAMED);
+        let ptr = LLVMBuildArrayMalloc(llbuilder, cx.ty_i8(), data_len, UNNAMED);
+        let null_ptr = cx.const_null_ptr(cx.ty_str());
+        let is_err = LLVMBuildICmp(llbuilder, llvm::IntPredicate::IntEQ, null_ptr, ptr, UNNAMED);
+        LLVMBuildCondBr(llbuilder, is_err, err_bb, write_bb);
+
+        LLVMPositionBuilderAtEnd(llbuilder, write_bb);
+        let data_len = LLVMBuildAdd(llbuilder, len, cx.const_int(1), UNNAMED);
+        args[0] = ptr;
+        args[1] = data_len;
+        let len = LLVMBuildCall2(llbuilder, fun_ty, fun, args.as_ptr(), args.len() as u32, UNNAMED);
+        let is_err = LLVMBuildICmp(llbuilder, IntPredicate::IntSLT, len, cx.const_int(0), UNNAMED);
+        LLVMBuildCondBr(llbuilder, is_err, err_bb, exit_bb);
+
+        LLVMPositionBuilderAtEnd(llbuilder, err_bb);
+        LLVMBuildBr(llbuilder, exit_bb);
+
+        LLVMPositionBuilderAtEnd(llbuilder, exit_bb);
+        let flags = LLVMBuildPhi(llbuilder, cx.ty_int(), UNNAMED);
+        let lvl = match kind {
+            DisplayKind::Debug => LOG_LVL_DEBUG,
+            DisplayKind::Display | DisplayKind::Monitor => LOG_LVL_DISPLAY,
+            DisplayKind::Info => LOG_LVL_INFO,
+            DisplayKind::Warn => LOG_LVL_WARN,
+            DisplayKind::Error => LOG_LVL_ERR,
+            DisplayKind::Fatal => LOG_LVL_FATAL,
+        };
+        let lvl_and_err = lvl | LOG_FMT_ERR;
+        let lvl = cx.const_unsigned_int(lvl);
+        let lvl_and_err = cx.const_unsigned_int(lvl_and_err);
+        LLVMAddIncoming(flags, [lvl, lvl_and_err].as_ptr(), [write_bb, err_bb].as_ptr(), 2);
+        let msg = LLVMBuildPhi(llbuilder, cx.ty_str(), UNNAMED);
+        LLVMAddIncoming(msg, [ptr, fmt_lit].as_ptr(), [write_bb, err_bb].as_ptr(), 2);
+        let fun = cx.get_func_by_name("osdi_log").expect("callback osdi_log is missing");
+        let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str(), cx.ty_int()], cx.ty_void());
+        LLVMBuildCall2(llbuilder, fun_ty, fun, [handle, msg, flags].as_ptr(), 3, UNNAMED);
+        llvm::LLVMBuildRetVoid(llbuilder);
+        llvm::LLVMDisposeBuilder(llbuilder);
+    }
+
+    (fun, fun_ty)
 }

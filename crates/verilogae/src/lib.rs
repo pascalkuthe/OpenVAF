@@ -95,8 +95,7 @@ impl CompilationDB {
         };
         let cg_opts: Vec<_> = opts.cg_flags().map(str::to_owned).collect();
         let target = opts.target()?;
-        let backend =
-            LLVMBackend::new(&cg_opts, &target, target_cpu.to_owned(), &[], opts.opt_lvl.into());
+        let backend = LLVMBackend::new(&cg_opts, &target, target_cpu.to_owned(), &[]);
         let cache_dir = opts.cache_dir()?;
 
         std::fs::create_dir_all(&cache_dir).unwrap();
@@ -115,6 +114,7 @@ impl CompilationDB {
                 model_info: &info,
                 llbackend: &backend,
                 literals: &mut literals,
+                opt_lvl: opts.opt_lvl.into(),
             };
 
             cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
@@ -151,6 +151,7 @@ impl CompilationDB {
                 model_info: &info,
                 llbackend: &backend,
                 literals: &mut literals,
+                opt_lvl: opts.opt_lvl.into(),
             };
 
             cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);

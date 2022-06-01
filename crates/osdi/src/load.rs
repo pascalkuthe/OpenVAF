@@ -99,6 +99,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         llfunc
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn load_spice_rhs_(
         &mut self,
         tran: bool,

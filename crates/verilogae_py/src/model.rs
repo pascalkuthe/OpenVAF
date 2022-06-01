@@ -656,6 +656,23 @@ macro_rules! read_branch_val {
     };
 }
 
+macro_rules! populate_default_branches {
+    ( $expected: expr, $found: expr, $len: ident, $dst: expr) => {
+        for ((_, name, default_val), dst) in $expected.iter().copied().zip(&mut $dst) {
+            if default_val.is_nan() {
+                return raise_eval_exception(&format!(
+                    "eval() missing required {} '{}'",
+                    stringify!($found),
+                    name
+                ));
+            } else {
+                let dst = &mut dst.float;
+                dst.set_scalar(default_val)
+            }
+        }
+    };
+}
+
 impl VaeFun {
     unsafe fn new_dict(handle: *const c_void) -> *mut PyObject {
         let functions = PyDict_New();
@@ -987,21 +1004,17 @@ impl VaeFun {
             }
         }
 
-        if !self_.voltages_.is_empty() {
-            let voltages = PyDict_GetItem(kwds, VOLTAGES_STR);
-            if unlikely(voltages.is_null()) {
-                return raise_eval_exception("eval() missing required keyword argument 'voltages'");
-            }
-
+        let voltages = PyDict_GetItem(kwds, VOLTAGES_STR);
+        if unlikely(voltages.is_null()) {
+            populate_default_branches!(self_.voltages_, voltages, len, dst);
+        } else {
             read_branch_val!(self_.voltages_, voltages, len, dst);
         }
 
-        if !self_.currents_.is_empty() {
-            let currents = PyDict_GetItem(kwds, CURRENTS_STR);
-            if unlikely(currents.is_null()) {
-                return raise_eval_exception("eval() missing required keyword argument 'currents'");
-            }
-
+        let currents = PyDict_GetItem(kwds, CURRENTS_STR);
+        if unlikely(currents.is_null()) {
+            populate_default_branches!(self_.currents_, currents, len, dst);
+        } else {
             read_branch_val!(self_.currents_, currents, len, dst);
         }
 

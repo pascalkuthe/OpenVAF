@@ -128,7 +128,6 @@ impl CompilationDB {
         config.styles.header_bug.set_intense(false);
         config.styles.header_note.set_intense(false);
 
-
         config.styles.note_bullet.set_bold(true).set_intense(true);
         config.styles.line_number.set_bold(true).set_intense(true);
         config.styles.source_border.set_bold(true).set_intense(true);

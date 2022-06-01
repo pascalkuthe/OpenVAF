@@ -136,8 +136,8 @@ impl CompilationDB {
 
     pub fn current_name(&self, kind: CurrentKind) -> String {
         match kind {
-            CurrentKind::ExplicitBranch(branch) => self.branch_data(branch).name.deref().to_owned(),
-            CurrentKind::ImplictBranch { hi, lo } => {
+            CurrentKind::Branch(branch) => self.branch_data(branch).name.deref().to_owned(),
+            CurrentKind::Unnamed { hi, lo } => {
                 let mut name = format!(" {} ", &self.node_data(hi).name);
                 if let Some(lo) = lo {
                     name.push_str(&*self.node_data(lo).name);

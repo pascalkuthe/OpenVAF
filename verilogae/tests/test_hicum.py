@@ -20,6 +20,7 @@ hl2 = verilogae.load("hicumL2V2p4p0_vae.va")
 
 itf = hl2.functions["itf"].eval(**args)
 args["itf"] = itf
+print(hl2.functions["c10_t"].parameters)
 
 data = np.load('test_data.npz', allow_pickle=False)
 
