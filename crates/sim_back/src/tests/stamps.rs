@@ -340,29 +340,29 @@ fn diode() {
     let _rhs_react = mir.residual.reactive_entries(&db);
 
     let matrix_res = expect![[r#"
-        (A, dT) = v463
-        (CI, dT) = v464
-        (A, A) = v465
-        (A, CI) = v466
-        (CI, A) = v466
-        (CI, CI) = v468
-        (CI, C) = v470
-        (C, dT) = v471
-        (C, CI) = v470
-        (C, C) = v474
-        (dT, dT) = v475
-        (dT, A) = v476
-        (dT, CI) = v477
-        (dT, C) = v478
+        (A, dT) = v470
+        (A, A) = v471
+        (A, CI) = v488
+        (CI, dT) = v473
+        (CI, A) = v474
+        (CI, CI) = v492
+        (CI, C) = v493
+        (C, dT) = v476
+        (C, CI) = v478
+        (C, C) = v496
+        (dT, dT) = v479
+        (dT, A) = v480
+        (dT, CI) = v498
+        (dT, C) = v499
     "#]];
 
     let matrix_react = expect![[r#"
-        (A, dT) = v479
-        (CI, dT) = v480
-        (A, A) = v481
-        (A, CI) = v482
-        (CI, A) = v482
-        (CI, CI) = v481
+        (A, dT) = v482
+        (A, A) = v483
+        (A, CI) = v500
+        (CI, dT) = v485
+        (CI, A) = v486
+        (CI, CI) = v503
     "#]];
 
     matrix_res.assert_eq(&mir.matrix.print_resistive_stamps(&db));

@@ -1,7 +1,7 @@
-use bitset::BitSet;
+use bitset::{BitSet, SparseBitMatrix};
 use mir::{Block, ControlFlowGraph, Function, Inst, InstructionData, Value, ValueDef};
 
-use crate::post_dominators::PostDominanceFrontiers;
+pub type PostDominanceFrontiers = SparseBitMatrix<Block, Block>;
 
 pub fn agressive_dead_code_elimination(
     func: &mut Function,

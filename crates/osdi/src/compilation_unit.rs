@@ -1,5 +1,5 @@
 use hir_def::db::HirDefDB;
-use hir_def::{NodeId, Type};
+use hir_def::Type;
 use hir_lower::{CallBackKind, DisplayKind, HirInterner};
 use lasso::Rodeo;
 use llvm::{
@@ -13,7 +13,7 @@ use mir::FuncRef;
 use mir_llvm::{CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use salsa::InternKey;
 use sim_back::matrix::MatrixEntry;
-use sim_back::{CompilationDB, EvalMir, ModuleInfo};
+use sim_back::{CompilationDB, EvalMir, ModuleInfo, SimUnkown};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
@@ -32,7 +32,7 @@ pub struct OsdiMatrixEntry {
 }
 
 impl OsdiMatrixEntry {
-    pub fn to_middle(self, node_ids: &TiSet<OsdiNodeId, NodeId>) -> MatrixEntry {
+    pub fn to_middle(self, node_ids: &TiSet<OsdiNodeId, SimUnkown>) -> MatrixEntry {
         MatrixEntry { row: node_ids[self.row], col: node_ids[self.col] }
     }
 }
@@ -83,7 +83,7 @@ impl<'a, 'b, 'll> OsdiCompilationUnit<'a, 'b, 'll> {
 pub struct OsdiModule<'a> {
     pub base: &'a ModuleInfo,
     pub mir: &'a EvalMir,
-    pub node_ids: TiSet<OsdiNodeId, NodeId>,
+    pub node_ids: TiSet<OsdiNodeId, SimUnkown>,
     pub matrix_ids: TiSet<OsdiMatrixId, OsdiMatrixEntry>,
     pub num_terminals: u32,
     pub sym: String,
@@ -91,7 +91,12 @@ pub struct OsdiModule<'a> {
 
 impl<'a> OsdiModule<'a> {
     pub fn new(db: &'a CompilationDB, mir: &'a EvalMir, module: &'a ModuleInfo) -> Self {
-        let mut terminals: TiSet<_, _> = db.module_data(module.id).ports.iter().copied().collect();
+        let mut terminals: TiSet<_, _> = db
+            .module_data(module.id)
+            .ports
+            .iter()
+            .map(|port| SimUnkown::KirchoffLaw(*port))
+            .collect();
         let num_terminals = terminals.len() as u32;
 
         let node_ids = {
@@ -154,6 +159,7 @@ pub fn general_callbacks<'ll>(
                         fun_ty,
                         fun,
                         state: vec![simparam, handle, ret_flags].into_boxed_slice(),
+                        num_state: 0,
                     }
                 }
                 CallBackKind::SimParamOpt => {
@@ -165,7 +171,12 @@ pub fn general_callbacks<'ll>(
                         &[ty_void_ptr, builder.cx.ty_str(), builder.cx.ty_real()],
                         builder.cx.ty_real(),
                     );
-                    CallbackFun { fun_ty, fun, state: vec![simparam].into_boxed_slice() }
+                    CallbackFun {
+                        fun_ty,
+                        fun,
+                        state: vec![simparam].into_boxed_slice(),
+                        num_state: 0,
+                    }
                 }
                 CallBackKind::SimParamStr => {
                     let fun = builder
@@ -180,6 +191,7 @@ pub fn general_callbacks<'ll>(
                         fun_ty,
                         fun,
                         state: vec![simparam, handle, ret_flags].into_boxed_slice(),
+                        num_state: 0,
                     }
                 }
                 // If these derivative were non zero they would have been removed
@@ -190,16 +202,10 @@ pub fn general_callbacks<'ll>(
                 CallBackKind::ParamInfo(_, _) | CallBackKind::CollapseHint(_, _) => return None,
                 CallBackKind::Print { kind, arg_tys } => {
                     let (fun, fun_ty) = print_callback(builder.cx, *kind, arg_tys);
-                    CallbackFun { fun_ty, fun, state: Box::new([handle]) }
+                    CallbackFun { fun_ty, fun, state: Box::new([handle]), num_state: 0 }
                 }
+                // TODO boundstep
                 CallBackKind::BoundStep => return None,
-                CallBackKind::ExplicitDdt => {
-                    builder.cx.const_callback(&[builder.cx.ty_real()], builder.cx.const_real(0.0))
-                }
-                CallBackKind::Idt(kind) => builder.cx.const_callback(
-                    &vec![builder.cx.ty_real(); kind.num_params() as usize],
-                    builder.cx.const_real(0.0),
-                ),
             };
             Some(cb)
         })

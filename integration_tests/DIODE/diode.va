@@ -88,7 +88,7 @@ module diode_va(A,C,dT);
                 pterm = pterm + pow(Vr,2.0)/rs_t;
             end
 
-            I(br_sht)  <+ V(br_sht)/rth_t-pterm;
+            I(br_sht)  <+ pterm - V(br_sht)/rth_t;
         end else begin
             V(br_sht) <+ 0;
         end

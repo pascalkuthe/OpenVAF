@@ -12,6 +12,11 @@ use mir_llvm::LLVMBackend;
 use sim_back::CompilationDB;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 pub mod cache;
 pub mod cli_def;
 mod cli_process;
@@ -49,9 +54,9 @@ pub fn run(matches: ArgMatches) -> Result<i32> {
     })
     .context("linking failed!")?;
 
-    // for obj_file in paths {
-    //     std::fs::remove_file(obj_file).context("failed to delete intermediate compile artifact")?;
-    // }
+    for obj_file in paths {
+        std::fs::remove_file(obj_file).context("failed to delete intermediate compile artifact")?;
+    }
 
     let seconds = Instant::elapsed(&start).as_secs_f64();
     let mut stderr = StandardStream::stderr(ColorChoice::Auto);

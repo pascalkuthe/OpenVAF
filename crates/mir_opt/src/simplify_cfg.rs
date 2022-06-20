@@ -12,6 +12,21 @@ mod tests;
 pub fn simplify_cfg(func: &mut Function, cfg: &mut ControlFlowGraph) {
     let mut simplify = SimplifyCfg {
         cfg,
+        merge_phis: true,
+        vals_changed: BitSet::new_filled(func.layout.num_blocks()),
+        func,
+        local_changed: false,
+        // table: RawTable::with_capacity(8),
+        // hash_builer: ahash::RandomState::new(),
+        // unconditional_preds: Vec::with_capacity(4),
+    };
+    simplify.iteratively_simplify_cfg();
+}
+
+pub fn simplify_cfg_no_phi_merge(func: &mut Function, cfg: &mut ControlFlowGraph) {
+    let mut simplify = SimplifyCfg {
+        cfg,
+        merge_phis: false,
         vals_changed: BitSet::new_filled(func.layout.num_blocks()),
         func,
         local_changed: false,
@@ -25,6 +40,7 @@ pub fn simplify_cfg(func: &mut Function, cfg: &mut ControlFlowGraph) {
 struct SimplifyCfg<'a> {
     cfg: &'a mut ControlFlowGraph,
     func: &'a mut Function,
+    merge_phis: bool,
     local_changed: bool,
     // table: RawTable<Inst>,
     // hash_builer: ahash::RandomState,
@@ -611,12 +627,14 @@ impl<'a> SimplifyCfg<'a> {
         //     return;
         // }
 
-        if let Some(term) = self.func.layout.last_inst(bb) {
-            if let InstructionData::Jump { destination } = self.func.dfg.insts[term] {
-                self.simplify_unconditional_jmp_term(bb, destination)
-            }
+        if self.merge_phis {
+            if let Some(term) = self.func.layout.last_inst(bb) {
+                if let InstructionData::Jump { destination } = self.func.dfg.insts[term] {
+                    self.simplify_unconditional_jmp_term(bb, destination)
+                }
 
-            // TODO merge common code in successor (for branch)
+                // TODO merge common code in successor (for branch)
+            }
         }
     }
 }

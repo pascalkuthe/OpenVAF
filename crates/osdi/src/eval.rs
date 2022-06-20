@@ -1,11 +1,12 @@
 use ahash::AHashMap;
-use hir_lower::{ParamKind, PlaceInfo, PlaceKind};
+use hir_lower::{CurrentKind, ParamKind, PlaceKind};
 use llvm::IntPredicate::{IntNE, IntULT};
 use llvm::{
     LLVMAppendBasicBlockInContext, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCondBr, LLVMBuildICmp,
     LLVMPositionBuilderAtEnd, UNNAMED,
 };
 use mir_llvm::{Builder, BuilderVal};
+use sim_back::SimUnkown;
 use typed_index_collections::TiVec;
 
 use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
@@ -75,7 +76,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         unsafe { builder.store(ret_flags, builder.cx.const_int(0)) };
 
         let connected_ports = unsafe { inst_data.load_connected_ports(&builder, instance) };
-        let voltages: AHashMap<_, _> = module
+        let prev_solve: AHashMap<_, _> = module
             .node_ids
             .iter_enumerated()
             .map(|(node_id, node)| unsafe {
@@ -111,15 +112,19 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 .into()
                         }
                         ParamKind::Voltage { hi, lo } => {
-                            let hi = voltages[&hi];
+                            let hi = prev_solve[&SimUnkown::KirchoffLaw(hi)];
                             if let Some(lo) = lo {
-                                let lo = voltages[&lo];
+                                let lo = prev_solve[&SimUnkown::KirchoffLaw(lo)];
                                 llvm::LLVMBuildFSub(builder.llbuilder, hi, lo, UNNAMED)
                             } else {
                                 hi
                             }
                         }
-                        ParamKind::Current(_) => builder.cx.const_real(0.0),
+                        ParamKind::Current(CurrentKind::Port(_)) => builder.cx.const_real(0.0),
+                        ParamKind::Current(kind) => prev_solve[&SimUnkown::Current(kind)],
+                        ParamKind::ImplicitUnkown(equation) => {
+                            prev_solve[&SimUnkown::Implicit(equation)]
+                        }
                         ParamKind::Temperature => inst_data.load_temperature(&builder, instance),
                         ParamKind::ParamGiven { param } => {
                             let inst_given = inst_data.is_param_given(
@@ -146,7 +151,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             }
                         }
                         ParamKind::PortConnected { port } => {
-                            let id = module.node_ids.unwrap_index(&port);
+                            let id = module.node_ids.unwrap_index(&SimUnkown::KirchoffLaw(port));
                             let id = builder.cx.const_unsigned_int(id.into());
                             builder.int_cmp(id, connected_ports, IntULT)
                         }
@@ -158,7 +163,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             )
                             .unwrap(),
                         ParamKind::HiddenState(_) => unreachable!(),
-                        ParamKind::Abstime => todo!(), // TODO  hidden state
+                        ParamKind::Abstime => todo!(),
+                        ParamKind::EnableIntegration => todo!(), // TODO  hidden state
                     }
                 };
                 BuilderVal::Eager(val)
@@ -167,7 +173,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         let cache_vals = (0..module.mir.init_inst_cache_slots.len()).map(|i| unsafe {
             let slot = i.into();
-            let val = inst_data.load_cache_slot(builder.llbuilder, slot, instance);
+            let val = inst_data.load_cache_slot(module, builder.llbuilder, slot, instance);
             BuilderVal::Eager(val)
         });
 
@@ -245,8 +251,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             let store_opvars = |builder: &mut Builder<'_, '_, 'll>| {
                 for (i, var) in inst_data.opvars.keys().enumerate() {
-                    let val =
-                        intern.outputs[&PlaceInfo::new(PlaceKind::Var(*var))].unwrap_unchecked();
+                    let val = intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
                     inst_data.store_nth_opvar(i as u32, instance, val, builder);
                 }
             };

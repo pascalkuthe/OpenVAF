@@ -129,6 +129,8 @@ impl<'short, 'long> InstInserterBase<'short> for FuncInstBuilder<'short, 'long> 
         self.builder.func.layout.append_inst_to_bb(inst, self.block);
         self.builder.func.srclocs.push(self.builder.srcloc);
 
+        let op_dependent = &mut self.builder.op_dependent_vals;
+        op_dependent.ensure(self.builder.func.dfg.num_values() + 1);
         match self.builder.func.dfg.insts[inst] {
             InstructionData::Branch { then_dst, else_dst, .. } => {
                 self.builder.declare_successor(then_dst);
@@ -142,7 +144,6 @@ impl<'short, 'long> InstInserterBase<'short> for FuncInstBuilder<'short, 'long> 
 
             InstructionData::Binary { args: [arg0, arg1], .. } => {
                 let op_dependent = &mut self.builder.op_dependent_vals;
-                op_dependent.ensure(self.builder.func.dfg.num_values() + 1);
                 if op_dependent.contains(arg0) || op_dependent.contains(arg1) {
                     let res = self.builder.func.dfg.first_result(inst);
                     op_dependent.insert(res);
@@ -151,8 +152,24 @@ impl<'short, 'long> InstInserterBase<'short> for FuncInstBuilder<'short, 'long> 
 
             InstructionData::Unary { arg, .. } => {
                 let op_dependent = &mut self.builder.op_dependent_vals;
-                op_dependent.ensure(self.builder.func.dfg.num_values() + 1);
                 if op_dependent.contains(arg) {
+                    let res = self.builder.func.dfg.first_result(inst);
+                    // if res == 171549u32.into() {
+                    //     let inst = self.builder.func.dfg.value_def(arg).inst().unwrap();
+                    //     println!(
+                    //         "hmm {arg} = {:?} = ({})",
+                    //         self.builder.func.dfg.value_def(res),
+                    //         self.builder.func.dfg.display_inst(inst)
+                    //     );
+
+                    //     println!("{}", self.builder.func.to_debug_string());
+                    //     panic!()
+                    // }
+                    op_dependent.insert(res);
+                }
+            }
+            InstructionData::PhiNode(ref phi) => {
+                if self.builder.func.dfg.phi_edges(phi).any(|(_, val)| op_dependent.contains(val)) {
                     let res = self.builder.func.dfg.first_result(inst);
                     op_dependent.insert(res);
                 }
@@ -231,6 +248,13 @@ impl<'a> FunctionBuilder<'a> {
         };
         res.seal_block(entry);
         res
+    }
+
+    pub fn is_op_dependent(&self, val: Value) -> bool {
+        // the bitset is not resised when constants are inserted.
+        // Because constants are never op dependent we just short circuit here to avoid panics in
+        // that case
+        self.func.dfg.value_def(val).as_const().is_none() && self.op_dependent_vals.contains(val)
     }
 
     /// Creates a new FunctionBuilder structure that will operate on a `Function` using a

@@ -10,6 +10,7 @@ pub struct CallbackFun<'ll> {
     /// outside of the arguments provided in Verilog-A.
     /// These arguments are always passed before any arguments specified in the CFG
     pub state: Box<[&'ll llvm::Value]>,
+    pub num_state: u32,
 }
 
 impl<'ll> CodegenCx<'_, 'll> {
@@ -29,7 +30,7 @@ impl<'ll> CodegenCx<'_, 'll> {
             llvm::LLVMDisposeBuilder(builder);
         }
 
-        CallbackFun { fun_ty, fun, state: Box::new([]) }
+        CallbackFun { fun_ty, fun, state: Box::new([]), num_state: 0 }
     }
 
     pub fn trivial_callbacks(&mut self, args: &[&'ll llvm::Type]) -> CallbackFun<'ll> {
@@ -44,7 +45,7 @@ impl<'ll> CodegenCx<'_, 'll> {
             llvm::LLVMDisposeBuilder(builder);
         }
 
-        CallbackFun { fun_ty, fun, state: Box::new([]) }
+        CallbackFun { fun_ty, fun, state: Box::new([]), num_state: 0 }
     }
 
     pub fn const_return(&mut self, args: &[&'ll llvm::Type], idx: usize) -> CallbackFun<'ll> {
@@ -59,7 +60,7 @@ impl<'ll> CodegenCx<'_, 'll> {
             llvm::LLVMBuildRet(builder, val);
             llvm::LLVMDisposeBuilder(builder);
         }
-        CallbackFun { fun_ty, fun, state: Box::new([]) }
+        CallbackFun { fun_ty, fun, state: Box::new([]), num_state: 0 }
     }
 
     pub fn local_callback_name(&mut self) -> String {

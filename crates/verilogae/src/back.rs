@@ -3,9 +3,7 @@ use std::path::Path;
 
 use hir_def::db::HirDefDB;
 use hir_def::Type;
-use hir_lower::{
-    CallBackKind, CurrentKind, HirInterner, IdtKind, ParamInfoKind, ParamKind, PlaceInfo, PlaceKind,
-};
+use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
 use lasso::Rodeo;
 use llvm::{OptLevel, UNNAMED};
 use mir::{ControlFlowGraph, FuncRef, Function};
@@ -56,20 +54,13 @@ pub fn stub_callbacks<'ll>(
                 CallBackKind::SimParam => sim_param_stub(cx),
                 CallBackKind::SimParamOpt => sim_param_opt_stub(cx),
                 CallBackKind::SimParamStr => sim_param_str_stub(cx),
-                CallBackKind::Idt(IdtKind::Basic)
-                | CallBackKind::Derivative(_)
-                | CallBackKind::NodeDerivative(_)
-                | CallBackKind::ExplicitDdt => {
+                CallBackKind::Derivative(_) | CallBackKind::NodeDerivative(_) => {
                     cx.const_callback(&[cx.ty_real()], cx.const_real(0.0))
                 }
                 CallBackKind::Print { .. }
                 | CallBackKind::ParamInfo(_, _)
                 | CallBackKind::CollapseHint(_, _) => return None,
                 CallBackKind::BoundStep => todo!(),
-                CallBackKind::Idt(kind) => {
-                    let args = vec![cx.ty_real(); kind.num_params() as usize];
-                    cx.const_return(&args, 1)
-                }
             };
 
             Some(res)
@@ -356,7 +347,10 @@ impl CodegenCtx<'_, '_> {
                     ParamKind::ParamSysFun(param) => {
                         codegen.builder.cx.const_real(param.default_value())
                     }
-                    ParamKind::Abstime => codegen.builder.cx.const_real(0.0),
+                    ParamKind::ImplicitUnkown(_) | ParamKind::Abstime => {
+                        codegen.builder.cx.const_real(0.0)
+                    }
+                    ParamKind::EnableIntegration => codegen.builder.cx.const_bool(false),
                 };
 
                 val.into()
@@ -411,9 +405,7 @@ impl CodegenCtx<'_, '_> {
             let out = llvm::LLVMGetParam(llfun, 9);
             let out = builder.gep(out, &[offset]);
 
-            let ret_val = intern.outputs
-                [&PlaceInfo { kind: PlaceKind::Var(spec.var), dim: None.into() }]
-                .unwrap();
+            let ret_val = intern.outputs[&PlaceKind::Var(spec.var)].unwrap();
             let ret_val = builder.values[ret_val].get(&builder);
 
             builder.store(out, ret_val);
@@ -498,9 +490,7 @@ impl CodegenCtx<'_, '_> {
         for (i, (param, _)) in
             self.model_info.params.iter().filter(|(_, info)| info.ty == ty).enumerate()
         {
-            let param_val = intern.outputs
-                [&PlaceInfo { kind: PlaceKind::Param(*param), dim: None.into() }]
-                .unwrap();
+            let param_val = intern.outputs[&PlaceKind::Param(*param)].unwrap();
             let param_val = unsafe { builder.values[param_val].get(builder) };
 
             unsafe {
@@ -511,9 +501,7 @@ impl CodegenCtx<'_, '_> {
 
             if let Some((min_ptr, max_ptr)) = bounds_ptrs {
                 unsafe {
-                    let param_min = intern.outputs
-                        [&PlaceInfo { kind: PlaceKind::ParamMin(*param), dim: None.into() }]
-                        .unwrap();
+                    let param_min = intern.outputs[&PlaceKind::ParamMin(*param)].unwrap();
                     let param_min = builder.values[param_min].get(builder);
                     let off = builder.cx.const_usize(i);
                     let ptr = builder.gep(min_ptr, &[off]);
@@ -521,9 +509,7 @@ impl CodegenCtx<'_, '_> {
                 }
 
                 unsafe {
-                    let param_max = intern.outputs
-                        [&PlaceInfo { kind: PlaceKind::ParamMax(*param), dim: None.into() }]
-                        .unwrap();
+                    let param_max = intern.outputs[&PlaceKind::ParamMax(*param)].unwrap();
                     let param_max = builder.values[param_max].get(builder);
                     let off = builder.cx.const_usize(i);
                     let ptr = builder.gep(max_ptr, &[off]);
@@ -608,6 +594,7 @@ impl CodegenCtx<'_, '_> {
                     fun_ty,
                     fun,
                     state: vec![dst, builder.cx.const_u8(bits)].into_boxed_slice(),
+                    num_state: 0,
                 };
 
                 let cb = intern.callbacks.unwrap_index(&CallBackKind::ParamInfo(kind, *param));
@@ -684,7 +671,8 @@ impl CodegenCtx<'_, '_> {
                     ParamKind::Temperature => builder.cx.const_real(293f64),
                     ParamKind::PortConnected { .. } => builder.cx.const_bool(true),
                     ParamKind::ParamSysFun(param) => builder.cx.const_real(param.default_value()),
-                    ParamKind::Abstime => builder.cx.const_real(0.0),
+                    ParamKind::ImplicitUnkown(_) | ParamKind::Abstime => builder.cx.const_real(0.0),
+                    ParamKind::EnableIntegration => builder.cx.const_bool(false),
                 };
 
                 val.into()

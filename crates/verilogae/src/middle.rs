@@ -1,12 +1,12 @@
 use ahash::AHashSet;
-use bitset::BitSet;
-use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind, PlaceInfo};
+use bitset::{BitSet, SparseBitMatrix};
+use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
 use lasso::Rodeo;
 use mir::{ControlFlowGraph, Function, ValueDef};
 use mir_autodiff::auto_diff;
 use mir_opt::{
-    agressive_dead_code_elimination, dead_code_elimination, inst_combine, postdom_frontiers,
-    simplify_cfg, sparse_conditional_constant_propagation,
+    agressive_dead_code_elimination, dead_code_elimination, inst_combine, simplify_cfg,
+    sparse_conditional_constant_propagation, DominatorTree,
 };
 
 use crate::compiler_db::{CompilationDB, FuncSpec, ModelInfo};
@@ -18,9 +18,7 @@ impl FuncSpec {
         cfg: &ControlFlowGraph,
         intern: &HirInterner,
     ) -> (Function, ControlFlowGraph) {
-        let ret_val = intern.outputs
-            [&PlaceInfo { kind: PlaceKind::Var(self.var), dim: None.into() }]
-            .unwrap();
+        let ret_val = intern.outputs[&PlaceKind::Var(self.var)].unwrap();
         let mut func = func.clone();
         let mut cfg = cfg.clone();
 
@@ -45,7 +43,11 @@ impl FuncSpec {
 
         simplify_cfg(&mut func, &mut cfg);
 
-        let control_dep = postdom_frontiers(&cfg, &func);
+        let mut dom_tree = DominatorTree::default();
+        dom_tree.compute(&func, &cfg, false, true, false);
+        let mut control_dep = SparseBitMatrix::new(0, 0);
+        dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
+
         agressive_dead_code_elimination(
             &mut func,
             &mut cfg,
@@ -74,9 +76,9 @@ impl CompilationDB {
         let (mut func, mut intern) = MirBuilder::new(
             self,
             info.module.into(),
-            &|info| {
+            &|kind| {
                 matches!(
-                    info.kind,
+                    kind,
                     PlaceKind::Var(var) if outputs.contains(&var)
                 )
             },

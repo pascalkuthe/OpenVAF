@@ -107,20 +107,6 @@ pub fn postdom_frontiers(cfg: &ControlFlowGraph, func: &Function) -> PostDominan
     cdg
 }
 
-fn intersect(
-    post_dominators: &TiSlice<PostorderId, PostorderId>,
-    mut finger1: PostorderId,
-    mut finger2: PostorderId,
-) -> PostorderId {
-    loop {
-        match finger1.cmp(&finger2) {
-            Ordering::Greater => finger1 = post_dominators[finger1],
-            Ordering::Less => finger2 = post_dominators[finger2],
-            Ordering::Equal => return finger1,
-        }
-    }
-}
-
 pub type PostDominanceFrontiers = SparseBitMatrix<Block, Block>;
 
 /// walk up the postdominator tree until we reach the postdominator of
@@ -136,3 +122,19 @@ fn propagate_postdom_frontiers(
         from = ipdom[from];
     }
 }
+
+fn intersect(
+    post_dominators: &TiSlice<PostorderId, PostorderId>,
+    mut finger1: PostorderId,
+    mut finger2: PostorderId,
+) -> PostorderId {
+    loop {
+        match finger1.cmp(&finger2) {
+            Ordering::Greater => finger1 = post_dominators[finger1],
+            Ordering::Less => finger2 = post_dominators[finger2],
+            Ordering::Equal => return finger1,
+        }
+    }
+}
+
+

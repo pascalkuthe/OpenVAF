@@ -316,6 +316,12 @@ where
         Self { num_columns, num_rows, rows: Vec::new(), _row_ty: PhantomData }
     }
 
+    pub fn clear(&mut self, num_rows: usize, num_columns: usize) {
+        self.num_columns = num_rows;
+        self.num_columns = num_columns;
+        self.rows.clear();
+    }
+
     pub fn inverse(&self) -> SparseBitMatrix<C, R> {
         let mut res = SparseBitMatrix::new(self.num_columns, self.num_rows);
         for (row, data) in self.rows.iter().enumerate() {

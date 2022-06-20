@@ -444,8 +444,7 @@ impl GVN {
     pub fn init(&mut self, func: &Function, dom_tree: &DominatorTree, num_params: u32) {
         self.dfs_map.populate(func, dom_tree, num_params);
         self.class_map.init(func);
-        self.touched_insts.insert_all();
-        self.touched_insts.ensure_enabled(self.dfs_map.dfs_to_inst.len())
+        self.touched_insts.set_size_enable(self.dfs_map.dfs_to_inst.len())
     }
 
     pub fn inst_class(&self, inst: Inst) -> PackedOption<ClassId> {
@@ -500,6 +499,7 @@ impl GVN {
                     self.process_inst(func, inst)
                 }
             }
+
             if self.touched_insts.is_empty() {
                 break;
             }

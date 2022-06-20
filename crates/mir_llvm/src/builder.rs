@@ -107,7 +107,7 @@ pub struct Builder<'a, 'cx, 'll> {
     pub callbacks: TiVec<FuncRef, Option<CallbackFun<'ll>>>,
     pub prepend_pos: &'ll llvm::BasicBlock,
     pub unfinished_phis: Vec<(PhiNode, &'ll llvm::Value)>,
-    fun: &'ll llvm::Value,
+    pub fun: &'ll llvm::Value,
 }
 
 impl Drop for Builder<'_, '_, '_> {
@@ -432,22 +432,36 @@ impl<'ll> Builder<'_, '_, 'll> {
                 };
 
                 let args = args.as_slice(&self.func.dfg.insts.value_lists);
+                let args = args.iter().map(|operand| self.values[*operand].get(self));
 
-                let operands: Vec<_> = callback
-                    .state
-                    .iter()
-                    .copied()
-                    .chain(args.iter().map(|operand| self.values[*operand].get(self)))
-                    .collect();
-                let res = self.call(callback.fun_ty, callback.fun, &operands);
-                let inst_res = self.func.dfg.inst_results(inst);
-                match inst_res {
-                    [] => (),
-                    [val] => self.values[*val] = res.into(),
-                    vals => {
-                        for (i, val) in vals.iter().enumerate() {
-                            let res = LLVMBuildExtractValue(self.llbuilder, res, i as u32, UNNAMED);
-                            self.values[*val] = res.into();
+                if callback.num_state != 0 {
+                    let args: Vec<_> = args.collect();
+                    let num_iter = callback.state.len() as u32 / callback.num_state;
+                    for i in 0..num_iter {
+                        let start = (i * callback.num_state) as usize;
+                        let end = ((i + 1) * callback.num_state) as usize;
+                        let operands: Vec<_> = callback.state[start..end]
+                            .iter()
+                            .copied()
+                            .chain(args.iter().copied())
+                            .collect();
+                        self.call(callback.fun_ty, callback.fun, &operands);
+                        debug_assert!(self.func.dfg.inst_results(inst).is_empty());
+                    }
+                } else {
+                    let operands: Vec<_> = callback.state.iter().copied().chain(args).collect();
+                    let res = self.call(callback.fun_ty, callback.fun, &operands);
+                    let inst_res = self.func.dfg.inst_results(inst);
+
+                    match inst_res {
+                        [] => (),
+                        [val] => self.values[*val] = res.into(),
+                        vals => {
+                            for (i, val) in vals.iter().enumerate() {
+                                let res =
+                                    LLVMBuildExtractValue(self.llbuilder, res, i as u32, UNNAMED);
+                                self.values[*val] = res.into();
+                            }
                         }
                     }
                 }

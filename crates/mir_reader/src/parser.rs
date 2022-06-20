@@ -269,7 +269,7 @@ impl<'a> Parser<'a> {
     fn match_value(&mut self, ctx: &mut Context, err_msg: &str) -> ParseResult<Value> {
         if let Some(Token::Value(v)) = self.token() {
             while ctx.function.dfg.num_values() <= usize::from(v) {
-                ctx.function.dfg.make_invalid_value_for_parser();
+                ctx.function.dfg.make_invalid_value();
             }
 
             self.consume();
@@ -407,7 +407,7 @@ impl<'a> Parser<'a> {
                 }
                 Some(Token::Value(dst)) => {
                     while ctx.function.dfg.num_values() <= usize::from(dst) {
-                        ctx.function.dfg.make_invalid_value_for_parser();
+                        ctx.function.dfg.make_invalid_value();
                     }
                     self.consume();
                     self.match_token(
@@ -416,7 +416,7 @@ impl<'a> Parser<'a> {
                     )?;
 
                     while ctx.function.dfg.num_values() <= usize::from(dst) {
-                        ctx.function.dfg.make_invalid_value_for_parser();
+                        ctx.function.dfg.make_invalid_value();
                     }
                     match self.token() {
                         Some(Token::Identifier("fconst")) => {
@@ -598,7 +598,7 @@ impl<'a> Parser<'a> {
         let v = self.match_value(ctx, "function argument must be a value")?;
 
         while ctx.function.dfg.num_values() <= usize::from(v) {
-            ctx.function.dfg.make_invalid_value_for_parser();
+            ctx.function.dfg.make_invalid_value();
         }
 
         // Allocate the block argument.

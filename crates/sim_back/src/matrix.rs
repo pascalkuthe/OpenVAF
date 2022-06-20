@@ -1,7 +1,6 @@
 use ahash::AHashMap;
 use bitset::BitSet;
 use hir_def::db::HirDefDB;
-use hir_def::ParamSysFun;
 use hir_lower::{HirInterner, ParamKind};
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
@@ -69,11 +68,6 @@ impl JacobianMatrix {
                     }
                 }
             }
-        }
-
-        let mfactor = intern.ensure_param(func.func, ParamKind::ParamSysFun(ParamSysFun::mfactor));
-        for val in self.resistive.raw.values_mut().chain(self.reactive.raw.values_mut()) {
-            *val = func.ins().fmul(*val, mfactor)
         }
     }
 

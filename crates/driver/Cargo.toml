@@ -8,6 +8,9 @@ license = "GPL-3.0"
 [lib]
 doctest = false
 
+[[bin]]
+name = "openvaf"
+path = "src/main.rs"
 
 
 [dependencies]
@@ -46,4 +49,5 @@ ahash = "0.7"
 anyhow = "1"
 termcolor = "1.1"
 
+mimalloc = { version = "*", default-features = false }
 

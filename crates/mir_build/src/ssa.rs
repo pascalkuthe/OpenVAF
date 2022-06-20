@@ -13,6 +13,7 @@ use mir::builder::InstBuilderBase;
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{Block, Function, PhiNode, Value, ValueList, GRAVESTONE};
 use smallvec::SmallVec;
+use stdx::iter::zip;
 use stdx::packed_option::PackedOption;
 use typed_index_collections::TiVec;
 
@@ -130,7 +131,7 @@ enum Call {
 }
 
 /// The following methods are the API of the SSA builder. Here is how it should be used when
-/// translating to Cranelift IR:
+/// translating to MIR:
 ///
 /// - for each basic block, create a corresponding data for SSA construction with `declare_block`;
 ///
@@ -259,9 +260,10 @@ impl SSABuilder {
                 self.calls.push(Call::UseVar(pred));
             } else {
                 // Break potential cycles by eagerly adding a sentinel value
-                let val = func.dfg.make_invalid_value_for_parser();
+                let val = func.dfg.make_invalid_value();
                 flags.ensure(func.dfg.num_values());
                 flags.insert(val); // conservitive: treat unkown values as op dependent
+                func.dfg.set_tag(val, Some(u32::from(var).into()));
 
                 // Define the operandless param added above to prevent lookup cycles.
                 self.def_var(var, val, block);
@@ -270,7 +272,7 @@ impl SSABuilder {
                 self.begin_predecessors_lookup(val, block);
             }
         } else {
-            let val = func.dfg.make_invalid_value_for_parser();
+            let val = func.dfg.make_invalid_value();
             flags.ensure(func.dfg.num_values());
             flags.insert(val); // conservitive: treat unkown values as op dependent
             func.dfg.set_tag(val, Some(u32::from(var).into()));
@@ -410,8 +412,6 @@ impl SSABuilder {
     ) -> Value {
         debug_assert!(self.calls.is_empty());
         debug_assert!(self.results.is_empty());
-        // self.side_effects may be non-empty here so that callers can
-        // accumulate side effects over multiple calls.
         self.begin_predecessors_lookup(sentinel, block);
         self.run_state_machine(func, flags, var)
     }
@@ -434,7 +434,6 @@ impl SSABuilder {
         func: &mut Function,
         flags: &mut BitSet<Value>,
         sentinel: Value,
-        var: Place,
         dest_block: Block,
     ) {
         let mut pred_values: ZeroOneOrMore<Value> = ZeroOneOrMore::Zero;
@@ -461,7 +460,6 @@ impl SSABuilder {
         }
 
         // Those predecessors' Values have been examined: pop all their results.
-        self.results.truncate(self.results.len() - num_predecessors);
 
         let result_val = match pred_values {
             ZeroOneOrMore::Zero => {
@@ -471,23 +469,24 @@ impl SSABuilder {
                 func.dfg.values.make_alias_at(GRAVESTONE, sentinel);
                 GRAVESTONE
             }
-            ZeroOneOrMore::One(pred_val) => {
+            ZeroOneOrMore::One(mut pred_val) => {
                 // Here all the predecessors use a single value to represent our variable
                 // so we don't need to have it as a block argument.
                 // We need to replace all the occurrences of val with pred_val but since
                 // we can't afford a re-writing pass right now we just declare an alias.
-                // Resolve aliases eagerly so that we can check for cyclic aliasing,
-                // which can occur in unreachable code.
-                let mut resolved = func.dfg.resolve_alias(pred_val);
-                if sentinel == resolved {
+                if sentinel == pred_val {
                     // Cycle detected. Break it by creating a GRAVESTONE
-                    resolved = GRAVESTONE;
+                    pred_val = GRAVESTONE;
                 }
-                if flags.contains(resolved) {
+
+                if flags.contains(pred_val) {
                     flags.insert(sentinel);
+                } else {
+                    flags.remove(sentinel);
                 }
-                func.dfg.values.make_alias_at(resolved, sentinel);
-                resolved
+
+                func.dfg.values.make_alias_at(pred_val, sentinel);
+                pred_val
             }
             ZeroOneOrMore::More => {
                 // There is disagreement in the predecessors on which value to use so we have
@@ -498,13 +497,15 @@ impl SSABuilder {
 
                 let mut op_dependent = false;
 
-                let iter = self.ssa_blocks[dest_block].predecessors.iter().map(|pred_block| {
-                    // We already did a full `use_var` above, so we can do just the fast path.
-                    let pred_val = self.variables[var][*pred_block].unwrap();
-                    op_dependent = op_dependent || flags.contains(pred_val);
-                    let i = args.push(pred_val, &mut func.dfg.insts.value_lists) as u32;
-                    (*pred_block, i)
-                });
+                let vals = &self.results[self.results.len() - num_predecessors..];
+                let iter = zip(self.ssa_blocks[dest_block].predecessors.iter(), vals).map(
+                    |(pred_block, pred_val)| {
+                        // We already did a full `use_var` above, so we can do just the fast path.
+                        op_dependent = op_dependent || flags.contains(*pred_val);
+                        let i = args.push(*pred_val, &mut func.dfg.insts.value_lists) as u32;
+                        (*pred_block, i)
+                    },
+                );
 
                 blocks.insert_sorted_iter(iter, &mut func.dfg.phi_forest, &(), |old, it| {
                     debug_assert_eq!(old, None);
@@ -513,6 +514,8 @@ impl SSABuilder {
 
                 if op_dependent {
                     flags.insert(sentinel);
+                } else {
+                    flags.remove(sentinel);
                 }
 
                 FuncCursor::new(func)
@@ -525,6 +528,7 @@ impl SSABuilder {
             }
         };
 
+        self.results.truncate(self.results.len() - num_predecessors);
         self.results.push(result_val);
     }
 
@@ -572,7 +576,7 @@ impl SSABuilder {
                     self.finish_sealed_one_predecessor(var, ssa_block);
                 }
                 Call::FinishPredecessorsLookup(sentinel, dest_block) => {
-                    self.finish_predecessors_lookup(func, flags, sentinel, var, dest_block);
+                    self.finish_predecessors_lookup(func, flags, sentinel, dest_block);
                 }
             }
         }

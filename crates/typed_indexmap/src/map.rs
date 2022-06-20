@@ -126,6 +126,10 @@ where
         self.raw.get_full(key).map(|(index, _, val)| (index.into(), val))
     }
 
+    pub fn unwrap_index_and_val(&self, key: &K) -> (I, &V) {
+        self.index_and_val(key).unwrap()
+    }
+
     pub fn contains_key(&self, key: &K) -> bool {
         self.raw.contains_key(key)
     }

@@ -1,12 +1,14 @@
-use hir_lower::{CallBackKind, ParamInfoKind, ParamKind, PlaceInfo, PlaceKind};
+use hir_lower::{CallBackKind, ParamInfoKind, ParamKind, PlaceKind};
 
 use llvm::IntPredicate::IntSLT;
 use llvm::{
-    LLVMAppendBasicBlockInContext, LLVMBuildRetVoid, LLVMCreateBuilderInContext,
-    LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd, UNNAMED,
+    LLVMAppendBasicBlockInContext, LLVMBuildBr, LLVMBuildCondBr, LLVMBuildRetVoid,
+    LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd,
+    UNNAMED,
 };
 use mir::ControlFlowGraph;
 use mir_llvm::{Builder, BuilderVal, CallbackFun, CodegenCx};
+use sim_back::SimUnkown;
 
 use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
 use crate::inst_data::OsdiInstanceParam;
@@ -180,6 +182,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         fun_ty: invalid_param_err.0,
                         fun: invalid_param_err.1,
                         state: vec![err_ptr_void, err_len, err_cap, err_param].into_boxed_slice(),
+                        num_state: 0,
                     };
 
                     builder.callbacks[call_id] = Some(cb);
@@ -203,7 +206,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         // store parameters
         for (i, param) in model_data.params.keys().enumerate() {
-            let val = intern.outputs[&PlaceInfo::new(PlaceKind::Param(*param))].unwrap_unchecked();
+            let val = intern.outputs[&PlaceKind::Param(*param)].unwrap_unchecked();
             let inst = func.dfg.value_def(val).unwrap_inst();
             let bb = func.layout.inst_block(inst).unwrap();
             builder.select_bb_before_terminator(bb);
@@ -352,20 +355,19 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             builder.params[dst] = BuilderVal::Eager(temperature)
         }
 
-        for (node_id, node) in module.node_ids.iter_enumerated() {
-            if u32::from(node_id) >= module.num_terminals {
-                break;
-            }
-            if let Some((dst, val)) =
-                intern.params.index_and_val(&ParamKind::PortConnected { port: *node })
-            {
-                if func.dfg.value_dead(*val) {
-                    continue;
-                }
+        for (node_id, unkown) in module.node_ids.iter_enumerated() {
+            if let SimUnkown::KirchoffLaw(node) = unkown {
+                if let Some((dst, val)) =
+                    intern.params.index_and_val(&ParamKind::PortConnected { port: *node })
+                {
+                    if func.dfg.value_dead(*val) {
+                        continue;
+                    }
 
-                let id = builder.cx.const_unsigned_int(node_id.into());
-                let is_connected = unsafe { builder.int_cmp(id, connected_terminals, IntSLT) };
-                builder.params[dst] = BuilderVal::Eager(is_connected)
+                    let id = builder.cx.const_unsigned_int(node_id.into());
+                    let is_connected = unsafe { builder.int_cmp(id, connected_terminals, IntSLT) };
+                    builder.params[dst] = BuilderVal::Eager(is_connected)
+                }
             }
         }
 
@@ -408,18 +410,27 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             fun: invalid_param_err.1,
                             state: vec![err_ptr_void, err_len, err_cap, err_param]
                                 .into_boxed_slice(),
+                            num_state: 0,
                         }
                     } else {
                         trivial_cb.clone()
                     }
                 }
                 CallBackKind::CollapseHint(node1, node2) => {
-                    let idx = module.mir.collapse.unwrap_index(&(*node1, *node2));
+                    let (idx, extra_indecies) = module.mir.collapse.unwrap_index_and_val(&(
+                        SimUnkown::KirchoffLaw(*node1),
+                        node2.map(SimUnkown::KirchoffLaw),
+                    ));
                     let idx = builder.cx.const_unsigned_int(idx.into());
+                    let extra_indecies =
+                        extra_indecies.iter().map(|&idx| builder.cx.const_unsigned_int(idx.into()));
+                    let mut state = vec![instance, idx];
+                    state.extend(extra_indecies);
                     CallbackFun {
                         fun_ty: mark_collapsed.1,
                         fun: mark_collapsed.0,
-                        state: vec![instance, idx].into_boxed_slice(),
+                        state: state.into_boxed_slice(),
+                        num_state: 2,
                     }
                 }
                 _ => continue,
@@ -430,6 +441,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         unsafe {
             builder.build_consts();
+            // for (_, kind, val) in intern.live_params(&func.dfg) {
+            //     if matches!(builder.values[val], BuilderVal::Undef) {
+            //         println!("hmm {val} = {kind:?}");
+            //     }
+            // }
             builder.build_cfg(&postorder);
         }
         let exit_bb = *postorder
@@ -446,7 +462,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let val = match param {
                 OsdiInstanceParam::Builtin(_) => continue,
                 OsdiInstanceParam::User(param) => {
-                    intern.outputs[&PlaceInfo::new(PlaceKind::Param(*param))].unwrap_unchecked()
+                    intern.outputs[&PlaceKind::Param(*param)].unwrap_unchecked()
                 }
             };
 
@@ -462,6 +478,29 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         builder.select_bb(exit_bb);
 
+        for (idx, (collapse, _)) in module.mir.collapse.iter_enumerated() {
+            if let (SimUnkown::Implicit(equation), None) = collapse {
+                let should_collapse = PlaceKind::CollapseImplicitEquation(*equation);
+                let outputs = &module.mir.init_inst_intern.outputs;
+                let should_collapse = outputs[&should_collapse].unwrap_unchecked();
+                unsafe {
+                    let should_collapse = builder.values[should_collapse].get(&builder);
+                    let idx = builder.cx.const_unsigned_int(idx.into());
+
+                    let llcx = builder.cx.llcx;
+                    let llbuilder = &*builder.llbuilder;
+
+                    let else_bb = LLVMAppendBasicBlockInContext(llcx, builder.fun, UNNAMED);
+                    let then_bb = LLVMAppendBasicBlockInContext(llcx, builder.fun, UNNAMED);
+                    LLVMBuildCondBr(llbuilder, should_collapse, then_bb, else_bb);
+                    LLVMPositionBuilderAtEnd(llbuilder, then_bb);
+                    inst_data.store_is_collapsible(builder.cx, builder.llbuilder, instance, idx);
+                    LLVMBuildBr(llbuilder, else_bb);
+                    LLVMPositionBuilderAtEnd(llbuilder, else_bb);
+                }
+            }
+        }
+
         unsafe { builder.ret_void() }
 
         for (&val, &slot) in module.mir.init_inst_cache_vals.iter() {
@@ -473,7 +512,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             builder.select_bb_before_terminator(bb);
             unsafe {
                 let val = builder.values[val].get(&builder);
-                inst_data.store_cache_slot(builder.llbuilder, slot, instance, val)
+                inst_data.store_cache_slot(module, builder.llbuilder, slot, instance, val)
             }
         }
 

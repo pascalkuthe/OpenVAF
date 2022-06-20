@@ -1,27 +1,29 @@
 use std::mem::swap;
 
-use bitset::BitSet;
+use bitset::{BitSet, SparseBitMatrix};
 use hir_def::db::HirDefDB;
-use hir_def::{NodeId, Type};
-use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
+use hir_def::Type;
+use hir_lower::{CallBackKind, CurrentKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
+use hir_ty::inference::BranchWrite;
 use indexmap::{IndexMap, IndexSet};
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{ControlFlowGraph, Function, InstructionData, Opcode, Value};
+use mir::{ControlFlowGraph, Function, InstructionData, Value, FALSE};
 use mir_autodiff::auto_diff;
 use mir_opt::{
-    agressive_dead_code_elimination, dead_code_elimination, inst_combine, postdom_frontiers,
-    propagate_taint, simplify_cfg, sparse_conditional_constant_propagation, ClassId, DominatorTree,
-    GVN,
+    agressive_dead_code_elimination, dead_code_elimination, inst_combine, propagate_taint,
+    simplify_cfg, simplify_cfg_no_phi_merge, sparse_conditional_constant_propagation, ClassId,
+    DominatorTree, GVN,
 };
 use stdx::packed_option::PackedOption;
 use stdx::{impl_debug_display, impl_idx_from};
-use typed_indexmap::{TiMap, TiSet};
+use typed_indexmap::TiMap;
 
 use crate::compilation_db::{CompilationDB, ModuleInfo};
 use crate::matrix::JacobianMatrix;
 use crate::residual::Residual;
+use crate::{strip_optbarrier, SimUnkown};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct CacheSlot(u32);
@@ -50,7 +52,7 @@ pub struct EvalMir {
     pub init_model_intern: HirInterner,
     pub init_model_func: Function,
 
-    pub collapse: TiSet<CollapsePair, (NodeId, Option<NodeId>)>,
+    pub collapse: TiMap<CollapsePair, (SimUnkown, Option<SimUnkown>), Vec<CollapsePair>>,
 }
 
 impl EvalMir {
@@ -61,6 +63,7 @@ impl EvalMir {
             &|kind| match kind {
                 PlaceKind::Contribute { .. }
                 | PlaceKind::ImplicitResidual { .. }
+                | PlaceKind::CollapseImplicitEquation(_)
                 | PlaceKind::IsVoltageSrc(_) => true,
                 PlaceKind::Var(var) => module.op_vars.contains_key(&var),
                 _ => false,
@@ -77,7 +80,7 @@ impl EvalMir {
         let mut cfg = ControlFlowGraph::new();
         cfg.compute(&func);
 
-        simplify_cfg(&mut func, &mut cfg);
+        simplify_cfg_no_phi_merge(&mut func, &mut cfg);
 
         for (param, (kind, _)) in intern.params.iter_enumerated() {
             if matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
@@ -95,9 +98,22 @@ impl EvalMir {
         dead_code_elimination(&mut func, &output_values);
         sparse_conditional_constant_propagation(&mut func, &cfg);
         inst_combine(&mut func);
-        simplify_cfg(&mut func, &mut cfg);
+        simplify_cfg_no_phi_merge(&mut func, &mut cfg);
+
         let mut dom_tree = DominatorTree::default();
-        dom_tree.compute(&func, &cfg);
+        dom_tree.compute(&func, &cfg, true, true, false);
+
+        // dom_tree.render_dom_frontier(
+        //     std::path::Path::new("dom_frontiers.dot"),
+        //     "main_dom_frontiers",
+        //     &func,
+        // );
+        // dom_tree.render_pdom_frontier(
+        //     std::path::Path::new("postdom_frontiers.dot"),
+        //     "main_postdom_frontiers",
+        //     &func,
+        // );
+
         let mut gvn = GVN::default();
         gvn.init(&func, &dom_tree, intern.params.len() as u32);
         gvn.solve(&mut func);
@@ -115,65 +131,10 @@ impl EvalMir {
 
         output_values.clear();
         for (kind, val) in intern.outputs.iter() {
-            if matches!(kind, PlaceKind::Var(var) if module.op_vars.contains_key(var)) {
+            if matches!(kind, PlaceKind::Var(var) if module.op_vars.contains_key(var))
+                || matches!(kind, PlaceKind::CollapseImplicitEquation(_))
+            {
                 output_values.insert(val.unwrap_unchecked());
-            }
-        }
-
-        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
-        let mut residual = Residual::default();
-        residual.populate(db, &mut cursor, &mut intern);
-        output_block = cursor.current_block().unwrap();
-
-        let unkowns = intern.unkowns(&mut func, true);
-        let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &unkowns);
-        let ad = auto_diff(&mut func, &cfg, &unkowns, &extra_derivatives);
-
-        let mut matrix = JacobianMatrix::default();
-        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
-        matrix.populate(&mut cursor, &mut intern, &residual.resistive, false, &ad, &unkowns);
-        matrix.populate(&mut cursor, &mut intern, &residual.reactive, true, &ad, &unkowns);
-
-        output_values.ensure(cursor.func.dfg.num_values() + 1);
-        matrix.insert_opt_barries(&mut cursor, &mut output_values);
-        residual.insert_opt_barries(&mut cursor, &mut output_values);
-
-        sparse_conditional_constant_propagation(&mut func, &cfg);
-        simplify_cfg(&mut func, &mut cfg);
-        inst_combine(&mut func);
-        dom_tree.clear();
-        dom_tree.compute(&func, &cfg);
-        gvn.init(&func, &dom_tree, intern.params.len() as u32);
-        gvn.solve(&mut func);
-        gvn.remove_unnecessary_insts(&mut func, &dom_tree);
-
-        let control_dep = postdom_frontiers(&cfg, &func);
-        agressive_dead_code_elimination(
-            &mut func,
-            &mut cfg,
-            &|val, _| output_values.contains(val),
-            &control_dep,
-        );
-
-        simplify_cfg(&mut func, &mut cfg);
-
-        matrix.strip_opt_barries(&mut func, &mut output_values);
-        residual.strip_opt_barries(&mut func, &mut output_values);
-        matrix.sparsify();
-        residual.sparsify();
-
-        for (kind, out_val) in intern.outputs.iter_mut() {
-            if matches!(&kind, PlaceKind::Var(var) if module.op_vars.contains_key(var)) {
-                let val = out_val.unwrap_unchecked();
-                if let Some(inst) = func.dfg.value_def(val).inst() {
-                    if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } =
-                        func.dfg.insts[inst]
-                    {
-                        output_values.remove(val);
-                        output_values.insert(arg);
-                        *out_val = arg.into();
-                    }
-                }
             }
         }
 
@@ -187,7 +148,12 @@ impl EvalMir {
                 }
                 if matches!(
                     param,
-                    ParamKind::Voltage { .. } | ParamKind::Current(_) | ParamKind::HiddenState(_)
+                    ParamKind::Voltage { .. }
+                        | ParamKind::Current(_)
+                        | ParamKind::ImplicitUnkown(_)
+                        | ParamKind::Abstime
+                        | ParamKind::EnableIntegration
+                        | ParamKind::HiddenState(_)
                 ) {
                     Some(val)
                 } else {
@@ -207,9 +173,114 @@ impl EvalMir {
             }
         }
 
-        let control_dep = postdom_frontiers(&cfg, &func);
-        let op_dependent = propagate_taint(&func, &control_dep, &op_dependent);
-        let mut collapse = TiSet::default();
+        let op_dependent_insts = propagate_taint(&func, &dom_tree, &op_dependent);
+
+        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
+        let mut residual = Residual::default();
+        residual.populate(db, &mut cursor, &mut intern, &mut cfg, &op_dependent_insts);
+        let new_output_bb = cursor.current_block().unwrap();
+        output_block = new_output_bb;
+
+        let unkowns = intern.unkowns(&mut func, true);
+        let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &unkowns);
+        let ad = auto_diff(&mut func, &cfg, &unkowns, &extra_derivatives);
+
+        let mut matrix = JacobianMatrix::default();
+        let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
+        matrix.populate(&mut cursor, &mut intern, &residual.resistive, false, &ad, &unkowns);
+        matrix.populate(&mut cursor, &mut intern, &residual.reactive, true, &ad, &unkowns);
+
+        output_values.ensure(cursor.func.dfg.num_values() + 1);
+        matrix.insert_opt_barries(&mut cursor, &mut output_values);
+        residual.insert_opt_barries(&mut cursor, &mut output_values);
+
+        sparse_conditional_constant_propagation(&mut func, &cfg);
+        simplify_cfg(&mut func, &mut cfg);
+        inst_combine(&mut func);
+
+        dom_tree.compute(&func, &cfg, true, true, false);
+        // cfg.render(std::path::Path::new("cfg.dot"), "main_cfg", &func);
+        // dom_tree.render_idom(std::path::Path::new("domtree.dot"), "main_domtree", &func);
+        // dom_tree.render_ipdom(std::path::Path::new("postdomtree.dot"), "main_postdomtree", &func);
+
+        gvn.init(&func, &dom_tree, intern.params.len() as u32);
+        gvn.solve(&mut func);
+        gvn.remove_unnecessary_insts(&mut func, &dom_tree);
+
+        let mut control_dep = SparseBitMatrix::new(0, 0);
+        dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
+
+        agressive_dead_code_elimination(
+            &mut func,
+            &mut cfg,
+            &|val, _| output_values.contains(val),
+            &control_dep,
+        );
+
+        simplify_cfg(&mut func, &mut cfg);
+
+        matrix.strip_opt_barries(&mut func, &mut output_values);
+        residual.strip_opt_barries(&mut func, &mut output_values);
+        matrix.sparsify();
+        residual.sparsify();
+
+        let mut collapse = TiMap::default();
+        let mut init_output_values = BitSet::new_empty(func.dfg.num_values());
+        for (kind, out_val) in intern.outputs.iter_mut() {
+            let dst = match kind {
+                PlaceKind::Var(var) if module.op_vars.contains_key(var) => &mut output_values,
+                PlaceKind::CollapseImplicitEquation(equ)
+                    if strip_optbarrier(&func, out_val.unwrap_unchecked()) != FALSE =>
+                {
+                    collapse.insert((SimUnkown::Implicit(*equ), None), vec![]);
+                    &mut init_output_values
+                }
+                _ => continue,
+            };
+            let old_val = out_val.unwrap_unchecked();
+            let val = strip_optbarrier(&func, old_val);
+            dst.insert(val);
+            output_values.remove(old_val);
+            *out_val = val.into();
+        }
+
+        let mut op_dependent: Vec<Value> = intern
+            .params
+            .raw
+            .iter()
+            .filter_map(|(param, &val)| {
+                if func.dfg.value_dead(val) {
+                    return None;
+                }
+                if matches!(
+                    param,
+                    ParamKind::Voltage { .. }
+                        | ParamKind::Current(_)
+                        | ParamKind::ImplicitUnkown(_)
+                        | ParamKind::Abstime
+                        | ParamKind::EnableIntegration
+                        | ParamKind::HiddenState(_)
+                ) {
+                    Some(val)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for inst in func.dfg.insts.iter() {
+            if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
+                match intern.callbacks[func_ref] {
+                    CallBackKind::SimParam
+                    | CallBackKind::SimParamOpt
+                    | CallBackKind::SimParamStr => op_dependent.push(func.dfg.first_result(inst)),
+                    _ => (),
+                }
+            }
+        }
+
+        dom_tree.compute(&func, &cfg, true, true, false);
+        let op_dependent = propagate_taint(&func, &dom_tree, &op_dependent);
 
         let mut init_inst_func = func.clone();
         let mut init_inst_cfg = cfg.clone();
@@ -225,15 +296,27 @@ impl EvalMir {
 
             if op_dependent.contains(inst) {
                 if !func.dfg.insts[inst].is_terminator() {
+                    #[cfg(debug_assertions)]
                     if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
                         if let CallBackKind::CollapseHint(_, _) = intern.callbacks[func_ref] {
-                            // TODO WARN
+                            func.dfg.zap_inst(inst);
+                            func.layout.remove_inst(inst);
                         }
                     }
                     init_inst_func.dfg.zap_inst(inst);
                     init_inst_func.layout.remove_inst(inst);
-                } else if let InstructionData::Branch { else_dst, .. } = func.dfg.insts[inst] {
+                } else if let InstructionData::Branch { else_dst, then_dst, .. } =
+                    func.dfg.insts[inst]
+                {
                     init_inst_func.dfg.replace(inst).jump(else_dst);
+                    let block = init_inst_func.layout.inst_block(inst).unwrap();
+                    let mut pos = init_inst_func.layout.block_inst_cursor(then_dst);
+                    while let Some(inst) = pos.next(&init_inst_func.layout) {
+                        if init_inst_func.dfg.insts[inst].is_phi() {
+                            let rem = init_inst_func.dfg.try_remove_phi_edge_at(inst, block);
+                            debug_assert!(rem.is_some());
+                        }
+                    }
                     init_inst_cfg.recompute_block(&init_inst_func, bb);
                 }
             } else if func
@@ -263,12 +346,15 @@ impl EvalMir {
                                 swap(&mut lo, &mut hi);
                             }
 
-                            collapse.ensure((hi, Some(lo)));
+                            collapse.insert(
+                                (SimUnkown::KirchoffLaw(hi), Some(SimUnkown::KirchoffLaw(lo))),
+                                vec![],
+                            );
                         } else {
                             if hi_gnd {
                                 continue;
                             }
-                            collapse.ensure((hi, None));
+                            collapse.insert((SimUnkown::KirchoffLaw(hi), None), vec![]);
                         }
                     }
                 }
@@ -276,6 +362,31 @@ impl EvalMir {
                 func.layout.remove_inst(inst);
             }
         }
+
+        for nodes in [residual.resistive.raw.keys(), residual.reactive.raw.keys()] {
+            for node in nodes {
+                if let SimUnkown::Current(curr) = node {
+                    let (hi, lo) = match *curr {
+                        CurrentKind::Branch(br) => BranchWrite::Named(br).nodes(db),
+                        CurrentKind::Unnamed { hi, lo } => (hi, lo),
+                        CurrentKind::Port(_) => continue,
+                    };
+                    let lo = lo.map(SimUnkown::KirchoffLaw);
+                    let hi = SimUnkown::KirchoffLaw(hi);
+                    if collapse.contains_key(&(hi, lo)) {
+                        // careful, if we insert extra derivatives for currents then we need to
+                        // check that we are not overwritign that list here
+                        let pair = collapse.insert_full((*node, None), vec![]).0;
+                        if let Some(extra_collapse) = collapse.raw.get_mut(&(hi, lo)) {
+                            extra_collapse.push(pair)
+                        }
+                    }
+                }
+            }
+        }
+
+        dom_tree.compute(&func, &cfg, false, true, false);
+        dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
 
         agressive_dead_code_elimination(
             &mut func,
@@ -307,13 +418,13 @@ impl EvalMir {
                         PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => {
                             Type::Real
                         }
-                        PlaceKind::ParamMin(_) | PlaceKind::ParamMax(_) => {
+                        PlaceKind::ParamMin(_)
+                        | PlaceKind::ParamMax(_)
+                        | PlaceKind::CollapseImplicitEquation(_)
+                        | PlaceKind::Param(_) => {
                             unreachable!()
                         }
-                        PlaceKind::Param(_) => unreachable!(),
-                        PlaceKind::CollapseImplicitEquation(_) | PlaceKind::IsVoltageSrc(_) => {
-                            Type::Bool
-                        }
+                        PlaceKind::IsVoltageSrc(_) => Type::Bool,
                     }
                 } else {
                     Type::Real
@@ -339,11 +450,14 @@ impl EvalMir {
             })
             .collect();
 
+        dom_tree.compute(&init_inst_func, &init_inst_cfg, false, true, false);
+        dom_tree.compute_postdom_frontiers(&init_inst_cfg, &mut control_dep);
+
         // TODO seperate model dependent code
         agressive_dead_code_elimination(
             &mut init_inst_func,
             &mut init_inst_cfg,
-            &|val, _| init_inst_cache_vals.contains_key(&val),
+            &|val, _| init_inst_cache_vals.contains_key(&val) || init_output_values.contains(val),
             &control_dep,
         );
 

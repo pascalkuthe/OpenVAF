@@ -162,7 +162,7 @@ pub fn diode() {
                 end
                 else
                 <missing>;
-                I(br_sht, )<+V(br_sht, ) / rth_t - pterm;
+                I(br_sht, )<+pterm - V(br_sht, ) / rth_t;
             end
             else
             begin: (Root)

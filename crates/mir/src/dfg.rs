@@ -331,8 +331,8 @@ impl DataFlowGraph {
 }
 
 impl DataFlowGraph {
-    pub fn make_invalid_value_for_parser(&mut self) -> Value {
-        self.values.make(ValueDataType::False, None)
+    pub fn make_invalid_value(&mut self) -> Value {
+        self.values.make(ValueDataType::Invalid, None)
     }
 }
 

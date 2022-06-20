@@ -426,15 +426,20 @@ impl DfgValues {
         self.str_consts.insert(val, dst);
         self.defs[dst].ty = ValueDataType::Sconst { val };
     }
+
+    #[inline]
+    pub fn resolve_alias(&self, mut val: Value) -> Value {
+        while let ValueDataType::Alias(res) = self.defs[val].ty {
+            val = res
+        }
+        val
+    }
 }
 
 impl DataFlowGraph {
     #[inline]
-    pub fn resolve_alias(&self, mut val: Value) -> Value {
-        while let ValueDataType::Alias(res) = self.values.defs[val].ty {
-            val = res
-        }
-        val
+    pub fn resolve_alias(&self, val: Value) -> Value {
+        self.values.resolve_alias(val)
     }
 
     pub fn strip_alias(&mut self) {

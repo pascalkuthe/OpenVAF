@@ -1,21 +1,19 @@
-use bitset::{BitSet, SparseBitMatrix};
+use bitset::BitSet;
 use mir::{Block, Function, Inst, InstructionData, Value};
 
-use crate::post_dominators::PostDominanceFrontiers;
+use crate::DominatorTree;
 
 pub fn propagate_taint(
     func: &Function,
-    control_dep: &PostDominanceFrontiers,
+    dom_tree: &DominatorTree,
     tainted: &[Value],
 ) -> BitSet<Inst> {
-    let inv_control_dep = control_dep.inverse();
-
     let mut solver = TaintSolver {
-        control_dependents: &inv_control_dep,
+        dom_tree,
         func,
         inst_queue: Vec::new(),
-        tainted_insts: BitSet::new_empty(func.dfg.num_insts()),
         tainted_blocks: BitSet::new_empty(func.layout.num_blocks()),
+        tainted_insts: BitSet::new_empty(func.dfg.num_insts()),
     };
 
     for val in tainted {
@@ -30,7 +28,7 @@ pub fn propagate_taint(
 }
 
 struct TaintSolver<'a> {
-    control_dependents: &'a SparseBitMatrix<Block, Block>,
+    dom_tree: &'a DominatorTree,
     func: &'a Function,
 
     inst_queue: Vec<Inst>,
@@ -45,10 +43,20 @@ impl TaintSolver<'_> {
         }
     }
 
-    fn taint_block(&mut self, block: Block) {
-        if self.tainted_blocks.insert(block) {
-            for inst in self.func.layout.block_insts(block) {
-                self.taint_inst(inst)
+    fn taint_block(&mut self, mut block: Block, end: Option<Block>) {
+        loop {
+            if Some(block) == end {
+                return;
+            }
+
+            if self.tainted_blocks.insert(block) {
+                for inst in self.func.layout.block_insts(block) {
+                    self.taint_inst(inst);
+                }
+            }
+
+            if let Some(next) = self.dom_tree.ipdom(block) {
+                block = next;
             }
         }
     }
@@ -56,13 +64,13 @@ impl TaintSolver<'_> {
     fn solve(&mut self) {
         while let Some(inst) = self.inst_queue.pop() {
             match self.func.dfg.insts[inst] {
-                InstructionData::Branch { .. } => {
+                InstructionData::Branch { then_dst, else_dst, .. } => {
                     let bb = self.func.layout.inst_block(inst).unwrap();
-                    if let Some(depenents) = self.control_dependents.row(bb) {
-                        for dep in depenents.iter() {
-                            self.taint_block(dep)
-                        }
-                    }
+                    let end = self.dom_tree.ipdom(bb);
+                    self.taint_block(then_dst, end);
+                    self.taint_block(else_dst, end);
+                    // self.taint_dom_frontier_phis(bb, then_dst);
+                    // self.taint_dom_frontier_phis(bb, else_dst);
                     continue;
                 }
                 InstructionData::Jump { destination } => {
@@ -73,6 +81,7 @@ impl TaintSolver<'_> {
                             break;
                         }
                     }
+                    continue;
                 }
                 _ => (),
             }

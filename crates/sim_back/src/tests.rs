@@ -13,7 +13,6 @@ use typed_index_collections::{TiSlice, TiVec};
 use crate::compilation_db::CompilationDB;
 use crate::matrix::JacobianMatrix;
 use crate::middle::EvalMir;
-use crate::residual::Residual;
 use crate::SimUnkown;
 
 mod stamps;
@@ -80,38 +79,6 @@ impl JacobianMatrix {
                 )
             }
         }
-    }
-}
-
-impl Residual {
-    fn resistive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
-        self.resistive
-            .raw
-            .iter()
-            .filter_map(|(unkown, val)| {
-                if let SimUnkown::KirchoffLaw(node) = unkown {
-                    let name = db.node_data(*node).name.to_string();
-                    Some((name, *val))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    fn reactive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
-        self.reactive
-            .raw
-            .iter()
-            .filter_map(|(unkown, val)| {
-                if let SimUnkown::KirchoffLaw(node) = unkown {
-                    let name = db.node_data(*node).name.to_string();
-                    Some((name, *val))
-                } else {
-                    None
-                }
-            })
-            .collect()
     }
 }
 

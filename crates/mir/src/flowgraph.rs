@@ -23,9 +23,10 @@
 //! Here `Block1` and `Block2` would each have a single predecessor denoted as `(Block0, brz)`
 //! and `(Block0, jmp Block2)` respectively.
 
-use std::cmp::Ordering;
+use std::fs::File;
 use std::iter::FilterMap;
 use std::ops::Index;
+use std::path::Path;
 
 use bforest::Set;
 use stdx::packed_option::PackedOption;
@@ -61,7 +62,7 @@ pub struct CFGNode {
 }
 
 #[derive(Clone, Default, Copy, PartialEq, Eq, Debug)]
-pub struct Successors(PackedOption<Block>, PackedOption<Block>);
+pub struct Successors(pub PackedOption<Block>, pub PackedOption<Block>);
 
 impl Successors {
     #[inline]
@@ -73,30 +74,19 @@ impl Successors {
     #[inline]
     pub fn insert(&mut self, bb: Block) -> bool {
         let res = PackedOption::from(bb);
-        let res = match self.0.cmp(&res) {
-            Ordering::Equal => false,
-            Ordering::Less => {
-                let changed = self.1 != res;
-                debug_assert!(
-                    self.1.is_none() || !changed,
-                    "not space to insert {} into [{:?}, {:?}]",
-                    bb,
-                    self.0,
-                    self.1
-                );
-                self.1 = res;
-                changed
-            }
-            Ordering::Greater => {
-                debug_assert!(self.0.is_none() || self.1.is_none());
-                self.1 = self.0;
-                self.0 = res;
-                true
-            }
-        };
+        if self.0.is_none() {
+            self.0 = res;
+        } else if self.0 == res {
+            return false;
+        } else if self.1.is_none() {
+            self.1 = res;
+        } else if self.1 == res {
+            return false;
+        } else if cfg!(debug_assertions) {
+            unreachable!("not space to insert {} into [{:?}, {:?}]", bb, self.0, self.1);
+        }
 
-        debug_assert_ne!(self.0, self.1);
-        res
+        true
     }
 
     #[inline]
@@ -115,8 +105,17 @@ impl Successors {
         [self.0, self.1].into_iter().filter_map(|it| it.expand())
     }
 
+    #[inline]
+    pub fn as_array(self) -> [PackedOption<Block>; 2] {
+        [self.0, self.1]
+    }
+
     pub fn is_empty(self) -> bool {
         self.0.is_none()
+    }
+
+    pub fn as_pair(self) -> Option<(Block, Block)> {
+        Some((self.0.expand()?, self.1.expand()?))
     }
 }
 
@@ -133,6 +132,57 @@ pub struct ControlFlowGraph {
     data: TiVec<Block, CFGNode>,
     pred_forest: bforest::SetForest<Block>,
     valid: bool,
+}
+
+pub struct CfgRender<'a> {
+    pub cfg: &'a ControlFlowGraph,
+    pub func: &'a Function,
+    pub name: &'a str,
+}
+
+impl ControlFlowGraph {
+    pub fn render(&self, dst: &Path, name: &str, func: &Function) {
+        CfgRender { cfg: self, func, name }.to_dot(dst)
+    }
+}
+
+impl CfgRender<'_> {
+    pub fn to_dot(&self, dst: &Path) {
+        let mut dst = File::create(dst).unwrap();
+        dot::render(self, &mut dst).unwrap()
+    }
+}
+
+impl<'a> dot::Labeller<'a, Block, (Block, Block)> for CfgRender<'a> {
+    fn graph_id(&'a self) -> dot::Id<'a> {
+        dot::Id::new(self.name).unwrap()
+    }
+
+    fn node_id(&'a self, n: &Block) -> dot::Id<'a> {
+        dot::Id::new(n.to_string()).unwrap()
+    }
+}
+
+impl<'a> dot::GraphWalk<'a, Block, (Block, Block)> for CfgRender<'a> {
+    fn nodes(&'a self) -> dot::Nodes<'a, Block> {
+        self.func.layout.blocks().collect()
+    }
+
+    fn edges(&'a self) -> dot::Edges<'a, (Block, Block)> {
+        self.func
+            .layout
+            .blocks()
+            .flat_map(|bb| self.cfg.data[bb].successors.iter().map(move |succ| (bb, succ)))
+            .collect()
+    }
+
+    fn source(&'a self, edge: &(Block, Block)) -> Block {
+        edge.0
+    }
+
+    fn target(&'a self, edge: &(Block, Block)) -> Block {
+        edge.1
+    }
 }
 
 impl ControlFlowGraph {
@@ -175,8 +225,10 @@ impl ControlFlowGraph {
             match func.dfg.insts[inst] {
                 InstructionData::Jump { destination } => self.add_edge(block, destination),
                 InstructionData::Branch { then_dst, else_dst, .. } => {
-                    self.add_edge(block, then_dst);
+                    // CAREFUL: Do not change the order of edges here. We want postorder
+                    // trasnversal to always take the loop free path
                     self.add_edge(block, else_dst);
+                    self.add_edge(block, then_dst);
                 }
                 _ => (),
             }
@@ -232,9 +284,13 @@ impl ControlFlowGraph {
         self.invalidate_block_successors(old);
     }
 
-    fn add_edge(&mut self, from: Block, to: Block) {
+    pub fn add_edge(&mut self, from: Block, to: Block) {
         self.data[from].successors.insert(to);
         self.data[to].predecessors.insert(from, &mut self.pred_forest, &());
+    }
+
+    pub fn ensure_bb(&mut self, bb: Block) {
+        self.data.resize(usize::from(bb) + 1, CFGNode::default())
     }
 
     /// Get an iterator over the CFG predecessors to `block`.

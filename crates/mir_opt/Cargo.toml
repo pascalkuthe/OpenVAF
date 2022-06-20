@@ -22,6 +22,7 @@ typed-index-collections = "3.0"
 ahash = "0.7"
 hashbrown = {version = "0.12", features = ["raw"]}
 indexmap = "1.6"
+dot = "0.1.4"
 
 [dev-dependencies]
 expect-test = "1.1"

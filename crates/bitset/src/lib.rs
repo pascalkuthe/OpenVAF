@@ -258,12 +258,12 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
         }
     }
 
-    pub fn ensure_enabled(&mut self, min_domain_size: usize) {
-        if self.domain_size < min_domain_size {
+    pub fn set_size_enable(&mut self, domain_size: usize) {
+        if self.domain_size < domain_size {
             let len = self.words.len();
             if let Some(last) = self.words.last_mut() {
                 let last_pos = len - 1;
-                for i in self.domain_size..min_domain_size {
+                for i in self.domain_size..domain_size {
                     let (pos, word) = word_index_and_mask(i);
                     if pos != last_pos {
                         break;
@@ -271,16 +271,12 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
                     *last |= word;
                 }
             }
-            self.domain_size = min_domain_size;
-        } else {
-            return;
+            self.domain_size = domain_size;
         }
 
-        let min_num_words = num_words(min_domain_size);
-        if self.words.len() < min_num_words {
-            self.words.resize(min_num_words, u64::MAX)
-        }
-        self.clear_excess_bits()
+        let num_words = num_words(domain_size);
+        self.words.resize(num_words, u64::MAX);
+        self.insert_all();
     }
 }
 

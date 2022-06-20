@@ -1,10 +1,11 @@
 use ahash::RandomState;
-use hir_def::{ParamId, ParamSysFun, VarId};
-use hir_lower::{ParamKind, PlaceKind, PlaceInfo};
+use hir_def::{ParamId, ParamSysFun, Type, VarId};
+use hir_lower::{ParamKind, PlaceKind};
 use indexmap::IndexMap;
 use llvm::{
-    LLVMBuildFAdd, LLVMBuildGEP2, LLVMBuildLoad2, LLVMBuildStore, LLVMBuildStructGEP2,
-    LLVMOffsetOfElement, LLVMSetFastMath, TargetData, UNNAMED,
+    IntPredicate, LLVMBuildFAdd, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildIntCast2, LLVMBuildLoad2,
+    LLVMBuildStore, LLVMBuildStructGEP2, LLVMConstInt, LLVMOffsetOfElement, LLVMSetFastMath,
+    TargetData, UNNAMED,
 };
 use mir::{Const, Param, Value, ValueDef};
 use mir_llvm::{CodegenCx, MemLoc};
@@ -29,7 +30,8 @@ pub const JACOBIAN_PTR_REACT: u32 = 2;
 pub const NODE_MAPPING: u32 = 3;
 pub const COLLAPSED: u32 = 4;
 pub const TEMPERATURE: u32 = 5;
-pub const CONNTEDED_PORTS: u32 = 6;
+pub const CONNECTED: u32 = 6;
+// pub const MAX_STEP_SIZE: u32 = 7;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum EvalOutput {
@@ -49,7 +51,7 @@ impl EvalOutput {
         match cgunit.mir.eval_func.dfg.value_def(val) {
             ValueDef::Result(_, _) => (),
             ValueDef::Param(param) => {
-                // all non-op dependent parameters are already stored in instance or model :)
+                // all non-op dependent parameters are already stored in instance or model
                 // ParamGiven and PortConnected are not possible here because they are bools but
                 // there are not bool eval outputs
                 if !matches!(
@@ -58,7 +60,10 @@ impl EvalOutput {
                         ParamKind::Current(_)
                             | ParamKind::Voltage { .. }
                             | ParamKind::ParamGiven { .. }
-                            | ParamKind::PortConnected { .. },
+                            | ParamKind::PortConnected { .. }
+                            | ParamKind::ImplicitUnkown { .. }
+                            | ParamKind::EnableIntegration { .. }
+                            | ParamKind::Abstime,
                         _
                     ))
                 ) {
@@ -128,7 +133,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             .op_vars
             .iter()
             .map(|(var, info)| {
-                let val = cgunit.mir.eval_intern.outputs[&PlaceInfo::new(PlaceKind::Var(*var))].unwrap_unchecked();
+                let val = cgunit.mir.eval_intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
                 let ty = lltype(&info.ty, cx);
                 let pos = EvalOutput::new(cgunit, val, &mut eval_outputs, true, ty);
                 (*var, pos)
@@ -613,22 +618,39 @@ impl<'ll> OsdiInstanceData<'ll> {
 
     pub unsafe fn load_cache_slot(
         &self,
+        module: &OsdiModule,
         llbuilder: &llvm::Builder<'ll>,
         slot: CacheSlot,
         ptr: &'ll llvm::Value,
     ) -> &'ll llvm::Value {
         let (ptr, ty) = self.cache_slot_ptr(llbuilder, slot, ptr);
-        LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED)
+        let mut val = LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED);
+
+        if module.mir.init_inst_cache_slots[slot] == Type::Bool {
+            val = LLVMBuildICmp(
+                llbuilder,
+                IntPredicate::IntNE,
+                val,
+                LLVMConstInt(ty, 0, llvm::False),
+                UNNAMED,
+            );
+        }
+
+        val
     }
 
     pub unsafe fn store_cache_slot(
         &self,
+        module: &OsdiModule,
         llbuilder: &llvm::Builder<'ll>,
         slot: CacheSlot,
         ptr: &'ll llvm::Value,
-        val: &'ll llvm::Value,
+        mut val: &'ll llvm::Value,
     ) {
-        let (ptr, _) = self.cache_slot_ptr(llbuilder, slot, ptr);
+        let (ptr, ty) = self.cache_slot_ptr(llbuilder, slot, ptr);
+        if module.mir.init_inst_cache_slots[slot] == Type::Bool {
+            val = LLVMBuildIntCast2(llbuilder, val, ty, llvm::False, UNNAMED);
+        }
         LLVMBuildStore(llbuilder, val, ptr);
     }
 
@@ -675,7 +697,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         builder: &mir_llvm::Builder<'_, '_, 'll>,
         ptr: &'ll llvm::Value,
     ) -> &'ll llvm::Value {
-        let ptr = builder.typed_struct_gep(self.ty, ptr, CONNTEDED_PORTS);
+        let ptr = builder.typed_struct_gep(self.ty, ptr, CONNECTED);
         builder.load(builder.cx.ty_int(), ptr)
     }
 
@@ -685,7 +707,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         ptr: &'ll llvm::Value,
         val: &'ll llvm::Value,
     ) {
-        let ptr = builder.typed_struct_gep(self.ty, ptr, CONNTEDED_PORTS);
+        let ptr = builder.typed_struct_gep(self.ty, ptr, CONNECTED);
         builder.store(ptr, val)
     }
 }
@@ -734,8 +756,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         ParamKind::Voltage { .. }
                         | ParamKind::Current(_)
                         | ParamKind::PortConnected { .. }
-                        | ParamKind::ParamGiven { .. } => unreachable!(),
-                        ParamKind::Abstime => todo!()
+                        | ParamKind::ParamGiven { .. }
+                        | ParamKind::Abstime
+                        | ParamKind::EnableIntegration
+                        | ParamKind::ImplicitUnkown(_) => unreachable!(),
                     }
                 } else {
                     let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;
@@ -807,8 +831,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         ParamKind::Voltage { .. }
                         | ParamKind::Current(_)
                         | ParamKind::PortConnected { .. }
-                        | ParamKind::ParamGiven { .. } => unreachable!(),
-                        ParamKind::Abstime => todo!(),
+                        | ParamKind::ParamGiven { .. }
+                        | ParamKind::EnableIntegration { .. }
+                        | ParamKind::Abstime
+                        | ParamKind::ImplicitUnkown(_) => unreachable!(),
                     }
                 } else {
                     let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;

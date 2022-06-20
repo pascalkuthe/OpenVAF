@@ -1,11 +1,13 @@
+use ahash::AHashMap;
 use bitset::BitSet;
+use hir_def::db::HirDefDB;
 use hir_def::ParamSysFun;
 use hir_lower::{HirInterner, ParamKind, PlaceKind, REACTIVE_DIM, RESISTIVE_DIM};
 use hir_ty::inference::BranchWrite;
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{DerivativeInfo, Function, Value, FALSE, F_ZERO, TRUE};
+use mir::{ControlFlowGraph, DerivativeInfo, Function, Inst, Value, FALSE, F_ZERO, TRUE};
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
@@ -24,7 +26,7 @@ fn get_contrib(
     react: bool,
     voltage_src: bool,
 ) -> Value {
-    let dim = if react { RESISTIVE_DIM } else { REACTIVE_DIM };
+    let dim = if react { REACTIVE_DIM } else { RESISTIVE_DIM };
     let contrib = PlaceKind::Contribute { dst, dim, voltage_src };
 
     intern
@@ -78,6 +80,8 @@ impl Residual {
         db: &CompilationDB,
         cursor: &mut FuncCursor,
         intern: &mut HirInterner,
+        cfg: &mut ControlFlowGraph,
+        op_dependent: &BitSet<Inst>,
     ) {
         for i in 0..intern.outputs.len() {
             let (kind, val) = intern.outputs.get_index(i).unwrap();
@@ -101,6 +105,11 @@ impl Residual {
                 _ => continue,
             };
 
+            // let (hi, lo) = dst.nodes(db);
+            // let hi = db.node_data(hi).name.to_string();
+            // let lo = lo.map_or_else(|| "gnd".to_string(), |hi| db.node_data(hi).name.to_string());
+            // println!("{hi} {lo}");
+
             let current = dst.into();
             let is_voltage_src = strip_optbarrier(cursor.func, val.unwrap_unchecked());
 
@@ -117,6 +126,7 @@ impl Residual {
                         if resist_val != F_ZERO {
                             self.add_kirchoff_laws(cursor, resist_val, dst, false, db);
                         }
+
                         let react_val = get_contrib(cursor, intern, dst, true, false);
                         if react_val != F_ZERO {
                             self.add_kirchoff_laws(cursor, react_val, dst, true, db);
@@ -127,14 +137,73 @@ impl Residual {
 
                 TRUE => {
                     // voltage src
+
+                    let requires_unkown =
+                        intern.is_param_live(cursor.func, &ParamKind::Current(current));
+
+                    let static_collapse = !requires_unkown
+                        && get_contrib(cursor, intern, dst, false, true) == F_ZERO
+                        && get_contrib(cursor, intern, dst, true, true) == F_ZERO;
+
+                    if static_collapse {
+                        // just node collapsing
+                        continue;
+                    }
+
                     src_residual(cursor, intern, dst, true, db)
                 }
 
                 // switch branch
                 _ => {
+                    let requires_unkown =
+                        intern.is_param_live(cursor.func, &ParamKind::Current(current));
+                    let op_dependent = cursor
+                        .func
+                        .dfg
+                        .value_def(is_voltage_src)
+                        .inst()
+                        .map_or(false, |inst| op_dependent.contains(inst));
+
+                    let resist_voltage = get_contrib(cursor, intern, dst, false, true);
+                    let react_voltage = get_contrib(cursor, intern, dst, true, true);
+                    let just_current_src = !requires_unkown
+                        && !op_dependent
+                        && resist_voltage == F_ZERO
+                        && react_voltage == F_ZERO;
+
+                    let resist_current = get_contrib(cursor, intern, dst, false, false);
+                    let react_current = get_contrib(cursor, intern, dst, true, false);
+
+                    if just_current_src {
+                        // no extra unkowns required so just node collapsing + current source is
+                        // enough
+                        if resist_current != F_ZERO {
+                            self.add_kirchoff_laws(cursor, resist_current, dst, false, db);
+                        }
+
+                        if react_current != F_ZERO {
+                            self.add_kirchoff_laws(cursor, react_current, dst, true, db);
+                        }
+                        continue;
+                    }
+
+                    // let (hi, lo) = dst.nodes(db);
+                    // unreachable!(
+                    //     "hmm {}, {} = {resist_voltage} + j {react_voltage} {:?} {requires_unkown} {is_voltage_src}",
+                    //     db.node_data(hi).name,
+                    //     lo.map_or("gnd".to_owned(), |lo| db.node_data(lo).name.to_string()),
+                    //     cursor.func.dfg.value_def(resist_current)
+                    // );
+
+                    let start_bb = cursor.current_block().unwrap();
                     let voltage_src_bb = cursor.layout_mut().append_new_block();
                     let current_src_bb = cursor.layout_mut().append_new_block();
                     let next_block = cursor.layout_mut().append_new_block();
+                    cfg.ensure_bb(next_block);
+                    cfg.add_edge(start_bb, voltage_src_bb);
+                    cfg.add_edge(start_bb, current_src_bb);
+                    cfg.add_edge(voltage_src_bb, next_block);
+                    cfg.add_edge(current_src_bb, next_block);
 
                     cursor.ins().br(is_voltage_src, voltage_src_bb, current_src_bb);
                     cursor.goto_bottom(voltage_src_bb);
@@ -142,8 +211,25 @@ impl Residual {
                     cursor.ins().jump(next_block);
 
                     cursor.goto_bottom(current_src_bb);
-                    let current_residual = src_residual(cursor, intern, dst, false, db);
+                    let introduce_unkown =
+                        requires_unkown || resist_voltage != F_ZERO || react_voltage != F_ZERO;
+
+                    let current_residual = if introduce_unkown {
+                        src_residual(cursor, intern, dst, false, db)
+                    } else {
+                        let val = if op_dependent {
+                            intern.ensure_param(cursor.func, ParamKind::Current(dst.into()))
+                        } else {
+                            // TODO collapse
+                            // let func_ref = intern.;
+                            //     cursor.ins().call(func_ref, &[]);
+                            F_ZERO
+                        };
+                        [val, F_ZERO]
+                    };
                     cursor.ins().jump(next_block);
+
+                    cursor.goto_bottom(next_block);
                     let residual_resist = cursor.ins().phi(&[
                         (current_src_bb, current_residual[0]),
                         (voltage_src_bb, voltage_residual[0]),
@@ -152,6 +238,23 @@ impl Residual {
                         (current_src_bb, current_residual[1]),
                         (voltage_src_bb, voltage_residual[1]),
                     ]);
+
+                    if !introduce_unkown {
+                        if resist_current != F_ZERO {
+                            let residual_resist = cursor
+                                .ins()
+                                .phi(&[(current_src_bb, resist_current), (voltage_src_bb, F_ZERO)]);
+                            self.add_kirchoff_laws(cursor, residual_resist, dst, false, db);
+                        }
+
+                        if react_current != F_ZERO {
+                            let residual_react = cursor
+                                .ins()
+                                .phi(&[(current_src_bb, react_current), (voltage_src_bb, F_ZERO)]);
+                            self.add_kirchoff_laws(cursor, residual_react, dst, false, db);
+                        }
+                    }
+
                     [residual_resist, residual_react]
                 }
             };
@@ -194,7 +297,7 @@ impl Residual {
 
         let num_unkowns = params.len() * (self.resistive.len() + self.reactive.len());
         let mut res = Vec::with_capacity(num_unkowns);
-        for dim in [&self.resistive, &self.resistive] {
+        for dim in [&self.resistive, &self.reactive] {
             for residual in dim.raw.values() {
                 res.extend(params.iter().map(|unkown| (*residual, *unkown)))
             }
@@ -294,5 +397,35 @@ impl Residual {
     pub(crate) fn sparsify(&mut self) {
         self.resistive.raw.retain(|_, val| *val != F_ZERO);
         self.reactive.raw.retain(|_, val| *val != F_ZERO);
+    }
+
+    pub fn resistive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
+        self.resistive
+            .raw
+            .iter()
+            .filter_map(|(unkown, val)| {
+                if let SimUnkown::KirchoffLaw(node) = unkown {
+                    let name = db.node_data(*node).name.to_string();
+                    Some((name, *val))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn reactive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
+        self.reactive
+            .raw
+            .iter()
+            .filter_map(|(unkown, val)| {
+                if let SimUnkown::KirchoffLaw(node) = unkown {
+                    let name = db.node_data(*node).name.to_string();
+                    Some((name, *val))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }

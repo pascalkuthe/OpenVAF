@@ -2,11 +2,12 @@ use std::iter::once;
 
 use hir_def::db::HirDefDB;
 use hir_def::{Lookup, Type};
+use hir_lower::CurrentKind;
 use hir_ty::db::HirTyDB;
 use lasso::Rodeo;
 use llvm::{LLVMABISizeOfType, LLVMOffsetOfElement, TargetData};
 use sim_back::matrix::MatrixEntry;
-use sim_back::CompilationDB;
+use sim_back::{CompilationDB, SimUnkown};
 use smol_str::SmolStr;
 
 use crate::compilation_unit::{OsdiCompilationUnit, OsdiModule};
@@ -106,30 +107,19 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         module
             .node_ids
             .iter_enumerated()
-            .map(|(id, node)| {
-                // TODO flows
-                let discipline = db.node_discipline(*node).unwrap();
-                let discipline = db.discipline_info(discipline);
-
+            .map(|(id, unkown)| {
+                let (name, units, is_flow) = sim_unkown_info(*unkown, db);
                 let resist_residual_off =
                     inst_data.residual_off(id, false, target_data).unwrap_or(u32::MAX);
                 let react_residual_off =
                     inst_data.residual_off(id, true, target_data).unwrap_or(u32::MAX);
                 OsdiNode {
-                    name: db.node_data(*node).name.to_string(),
-                    units: db
-                        .nature_info(discipline.potential.unwrap())
-                        .units
-                        .as_ref()
-                        .map_or_else(String::new, String::clone),
-                    residual_units: db
-                        .nature_info(discipline.flow.unwrap())
-                        .units
-                        .as_ref()
-                        .map_or_else(String::new, String::clone),
+                    name,
+                    units,
+                    residual_units: String::new(),
                     resist_residual_off,
                     react_residual_off,
-                    is_flow: false, // TODO
+                    is_flow,
                 }
             })
             .collect()
@@ -191,7 +181,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             .mir
             .collapse
             .raw
-            .iter()
+            .keys()
             .map(|(hi, lo)| {
                 let node_1 = self.module.node_ids.unwrap_index(hi).0;
                 let node_2 = lo.map_or(u32::MAX, |lo| self.module.node_ids.unwrap_index(&lo).0);
@@ -262,17 +252,64 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
 impl OsdiModule<'_> {
     pub fn intern_node_strs(&self, intern: &mut Rodeo, db: &CompilationDB) {
-        for node in self.node_ids.raw.iter() {
-            intern.get_or_intern(&*db.node_data(*node).name);
-
-            let discipline = db.node_discipline(*node).unwrap();
-            let discipline = db.discipline_info(discipline);
-            if let Some(units) = db.nature_info(discipline.potential.unwrap()).units.as_ref() {
-                intern.get_or_intern(units);
-            }
-            if let Some(units) = db.nature_info(discipline.flow.unwrap()).units.as_ref() {
-                intern.get_or_intern(units);
-            }
+        for unkown in self.node_ids.raw.iter() {
+            let (name, units, _) = sim_unkown_info(*unkown, db);
+            intern.get_or_intern(&name);
+            intern.get_or_intern(&units);
         }
     }
+}
+
+fn sim_unkown_info(unkown: SimUnkown, db: &CompilationDB) -> (String, String, bool) {
+    let name;
+    let discipline;
+    let is_flow;
+
+    match unkown {
+        SimUnkown::KirchoffLaw(node) => {
+            name = db.node_data(node).name.to_string();
+            discipline = db.node_discipline(node);
+            is_flow = true;
+        }
+
+        SimUnkown::Current(CurrentKind::Unnamed { hi, lo }) => {
+            let hi_ = db.node_data(hi);
+            name = if let Some(lo) = lo {
+                let lo = db.node_data(lo);
+                format!("flow({},{})", &hi_.name, &lo.name)
+            } else {
+                format!("flow({})", &hi_.name)
+            };
+            discipline = Some(db.node_discipline(hi).unwrap());
+            is_flow = true;
+        }
+        SimUnkown::Current(CurrentKind::Branch(br)) => {
+            let br_ = db.branch_data(br);
+            name = format!("flow({})", &br_.name);
+            discipline = Some(db.branch_info(br).unwrap().discipline);
+            is_flow = true;
+        }
+        SimUnkown::Current(CurrentKind::Port(node)) => {
+            let node_ = db.node_data(node);
+            name = format!("flow(<{}>)", &node_.name);
+            discipline = db.node_discipline(node);
+            is_flow = true;
+        }
+        SimUnkown::Implicit(equ) => {
+            name = format!("implicit_equation_{}", u32::from(equ));
+            discipline = None;
+            is_flow = false;
+        }
+    };
+
+    let units = if let Some(discipline) = discipline {
+        let discipline = db.discipline_info(discipline);
+        let nature = if is_flow { discipline.flow } else { discipline.potential };
+
+        db.nature_info(nature.unwrap()).units.as_ref().map_or_else(String::new, String::clone)
+    } else {
+        String::new()
+    };
+
+    (name, units, is_flow)
 }
