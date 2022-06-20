@@ -204,8 +204,7 @@ pub fn general_callbacks<'ll>(
                     let (fun, fun_ty) = print_callback(builder.cx, *kind, arg_tys);
                     CallbackFun { fun_ty, fun, state: Box::new([handle]), num_state: 0 }
                 }
-                // TODO boundstep
-                CallBackKind::BoundStep => return None,
+                CallBackKind::BoundStep => builder.cx.trivial_callbacks(&[builder.cx.ty_real()]),
             };
             Some(cb)
         })

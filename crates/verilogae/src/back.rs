@@ -58,9 +58,9 @@ pub fn stub_callbacks<'ll>(
                     cx.const_callback(&[cx.ty_real()], cx.const_real(0.0))
                 }
                 CallBackKind::Print { .. }
+                | CallBackKind::BoundStep
                 | CallBackKind::ParamInfo(_, _)
                 | CallBackKind::CollapseHint(_, _) => return None,
-                CallBackKind::BoundStep => todo!(),
             };
 
             Some(res)

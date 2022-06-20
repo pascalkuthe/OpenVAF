@@ -2004,7 +2004,6 @@ impl LoweringCtx<'_, '_> {
             BuiltIn::port_connected => self.param(ParamKind::PortConnected {
                 port: self.infere.expr_types[args[0]].unwrap_node(),
             }),
-            // TODO boundstep
             BuiltIn::bound_step => {
                 let cb = self.callback(CallBackKind::BoundStep);
                 let step_size = self.lower_expr(args[0]);

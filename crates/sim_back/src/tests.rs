@@ -145,7 +145,12 @@ impl EvalMir {
                          _rets: &[Value],
                          _ptr: *mut c_void| {}
                     }
-                    hir_lower::CallBackKind::BoundStep => todo!(),
+                    hir_lower::CallBackKind::BoundStep => {
+                        |_state: &mut InterpreterState,
+                         _args: &[Value],
+                         _rets: &[Value],
+                         _ptr: *mut c_void| {}
+                    }
                 };
 
                 (res, ptr)

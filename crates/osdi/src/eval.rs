@@ -120,7 +120,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 hi
                             }
                         }
-                        ParamKind::Current(CurrentKind::Port(_)) => builder.cx.const_real(0.0),
+                        // TODO support abstime
+                        ParamKind::Current(CurrentKind::Port(_)) | ParamKind::Abstime => {
+                            builder.cx.const_real(0.0)
+                        }
                         ParamKind::Current(kind) => prev_solve[&SimUnkown::Current(kind)],
                         ParamKind::ImplicitUnkown(equation) => {
                             prev_solve[&SimUnkown::Implicit(equation)]
@@ -162,9 +165,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 builder.llbuilder,
                             )
                             .unwrap(),
-                        ParamKind::HiddenState(_) => unreachable!(),
-                        ParamKind::Abstime => todo!(),
-                        ParamKind::EnableIntegration => todo!(), // TODO  hidden state
+                        ParamKind::HiddenState(_) => unreachable!(), // TODO  hidden state
+                        ParamKind::EnableIntegration => builder.cx.const_bool(true), // TODO integration check to support IC
                     }
                 };
                 BuilderVal::Eager(val)

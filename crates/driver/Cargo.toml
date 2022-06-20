@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-driver"
-version = "0.1.0-beta1"
+version = "0.1.0"
 authors = ["DSPOM"]
 edition = "2021"
 license = "GPL-3.0"
