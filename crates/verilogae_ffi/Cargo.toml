@@ -1,6 +1,6 @@
 [package]
 name = "verilogae_ffi"
-version = "0.9.0-beta5"
+version = "0.9.0-beta6"
 authors = ["DSPOM"]
 edition = "2021"
 license = "GPL-3.0"
@@ -13,7 +13,7 @@ doctest = false
 
 [dependencies]
 
-verilogae = { version = "0.9.0-beta5", path = "../verilogae", optional=true}
+verilogae = { version = "0.9.0-beta6", path = "../verilogae", optional=true}
 
 [dev-dependencies]
 

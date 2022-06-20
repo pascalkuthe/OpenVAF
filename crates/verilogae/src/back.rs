@@ -377,8 +377,6 @@ impl CodegenCtx<'_, '_> {
 
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
-        std::fs::write("tmp_func", func.to_debug_string()).unwrap();
-
         unsafe {
             // the actual compiled function
             builder.build_consts();

@@ -11,13 +11,14 @@ extension = RustExtension(
     rust_version=">=1.58",
     binding=Binding.NoBinding,
     strip=Strip.All,
+    debug=False,
 )
 
 
 
 setup(
     name="verilogae",
-    version="0.9-beta-5",
+    version="0.9-beta-6",
     author="DSPOM",
     author_email="dspom@protonmail.com",
     url="https://man.sr.ht/~dspom/openvaf_doc/verilogae/",
