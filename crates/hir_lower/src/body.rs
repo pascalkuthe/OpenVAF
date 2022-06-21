@@ -480,7 +480,7 @@ impl HirInterner {
                                         ctx.func.ins().call(min_exclusive, &[]);
                                     }
 
-                                    if range.start_inclusive {
+                                    if range.end_inclusive {
                                         ctx.func.ins().call(max_inclusive, &[]);
                                     } else {
                                         ctx.func.ins().call(max_exclusive, &[]);
