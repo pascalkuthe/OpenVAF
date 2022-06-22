@@ -259,21 +259,7 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> BitSet<T> {
     }
 
     pub fn set_size_enable(&mut self, domain_size: usize) {
-        if self.domain_size < domain_size {
-            let len = self.words.len();
-            if let Some(last) = self.words.last_mut() {
-                let last_pos = len - 1;
-                for i in self.domain_size..domain_size {
-                    let (pos, word) = word_index_and_mask(i);
-                    if pos != last_pos {
-                        break;
-                    }
-                    *last |= word;
-                }
-            }
-            self.domain_size = domain_size;
-        }
-
+        self.domain_size = domain_size;
         let num_words = num_words(domain_size);
         self.words.resize(num_words, u64::MAX);
         self.insert_all();

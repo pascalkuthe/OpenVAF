@@ -492,15 +492,18 @@ impl GVN {
 
     pub fn solve(&mut self, func: &mut Function) {
         loop {
+            let mut changed = false;
             for dfs_id in 0..self.dfs_map.dfs_to_inst.len() {
                 let dfs_id = dfs_id.into();
                 if self.touched_insts.remove(dfs_id) {
                     let inst = self.dfs_map.dfs_to_inst[dfs_id];
-                    self.process_inst(func, inst)
+                    self.process_inst(func, inst);
+                    changed = true;
                 }
             }
 
-            if self.touched_insts.is_empty() {
+            if !changed {
+                debug_assert!(self.touched_insts.is_empty());
                 break;
             }
         }

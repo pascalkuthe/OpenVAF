@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Refactor the algorithm that determines whether `ddt` needs an unkown, so that OpenVAF doesn't create one when not required.
 
+### Fixed
+
+* Remove infinite loop during global value numbering optimization.
+
 
 ## 0.1.0 - 2022-06-20
 
