@@ -422,10 +422,12 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         node2.map(SimUnkown::KirchoffLaw),
                     ));
                     let idx = builder.cx.const_unsigned_int(idx.into());
-                    let extra_indecies =
-                        extra_indecies.iter().map(|&idx| builder.cx.const_unsigned_int(idx.into()));
                     let mut state = vec![instance, idx];
-                    state.extend(extra_indecies);
+                    for &idx in extra_indecies.iter() {
+                        state.push(instance);
+                        let idx = builder.cx.const_unsigned_int(idx.into());
+                        state.push(idx)
+                    }
                     CallbackFun {
                         fun_ty: mark_collapsed.1,
                         fun: mark_collapsed.0,

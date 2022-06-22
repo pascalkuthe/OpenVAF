@@ -125,9 +125,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             builder.cx.const_real(0.0)
                         }
                         ParamKind::Current(kind) => prev_solve[&SimUnkown::Current(kind)],
-                        ParamKind::ImplicitUnkown(equation) => {
-                            prev_solve[&SimUnkown::Implicit(equation)]
-                        }
+                        ParamKind::ImplicitUnkown(equation) => prev_solve
+                            .get(&SimUnkown::Implicit(equation))
+                            .copied()
+                            .unwrap_or_else(|| builder.cx.const_real(0.0)),
                         ParamKind::Temperature => inst_data.load_temperature(&builder, instance),
                         ParamKind::ParamGiven { param } => {
                             let inst_given = inst_data.is_param_given(

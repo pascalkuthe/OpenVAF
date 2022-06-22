@@ -730,9 +730,6 @@ impl LoweringCtx<'_, '_> {
             Stmt::If { cond, then_branch, else_branch } => {
                 let cond_ = self.lower_expr(cond);
 
-                // let op_dependent_execution =
-                //     self.op_dependent_execution || self.func.is_op_dependent(cond_);
-
                 self.func.make_cond(cond_, |func, branch| {
                     let stmt = if branch { then_branch } else { else_branch };
                     LoweringCtx {
@@ -749,10 +746,6 @@ impl LoweringCtx<'_, '_> {
                     }
                     .lower_stmt(stmt);
                 });
-
-                // if self.func.is_op_dependent(cond_) && !self.op_dependent_execution {
-                //     println!("hmm exit {cond_}");
-                // }
             }
             Stmt::ForLoop { init, cond, incr, body } => {
                 self.lower_stmt(init);
@@ -959,22 +952,7 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn param(&mut self, kind: ParamKind) -> Value {
-        let (val, changed) =
-            HirInterner::ensure_param_(&mut self.data.params, self.func.func, kind);
-        if changed {
-            self.func.op_dependent_vals.ensure(self.func.func.dfg.num_values());
-
-            if matches!(
-                kind,
-                ParamKind::Voltage { .. }
-                    | ParamKind::Current(_)
-                    | ParamKind::ImplicitUnkown(_)
-                    | ParamKind::Abstime
-            ) {
-                self.func.op_dependent_vals.insert(val);
-            }
-        }
-        val
+        self.data.ensure_param(self.func.func, kind)
     }
 
     fn callback(&mut self, kind: CallBackKind) -> FuncRef {
@@ -1401,24 +1379,19 @@ impl LoweringCtx<'_, '_> {
                     return res;
                 }
                 Opcode::Fmul | Opcode::Fdiv => {
-                    let mut lhs_ = self.lower_expr_(lhs);
+                    let lhs_ = self.lower_expr_(lhs);
                     let has_extra_dims = self
                         .extra_dims
                         .as_deref_mut()
                         .unwrap()
                         .iter()
                         .any(|vals| vals.contains_key(&lhs));
-                    let is_op_dependent = has_extra_dims | self.func.is_op_dependent(lhs_);
-                    if is_op_dependent {
+                    if has_extra_dims {
                         let rhs_ = self.lower_expr(rhs);
-                        if self.func.is_op_dependent(rhs_) {
-                            lhs_ = self.lower_expr(lhs);
-                        } else if has_extra_dims {
-                            for dim_vals in self.extra_dims.as_deref_mut().unwrap() {
-                                if let Some(val) = dim_vals.get(&lhs).copied() {
-                                    let val = self.func.ins().binary1(op, val, rhs_);
-                                    dim_vals.insert(expr, val);
-                                }
+                        for dim_vals in self.extra_dims.as_deref_mut().unwrap() {
+                            if let Some(val) = dim_vals.get(&lhs).copied() {
+                                let val = self.func.ins().binary1(op, val, rhs_);
+                                dim_vals.insert(expr, val);
                             }
                         }
 
@@ -1863,31 +1836,27 @@ impl LoweringCtx<'_, '_> {
 
             BuiltIn::abstime => self.param(ParamKind::Abstime),
 
-            BuiltIn::ddt if self.contribute_rhs => {
-                self.contribute_rhs = false;
-                let arg0 = self.lower_expr(args[0]);
-                self.contribute_rhs = true;
-                if self.func.is_op_dependent(arg0) {
-                    if let Some(extra_dims) = &mut self.extra_dims {
-                        extra_dims[REACTIVE_DIM].insert(expr, arg0);
-                    }
+            BuiltIn::ddt => {
+                if self.extra_dims.is_none() {
+                    return F_ZERO;
                 }
-                F_ZERO
+                let arg0 = self.lower_expr(args[0]);
+                let equation_kind = if self.contribute_rhs {
+                    // optbarrier to allow removing this if this is not a linear contribute
+                    let arg0 = self.func.ins().optbarrier(arg0);
+                    self.extra_dims.as_mut().unwrap()[REACTIVE_DIM].insert(expr, arg0);
+                    ImplicitEquationKind::DdtContrib(arg0)
+                } else {
+                    ImplicitEquationKind::Ddt
+                };
+
+                let (equation, val) = self.implicit_eqation(equation_kind);
+                self.define_resist_residual(val, equation);
+                let react_residual = self.func.ins().fneg(arg0);
+                self.define_react_residual(react_residual, equation);
+                val
             }
 
-            BuiltIn::ddt => {
-                if self.extra_dims.is_some() {
-                    let arg0 = self.lower_expr(args[0]);
-                    if self.func.is_op_dependent(arg0) {
-                        let (equation, val) = self.implicit_eqation(ImplicitEquationKind::Ddt);
-                        self.define_resist_residual(val, equation);
-                        let react_residual = self.func.ins().fneg(val);
-                        self.define_react_residual(react_residual, equation);
-                        return val;
-                    }
-                }
-                F_ZERO
-            }
             BuiltIn::idt | BuiltIn::idtmod if self.extra_dims.is_none() => {
                 match *signature.unwrap() {
                     IDT_NO_IC => F_ZERO, // fair enough approximation

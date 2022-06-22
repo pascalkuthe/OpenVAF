@@ -138,7 +138,7 @@ impl EvalMir {
             }
         }
 
-        let mut op_dependent: Vec<Value> = intern
+        let op_dependent: Vec<Value> = intern
             .params
             .raw
             .iter()
@@ -146,15 +146,7 @@ impl EvalMir {
                 if func.dfg.value_dead(val) {
                     return None;
                 }
-                if matches!(
-                    param,
-                    ParamKind::Voltage { .. }
-                        | ParamKind::Current(_)
-                        | ParamKind::ImplicitUnkown(_)
-                        | ParamKind::Abstime
-                        | ParamKind::EnableIntegration
-                        | ParamKind::HiddenState(_)
-                ) {
+                if param.op_dependent() {
                     Some(val)
                 } else {
                     None
@@ -162,22 +154,14 @@ impl EvalMir {
             })
             .collect();
 
-        for inst in func.dfg.insts.iter() {
-            if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
-                match intern.callbacks[func_ref] {
-                    CallBackKind::SimParam
-                    | CallBackKind::SimParamOpt
-                    | CallBackKind::SimParamStr => op_dependent.push(func.dfg.first_result(inst)),
-                    _ => (),
-                }
-            }
-        }
+
 
         let op_dependent_insts = propagate_taint(&func, &dom_tree, &op_dependent);
 
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
         let mut residual = Residual::default();
         residual.populate(db, &mut cursor, &mut intern, &mut cfg, &op_dependent_insts);
+
         let new_output_bb = cursor.current_block().unwrap();
         output_block = new_output_bb;
 
@@ -199,13 +183,11 @@ impl EvalMir {
         inst_combine(&mut func);
 
         dom_tree.compute(&func, &cfg, true, true, false);
-        // cfg.render(std::path::Path::new("cfg.dot"), "main_cfg", &func);
-        // dom_tree.render_idom(std::path::Path::new("domtree.dot"), "main_domtree", &func);
-        // dom_tree.render_ipdom(std::path::Path::new("postdomtree.dot"), "main_postdomtree", &func);
 
         gvn.init(&func, &dom_tree, intern.params.len() as u32);
         gvn.solve(&mut func);
         gvn.remove_unnecessary_insts(&mut func, &dom_tree);
+        println!("hmm");
 
         let mut control_dep = SparseBitMatrix::new(0, 0);
         dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
@@ -230,11 +212,19 @@ impl EvalMir {
             let dst = match kind {
                 PlaceKind::Var(var) if module.op_vars.contains_key(var) => &mut output_values,
                 PlaceKind::CollapseImplicitEquation(equ)
-                    if strip_optbarrier(&func, out_val.unwrap_unchecked()) != FALSE =>
+                    if strip_optbarrier(&func, out_val.unwrap_unchecked()) != FALSE
+                        && residual.contains(SimUnkown::Implicit(*equ)) =>
                 {
                     collapse.insert((SimUnkown::Implicit(*equ), None), vec![]);
                     &mut init_output_values
                 }
+
+                PlaceKind::CollapseImplicitEquation(_) => {
+                    let old_val = out_val.unwrap_unchecked();
+                    output_values.remove(old_val);
+                    continue;
+                }
+
                 _ => continue,
             };
             let old_val = out_val.unwrap_unchecked();
@@ -243,6 +233,7 @@ impl EvalMir {
             output_values.remove(old_val);
             *out_val = val.into();
         }
+
 
         let mut op_dependent: Vec<Value> = intern
             .params
@@ -408,7 +399,8 @@ impl EvalMir {
 
                 let ty = if let Some(tag) = func.dfg.tag(*val) {
                     let idx = usize::from(tag);
-                    match *intern.outputs.get_index(idx).unwrap().0 {
+                    let kind = *intern.outputs.get_index(idx).unwrap().0;
+                    match kind {
                         PlaceKind::Var(var) => db.var_data(var).ty.clone(),
                         PlaceKind::FunctionReturn(fun) => db.function_data(fun).return_ty.clone(),
                         PlaceKind::FunctionArg { fun, arg } => {

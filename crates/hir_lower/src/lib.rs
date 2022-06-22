@@ -31,6 +31,7 @@ mod tests;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImplicitEquationKind {
     Ddt,
+    DdtContrib(Value),
     Idt(IdtKind),
     NoiseSrc,
 }
@@ -72,6 +73,18 @@ impl ParamKind {
             ParamKind::Voltage { hi, lo: None } => *hi,
             _ => unreachable!("called unwrap_pot_node on {:?}", self),
         }
+    }
+
+    pub fn op_dependent(&self) -> bool {
+        matches!(
+            self,
+            ParamKind::Voltage { .. }
+                | ParamKind::Current(_)
+                | ParamKind::ImplicitUnkown(_)
+                | ParamKind::Abstime
+                | ParamKind::EnableIntegration
+                | ParamKind::HiddenState(_)
+        )
     }
 }
 
