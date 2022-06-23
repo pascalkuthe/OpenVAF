@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
@@ -39,6 +40,7 @@ pub fn run(matches: ArgMatches) -> Result<i32> {
             print_path(path.as_ref());
             return Ok(0);
         }
+        fs::create_dir_all(opts.cache_dir).context("failed to create cache directory")?;
         path
     } else {
         opts.output
@@ -51,8 +53,7 @@ pub fn run(matches: ArgMatches) -> Result<i32> {
         for path in &paths {
             linker.add_object(path);
         }
-    })
-    .context("linking failed!")?;
+    })?;
 
     for obj_file in paths {
         std::fs::remove_file(obj_file).context("failed to delete intermediate compile artifact")?;
