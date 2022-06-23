@@ -36,24 +36,25 @@ fn test_compile(root_file: &Path) {
     let modules = db.collect_modules().unwrap();
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, "native".to_owned(), &[]);
-    crate::compile(&db, &modules, Path::new("foo.o"), &target, &back, true, OptLevel::Aggressive);
+    let emit = !stdx::IS_CI;
+    crate::compile(&db, &modules, Path::new("foo.o"), &target, &back, emit, OptLevel::Aggressive);
 }
 
 #[test]
 pub fn generate_integration_tests() {
     let tests = collect_integration_tests();
     let file = project_root().join("crates/osdi/src/tests/integration.rs");
-    let test_impl = tests.into_iter().filter_map(|(test_name, _)| {
+    let test_impl = tests.into_iter().map(|(test_name, _)| {
         // skip this test until we implement switch branches
         // TODO switch branches
-        if matches!(&*test_name, "ASMHEMT"|"AMPLIFIER"){
-            return None
-        }
+        // if matches!(&*test_name, "ASMHEMT"|"AMPLIFIER"){
+        //     return None
+        // }
 
         let test_case = format_ident!("{}", test_name.to_lowercase());
         let root_file_name = format!("{}.va", test_name.to_lowercase());
 
-        let res = quote! {
+        quote! {
             #[test]
             fn #test_case(){
                 if skip_slow_tests(){
@@ -63,9 +64,8 @@ pub fn generate_integration_tests() {
                 let root_file = project_root().join("integration_tests").join(#test_name).join(#root_file_name);
                 super::test_compile(&root_file);
             }
-        };
+        }
 
-        Some(res)
     });
 
     let header = "
@@ -76,6 +76,7 @@ pub fn generate_integration_tests() {
         #(#test_impl)*
     );
     let file_string = format!("{}\n{}", header, file_string);
-    let file_string = add_preamble("generate_integration_tests", reformat(file_string));
+    let file_string = add_preamble("generate_integration_tests", file_string);
+    let file_string = reformat(file_string);
     ensure_file_contents(&file, &file_string);
 }

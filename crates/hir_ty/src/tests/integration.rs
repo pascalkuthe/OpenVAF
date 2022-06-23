@@ -253,8 +253,6 @@ fn diode() {
     let mut vfs = db.vfs().write();
     let path = project_root().join("integration_tests").join("DIODE").join("diode.va");
     vfs.add_virt_file("/diode.va", read(path).into());
-    let path = project_root().join("integration_tests").join("DIODE").join("diode2.va");
-    vfs.add_virt_file("/diode2.va", read(path).into());
     drop(vfs);
     let actual = db.lower_and_check();
     expect_file![project_root()

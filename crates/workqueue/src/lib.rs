@@ -71,7 +71,7 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> WorkQueue<T> {
         self.deque.is_empty()
     }
 
-    pub fn clear(&mut self){
+    pub fn clear(&mut self) {
         self.deque.clear();
         self.set.clear();
     }
@@ -169,7 +169,7 @@ impl<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> WorkStack<T> {
         self.deque.is_empty()
     }
 
-    pub fn clear(&mut self){
+    pub fn clear(&mut self) {
         self.deque.clear();
         self.set.clear();
     }

@@ -307,7 +307,6 @@ impl Residual {
                         };
 
                         if non_linear {
-                            println!("HMMMM {equation} {}", cursor.func.dfg.display_inst(inst));
                             requires_unkown = true;
                             break;
                         }

@@ -22,7 +22,7 @@ build:
   stage: build
   script:
     - export PATH="/cargo/bin:/llvm/bin:${PATH}"
-    - cargo test --no-run 
+    - cargo nextest list
   cache:
     <<: *global_cache
     policy: push
@@ -47,4 +47,4 @@ test:
     <<: *global_cache
   script:
     - export PATH="/cargo/bin:/llvm/bin:${PATH}"
-    - cargo test
+    - cargo nextest run

@@ -154,8 +154,6 @@ impl EvalMir {
             })
             .collect();
 
-
-
         let op_dependent_insts = propagate_taint(&func, &dom_tree, &op_dependent);
 
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
@@ -187,7 +185,6 @@ impl EvalMir {
         gvn.init(&func, &dom_tree, intern.params.len() as u32);
         gvn.solve(&mut func);
         gvn.remove_unnecessary_insts(&mut func, &dom_tree);
-        println!("hmm");
 
         let mut control_dep = SparseBitMatrix::new(0, 0);
         dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
@@ -233,7 +230,6 @@ impl EvalMir {
             output_values.remove(old_val);
             *out_val = val.into();
         }
-
 
         let mut op_dependent: Vec<Value> = intern
             .params
