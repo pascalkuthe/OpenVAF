@@ -245,6 +245,7 @@ impl FunctionData {
 pub struct ModuleData {
     pub name: Name,
     pub ports: Vec<NodeId>,
+    pub internal_nodes: Vec<NodeId>,
 }
 
 impl ModuleData {
@@ -252,7 +253,10 @@ impl ModuleData {
         let loc = module.lookup(db);
         let item_tree = loc.item_tree(db);
         let num_ports = item_tree[loc.id].num_ports;
+        let num_nodes = item_tree[loc.id].nodes.len() as u32;
         let ports = (0..num_ports).map(|id| NodeLoc { module, id: id.into() }.intern(db)).collect();
-        Arc::new(ModuleData { name: item_tree[loc.id].name.clone(), ports })
+        let internal_nodes =
+            (num_ports..num_nodes).map(|id| NodeLoc { module, id: id.into() }.intern(db)).collect();
+        Arc::new(ModuleData { name: item_tree[loc.id].name.clone(), ports, internal_nodes })
     }
 }

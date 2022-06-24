@@ -1,5 +1,3 @@
-use std::mem::swap;
-
 use bitset::{BitSet, SparseBitMatrix};
 use hir_def::db::HirDefDB;
 use hir_def::Type;
@@ -97,22 +95,12 @@ impl EvalMir {
 
         dead_code_elimination(&mut func, &output_values);
         sparse_conditional_constant_propagation(&mut func, &cfg);
+
         inst_combine(&mut func);
         simplify_cfg_no_phi_merge(&mut func, &mut cfg);
 
         let mut dom_tree = DominatorTree::default();
         dom_tree.compute(&func, &cfg, true, true, false);
-
-        // dom_tree.render_dom_frontier(
-        //     std::path::Path::new("dom_frontiers.dot"),
-        //     "main_dom_frontiers",
-        //     &func,
-        // );
-        // dom_tree.render_pdom_frontier(
-        //     std::path::Path::new("postdom_frontiers.dot"),
-        //     "main_postdom_frontiers",
-        //     &func,
-        // );
 
         let mut gvn = GVN::default();
         gvn.init(&func, &dom_tree, intern.params.len() as u32);
@@ -283,7 +271,6 @@ impl EvalMir {
 
             if op_dependent.contains(inst) {
                 if !func.dfg.insts[inst].is_terminator() {
-                    #[cfg(debug_assertions)]
                     if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
                         if let CallBackKind::CollapseHint(_, _) = intern.callbacks[func_ref] {
                             func.dfg.zap_inst(inst);
@@ -323,24 +310,13 @@ impl EvalMir {
                 && func.dfg.inst_results(inst).is_empty()
             {
                 if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
-                    if let CallBackKind::CollapseHint(mut hi, lo) = intern.callbacks[func_ref] {
-                        let hi_gnd = db.node_data(hi).is_gnd;
-                        if let Some(mut lo) = lo {
-                            if hi_gnd {
-                                if db.node_data(lo).is_gnd {
-                                    continue;
-                                }
-                                swap(&mut lo, &mut hi);
-                            }
-
+                    if let CallBackKind::CollapseHint(hi, lo) = intern.callbacks[func_ref] {
+                        if let Some(lo) = lo {
                             collapse.insert(
                                 (SimUnkown::KirchoffLaw(hi), Some(SimUnkown::KirchoffLaw(lo))),
                                 vec![],
                             );
                         } else {
-                            if hi_gnd {
-                                continue;
-                            }
                             collapse.insert((SimUnkown::KirchoffLaw(hi), None), vec![]);
                         }
                     }

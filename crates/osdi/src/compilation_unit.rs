@@ -91,19 +91,24 @@ pub struct OsdiModule<'a> {
 
 impl<'a> OsdiModule<'a> {
     pub fn new(db: &'a CompilationDB, mir: &'a EvalMir, module: &'a ModuleInfo) -> Self {
-        let mut terminals: TiSet<_, _> = db
-            .module_data(module.id)
-            .ports
-            .iter()
-            .map(|port| SimUnkown::KirchoffLaw(*port))
-            .collect();
+        let module_data = db.module_data(module.id);
+        let mut terminals: TiSet<_, _> =
+            module_data.ports.iter().map(|port| SimUnkown::KirchoffLaw(*port)).collect();
         let num_terminals = terminals.len() as u32;
 
         let node_ids = {
-            // add all used nodes that are not already terminals
-            let node_iter =
+            // add all internal nodes
+            let internal_nodes =
+                module_data.internal_nodes.iter().map(|node| SimUnkown::KirchoffLaw(*node));
+
+            terminals.raw.extend(internal_nodes);
+
+            // add all other implicit unkowns
+            let other_unkowns =
                 mir.residual.resistive.raw.keys().chain(mir.residual.reactive.raw.keys()).copied();
-            terminals.raw.extend(node_iter);
+
+            terminals.raw.extend(other_unkowns);
+
             terminals
         };
 
