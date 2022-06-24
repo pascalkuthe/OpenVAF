@@ -2089,8 +2089,12 @@ impl LoweringCtx<'_, '_> {
                 }
             } else {
                 let ty = self.resolved_ty(*expr);
+                let has_whitespace = fmt_lit.chars().last().map_or(false, |c| c.is_whitespace());
+                if !has_whitespace {
+                    fmt_lit.push(' ')
+                }
                 match ty {
-                    Type::Real => fmt_lit.push_str("%f"),
+                    Type::Real => fmt_lit.push_str("%g"),
                     Type::Integer => fmt_lit.push_str("%d"),
                     Type::String => {
                         // if i == 0 {
