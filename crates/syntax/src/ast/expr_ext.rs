@@ -290,11 +290,11 @@ impl ast::StrLit {
 }
 impl ast::SelectExpr {
     pub fn then_val(&self) -> Option<ast::Expr> {
-        support::children(self.syntax()).next()
+        support::children(self.syntax()).nth(1)
     }
 
     pub fn else_val(&self) -> Option<ast::Expr> {
-        support::children(self.syntax()).nth(1)
+        support::children(self.syntax()).nth(2)
     }
 }
 

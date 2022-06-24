@@ -1,10 +1,16 @@
-# Changelog - OpenVAF OSDI
+# Changelog - VerilogAE
 
-All notable changes to OpenVAF relevant to OSDI will be documented in this file.
+All notable changes to OpenVAF relevant to VerilogAE will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [unreleased]
+
+### Fixed
+
+* Fixed select expressions producing incorrect values
 
 ##  0.9.0-beta7 - 2022-06-24
 

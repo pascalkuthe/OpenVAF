@@ -121,8 +121,6 @@ fn bsimcmg() {
     let path =
         project_root().join("integration_tests").join("BSIMCMG").join("bsimimg_sp_new.include");
     vfs.add_virt_file("/bsimimg_sp_new.include", read(path).into());
-    let path = project_root().join("integration_tests").join("BSIMCMG").join("bsimsoi.va");
-    vfs.add_virt_file("/bsimsoi.va", read(path).into());
     let path = project_root().join("integration_tests").join("BSIMCMG").join("common_defs.include");
     vfs.add_virt_file("/common_defs.include", read(path).into());
     drop(vfs);
