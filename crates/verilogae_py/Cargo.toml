@@ -1,6 +1,6 @@
 [package]
 name = "verilogae_py"
-version = "0.9.0-beta6"
+version = "0.9.0-beta7"
 authors = ["DSPOM"]
 edition = "2021"
 license = "GPL-3.0"
@@ -12,7 +12,7 @@ name = "verilogae_py"
 
 [dependencies]
 pyo3-ffi = { version = "0.16", features = ["extension-module"]}
-verilogae_ffi = { version = "0.9.0-beta6", path = "../verilogae_ffi"}
+verilogae_ffi = { version = "0.9.0-beta7", path = "../verilogae_ffi"}
 libc = "0.2"
 ahash = "0.7"
 
