@@ -5,10 +5,12 @@ members = ["crates/*","xtask/", "lib/*"]
 exclude = ["exclude/*"]
 
 [profile.release]
-lto = "thin"
-incremental = true
+lto = "fat"
+incremental = false
 panic = "abort"
-debug = true
+debug = false
+strip = true
+codegen-units = 1
 
 
 [profile.dev]
