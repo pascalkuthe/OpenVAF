@@ -1,11 +1,11 @@
 use ahash::AHashMap;
-use hir_lower::{CurrentKind, ParamKind, PlaceKind};
+use hir_lower::{CallBackKind, CurrentKind, ParamKind, PlaceKind};
 use llvm::IntPredicate::{IntNE, IntULT};
 use llvm::{
     LLVMAppendBasicBlockInContext, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCondBr, LLVMBuildICmp,
     LLVMPositionBuilderAtEnd, UNNAMED,
 };
-use mir_llvm::{Builder, BuilderVal};
+use mir_llvm::{Builder, BuilderVal, CallbackFun, MemLoc};
 use sim_back::SimUnkown;
 use typed_index_collections::TiVec;
 
@@ -21,19 +21,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let cx = &self.cx;
 
         let ty_void_ptr = cx.ty_void_ptr();
-        let simparam_ptr_ty = cx.ptr_ty(self.tys.osdi_sim_paras);
+        let siminfo_ptr_ty = cx.ptr_ty(self.tys.osdi_sim_info);
 
-        let fun_ty = cx.ty_func(
-            &[
-                ty_void_ptr,
-                ty_void_ptr,
-                ty_void_ptr,
-                cx.ty_int(),
-                cx.ptr_ty(cx.ty_real()),
-                simparam_ptr_ty,
-            ],
-            cx.ty_int(),
-        );
+        let fun_ty =
+            cx.ty_func(&[ty_void_ptr, ty_void_ptr, ty_void_ptr, siminfo_ptr_ty], cx.ty_int());
         cx.declare_ext_fn(name, fun_ty)
     }
 
@@ -69,9 +60,24 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let raw = llvm::LLVMGetParam(llfunc, 2);
             builder.ptrcast(raw, builder.cx.ptr_ty(model_data.ty))
         };
-        let flags = unsafe { llvm::LLVMGetParam(llfunc, 3) };
-        let prev_result = unsafe { llvm::LLVMGetParam(llfunc, 4) };
-        let simparam = unsafe { llvm::LLVMGetParam(llfunc, 5) };
+        let sim_info = unsafe { llvm::LLVMGetParam(llfunc, 3) };
+        let sim_info_ty = self.tys.osdi_sim_info;
+
+        // let simparam_ty = self.tys.osdi_sim_paras;
+        let simparam = unsafe { builder.typed_struct_gep(sim_info_ty, sim_info, 0) };
+
+        let abstime_offset = builder.cx.const_usize(1);
+
+        let prev_result = unsafe {
+            let ptr = builder.typed_struct_gep(sim_info_ty, sim_info, 2);
+            builder.load(builder.cx.ptr_ty(builder.cx.ty_real()), ptr)
+        };
+
+        let flags = unsafe {
+            let ptr = builder.typed_struct_gep(sim_info_ty, sim_info, 3);
+            builder.load(builder.cx.ty_int(), ptr)
+        };
+
         let ret_flags = unsafe { builder.alloca(builder.cx.ty_int()) };
         unsafe { builder.store(ret_flags, builder.cx.const_int(0)) };
 
@@ -121,15 +127,25 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             }
                         }
                         // TODO support abstime
-                        ParamKind::Current(CurrentKind::Port(_)) | ParamKind::Abstime => {
-                            builder.cx.const_real(0.0)
+                        ParamKind::Current(CurrentKind::Port(_)) => builder.cx.const_real(0.0),
+                        ParamKind::Abstime => {
+                            let loc = MemLoc {
+                                ptr: sim_info,
+                                ptr_ty: sim_info_ty,
+                                ty: builder.cx.ty_real(),
+                                indicies: vec![abstime_offset].into_boxed_slice(),
+                            };
+                            return loc.into();
                         }
+
                         ParamKind::Current(kind) => prev_solve[&SimUnkown::Current(kind)],
                         ParamKind::ImplicitUnkown(equation) => prev_solve
                             .get(&SimUnkown::Implicit(equation))
                             .copied()
                             .unwrap_or_else(|| builder.cx.const_real(0.0)),
-                        ParamKind::Temperature => inst_data.load_temperature(&builder, instance),
+                        ParamKind::Temperature => {
+                            return inst_data.temperature_loc(builder.cx, instance).into()
+                        }
                         ParamKind::ParamGiven { param } => {
                             let inst_given = inst_data.is_param_given(
                                 builder.cx,
@@ -184,6 +200,20 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         builder.params = params;
 
         builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
+        if let Some(fun_ref) = intern.callbacks.index(&CallBackKind::BoundStep) {
+            let bound_step_ptr = unsafe { inst_data.bound_step_ptr(&builder, instance) };
+            unsafe { builder.store(bound_step_ptr, builder.cx.const_real(f64::INFINITY)) };
+
+            let ty_real_ptr = builder.cx.ptr_ty(builder.cx.ty_real());
+            let fun = builder
+                .cx
+                .get_func_by_name("bound_step")
+                .expect("stdlib function bound_step is missing");
+            let fun_ty =
+                builder.cx.ty_func(&[ty_real_ptr, builder.cx.ty_real()], builder.cx.ty_void());
+            let cb = CallbackFun { fun_ty, fun, state: Box::new([bound_step_ptr]), num_state: 0 };
+            builder.callbacks[fun_ref] = Some(cb);
+        }
 
         unsafe {
             builder.build_consts();

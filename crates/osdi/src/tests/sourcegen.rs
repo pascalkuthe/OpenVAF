@@ -459,7 +459,7 @@ impl ToTokens for OsdiStructInterp<'_, '_> {
         let OsdiStruct { ident, fields, .. } = self.info;
         if !matches!(
             *ident,
-            "OsdiInitError" | "OsdiSimParas" | "OsdiInitInfo" | "OsdiInitErrorPayload"
+            "OsdiInitError" | "OsdiSimParas" | "OsdiInitInfo" | "OsdiInitErrorPayload" | "OsdiSimInfo"
         ) {
             assert!(!self.info.is_union, "union code generation is not implemented (yet)");
             let ident = Ident::new(ident, Span::call_site());

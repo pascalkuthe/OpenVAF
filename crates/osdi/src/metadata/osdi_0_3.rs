@@ -54,6 +54,15 @@ impl OsdiTyBuilder<'_, '_, '_> {
     }
 }
 impl OsdiTyBuilder<'_, '_, '_> {
+    fn osdi_sim_info(&mut self) {
+        let ctx = &*self.ctx;
+        let fields =
+            [self.osdi_sim_paras.unwrap(), ctx.ty_real(), ctx.ptr_ty(ctx.ty_real()), ctx.ty_int()];
+        let ty = ctx.struct_ty("OsdiSimInfo", &fields);
+        self.osdi_sim_info = Some(ty);
+    }
+}
+impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_init_error_payload(&mut self) {
         let ctx = &*self.ctx;
         unsafe {
@@ -257,6 +266,7 @@ pub struct OsdiDescriptor<'ll> {
     pub param_opvar: Vec<OsdiParamOpvar>,
     pub node_mapping_offset: u32,
     pub jacobian_ptr_resist_offset: u32,
+    pub bound_step_offset: u32,
     pub instance_size: u32,
     pub model_size: u32,
     pub access: &'ll llvm::Value,
@@ -297,6 +307,7 @@ impl<'ll> OsdiDescriptor<'ll> {
             ctx.const_arr_ptr(tys.osdi_param_opvar, &arr_14),
             ctx.const_unsigned_int(self.node_mapping_offset),
             ctx.const_unsigned_int(self.jacobian_ptr_resist_offset),
+            ctx.const_unsigned_int(self.bound_step_offset),
             ctx.const_unsigned_int(self.instance_size),
             ctx.const_unsigned_int(self.model_size),
             self.access,
@@ -339,6 +350,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
+            ctx.ty_int(),
             ctx.ptr_ty(ctx.ty_func(
                 &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ty_int(), ctx.ty_int()],
                 ctx.ty_void_ptr(),
@@ -369,9 +381,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
                     ctx.ty_void_ptr(),
                     ctx.ty_void_ptr(),
                     ctx.ty_void_ptr(),
-                    ctx.ty_int(),
-                    ctx.ptr_ty(ctx.ty_real()),
-                    ctx.ptr_ty(self.osdi_sim_paras.unwrap()),
+                    ctx.ptr_ty(self.osdi_sim_info.unwrap()),
                 ],
                 ctx.ty_int(),
             )),
@@ -427,6 +437,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
 #[derive(Clone)]
 pub struct OsdiTys<'ll> {
     pub osdi_sim_paras: &'ll llvm::Type,
+    pub osdi_sim_info: &'ll llvm::Type,
     pub osdi_init_error_payload: &'ll llvm::Type,
     pub osdi_init_error: &'ll llvm::Type,
     pub osdi_init_info: &'ll llvm::Type,
@@ -443,6 +454,7 @@ impl<'ll> OsdiTys<'ll> {
             ctx,
             target_data,
             osdi_sim_paras: None,
+            osdi_sim_info: None,
             osdi_init_error_payload: None,
             osdi_init_error: None,
             osdi_init_info: None,
@@ -454,6 +466,7 @@ impl<'ll> OsdiTys<'ll> {
             osdi_descriptor: None,
         };
         builder.osdi_sim_paras();
+        builder.osdi_sim_info();
         builder.osdi_init_error_payload();
         builder.osdi_init_error();
         builder.osdi_init_info();
@@ -470,6 +483,7 @@ struct OsdiTyBuilder<'a, 'b, 'll> {
     ctx: &'a CodegenCx<'b, 'll>,
     target_data: &'a llvm::TargetData,
     osdi_sim_paras: Option<&'ll llvm::Type>,
+    osdi_sim_info: Option<&'ll llvm::Type>,
     osdi_init_error_payload: Option<&'ll llvm::Type>,
     osdi_init_error: Option<&'ll llvm::Type>,
     osdi_init_info: Option<&'ll llvm::Type>,
@@ -484,6 +498,7 @@ impl<'ll> OsdiTyBuilder<'_, '_, 'll> {
     fn finish(self) -> OsdiTys<'ll> {
         OsdiTys {
             osdi_sim_paras: self.osdi_sim_paras.unwrap(),
+            osdi_sim_info: self.osdi_sim_info.unwrap(),
             osdi_init_error_payload: self.osdi_init_error_payload.unwrap(),
             osdi_init_error: self.osdi_init_error.unwrap(),
             osdi_init_info: self.osdi_init_info.unwrap(),

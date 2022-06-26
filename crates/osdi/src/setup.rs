@@ -503,6 +503,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             }
         }
 
+        if module.mir.eval_intern.callbacks.index(&CallBackKind::BoundStep).is_none() {
+            let bound_step_ptr = unsafe { inst_data.bound_step_ptr(&builder, instance) };
+            unsafe { builder.store(bound_step_ptr, builder.cx.const_real(f64::INFINITY)) };
+        }
+
         unsafe { builder.ret_void() }
 
         for (&val, &slot) in module.mir.init_inst_cache_vals.iter() {

@@ -98,3 +98,7 @@ void push_invalid_param_err(void **dst, uint32_t *len, uint32_t *cap,
 
   push_error((OsdiInitError **)dst, len, cap, err);
 }
+
+void bound_step(double *dst, double val){
+    *dst = val;
+}

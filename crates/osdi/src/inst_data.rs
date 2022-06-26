@@ -23,7 +23,7 @@ pub enum OsdiInstanceParam {
     User(ParamId),
 }
 
-pub const NUM_CONST_FIELDS: u32 = 7;
+pub const NUM_CONST_FIELDS: u32 = 8;
 pub const PARAM_GIVEN: u32 = 0;
 pub const JACOBIAN_PTR_RESIST: u32 = 1;
 pub const JACOBIAN_PTR_REACT: u32 = 2;
@@ -31,7 +31,7 @@ pub const NODE_MAPPING: u32 = 3;
 pub const COLLAPSED: u32 = 4;
 pub const TEMPERATURE: u32 = 5;
 pub const CONNECTED: u32 = 6;
-// pub const MAX_STEP_SIZE: u32 = 7;
+pub const MAX_STEP_SIZE: u32 = 7;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum EvalOutput {
@@ -209,6 +209,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let node_mapping = cx.ty_array(ty_u32, cgunit.node_ids.len() as u32);
         let collapsed = cx.ty_array(cx.ty_c_bool(), cgunit.mir.collapse.len() as u32);
         let temperature = cx.ty_real();
+        let max_step_size = cx.ty_real();
         let connected_ports = cx.ty_int();
 
         let cache_slots: TiVec<_, _> =
@@ -222,6 +223,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             collapsed,
             temperature,
             connected_ports,
+            max_step_size,
         ]
         .into_iter()
         .chain(params.values().copied())
@@ -250,6 +252,14 @@ impl<'ll> OsdiInstanceData<'ll> {
             jacobian_ptr_react,
             jacobian_ptr_react_off,
         }
+    }
+
+    pub unsafe fn bound_step_ptr(
+        &self,
+        builder: &mir_llvm::Builder<'_, '_, 'll>,
+        ptr: &'ll llvm::Value,
+    ) -> &'ll llvm::Value {
+        builder.typed_struct_gep(self.ty, ptr, MAX_STEP_SIZE)
     }
 
     pub unsafe fn param_ptr(
@@ -673,13 +683,13 @@ impl<'ll> OsdiInstanceData<'ll> {
         LLVMBuildStore(llbuilder, cx.const_c_bool(true), ptr);
     }
 
-    pub unsafe fn load_temperature(
-        &self,
-        builder: &mir_llvm::Builder<'_, '_, 'll>,
-        ptr: &'ll llvm::Value,
-    ) -> &'ll llvm::Value {
-        let ptr = builder.typed_struct_gep(self.ty, ptr, TEMPERATURE);
-        builder.load(builder.cx.ty_real(), ptr)
+    pub unsafe fn temperature_loc(&self, cx: &CodegenCx<'_, 'll>, ptr: &'ll llvm::Value) -> MemLoc<'ll> {
+        MemLoc {
+            ptr,
+            ptr_ty: self.ty,
+            ty: cx.ty_real(),
+            indicies: vec![cx.const_usize(TEMPERATURE as usize)].into_boxed_slice(),
+        }
     }
 
     pub unsafe fn store_temperature(
