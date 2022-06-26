@@ -33,6 +33,13 @@ pub struct CollapsePair(u32);
 impl_idx_from!(CollapsePair(u32));
 impl_debug_display! {match CollapsePair{CollapsePair(id) => "collapse{id}";}}
 
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum BoundStepKind {
+    None,
+    Setup,
+    Eval,
+}
+
 pub struct EvalMir {
     pub init_inst_func: Function,
     pub init_inst_cfg: ControlFlowGraph,
@@ -49,6 +56,7 @@ pub struct EvalMir {
 
     pub init_model_intern: HirInterner,
     pub init_model_func: Function,
+    pub bound_step: BoundStepKind,
 
     pub collapse: TiMap<CollapsePair, (SimUnkown, Option<SimUnkown>), Vec<CollapsePair>>,
 }
@@ -142,7 +150,16 @@ impl EvalMir {
             })
             .collect();
 
-        let op_dependent_insts = propagate_taint(&func, &dom_tree, &op_dependent);
+        let mut op_dependent_insts = BitSet::new_empty(func.dfg.num_insts());
+        propagate_taint(&func, &dom_tree, &op_dependent, &mut op_dependent_insts);
+
+        let bound_step_op_dependent = op_dependent_insts.iter().any(|inst| {
+            if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
+                intern.callbacks[func_ref] == CallBackKind::BoundStep
+            } else {
+                false
+            }
+        });
 
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
         let mut residual = Residual::default();
@@ -243,19 +260,28 @@ impl EvalMir {
             })
             .collect();
 
+        op_dependent_insts.clear();
+        op_dependent_insts.ensure(func.dfg.num_insts());
+        let mut has_bound_step = false;
         for inst in func.dfg.insts.iter() {
             if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
                 match intern.callbacks[func_ref] {
                     CallBackKind::SimParam
                     | CallBackKind::SimParamOpt
                     | CallBackKind::SimParamStr => op_dependent.push(func.dfg.first_result(inst)),
+                    CallBackKind::BoundStep if func.layout.inst_block(inst).is_some() => {
+                        has_bound_step = true;
+                        if bound_step_op_dependent {
+                            op_dependent_insts.insert(inst);
+                        }
+                    }
                     _ => (),
                 }
             }
         }
 
         dom_tree.compute(&func, &cfg, true, true, false);
-        let op_dependent = propagate_taint(&func, &dom_tree, &op_dependent);
+        propagate_taint(&func, &dom_tree, &op_dependent, &mut op_dependent_insts);
 
         let mut init_inst_func = func.clone();
         let mut init_inst_cfg = cfg.clone();
@@ -269,7 +295,7 @@ impl EvalMir {
                 continue;
             };
 
-            if op_dependent.contains(inst) {
+            if op_dependent_insts.contains(inst) {
                 if !func.dfg.insts[inst].is_terminator() {
                     if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
                         if let CallBackKind::CollapseHint(_, _) = intern.callbacks[func_ref] {
@@ -466,6 +492,16 @@ impl EvalMir {
         sparse_conditional_constant_propagation(&mut init_model_func, &init_model_cfg);
         simplify_cfg(&mut init_model_func, &mut init_model_cfg);
 
+        let bound_step = if has_bound_step {
+            if bound_step_op_dependent {
+                BoundStepKind::Eval
+            } else {
+                BoundStepKind::Setup
+            }
+        } else {
+            BoundStepKind::None
+        };
+
         EvalMir {
             init_inst_func,
             init_inst_cfg,
@@ -480,6 +516,7 @@ impl EvalMir {
             residual,
             init_model_intern,
             init_model_func,
+            bound_step,
             collapse,
         }
     }

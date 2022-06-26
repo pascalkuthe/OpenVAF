@@ -12,8 +12,7 @@ use smol_str::SmolStr;
 
 use crate::compilation_unit::{OsdiCompilationUnit, OsdiModule};
 use crate::inst_data::{
-    OsdiInstanceParam, COLLAPSED, JACOBIAN_PTR_REACT, JACOBIAN_PTR_RESIST, MAX_STEP_SIZE,
-    NODE_MAPPING,
+    OsdiInstanceParam, COLLAPSED, JACOBIAN_PTR_REACT, JACOBIAN_PTR_RESIST, NODE_MAPPING,
 };
 use crate::load::JacobianLoadType;
 use crate::metadata::osdi_0_3::{
@@ -206,8 +205,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 LLVMOffsetOfElement(target_data, inst_data.ty, JACOBIAN_PTR_RESIST) as u32;
 
             let collapsed_offset = LLVMOffsetOfElement(target_data, inst_data.ty, COLLAPSED) as u32;
-            let bound_step_offset =
-                LLVMOffsetOfElement(target_data, inst_data.ty, MAX_STEP_SIZE) as u32;
+            let bound_step_offset = inst_data.bound_step.map_or(u32::MAX, |slot| {
+                let elem = inst_data.cache_slot_elem(slot);
+                LLVMOffsetOfElement(target_data, inst_data.ty, elem) as u32
+            });
 
             let instance_size = LLVMABISizeOfType(target_data, inst_data.ty) as u32;
             let model_size = LLVMABISizeOfType(target_data, model_data.ty) as u32;

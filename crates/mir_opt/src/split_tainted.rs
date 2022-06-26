@@ -7,13 +7,15 @@ pub fn propagate_taint(
     func: &Function,
     dom_tree: &DominatorTree,
     tainted: &[Value],
-) -> BitSet<Inst> {
+    tainted_insts: &mut BitSet<Inst>,
+) {
+    tainted_insts.ensure(func.dfg.num_insts());
     let mut solver = TaintSolver {
         dom_tree,
         func,
         inst_queue: Vec::new(),
         tainted_blocks: BitSet::new_empty(func.layout.num_blocks()),
-        tainted_insts: BitSet::new_empty(func.dfg.num_insts()),
+        tainted_insts,
     };
 
     for val in tainted {
@@ -24,15 +26,14 @@ pub fn propagate_taint(
     }
 
     solver.solve();
-    solver.tainted_insts
 }
 
 struct TaintSolver<'a> {
     dom_tree: &'a DominatorTree,
     func: &'a Function,
+    tainted_insts: &'a mut BitSet<Inst>,
 
     inst_queue: Vec<Inst>,
-    tainted_insts: BitSet<Inst>,
     tainted_blocks: BitSet<Block>,
 }
 

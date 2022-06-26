@@ -9,7 +9,7 @@ use llvm::{
 };
 use mir::{Const, Param, Value, ValueDef};
 use mir_llvm::{CodegenCx, MemLoc};
-use sim_back::CacheSlot;
+use sim_back::{BoundStepKind, CacheSlot};
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiMap;
@@ -23,7 +23,7 @@ pub enum OsdiInstanceParam {
     User(ParamId),
 }
 
-pub const NUM_CONST_FIELDS: u32 = 8;
+pub const NUM_CONST_FIELDS: u32 = 7;
 pub const PARAM_GIVEN: u32 = 0;
 pub const JACOBIAN_PTR_RESIST: u32 = 1;
 pub const JACOBIAN_PTR_REACT: u32 = 2;
@@ -31,7 +31,6 @@ pub const NODE_MAPPING: u32 = 3;
 pub const COLLAPSED: u32 = 4;
 pub const TEMPERATURE: u32 = 5;
 pub const CONNECTED: u32 = 6;
-pub const MAX_STEP_SIZE: u32 = 7;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum EvalOutput {
@@ -103,6 +102,8 @@ pub struct OsdiInstanceData<'ll> {
     pub matrix_resist: TiVec<OsdiMatrixId, Option<EvalOutput>>,
     pub matrix_react: TiVec<OsdiMatrixId, Option<EvalOutput>>,
     pub ty: &'ll llvm::Type,
+
+    pub bound_step: Option<CacheSlot>,
 }
 
 impl<'ll> OsdiInstanceData<'ll> {
@@ -209,11 +210,16 @@ impl<'ll> OsdiInstanceData<'ll> {
         let node_mapping = cx.ty_array(ty_u32, cgunit.node_ids.len() as u32);
         let collapsed = cx.ty_array(cx.ty_c_bool(), cgunit.mir.collapse.len() as u32);
         let temperature = cx.ty_real();
-        let max_step_size = cx.ty_real();
         let connected_ports = cx.ty_int();
 
-        let cache_slots: TiVec<_, _> =
+        let mut cache_slots: TiVec<_, _> =
             cgunit.mir.init_inst_cache_slots.raw.values().map(|ty| lltype(ty, cx)).collect();
+
+        let bound_step = if cgunit.mir.bound_step != BoundStepKind::None {
+            Some(cache_slots.push_and_get_key(cx.ty_real()))
+        } else {
+            None
+        };
 
         let fields: Vec<_> = [
             param_given,
@@ -223,7 +229,6 @@ impl<'ll> OsdiInstanceData<'ll> {
             collapsed,
             temperature,
             connected_ports,
-            max_step_size,
         ]
         .into_iter()
         .chain(params.values().copied())
@@ -251,6 +256,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             residual_react,
             jacobian_ptr_react,
             jacobian_ptr_react_off,
+            bound_step,
         }
     }
 
@@ -259,7 +265,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         builder: &mir_llvm::Builder<'_, '_, 'll>,
         ptr: &'ll llvm::Value,
     ) -> &'ll llvm::Value {
-        builder.typed_struct_gep(self.ty, ptr, MAX_STEP_SIZE)
+        self.cache_slot_ptr(builder.llbuilder, self.bound_step.unwrap(), ptr).0
     }
 
     pub unsafe fn param_ptr(
@@ -614,13 +620,17 @@ impl<'ll> OsdiInstanceData<'ll> {
         LLVMBuildStore(llbuilder, val, dst);
     }
 
+    pub fn cache_slot_elem(&self, slot: CacheSlot) -> u32 {
+        NUM_CONST_FIELDS + self.params.len() as u32 + u32::from(slot)
+    }
+
     pub fn cache_slot_ptr(
         &self,
         llbuilder: &llvm::Builder<'ll>,
         slot: CacheSlot,
         ptr: &'ll llvm::Value,
     ) -> (&'ll llvm::Value, &'ll llvm::Type) {
-        let elem = NUM_CONST_FIELDS + self.params.len() as u32 + u32::from(slot);
+        let elem = self.cache_slot_elem(slot);
         let ptr = unsafe { LLVMBuildStructGEP2(llbuilder, self.ty, ptr, elem, UNNAMED) };
         let ty = self.cache_slots[slot];
         (ptr, ty)
@@ -683,7 +693,11 @@ impl<'ll> OsdiInstanceData<'ll> {
         LLVMBuildStore(llbuilder, cx.const_c_bool(true), ptr);
     }
 
-    pub unsafe fn temperature_loc(&self, cx: &CodegenCx<'_, 'll>, ptr: &'ll llvm::Value) -> MemLoc<'ll> {
+    pub unsafe fn temperature_loc(
+        &self,
+        cx: &CodegenCx<'_, 'll>,
+        ptr: &'ll llvm::Value,
+    ) -> MemLoc<'ll> {
         MemLoc {
             ptr,
             ptr_ty: self.ty,

@@ -6,7 +6,7 @@ use llvm::{
     LLVMPositionBuilderAtEnd, UNNAMED,
 };
 use mir_llvm::{Builder, BuilderVal, CallbackFun, MemLoc};
-use sim_back::SimUnkown;
+use sim_back::{BoundStepKind, SimUnkown};
 use typed_index_collections::TiVec;
 
 use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
@@ -200,10 +200,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         builder.params = params;
 
         builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
-        if let Some(fun_ref) = intern.callbacks.index(&CallBackKind::BoundStep) {
+        if module.mir.bound_step == BoundStepKind::Eval {
             let bound_step_ptr = unsafe { inst_data.bound_step_ptr(&builder, instance) };
             unsafe { builder.store(bound_step_ptr, builder.cx.const_real(f64::INFINITY)) };
 
+            let func_ref = intern.callbacks.unwrap_index(&CallBackKind::BoundStep);
             let ty_real_ptr = builder.cx.ptr_ty(builder.cx.ty_real());
             let fun = builder
                 .cx
@@ -212,7 +213,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let fun_ty =
                 builder.cx.ty_func(&[ty_real_ptr, builder.cx.ty_real()], builder.cx.ty_void());
             let cb = CallbackFun { fun_ty, fun, state: Box::new([bound_step_ptr]), num_state: 0 };
-            builder.callbacks[fun_ref] = Some(cb);
+            builder.callbacks[func_ref] = Some(cb);
         }
 
         unsafe {
