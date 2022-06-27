@@ -271,11 +271,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     }])
                     .with_message("invalid unkown was supplied to the ddx operator")
                     .with_notes(vec![
-                        "help: expected one of the following".to_owned(),
-                        "branch current acces: I(branch), I(a,b)".to_owned(),
-                        "node voltage: V(x)".to_owned(),
-                        "explicit voltage: V(x,y)".to_owned(),
-                        "temperature: $temperature".to_owned(),
+                        "help: expected one of the following\nbranch current acces: I(branch), I(a,b)\nnode voltage: V(x)\nexplicit voltage: V(x,y)\ntemperature: $temperature".to_owned(),
                     ])
             }
             InferenceDiagnostic::NonStandardUnkown { e, .. } => {
@@ -290,13 +286,10 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         range: src.range.into(),
                         message: "unkown is not standard compliant".to_owned(),
                     }])
-                    .with_message("the unkown supplied to the ddx operator")
+                    .with_message("unkown supplied to the ddx operator is not standard compilant")
                     .with_notes(vec![
-                        "help: expected one of the following".to_owned(),
-                        "branch current acces: I(branch), I(a,b)".to_owned(),
-                        "node voltage: V(x)".to_owned(),
-                        "explicit voltage: V(x,y)".to_owned(),
-                        "temperature: $temperature".to_owned(),
+                        "note: this functionality is fully suported by openvaf\nbut other Verilog-A compilers might not support it".to_owned(),
+                        "help: expected one of the following\nbranch current acces: I(branch), I(a,b)\nnode voltage: V(x)".to_owned(),
                     ])
             }
         }

@@ -40,17 +40,17 @@ fn ddx() {
     );
     let actual = db.lower_and_check();
     expect![[r#"
-        warning[L011]: the unkown supplied to the ddx operator
+        warning[L011]: unkown supplied to the ddx operator is not standard compilant
            ┌─ /root.va:16:29
            │
         16 │                 x = ddx(1.0,V(a,c));
            │                             ^^^^^^ unkown is not standard compliant
            │
+           = note: this functionality is fully suported by openvaf
+             but other Verilog-A compilers might not support it
            = help: expected one of the following
-           = branch current acces: I(branch), I(a,b)
-           = node voltage: V(x)
-           = explicit voltage: V(x,y)
-           = temperature: $temperature
+             branch current acces: I(branch), I(a,b)
+             node voltage: V(x)
            = non_standard_code is set to warn by default
 
         error: invalid unkown was supplied to the ddx operator
@@ -60,10 +60,10 @@ fn ddx() {
            │                             ^^^^^^^^ invalid ddx unkown
            │
            = help: expected one of the following
-           = branch current acces: I(branch), I(a,b)
-           = node voltage: V(x)
-           = explicit voltage: V(x,y)
-           = temperature: $temperature
+             branch current acces: I(branch), I(a,b)
+             node voltage: V(x)
+             explicit voltage: V(x,y)
+             temperature: $temperature
 
         error: invalid unkown was supplied to the ddx operator
            ┌─ /root.va:21:29
@@ -72,10 +72,10 @@ fn ddx() {
            │                             ^^^^^^ invalid ddx unkown
            │
            = help: expected one of the following
-           = branch current acces: I(branch), I(a,b)
-           = node voltage: V(x)
-           = explicit voltage: V(x,y)
-           = temperature: $temperature
+             branch current acces: I(branch), I(a,b)
+             node voltage: V(x)
+             explicit voltage: V(x,y)
+             temperature: $temperature
 
         error: invalid unkown was supplied to the ddx operator
            ┌─ /root.va:22:29
@@ -84,10 +84,10 @@ fn ddx() {
            │                             ^^^^ invalid ddx unkown
            │
            = help: expected one of the following
-           = branch current acces: I(branch), I(a,b)
-           = node voltage: V(x)
-           = explicit voltage: V(x,y)
-           = temperature: $temperature
+             branch current acces: I(branch), I(a,b)
+             node voltage: V(x)
+             explicit voltage: V(x,y)
+             temperature: $temperature
 
         error: invalid unkown was supplied to the ddx operator
            ┌─ /root.va:23:29
@@ -96,10 +96,10 @@ fn ddx() {
            │                             ^^^^^^ invalid ddx unkown
            │
            = help: expected one of the following
-           = branch current acces: I(branch), I(a,b)
-           = node voltage: V(x)
-           = explicit voltage: V(x,y)
-           = temperature: $temperature
+             branch current acces: I(branch), I(a,b)
+             node voltage: V(x)
+             explicit voltage: V(x,y)
+             temperature: $temperature
 
         error: invalid unkown was supplied to the ddx operator
            ┌─ /root.va:24:29
@@ -108,10 +108,10 @@ fn ddx() {
            │                             ^^^^^^ invalid ddx unkown
            │
            = help: expected one of the following
-           = branch current acces: I(branch), I(a,b)
-           = node voltage: V(x)
-           = explicit voltage: V(x,y)
-           = temperature: $temperature
+             branch current acces: I(branch), I(a,b)
+             node voltage: V(x)
+             explicit voltage: V(x,y)
+             temperature: $temperature
 
         error: access of port-branch potential
            ┌─ /root.va:24:29
