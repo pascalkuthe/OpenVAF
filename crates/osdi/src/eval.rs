@@ -66,17 +66,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         // let simparam_ty = self.tys.osdi_sim_paras;
         let simparam = unsafe { builder.typed_struct_gep(sim_info_ty, sim_info, 0) };
 
-        let abstime_offset = builder.cx.const_usize(1);
+        const ABSTIME_OFFSET: u32 = 1;
 
         let prev_result = unsafe {
             let ptr = builder.typed_struct_gep(sim_info_ty, sim_info, 2);
             builder.load(builder.cx.ptr_ty(builder.cx.ty_real()), ptr)
         };
 
-        let flags = unsafe {
-            let ptr = builder.typed_struct_gep(sim_info_ty, sim_info, 3);
-            builder.load(builder.cx.ty_int(), ptr)
-        };
+        let flags = unsafe { builder.typed_struct_gep(sim_info_ty, sim_info, 3) };
 
         let ret_flags = unsafe { builder.alloca(builder.cx.ty_int()) };
         unsafe { builder.store(ret_flags, builder.cx.const_int(0)) };
@@ -129,12 +126,13 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         // TODO support abstime
                         ParamKind::Current(CurrentKind::Port(_)) => builder.cx.const_real(0.0),
                         ParamKind::Abstime => {
-                            let loc = MemLoc {
-                                ptr: sim_info,
-                                ptr_ty: sim_info_ty,
-                                ty: builder.cx.ty_real(),
-                                indicies: vec![abstime_offset].into_boxed_slice(),
-                            };
+                            let loc = MemLoc::struct_gep(
+                                sim_info,
+                                sim_info_ty,
+                                builder.cx.ty_real(),
+                                ABSTIME_OFFSET,
+                                builder.cx,
+                            );
                             return loc.into();
                         }
 
@@ -309,6 +307,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let bb = LLVMAppendBasicBlockInContext(builder.cx.llcx, llfunc, UNNAMED);
         let next_bb = LLVMAppendBasicBlockInContext(builder.cx.llcx, llfunc, UNNAMED);
 
+        let flags = builder.load(builder.cx.ty_int(), flags);
         let flag = builder.cx.const_unsigned_int(flag);
         let and = LLVMBuildAnd(builder.llbuilder, flags, flag, UNNAMED);
         let is_set = LLVMBuildICmp(builder.llbuilder, IntNE, and, builder.cx.const_int(0), UNNAMED);

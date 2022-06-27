@@ -21,6 +21,20 @@ pub struct MemLoc<'ll> {
 }
 
 impl<'ll> MemLoc<'ll> {
+    pub fn struct_gep(
+        ptr: &'ll llvm::Value,
+        ptr_ty: &'ll llvm::Type,
+        ty: &'ll llvm::Type,
+        idx: u32,
+        cx: &CodegenCx<'_, 'll>,
+    ) -> MemLoc<'ll> {
+        MemLoc {
+            ptr,
+            ptr_ty,
+            ty,
+            indicies: vec![cx.const_unsigned_int(0), cx.const_unsigned_int(idx)].into_boxed_slice(),
+        }
+    }
     /// # Safety
     ///
     /// ptr_ty, ty and indicies must be valid for ptr

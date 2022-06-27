@@ -300,8 +300,7 @@ impl<'ll> OsdiInstanceData<'ll> {
     ) -> MemLoc<'ll> {
         let ty = self.params.get_index(pos as usize).unwrap().1;
         let elem = NUM_CONST_FIELDS + pos as u32;
-        let indicies = vec![cx.const_int(0), cx.const_unsigned_int(elem)].into_boxed_slice();
-        MemLoc { ptr, ptr_ty: self.ty, ty, indicies }
+        MemLoc::struct_gep(ptr, self.ty, ty, elem, cx)
     }
 
     pub fn param_loc(
@@ -698,12 +697,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         cx: &CodegenCx<'_, 'll>,
         ptr: &'ll llvm::Value,
     ) -> MemLoc<'ll> {
-        MemLoc {
-            ptr,
-            ptr_ty: self.ty,
-            ty: cx.ty_real(),
-            indicies: vec![cx.const_usize(TEMPERATURE as usize)].into_boxed_slice(),
-        }
+        MemLoc::struct_gep(ptr, self.ty, cx.ty_real(), TEMPERATURE, cx)
     }
 
     pub unsafe fn store_temperature(
