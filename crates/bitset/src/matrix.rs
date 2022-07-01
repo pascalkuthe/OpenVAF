@@ -333,6 +333,12 @@ where
         res
     }
 
+    pub fn intersect(&mut self, other: &SparseBitMatrix<R, C>) {
+        self.rows.truncate(other.rows.len());
+        for (dst, other) in zip(&mut self.rows, &other.rows) {
+            dst.intersect(other)
+        }
+    }
     #[inline]
     pub fn ensure_row(&mut self, row: R) -> &mut HybridBitSet<C> {
         // Instantiate any missing rows up to and including row `row` with an empty HybridBitSet.
@@ -381,6 +387,10 @@ where
         self.ensure_row(row).insert_all(col);
     }
 
+    pub fn row_data_mut(&mut self) -> impl Iterator<Item = &mut HybridBitSet<C>> {
+        self.rows.iter_mut()
+    }
+
     pub fn rows(&self) -> impl Iterator<Item = R> {
         (0..self.rows.len()).map(R::from)
     }
@@ -398,6 +408,10 @@ where
 
     pub fn row(&self, row: R) -> Option<&HybridBitSet<C>> {
         self.rows.get(row.into())
+    }
+
+    pub fn row_mut(&mut self, row: R) -> Option<&mut HybridBitSet<C>> {
+        self.rows.get_mut(row.into())
     }
 
     pub fn take_row(&mut self, row: R) -> Option<HybridBitSet<C>> {

@@ -331,7 +331,7 @@ where
     T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
     // Performs `other = other - self`.
-    fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool;
+    fn subtract_from_h(&self, other: &mut HybridBitSet<T>) -> bool;
 }
 
 impl<T> UnionIntoBitSet<T> for BitSet<T>

@@ -8,14 +8,13 @@ pub mod residual;
 pub use compilation_db::{CompilationDB, ModuleInfo};
 use hir_def::NodeId;
 use hir_lower::{CurrentKind, ImplicitEquation};
-pub use middle::{CacheSlot, EvalMir, BoundStepKind};
+pub use middle::{BoundStepKind, CacheSlot, EvalMir};
 use mir::{Function, InstructionData, Opcode, Value};
 pub use residual::Residual;
 use stdx::impl_debug_display;
 
 #[cfg(test)]
 mod tests;
-
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub enum SimUnkown {

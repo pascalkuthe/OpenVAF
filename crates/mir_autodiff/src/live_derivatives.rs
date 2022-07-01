@@ -1,9 +1,12 @@
-use bitset::{BitSet, HybridBitSet, SparseBitMatrix};
-use mir::{
-    DataFlowGraph, Function, Inst, InstUseIter, InstructionData, Opcode, Use, Value, ValueDef,
-};
+use ahash::AHashMap;
+use bitset::{HybridBitSet, SparseBitMatrix};
+use mir::{DominatorTree, Function, Inst, InstructionData, Value, ValueDef};
+use workqueue::WorkQueue;
 
-use crate::unkowns::{Unkown, Unkowns};
+use crate::postorder::Postorder;
+use crate::subgraph::SubGraphExplorer;
+use crate::unkowns::{NthOrderUnkownInfo, Unkown, Unkowns};
+use crate::ChainRule;
 
 #[cfg(test)]
 mod tests;
@@ -11,6 +14,8 @@ mod tests;
 #[derive(Debug, Clone)]
 pub struct LiveDerivatives {
     pub mat: SparseBitMatrix<Inst, Unkown>,
+    pub(crate) conversions: AHashMap<Inst, Vec<ChainRule>>,
+    pub(crate) completed_subgraphs: Vec<(Value, HybridBitSet<Unkown>)>,
 }
 
 impl LiveDerivatives {
@@ -18,121 +23,133 @@ impl LiveDerivatives {
         func: &Function,
         unkowns: &mut Unkowns,
         extra_derivatives: &[(Value, mir::Unkown)],
+        dom_tree: &DominatorTree,
     ) -> LiveDerivatives {
-        let mut derivative_params = BitSet::new_empty(func.dfg.num_values());
+        let mut post_order = Postorder::new(&func.dfg);
 
-        for param in unkowns.first_order_unkowns.raw.iter() {
-            derivative_params.insert(*param);
+        // First check which first-order derivatives are actually reachable in the DFG.
+        // If a derivative is not reachable at a certain
+        // instruction it can be assumed that its value is 0 here.
+        let mut reachable_derivatives: SparseBitMatrix<Inst, Unkown> =
+            SparseBitMatrix::new(func.dfg.num_values(), unkowns.len());
+
+        for (unkown, param) in unkowns.first_order_unkowns.iter_enumerated() {
+            post_order.populate(*param);
+            post_order.traverse_successor();
+            for inst in &mut post_order {
+                reachable_derivatives.insert(inst, unkown.into());
+            }
+            post_order.clear();
         }
 
-        let mut mat = SparseBitMatrix::new(func.dfg.num_values(), unkowns.len());
+        // If higher older derivatives are added, we insert where this higer order derivative is
+        // rechable. A higher order derivative is rechable when its new base unkown or its previous
+        // order are rechable (both known at this point). A higher order derivative is only
+        // generated if all its unkowns are rechable at the ddx call
+        let mut insert_higher_order_unkown =
+            |inst: Inst, unkown, info: Option<NthOrderUnkownInfo>| {
+                if let Some(info) = info {
+                    for row in reachable_derivatives.row_data_mut() {
+                        if row.contains(info.previous_order) && row.contains(info.base.into()) {
+                            row.insert_growable(unkown, usize::from(unkown) + 1);
+                        }
+                    }
+                    true
+                } else {
+                    reachable_derivatives.row(inst).map_or(false, |row| row.contains(unkown))
+                }
+            };
+
+        // First we find the live derivatives at any instruction: That is any derivative that we
+        // care about at a certain instruction regardless [^1]  of whether this derivative is
+        // non-zero here. Most importantly this pass finds any higher order derivatives that might be
+        // required.
+        //
+        // finding the live derivatives is a reverse data flow problem on the SSA.
+        // The live derivatives at any instruction is the union of the derivatives of the uses.
+        //
+        //
+        // [^1]: We use a postorder visit of the dataflow graph starting from the first order
+        // derivative values. Therefore we do in fact ignore any derivatives which are trivally
+        // zero. However this is just a performance optimzation and still produces a lot of unneded
+        // derivatives. Furthermore we only generate higher order derivatives if their first order
+        // derivative is reachable at this point
+        let mut live_derivatives = SparseBitMatrix::new(func.dfg.num_values(), unkowns.len());
+
+        for param in unkowns.first_order_unkowns.raw.iter() {
+            post_order.populate(*param)
+        }
+
+        post_order.traverse_successor();
 
         for (val, unkown) in extra_derivatives {
             if let ValueDef::Result(inst, _) = func.dfg.value_def(*val) {
-                mat.insert(inst, (*unkown).into());
+                live_derivatives.insert(inst, (*unkown).into());
             }
         }
 
-        // finding the live derivatives is a simple post order visit
-        // the union of the derivatives of the uses then form the live derivatives
-        // However for cycels this doesn't work because not all uses can be visited before.
-        //
-        // For now simply running a fixpoint iteration is the only valid solution here.
-        // Even for complex models we required 5 iterations at most which is fine (this loop
-        // isn't very performance intensive)
-        //
-        // If it becomes a problem we might look into only reprocessing users of cycels
+        let mut workqueue: WorkQueue<_> = WorkQueue::with_none(func.dfg.num_insts());
+        workqueue.extend(&mut post_order);
+        let mut live_derivatives = LiveDerivatives {
+            mat: live_derivatives,
+            conversions: AHashMap::default(),
+            completed_subgraphs: Vec::new(),
+        };
 
-        let post_order: Vec<_> = Postorder::new(&func.dfg, &derivative_params).collect();
-        let mut live_derivatives = LiveDerivatives { mat };
-
-        loop {
-            let mut changed = false;
-
-            for inst in post_order.iter().copied() {
-                let opcode = func.dfg.insts[inst].opcode();
-                let no_derivative = matches!(
-                    opcode,
-                    Opcode::Ineg
-                        | Opcode::Iadd
-                        | Opcode::Isub
-                        | Opcode::Imul
-                        | Opcode::Idiv
-                        | Opcode::Ishl
-                        | Opcode::Ishr
-                        | Opcode::IFcast
-                        | Opcode::BIcast
-                        | Opcode::IBcast
-                        | Opcode::FBcast
-                        | Opcode::BFcast
-                        | Opcode::FIcast
-                        | Opcode::Irem
-                        | Opcode::Inot
-                        | Opcode::Ixor
-                        | Opcode::Iand
-                        | Opcode::Ior
-                        | Opcode::Clog2
-                        | Opcode::Frem
-                        | Opcode::Floor
-                        | Opcode::Ceil
-                        | Opcode::Bnot
-                        | Opcode::Ilt
-                        | Opcode::Igt
-                        | Opcode::Flt
-                        | Opcode::Fgt
-                        | Opcode::Ile
-                        | Opcode::Ige
-                        | Opcode::Fle
-                        | Opcode::Fge
-                        | Opcode::Ieq
-                        | Opcode::Feq
-                        | Opcode::Seq
-                        | Opcode::Beq
-                        | Opcode::Ine
-                        | Opcode::Fne
-                        | Opcode::Sne
-                        | Opcode::Bne
-                        | Opcode::Br
-                        | Opcode::Jmp
-                );
-
-                if no_derivative {
-                    continue;
-                }
-                // zero no need to store the derivative
-                let mut dst = live_derivatives.compute_inst(inst, func, unkowns);
-                if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
-                    if unkowns.ddx_calls.contains_key(&func_ref) {
-                        let old = dst.clone();
-                        let (pos_unkowns, neg_unkowns) = &unkowns.ddx_calls[&func_ref];
-                        for ddx_unkown in pos_unkowns.iter().chain(neg_unkowns.iter()) {
-                            for unkown in old.iter() {
-                                let higher_order = unkowns.raise_order(unkown, ddx_unkown);
+        while let Some(inst) = workqueue.pop() {
+            let mut dst = live_derivatives.compute_inst(inst, func, unkowns);
+            if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
+                if unkowns.ddx_calls.contains_key(&func_ref) {
+                    let old = dst.clone();
+                    let (pos_unkowns, neg_unkowns) = &unkowns.ddx_calls[&func_ref];
+                    for ddx_unkown in pos_unkowns.iter().chain(neg_unkowns.iter()) {
+                        for unkown in old.iter() {
+                            let higher_order =
+                                unkowns.raise_order_with(unkown, ddx_unkown, |unkown, info| {
+                                    insert_higher_order_unkown(inst, unkown, info)
+                                });
+                            if let Some(higher_order) = higher_order {
                                 dst.insert_growable(higher_order, unkowns.len());
                             }
-
-                            dst.insert(ddx_unkown.into(), unkowns.len());
                         }
-                    } else {
-                        continue; // TODO call derivatives
-                    }
-                }
 
-                if !dst.is_empty() {
-                    let old = live_derivatives.mat.ensure_row(inst);
-                    if old != &dst {
-                        changed = true;
-                        *old = dst;
+                        dst.insert(ddx_unkown.into(), unkowns.len());
                     }
+                } else {
+                    continue; // TODO call derivatives
                 }
             }
 
-            if !changed {
-                break;
+            if !dst.is_empty() {
+                let old = live_derivatives.mat.ensure_row(inst);
+                if old != &dst {
+                    for val in func.dfg.instr_args(inst) {
+                        if let Some(inst) = func.dfg.value_def(*val).inst() {
+                            if post_order.visited.contains(inst) {
+                                workqueue.insert(inst);
+                            }
+                        }
+                    }
+                    *old = dst;
+                }
             }
         }
 
-        // post_order.retain(|inst| live_derivatives.mat.row(*inst).is_some());
+        // only keep those live derivative that are actually rechable
+        live_derivatives.mat.intersect(&reachable_derivatives);
+        drop(reachable_derivatives);
+        let mut outputs = post_order.visited;
+        outputs.clear();
+        for (val, _) in extra_derivatives {
+            if let Some(inst) = func.dfg.value_def(*val).inst() {
+                outputs.insert(inst);
+            }
+        }
+
+        let mut subgraph_opt =
+            SubGraphExplorer::new(&mut live_derivatives, func, unkowns, dom_tree, &outputs);
+        subgraph_opt.run();
+
         live_derivatives
     }
 
@@ -156,82 +173,5 @@ impl LiveDerivatives {
             }
         }
         dst
-    }
-}
-
-/// Postorder traversal of a graph.
-///
-/// Postorder traversal is when each node is visited after all of its
-/// successors, except when the successor is only reachable by a back-edge
-///
-///
-/// ```text
-///
-///         A
-///        / \
-///       /   \
-///      B     C
-///       \   /
-///        \ /
-///         D
-/// ```
-///
-/// A Postorder traversal of this graph is `D B C A` or `D C B A`
-///
-pub struct Postorder<'a> {
-    dfg: &'a DataFlowGraph,
-    visited: BitSet<Inst>,
-    visit_stack: Vec<(Inst, InstUseIter<'a>)>,
-}
-
-impl<'a> Postorder<'a> {
-    pub fn new(dfg: &'a DataFlowGraph, entries: &BitSet<Value>) -> Postorder<'a> {
-        let mut po =
-            Postorder { dfg, visited: BitSet::new_empty(dfg.num_insts()), visit_stack: Vec::new() };
-
-        for val in entries.iter() {
-            for use_ in dfg.uses(val) {
-                po.transverse_use(use_)
-            }
-        }
-
-        po.traverse_successor();
-
-        po
-    }
-
-    fn traverse_successor(&mut self) {
-        while let Some(use_) = self.visit_stack.last_mut().and_then(|(_, iter)| iter.next()) {
-            self.transverse_use(use_);
-        }
-    }
-
-    fn transverse_use(&mut self, use_: Use) {
-        let inst = self.dfg.use_to_operand(use_).0;
-        if self.visited.insert(inst) {
-            self.visit_stack.push((inst, self.dfg.inst_uses(inst)));
-        }
-    }
-}
-
-impl<'lt> Iterator for Postorder<'lt> {
-    type Item = Inst;
-
-    fn next(&mut self) -> Option<Inst> {
-        let next = self.visit_stack.pop().map(|(inst, _)| inst);
-        if next.is_some() {
-            self.traverse_successor();
-        }
-
-        next
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        // All the blocks, minus the number of blocks we've visited.
-        let upper = self.dfg.num_insts() - self.visited.count();
-
-        let lower = self.visit_stack.len();
-
-        (lower, Some(upper))
     }
 }

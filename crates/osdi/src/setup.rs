@@ -443,11 +443,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         unsafe {
             builder.build_consts();
-            // for (_, kind, val) in intern.live_params(&func.dfg) {
-            //     if matches!(builder.values[val], BuilderVal::Undef) {
-            //         println!("hmm {val} = {kind:?}");
-            //     }
-            // }
             builder.build_cfg(&postorder);
         }
         let exit_bb = *postorder

@@ -763,6 +763,7 @@ impl CodegenCtx<'_, '_> {
 
         debug_assert!(module.verify_and_print(), "generated invalid code");
         module.optimize();
+        // println!("{}", module.to_str());
 
         module.emit_obect(dst).expect("code generation failed!");
     }

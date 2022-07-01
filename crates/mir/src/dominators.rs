@@ -2,10 +2,10 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::path::Path;
 
+use crate::flowgraph::Successors;
+use crate::ControlFlowGraph;
+use crate::{Block, Function};
 use bitset::SparseBitMatrix;
-use mir::flowgraph::Successors;
-use mir::ControlFlowGraph;
-use mir::{Block, Function};
 use stdx::packed_option::PackedOption;
 use typed_index_collections::{TiSlice, TiVec};
 

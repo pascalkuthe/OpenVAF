@@ -204,7 +204,9 @@ pub fn general_callbacks<'ll>(
                     let zero = builder.cx.const_real(0.0);
                     builder.cx.const_callback(&[builder.cx.ty_real()], zero)
                 }
-                CallBackKind::ParamInfo(_, _) | CallBackKind::CollapseHint(_, _) | CallBackKind::BoundStep=> return None,
+                CallBackKind::ParamInfo(_, _)
+                | CallBackKind::CollapseHint(_, _)
+                | CallBackKind::BoundStep => return None,
                 CallBackKind::Print { kind, arg_tys } => {
                     let (fun, fun_ty) = print_callback(builder.cx, *kind, arg_tys);
                     CallbackFun { fun_ty, fun, state: Box::new([handle]), num_state: 0 }

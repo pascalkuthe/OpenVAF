@@ -59,7 +59,7 @@ where
         dense
     }
 
-    pub(super) fn iter(&self) -> slice::Iter<'_, T> {
+    pub fn iter(&self) -> slice::Iter<'_, T> {
         self.elems.iter()
     }
 }
@@ -81,7 +81,7 @@ impl<T> SparseBitSet<T>
 where
     T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
-    pub(super) fn insert(&mut self, elem: T) -> bool {
+    pub fn insert(&mut self, elem: T) -> bool {
         let changed = if let Some(i) = self.elems.iter().position(|&e| e.into() >= elem.into()) {
             if self.elems[i] == elem {
                 // `elem` is already in the set.
@@ -104,7 +104,7 @@ impl<T> SparseBitSet<T>
 where
     T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
-    pub(super) fn remove(&mut self, elem: T) -> bool {
+    pub fn remove(&mut self, elem: T) -> bool {
         if let Some(i) = self.elems.iter().position(|&e| e == elem) {
             self.elems.remove(i);
             true
@@ -113,7 +113,7 @@ where
         }
     }
 
-    pub(super) fn contains(&self, elem: T) -> bool {
+    pub fn contains(&self, elem: T) -> bool {
         self.elems.contains(&elem)
     }
 }

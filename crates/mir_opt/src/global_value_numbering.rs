@@ -7,12 +7,12 @@ use std::ops::{Index, IndexMut};
 use ahash::RandomState;
 use bitset::{BitSet, HybridBitSet};
 use hashbrown::raw::RawTable;
+use mir::DominatorTree;
 use mir::{Block, FuncRef, Function, Inst, InstructionData, Opcode, Value, ValueDef, ValueList};
 use stdx::packed_option::PackedOption;
 use stdx::{impl_idx_from, impl_idx_math};
 use typed_index_collections::TiVec;
 
-use crate::dominators::DominatorTree;
 use crate::simplify::SimplifyCtx;
 
 struct GVNExpression {

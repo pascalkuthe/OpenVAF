@@ -22,6 +22,7 @@
 //! [SSA]: https://en.wikipedia.org/wiki/Static_single_assignment_form
 
 mod dfg;
+mod dominators;
 mod entities;
 mod immediates;
 mod instructions;
@@ -42,6 +43,7 @@ use typed_indexmap::TiSet;
 
 pub use crate::dfg::consts::*;
 pub use crate::dfg::{Const, DataFlowGraph, DfgValues, InstUseIter, UseCursor, UseIter, ValueDef};
+pub use crate::dominators::DominatorTree;
 pub use crate::entities::{AnyEntity, Block, FuncRef, Inst, Param, Use, Value};
 pub use crate::flowgraph::ControlFlowGraph;
 pub use crate::immediates::Ieee64;
@@ -198,6 +200,7 @@ impl Function {
 pub struct DerivativeInfo {
     pub unkowns: TiSet<Unkown, Value>,
     pub ddx_calls: AHashMap<FuncRef, (HybridBitSet<Unkown>, HybridBitSet<Unkown>)>,
+    // pub standin_calls: AHashMap<FuncRef, u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

@@ -2,7 +2,7 @@ use std::fmt::{self, Debug};
 
 use bitset::{HybridBitSet, SparseBitMatrix};
 use expect_test::{expect, Expect};
-use mir::{DerivativeInfo, Function, Inst, Value};
+use mir::{ControlFlowGraph, DerivativeInfo, DominatorTree, Function, Inst, Value};
 use mir_reader::parse_function;
 
 use crate::unkowns::Unkown;
@@ -59,7 +59,12 @@ fn check(src: &str, data_flow_result: Expect) {
     let derivative_info = DerivativeInfo { unkowns, ddx_calls };
     let mut unkowns = Unkowns::new(&derivative_info);
 
-    let res = LiveDerivatives::build(&func, &mut unkowns, &[]);
+    let mut cfg = ControlFlowGraph::new();
+    cfg.compute(&func);
+    let mut dom_tree = DominatorTree::default();
+    dom_tree.compute(&func, &cfg, true, false, true);
+
+    let res = LiveDerivatives::build(&func, &mut unkowns, &[], &dom_tree);
     let printer = DerivativeFmt { func: &func, derivatives: &res.mat };
 
     let actual = format!("{:#?}", printer);
@@ -87,7 +92,7 @@ fn smoke_test() {
             br v14, block2, block4
 
         block2:
-            v15 = fmul v12, v16
+            v15 = fmul v10, v16
             v23 = fadd v5, v12 
             jmp block3
 
@@ -109,9 +114,7 @@ fn smoke_test() {
         SparseBitMatrix(41x2) {
             v20: unkown0,
             v13: unkown0,
-            v16: unkown0,
             v16: unkown1,
-            v16: unkown2,
             v15: unkown0,
             v15: unkown1,
             v15: unkown2,

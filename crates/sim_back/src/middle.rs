@@ -7,12 +7,11 @@ use indexmap::{IndexMap, IndexSet};
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{ControlFlowGraph, Function, InstructionData, Value, FALSE};
+use mir::{ControlFlowGraph, DominatorTree, Function, InstructionData, Value, FALSE};
 use mir_autodiff::auto_diff;
 use mir_opt::{
     agressive_dead_code_elimination, dead_code_elimination, inst_combine, propagate_taint,
-    simplify_cfg, simplify_cfg_no_phi_merge, sparse_conditional_constant_propagation, ClassId,
-    DominatorTree, GVN,
+    simplify_cfg, simplify_cfg_no_phi_merge, sparse_conditional_constant_propagation, ClassId, GVN,
 };
 use stdx::packed_option::PackedOption;
 use stdx::{impl_debug_display, impl_idx_from};
@@ -168,9 +167,60 @@ impl EvalMir {
         let new_output_bb = cursor.current_block().unwrap();
         output_block = new_output_bb;
 
+        dom_tree.compute(&func, &cfg, true, true, false);
         let unkowns = intern.unkowns(&mut func, true);
         let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &unkowns);
-        let ad = auto_diff(&mut func, &cfg, &unkowns, &extra_derivatives);
+        let ad = auto_diff(&mut func, &dom_tree, &unkowns, &extra_derivatives);
+
+        // println!("{:?}", func);
+
+        // cfg.render(std::path::Path::new("cfg.dot"), "cfg", &func);
+
+        // for inst in func.dfg.insts.iter() {
+        //     if let Some(bb) = func.layout.inst_block(inst) {
+        //         if let InstructionData::PhiNode(phi) = &func.dfg.insts[inst] {
+        //             for (bb, arg) in func.dfg.phi_edges(phi) {
+        //                 if let Some(src_inst) = func.dfg.value_def(arg).inst() {
+        //                     if let Some(src_bb) = func.layout.inst_block(src_inst) {
+        //                         if src_bb != bb && !dom_tree.dominates(bb, src_bb) {
+        //                             println!(
+        //                                 "[ERROR] instruction doesn't dominate use\n{}\n{} {bb}",
+        //                                 func.dfg.display_inst(src_inst),
+        //                                 func.dfg.display_inst(inst),
+        //                             );
+        //                         }
+        //                     } else {
+        //                         println!(
+        //                             "[ERROR] used detachted inst\n{}\n{}",
+        //                             func.dfg.display_inst(src_inst),
+        //                             func.dfg.display_inst(inst)
+        //                         );
+        //                     }
+        //                 }
+        //             }
+        //         } else {
+        //             for arg in func.dfg.instr_args(inst) {
+        //                 if let Some(src_inst) = func.dfg.value_def(*arg).inst() {
+        //                     if let Some(src_bb) = func.layout.inst_block(src_inst) {
+        //                         if src_bb != bb && !dom_tree.dominates(bb, src_bb) {
+        //                             println!(
+        //                                 "[ERROR] instruction doesn't dominate use\n{}\n{} {bb}",
+        //                                 func.dfg.display_inst(src_inst),
+        //                                 func.dfg.display_inst(inst)
+        //                             );
+        //                         }
+        //                     } else {
+        //                         println!(
+        //                             "[ERROR] used detachted inst\n{}\n{}",
+        //                             func.dfg.display_inst(src_inst),
+        //                             func.dfg.display_inst(inst)
+        //                         );
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         let mut matrix = JacobianMatrix::default();
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
@@ -501,6 +551,11 @@ impl EvalMir {
         } else {
             BoundStepKind::None
         };
+
+        // let num_insts =
+        //     func.dfg.insts.iter().filter(|inst| func.layout.inst_block(*inst).is_some()).count();
+
+        // println!("{num_insts}");
 
         EvalMir {
             init_inst_func,

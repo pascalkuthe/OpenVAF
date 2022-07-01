@@ -1,7 +1,7 @@
 use bitset::HybridBitSet;
 use expect_test::{expect, Expect};
 use float_cmp::{ApproxEq, F64Margin};
-use mir::{ControlFlowGraph, DerivativeInfo};
+use mir::{ControlFlowGraph, DerivativeInfo, DominatorTree};
 use mir_interpret::{Data, Interpreter};
 use mir_reader::parse_function;
 use typed_index_collections::TiSlice;
@@ -12,6 +12,8 @@ fn check_simple(src: &str, data_flow_result: Expect) {
     let (mut func, _) = parse_function(src).unwrap();
     let mut cfg = ControlFlowGraph::new();
     cfg.compute(&func);
+    let mut dom_tree = DominatorTree::default();
+    dom_tree.compute(&func, &cfg, true, false, true);
 
     let unkowns = [10u32.into(), 11u32.into()].into_iter().collect();
 
@@ -28,7 +30,7 @@ fn check_simple(src: &str, data_flow_result: Expect) {
 
     let unkowns = DerivativeInfo { unkowns, ddx_calls };
 
-    auto_diff(&mut func, &cfg, &unkowns, &[]);
+    auto_diff(&mut func, &dom_tree, &unkowns, &[]);
     data_flow_result.assert_eq(&func.to_debug_string());
 }
 
@@ -52,7 +54,9 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
 
     let unkowns = DerivativeInfo { unkowns, ddx_calls };
 
-    auto_diff(&mut func, &cfg, &unkowns, &[]);
+    let mut dom_tree = DominatorTree::default();
+    dom_tree.compute(&func, &cfg, true, false, true);
+    auto_diff(&mut func, &dom_tree, &unkowns, &[]);
     let mut interpret = Interpreter::new(
         &func,
         TiSlice::from_ref(&[]),

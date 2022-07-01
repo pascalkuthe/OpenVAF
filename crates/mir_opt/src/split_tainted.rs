@@ -1,7 +1,7 @@
 use bitset::BitSet;
 use mir::{Block, Function, Inst, InstructionData, Value};
 
-use crate::DominatorTree;
+use mir::DominatorTree;
 
 pub fn propagate_taint(
     func: &Function,

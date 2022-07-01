@@ -2,11 +2,11 @@ use ahash::AHashSet;
 use bitset::{BitSet, SparseBitMatrix};
 use hir_lower::{CallBackKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
 use lasso::Rodeo;
-use mir::{ControlFlowGraph, Function, ValueDef};
+use mir::{ControlFlowGraph, DominatorTree, Function, ValueDef};
 use mir_autodiff::auto_diff;
 use mir_opt::{
     agressive_dead_code_elimination, dead_code_elimination, inst_combine, simplify_cfg,
-    sparse_conditional_constant_propagation, DominatorTree,
+    sparse_conditional_constant_propagation,
 };
 
 use crate::compiler_db::{CompilationDB, FuncSpec, ModelInfo};
@@ -116,8 +116,10 @@ impl CompilationDB {
 
         dead_code_elimination(&mut func, &output_values);
 
+        let mut dom_tree = DominatorTree::default();
+        dom_tree.compute(&func, &cfg, true, false, true);
         let unkowns = intern.unkowns(&mut func, false);
-        auto_diff(&mut func, &cfg, &unkowns, &[]);
+        auto_diff(&mut func, &dom_tree, &unkowns, &[]);
 
         sparse_conditional_constant_propagation(&mut func, &cfg);
         inst_combine(&mut func);

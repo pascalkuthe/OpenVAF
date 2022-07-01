@@ -174,7 +174,7 @@ where
     /// Sets `self = self - other` and returns `true` if `self` changed.
     /// (i.e., if any bits were removed).
     pub fn subtract(&mut self, other: &impl SubtractFromHybridBitSet<T>) -> bool {
-        other.subtract_from(self)
+        other.subtract_from_h(self)
     }
 
     /// Converts to a dense set, consuming itself in the process.
@@ -259,11 +259,36 @@ where
     }
 }
 
+impl<T> SubtractFromHybridBitSet<T> for SparseBitSet<T>
+where
+    T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
+{
+    fn subtract_from_h(&self, other: &mut HybridBitSet<T>) -> bool {
+        // Note: we currently don't bother going from Dense back to Sparse.
+        match other {
+            HybridBitSet::Sparse(sparse) => {
+                let mut changed = false;
+                // todo smarter algorithem for sparse case? -- Probably not worth it due to all the extra branches require to make this actually work
+                sparse.elems.retain(|&mut x| {
+                    if self.contains(x) {
+                        changed = true;
+                        false
+                    } else {
+                        true
+                    }
+                });
+                changed
+            }
+            HybridBitSet::Dense(dense) => dense.subtract(self),
+        }
+    }
+}
+
 impl<T> SubtractFromHybridBitSet<T> for HybridBitSet<T>
 where
     T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
-    fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
+    fn subtract_from_h(&self, other: &mut HybridBitSet<T>) -> bool {
         // Note: we currently don't bother going from Dense back to Sparse.
         match other {
             Self::Sparse(sparse) => {
@@ -344,7 +369,7 @@ impl<T> SubtractFromHybridBitSet<T> for BitSet<T>
 where
     T: From<usize> + Into<usize> + Copy + PartialEq + Debug,
 {
-    fn subtract_from(&self, other: &mut HybridBitSet<T>) -> bool {
+    fn subtract_from_h(&self, other: &mut HybridBitSet<T>) -> bool {
         match other {
             HybridBitSet::Sparse(sparse) => {
                 let mut changed = false;

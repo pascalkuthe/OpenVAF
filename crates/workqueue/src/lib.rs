@@ -91,7 +91,7 @@ impl<I: From<usize> + Into<usize> + Copy + PartialEq + Debug> From<BitSet<I>> fo
     }
 }
 
-impl<I: From<usize> + Into<usize> + Copy + PartialEq + Debug + Debug> Debug for WorkQueue<I> {
+impl<I: From<usize> + Into<usize> + Copy + PartialEq + Debug> Debug for WorkQueue<I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("[")?;
         for item in &self.deque {

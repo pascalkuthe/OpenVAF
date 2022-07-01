@@ -101,6 +101,7 @@ impl AgressiveDeadCode<'_> {
     fn mark_inst_live(&mut self, inst: Inst) -> bool {
         if self.live_insts.insert(inst) {
             self.inst_work_list.push(inst);
+
             let bb = self.func.layout.inst_block(inst).unwrap();
             self.mark_bb_live(bb);
 
