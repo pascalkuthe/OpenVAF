@@ -1816,7 +1816,6 @@ impl LoweringCtx<'_, '_> {
                 self.ins_display(DisplayKind::Info, true, args);
                 GRAVESTONE
             }
-            BuiltIn::finish | BuiltIn::stop => GRAVESTONE,
 
             BuiltIn::fatal => {
                 self.ins_display(DisplayKind::Fatal, true, args);
@@ -1891,7 +1890,6 @@ impl LoweringCtx<'_, '_> {
                 self.lower_integral(kind, args)
             }
 
-            BuiltIn::slew | BuiltIn::transition | BuiltIn::absdelay => self.lower_expr(args[0]),
             BuiltIn::flow => {
                 let res = match_signature! {
                     signature:
@@ -1979,6 +1977,50 @@ impl LoweringCtx<'_, '_> {
                 self.func.ins().call(cb, &[step_size]);
                 GRAVESTONE
             }
+
+            // BuiltIn::limit
+            //     if *signature.unwrap() == LIMIT_BUILTIN_FUNCTION && self.extra_dims.is_some() =>
+            // {
+            //     let new_val = self.lower_expr(args[0]);
+
+            //     let prev_val = if let Some(inst) = self.func.func.dfg.value_def(new_val).inst() {
+            //         debug_assert_eq!(self.func.func.dfg.insts[inst].opcode(), Opcode::Fneg);
+            //         let unkown = self.func.func.dfg.instr_args(inst)[0];
+            //         let prev_val_neg = self.param(ParamKind::PrevVal(unkown));
+            //         self.func.ins().fneg(prev_val_neg)
+            //     } else {
+            //         self.param(ParamKind::PrevVal(new_val))
+            //     };
+            //     let name = self.body.exprs[args[1]].unwrap_literal().unwrap_str();
+            //     let name = self.func.interner.get_or_intern(name);
+            //     let func_ref =
+            //         self.callback(CallBackKind::Limit { name, num_args: args.len() as u32 });
+            //     let mut call_args = vec![new_val, prev_val];
+            //     call_args.extend(args[2..].iter().map(|arg| self.lower_expr(*arg)));
+            //     self.func.ins().call1(func_ref, &call_args)
+            // }
+
+            //             BuiltIn::limit
+            //                 if *signature.unwrap() == LIMIT_USER_FUNCTION && self.extra_dims.is_some() =>
+            //             {
+            //                 todo!()
+            //                 // let unkown = self.lower_expr(args[0]);
+            //                 // let prev_val = self.param(ParamKind::PrevVal(unkown));
+            //                 // let func = self.infere.expr_types[args[1]].unwrap_func();
+            //                 // let func_ref =
+            //                 //     self.callback(CallBackKind::Limit { name, num_args: args.len() as u32 });
+            //                 // let mut call_args = vec![unkown, prev_val];
+            //                 // call_args.extend(args[2..].iter().map(|arg| self.lower_expr(*arg)));
+            //                 // self.func.ins().call1(func_ref, &call_args)
+            //             }
+
+            // TODO implement properly
+            BuiltIn::finish | BuiltIn::stop | BuiltIn::discontinuity => GRAVESTONE,
+            // TODO properly implement slew/tranisiton/absdelay
+            BuiltIn::slew | BuiltIn::transition | BuiltIn::absdelay | BuiltIn::limit => {
+                self.lower_expr(args[0])
+            }
+
             _ => todo!(),
             // TODO files
             // BuiltIn::fclose => todo!(),
@@ -2019,12 +2061,10 @@ impl LoweringCtx<'_, '_> {
             // BuiltIn::rdist_t => todo!(),
 
             // BuiltIn::simprobe => todo!(),
-            // BuiltIn::discontinuity => todo!(),
             // BuiltIn::analog_node_alias => todo!(),
             // BuiltIn::analog_port_alias => todo!(),
             // BuiltIn::test_plusargs => todo!(),
             // BuiltIn::value_plusargs => todo!(),
-            // BuiltIn::limit => todo!(),
 
             // // TODO impelement?
             // // TODO what is the DC value?

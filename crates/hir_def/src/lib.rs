@@ -28,6 +28,7 @@ use syntax::name::Name;
 use syntax::{AstNode, AstPtr};
 
 pub use crate::builtin::{BuiltIn, ParamSysFun};
+pub use crate::data::FunctionArg;
 use crate::db::HirDefDB;
 pub use crate::expr::{Case, Expr, ExprId, Literal, Stmt, StmtId};
 use crate::item_tree::{

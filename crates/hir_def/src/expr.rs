@@ -30,6 +30,16 @@ pub enum Literal {
     Inf,
 }
 
+impl Literal {
+    pub fn unwrap_str(&self) -> &str {
+        if let Literal::String(lit) = self {
+            &*lit
+        } else {
+            unreachable!("called unwrap str on {self:?}")
+        }
+    }
+}
+
 impl_debug! {
     match Literal{
         Literal::String(_) => "\"<literal>\"";
@@ -142,6 +152,14 @@ impl Expr {
                     f(*e)
                 }
             }
+        }
+    }
+
+    pub fn unwrap_literal(&self) -> &Literal {
+        if let Expr::Literal(lit) = self {
+            lit
+        } else {
+            unreachable!("called unwrap_literal on {self:?}")
         }
     }
 }

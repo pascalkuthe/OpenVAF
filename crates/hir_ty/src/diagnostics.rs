@@ -155,7 +155,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     .with_message(format!("type missmatch: {} but found {}", &err, err.found_ty))
             }
             InferenceDiagnostic::SignatureMissmatch(ref err) => {
-                let res = if let [ref ty_err] = *err.type_missmatches {
+                let mut res = if let [ref ty_err] = *err.type_missmatches {
                     let FileSpan { file, range } = self.parse.to_file_span(
                         self.body_sm.expr_map_back[ty_err.expr].as_ref().unwrap().range(),
                         self.sm,
@@ -213,15 +213,15 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     let name = fun.item_tree(self.db.upcast())[fun.id].name.clone();
                     let range = fun.ast_ptr(self.db.upcast()).range();
                     let span = self.parse.to_file_span(range, self.sm);
-                    res.with_labels(vec![Label {
+                    res.labels.push(Label {
                         style: LabelStyle::Secondary,
                         file_id: span.file,
                         range: span.range.into(),
                         message: format!("info: '{}' was declared here", name),
-                    }])
-                } else {
-                    res
+                    })
                 }
+
+                res
             }
             InferenceDiagnostic::ArrayTypeMissmatch(ArrayTypeMissmatch {
                 ref expected,
@@ -291,6 +291,106 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         "note: this functionality is fully suported by openvaf\nbut other Verilog-A compilers might not support it".to_owned(),
                         "help: expected one of the following\nbranch current acces: I(branch), I(a,b)\nnode voltage: V(x)".to_owned(),
                     ])
+            }
+            InferenceDiagnostic::ExpectedProbe { e } => {
+                let src = self
+                    .parse
+                    .to_file_span(self.body_sm.expr_map_back[e].as_ref().unwrap().range(), self.sm);
+
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: src.file,
+                        range: src.range.into(),
+                        message: "expected a branch probe".to_owned(),
+                    }])
+                    .with_message("'$limit' expected a branch probe as the first argument")
+                    .with_notes(vec![
+                        "help: expected nature access such as V(foo) or I(foo)".to_owned()
+                    ])
+            }
+            InferenceDiagnostic::InvalidLimitFunction {
+                expr,
+                func,
+                invalid_arg0,
+                invalid_arg1,
+                invalid_ret,
+                ref output_args,
+            } => {
+                let src = self.parse.to_file_span(
+                    self.body_sm.expr_map_back[expr].as_ref().unwrap().range(),
+                    self.sm,
+                );
+
+                let func = func.lookup(self.db.upcast());
+                let name = func.name(self.db.upcast());
+                let tree = func.item_tree(self.db.upcast());
+                let mut labels = Vec::new();
+                let id_map = self.db.ast_id_map(func.scope.root_file);
+
+                let decl = tree[func.id].ast_id;
+                let decl = id_map.get_syntax(decl.into()).range();
+                let decl = self.parse.to_file_span(decl, self.sm);
+                labels.push(Label {
+                    style: LabelStyle::Primary,
+                    file_id: decl.file,
+                    range: decl.range.into(),
+                    message: "invalid $limit function".to_owned(),
+                });
+
+                labels.push(Label {
+                    style: LabelStyle::Secondary,
+                    file_id: src.file,
+                    range: src.range.into(),
+                    message: format!("info: {name} is used in $limit here"),
+                });
+
+                if invalid_arg0 {
+                    let decl = tree[tree[func.id].args.raw[0].declarations[0]].ast_id;
+                    let decl = id_map.get_syntax(decl.into()).range();
+                    let decl = self.parse.to_file_span(decl, self.sm);
+                    labels.push(Label {
+                        style: LabelStyle::Secondary,
+                        file_id: decl.file,
+                        range: decl.range.into(),
+                        message: "help: first argument must have 'real' type".to_owned(),
+                    })
+                }
+
+                if invalid_arg1 {
+                    let decl = tree[tree[func.id].args.raw[1].declarations[0]].ast_id;
+                    let decl = id_map.get_syntax(decl.into()).range();
+                    let decl = self.parse.to_file_span(decl, self.sm);
+                    labels.push(Label {
+                        style: LabelStyle::Secondary,
+                        file_id: decl.file,
+                        range: decl.range.into(),
+                        message: "help: second argument must have 'real' type".to_owned(),
+                    })
+                }
+
+                for arg in output_args {
+                    let decl = tree[func.id].args[*arg].ast_ids[0];
+                    let decl = id_map.get_syntax(decl.into()).range();
+                    let decl = self.parse.to_file_span(decl, self.sm);
+                    labels.push(Label {
+                        style: LabelStyle::Secondary,
+                        file_id: decl.file,
+                        range: decl.range.into(),
+                        message: "help: argument must have direction 'input'".to_owned(),
+                    })
+                }
+
+                let mut notes = Vec::new();
+
+                if invalid_ret {
+                    notes.push("help: return type must be real".to_owned());
+                }
+
+                Report::error()
+                    .with_labels(labels)
+                    .with_message(format!("{name} is not a valid function for use with $limit"))
+                    .with_notes(notes)
             }
         }
     }

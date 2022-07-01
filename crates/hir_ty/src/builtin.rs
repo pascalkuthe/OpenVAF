@@ -47,10 +47,6 @@ impl BuiltinInfo {
         BuiltinInfo { signatures: &[], min_args, max_args, has_side_effects: false }
     }
 
-    const fn specical_cased_impure(min_args: usize) -> BuiltinInfo {
-        BuiltinInfo { signatures: &[], min_args, max_args: None, has_side_effects: true }
-    }
-
     const fn varargs(signatures: &'static [SignatureData], has_side_effects: bool) -> BuiltinInfo {
         let mut min_args = None;
         let mut i = 0;
@@ -386,6 +382,19 @@ const DISPLAY_FUN: BuiltinInfo = BuiltinInfo::varargs(
     &[SignatureData { args: Cow::Borrowed(&[]), return_ty: Type::Void }],
     true,
 );
+
+pub const LIMIT_BUILTIN_FUNCTION: Signature = Signature(0);
+pub const LIMIT_USER_FUNCTION: Signature = Signature(1);
+pub const LIMIT_NO_ARG: Signature = Signature(2);
+
+const LIMIT: BuiltinInfo = BuiltinInfo::varargs(
+    &[
+        SignatureData { args: Cow::Borrowed(&[Val(Real), Literal(String)]), return_ty: Type::Real },
+        SignatureData { args: Cow::Borrowed(&[Val(Real), Function]), return_ty: Type::Real },
+        SignatureData { args: Cow::Borrowed(&[Val(Real)]), return_ty: Type::Real },
+    ],
+    false,
+);
 const FDISPLAY_FUN: BuiltinInfo = BuiltinInfo::varargs(
     &[SignatureData { args: Cow::Borrowed(&[Val(Integer)]), return_ty: Type::Void }],
     true,
@@ -398,7 +407,6 @@ const SFORMAT: BuiltinInfo = BuiltinInfo::varargs(
     &[SignatureData { args: Cow::Borrowed(&[Var(String), Val(String)]), return_ty: Type::Void }],
     true,
 );
-const LIMIT: BuiltinInfo = BuiltinInfo::specical_cased_impure(2);
 const FATAL: BuiltinInfo = BuiltinInfo::varargs(
     &[SignatureData { args: Cow::Borrowed(&[Val(Integer)]), return_ty: Type::Void }],
     true,

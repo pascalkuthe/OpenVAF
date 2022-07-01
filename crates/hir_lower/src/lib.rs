@@ -57,6 +57,8 @@ pub enum ParamKind {
     Param(ParamId),
     Abstime,
     EnableIntegration,
+    // PrevVal(Value),
+    // LimitChange(Value),
     Voltage { hi: NodeId, lo: Option<NodeId> },
     Current(CurrentKind),
     Temperature,
@@ -179,6 +181,7 @@ pub enum CallBackKind {
     NodeDerivative(NodeId),
     ParamInfo(ParamInfoKind, ParamId),
     CollapseHint(NodeId, Option<NodeId>),
+    // Limit { name: Spur, num_args: u32 },
     // StoreState(StateId),
 }
 
@@ -239,6 +242,12 @@ impl CallBackKind {
                 returns: 0,
                 has_sideeffects: true,
             },
+            // CallBackKind::Limit { name, num_args } => FunctionSignature {
+            //     name: format!("$limit[{name:?}]"),
+            //     params: *num_args as u16,
+            //     returns: 1,
+            //     has_sideeffects: false,
+            // },
             // CallBackKind::ExplicitDdt(_) => FunctionSignature {
             //     name: "ddt!".to_owned(),
             //     params: 1,
@@ -291,6 +300,7 @@ pub struct HirInterner {
     pub callbacks: TiSet<FuncRef, CallBackKind>,
     pub dims: TiVec<Dim, DimKind>,
     pub implicit_equations: TiVec<ImplicitEquation, ImplicitEquationKind>,
+    // pub lim_equations: IndexMap<Value, Vec<Value>, ahash::RandomState>,
 }
 
 pub type LiveParams<'a> = FilterMap<

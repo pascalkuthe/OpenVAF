@@ -11,6 +11,12 @@ use hir_def::{
 use crate::inference::InferenceResult;
 use crate::lower::{BranchTy, DisciplineTy, NatureTy};
 
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct LimitSignature {
+    pub name: String,
+    pub num_args: u32,
+}
+
 #[salsa::query_group(HirTyDatabase)]
 pub trait HirTyDB: HirDefDB + Upcast<dyn HirDefDB> {
     #[salsa::invoke(NatureTy::nature_info_query)]
@@ -32,6 +38,9 @@ pub trait HirTyDB: HirDefDB + Upcast<dyn HirDefDB> {
 
     #[salsa::transparent]
     fn node_discipline(&self, node: NodeId) -> Option<DisciplineId>;
+
+    #[salsa::input]
+    fn known_limit_functions(&self) -> Option<Arc<[LimitSignature]>>;
 }
 
 fn nature_attr_ty(db: &dyn HirTyDB, id: NatureAttrId) -> Option<Type> {

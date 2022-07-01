@@ -19,8 +19,8 @@ use syntax::ast::{self, BinaryOp, UnaryOp};
 use typed_index_collections::{TiSlice, TiVec};
 
 use crate::builtin::{
-    DDX_FLOW, DDX_POT, DDX_POT_DIFF, DDX_TEMP, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
-    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
+    DDX_FLOW, DDX_POT, DDX_POT_DIFF, DDX_TEMP, LIMIT_BUILTIN_FUNCTION, LIMIT_USER_FUNCTION,
+    NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
 };
 use crate::db::HirTyDB;
 use crate::diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch};
@@ -302,9 +302,9 @@ impl Ctx<'_> {
                     Ty::Param(self.db.param_data(param).ty.clone(), param)
                 }
                 ScopeDefItem::BranchId(branch) => Ty::Branch(branch),
-                ScopeDefItem::BuiltIn(_)
-                | ScopeDefItem::FunctionId(_)
-                | ScopeDefItem::NatureAccess(_) => Ty::Function,
+                ScopeDefItem::BuiltIn(_) | ScopeDefItem::NatureAccess(_) => Ty::BuiltInFunction,
+
+                ScopeDefItem::FunctionId(fun) => Ty::UserFunction(fun),
                 ScopeDefItem::FunctionReturn(fun) => Ty::FuntionVar {
                     fun,
                     ty: self.db.function_data(fun).return_ty.clone(),
@@ -572,10 +572,6 @@ impl Ctx<'_> {
     ) -> Option<Ty> {
         let info: BuiltinInfo = builtin.into();
 
-        if builtin == BuiltIn::limit {
-            todo!()
-        }
-
         let exact = Some(info.min_args) == info.max_args;
         if args.len() < info.min_args {
             let err = InferenceDiagnostic::ArgCntMissmatch {
@@ -598,25 +594,123 @@ impl Ctx<'_> {
             return default_return_ty(info.signatures);
         }
 
+        let mut infere_args = args;
         let signatures = match builtin {
             BuiltIn::ddx => {
                 self.infere_ddx(stmt, expr, args[0], args[1]);
                 return Some(Ty::Val(Type::Real));
             }
+
+            BuiltIn::limit => {
+                infere_args = &args[0..2];
+                Cow::Borrowed(TiSlice::from_ref(info.signatures))
+            }
+
             _ if info.max_args.is_none() => {
-                debug_assert_eq!(info.signatures.len(), 1, "{:?}", builtin);
-                let mut signature = info.signatures[0].clone();
-                signature.args.to_mut().resize_with(args.len(), || TyRequirement::AnyVal);
-                Cow::Owned(TiVec::from(vec![signature]))
+                let mut signatures = Vec::from(info.signatures);
+                for sig in &mut signatures {
+                    sig.args.to_mut().resize(args.len(), TyRequirement::AnyVal)
+                }
+                Cow::Owned(TiVec::from(signatures))
             }
             _ => Cow::Borrowed(TiSlice::from_ref(info.signatures)),
         };
 
         debug_assert_ne!(&signatures.raw, &[]);
 
-        let ty = self.resolve_function_args(stmt, expr, args, signatures, None)?;
+        let ty = self.resolve_function_args(stmt, expr, infere_args, signatures, None)?;
+
+        if builtin == BuiltIn::limit {
+            self.infere_limit(stmt, expr, args)
+        }
 
         Some(ty)
+    }
+
+    fn infere_limit(&mut self, stmt: StmtId, expr: ExprId, args: &[ExprId]) {
+        let sig = if let Some(sig) = self.result.resolved_signatures.get(&expr) {
+            *sig
+        } else {
+            // already reported an error no need to repeat
+            return;
+        };
+
+        let probe = args[0];
+        if self.result.expr_types[probe] != Ty::Val(Type::Err)
+            && !matches!(
+                self.result.resolved_calls.get(&expr),
+                Some(ResolvedFun::BuiltIn(BuiltIn::potential | BuiltIn::flow))
+            )
+        {
+            self.result.diagnostics.push(InferenceDiagnostic::ExpectedProbe { e: probe })
+        }
+
+        if let Some(Ty::UserFunction(func)) = self.result.expr_types.get(args[1]).cloned() {
+            debug_assert_eq!(sig, LIMIT_USER_FUNCTION);
+            let fun_info = self.db.function_data(func);
+
+            // user-function needs two extra arguments but $limit also accepts two accepts that are
+            // not passed directly to the function so these must just be equal
+            if fun_info.args.len() != args.len() {
+                self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
+                    expected: fun_info.args.len(),
+                    found: args.len(),
+                    expr,
+                    exact: true,
+                });
+                return;
+            }
+
+            let output_args: Vec<_> = fun_info
+                .args
+                .iter_enumerated()
+                .filter_map(|(id, info)| info.is_output.then(|| id))
+                .collect();
+
+            let invalid_ret = !matches!(fun_info.return_ty, Type::Real | Type::Err);
+            let invalid_arg0 = !matches!(fun_info.args.raw[0].ty, Type::Real | Type::Err);
+            let invalid_arg1 = !matches!(fun_info.args.raw[1].ty, Type::Real | Type::Err);
+
+            if invalid_ret || invalid_arg0 || invalid_arg1 || !output_args.is_empty() {
+                self.result.diagnostics.push(InferenceDiagnostic::InvalidLimitFunction {
+                    expr,
+                    func,
+                    invalid_arg0,
+                    invalid_arg1,
+                    invalid_ret,
+                    output_args,
+                })
+            }
+
+            let signature = fun_info.args.raw[2..]
+                .iter()
+                .map(|arg| TyRequirement::Val(arg.ty.clone()))
+                .collect();
+
+            self.resolve_function_args(
+                stmt,
+                expr,
+                &args[2..],
+                Cow::Owned(TiVec::from(vec![SignatureData {
+                    args: Cow::Owned(signature),
+                    return_ty: fun_info.return_ty.clone(),
+                }])),
+                Some(func),
+            );
+
+            self.infere_user_fun_call(stmt, expr, func, &args[2..]);
+        } else if sig == LIMIT_BUILTIN_FUNCTION {
+            self.resolve_function_args(
+                stmt,
+                expr,
+                &args[2..],
+                Cow::Owned(TiVec::from(vec![SignatureData {
+                    args: Cow::Owned(vec![TyRequirement::Val(Type::Real); args.len() - 2]),
+                    return_ty: Type::Real,
+                }])),
+                None,
+            );
+        }
     }
 
     fn infere_ddx(&mut self, stmt: StmtId, expr: ExprId, val: ExprId, unkown: ExprId) {
@@ -987,6 +1081,20 @@ pub enum InferenceDiagnostic {
         expr: ExprId,
         exact: bool,
     },
+
+    ExpectedProbe {
+        e: ExprId,
+    },
+
+    InvalidLimitFunction {
+        expr: ExprId,
+        func: FunctionId,
+        invalid_arg0: bool,
+        invalid_arg1: bool,
+        invalid_ret: bool,
+        output_args: Vec<LocalFunctionArgId>,
+    },
+
     TypeMissmatch(TypeMissmatch),
     SignatureMissmatch(SignatureMissmatch),
     ArrayTypeMissmatch(ArrayTypeMissmatch),

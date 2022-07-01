@@ -21,6 +21,7 @@ pub enum TyRequirement {
     AnyParam,
     Branch,
     Literal(Type),
+    Function,
 }
 
 impl TyRequirement {
@@ -64,7 +65,9 @@ impl_display! {
         TyRequirement::Literal(ty) => "{} literal", ty;
         TyRequirement::PortFlow => "port-flow reference";
         TyRequirement::Branch => "branch reference";
+        TyRequirement::Function => "function";
     }
+
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,7 +85,8 @@ pub enum Ty {
     InfLiteral,
     Branch(BranchId),
     Scope,
-    Function,
+    BuiltInFunction,
+    UserFunction(FunctionId),
 }
 
 // TODO coerce tys for nicer errors? Would that even be an improvement?
@@ -100,7 +104,8 @@ impl_display! {
         Ty::Param(ty,_) => "{} parameter ref", ty;
         Ty::Literal(ty) => "{} literal", ty;
         Ty::Branch(_) => "branch reference";
-        Ty::Function => "function";
+        Ty::BuiltInFunction => "(builtin) function";
+        Ty::UserFunction(_) => "(user-defined) function";
         Ty::Scope => "scope";
         Ty::InfLiteral => "numeric literal";
     }
@@ -172,6 +177,7 @@ impl Ty {
             | (Ty::PortFlow(_), TyRequirement::PortFlow)
             | (Ty::Nature(_), TyRequirement::Nature)
             | (Ty::Param(_, _), TyRequirement::AnyParam)
+            | (Ty::BuiltInFunction, TyRequirement::Function)
             | (Ty::Branch(_), TyRequirement::Branch) => true,
 
             (
@@ -209,6 +215,14 @@ impl Ty {
             | (Ty::Param(ty1, _), TyRequirement::Param(ty2)) => ty1 == ty2,
 
             _ => false,
+        }
+    }
+
+    pub fn unwrap_func(&self) -> FunctionId {
+        if let Ty::UserFunction(func) = *self {
+            func
+        } else {
+            unreachable!("called unwrap_func on {self:?}")
         }
     }
 
