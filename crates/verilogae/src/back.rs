@@ -381,8 +381,6 @@ impl CodegenCtx<'_, '_> {
         // setup callbacks
 
         codegen.builder.callbacks = stub_callbacks(&intern.callbacks, codegen.builder.cx);
-        drop(codegen);
-
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
         let exit_bb = *postorder

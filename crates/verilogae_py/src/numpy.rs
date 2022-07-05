@@ -71,7 +71,7 @@ pub struct NumpyArray {
     pub kind: ItemType,
 }
 
-impl<'a> NumpyArray {
+impl NumpyArray {
     // #[inline(never)]
     pub fn new(ptr: *mut PyObject) -> Result<Self, PyArrayError> {
         let capsule = unsafe { PyObject_GetAttr(ptr, ARRAY_STRUCT_STR) };

@@ -468,7 +468,7 @@ pub struct MsvcLinker {
     cmd: Command,
 }
 
-impl<'a> Linker for MsvcLinker {
+impl Linker for MsvcLinker {
     fn cmd(&mut self) -> &mut Command {
         self.cmd.arg("/DLL");
         // let mut arg: OsString = "/IMPLIB:".into();

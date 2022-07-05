@@ -204,7 +204,7 @@ impl<'a> dyn BaseDB + 'a {
 
 struct SourceProviderDelegate<'a>(&'a dyn BaseDB);
 
-impl<'a> SourceProvider for SourceProviderDelegate<'_> {
+impl SourceProvider for SourceProviderDelegate<'_> {
     #[inline(always)]
     fn include_dirs(&self, root_file: FileId) -> Arc<[VfsPath]> {
         self.0.include_dirs(root_file)

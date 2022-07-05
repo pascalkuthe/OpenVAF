@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use ahash::AHashSet;
 use stdx::iter::zip;
 use syntax::PreprocessorDiagnostic;
@@ -198,7 +200,7 @@ impl Diagnostic for PreprocessorDiagnostic {
                             "help: It looks like you used characters that look similar to ascii: "
                                 .to_owned();
                         for (_, (lookalike, ascii)) in zip(0..5, lookalike.iter()) {
-                            help.push_str(&format!("\n{lookalike} instead of {ascii}"))
+                            write!(help, "\n{lookalike} instead of {ascii}").unwrap();
                         }
 
                         if lookalike.len() > 5 {

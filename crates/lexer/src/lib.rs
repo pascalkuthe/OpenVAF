@@ -348,7 +348,7 @@ impl Cursor<'_> {
             '.' => {
                 self.bump();
                 let mut has_scale_char = false;
-                if self.first().is_digit(10) {
+                if self.first().is_ascii_digit() {
                     self.eat_decimal_digits();
                     match self.first() {
                         'e' | 'E' => {

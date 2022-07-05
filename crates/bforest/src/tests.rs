@@ -12,10 +12,9 @@ fn comparator() {
     let block3 = Block::from(3u32);
     let block4 = Block::from(4u32);
     let vals = [block1, block2, block4];
-    let comp = ();
-    assert_eq!(comp.search(block1, &vals), Ok(0));
-    assert_eq!(comp.search(block3, &vals), Err(2));
-    assert_eq!(comp.search(block4, &vals), Ok(2));
+    assert_eq!(().search(block1, &vals), Ok(0));
+    assert_eq!(().search(block3, &vals), Err(2));
+    assert_eq!(().search(block4, &vals), Ok(2));
 }
 
 #[test]

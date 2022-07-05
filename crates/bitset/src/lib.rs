@@ -1,4 +1,4 @@
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Write};
 use std::marker::PhantomData;
 use std::{mem, slice};
 
@@ -398,7 +398,7 @@ where
                 assert!(mask <= 0xFF);
                 let byte = word & mask;
 
-                result.push_str(&format!("{}{:02x}", sep, byte));
+                write!(result, "{}{:02x}", sep, byte).unwrap();
 
                 if remain <= 8 {
                     break;
