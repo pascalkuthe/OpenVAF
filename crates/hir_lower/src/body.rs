@@ -159,9 +159,9 @@ impl<'a> MirBuilder<'a> {
             .map(|(place, kind)| {
                 if is_output(*kind) {
                     let mut val = builder.use_var(place);
-                    if builder.func.dfg.values.def_allow_alias(val).inst().is_some() {
-                        val = builder.ins().optbarrier(val);
-                    }
+                    // if builder.func.dfg.values.def_allow_alias(val).inst().is_some() {
+                    val = builder.ins().optbarrier(val);
+                    // }
                     (*kind, val.into())
                 } else {
                     (*kind, None.into())
