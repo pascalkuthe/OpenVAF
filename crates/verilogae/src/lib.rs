@@ -43,7 +43,7 @@ pub fn export_vfs(path: &Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
     };
 
     if !unresolved_files.is_empty() {
-        bail!("Failed to crates vfs for {:?}\nThe following files are not contained within the same directoy {:?}", path, pretty::List::with_final_seperator(&unresolved_files, ", "));
+        bail!("Failed to crates vfs for {:?}\nThe following files are not contained within the same directoy {:?}", path, pretty::List::new(unresolved_files).with_final_seperator(", "));
     }
 
     let res = vfs_export

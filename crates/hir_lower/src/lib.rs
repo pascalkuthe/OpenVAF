@@ -171,9 +171,27 @@ pub enum DisplayKind {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum FmtArgKind {
+    Binary,
+    EngineerReal,
+    Other,
+}
+
+impl From<Type> for FmtArg {
+    fn from(ty: Type) -> FmtArg {
+        FmtArg { ty, kind: FmtArgKind::Other }
+    }
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct FmtArg {
+    pub ty: Type,
+    pub kind: FmtArgKind,
+}
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum CallBackKind {
     BoundStep,
-    Print { kind: DisplayKind, arg_tys: Box<[Type]> },
+    Print { kind: DisplayKind, arg_tys: Box<[FmtArg]> },
     SimParam,
     SimParamOpt,
     SimParamStr,

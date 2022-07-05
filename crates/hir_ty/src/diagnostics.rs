@@ -11,10 +11,11 @@ use hir_def::body::BodySourceMap;
 
 use hir_def::{ExprId, FunctionId, Lookup, Type};
 use stdx::iter::zip;
+use stdx::pretty::List;
 use stdx::{impl_display, pretty};
 use syntax::ast::{self, AssignOp};
 use syntax::sourcemap::{FileSpan, SourceMap};
-use syntax::{Parse, SourceFile};
+use syntax::{Parse, SourceFile, TextSize};
 use typed_index_collections::TiSlice;
 
 use crate::db::HirTyDB;
@@ -197,7 +198,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
 
                     let mut notes = vec![format!(
                         "help: found ({})",
-                        pretty::List::with_final_seperator(&*err.found, ", ")
+                        pretty::List::new(&*err.found).with_final_seperator(", ")
                     )];
 
                     notes.extend(err.signatures.iter().map(|sig| format!("expected {}", sig)));
@@ -391,6 +392,95 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     .with_labels(labels)
                     .with_message(format!("{name} is not a valid function for use with $limit"))
                     .with_notes(notes)
+            }
+            InferenceDiagnostic::DisplayTypeMissmatch { ref err, fmt_lit, lit_range, .. } => {
+                let fmt_lit = self.body_sm.expr_map_back[fmt_lit].as_ref().unwrap().range();
+                let lit_src = self
+                    .parse
+                    .to_file_span(lit_range + fmt_lit.start() + TextSize::from(1u32), self.sm);
+
+                let val_src = self.parse.to_file_span(
+                    self.body_sm.expr_map_back[err.expr].as_ref().unwrap().range(),
+                    self.sm,
+                );
+
+                Report::error()
+                    .with_labels(vec![
+                        Label {
+                            style: LabelStyle::Primary,
+                            file_id: val_src.file,
+                            range: val_src.range.into(),
+                            message: err.to_string(),
+                        },
+                        Label {
+                            style: LabelStyle::Secondary,
+                            file_id: lit_src.file,
+                            range: lit_src.range.into(),
+                            message: "help: expected because of this fmt specifier".to_owned(),
+                        },
+                    ])
+                    .with_message(format!("type missmatch: {} but found {}", &err, err.found_ty))
+            }
+            InferenceDiagnostic::MissingFmtArg { fmt_lit, lit_range } => {
+                let fmt_lit = self.body_sm.expr_map_back[fmt_lit].as_ref().unwrap().range();
+                let lit_src = self
+                    .parse
+                    .to_file_span(lit_range + fmt_lit.start() + TextSize::from(1u32), self.sm);
+
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: lit_src.file,
+                        range: lit_src.range.into(),
+                        message: "value for this fmt specifier is missing".to_owned(),
+                    }])
+                    .with_message("$display system task is missing an argument")
+            }
+            InferenceDiagnostic::InvalidFmtSpecifierChar {
+                fmt_lit,
+                lit_range,
+                err_char,
+                candidates,
+            } => {
+                let fmt_lit = self.body_sm.expr_map_back[fmt_lit].as_ref().unwrap().range();
+                let lit_src = self
+                    .parse
+                    .to_file_span(lit_range + fmt_lit.start() + TextSize::from(1u32), self.sm);
+
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: lit_src.file,
+                        range: lit_src.range.into(),
+                        message: "unexpected character in fmt specifier".to_owned(),
+                    }])
+                    .with_message(format!(
+                        "failed to parse format specifier; unexpected character {err_char}",
+                    ))
+                    .with_notes(vec![format!(
+                        "help: expected {}",
+                        List::new(candidates)
+                            .surround("'")
+                            .with_first_break_after(15)
+                            .with_break_after(18)
+                    )])
+            }
+            InferenceDiagnostic::InvalidFmtSpecifierEnd { fmt_lit, lit_range } => {
+                let fmt_lit = self.body_sm.expr_map_back[fmt_lit].as_ref().unwrap().range();
+                let lit_src = self
+                    .parse
+                    .to_file_span(lit_range + fmt_lit.start() + TextSize::from(1u32), self.sm);
+
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: lit_src.file,
+                        range: lit_src.range.into(),
+                        message: "unexpected end of fmt specifier".to_owned(),
+                    }])
+                    .with_message(
+                        "failed to parse format specifier; unexpected end of literal".to_owned(),
+                    )
             }
         }
     }

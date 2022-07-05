@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 * Refactor the algorithm that determines whether `ddt` needs an unkown, so that OpenVAF doesn't create one when not required.
-* automatically add whitespace between auto generated format characters for `$strope etc.`
+* Automatically add whitespace between auto generated format characters for `$strope etc.`
+* Check that fmt literals used in $display are correct and match the format arguments to avoid crashes/undefined behavior.
 
 ### Fixed
 

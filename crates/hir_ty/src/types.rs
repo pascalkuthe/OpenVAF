@@ -248,7 +248,7 @@ pub struct SignatureData {
 
 impl_display! {
     match SignatureData{
-        SignatureData{ args, return_ty } => "({}) -> {}", pretty::List::with_final_seperator(args.deref(), ", "), return_ty;
+        SignatureData{ args, return_ty } => "({}) -> {}", pretty::List::new(args.deref()).with_final_seperator(", "), return_ty;
     }
 }
 

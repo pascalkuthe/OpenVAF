@@ -30,8 +30,9 @@ use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
 use crate::{
-    CallBackKind, CurrentKind, Dim, DimKind, DisplayKind, HirInterner, IdtKind, ImplicitEquation,
-    ImplicitEquationKind, ParamInfoKind, ParamKind, PlaceKind, REACTIVE_DIM, RESISTIVE_DIM,
+    CallBackKind, CurrentKind, Dim, DimKind, DisplayKind, FmtArg, FmtArgKind, HirInterner, IdtKind,
+    ImplicitEquation, ImplicitEquationKind, ParamInfoKind, ParamKind, PlaceKind, REACTIVE_DIM,
+    RESISTIVE_DIM,
 };
 use syntax::ast::{BinaryOp, UnaryOp};
 
@@ -2099,30 +2100,80 @@ impl LoweringCtx<'_, '_> {
             i += 1;
             if let Expr::Literal(Literal::String(ref lit)) = self.body.exprs[*expr] {
                 fmt_lit.reserve(lit.len());
-                let mut last_percent = false;
-                for c in lit.chars() {
-                    if last_percent {
-                        match c {
-                            '%' => fmt_lit.push_str("%%"),
+                let mut chars = lit.chars();
+                while let Some(mut c) = chars.next() {
+                    if c == '%' {
+                        c = chars.next().unwrap();
+                        let ty = match c {
+                            '%' => {
+                                fmt_lit.push_str("%%");
+                                continue;
+                            }
                             'm' | 'M' => {
                                 fmt_lit.push_str(self.path);
+                                continue;
                             }
                             'l' | 'L' => {
                                 // TODO support properly
                                 fmt_lit.push_str("__.__");
+                                continue;
                             }
-                            c => {
+                            'h' => {
+                                fmt_lit.push_str("%x");
+                                Type::Integer.into()
+                            }
+                            'H' => {
+                                fmt_lit.push_str("%X");
+                                Type::Integer.into()
+                            }
+                            'b' | 'B' => {
+                                fmt_lit.push_str("%s");
+                                FmtArg { ty: Type::Integer, kind: FmtArgKind::Binary }
+                            }
+                            'd' | 'D' => {
+                                fmt_lit.push_str("%d");
+                                Type::Integer.into()
+                            }
+                            'o' | 'O' => {
+                                fmt_lit.push_str("%o");
+                                Type::Integer.into()
+                            }
+                            'c' | 'C' => {
+                                fmt_lit.push_str("%c");
+                                Type::Integer.into()
+                            }
+                            's' | 'S' => {
+                                fmt_lit.push_str("%s");
+                                Type::String.into()
+                            }
+                            _ => {
                                 fmt_lit.push('%');
-                                fmt_lit.push(c);
-                                let ty = self.resolved_ty(args[i]);
-                                arg_tys.push(ty);
-                                call_args.push(self.lower_expr(args[i]));
-                                i += 1;
+                                // real fmt specifiers may contain cmplx prefixes
+                                // we validatet these
+                                while !matches!(c, 'e'..='g'|'E'..='G'|'r'|'R') {
+                                    if c == '*' {
+                                        arg_tys.push(Type::Integer.into());
+                                        call_args.push(self.lower_expr(args[i]));
+                                        i += 1;
+                                    }
+                                    fmt_lit.push(c);
+                                    c = chars.next().unwrap()
+                                }
+                                let kind = if matches!(c, 'r' | 'R') {
+                                    fmt_lit.push_str("f%c");
+                                    FmtArgKind::EngineerReal
+                                } else {
+                                    fmt_lit.push(c);
+                                    FmtArgKind::Other
+                                };
+
+                                FmtArg { ty: Type::Real, kind }
                             }
-                        }
-                        last_percent = false
-                    } else if c == '%' {
-                        last_percent = true;
+                        };
+
+                        arg_tys.push(ty);
+                        call_args.push(self.lower_expr(args[i]));
+                        i += 1;
                     } else {
                         fmt_lit.push(c)
                     }
@@ -2149,7 +2200,7 @@ impl LoweringCtx<'_, '_> {
                     _ => unreachable!(),
                 }
 
-                arg_tys.push(ty);
+                arg_tys.push(ty.into());
                 call_args.push(self.lower_expr(*expr));
             }
         }
@@ -2163,19 +2214,6 @@ impl LoweringCtx<'_, '_> {
         self.func.ins().call(func_ref, &call_args);
     }
 }
-
-/* TODO display typecheck
-while let Some(c) = chars.next(){
-         if c == '%'{
-             match chars.next(){
-                 '%' => ()
-                 'h'|'d'|
-
-             }
-         }
-
-         lit.push(ch)
-     }*/
 
 fn callback_(intern: &mut HirInterner, func: &mut FunctionBuilder, kind: CallBackKind) -> FuncRef {
     let data = kind.signature();

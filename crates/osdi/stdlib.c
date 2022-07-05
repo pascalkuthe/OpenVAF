@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #ifdef OSDI_0_3
 #include "header/osdi_0_3.h"
@@ -50,8 +51,7 @@ double simparam_opt(void *params_, char *name, double default_val) {
   return default_val;
 }
 
-
-extern int strcmp (const char *__s1, const char *__s2);
+extern int strcmp(const char *__s1, const char *__s2);
 
 char *simparam_str(void *params_, void *handle, uint32_t *flags, char *name) {
   OsdiSimParas *params = params_;
@@ -99,6 +99,42 @@ void push_invalid_param_err(void **dst, uint32_t *len, uint32_t *cap,
   push_error((OsdiInitError **)dst, len, cap, err);
 }
 
-void bound_step(double *dst, double val){
-    *dst = val;
+void bound_step(double *dst, double val) { *dst = val; }
+
+#define FMT_OFF 6
+#define NUM_FMT 11
+const char FMT_CHARS[NUM_FMT] = {'a', 'f', 'p', 'n', 'u', 'm',
+                                 ' ', 'k', 'M', 'G', 'T'};
+const double EXP[NUM_FMT] = {1e18, 1e15, 1e12, 1e9,  1e6,  1e3,
+                             1,    1e-3, 1e-6, 1e-9, 1e-12};
+int fmt_char_idx(double val) {
+  int exp = ((int)log(val)) / 3;
+  int pos = exp + NUM_FMT;
+
+  if (pos < 0) {
+    return 0;
+  }
+  if (pos >= NUM_FMT) {
+    return NUM_FMT - 1;
+  }
+  return pos;
+}
+
+char *fmt_binary(int val) {
+  int len = 32 - __builtin_clz(val);
+  char *res = malloc(len + 1);
+  res[len] = '\0';
+  if (len == 0) {
+    return res;
+  }
+  for (int i = 1; i < len + 1; i++) {
+    if (val & 1) {
+      res[len - i] = '1';
+    } else {
+      res[len - i] = '0';
+    }
+    val >>= 1;
+  }
+
+  return res;
 }

@@ -16,6 +16,7 @@ use hir_def::{
 use stdx::impl_from;
 use stdx::iter::zip;
 use syntax::ast::{self, BinaryOp, UnaryOp};
+use syntax::{TextRange, TextSize};
 use typed_index_collections::{TiSlice, TiVec};
 
 use crate::builtin::{
@@ -24,9 +25,11 @@ use crate::builtin::{
 };
 use crate::db::HirTyDB;
 use crate::diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch};
+use crate::inference::fmt_parser::parse_real_fmt_spec;
 use crate::lower::{BranchKind, BranchTy, DisciplineAccess};
 use crate::types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement};
 
+mod fmt_parser;
 #[cfg(test)]
 mod tests;
 
@@ -620,13 +623,153 @@ impl Ctx<'_> {
 
         let ty = self.resolve_function_args(stmt, expr, infere_args, signatures, None)?;
 
-        if builtin == BuiltIn::limit {
-            self.infere_limit(stmt, expr, args)
+        match builtin {
+            BuiltIn::limit => self.infere_limit(stmt, expr, args),
+            BuiltIn::write
+            | BuiltIn::display
+            | BuiltIn::strobe
+            | BuiltIn::monitor
+            | BuiltIn::debug
+            | BuiltIn::warning
+            | BuiltIn::error
+            | BuiltIn::info
+            | BuiltIn::fatal => self.infere_display(stmt, args),
+
+            _ => (),
         }
 
         Some(ty)
     }
 
+    fn check_display_dynamic_arg(&mut self, fmt_expr: ExprId, arg: Option<ExprId>, off: TextSize) {
+        let arg = if let Some(arg) = arg {
+            arg
+        } else {
+            self.result.diagnostics.push(InferenceDiagnostic::MissingFmtArg {
+                fmt_lit: fmt_expr,
+                lit_range: TextRange::at(off, 1u32.into()),
+            });
+
+            return;
+        };
+        match self.result.expr_types[arg].to_value() {
+            Some(Type::Integer) => (),
+
+            Some(ty) if ty.is_convertable_to(&Type::Integer) => {
+                self.result.casts.insert(arg, Type::Integer);
+            }
+            _ => self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMissmatch {
+                err: TypeMissmatch {
+                    expected: Cow::Borrowed(&[TyRequirement::Val(Type::Integer)]),
+                    found_ty: self.result.expr_types[arg].clone(),
+                    expr: arg,
+                },
+                fmt_lit: fmt_expr,
+                lit_range: TextRange::at(off, 1u32.into()),
+                lint_ctx: None,
+            }),
+        }
+    }
+
+    fn check_display_arg_val(
+        &mut self,
+        stmt: StmtId,
+        fmt_expr: ExprId,
+        arg: Option<ExprId>,
+        lit_range: TextRange,
+        ty: Type,
+    ) {
+        let arg = if let Some(arg) = arg {
+            arg
+        } else {
+            self.result
+                .diagnostics
+                .push(InferenceDiagnostic::MissingFmtArg { fmt_lit: fmt_expr, lit_range });
+
+            return;
+        };
+        match self.result.expr_types[arg].to_value() {
+            Some(ty_) if ty_ == ty => (),
+
+            Some(ty_) if ty_.is_convertable_to(&ty) => {
+                self.result.casts.insert(arg, ty);
+            }
+
+            Some(ty_) if ty_.is_assignable_to(&ty) => {
+                self.result.casts.insert(arg, ty.clone());
+                self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMissmatch {
+                    err: TypeMissmatch {
+                        expected: Cow::Owned(vec![TyRequirement::Val(ty)]),
+                        found_ty: self.result.expr_types[arg].clone(),
+                        expr: arg,
+                    },
+                    fmt_lit: fmt_expr,
+                    lit_range,
+                    lint_ctx: Some(stmt),
+                })
+            }
+            _ => self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMissmatch {
+                err: TypeMissmatch {
+                    expected: Cow::Owned(vec![TyRequirement::Val(ty)]),
+                    found_ty: self.result.expr_types[arg].clone(),
+                    expr: arg,
+                },
+                fmt_lit: fmt_expr,
+                lit_range,
+                lint_ctx: None,
+            }),
+        }
+    }
+
+    fn infere_display(&mut self, stmt: StmtId, args: &[ExprId]) {
+        let mut i = 0;
+        while let Some(fmt_expr) = args.get(i) {
+            i += 1;
+            if let Expr::Literal(Literal::String(ref lit)) = self.body.exprs[*fmt_expr] {
+                let mut chars = lit.char_indices();
+                while let Some((start, c)) = chars.next() {
+                    if c == '%' {
+                        let pos = chars.next();
+                        let mut end: TextSize = (start + 2).try_into().unwrap();
+                        let ty = match pos.map(|(_, c)| c) {
+                            Some('%' | 'm' | 'M' | 'l' | 'L') => continue, // escape sequences, always correct
+                            Some('d' | 'D' | 'h' | 'H' | 'o' | 'O' | 'b' | 'B' | 'c' | 'C') => {
+                                Type::Integer
+                            }
+                            Some('s' | 'S') => Type::String,
+                            _ => {
+                                let res =
+                                    parse_real_fmt_spec(start as u32, *fmt_expr, pos, &mut chars);
+                                if let Some(err) = res.err {
+                                    self.result.diagnostics.push(err);
+                                    i += 1 + res.dynamic_args.len();
+                                    continue;
+                                }
+
+                                for pos in res.dynamic_args {
+                                    self.check_display_dynamic_arg(
+                                        *fmt_expr,
+                                        args.get(i).copied(),
+                                        pos,
+                                    );
+                                    i += 1;
+                                }
+
+                                end = res.end;
+                                Type::Real
+                            }
+                        };
+
+                        let arg = args.get(i).copied();
+                        let range = TextRange::new(start.try_into().unwrap(), end);
+                        self.check_display_arg_val(stmt, *fmt_expr, arg, range, ty);
+
+                        i += 1;
+                    }
+                }
+            }
+        }
+    }
     fn infere_limit(&mut self, stmt: StmtId, expr: ExprId, args: &[ExprId]) {
         let sig = if let Some(sig) = self.result.resolved_signatures.get(&expr) {
             *sig
@@ -1093,6 +1236,30 @@ pub enum InferenceDiagnostic {
         invalid_arg1: bool,
         invalid_ret: bool,
         output_args: Vec<LocalFunctionArgId>,
+    },
+
+    DisplayTypeMissmatch {
+        err: TypeMissmatch,
+        fmt_lit: ExprId,
+        lit_range: TextRange,
+        lint_ctx: Option<StmtId>,
+    },
+
+    MissingFmtArg {
+        fmt_lit: ExprId,
+        lit_range: TextRange,
+    },
+
+    InvalidFmtSpecifierChar {
+        fmt_lit: ExprId,
+        lit_range: TextRange,
+        err_char: char,
+        candidates: &'static [char],
+    },
+
+    InvalidFmtSpecifierEnd {
+        fmt_lit: ExprId,
+        lit_range: TextRange,
     },
 
     TypeMissmatch(TypeMissmatch),

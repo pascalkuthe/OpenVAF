@@ -1,12 +1,12 @@
 use hir_def::db::HirDefDB;
-use hir_def::Type;
-use hir_lower::{CallBackKind, DisplayKind, HirInterner};
+use hir_lower::{CallBackKind, DisplayKind, FmtArg, FmtArgKind, HirInterner};
 use lasso::Rodeo;
 use llvm::{
     IntPredicate, LLVMAddIncoming, LLVMAppendBasicBlockInContext, LLVMBuildAdd,
-    LLVMBuildArrayMalloc, LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildICmp,
-    LLVMBuildPhi, LLVMGetParam, LLVMIsDeclaration, LLVMPositionBuilderAtEnd, LLVMSetLinkage,
-    LLVMSetUnnamedAddress, UnnamedAddr, UNNAMED,
+    LLVMBuildArrayMalloc, LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildFMul,
+    LLVMBuildFree, LLVMBuildICmp, LLVMBuildInBoundsGEP2, LLVMBuildPhi, LLVMGetParam,
+    LLVMIsDeclaration, LLVMPositionBuilderAtEnd, LLVMSetLinkage, LLVMSetUnnamedAddress,
+    UnnamedAddr, UNNAMED,
 };
 use llvm::{LLVMPurgeAttrs, Linkage};
 use mir::FuncRef;
@@ -220,10 +220,10 @@ pub fn general_callbacks<'ll>(
 fn print_callback<'ll>(
     cx: &mut CodegenCx<'_, 'll>,
     kind: DisplayKind,
-    arg_tys: &[Type],
+    arg_tys: &[FmtArg],
 ) -> (&'ll llvm::Value, &'ll llvm::Type) {
     let mut args = vec![cx.ty_void_ptr(), cx.ty_str()];
-    args.extend(arg_tys.iter().map(|ty| lltype(ty, cx)));
+    args.extend(arg_tys.iter().map(|arg| lltype(&arg.ty, cx)));
     let fun_ty = cx.ty_func(&args, cx.ty_void());
     let name = cx.local_callback_name();
     let fun = cx.declare_int_fn(&name, fun_ty);
@@ -238,7 +238,67 @@ fn print_callback<'ll>(
         LLVMPositionBuilderAtEnd(llbuilder, entry_bb);
         let handle = LLVMGetParam(fun, 0);
         let fmt_lit = LLVMGetParam(fun, 1);
-        let mut args = vec![cx.const_null_ptr(cx.ty_str()), cx.const_usize(0)];
+        let mut args =
+            vec![cx.const_null_ptr(cx.ty_str()), cx.const_usize(0), LLVMGetParam(fun, 1)];
+
+        let exp_table = cx.get_declared_value("EXP").expect("constant EXP missing from stdlib");
+        let exp_table_ty = cx.ty_array(cx.ty_real(), 11);
+        let char_table =
+            cx.get_declared_value("FMT_CHARS").expect("constant FMT_CHARS missing from stdlib");
+        let char_table_ty = cx.ty_array(cx.ty_i8(), 11);
+        let fmt_char_idx =
+            cx.get_func_by_name("fmt_char_idx").expect("fmt_char_idx missing from stdlib");
+        let fmt_char_idx_ty = cx.ty_func(&[cx.ty_real()], cx.ty_int());
+        let fmt_binary = cx.get_func_by_name("fmt_binary").expect("fmt_binary missing from stdlib");
+        let fmt_binary_ty = cx.ty_func(&[cx.ty_int()], cx.ty_str());
+        let mut free = Vec::new();
+
+        for (i, arg) in arg_tys.iter().enumerate() {
+            let val = LLVMGetParam(fun, i as u32 + 2);
+            match arg.kind {
+                FmtArgKind::Binary => {
+                    let formatted_str = LLVMBuildCall2(
+                        llbuilder,
+                        fmt_binary_ty,
+                        fmt_binary,
+                        [val].as_ptr(),
+                        1,
+                        UNNAMED,
+                    );
+                    free.push(formatted_str);
+                }
+                FmtArgKind::EngineerReal => {
+                    let idx = LLVMBuildCall2(
+                        llbuilder,
+                        fmt_char_idx_ty,
+                        fmt_char_idx,
+                        [val].as_ptr(),
+                        1,
+                        UNNAMED,
+                    );
+                    let exp = LLVMBuildInBoundsGEP2(
+                        llbuilder,
+                        exp_table_ty,
+                        exp_table,
+                        [cx.const_int(0), idx].as_ptr(),
+                        2,
+                        UNNAMED,
+                    );
+                    let num = LLVMBuildFMul(llbuilder, val, exp, UNNAMED);
+                    args.push(num);
+                    let scale_char = LLVMBuildInBoundsGEP2(
+                        llbuilder,
+                        char_table_ty,
+                        char_table,
+                        [cx.const_int(0), idx].as_ptr(),
+                        2,
+                        UNNAMED,
+                    );
+                    args.push(scale_char);
+                }
+                FmtArgKind::Other => args.push(val),
+            }
+        }
         args.extend((1..(2 + arg_tys.len())).map(|arg| LLVMGetParam(fun, arg as u32)));
         let (fun_ty, fun) = cx.intrinsic("snprintf").unwrap();
         let len = LLVMBuildCall2(llbuilder, fun_ty, fun, args.as_ptr(), args.len() as u32, UNNAMED);
@@ -258,6 +318,9 @@ fn print_callback<'ll>(
         args[1] = data_len;
         let len = LLVMBuildCall2(llbuilder, fun_ty, fun, args.as_ptr(), args.len() as u32, UNNAMED);
         let is_err = LLVMBuildICmp(llbuilder, IntPredicate::IntSLT, len, cx.const_int(0), UNNAMED);
+        for alloc in free.iter() {
+            LLVMBuildFree(llbuilder, alloc);
+        }
         LLVMBuildCondBr(llbuilder, is_err, err_bb, exit_bb);
 
         LLVMPositionBuilderAtEnd(llbuilder, err_bb);

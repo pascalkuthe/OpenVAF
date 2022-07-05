@@ -240,3 +240,101 @@ endmodule
     let actual = db.lower_and_check();
     expect![[r#""#]].assert_eq(&actual);
 }
+
+#[test]
+fn formatting() {
+    let db = TestDataBase::new(
+        "/root.va",
+        r#"
+        module diode;
+            analog begin 
+                $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+                $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+            end
+        endmodule
+    "#,
+    );
+    let actual = db.lower_and_check();
+    expect![[r#"
+        error: type missmatch: expected real value but found string literal
+          ┌─ /root.va:4:53
+          │
+        4 │                 $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+          │                                 --                  ^^^^^ expected real value
+          │                                 │                    
+          │                                 help: expected because of this fmt specifier
+
+        error: type missmatch: expected integer value but found real literal
+          ┌─ /root.va:4:60
+          │
+        4 │                 $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+          │                                         -                  ^^^ expected integer value
+          │                                         │                   
+          │                                         help: expected because of this fmt specifier
+
+        error: type missmatch: expected real value but found string literal
+          ┌─ /root.va:4:65
+          │
+        4 │                 $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+          │                                    -------                      ^^^^^ expected real value
+          │                                    │                             
+          │                                    help: expected because of this fmt specifier
+
+        error: type missmatch: expected integer value but found real literal
+          ┌─ /root.va:4:72
+          │
+        4 │                 $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+          │                                            --                          ^^^ expected integer value
+          │                                            │                            
+          │                                            help: expected because of this fmt specifier
+
+        error: type missmatch: expected integer value but found real literal
+          ┌─ /root.va:5:55
+          │
+        5 │                 $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+          │                                  -                    ^^^ expected integer value
+          │                                  │                     
+          │                                  help: expected because of this fmt specifier
+
+        error: type missmatch: expected real value but found string literal
+          ┌─ /root.va:5:60
+          │
+        5 │                 $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+          │                                 -----                      ^^^ expected real value
+          │                                 │                           
+          │                                 help: expected because of this fmt specifier
+
+        error: failed to parse format specifier; unexpected character .
+          ┌─ /root.va:5:41
+          │
+        5 │                 $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+          │                                         ^ unexpected character in fmt specifier
+          │
+          = help: expected '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' or '*'
+
+        error: type missmatch: expected string value but found real literal
+          ┌─ /root.va:5:72
+          │
+        5 │                 $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+          │                                            --                          ^^^^^ expected string value
+          │                                            │                            
+          │                                            help: expected because of this fmt specifier
+
+        error: failed to parse format specifier; unexpected character J
+          ┌─ /root.va:5:48
+          │
+        5 │                 $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+          │                                                ^ unexpected character in fmt specifier
+          │
+          = help: expected '-', '+', ' ', '#', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*', 
+            '.', 'e', 'E', 'f', 'F', 'g', 'G', 'r', 'R', '%', 'm', 'M', 'l', 'L', 'd', 'D', 'h', 'H', 
+            'o', 'O', 'b', 'B', 'c', 'C', 's' or 'S'
+
+        error: $display system task is missing an argument
+          ┌─ /root.va:5:50
+          │
+        5 │                 $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+          │                                                  ^^ value for this fmt specifier is missing
+
+    "#]].assert_eq(&actual);
+}

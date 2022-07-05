@@ -43,6 +43,6 @@ impl AsIdent for Path {
 }
 
 impl_debug!(match Path{
-    Path{is_root_path: false, segments} => "{}",pretty::List{ data: segments.as_slice(), seperator:".", final_seperator: ".", prefix: "", postfix: "" };
-    Path{is_root_path: true, segments} => "$root.{}",pretty::List{ data: segments.as_slice(), seperator:".", final_seperator: ".", prefix: "", postfix: "" };
+    Path{is_root_path: false, segments} => "{}", pretty::List::path(segments.as_slice());
+    Path{is_root_path: true, segments} => "$root.{}", pretty::List::path(segments.as_slice());
 });
