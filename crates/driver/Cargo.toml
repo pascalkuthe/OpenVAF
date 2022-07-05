@@ -41,7 +41,6 @@ md5 = "0.7"
 directories-next = "2"
 path-absolutize = "3.0.13"
 
-smol_str = "0.1.22"
 parking_lot = "0.12"
 typed-index-collections = "3"
 ahash = "0.7"
