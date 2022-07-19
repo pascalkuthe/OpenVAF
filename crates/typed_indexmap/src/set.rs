@@ -96,7 +96,13 @@ where
 
 impl<K: From<usize>, V> TiSet<K, V> {
     pub fn iter_enumerated(&self) -> Iter<K, V> {
-        self.raw.iter().enumerate().map(|(index, val)| (index.into(), val))
+        self.iter().enumerate().map(|(index, val)| (index.into(), val))
+    }
+}
+
+impl<K, V> TiSet<K, V> {
+    pub fn iter(&self) -> indexmap::set::Iter<'_, V> {
+        self.raw.iter()
     }
 }
 

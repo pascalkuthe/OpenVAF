@@ -5,38 +5,26 @@ use arena::{Arena, IdxRange};
 use bitset::{BitSet, HybridBitSet};
 use mir::builder::{InsertBuilder, InstBuilder, InstInserterBase};
 use mir::{
-    Block, Function, Inst, InstructionData, Opcode, SourceLoc, Value, F_LOG10_E, F_ONE, F_TWO,
-    F_ZERO,
+    Block, Function, Inst, InstructionData, Opcode, SourceLoc, Unknown, Value, F_LOG10_E, F_ONE,
+    F_TWO, F_ZERO,
 };
 use stdx::iter::zip;
 use stdx::packed_option::{PackedOption, ReservedValue};
 
+use crate::intern::{Derivative, DerivativeIntern};
 use crate::live_derivatives::LiveDerivatives;
-use crate::unkowns::{FirstOrderUnkown, Unkown, Unkowns};
 
 #[cfg(test)]
 mod tests;
 
 pub fn build_derivatives(
     func: &mut Function,
-    unkowns: &mut Unkowns,
+    intern: &mut DerivativeIntern,
     live_derivatives: &LiveDerivatives,
     post_order: &[Block],
-) -> AHashMap<(Value, FirstOrderUnkown), Value> {
-    let mut derivative_values: AHashMap<(Value, FirstOrderUnkown), Value> = unkowns
-        .first_order_unkowns
-        .iter_enumerated()
-        .map(|(unkown, &val)| ((val, unkown), F_ONE))
-        .collect();
-
-    let off = unkowns.first_order_unkowns.len() as u32 + unkowns.higher_order_unkowns.len() as u32;
-    derivative_values.extend(
-        live_derivatives
-            .completed_subgraphs
-            .iter()
-            .enumerate()
-            .map(|(i, (val, _))| ((*val, FirstOrderUnkown::from(off + i as u32)), F_ONE)),
-    );
+) -> AHashMap<(Value, Unknown), Value> {
+    let derivative_values: AHashMap<(Value, Unknown), Value> =
+        intern.unknowns.iter_enumerated().map(|(unknown, &val)| ((val, unknown), F_ONE)).collect();
 
     let mut known_values = BitSet::new_empty(func.dfg.num_values());
     for val in func.dfg.values() {
@@ -48,7 +36,7 @@ pub fn build_derivatives(
     let mut builder = DerivativeBuilder {
         func,
         live_derivatives,
-        unkowns,
+        intern,
         derivative_values,
         known_values,
         dst: (0u32.into(), SourceLoc::new(0)),
@@ -65,13 +53,13 @@ pub(crate) struct DerivativeBuilder<'a, 'u> {
     func: &'a mut Function,
 
     live_derivatives: &'a LiveDerivatives,
-    unkowns: &'a mut Unkowns<'u>,
+    intern: &'a mut DerivativeIntern<'u>,
 
-    derivative_values: AHashMap<(Value, FirstOrderUnkown), Value>,
+    derivative_values: AHashMap<(Value, Unknown), Value>,
     known_values: BitSet<Value>,
     dst: (Inst, SourceLoc),
 
-    cyclical_phis: Vec<(Inst, Unkown)>,
+    cyclical_phis: Vec<(Inst, Derivative)>,
 }
 
 impl<'f> InstInserterBase<'f> for &'f mut DerivativeBuilder<'_, '_> {
@@ -122,10 +110,11 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         }
 
         // populate phis with derivatives (now all values are either known/phi dummys)
-        for (phi, unkown) in &self.cyclical_phis {
+        for (phi, derivative) in &self.cyclical_phis {
             self.func.dfg.zap_inst(*phi);
             for arg in self.func.dfg.instr_args_mut(*phi) {
-                *arg = Self::derivative_of_(self.unkowns, &self.derivative_values, *arg, *unkown);
+                *arg =
+                    Self::derivative_of_(self.intern, &self.derivative_values, *arg, *derivative);
             }
             self.func.dfg.update_inst_uses(*phi)
         }
@@ -134,17 +123,17 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
     fn ddx(
         &mut self,
         arg: Value,
-        pos_unkowns: &HybridBitSet<FirstOrderUnkown>,
-        neg_unkowns: &HybridBitSet<FirstOrderUnkown>,
-        higher_order_unkown: Option<Unkown>,
+        pos_unknowns: &HybridBitSet<Unknown>,
+        neg_unknowns: &HybridBitSet<Unknown>,
+        higher_order_derivative: Option<Derivative>,
     ) -> Value {
         let mut derivative = F_ZERO;
-        for next_unkown in pos_unkowns.iter() {
-            let val = if let Some(unkown) = higher_order_unkown {
-                let unkown = self.unkowns.raise_order(unkown, next_unkown);
-                self.derivative_of(arg, unkown)
+        for next_unknown in pos_unknowns.iter() {
+            let val = if let Some(unknown) = higher_order_derivative {
+                let unknown = self.intern.raise_order(unknown, next_unknown);
+                self.derivative_of(arg, unknown)
             } else {
-                self.derivative_of_1(arg, next_unkown)
+                self.derivative_of_1(arg, next_unknown)
             };
 
             if val == F_ZERO {
@@ -158,12 +147,12 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
             }
         }
 
-        for next_unkown in neg_unkowns.iter() {
-            let val = if let Some(unkown) = higher_order_unkown {
-                let unkown = self.unkowns.raise_order(unkown, next_unkown);
-                self.derivative_of(arg, unkown)
+        for next_unknown in neg_unknowns.iter() {
+            let val = if let Some(unknown) = higher_order_derivative {
+                let unknown = self.intern.raise_order(unknown, next_unknown);
+                self.derivative_of(arg, unknown)
             } else {
-                self.derivative_of_1(arg, next_unkown)
+                self.derivative_of_1(arg, next_unknown)
             };
 
             if val == F_ZERO {
@@ -181,16 +170,16 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
     }
 
     fn build_inst(&mut self, bcache: &mut BuilderCache) {
-        let unkowns = self.live_derivatives.of_inst(self.dst.0);
+        let derivatives = self.live_derivatives.of_inst(self.dst.0);
 
         let inst = self.dst.0;
         match self.func.dfg.insts[inst].clone() {
             // ddx calls just get replaced with the appropriate derivatives
             InstructionData::Call { func_ref, args } => {
-                if let Some((pos_unkowns, neg_unkowns)) = self.unkowns.ddx_calls.get(&func_ref) {
+                if let Some((pos_unknowns, neg_unknowns)) = self.intern.ddx_calls.get(&func_ref) {
                     let inst = self.dst.0;
                     let arg = args.as_slice(&self.func.dfg.insts.value_lists)[0];
-                    let res = self.ddx(arg, pos_unkowns, neg_unkowns, None);
+                    let res = self.ddx(arg, pos_unknowns, neg_unknowns, None);
 
                     // replace call with calculated derivative
                     let old = self.func.dfg.first_result(inst);
@@ -198,23 +187,17 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                     self.func.dfg.zap_inst(inst);
                     self.func.layout.remove_inst(inst);
 
-                    let higher_order_unkowns =
-                        self.live_derivatives.compute_inst(inst, self.func, self.unkowns);
-                    for unkown in higher_order_unkowns.iter() {
-                        let derivative = self.ddx(arg, pos_unkowns, neg_unkowns, Some(unkown));
+                    let higher_order_derivatives =
+                        self.live_derivatives.compute_inst(inst, self.func, self.intern);
+                    for derivative in higher_order_derivatives.iter() {
+                        let ddx_val = self.ddx(arg, pos_unknowns, neg_unknowns, Some(derivative));
 
-                        let prev_order = match self.unkowns.previous_order(unkown) {
+                        let prev_order = match self.intern.previous_order(derivative) {
                             Some(val) => self.derivative_of(res, val),
                             None => res, // 0th order is the original result
                         };
-                        if u32::from(unkown)
-                            >= self.unkowns.first_order_unkowns.len() as u32
-                                + self.unkowns.higher_order_unkowns.len() as u32
-                        {
-                            continue;
-                        }
-                        let unkown_ = self.unkowns.to_first_order(unkown);
-                        self.insert_derivative(prev_order, unkown_, derivative);
+                        let unknown = self.intern.get_unknown(derivative);
+                        self.insert_derivative(prev_order, unknown, ddx_val);
                     }
 
                     debug_assert!(self.live_derivatives.conversions.get(&inst).is_none());
@@ -225,7 +208,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
             // place dummy values for phis to break cycels
             // arguments are populated with derivatives later
             InstructionData::PhiNode(phi) => {
-                if let Some(unkowns) = unkowns {
+                if let Some(derivatives) = derivatives {
                     let res = self.func.dfg.first_result(self.dst.0);
                     let is_cyclical = self
                         .func
@@ -237,39 +220,39 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                         // we do not calculate phis just yet because it requires the value of a backwards edges.
                         // Instead we just copy the phi and delay until all other derivatives are
                         // done
-                        for unkown in unkowns.iter() {
-                            let prev_order = match self.unkowns.previous_order(unkown) {
+                        for derivative in derivatives.iter() {
+                            let prev_order = match self.intern.previous_order(derivative) {
                                 Some(val) => self.derivative_of(res, val),
                                 None => res, // 0th order is the original result
                             };
-                            let unkown_ = self.unkowns.to_first_order(unkown);
+                            let unknown = self.intern.get_unknown(derivative);
 
                             let edges: Vec<_> = self.func.dfg.phi_edges(&phi).collect();
                             let val = self.ins().phi(&edges);
-                            self.derivative_values.insert((prev_order, unkown_), val);
+                            self.derivative_values.insert((prev_order, unknown), val);
 
-                            self.cyclical_phis.push((self.dst.0, unkown))
+                            self.cyclical_phis.push((self.dst.0, derivative))
                         }
                     } else {
-                        for unkown in unkowns.iter() {
-                            let prev_order = match self.unkowns.previous_order(unkown) {
+                        for derivative in derivatives.iter() {
+                            let prev_order = match self.intern.previous_order(derivative) {
                                 Some(val) => self.derivative_of(res, val),
                                 None => res, // 0th order is the original result
                             };
-                            let unkown_ = self.unkowns.to_first_order(unkown);
+                            let unknown = self.intern.get_unknown(derivative);
 
                             let edges: Vec<_> = self
                                 .func
                                 .dfg
                                 .phi_edges(&phi)
-                                .map(|(bb, val)| (bb, self.derivative_of(val, unkown)))
+                                .map(|(bb, val)| (bb, self.derivative_of(val, derivative)))
                                 .collect();
 
                             if edges.iter().all(|(_, val)| *val == edges[0].1) {
-                                self.insert_derivative(prev_order, unkown_, edges[0].1);
+                                self.insert_derivative(prev_order, unknown, edges[0].1);
                             } else {
                                 let val = self.ins().phi(&edges);
-                                self.derivative_values.insert((prev_order, unkown_), val);
+                                self.derivative_values.insert((prev_order, unknown), val);
                             }
                         }
                     }
@@ -281,27 +264,30 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
             _ => (),
         }
 
-        if let Some(unkowns) = unkowns {
+        if let Some(derivatives) = derivatives {
             // add the original instruction
             bcache.resolved_derivatives.insert(None, ResolvedDerivative::root_instr(self.dst.0));
 
-            for unkown in unkowns.iter() {
-                let prev_order = self.unkowns.previous_order(unkown);
+            for derivative in derivatives.iter() {
+                let prev_order = self.intern.previous_order(derivative);
+                let base = self.intern.get_unknown(derivative);
+
                 let origin = bcache.resolved_derivatives[&prev_order].clone();
                 let cache = self.ensure_cache(prev_order, &origin, bcache);
 
                 let inst_start = self.func.dfg.num_insts().into();
 
-                let base = self.unkowns.to_first_order(unkown);
-
                 for (inst, cache_data_i) in zip(origin.instructions(), cache.data) {
-                    self.inst_derivative(inst, base, bcache.cache_data[cache_data_i]);
+                    let res = self.func.dfg.first_result(inst);
+                    if !self.derivative_values.contains_key(&(res, base)) {
+                        self.inst_derivative(inst, base, bcache.cache_data[cache_data_i]);
+                    }
                 }
 
                 let inst_end = self.func.dfg.num_insts().into();
 
                 bcache.resolved_derivatives.insert(
-                    Some(unkown),
+                    Some(derivative),
                     ResolvedDerivative { instrs: inst_start..inst_end, cache_instrs: cache.instrs },
                 );
             }
@@ -315,36 +301,30 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         if let Some(conversion) = self.live_derivatives.conversions.get(&inst) {
             for chain_rule in conversion {
                 let outer_derivative =
-                    self.derivative_of_1(chain_rule.outer_val, chain_rule.out_derivative_unkown);
+                    self.derivative_of(chain_rule.val, chain_rule.outer_derivative);
                 if outer_derivative == F_ZERO {
                     continue;
                 }
 
-                let subgraph = usize::from(chain_rule.out_derivative_unkown)
-                    - self.unkowns.first_order_unkowns.len()
-                    - self.unkowns.higher_order_unkowns.len();
-                let inner_derivative_val = self.live_derivatives.completed_subgraphs[subgraph].0;
-                let inner_derivative = self.derivative_of(inner_derivative_val, chain_rule.unkown);
+                let inner_derivative = self
+                    .derivative_of(chain_rule.inner_derivative.0, chain_rule.inner_derivative.1);
 
                 if inner_derivative == F_ZERO {
                     continue;
                 }
 
-                let prev_order = match self.unkowns.previous_order(chain_rule.unkown) {
-                    Some(val) => self.derivative_of(chain_rule.outer_val, val),
-                    None => chain_rule.outer_val, // 0th order is the original result
-                };
-
+                let prev_order =
+                    self.prev_order_derivative_of(chain_rule.val, chain_rule.dst_derivative);
+                let unknown = self.intern.get_unknown(chain_rule.dst_derivative);
                 let val = self.ins().fmul(inner_derivative, outer_derivative);
-                let unkown = self.unkowns.to_first_order(chain_rule.unkown);
-                self.derivative_values.insert((prev_order, unkown), val);
+                self.derivative_values.insert((prev_order, unknown), val);
             }
         }
     }
 
     fn ensure_cache(
         &mut self,
-        prev_order: Option<Unkown>,
+        prev_order: Option<Derivative>,
         prev_order_instr: &ResolvedDerivative,
         bcache: &mut BuilderCache,
     ) -> CacheInfo {
@@ -374,22 +354,31 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         InsertBuilder::new(self)
     }
 
-    fn derivative_of_1(&self, val: Value, unkown: FirstOrderUnkown) -> Value {
-        self.derivative_values.get(&(val, unkown)).copied().unwrap_or(F_ZERO)
+    fn derivative_of_1(&self, val: Value, unknown: Unknown) -> Value {
+        self.derivative_values.get(&(val, unknown)).copied().unwrap_or(F_ZERO)
     }
 
-    fn derivative_of(&self, val: Value, unkown: Unkown) -> Value {
-        Self::derivative_of_(self.unkowns, &self.derivative_values, val, unkown)
+    fn prev_order_derivative_of(&self, val: Value, derivative: Derivative) -> Value {
+        match self.intern.previous_order(derivative) {
+            Some(prev_order) => {
+                Self::derivative_of_(self.intern, &self.derivative_values, val, prev_order)
+            }
+            None => val,
+        }
+    }
+
+    fn derivative_of(&self, val: Value, derivative: Derivative) -> Value {
+        Self::derivative_of_(self.intern, &self.derivative_values, val, derivative)
     }
 
     fn derivative_of_(
-        unkowns: &Unkowns,
-        derivative_values: &AHashMap<(Value, FirstOrderUnkown), Value>,
+        intern: &DerivativeIntern,
+        derivative_values: &AHashMap<(Value, Unknown), Value>,
         mut val: Value,
-        unkown: Unkown,
+        derivative: Derivative,
     ) -> Value {
-        for unkown in unkowns.first_order_unkowns_rev(unkown) {
-            if let Some(derivative) = derivative_values.get(&(val, unkown)) {
+        for unknown in intern.unknowns_rev(derivative) {
+            if let Some(derivative) = derivative_values.get(&(val, unknown)) {
                 val = *derivative;
             } else {
                 return F_ZERO;
@@ -399,18 +388,21 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         val
     }
 
-    fn insert_derivative(&mut self, original: Value, unkown: FirstOrderUnkown, val: Value) {
+    fn insert_derivative(&mut self, original: Value, unknown: Unknown, val: Value) {
         if val == F_ZERO {
             return;
         }
-        let old = self.derivative_values.insert((original, unkown), val);
+        let old = self.derivative_values.insert((original, unknown), val);
         if cfg!(debug_assertions) {
             if let Some(old) = old {
                 let original_inst = self.func.dfg.value_def(original).unwrap_inst();
                 let original_inst = self.func.dfg.display_inst(original_inst);
-                let func = self.func.to_debug_string();
-                let higher_order = &self.unkowns.higher_order_unkowns;
-                panic!("derivative of {original} by {unkown:?} generated twice: {old} {val}\norg: {original_inst}\n\n{func}\n{higher_order:#?}")
+                let old_inst = self.func.dfg.value_def(old).unwrap_inst();
+                let old_inst = self.func.dfg.display_inst(old_inst);
+                let new_inst = self.func.dfg.value_def(val).unwrap_inst();
+                let new_inst = self.func.dfg.display_inst(new_inst);
+                // println!("{:?}", self.func);
+                panic!("derivative of {original} by {unknown:?} generated twice: {old} {val}\norg: {original_inst}\n{new_inst}\n{old_inst}")
             }
         }
     }
@@ -570,7 +562,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         cache
     }
 
-    fn inst_derivative(&mut self, inst: Inst, unkown: FirstOrderUnkown, cache: CacheData) {
+    fn inst_derivative(&mut self, inst: Inst, unknown: Unknown, cache: CacheData) {
         let res = self.func.dfg.first_result(inst);
         let op = self.func.dfg.insts[inst].opcode();
 
@@ -578,7 +570,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         let arg0 = args.get(0).copied().unwrap_or_else(Value::reserved_value);
         let arg1 = args.get(1).copied().unwrap_or_else(Value::reserved_value);
         let arg_derivative = |sel: &mut DerivativeBuilder, i| {
-            sel.derivative_of_1(sel.func.dfg.instr_args(inst)[i], unkown)
+            sel.derivative_of_1(sel.func.dfg.instr_args(inst)[i], unknown)
         };
 
         let gen_mul_derivative =
@@ -797,7 +789,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
             Opcode::Br | Opcode::Jmp |Opcode::Phi => unreachable!(),
         };
 
-        self.insert_derivative(res, unkown, val)
+        self.insert_derivative(res, unknown, val)
     }
 }
 
@@ -818,8 +810,8 @@ impl ResolvedDerivative {
         // The original instruction (so something the user typed) never has a cache and is always the first
         // instruction.
         ResolvedDerivative {
-            instrs: Inst::from(u32::from(pos))..Inst::from(u32::from(pos) + 1),
-            cache_instrs: Inst::from(u32::from(pos))..Inst::from(u32::from(pos)),
+            instrs: pos..Inst::from(u32::from(pos) + 1),
+            cache_instrs: pos..Inst::from(u32::from(pos)),
         }
     }
 
@@ -832,9 +824,9 @@ impl ResolvedDerivative {
 
 #[derive(Default)]
 pub struct BuilderCache {
-    resolved_derivatives: AHashMap<Option<Unkown>, ResolvedDerivative>,
+    resolved_derivatives: AHashMap<Option<Derivative>, ResolvedDerivative>,
     cache_data: Arena<CacheData>,
-    derivative_cache: AHashMap<Option<Unkown>, CacheInfo>,
+    derivative_cache: AHashMap<Option<Derivative>, CacheInfo>,
 }
 
 impl BuilderCache {

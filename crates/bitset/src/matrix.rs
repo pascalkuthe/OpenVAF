@@ -242,6 +242,21 @@ where
     }
 }
 
+impl<R, C> Default for SparseBitMatrix<R, C>
+where
+    R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+    C: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    fn default() -> Self {
+        Self {
+            num_columns: Default::default(),
+            num_rows: Default::default(),
+            rows: Default::default(),
+            _row_ty: Default::default(),
+        }
+    }
+}
+
 /// A fixed-column-size, variable-row-size 2D bit matrix with a moderately
 /// sparse representation.
 ///
@@ -333,11 +348,23 @@ where
         res
     }
 
+    pub fn ensure_columns(&mut self, num_columns: usize) {
+        if self.num_columns < num_columns {
+            for row in self.rows.iter_mut() {
+                if let HybridBitSet::Dense(row) = row {
+                    row.ensure(num_columns);
+                }
+            }
+        }
+        self.num_columns = num_columns;
+    }
+
     pub fn intersect(&mut self, other: &SparseBitMatrix<R, C>) {
         self.rows.truncate(other.rows.len());
         for (dst, other) in zip(&mut self.rows, &other.rows) {
             dst.intersect(other)
         }
+        self.rows.truncate(other.rows.len())
     }
     #[inline]
     pub fn ensure_row(&mut self, row: R) -> &mut HybridBitSet<C> {
@@ -387,16 +414,16 @@ where
         self.ensure_row(row).insert_all(col);
     }
 
-    pub fn row_data_mut(&mut self) -> impl Iterator<Item = &mut HybridBitSet<C>> {
-        self.rows.iter_mut()
+    pub fn row_data_mut(&mut self) -> impl Iterator<Item = (R, &mut HybridBitSet<C>)> {
+        self.rows.iter_mut().enumerate().map(|(i, row)| (i.into(), row))
     }
 
     pub fn rows(&self) -> impl Iterator<Item = R> {
         (0..self.rows.len()).map(R::from)
     }
 
-    pub fn row_data(&self) -> impl Iterator<Item = &HybridBitSet<C>> {
-        self.rows.iter()
+    pub fn row_data(&self) -> impl Iterator<Item = (R, &HybridBitSet<C>)> {
+        self.rows.iter().enumerate().map(|(i, row)| (i.into(), row))
     }
 
     /// Iterates through all the columns set to true in a given row of

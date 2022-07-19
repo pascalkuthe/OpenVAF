@@ -1,7 +1,7 @@
-// mod back;
 mod compilation_db;
 mod middle;
 
+mod lim_rhs;
 pub mod matrix;
 pub mod residual;
 
@@ -17,17 +17,17 @@ use stdx::impl_debug_display;
 mod tests;
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
-pub enum SimUnkown {
+pub enum SimUnknown {
     KirchoffLaw(NodeId),
     Current(CurrentKind),
     Implicit(ImplicitEquation),
 }
 
 impl_debug_display! {
-    match SimUnkown{
-        SimUnkown::KirchoffLaw(node) => "{node}";
-        SimUnkown::Current(curr) => "br[{curr:?}]";
-        SimUnkown::Implicit(node) => "{node}";
+    match SimUnknown{
+        SimUnknown::KirchoffLaw(node) => "{node}";
+        SimUnknown::Current(curr) => "br[{curr:?}]";
+        SimUnknown::Implicit(node) => "{node}";
     }
 }
 

@@ -13,9 +13,9 @@ use hir_def::{
 use hir_ty::builtin::{
     ABS_INT, ABS_REAL, DDX_POT, IDTMOD_IC, IDTMOD_IC_MODULUS, IDTMOD_IC_MODULUS_OFFSET,
     IDTMOD_IC_MODULUS_OFFSET_NATURE, IDTMOD_IC_MODULUS_OFFSET_TOL, IDTMOD_NO_IC, IDT_IC,
-    IDT_IC_ASSERT, IDT_IC_ASSERT_NATURE, IDT_IC_ASSERT_TOL, IDT_NO_IC, MAX_INT, MAX_REAL,
-    NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
-    SIMPARAM_DEFAULT, SIMPARAM_NO_DEFAULT,
+    IDT_IC_ASSERT, IDT_IC_ASSERT_NATURE, IDT_IC_ASSERT_TOL, IDT_NO_IC, LIMIT_BUILTIN_FUNCTION,
+    MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND,
+    NATURE_ACCESS_PORT_FLOW, SIMPARAM_DEFAULT, SIMPARAM_NO_DEFAULT,
 };
 use hir_ty::db::HirTyDB;
 use hir_ty::inference::{AssignDst, BranchWrite, InferenceResult, ResolvedFun};
@@ -31,8 +31,8 @@ use typed_indexmap::TiSet;
 
 use crate::{
     CallBackKind, CurrentKind, Dim, DimKind, DisplayKind, FmtArg, FmtArgKind, HirInterner, IdtKind,
-    ImplicitEquation, ImplicitEquationKind, ParamInfoKind, ParamKind, PlaceKind, REACTIVE_DIM,
-    RESISTIVE_DIM,
+    ImplicitEquation, ImplicitEquationKind, LimitState, ParamInfoKind, ParamKind, PlaceKind,
+    REACTIVE_DIM, RESISTIVE_DIM,
 };
 use syntax::ast::{BinaryOp, UnaryOp};
 
@@ -144,6 +144,7 @@ impl<'a> MirBuilder<'a> {
             extra_dims: self.split_contribute.then(|| &mut extra_dims),
             path: &path,
             contribute_rhs: false,
+            inside_lim: false,
         };
 
         ctx.lower_entry_stmts();
@@ -212,7 +213,7 @@ impl HirInterner {
     pub fn insert_var_init(&mut self, db: &dyn HirTyDB, func: &mut Function, literals: &mut Rodeo) {
         let mut ctx = FunctionBuilderContext::default();
         let (mut builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
-        for (kind, param) in self.params.clone().raw.iter() {
+        for (kind, param) in self.params.clone().iter() {
             if let ParamKind::HiddenState(var) = *kind {
                 if builder.func.dfg.value_dead(*param) {
                     continue;
@@ -275,6 +276,7 @@ impl HirInterner {
                             extra_dims: None,
                             path: "",
                             contribute_rhs: false,
+                            inside_lim: false,
                         };
 
                         let invalid =
@@ -318,6 +320,7 @@ impl HirInterner {
                             extra_dims: None,
                             path: "",
                             contribute_rhs: false,
+                            inside_lim: false,
                         };
 
                         let invalid =
@@ -377,6 +380,7 @@ impl HirInterner {
                 tagged_vars: &AHashSet::default(),
                 extra_dims: None,
                 contribute_rhs: false,
+                inside_lim: false,
             };
 
             let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
@@ -572,6 +576,7 @@ impl HirInterner {
             places: &mut TiSet::default(),
             extra_dims: None,
             contribute_rhs: false,
+            inside_lim: false,
         };
 
         let expr = body.stmts[body.entry_stmts[i]].unwrap_expr();
@@ -600,6 +605,7 @@ pub struct LoweringCtx<'a, 'c> {
     pub tagged_vars: &'a AHashSet<VarId>,
     pub extra_dims: Option<&'a mut TiVec<Dim, AHashMap<ExprId, Value>>>,
     pub contribute_rhs: bool,
+    pub inside_lim: bool,
 }
 
 impl LoweringCtx<'_, '_> {
@@ -744,6 +750,7 @@ impl LoweringCtx<'_, '_> {
                         extra_dims: self.extra_dims.as_deref_mut(),
                         path: "",
                         contribute_rhs: false,
+                        inside_lim: false,
                     }
                     .lower_stmt(stmt);
                 });
@@ -1038,6 +1045,7 @@ impl LoweringCtx<'_, '_> {
                         extra_dims: self.extra_dims.as_deref_mut(),
                         path: self.path,
                         contribute_rhs: self.contribute_rhs,
+                        inside_lim: false,
                     };
                     let expr = if then { then_val } else { else_val };
                     ctx.lower_expr(expr)
@@ -1060,7 +1068,7 @@ impl LoweringCtx<'_, '_> {
                 self.func.ins().phi(&[then_src, else_src])
             }
             hir_def::Expr::Call { ref args, .. } => match self.infere.resolved_calls[&expr] {
-                ResolvedFun::User(fun) => self.lower_user_fun(fun, args),
+                ResolvedFun::User { func, limit } => self.lower_user_fun(func, limit, args),
                 ResolvedFun::BuiltIn(builtin) => self.lower_builtin(expr, builtin, args),
                 ResolvedFun::Param(param) => self.param(ParamKind::ParamSysFun(param)),
             },
@@ -1448,6 +1456,7 @@ impl LoweringCtx<'_, '_> {
                 extra_dims: self.extra_dims.as_deref_mut(),
                 path: self.path,
                 contribute_rhs: self.contribute_rhs,
+                inside_lim: self.inside_lim,
             };
             if branch {
                 lower_then_val(&mut ctx)
@@ -1475,6 +1484,7 @@ impl LoweringCtx<'_, '_> {
                 extra_dims: self.extra_dims.as_deref_mut(),
                 path: self.path,
                 contribute_rhs: self.contribute_rhs,
+                inside_lim: self.inside_lim,
             };
             lower_body(&mut ctx, branch)
         })
@@ -1493,16 +1503,53 @@ impl LoweringCtx<'_, '_> {
         then_vals
     }
 
-    fn lower_user_fun(&mut self, fun: FunctionId, args: &[ExprId]) -> Value {
+    fn lower_user_fun(&mut self, fun: FunctionId, lim: bool, args: &[ExprId]) -> Value {
+        if lim {
+            if self.extra_dims.is_none() {
+                return self.lower_expr(args[0]);
+            }
+            let (new_val, state) = self.limit_state(args[0]);
+            let new_val_place = self.place(PlaceKind::FunctionArg { fun, arg: 0u32.into() });
+            let old_val = self.param(ParamKind::PrevState(state));
+            let old_val_place = self.place(PlaceKind::FunctionArg { fun, arg: 1u32.into() });
+
+            let enable_lim = self.param(ParamKind::EnableLim);
+            let res = self.lower_select_with(
+                enable_lim,
+                |cx| {
+                    cx.func.def_var(new_val_place, new_val);
+                    cx.func.def_var(old_val_place, old_val);
+                    cx.lower_user_fun_impl(fun, args, true)
+                },
+                |_| enable_lim,
+            );
+
+            self.insert_limit(state, res)
+        } else {
+            self.lower_user_fun_impl(fun, args, false)
+        }
+    }
+    fn lower_user_fun_impl(
+        &mut self,
+        fun: FunctionId,
+        mut args: &[ExprId],
+        inside_lim: bool,
+    ) -> Value {
         let info = self.db.function_data(fun);
+
+        // FIXME proper path for functions
         let mut path = self.path.to_owned();
         path.push_str(&*info.name);
 
         let body = self.db.body(fun.into());
         let infere = self.db.inference_result(fun.into());
+        let mut arg_info = &*info.args;
+        if inside_lim {
+            arg_info = &arg_info[2u32.into()..];
+            args = &args[2..];
+        }
 
-        // TODO do not inline functions?
-        for ((arg, info), expr) in zip(info.args.iter_enumerated(), args) {
+        for ((arg, info), expr) in zip(arg_info.iter_enumerated(), args) {
             let place = self.place(PlaceKind::FunctionArg { fun, arg });
             let init = if info.is_input {
                 self.lower_expr(*expr)
@@ -1537,6 +1584,7 @@ impl LoweringCtx<'_, '_> {
             extra_dims: None,
             // can not contain contribute so doesn't matter
             contribute_rhs: false,
+            inside_lim,
         };
 
         ctx.lower_entry_stmts();
@@ -1565,7 +1613,7 @@ impl LoweringCtx<'_, '_> {
         let equation = self.data.implicit_equations.push_and_get_key(kind);
         let place = self.place(PlaceKind::CollapseImplicitEquation(equation));
         self.func.def_var(place, FALSE);
-        let val = self.param(ParamKind::ImplicitUnkown(equation));
+        let val = self.param(ParamKind::ImplicitUnknown(equation));
         (equation, val)
     }
 
@@ -1579,6 +1627,27 @@ impl LoweringCtx<'_, '_> {
         let place = PlaceKind::ImplicitResidual { equation, dim: REACTIVE_DIM };
         let place = self.place(place);
         self.func.def_var(place, residual_val);
+    }
+
+    fn limit_state(&mut self, probe: ExprId) -> (Value, LimitState) {
+        let new_val = self.lower_expr(probe);
+        let mut unkown = new_val;
+        if let Some(inst) = self.func.func.dfg.value_def(unkown).inst() {
+            debug_assert_eq!(self.func.func.dfg.insts[inst].opcode(), Opcode::Fneg);
+            unkown = self.func.func.dfg.instr_args(inst)[0];
+        }
+        let dst = self.data.lim_state.raw.entry(unkown);
+        let state = LimitState::from(dst.index());
+        dst.or_default().push((new_val, new_val != unkown));
+
+        (new_val, state)
+    }
+
+    fn insert_limit(&mut self, state: LimitState, mut val: Value) -> Value {
+        let func_ref = self.callback(CallBackKind::StoreLimit(state));
+        val = self.func.ins().call1(func_ref, &[val]);
+        self.data.lim_state[state].last_mut().unwrap().0 = val;
+        val
     }
 
     fn lower_integral(&mut self, kind: IdtKind, args: &[ExprId]) -> Value {
@@ -1979,44 +2048,40 @@ impl LoweringCtx<'_, '_> {
                 GRAVESTONE
             }
 
-            // BuiltIn::limit
-            //     if *signature.unwrap() == LIMIT_BUILTIN_FUNCTION && self.extra_dims.is_some() =>
-            // {
-            //     let new_val = self.lower_expr(args[0]);
+            BuiltIn::limit
+                if *signature.unwrap() == LIMIT_BUILTIN_FUNCTION && self.extra_dims.is_some() =>
+            {
+                let (new_val, state) = self.limit_state(args[0]);
 
-            //     let prev_val = if let Some(inst) = self.func.func.dfg.value_def(new_val).inst() {
-            //         debug_assert_eq!(self.func.func.dfg.insts[inst].opcode(), Opcode::Fneg);
-            //         let unkown = self.func.func.dfg.instr_args(inst)[0];
-            //         let prev_val_neg = self.param(ParamKind::PrevVal(unkown));
-            //         self.func.ins().fneg(prev_val_neg)
-            //     } else {
-            //         self.param(ParamKind::PrevVal(new_val))
-            //     };
-            //     let name = self.body.exprs[args[1]].unwrap_literal().unwrap_str();
-            //     let name = self.func.interner.get_or_intern(name);
-            //     let func_ref =
-            //         self.callback(CallBackKind::Limit { name, num_args: args.len() as u32 });
-            //     let mut call_args = vec![new_val, prev_val];
-            //     call_args.extend(args[2..].iter().map(|arg| self.lower_expr(*arg)));
-            //     self.func.ins().call1(func_ref, &call_args)
-            // }
+                let prev_val = self.param(ParamKind::PrevState(state));
+                let name = self.body.exprs[args[1]].unwrap_literal().unwrap_str();
+                let name = self.func.interner.get_or_intern(name);
+                let func_ref =
+                    self.callback(CallBackKind::BuiltinLimit { name, num_args: args.len() as u32 });
+                let mut call_args = vec![new_val, prev_val];
+                call_args.extend(args[2..].iter().map(|arg| self.lower_expr(*arg)));
 
-            //             BuiltIn::limit
-            //                 if *signature.unwrap() == LIMIT_USER_FUNCTION && self.extra_dims.is_some() =>
-            //             {
-            //                 todo!()
-            //                 // let unkown = self.lower_expr(args[0]);
-            //                 // let prev_val = self.param(ParamKind::PrevVal(unkown));
-            //                 // let func = self.infere.expr_types[args[1]].unwrap_func();
-            //                 // let func_ref =
-            //                 //     self.callback(CallBackKind::Limit { name, num_args: args.len() as u32 });
-            //                 // let mut call_args = vec![unkown, prev_val];
-            //                 // call_args.extend(args[2..].iter().map(|arg| self.lower_expr(*arg)));
-            //                 // self.func.ins().call1(func_ref, &call_args)
-            //             }
+                let enable_lim = self.param(ParamKind::EnableLim);
+                let res = self.func.make_select(enable_lim, |func, lim| {
+                    if lim {
+                        func.ins().call1(func_ref, &call_args)
+                    } else {
+                        new_val
+                    }
+                });
 
+                self.insert_limit(state, res)
+            }
+            BuiltIn::discontinuity => {
+                if self.inside_lim && Expr::Literal(Literal::Int(-1)) == self.body.exprs[args[0]] {
+                    self.callback(CallBackKind::LimDiscontinuity);
+                } else {
+                    // TODO implement support for discontinuity?
+                }
+                GRAVESTONE
+            }
             // TODO implement properly
-            BuiltIn::finish | BuiltIn::stop | BuiltIn::discontinuity => GRAVESTONE,
+            BuiltIn::finish | BuiltIn::stop => GRAVESTONE,
             // TODO properly implement slew/tranisiton/absdelay
             BuiltIn::slew | BuiltIn::transition | BuiltIn::absdelay | BuiltIn::limit => {
                 self.lower_expr(args[0])
@@ -2187,12 +2252,7 @@ impl LoweringCtx<'_, '_> {
                 match ty {
                     Type::Real => fmt_lit.push_str("%g"),
                     Type::Integer => fmt_lit.push_str("%d"),
-                    Type::String => {
-                        // if i == 0 {
-                        //     TODO warn
-                        // }
-                        fmt_lit.push_str("%s")
-                    }
+                    Type::String => fmt_lit.push_str("%s"),
                     Type::Void => {
                         fmt_lit.push(' ');
                         continue;

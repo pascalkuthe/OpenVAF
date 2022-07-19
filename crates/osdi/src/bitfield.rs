@@ -1,11 +1,11 @@
 use std::mem::size_of;
 
-use llvm::IntPredicate::IntNE;
+use llvm::IntPredicate::{IntEQ, IntNE};
 use llvm::{
     LLVMBuildAnd, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildLoad2, LLVMBuildOr, LLVMBuildStore,
     UNNAMED,
 };
-use mir_llvm::CodegenCx;
+use mir_llvm::{CodegenCx, MemLoc};
 
 type WORD = u32;
 
@@ -66,4 +66,44 @@ pub unsafe fn set_bit<'ll>(
     let mut word = LLVMBuildLoad2(llbuilder, cx.ty_int(), ptr, UNNAMED);
     word = LLVMBuildOr(llbuilder, word, mask, UNNAMED);
     LLVMBuildStore(llbuilder, word, ptr);
+}
+
+pub unsafe fn is_flag_set_mem<'ll>(
+    cx: &CodegenCx<'_, 'll>,
+    flag: u32,
+    val: &MemLoc<'ll>,
+    llbuilder: &llvm::Builder<'ll>,
+) -> &'ll llvm::Value {
+    is_flag_set(cx, flag, val.read(llbuilder), llbuilder)
+}
+
+// pub unsafe fn is_flag_unset_mem<'ll>(
+//     cx: &CodegenCx<'_, 'll>,
+//     flag: u32,
+//     val: MemLoc<'ll>,
+//     llbuilder: &llvm::Builder<'ll>,
+// ) -> &'ll llvm::Value {
+//     is_flag_unset(cx, flag, val.read(llbuilder), llbuilder)
+// }
+
+pub unsafe fn is_flag_set<'ll>(
+    cx: &CodegenCx<'_, 'll>,
+    flag: u32,
+    val: &'ll llvm::Value,
+    llbuilder: &llvm::Builder<'ll>,
+) -> &'ll llvm::Value {
+    let mask = cx.const_unsigned_int(flag);
+    let bits = LLVMBuildAnd(llbuilder, mask, val, UNNAMED);
+    LLVMBuildICmp(llbuilder, IntNE, bits, cx.const_int(0), UNNAMED)
+}
+
+pub unsafe fn is_flag_unset<'ll>(
+    cx: &CodegenCx<'_, 'll>,
+    flag: u32,
+    val: &'ll llvm::Value,
+    llbuilder: &llvm::Builder<'ll>,
+) -> &'ll llvm::Value {
+    let mask = cx.const_unsigned_int(flag);
+    let bits = LLVMBuildAnd(llbuilder, mask, val, UNNAMED);
+    LLVMBuildICmp(llbuilder, IntEQ, bits, cx.const_int(0), UNNAMED)
 }

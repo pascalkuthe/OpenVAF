@@ -18,7 +18,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         cx.declare_ext_fn(name, fun_ty)
     }
 
-    pub fn access_function(&mut self) -> &'ll llvm::Value {
+    pub fn access_function(&self) -> &'ll llvm::Value {
         let llfunc = self.access_function_prototype();
         let OsdiCompilationUnit { inst_data, model_data, cx, .. } = &self;
 

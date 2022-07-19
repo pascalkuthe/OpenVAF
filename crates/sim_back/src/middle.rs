@@ -1,7 +1,7 @@
 use bitset::{BitSet, SparseBitMatrix};
 use hir_def::db::HirDefDB;
 use hir_def::Type;
-use hir_lower::{CallBackKind, CurrentKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
+use hir_lower::{CallBackKind, CurrentKind, HirInterner, MirBuilder, PlaceKind};
 use hir_ty::inference::BranchWrite;
 use indexmap::{IndexMap, IndexSet};
 use lasso::Rodeo;
@@ -18,9 +18,10 @@ use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
 use crate::compilation_db::{CompilationDB, ModuleInfo};
+use crate::lim_rhs::LimRhs;
 use crate::matrix::JacobianMatrix;
 use crate::residual::Residual;
-use crate::{strip_optbarrier, SimUnkown};
+use crate::{strip_optbarrier, SimUnknown};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct CacheSlot(u32);
@@ -57,7 +58,8 @@ pub struct EvalMir {
     pub init_model_func: Function,
     pub bound_step: BoundStepKind,
 
-    pub collapse: TiMap<CollapsePair, (SimUnkown, Option<SimUnkown>), Vec<CollapsePair>>,
+    pub collapse: TiMap<CollapsePair, (SimUnknown, Option<SimUnknown>), Vec<CollapsePair>>,
+    pub lim_rhs: LimRhs,
 }
 
 impl EvalMir {
@@ -79,6 +81,9 @@ impl EvalMir {
         .with_tagged_writes()
         .build(literals);
 
+        let mut output_values = BitSet::new_empty(func.dfg.num_values());
+        output_values.extend(intern.outputs.values().copied().filter_map(PackedOption::expand));
+
         // TODO enable hidden state or warn
         intern.insert_var_init(db, &mut func, literals);
 
@@ -86,19 +91,6 @@ impl EvalMir {
         cfg.compute(&func);
 
         simplify_cfg_no_phi_merge(&mut func, &mut cfg);
-
-        for (param, (kind, _)) in intern.params.iter_enumerated() {
-            if matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
-                let changed = intern.callbacks.ensure(CallBackKind::Derivative(param)).1;
-                if changed {
-                    let signature = CallBackKind::Derivative(param).signature();
-                    func.import_function(signature);
-                }
-            }
-        }
-
-        let mut output_values = BitSet::new_empty(func.dfg.num_values());
-        output_values.extend(intern.outputs.values().copied().filter_map(PackedOption::expand));
 
         dead_code_elimination(&mut func, &output_values);
         sparse_conditional_constant_propagation(&mut func, &cfg);
@@ -167,69 +159,31 @@ impl EvalMir {
         let new_output_bb = cursor.current_block().unwrap();
         output_block = new_output_bb;
 
-        dom_tree.compute(&func, &cfg, true, true, false);
-        let unkowns = intern.unkowns(&mut func, true);
-        let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &unkowns);
-        let ad = auto_diff(&mut func, &dom_tree, &unkowns, &extra_derivatives);
-
-        // println!("{:?}", func);
-
-        // cfg.render(std::path::Path::new("cfg.dot"), "cfg", &func);
-
-        // for inst in func.dfg.insts.iter() {
-        //     if let Some(bb) = func.layout.inst_block(inst) {
-        //         if let InstructionData::PhiNode(phi) = &func.dfg.insts[inst] {
-        //             for (bb, arg) in func.dfg.phi_edges(phi) {
-        //                 if let Some(src_inst) = func.dfg.value_def(arg).inst() {
-        //                     if let Some(src_bb) = func.layout.inst_block(src_inst) {
-        //                         if src_bb != bb && !dom_tree.dominates(bb, src_bb) {
-        //                             println!(
-        //                                 "[ERROR] instruction doesn't dominate use\n{}\n{} {bb}",
-        //                                 func.dfg.display_inst(src_inst),
-        //                                 func.dfg.display_inst(inst),
-        //                             );
-        //                         }
-        //                     } else {
-        //                         println!(
-        //                             "[ERROR] used detachted inst\n{}\n{}",
-        //                             func.dfg.display_inst(src_inst),
-        //                             func.dfg.display_inst(inst)
-        //                         );
-        //                     }
+        //         for (kind, val) in intern.params.iter() {
+        //             if let ParamKind::Voltage { hi, lo } = *kind {
+        //                 if let Some(lo) = lo {
+        //                     print!("({},{})", db.node_data(hi).name, db.node_data(lo).name)
+        //                 } else {
+        //                     print!("({},gnd)", db.node_data(hi).name)
         //                 }
-        //             }
-        //         } else {
-        //             for arg in func.dfg.instr_args(inst) {
-        //                 if let Some(src_inst) = func.dfg.value_def(*arg).inst() {
-        //                     if let Some(src_bb) = func.layout.inst_block(src_inst) {
-        //                         if src_bb != bb && !dom_tree.dominates(bb, src_bb) {
-        //                             println!(
-        //                                 "[ERROR] instruction doesn't dominate use\n{}\n{} {bb}",
-        //                                 func.dfg.display_inst(src_inst),
-        //                                 func.dfg.display_inst(inst)
-        //                             );
-        //                         }
-        //                     } else {
-        //                         println!(
-        //                             "[ERROR] used detachted inst\n{}\n{}",
-        //                             func.dfg.display_inst(src_inst),
-        //                             func.dfg.display_inst(inst)
-        //                         );
-        //                     }
-        //                 }
+        //                 println!(" = {val}")
         //             }
         //         }
-        //     }
-        // }
 
-        let mut matrix = JacobianMatrix::default();
+        dom_tree.compute(&func, &cfg, true, true, false);
+        let derivatives = intern.unkowns(&mut func, true);
+        let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &derivatives);
+        let ad = auto_diff(&mut func, &dom_tree, &derivatives, &extra_derivatives);
+
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
-        matrix.populate(&mut cursor, &mut intern, &residual.resistive, false, &ad, &unkowns);
-        matrix.populate(&mut cursor, &mut intern, &residual.reactive, true, &ad, &unkowns);
+        let mut matrix =
+            JacobianMatrix::new(&mut cursor, &mut intern, &residual, &ad, &derivatives);
+        let mut lim_rhs = LimRhs::new(&mut cursor, &mut intern, &residual, &ad, &derivatives);
 
         output_values.ensure(cursor.func.dfg.num_values() + 1);
         matrix.insert_opt_barries(&mut cursor, &mut output_values);
         residual.insert_opt_barries(&mut cursor, &mut output_values);
+        lim_rhs.insert_opt_barries(&mut cursor, &mut output_values);
 
         sparse_conditional_constant_propagation(&mut func, &cfg);
         simplify_cfg(&mut func, &mut cfg);
@@ -254,9 +208,11 @@ impl EvalMir {
         simplify_cfg(&mut func, &mut cfg);
 
         matrix.strip_opt_barries(&mut func, &mut output_values);
+        lim_rhs.strip_opt_barries(&mut func, &mut output_values);
         residual.strip_opt_barries(&mut func, &mut output_values);
         matrix.sparsify();
         residual.sparsify();
+        lim_rhs.sparsify();
 
         let mut collapse = TiMap::default();
         let mut init_output_values = BitSet::new_empty(func.dfg.num_values());
@@ -265,9 +221,9 @@ impl EvalMir {
                 PlaceKind::Var(var) if module.op_vars.contains_key(var) => &mut output_values,
                 PlaceKind::CollapseImplicitEquation(equ)
                     if strip_optbarrier(&func, out_val.unwrap_unchecked()) != FALSE
-                        && residual.contains(SimUnkown::Implicit(*equ)) =>
+                        && residual.contains(SimUnknown::Implicit(*equ)) =>
                 {
-                    collapse.insert((SimUnkown::Implicit(*equ), None), vec![]);
+                    collapse.insert((SimUnknown::Implicit(*equ), None), vec![]);
                     &mut init_output_values
                 }
 
@@ -294,15 +250,7 @@ impl EvalMir {
                 if func.dfg.value_dead(val) {
                     return None;
                 }
-                if matches!(
-                    param,
-                    ParamKind::Voltage { .. }
-                        | ParamKind::Current(_)
-                        | ParamKind::ImplicitUnkown(_)
-                        | ParamKind::Abstime
-                        | ParamKind::EnableIntegration
-                        | ParamKind::HiddenState(_)
-                ) {
+                if param.op_dependent() {
                     Some(val)
                 } else {
                     None
@@ -318,12 +266,19 @@ impl EvalMir {
                 match intern.callbacks[func_ref] {
                     CallBackKind::SimParam
                     | CallBackKind::SimParamOpt
-                    | CallBackKind::SimParamStr => op_dependent.push(func.dfg.first_result(inst)),
+                    | CallBackKind::StoreLimit(_)
+                    | CallBackKind::SimParamStr => {
+                        op_dependent_insts.insert(inst);
+                        op_dependent.push(func.dfg.first_result(inst));
+                    }
                     CallBackKind::BoundStep if func.layout.inst_block(inst).is_some() => {
                         has_bound_step = true;
                         if bound_step_op_dependent {
                             op_dependent_insts.insert(inst);
                         }
+                    }
+                    CallBackKind::LimDiscontinuity | CallBackKind::BuiltinLimit { .. } => {
+                        op_dependent_insts.insert(inst);
                     }
                     _ => (),
                 }
@@ -389,11 +344,11 @@ impl EvalMir {
                     if let CallBackKind::CollapseHint(hi, lo) = intern.callbacks[func_ref] {
                         if let Some(lo) = lo {
                             collapse.insert(
-                                (SimUnkown::KirchoffLaw(hi), Some(SimUnkown::KirchoffLaw(lo))),
+                                (SimUnknown::KirchoffLaw(hi), Some(SimUnknown::KirchoffLaw(lo))),
                                 vec![],
                             );
                         } else {
-                            collapse.insert((SimUnkown::KirchoffLaw(hi), None), vec![]);
+                            collapse.insert((SimUnknown::KirchoffLaw(hi), None), vec![]);
                         }
                     }
                 }
@@ -404,14 +359,14 @@ impl EvalMir {
 
         for nodes in [residual.resistive.raw.keys(), residual.reactive.raw.keys()] {
             for node in nodes {
-                if let SimUnkown::Current(curr) = node {
+                if let SimUnknown::Current(curr) = node {
                     let (hi, lo) = match *curr {
                         CurrentKind::Branch(br) => BranchWrite::Named(br).nodes(db),
                         CurrentKind::Unnamed { hi, lo } => (hi, lo),
                         CurrentKind::Port(_) => continue,
                     };
-                    let lo = lo.map(SimUnkown::KirchoffLaw);
-                    let hi = SimUnkown::KirchoffLaw(hi);
+                    let lo = lo.map(SimUnknown::KirchoffLaw);
+                    let hi = SimUnknown::KirchoffLaw(hi);
                     if collapse.contains_key(&(hi, lo)) {
                         // careful, if we insert extra derivatives for currents then we need to
                         // check that we are not overwritign that list here
@@ -564,6 +519,7 @@ impl EvalMir {
             init_inst_cache_slots,
             init_inst_intern,
             eval_intern,
+            lim_rhs,
             eval_func: func,
             eval_cfg: cfg,
             eval_outputs: output_values,

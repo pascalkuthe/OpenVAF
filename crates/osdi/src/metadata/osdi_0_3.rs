@@ -26,6 +26,17 @@ pub const CALC_RESIST_JACOBIAN: u32 = 4;
 pub const CALC_REACT_JACOBIAN: u32 = 8;
 pub const CALC_NOISE: u32 = 16;
 pub const CALC_OP: u32 = 32;
+pub const CALC_RESIST_LIM_RHS: u32 = 64;
+pub const CALC_REACT_LIM_RHS: u32 = 128;
+pub const ENABLE_LIM: u32 = 256;
+pub const INIT_LIM: u32 = 512;
+pub const ANALYSIS_NOISE: u32 = 1024;
+pub const ANALYSIS_DC: u32 = 2048;
+pub const ANALYSIS_AC: u32 = 4096;
+pub const ANALYSIS_TRAN: u32 = 8192;
+pub const ANALYSIS_IC: u32 = 16384;
+pub const ANALYSIS_STATIC: u32 = 32768;
+pub const ANALYSIS_NODESET: u32 = 65536;
 pub const EVAL_RET_FLAG_LIM: u32 = 1;
 pub const EVAL_RET_FLAG_FATAL: u32 = 2;
 pub const EVAL_RET_FLAG_FINISH: u32 = 4;
@@ -40,6 +51,30 @@ pub const LOG_LVL_FATAL: u32 = 5;
 pub const LOG_FMT_ERR: u32 = 16;
 pub const INIT_ERR_OUT_OF_BOUNDS: u32 = 1;
 
+pub struct OsdiLimFunction<'ll> {
+    pub name: String,
+    pub num_args: u32,
+    pub func_ptr: &'ll llvm::Value,
+}
+impl<'ll> OsdiLimFunction<'ll> {
+    pub fn to_ll_val(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
+        let fields = [
+            ctx.const_str_uninterned(&self.name),
+            ctx.const_unsigned_int(self.num_args),
+            self.func_ptr,
+        ];
+        let ty = tys.osdi_lim_function;
+        ctx.const_struct(ty, &fields)
+    }
+}
+impl OsdiTyBuilder<'_, '_, '_> {
+    fn osdi_lim_function(&mut self) {
+        let ctx = &*self.ctx;
+        let fields = [ctx.ty_str(), ctx.ty_int(), ctx.ty_void_ptr()];
+        let ty = ctx.struct_ty("OsdiLimFunction", &fields);
+        self.osdi_lim_function = Some(ty);
+    }
+}
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_sim_paras(&mut self) {
         let ctx = &*self.ctx;
@@ -56,8 +91,14 @@ impl OsdiTyBuilder<'_, '_, '_> {
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_sim_info(&mut self) {
         let ctx = &*self.ctx;
-        let fields =
-            [self.osdi_sim_paras.unwrap(), ctx.ty_real(), ctx.ptr_ty(ctx.ty_real()), ctx.ty_int()];
+        let fields = [
+            self.osdi_sim_paras.unwrap(),
+            ctx.ty_real(),
+            ctx.ptr_ty(ctx.ty_real()),
+            ctx.ptr_ty(ctx.ty_real()),
+            ctx.ptr_ty(ctx.ty_real()),
+            ctx.ty_int(),
+        ];
         let ty = ctx.struct_ty("OsdiSimInfo", &fields);
         self.osdi_sim_info = Some(ty);
     }
@@ -102,11 +143,7 @@ pub struct OsdiNodePair {
     pub node_2: u32,
 }
 impl OsdiNodePair {
-    pub fn to_ll_val<'ll>(
-        &self,
-        ctx: &mut CodegenCx<'_, 'll>,
-        tys: &'ll OsdiTys,
-    ) -> &'ll llvm::Value {
+    pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
         let fields = [ctx.const_unsigned_int(self.node_1), ctx.const_unsigned_int(self.node_2)];
         let ty = tys.osdi_node_pair;
         ctx.const_struct(ty, &fields)
@@ -126,11 +163,7 @@ pub struct OsdiJacobianEntry {
     pub flags: u32,
 }
 impl OsdiJacobianEntry {
-    pub fn to_ll_val<'ll>(
-        &self,
-        ctx: &mut CodegenCx<'_, 'll>,
-        tys: &'ll OsdiTys,
-    ) -> &'ll llvm::Value {
+    pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
         let fields = [
             self.nodes.to_ll_val(ctx, tys),
             ctx.const_unsigned_int(self.react_ptr_off),
@@ -154,20 +187,20 @@ pub struct OsdiNode {
     pub residual_units: String,
     pub resist_residual_off: u32,
     pub react_residual_off: u32,
+    pub resist_limit_rhs_off: u32,
+    pub react_limit_rhs_off: u32,
     pub is_flow: bool,
 }
 impl OsdiNode {
-    pub fn to_ll_val<'ll>(
-        &self,
-        ctx: &mut CodegenCx<'_, 'll>,
-        tys: &'ll OsdiTys,
-    ) -> &'ll llvm::Value {
+    pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
         let fields = [
             ctx.const_str_uninterned(&self.name),
             ctx.const_str_uninterned(&self.units),
             ctx.const_str_uninterned(&self.residual_units),
             ctx.const_unsigned_int(self.resist_residual_off),
             ctx.const_unsigned_int(self.react_residual_off),
+            ctx.const_unsigned_int(self.resist_limit_rhs_off),
+            ctx.const_unsigned_int(self.react_limit_rhs_off),
             ctx.const_c_bool(self.is_flow),
         ];
         let ty = tys.osdi_node;
@@ -177,8 +210,16 @@ impl OsdiNode {
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_node(&mut self) {
         let ctx = &*self.ctx;
-        let fields =
-            [ctx.ty_str(), ctx.ty_str(), ctx.ty_str(), ctx.ty_int(), ctx.ty_int(), ctx.ty_c_bool()];
+        let fields = [
+            ctx.ty_str(),
+            ctx.ty_str(),
+            ctx.ty_str(),
+            ctx.ty_int(),
+            ctx.ty_int(),
+            ctx.ty_int(),
+            ctx.ty_int(),
+            ctx.ty_c_bool(),
+        ];
         let ty = ctx.struct_ty("OsdiNode", &fields);
         self.osdi_node = Some(ty);
     }
@@ -192,11 +233,7 @@ pub struct OsdiParamOpvar {
     pub len: u32,
 }
 impl OsdiParamOpvar {
-    pub fn to_ll_val<'ll>(
-        &self,
-        ctx: &mut CodegenCx<'_, 'll>,
-        tys: &'ll OsdiTys,
-    ) -> &'ll llvm::Value {
+    pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
         let arr_0: Vec<_> = self.name.iter().map(|it| ctx.const_str_uninterned(&*it)).collect();
         let fields = [
             ctx.const_arr_ptr(ctx.ty_str(), &arr_0),
@@ -230,11 +267,7 @@ pub struct OsdiNoiseSource {
     pub nodes: OsdiNodePair,
 }
 impl OsdiNoiseSource {
-    pub fn to_ll_val<'ll>(
-        &self,
-        ctx: &mut CodegenCx<'_, 'll>,
-        tys: &'ll OsdiTys,
-    ) -> &'ll llvm::Value {
+    pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
         let fields = [ctx.const_str_uninterned(&self.name), self.nodes.to_ll_val(ctx, tys)];
         let ty = tys.osdi_noise_source;
         ctx.const_struct(ty, &fields)
@@ -266,6 +299,8 @@ pub struct OsdiDescriptor<'ll> {
     pub param_opvar: Vec<OsdiParamOpvar>,
     pub node_mapping_offset: u32,
     pub jacobian_ptr_resist_offset: u32,
+    pub num_states: u32,
+    pub state_idx_off: u32,
     pub bound_step_offset: u32,
     pub instance_size: u32,
     pub model_size: u32,
@@ -276,6 +311,8 @@ pub struct OsdiDescriptor<'ll> {
     pub load_noise: &'ll llvm::Value,
     pub load_residual_resist: &'ll llvm::Value,
     pub load_residual_react: &'ll llvm::Value,
+    pub load_limit_rhs_resist: &'ll llvm::Value,
+    pub load_limit_rhs_react: &'ll llvm::Value,
     pub load_spice_rhs_dc: &'ll llvm::Value,
     pub load_spice_rhs_tran: &'ll llvm::Value,
     pub load_jacobian_resist: &'ll llvm::Value,
@@ -283,7 +320,7 @@ pub struct OsdiDescriptor<'ll> {
     pub load_jacobian_tran: &'ll llvm::Value,
 }
 impl<'ll> OsdiDescriptor<'ll> {
-    pub fn to_ll_val(&self, ctx: &mut CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
+    pub fn to_ll_val(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
         let arr_3: Vec<_> = self.nodes.iter().map(|it| it.to_ll_val(ctx, tys)).collect();
         let arr_5: Vec<_> = self.jacobian_entries.iter().map(|it| it.to_ll_val(ctx, tys)).collect();
         let arr_7: Vec<_> = self.collapsible.iter().map(|it| it.to_ll_val(ctx, tys)).collect();
@@ -307,6 +344,8 @@ impl<'ll> OsdiDescriptor<'ll> {
             ctx.const_arr_ptr(tys.osdi_param_opvar, &arr_14),
             ctx.const_unsigned_int(self.node_mapping_offset),
             ctx.const_unsigned_int(self.jacobian_ptr_resist_offset),
+            ctx.const_unsigned_int(self.num_states),
+            ctx.const_unsigned_int(self.state_idx_off),
             ctx.const_unsigned_int(self.bound_step_offset),
             ctx.const_unsigned_int(self.instance_size),
             ctx.const_unsigned_int(self.model_size),
@@ -317,6 +356,8 @@ impl<'ll> OsdiDescriptor<'ll> {
             self.load_noise,
             self.load_residual_resist,
             self.load_residual_react,
+            self.load_limit_rhs_resist,
+            self.load_limit_rhs_react,
             self.load_spice_rhs_dc,
             self.load_spice_rhs_tran,
             self.load_jacobian_resist,
@@ -346,6 +387,8 @@ impl OsdiTyBuilder<'_, '_, '_> {
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ptr_ty(self.osdi_param_opvar.unwrap()),
+            ctx.ty_int(),
+            ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
@@ -404,6 +447,14 @@ impl OsdiTyBuilder<'_, '_, '_> {
                 ctx.ty_void(),
             )),
             ctx.ptr_ty(ctx.ty_func(
+                &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ptr_ty(ctx.ty_real())],
+                ctx.ty_void(),
+            )),
+            ctx.ptr_ty(ctx.ty_func(
+                &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ptr_ty(ctx.ty_real())],
+                ctx.ty_void(),
+            )),
+            ctx.ptr_ty(ctx.ty_func(
                 &[
                     ctx.ty_void_ptr(),
                     ctx.ty_void_ptr(),
@@ -436,6 +487,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
 }
 #[derive(Clone)]
 pub struct OsdiTys<'ll> {
+    pub osdi_lim_function: &'ll llvm::Type,
     pub osdi_sim_paras: &'ll llvm::Type,
     pub osdi_sim_info: &'ll llvm::Type,
     pub osdi_init_error_payload: &'ll llvm::Type,
@@ -453,6 +505,7 @@ impl<'ll> OsdiTys<'ll> {
         let mut builder = OsdiTyBuilder {
             ctx,
             target_data,
+            osdi_lim_function: None,
             osdi_sim_paras: None,
             osdi_sim_info: None,
             osdi_init_error_payload: None,
@@ -465,6 +518,7 @@ impl<'ll> OsdiTys<'ll> {
             osdi_noise_source: None,
             osdi_descriptor: None,
         };
+        builder.osdi_lim_function();
         builder.osdi_sim_paras();
         builder.osdi_sim_info();
         builder.osdi_init_error_payload();
@@ -482,6 +536,7 @@ impl<'ll> OsdiTys<'ll> {
 struct OsdiTyBuilder<'a, 'b, 'll> {
     ctx: &'a CodegenCx<'b, 'll>,
     target_data: &'a llvm::TargetData,
+    osdi_lim_function: Option<&'ll llvm::Type>,
     osdi_sim_paras: Option<&'ll llvm::Type>,
     osdi_sim_info: Option<&'ll llvm::Type>,
     osdi_init_error_payload: Option<&'ll llvm::Type>,
@@ -497,6 +552,7 @@ struct OsdiTyBuilder<'a, 'b, 'll> {
 impl<'ll> OsdiTyBuilder<'_, '_, 'll> {
     fn finish(self) -> OsdiTys<'ll> {
         OsdiTys {
+            osdi_lim_function: self.osdi_lim_function.unwrap(),
             osdi_sim_paras: self.osdi_sim_paras.unwrap(),
             osdi_sim_info: self.osdi_sim_info.unwrap(),
             osdi_init_error_payload: self.osdi_init_error_payload.unwrap(),

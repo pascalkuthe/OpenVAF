@@ -1,6 +1,6 @@
 use base_n::CASE_INSENSITIVE;
 use hir_def::{Lookup, Type};
-use hir_lower::ParamKind;
+use hir_lower::{CallBackKind, ParamKind};
 use lasso::Rodeo;
 use llvm::{LLVMDisposeTargetData, OptLevel};
 use mir_llvm::{CodegenCx, LLVMBackend};
@@ -9,12 +9,14 @@ use sim_back::{CompilationDB, EvalMir, ModuleInfo};
 use stdx::iter::zip;
 use stdx::{impl_debug_display, impl_idx_from};
 use target::spec::Target;
+use typed_indexmap::TiSet;
 
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
 
 use crate::compilation_unit::{new_codegen, OsdiCompilationUnit, OsdiModule};
 use crate::metadata::osdi_0_3::OsdiTys;
+use crate::metadata::OsdiLimFunction;
 
 mod access;
 mod bitfield;
@@ -41,8 +43,19 @@ pub fn compile(
     opt_lvl: OptLevel,
 ) -> Vec<PathBuf> {
     let mut literals = Rodeo::new();
-    let mir: Vec<_> =
-        modules.iter().map(|module| EvalMir::new(db, module, &mut literals)).collect();
+    let mut lim_table = TiSet::default();
+    let mir: Vec<_> = modules
+        .iter()
+        .map(|module| {
+            let mir = EvalMir::new(db, module, &mut literals);
+            for cb in mir.eval_intern.callbacks.iter() {
+                if let CallBackKind::BuiltinLimit { name, num_args } = *cb {
+                    lim_table.ensure(OsdiLimFunction { name, num_args: num_args - 2 });
+                }
+            }
+            mir
+        })
+        .collect();
     let name = dst.file_stem().unwrap().to_string_lossy().to_owned();
 
     let mut paths: Vec<PathBuf> = (0..modules.len() * 4)
@@ -60,7 +73,7 @@ pub fn compile(
 
     let modules: Vec<_> = zip(modules, &mir)
         .map(|(module, mir)| {
-            let unit = OsdiModule::new(db, mir, module);
+            let unit = OsdiModule::new(db, mir, module, &lim_table);
             unit.intern_names(&mut literals, db);
             unit
         })
@@ -80,9 +93,9 @@ pub fn compile(
             scope.spawn(move |_| {
                 let access = format!("access_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&access, opt_lvl).unwrap() };
-                let mut cx = new_codegen(back, &llmod, literals_);
+                let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
 
                 cguint.access_function();
                 debug_assert!(llmod.verify_and_print());
@@ -97,9 +110,9 @@ pub fn compile(
             scope.spawn(move |_| {
                 let name = format!("setup_model_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&name, opt_lvl).unwrap() };
-                let mut cx = new_codegen(back, &llmod, literals_);
+                let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
 
                 cguint.setup_model();
                 debug_assert!(llmod.verify_and_print());
@@ -114,9 +127,9 @@ pub fn compile(
             scope.spawn(move |_| {
                 let name = format!("setup_instance_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&name, opt_lvl).unwrap() };
-                let mut cx = new_codegen(back, &llmod, literals_);
+                let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+                let mut cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
 
                 cguint.setup_instance();
                 debug_assert!(llmod.verify_and_print());
@@ -131,11 +144,13 @@ pub fn compile(
             scope.spawn(move |_| {
                 let access = format!("eval_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&access, opt_lvl).unwrap() };
-                let mut cx = new_codegen(back, &llmod, literals_);
+                let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, true);
 
+                // println!("{:?}", module.mir.eval_func);
                 cguint.eval();
+                // println!("{}", llmod.to_str());
                 debug_assert!(llmod.verify_and_print());
 
                 if emit {
@@ -147,15 +162,15 @@ pub fn compile(
         }
 
         let llmod = unsafe { back.new_module(&*name, opt_lvl).unwrap() };
-        let mut cx = new_codegen(back, &llmod, &literals);
+        let cx = new_codegen(back, &llmod, &literals);
         let tys = OsdiTys::new(&cx, target_data);
 
         let descriptors: Vec<_> = modules
             .iter()
             .map(|module| {
-                let mut cguint = OsdiCompilationUnit::new(module, &mut cx, &tys);
+                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
                 let descriptor = cguint.descriptor(target_data, &*db);
-                descriptor.to_ll_val(&mut cx, &tys)
+                descriptor.to_ll_val(&cx, &tys)
             })
             .collect();
 
@@ -179,7 +194,26 @@ pub fn compile(
             true,
         );
 
-        // debug_assert!(llmod.verify_and_print());
+        if !lim_table.is_empty() {
+            let lim: Vec<_> = lim_table.iter().map(|entry| entry.to_ll_val(&cx, &tys)).collect();
+            cx.export_array("OSDI_LIM_TABLE", tys.osdi_lim_function, &lim, false, false);
+            cx.export_val(
+                "OSDI_LIM_TABLE_LEN",
+                cx.ty_int(),
+                cx.const_unsigned_int(lim.len() as u32),
+                true,
+            );
+        }
+
+        let osdi_log =
+            cx.get_declared_value("osdi_log").expect("symbol osdi_log mising from std lib");
+        let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str(), cx.ty_int()], cx.ty_void());
+        let val = cx.const_null_ptr(cx.ptr_ty(fun_ty));
+        unsafe {
+            llvm::LLVMSetInitializer(osdi_log, val);
+        }
+
+        debug_assert!(llmod.verify_and_print());
 
         if emit {
             // println!("{}", llmod.to_str());
@@ -233,6 +267,11 @@ impl_debug_display! {match OsdiNodeId{OsdiNodeId(id) => "res{id}";}}
 pub struct OsdiMatrixId(u32);
 impl_idx_from!(OsdiMatrixId(u32));
 impl_debug_display! {match OsdiMatrixId{OsdiMatrixId(id) => "matrix{id}";}}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct OsdiLimId(u32);
+impl_idx_from!(OsdiLimId(u32));
+impl_debug_display! {match OsdiLimId{OsdiLimId(id) => "lim{id}";}}
 
 fn ty_len(ty: &Type) -> Option<u32> {
     match ty {

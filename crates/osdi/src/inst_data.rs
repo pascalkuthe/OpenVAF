@@ -1,6 +1,6 @@
 use ahash::RandomState;
 use hir_def::{ParamId, ParamSysFun, Type, VarId};
-use hir_lower::{ParamKind, PlaceKind};
+use hir_lower::{LimitState, ParamKind, PlaceKind};
 use indexmap::IndexMap;
 use llvm::{
     IntPredicate, LLVMBuildFAdd, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildIntCast2, LLVMBuildLoad2,
@@ -23,7 +23,7 @@ pub enum OsdiInstanceParam {
     User(ParamId),
 }
 
-pub const NUM_CONST_FIELDS: u32 = 7;
+pub const NUM_CONST_FIELDS: u32 = 8;
 pub const PARAM_GIVEN: u32 = 0;
 pub const JACOBIAN_PTR_RESIST: u32 = 1;
 pub const JACOBIAN_PTR_REACT: u32 = 2;
@@ -31,6 +31,7 @@ pub const NODE_MAPPING: u32 = 3;
 pub const COLLAPSED: u32 = 4;
 pub const TEMPERATURE: u32 = 5;
 pub const CONNECTED: u32 = 6;
+pub const STATE_IDX: u32 = 7;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum EvalOutput {
@@ -60,9 +61,12 @@ impl EvalOutput {
                             | ParamKind::Voltage { .. }
                             | ParamKind::ParamGiven { .. }
                             | ParamKind::PortConnected { .. }
-                            | ParamKind::ImplicitUnkown { .. }
+                            | ParamKind::ImplicitUnknown { .. }
                             | ParamKind::EnableIntegration { .. }
-                            | ParamKind::Abstime,
+                            | ParamKind::EnableLim
+                            | ParamKind::Abstime
+                            | ParamKind::NewState(_)
+                            | ParamKind::PrevState(_),
                         _
                     ))
                 ) {
@@ -90,6 +94,7 @@ pub struct OsdiInstanceData<'ll> {
     pub jacobian_ptr: &'ll llvm::Type,
     pub jacobian_ptr_react: &'ll llvm::Type,
     pub node_mapping: &'ll llvm::Type,
+    pub state_idx: &'ll llvm::Type,
     pub collapsed: &'ll llvm::Type,
     pub params: IndexMap<OsdiInstanceParam, &'ll llvm::Type, RandomState>,
     pub eval_outputs: TiMap<EvalOutputSlot, Value, &'ll llvm::Type>,
@@ -98,6 +103,10 @@ pub struct OsdiInstanceData<'ll> {
 
     pub residual_resist: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
     pub residual_react: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
+
+    pub lim_rhs_resist: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
+    pub lim_rhs_react: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
+
     pub opvars: IndexMap<VarId, EvalOutput, RandomState>,
     pub matrix_resist: TiVec<OsdiMatrixId, Option<EvalOutput>>,
     pub matrix_react: TiVec<OsdiMatrixId, Option<EvalOutput>>,
@@ -112,7 +121,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let ty_u32 = cx.ty_int();
 
         let mir = &cgunit.mir;
-        let builtin_inst_params = mir.eval_intern.params.raw.iter().filter_map(|(kind, &val)| {
+        let builtin_inst_params = mir.eval_intern.params.iter().filter_map(|(kind, &val)| {
             if let ParamKind::ParamSysFun(param) = kind {
                 if !mir.eval_func.dfg.value_dead(val) || !mir.init_inst_func.dfg.value_dead(val) {
                     return Some((OsdiInstanceParam::Builtin(*param), ty_f64));
@@ -189,6 +198,28 @@ impl<'ll> OsdiInstanceData<'ll> {
             })
             .collect();
 
+        let lim_rhs_resist: TiVec<_, _> = cgunit
+            .node_ids
+            .raw
+            .iter()
+            .map(|node| {
+                let val = cgunit.mir.lim_rhs.resistive.get(node)?;
+                let pos = eval_outputs.insert_full(*val, ty_real).0;
+                Some(pos)
+            })
+            .collect();
+
+        let lim_rhs_react: TiVec<_, _> = cgunit
+            .node_ids
+            .raw
+            .iter()
+            .map(|node| {
+                let val = cgunit.mir.lim_rhs.reactive.get(node)?;
+                let pos = eval_outputs.insert_full(*val, ty_real).0;
+                Some(pos)
+            })
+            .collect();
+
         let param_given = bitfield::arr_ty(params.len() as u32, cx);
         let jacobian_ptr = cx.ty_array(cx.ptr_ty(ty_f64), cgunit.matrix_ids.len() as u32);
         let mut num_react = 0;
@@ -221,7 +252,8 @@ impl<'ll> OsdiInstanceData<'ll> {
             None
         };
 
-        let fields: Vec<_> = [
+        let state_idx = cx.ty_array(cx.ty_int(), cgunit.mir.eval_intern.lim_state.len() as u32);
+        let static_fields: [_; NUM_CONST_FIELDS as usize] = [
             param_given,
             jacobian_ptr,
             jacobian_ptr_react,
@@ -229,12 +261,15 @@ impl<'ll> OsdiInstanceData<'ll> {
             collapsed,
             temperature,
             connected_ports,
-        ]
-        .into_iter()
-        .chain(params.values().copied())
-        .chain(cache_slots.iter().copied())
-        .chain(eval_outputs.raw.values().copied())
-        .collect();
+            state_idx,
+        ];
+
+        let fields: Vec<_> = static_fields
+            .into_iter()
+            .chain(params.values().copied())
+            .chain(cache_slots.iter().copied())
+            .chain(eval_outputs.raw.values().copied())
+            .collect();
 
         let name = &cgunit.sym;
         let name = format!("osdi_inst_data_{name}");
@@ -257,6 +292,9 @@ impl<'ll> OsdiInstanceData<'ll> {
             jacobian_ptr_react,
             jacobian_ptr_react_off,
             bound_step,
+            lim_rhs_resist,
+            lim_rhs_react,
+            state_idx,
         }
     }
 
@@ -365,6 +403,23 @@ impl<'ll> OsdiInstanceData<'ll> {
         target_data: &TargetData,
     ) -> Option<u32> {
         let residual = if reactive { &self.residual_react } else { &self.residual_resist };
+        let slot = residual[node]?;
+        let elem = NUM_CONST_FIELDS
+            + self.params.len() as u32
+            + self.cache_slots.len() as u32
+            + u32::from(slot);
+
+        let off = unsafe { LLVMOffsetOfElement(target_data, self.ty, elem) } as u32;
+        Some(off)
+    }
+
+    pub fn lim_rhs_off(
+        &self,
+        node: OsdiNodeId,
+        reactive: bool,
+        target_data: &TargetData,
+    ) -> Option<u32> {
+        let residual = if reactive { &self.lim_rhs_resist } else { &self.lim_rhs_react };
         let slot = residual[node]?;
         let elem = NUM_CONST_FIELDS
             + self.params.len() as u32
@@ -521,6 +576,20 @@ impl<'ll> OsdiInstanceData<'ll> {
         LLVMBuildLoad2(llbuilder, cx.ty_int(), ptr, UNNAMED)
     }
 
+    pub unsafe fn read_state_idx(
+        &self,
+        cx: &CodegenCx<'_, 'll>,
+        idx: LimitState,
+        ptr: &'ll llvm::Value,
+        llbuilder: &llvm::Builder<'ll>,
+    ) -> &'ll llvm::Value {
+        let ptr = LLVMBuildStructGEP2(llbuilder, self.ty, ptr, STATE_IDX, UNNAMED);
+        let zero = cx.const_int(0);
+        let state = cx.const_unsigned_int(idx.into());
+        let ptr = LLVMBuildGEP2(llbuilder, self.state_idx, ptr, [zero, state].as_ptr(), 2, UNNAMED);
+        LLVMBuildLoad2(llbuilder, cx.ty_int(), ptr, UNNAMED)
+    }
+
     pub unsafe fn read_node_voltage(
         &self,
         cx: &CodegenCx<'_, 'll>,
@@ -543,6 +612,35 @@ impl<'ll> OsdiInstanceData<'ll> {
     ) -> Option<&'ll llvm::Value> {
         let residual = if reactive { &self.residual_react } else { &self.residual_resist };
         let val = self.load_eval_output_slot(llbuilder, ptr, residual[node]?);
+        Some(val)
+    }
+
+    pub unsafe fn store_lim_rhs(
+        &self,
+        node: OsdiNodeId,
+        ptr: &'ll llvm::Value,
+        val: &'ll llvm::Value,
+        llbuilder: &llvm::Builder<'ll>,
+        reactive: bool,
+    ) -> bool {
+        let residual = if reactive { &self.lim_rhs_react } else { &self.lim_rhs_resist };
+        if let Some(slot) = residual[node] {
+            self.store_eval_output_slot(llbuilder, ptr, slot, val);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub unsafe fn read_lim_rhs(
+        &self,
+        node: OsdiNodeId,
+        ptr: &'ll llvm::Value,
+        llbuilder: &llvm::Builder<'ll>,
+        reactive: bool,
+    ) -> Option<&'ll llvm::Value> {
+        let lim_rhs = if reactive { &self.lim_rhs_react } else { &self.lim_rhs_resist };
+        let val = self.load_eval_output_slot(llbuilder, ptr, lim_rhs[node]?);
         Some(val)
     }
 
@@ -732,7 +830,7 @@ impl<'ll> OsdiInstanceData<'ll> {
 
 impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     unsafe fn load_eval_output(
-        &mut self,
+        &self,
         output: EvalOutput,
         inst_ptr: &'ll llvm::Value,
         model_ptr: &'ll llvm::Value,
@@ -777,7 +875,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         | ParamKind::ParamGiven { .. }
                         | ParamKind::Abstime
                         | ParamKind::EnableIntegration
-                        | ParamKind::ImplicitUnkown(_) => unreachable!(),
+                        | ParamKind::EnableLim
+                        | ParamKind::PrevState(_)
+                        | ParamKind::NewState(_)
+                        | ParamKind::ImplicitUnknown(_) => unreachable!(),
                     }
                 } else {
                     let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;
@@ -790,7 +891,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     }
 
     pub unsafe fn load_jacobian_inst(
-        &mut self,
+        &self,
         entry: OsdiMatrixId,
         inst_ptr: &'ll llvm::Value,
         model_ptr: &'ll llvm::Value,
@@ -805,7 +906,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     }
 
     pub unsafe fn nth_opvar_ptr(
-        &mut self,
+        &self,
         pos: u32,
         inst_ptr: &'ll llvm::Value,
         model_ptr: &'ll llvm::Value,
@@ -852,7 +953,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         | ParamKind::ParamGiven { .. }
                         | ParamKind::EnableIntegration { .. }
                         | ParamKind::Abstime
-                        | ParamKind::ImplicitUnkown(_) => unreachable!(),
+                        | ParamKind::EnableLim
+                        | ParamKind::PrevState(_)
+                        | ParamKind::NewState(_)
+                        | ParamKind::ImplicitUnknown(_) => unreachable!(),
                     }
                 } else {
                     let slot = u32::from(param) - module.mir.eval_intern.params.len() as u32;

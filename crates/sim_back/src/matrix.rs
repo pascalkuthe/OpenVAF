@@ -5,17 +5,17 @@ use hir_lower::{HirInterner, ParamKind};
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::FuncCursor;
-use mir::{DerivativeInfo, Function, Unkown, Value, F_ZERO};
+use mir::{Function, KnownDerivatives, Unknown, Value, F_ZERO};
 use stdx::{format_to, impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
 use crate::residual::ResidualId;
-use crate::SimUnkown;
+use crate::{Residual, SimUnknown};
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct MatrixEntry {
-    pub row: SimUnkown,
-    pub col: SimUnkown,
+    pub row: SimUnknown,
+    pub col: SimUnknown,
 }
 impl_debug_display! {match MatrixEntry{MatrixEntry{row, col} => "({row:?}, {col:?})";}}
 
@@ -31,40 +31,66 @@ pub struct JacobianMatrix {
 }
 
 impl JacobianMatrix {
-    pub(crate) fn populate(
+    pub fn new(
+        func: &mut FuncCursor,
+        intern: &mut HirInterner,
+        residual: &Residual,
+        derivatives: &AHashMap<(Value, Unknown), Value>,
+        derivative_info: &KnownDerivatives,
+    ) -> JacobianMatrix {
+        let mut res = JacobianMatrix::default();
+        res.populate(func, intern, &residual.resistive, false, derivatives, derivative_info);
+        res.populate(func, intern, &residual.reactive, true, derivatives, derivative_info);
+        res
+    }
+
+    fn populate(
         &mut self,
         func: &mut FuncCursor,
         intern: &mut HirInterner,
-        residual: &TiMap<ResidualId, SimUnkown, Value>,
+        residual: &TiMap<ResidualId, SimUnknown, Value>,
         react: bool,
-        derivatives: &AHashMap<(Value, Unkown), Value>,
-        derivative_info: &DerivativeInfo,
+        derivatives: &AHashMap<(Value, Unknown), Value>,
+        derivative_info: &KnownDerivatives,
     ) {
-        for (row, residual) in residual.raw.iter() {
-            for (kind, val) in intern.params.raw.iter() {
+        for (row, residual) in residual.iter() {
+            for (kind, val) in intern.params.iter() {
                 if func.func.dfg.value_dead(*val) {
                     continue;
                 }
                 let (col_hi, col_lo) = match kind {
                     ParamKind::Voltage { hi, lo } => {
-                        (SimUnkown::KirchoffLaw(*hi), lo.map(SimUnkown::KirchoffLaw))
+                        (SimUnknown::KirchoffLaw(*hi), lo.map(SimUnknown::KirchoffLaw))
                     }
 
-                    ParamKind::ImplicitUnkown(equation) => (SimUnkown::Implicit(*equation), None),
+                    ParamKind::ImplicitUnknown(equation) => (SimUnknown::Implicit(*equation), None),
 
-                    ParamKind::Current(kind) => (SimUnkown::Current(*kind), None),
+                    ParamKind::Current(kind) => (SimUnknown::Current(*kind), None),
                     _ => continue,
                 };
 
-                let unkown = derivative_info.unkowns.unwrap_index(val);
+                let unkown = derivative_info.unknowns.unwrap_index(val);
                 if let Some(ddx) = derivatives.get(&(*residual, unkown)).copied() {
-                    if ddx == F_ZERO {
-                        continue;
+                    if ddx != F_ZERO {
+                        self.ensure_entry(func, *row, col_hi, ddx, false, react);
+                        if let Some(col_lo) = col_lo {
+                            self.ensure_entry(func, *row, col_lo, ddx, true, react);
+                        }
                     }
+                }
 
-                    self.ensure_entry(func, *row, col_hi, ddx, false, react);
-                    if let Some(col_lo) = col_lo {
-                        self.ensure_entry(func, *row, col_lo, ddx, true, react);
+                if let Some(lim_vals) = intern.lim_state.raw.get(val) {
+                    for (val, neg) in lim_vals {
+                        let unkown = derivative_info.unknowns.unwrap_index(val);
+                        if let Some(ddx) = derivatives.get(&(*residual, unkown)).copied() {
+                            if ddx != F_ZERO {
+                                self.ensure_entry(func, *row, col_hi, ddx, *neg, react);
+
+                                if let Some(col_lo) = col_lo {
+                                    self.ensure_entry(func, *row, col_lo, ddx, !neg, react);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -122,8 +148,8 @@ impl JacobianMatrix {
     pub(crate) fn ensure_entry(
         &mut self,
         func: &mut FuncCursor,
-        row: SimUnkown,
-        col: SimUnkown,
+        row: SimUnknown,
+        col: SimUnknown,
         mut val: Value,
         neg: bool,
         reactive: bool,
@@ -155,13 +181,13 @@ impl JacobianMatrix {
     pub fn print_resistive_stamps(&self, db: &dyn HirDefDB) -> String {
         let mut res = String::new();
         for (entry, val) in &self.resistive.raw {
-            if let SimUnkown::KirchoffLaw(node) = entry.row {
+            if let SimUnknown::KirchoffLaw(node) = entry.row {
                 format_to!(res, "({}, ", db.node_data(node).name);
             } else {
                 format_to!(res, "({:?}, ", entry.row);
             }
 
-            if let SimUnkown::KirchoffLaw(node) = entry.col {
+            if let SimUnknown::KirchoffLaw(node) = entry.col {
                 format_to!(res, "{}", db.node_data(node).name);
             } else {
                 format_to!(res, "{:?}", entry.col);
@@ -175,13 +201,13 @@ impl JacobianMatrix {
     pub fn print_reactive_stamps(&self, db: &dyn HirDefDB) -> String {
         let mut res = String::new();
         for (entry, val) in &self.reactive.raw {
-            if let SimUnkown::KirchoffLaw(node) = entry.row {
+            if let SimUnknown::KirchoffLaw(node) = entry.row {
                 format_to!(res, "({}, ", db.node_data(node).name);
             } else {
                 format_to!(res, "({:?}, ", entry.row);
             }
 
-            if let SimUnkown::KirchoffLaw(node) = entry.col {
+            if let SimUnknown::KirchoffLaw(node) = entry.col {
                 format_to!(res, "{}", db.node_data(node).name);
             } else {
                 format_to!(res, "{:?}", entry.col);

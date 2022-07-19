@@ -14,15 +14,15 @@ use typed_indexmap::TiSet;
 
 use crate::compiler_db::{CompilationDB, FuncSpec, InternedModel, ModelInfo};
 
-pub fn sim_param_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+pub fn sim_param_stub<'ll>(cx: &CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
     cx.const_callback(&[cx.ty_str()], cx.const_real(0.0))
 }
 
-pub fn sim_param_opt_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+pub fn sim_param_opt_stub<'ll>(cx: &CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
     cx.const_return(&[cx.ty_str(), cx.ty_real()], 1)
 }
 
-pub fn sim_param_str_stub<'ll>(cx: &mut CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
+pub fn sim_param_str_stub<'ll>(cx: &CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
     let empty_str = cx.literals.get("").unwrap();
     let empty_str = cx.const_str(empty_str);
     let ty_str = cx.ty_str();
@@ -44,7 +44,7 @@ pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
 
 pub fn stub_callbacks<'ll>(
     cb: &TiSet<FuncRef, CallBackKind>,
-    cx: &mut CodegenCx<'_, 'll>,
+    cx: &CodegenCx<'_, 'll>,
     // invalid_param_dst: &AHashMap<ParamId, &'ll Value>,
 ) -> TiVec<FuncRef, Option<CallbackFun<'ll>>> {
     cb.raw
@@ -60,6 +60,9 @@ pub fn stub_callbacks<'ll>(
                 CallBackKind::Print { .. }
                 | CallBackKind::BoundStep
                 | CallBackKind::ParamInfo(_, _)
+                | CallBackKind::BuiltinLimit { .. }
+                | CallBackKind::StoreLimit(_)
+                | CallBackKind::LimDiscontinuity
                 | CallBackKind::CollapseHint(_, _) => return None,
             };
 
@@ -287,7 +290,7 @@ impl CodegenCtx<'_, '_> {
         let ret_info = db.var_data(spec.var);
 
         let module = unsafe { self.llbackend.new_module(&*ret_info.name, self.opt_lvl).unwrap() };
-        let mut cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
+        let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let ret_ty = lltype(&ret_info.ty, &cx);
 
@@ -309,7 +312,7 @@ impl CodegenCtx<'_, '_> {
         let llfun = cx.declare_ext_fn(&spec.prefix, fun_ty);
 
         // setup builder
-        let mut builder = Builder::new(&mut cx, func, llfun);
+        let mut builder = Builder::new(&cx, func, llfun);
 
         let mut codegen = Codegen {
             db: &*db,
@@ -324,7 +327,7 @@ impl CodegenCtx<'_, '_> {
 
         let offset = unsafe { llvm::LLVMGetParam(llfun, 0) };
 
-        let true_val = codegen.builder.cx.const_bool(true);
+        let true_val = cx.const_bool(true);
         codegen.builder.params = intern
             .params
             .raw
@@ -347,10 +350,13 @@ impl CodegenCtx<'_, '_> {
                     ParamKind::ParamSysFun(param) => {
                         codegen.builder.cx.const_real(param.default_value())
                     }
-                    ParamKind::ImplicitUnkown(_) | ParamKind::Abstime => {
-                        codegen.builder.cx.const_real(0.0)
+                    ParamKind::ImplicitUnknown(_)
+                    | ParamKind::Abstime
+                    | ParamKind::PrevState(_)
+                    | ParamKind::NewState(_) => codegen.builder.cx.const_real(0.0),
+                    ParamKind::EnableIntegration | ParamKind::EnableLim => {
+                        codegen.builder.cx.const_bool(false)
                     }
-                    ParamKind::EnableIntegration => codegen.builder.cx.const_bool(false),
                 };
 
                 val.into()
@@ -519,7 +525,7 @@ impl CodegenCtx<'_, '_> {
 
     fn param_flag_cb<'ll>(
         &self,
-        cx: &mut mir_llvm::CodegenCx<'_, 'll>,
+        cx: &CodegenCx<'_, 'll>,
         set: bool,
     ) -> (&'ll llvm::Value, &'ll llvm::Type) {
         let name = cx.local_callback_name();
@@ -612,24 +618,24 @@ impl CodegenCtx<'_, '_> {
         param_init_intern: HirInterner,
     ) {
         let module = unsafe { self.llbackend.new_module("model_info", self.opt_lvl).unwrap() };
-        let mut cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
+        let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
-        let (fun_names, fun_symbols) = interned_model.functions(&mut cx);
+        let (fun_names, fun_symbols) = interned_model.functions(&cx);
         cx.export_array("functions", cx.ty_str(), &fun_names, true, true);
         cx.export_array("functions.sym", cx.ty_str(), &fun_symbols, true, false);
 
-        let op_vars = interned_model.opvars(&mut cx);
+        let op_vars = interned_model.opvars(&cx);
         cx.export_array("opvars", cx.ty_str(), &op_vars, true, true);
 
-        let nodes = interned_model.nodes(&mut cx);
+        let nodes = interned_model.nodes(&cx);
         cx.export_array("nodes", cx.ty_str(), &nodes, true, true);
 
         let module_name = cx.const_str(interned_model.module_name);
         cx.export_val("module_name", cx.ty_str(), module_name, true);
 
-        interned_model.export_param_info(&mut cx, Type::Real);
-        interned_model.export_param_info(&mut cx, Type::Integer);
-        interned_model.export_param_info(&mut cx, Type::String);
+        interned_model.export_param_info(&cx, Type::Real);
+        interned_model.export_param_info(&cx, Type::Integer);
+        interned_model.export_param_info(&cx, Type::String);
 
         let fun_ty = cx.ty_func(
             &[
@@ -647,7 +653,7 @@ impl CodegenCtx<'_, '_> {
 
         let llfun = cx.declare_ext_fn("init_modelcard", fun_ty);
 
-        let mut builder = Builder::new(&mut cx, &param_init_func, llfun);
+        let mut builder = Builder::new(&cx, &param_init_func, llfun);
 
         // read parameters
 
@@ -669,8 +675,13 @@ impl CodegenCtx<'_, '_> {
                     ParamKind::Temperature => builder.cx.const_real(293f64),
                     ParamKind::PortConnected { .. } => builder.cx.const_bool(true),
                     ParamKind::ParamSysFun(param) => builder.cx.const_real(param.default_value()),
-                    ParamKind::ImplicitUnkown(_) | ParamKind::Abstime => builder.cx.const_real(0.0),
-                    ParamKind::EnableIntegration => builder.cx.const_bool(false),
+                    ParamKind::ImplicitUnknown(_)
+                    | ParamKind::Abstime
+                    | ParamKind::PrevState(_)
+                    | ParamKind::NewState(_) => builder.cx.const_real(0.0),
+                    ParamKind::EnableIntegration | ParamKind::EnableLim => {
+                        builder.cx.const_bool(false)
+                    }
                 };
 
                 val.into()
@@ -770,7 +781,7 @@ impl CodegenCtx<'_, '_> {
 impl InternedModel<'_> {
     fn functions<'ll>(
         &self,
-        cx: &mut mir_llvm::CodegenCx<'_, 'll>,
+        cx: &CodegenCx<'_, 'll>,
     ) -> (Vec<&'ll llvm::Value>, Vec<&'ll llvm::Value>) {
         self.functions
             .iter()
@@ -778,15 +789,15 @@ impl InternedModel<'_> {
             .unzip()
     }
 
-    fn opvars<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>) -> Vec<&'ll llvm::Value> {
+    fn opvars<'ll>(&self, cx: &CodegenCx<'_, 'll>) -> Vec<&'ll llvm::Value> {
         self.opvars.iter().map(|name| cx.const_str(*name)).collect()
     }
 
-    fn nodes<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>) -> Vec<&'ll llvm::Value> {
+    fn nodes<'ll>(&self, cx: &CodegenCx<'_, 'll>) -> Vec<&'ll llvm::Value> {
         self.nodes.iter().map(|name| cx.const_str(*name)).collect()
     }
 
-    fn param_info<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>, ty: &Type) -> ParamInfo<'ll> {
+    fn param_info<'ll>(&self, cx: &CodegenCx<'_, 'll>, ty: &Type) -> ParamInfo<'ll> {
         let iter = self.params.iter().filter_map(|param| {
             if ty == param.ty {
                 Some((
@@ -803,7 +814,7 @@ impl InternedModel<'_> {
         ParamInfo { units, groups, names, descriptions }
     }
 
-    fn export_param_info<'ll>(&self, cx: &mut mir_llvm::CodegenCx<'_, 'll>, ty: Type) {
+    fn export_param_info<'ll>(&self, cx: &CodegenCx<'_, 'll>, ty: Type) {
         let params = self.param_info(cx, &ty);
 
         let sym = format!("params.{}", ty);

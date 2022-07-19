@@ -39,7 +39,18 @@ impl<'ll> MemLoc<'ll> {
     ///
     /// ptr_ty, ty and indicies must be valid for ptr
     pub unsafe fn read(&self, llbuilder: &llvm::Builder<'ll>) -> &'ll llvm::Value {
-        let ptr = self.to_ptr(llbuilder);
+        self.read_with_ptr(llbuilder, self.ptr)
+    }
+
+    /// # Safety
+    ///
+    /// ptr_ty, ty and indicies must be valid for ptr
+    pub unsafe fn read_with_ptr(
+        &self,
+        llbuilder: &llvm::Builder<'ll>,
+        ptr: &'ll llvm::Value,
+    ) -> &'ll llvm::Value {
+        let ptr = self.to_ptr_from(llbuilder, ptr);
         LLVMBuildLoad2(llbuilder, self.ty, ptr, UNNAMED)
     }
 
@@ -47,7 +58,17 @@ impl<'ll> MemLoc<'ll> {
     ///
     /// ptr_ty and indicies must be valid for ptr
     pub unsafe fn to_ptr(&self, llbuilder: &llvm::Builder<'ll>) -> &'ll llvm::Value {
-        let mut ptr = self.ptr;
+        self.to_ptr_from(llbuilder, self.ptr)
+    }
+
+    /// # Safety
+    ///
+    /// ptr_ty and indicies must be valid for ptr
+    pub unsafe fn to_ptr_from(
+        &self,
+        llbuilder: &llvm::Builder<'ll>,
+        mut ptr: &'ll llvm::Value,
+    ) -> &'ll llvm::Value {
         if !self.indicies.is_empty() {
             ptr = llvm::LLVMBuildGEP2(
                 llbuilder,
@@ -113,7 +134,7 @@ impl<'ll> BuilderVal<'ll> {
 #[must_use]
 pub struct Builder<'a, 'cx, 'll> {
     pub llbuilder: &'a mut llvm::Builder<'ll>,
-    pub cx: &'a mut CodegenCx<'cx, 'll>,
+    pub cx: &'a CodegenCx<'cx, 'll>,
     pub func: &'a Function,
     pub blocks: TiVec<Block, Option<&'ll llvm::BasicBlock>>,
     pub values: TiVec<Value, BuilderVal<'ll>>,
@@ -140,7 +161,7 @@ pub enum FastMathMode {
 
 impl<'a, 'cx, 'll> Builder<'a, 'cx, 'll> {
     pub fn new(
-        cx: &'a mut CodegenCx<'cx, 'll>,
+        cx: &'a CodegenCx<'cx, 'll>,
         mir_func: &'a Function,
         llfunc: &'ll llvm::Value,
     ) -> Self {
@@ -703,6 +724,12 @@ impl<'ll> Builder<'_, '_, 'll> {
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn imul(&self, val1: &'ll llvm::Value, val2: &'ll llvm::Value) -> &'ll llvm::Value {
         llvm::LLVMBuildMul(self.llbuilder, val1, val2, UNNAMED)
+    }
+
+    /// # Safety
+    /// Must not be called when a block that already contains a terminator is selected
+    pub unsafe fn iadd(&self, val1: &'ll llvm::Value, val2: &'ll llvm::Value) -> &'ll llvm::Value {
+        llvm::LLVMBuildAdd(self.llbuilder, val1, val2, UNNAMED)
     }
 
     /// # Safety

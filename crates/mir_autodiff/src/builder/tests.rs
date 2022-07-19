@@ -1,7 +1,7 @@
 use bitset::HybridBitSet;
 use expect_test::{expect, Expect};
 use float_cmp::{ApproxEq, F64Margin};
-use mir::{ControlFlowGraph, DerivativeInfo, DominatorTree};
+use mir::{ControlFlowGraph, DominatorTree, KnownDerivatives};
 use mir_interpret::{Data, Interpreter};
 use mir_reader::parse_function;
 use typed_index_collections::TiSlice;
@@ -28,7 +28,7 @@ fn check_simple(src: &str, data_flow_result: Expect) {
     .into_iter()
     .collect();
 
-    let unkowns = DerivativeInfo { unkowns, ddx_calls };
+    let unkowns = KnownDerivatives { unknowns: unkowns, ddx_calls };
 
     auto_diff(&mut func, &dom_tree, &unkowns, &[]);
     data_flow_result.assert_eq(&func.to_debug_string());
@@ -52,7 +52,7 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
     .into_iter()
     .collect();
 
-    let unkowns = DerivativeInfo { unkowns, ddx_calls };
+    let unkowns = KnownDerivatives { unknowns: unkowns, ddx_calls };
 
     let mut dom_tree = DominatorTree::default();
     dom_tree.compute(&func, &cfg, true, false, true);
@@ -124,8 +124,7 @@ fn phi() {
             v15 = phi [v13, block1], [v14, block2]
             v101 = phi [v13, block1], [v3, block2]
             v102 = phi [v3, block1], [v14, block2]
-            v103 = phi [v3, block1], [v3, block2]
-            v100 = optbarrier v103
+            v100 = optbarrier v3
         }
     "#]];
     check_simple(src, expect);

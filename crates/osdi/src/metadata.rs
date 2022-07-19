@@ -4,19 +4,20 @@ use hir_def::db::HirDefDB;
 use hir_def::{Lookup, Type};
 use hir_lower::CurrentKind;
 use hir_ty::db::HirTyDB;
-use lasso::Rodeo;
+use lasso::{Rodeo, Spur};
 use llvm::{LLVMABISizeOfType, LLVMOffsetOfElement, TargetData};
+use mir_llvm::CodegenCx;
 use sim_back::matrix::MatrixEntry;
-use sim_back::{CompilationDB, SimUnkown};
+use sim_back::{CompilationDB, SimUnknown};
 use smol_str::SmolStr;
 
 use crate::compilation_unit::{OsdiCompilationUnit, OsdiModule};
 use crate::inst_data::{
-    OsdiInstanceParam, COLLAPSED, JACOBIAN_PTR_REACT, JACOBIAN_PTR_RESIST, NODE_MAPPING,
+    OsdiInstanceParam, COLLAPSED, JACOBIAN_PTR_REACT, JACOBIAN_PTR_RESIST, NODE_MAPPING, STATE_IDX,
 };
 use crate::load::JacobianLoadType;
 use crate::metadata::osdi_0_3::{
-    OsdiDescriptor, OsdiJacobianEntry, OsdiNode, OsdiNodePair, OsdiParamOpvar,
+    OsdiDescriptor, OsdiJacobianEntry, OsdiNode, OsdiNodePair, OsdiParamOpvar, OsdiTys,
     JACOBIAN_ENTRY_REACT, JACOBIAN_ENTRY_REACT_CONST, JACOBIAN_ENTRY_RESIST,
     JACOBIAN_ENTRY_RESIST_CONST, PARA_KIND_INST, PARA_KIND_MODEL, PARA_KIND_OPVAR, PARA_TY_INT,
     PARA_TY_REAL, PARA_TY_STR,
@@ -25,6 +26,23 @@ use crate::ty_len;
 
 #[allow(unused_parens, dead_code)]
 pub mod osdi_0_3;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct OsdiLimFunction {
+    pub name: Spur,
+    pub num_args: u32,
+}
+
+impl OsdiLimFunction {
+    pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
+        osdi_0_3::OsdiLimFunction {
+            name: ctx.literals.resolve(&self.name).to_owned(),
+            num_args: self.num_args,
+            func_ptr: ctx.const_null_ptr(ctx.ty_void_ptr()),
+        }
+        .to_ll_val(ctx, tys)
+    }
+}
 
 impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     pub fn param_opvar(&self) -> Vec<OsdiParamOpvar> {
@@ -113,6 +131,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     inst_data.residual_off(id, false, target_data).unwrap_or(u32::MAX);
                 let react_residual_off =
                     inst_data.residual_off(id, true, target_data).unwrap_or(u32::MAX);
+
+                let resist_limit_rhs_off =
+                    inst_data.lim_rhs_off(id, false, target_data).unwrap_or(u32::MAX);
+                let react_limit_rhs_off =
+                    inst_data.lim_rhs_off(id, true, target_data).unwrap_or(u32::MAX);
                 OsdiNode {
                     name,
                     units,
@@ -120,6 +143,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     resist_residual_off,
                     react_residual_off,
                     is_flow,
+                    resist_limit_rhs_off,
+                    react_limit_rhs_off,
                 }
             })
             .collect()
@@ -191,7 +216,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     }
 
     pub fn descriptor(
-        &mut self,
+        &self,
         target_data: &llvm::TargetData,
         db: &CompilationDB,
     ) -> OsdiDescriptor<'ll> {
@@ -209,6 +234,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 let elem = inst_data.cache_slot_elem(slot);
                 LLVMOffsetOfElement(target_data, inst_data.ty, elem) as u32
             });
+
+            let state_idx_off = LLVMOffsetOfElement(target_data, inst_data.ty, STATE_IDX) as u32;
 
             let instance_size = LLVMABISizeOfType(target_data, inst_data.ty) as u32;
             let model_size = LLVMABISizeOfType(target_data, model_data.ty) as u32;
@@ -236,6 +263,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
                 node_mapping_offset,
                 jacobian_ptr_resist_offset,
+                state_idx_off,
                 instance_size,
                 model_size,
                 access: self.access_function_prototype(),
@@ -250,6 +278,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 load_jacobian_resist: self.load_jacobian(JacobianLoadType::Resist),
                 load_jacobian_react: self.load_jacobian(JacobianLoadType::React),
                 load_jacobian_tran: self.load_jacobian(JacobianLoadType::Tran),
+                num_states: self.module.mir.eval_intern.lim_state.len() as u32,
+                load_limit_rhs_resist: self.load_lim_rhs(false),
+                load_limit_rhs_react: self.load_lim_rhs(true),
             }
         }
     }
@@ -257,7 +288,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
 impl OsdiModule<'_> {
     pub fn intern_node_strs(&self, intern: &mut Rodeo, db: &CompilationDB) {
-        for unkown in self.node_ids.raw.iter() {
+        for unkown in self.node_ids.iter() {
             let (name, units, _) = sim_unkown_info(*unkown, db);
             intern.get_or_intern(&name);
             intern.get_or_intern(&units);
@@ -265,19 +296,19 @@ impl OsdiModule<'_> {
     }
 }
 
-fn sim_unkown_info(unkown: SimUnkown, db: &CompilationDB) -> (String, String, bool) {
+fn sim_unkown_info(unkown: SimUnknown, db: &CompilationDB) -> (String, String, bool) {
     let name;
     let discipline;
     let is_flow;
 
     match unkown {
-        SimUnkown::KirchoffLaw(node) => {
+        SimUnknown::KirchoffLaw(node) => {
             name = db.node_data(node).name.to_string();
             discipline = db.node_discipline(node);
             is_flow = true;
         }
 
-        SimUnkown::Current(CurrentKind::Unnamed { hi, lo }) => {
+        SimUnknown::Current(CurrentKind::Unnamed { hi, lo }) => {
             let hi_ = db.node_data(hi);
             name = if let Some(lo) = lo {
                 let lo = db.node_data(lo);
@@ -288,19 +319,19 @@ fn sim_unkown_info(unkown: SimUnkown, db: &CompilationDB) -> (String, String, bo
             discipline = Some(db.node_discipline(hi).unwrap());
             is_flow = true;
         }
-        SimUnkown::Current(CurrentKind::Branch(br)) => {
+        SimUnknown::Current(CurrentKind::Branch(br)) => {
             let br_ = db.branch_data(br);
             name = format!("flow({})", &br_.name);
             discipline = Some(db.branch_info(br).unwrap().discipline);
             is_flow = true;
         }
-        SimUnkown::Current(CurrentKind::Port(node)) => {
+        SimUnknown::Current(CurrentKind::Port(node)) => {
             let node_ = db.node_data(node);
             name = format!("flow(<{}>)", &node_.name);
             discipline = db.node_discipline(node);
             is_flow = true;
         }
-        SimUnkown::Implicit(equ) => {
+        SimUnknown::Implicit(equ) => {
             name = format!("implicit_equation_{}", u32::from(equ));
             discipline = None;
             is_flow = false;

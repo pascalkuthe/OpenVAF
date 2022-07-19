@@ -1,7 +1,10 @@
 use bitset::BitSet;
 use mir::{DataFlowGraph, Inst, InstUseIter, Use, Value};
 
-use crate::zero_derivative;
+use crate::intern::DerivativeIntern;
+use crate::{is_zero_call, zero_derivative};
+
+pub type PostorderParts<'a> = (BitSet<Inst>, Vec<(Inst, InstUseIter<'a>)>);
 
 /// Postorder traversal of a data flow graph
 ///
@@ -22,15 +25,33 @@ use crate::zero_derivative;
 ///
 /// A Postorder traversal of this graph is `D B C A` or `D C B A`
 ///
-pub struct Postorder<'a> {
+pub struct Postorder<'a, 'b, 'c> {
     dfg: &'a DataFlowGraph,
     pub visited: BitSet<Inst>,
-    visit_stack: Vec<(Inst, InstUseIter<'a>)>,
+    pub visit_stack: Vec<(Inst, InstUseIter<'a>)>,
+    intern: &'b DerivativeIntern<'c>,
 }
 
-impl<'a> Postorder<'a> {
-    pub fn new(dfg: &'a DataFlowGraph) -> Postorder<'a> {
-        Postorder { dfg, visited: BitSet::new_empty(dfg.num_insts()), visit_stack: Vec::new() }
+impl<'a, 'b, 'c> Postorder<'a, 'b, 'c> {
+    // pub fn new(dfg: &'a DataFlowGraph, intern: &'b DerivativeIntern<'c>) -> Postorder<'a, 'b, 'c> {
+    //     Postorder {
+    //         dfg,
+    //         visited: BitSet::new_empty(dfg.num_insts()),
+    //         visit_stack: Vec::new(),
+    //         intern,
+    //     }
+    // }
+
+    pub fn to_parts(self) -> PostorderParts<'a> {
+        (self.visited, self.visit_stack)
+    }
+
+    pub fn from_parts(
+        dfg: &'a DataFlowGraph,
+        parts: PostorderParts<'a>,
+        intern: &'b DerivativeIntern<'c>,
+    ) -> Self {
+        Postorder { dfg, visited: parts.0, visit_stack: parts.1, intern }
     }
 
     pub fn populate(&mut self, val: Value) {
@@ -51,13 +72,20 @@ impl<'a> Postorder<'a> {
 
     fn transverse_use(&mut self, use_: Use) {
         let inst = self.dfg.use_to_operand(use_).0;
-        if !zero_derivative(self.dfg, inst) && self.visited.insert(inst) {
+        self.transverse_inst(inst);
+    }
+
+    pub fn transverse_inst(&mut self, inst: Inst) {
+        if !zero_derivative(self.dfg, inst)
+            && !is_zero_call(self.dfg, inst, self.intern)
+            && self.visited.insert(inst)
+        {
             self.visit_stack.push((inst, self.dfg.inst_uses(inst)));
         }
     }
 }
 
-impl<'lt> Iterator for Postorder<'lt> {
+impl Iterator for Postorder<'_, '_, '_> {
     type Item = Inst;
 
     fn next(&mut self) -> Option<Inst> {

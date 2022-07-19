@@ -15,7 +15,7 @@ pub struct CallbackFun<'ll> {
 
 impl<'ll> CodegenCx<'_, 'll> {
     pub fn const_callback(
-        &mut self,
+        &self,
         args: &[&'ll llvm::Type],
         val: &'ll llvm::Value,
     ) -> CallbackFun<'ll> {
@@ -33,7 +33,7 @@ impl<'ll> CodegenCx<'_, 'll> {
         CallbackFun { fun_ty, fun, state: Box::new([]), num_state: 0 }
     }
 
-    pub fn trivial_callbacks(&mut self, args: &[&'ll llvm::Type]) -> CallbackFun<'ll> {
+    pub fn trivial_callbacks(&self, args: &[&'ll llvm::Type]) -> CallbackFun<'ll> {
         let name = self.local_callback_name();
         let fun_ty = self.ty_func(args, self.ty_void());
         let fun = self.declare_int_fn(&name, fun_ty);
@@ -48,7 +48,7 @@ impl<'ll> CodegenCx<'_, 'll> {
         CallbackFun { fun_ty, fun, state: Box::new([]), num_state: 0 }
     }
 
-    pub fn const_return(&mut self, args: &[&'ll llvm::Type], idx: usize) -> CallbackFun<'ll> {
+    pub fn const_return(&self, args: &[&'ll llvm::Type], idx: usize) -> CallbackFun<'ll> {
         let name = self.local_callback_name();
         let fun_ty = self.ty_func(args, args[idx]);
         let fun = self.declare_int_fn(&name, fun_ty);
@@ -63,7 +63,7 @@ impl<'ll> CodegenCx<'_, 'll> {
         CallbackFun { fun_ty, fun, state: Box::new([]), num_state: 0 }
     }
 
-    pub fn local_callback_name(&mut self) -> String {
-        Self::generate_local_symbol_name(&mut self.local_gen_sym_counter, "cb")
+    pub fn local_callback_name(&self) -> String {
+        self.generate_local_symbol_name("cb")
     }
 }

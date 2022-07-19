@@ -1,3 +1,4 @@
+use std::cell::{Cell, RefCell};
 use std::ffi::CString;
 
 use ahash::AHashMap;
@@ -17,9 +18,9 @@ pub struct CodegenCx<'a, 'll> {
     pub target: &'a Target,
     pub target_cpu: &'a str,
     pub literals: &'a Rodeo,
-    str_lit_cache: AHashMap<Spur, &'ll Value>,
-    pub(crate) intrinsics: AHashMap<&'static str, (&'ll Type, &'ll Value)>,
-    pub(crate) local_gen_sym_counter: usize,
+    str_lit_cache: RefCell<AHashMap<Spur, &'ll Value>>,
+    pub(crate) intrinsics: RefCell<AHashMap<&'static str, (&'ll Type, &'ll Value)>>,
+    pub(crate) local_gen_sym_counter: Cell<u32>,
 }
 
 impl<'a, 'll> CodegenCx<'a, 'll> {
@@ -34,10 +35,10 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         CodegenCx {
             llmod: llvm_module.llmod(),
             llcx: llvm_module.llcx,
-            str_lit_cache: AHashMap::with_capacity(literals.len()),
+            str_lit_cache: RefCell::new(AHashMap::with_capacity(literals.len())),
             literals,
-            intrinsics: AHashMap::new(),
-            local_gen_sym_counter: 0,
+            intrinsics: RefCell::new(AHashMap::new()),
+            local_gen_sym_counter: Cell::new(0),
             target_cpu,
             // ty_isize,
             target,
@@ -49,9 +50,8 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { LLVMGetNamedFunction(self.llmod, name.as_ptr()) }
     }
 
-    pub fn include_bitcode(&mut self, bitcode: &[u8]) {
-        let sym =
-            Self::generate_local_symbol_name(&mut self.local_gen_sym_counter, "bitcode_buffer");
+    pub fn include_bitcode(&self, bitcode: &[u8]) {
+        let sym = self.generate_local_symbol_name("bitcode_buffer");
         let sym = CString::new(sym).unwrap();
         unsafe {
             let buff = LLVMCreateMemoryBufferWithMemoryRange(
@@ -76,13 +76,13 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { LLVMString::new(llvm::LLVMPrintModuleToString(self.llmod)) }
     }
 
-    pub fn const_str_uninterned(&mut self, lit: &str) -> &'ll Value {
+    pub fn const_str_uninterned(&self, lit: &str) -> &'ll Value {
         let lit = self.literals.get(lit).unwrap();
         self.const_str(lit)
     }
 
-    pub fn const_str(&mut self, lit: Spur) -> &'ll Value {
-        if let Some(val) = self.str_lit_cache.get(&lit) {
+    pub fn const_str(&self, lit: Spur) -> &'ll Value {
+        if let Some(val) = self.str_lit_cache.borrow().get(&lit) {
             return val;
         }
 
@@ -98,7 +98,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
                 false as llvm::Bool,
             )
         };
-        let sym = Self::generate_local_symbol_name(&mut self.local_gen_sym_counter, "str");
+        let sym = self.generate_local_symbol_name("str");
         let ty = self.val_ty(val);
         let global = self
             .define_global(&sym, ty)
@@ -110,7 +110,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             llvm::LLVMSetLinkage(global, llvm::Linkage::Internal);
         }
         let res = self.ptrcast(global, self.ty_str());
-        self.str_lit_cache.insert(lit, res);
+        self.str_lit_cache.borrow_mut().insert(lit, res);
         res
     }
 
@@ -122,9 +122,9 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 impl CodegenCx<'_, '_> {
     /// Generates a new symbol name with the given prefix. This symbol name must
     /// only be used for definitions with `internal` or `private` linkage.
-    pub fn generate_local_symbol_name(local_gen_sym_counter: &mut usize, prefix: &str) -> String {
-        let idx = *local_gen_sym_counter;
-        *local_gen_sym_counter += 1;
+    pub fn generate_local_symbol_name(&self, prefix: &str) -> String {
+        let idx = self.local_gen_sym_counter.get();
+        self.local_gen_sym_counter.set(idx + 1);
         // Include a '.' character, so there can be no accidental conflicts with
         // user defined names
         let mut name = String::with_capacity(prefix.len() + 6);

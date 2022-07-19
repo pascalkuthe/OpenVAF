@@ -10,7 +10,7 @@ fn resistor() {
     // the optimized MIR that represents the actual compiled code (including matrix entries)
     // the interned string literals (unintersting)
     let root_file = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
-    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
+    let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
 
     //define parameters
     let r = 15.0;
@@ -33,14 +33,14 @@ fn resistor() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.resistive_stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db, &result);
     let rhs = mir.residual.resistive_entries(&db);
 
     // read the matrix entries
-    let ia_va: f64 = result.read(stamps[&("A".to_owned(), "A".to_owned())]);
-    let ia_vb: f64 = result.read(stamps[&("A".to_owned(), "B".to_owned())]);
-    let ib_va: f64 = result.read(stamps[&("B".to_owned(), "A".to_owned())]);
-    let ib_vb: f64 = result.read(stamps[&("B".to_owned(), "B".to_owned())]);
+    let ia_va = stamps[("A", "A")];
+    let ia_vb = stamps[("A", "B")];
+    let ib_va = stamps[("B", "A")];
+    let ib_vb = stamps[("B", "B")];
 
     let i_a = result.read(rhs["A"]);
     let i_b = result.read(rhs["B"]);
@@ -76,7 +76,7 @@ fn current_source() {
     // the interned string literals (unintersting)
     let root_file =
         project_root().join("integration_tests").join("CURRENT_SOURCE").join("current_source.va");
-    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
+    let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
 
     //define parameters
     let i = 1.0;
@@ -95,13 +95,13 @@ fn current_source() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.resistive_stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db, &result);
 
     // read the matrix entries
-    let ip_vp: f64 = result.read(stamps[&("Np".to_owned(), "Np".to_owned())]);
-    let ip_vm: f64 = result.read(stamps[&("Np".to_owned(), "Nm".to_owned())]);
-    let im_vp: f64 = result.read(stamps[&("Nm".to_owned(), "Np".to_owned())]);
-    let im_vm: f64 = result.read(stamps[&("Nm".to_owned(), "Nm".to_owned())]);
+    let ip_vp = stamps[("Np", "Np")];
+    let ip_vm = stamps[("Np", "Nm")];
+    let im_vp = stamps[("Nm", "Np")];
+    let im_vm = stamps[("Nm", "Nm")];
 
     // calculate the expected values for the stamps
     let g = 1.0 / r;
@@ -127,7 +127,7 @@ fn cccs() {
     // the optimized MIR that represents the actual compiled code (including matrix entries)
     // the interned string literals (unintersting)
     let root_file = project_root().join("integration_tests").join("CCCS").join("cccs.va");
-    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
+    let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
 
     //print assembly
     // println!("{}", mir.func.to_debug_string());
@@ -153,17 +153,17 @@ fn cccs() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.resistive_stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db, &result);
 
     // read the matrix entries
-    let op_op: f64 = result.read(stamps[&("Outp".to_owned(), "Outp".to_owned())]);
-    let op_om: f64 = result.read(stamps[&("Outp".to_owned(), "Outm".to_owned())]);
-    let om_op: f64 = result.read(stamps[&("Outm".to_owned(), "Outp".to_owned())]);
-    let om_om: f64 = result.read(stamps[&("Outm".to_owned(), "Outm".to_owned())]);
-    // let ip_ip: f64 = result.read(stamps[&("Inp".to_owned(), "Inp".to_owned())]);
-    // let ip_im: f64 = result.read(stamps[&("Inp".to_owned(), "Inm".to_owned())]);
-    // let im_ip: f64 = result.read(stamps[&("Inm".to_owned(), "Inp".to_owned())]);
-    // let im_im: f64 = result.read(stamps[&("Inm".to_owned(), "Inm".to_owned())]);
+    let op_op = stamps[("Outp", "Outp")];
+    let op_om = stamps[("Outp", "Outm")];
+    let om_op = stamps[("Outm", "Outp")];
+    let om_om = stamps[("Outm", "Outm")];
+    // let ip_ip: f64 = result.read(stamps[&("Inp", "Inp")]);
+    // let ip_im: f64 = result.read(stamps[&("Inp", "Inm")]);
+    // let im_ip: f64 = result.read(stamps[&("Inm", "Inp")]);
+    // let im_im: f64 = result.read(stamps[&("Inm", "Inm")]);
 
     // gin is the derivative of the input BRANCH by the input voltages not the input kirchoff laws
     // calculate the expected values for the stamps
@@ -198,7 +198,7 @@ fn vccs() {
     // the optimized MIR that represents the actual compiled code (including matrix entries)
     // the interned string literals (unintersting)
     let root_file = project_root().join("integration_tests").join("VCCS").join("vccs.va");
-    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
+    let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
 
     //print assembly
     // println!("{}", mir.func.to_debug_string());
@@ -224,23 +224,23 @@ fn vccs() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.resistive_stamps(&db);
+    let stamps = mir.matrix.resistive_stamps(&db, &result);
 
     // read the matrix entries
-    let ip_ip: f64 = result.read(stamps[&("Inp".to_owned(), "Inp".to_owned())]);
-    let ip_im: f64 = result.read(stamps[&("Inp".to_owned(), "Inm".to_owned())]);
-    let im_ip: f64 = result.read(stamps[&("Inm".to_owned(), "Inp".to_owned())]);
-    let im_im: f64 = result.read(stamps[&("Inm".to_owned(), "Inm".to_owned())]);
+    let ip_ip = stamps[("Inp", "Inp")];
+    let ip_im = stamps[("Inp", "Inm")];
+    let im_ip = stamps[("Inm", "Inp")];
+    let im_im = stamps[("Inm", "Inm")];
 
-    let op_op: f64 = result.read(stamps[&("Outp".to_owned(), "Outp".to_owned())]);
-    let op_om: f64 = result.read(stamps[&("Outp".to_owned(), "Outm".to_owned())]);
-    let om_op: f64 = result.read(stamps[&("Outm".to_owned(), "Outp".to_owned())]);
-    let om_om: f64 = result.read(stamps[&("Outm".to_owned(), "Outm".to_owned())]);
+    let op_op = stamps[("Outp", "Outp")];
+    let op_om = stamps[("Outp", "Outm")];
+    let om_op = stamps[("Outm", "Outp")];
+    let om_om = stamps[("Outm", "Outm")];
 
-    let op_ip: f64 = result.read(stamps[&("Outp".to_owned(), "Inp".to_owned())]);
-    let op_im: f64 = result.read(stamps[&("Outp".to_owned(), "Inm".to_owned())]);
-    let om_ip: f64 = result.read(stamps[&("Outm".to_owned(), "Inp".to_owned())]);
-    let om_im: f64 = result.read(stamps[&("Outm".to_owned(), "Inm".to_owned())]);
+    let op_ip = stamps[("Outp", "Inp")];
+    let op_im = stamps[("Outp", "Inm")];
+    let om_ip = stamps[("Outm", "Inp")];
+    let om_im = stamps[("Outm", "Inm")];
 
     // calculate the expected values for the stamps
     let gin = 1.0 / rin;
@@ -287,7 +287,7 @@ fn diode() {
     // the optimized MIR that represents the actual compiled code (including matrix entries)
     // the interned string literals (unintersting)
     let root_file = project_root().join("integration_tests").join("DIODE").join("diode.va");
-    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
+    let (db, module, mir, mut literals) = super::compile_to_mir(&root_file);
 
     //define parameters
     let is = 1e-9;
@@ -333,12 +333,12 @@ fn diode() {
 
     // run the interpreter
     let result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let stamps = mir.matrix.resistive_stamps(&db);
+    // let vars =
     // TODO check reactive component
     // TODO check RHS
-    let _stamps_react = mir.matrix.reactive_stamps(&db);
-    let _rhs = mir.residual.resistive_entries(&db);
-    let _rhs_react = mir.residual.reactive_entries(&db);
+    // let _stamps_react = mir.matrix.reactive_stamps(&db, &result);
+    // let _rhs = mir.residual.resistive_entries(&db);
+    // let _rhs_react = mir.residual.reactive_entries(&db);
 
     let matrix_res = expect![[r#"
         (A, dT) = v372
@@ -369,24 +369,22 @@ fn diode() {
     matrix_res.assert_eq(&mir.matrix.print_resistive_stamps(&db));
     matrix_react.assert_eq(&mir.matrix.print_reactive_stamps(&db));
 
-    // // Note: this produces an error if the matrix changes
-    // // You can update the string by running the test with UPDATE_EXPECT=1
-    // matrix.assert_eq(&mir.matrix.print_resistive_stamps(&db));
+    let stamps = mir.matrix.resistive_stamps(&db, &result);
 
     // read the matrix entries
-    let ia_va: f64 = result.read(stamps[&("A".to_owned(), "A".to_owned())]);
-    let ia_vci: f64 = result.read(stamps[&("A".to_owned(), "CI".to_owned())]);
-    let ia_dtj: f64 = result.read(stamps[&("A".to_owned(), "dT".to_owned())]);
-    let ici_va: f64 = result.read(stamps[&("CI".to_owned(), "A".to_owned())]);
-    let ici_vci: f64 = result.read(stamps[&("CI".to_owned(), "CI".to_owned())]);
-    let ici_vc: f64 = result.read(stamps[&("CI".to_owned(), "C".to_owned())]);
-    let ici_dtj: f64 = result.read(stamps[&("CI".to_owned(), "dT".to_owned())]);
-    let ic_vci: f64 = result.read(stamps[&("C".to_owned(), "CI".to_owned())]);
-    let ic_vc: f64 = result.read(stamps[&("C".to_owned(), "C".to_owned())]);
-    let itj_dtj: f64 = result.read(stamps[&("dT".to_owned(), "dT".to_owned())]);
-    let itj_va: f64 = result.read(stamps[&("dT".to_owned(), "A".to_owned())]);
-    let itj_vci: f64 = result.read(stamps[&("dT".to_owned(), "CI".to_owned())]);
-    let itj_vc: f64 = result.read(stamps[&("dT".to_owned(), "C".to_owned())]);
+    let ia_va = stamps[("A", "A")];
+    let ia_vci = stamps[("A", "CI")];
+    let ia_dtj = stamps[("A", "dT")];
+    let ici_va = stamps[("CI", "A")];
+    let ici_vci = stamps[("CI", "CI")];
+    let ici_vc = stamps[("CI", "C")];
+    let ici_dtj = stamps[("CI", "dT")];
+    let ic_vci = stamps[("C", "CI")];
+    let ic_vc = stamps[("C", "C")];
+    let itj_dtj = stamps[("dT", "dT")];
+    let itj_va = stamps[("dT", "A")];
+    let itj_vci = stamps[("dT", "CI")];
+    let itj_vc = stamps[("dT", "C")];
 
     // calculate the expected values for the stamps:
     // first some basic pre-calculations
@@ -396,7 +394,7 @@ fn diode() {
     let tdev_tnom = t_dev / tnom;
     let rs_t = rs * tdev_tnom.powf(zetars);
     let rth_t = rth * tdev_tnom.powf(zetarth);
-    let is_t = is * tdev_tnom.powf(zetais);
+    let is_t = is * tdev_tnom.powf(zetais / n);
     let rs_dt = zetars * rs * tdev_tnom.powf(zetars - 1.0) / tnom;
     let rth_dt = zetarth * rth * tdev_tnom.powf(zetarth - 1.0) / tnom;
     let is_dt = zetais * is * tdev_tnom.powf(zetais - 1.0) / tnom;
@@ -470,6 +468,9 @@ fn diode() {
     assert_approx_eq!(f64, itj_va, it_va_expect, epsilon = epsilon);
     assert_approx_eq!(f64, itj_vc, it_vc_expect, epsilon = epsilon);
     assert_approx_eq!(f64, itj_vci, it_vci_expect, epsilon = epsilon);
+
+    let opvars = mir.opvars(&module, &result);
+    assert_approx_eq!(f64, opvars["gd"], gd, epsilon = epsilon);
 }
 
 #[test]
@@ -479,542 +480,142 @@ fn hicum() {
     // the optimized MIR that represents the actual compiled code (including matrix entries)
     // the interned string literals (unintersting)
     let root_file = project_root().join("integration_tests").join("HICUML2").join("hicuml2.va");
-    let (db, mir, mut literals) = super::compile_to_mir(&root_file);
-
-    ///////////////////////////////////////
-    //define modelcard
-    //Transfer current
-    let c10 = 2.0E-30;
-    let qp0 = 2.0E-30;
-    let ich = 0.0;
-    let hf0 = 1.0;
-    let hfe = 1.0;
-    let hfc = 1.0;
-    let hjei = 1.0;
-    let ahjei = 0.0;
-    let rhjei = 1.0;
-    let hjci = 1.0;
-
-    //Base-Emitter diode currents
-    let ibeis = 1.0E-15;
-    let mbei = 1.0;
-    let ireis = 0.0;
-    let mrei = 2.0;
-    let ibeps = 0.0;
-    let mbep = 1.0;
-    let ireps = 0.0;
-    let mrep = 2.0;
-    let mcf = 1.0;
-
-    //Transit time for excess recombination current at b-c barrier
-    let tbhrec = 0.0;
-
-    //Base-Collector diode currents
-    let ibcis = 1.0E-15;
-    let mbci = 1.0;
-    let ibcxs = 0.0;
-    let mbcx = 1.0;
-
-    //Base-Emitter tunneling current
-    let ibets = 0.0;
-    let abet = 40;
-    let tunode = 1;
-
-    //Base-Collector avalanche current
-    let favl = 0.0;
-    let qavl = 0.0;
-    let kavl = 0.0;
-    let alfav = 0.0;
-    let alqav = 0.0;
-    let alkav = 0.0;
-
-    //Series resistances
-    let rbi0 = 0.0;
-    let rbx = 0.0;
-    let fgeo = 0.655;
-    let fdqr0 = 0.0;
-    let fcrbi = 0.0;
-    let fqi = 1.0;
-    let re = 0.0;
-    let rcx = 0.0;
-
-    //Substrate transistor
-    let itss = 0.0;
-    let msf = 1.0;
-    let iscs = 0.0;
-    let msc = 1.0;
-    let tsf = 0.0;
-
-    //Intra-device substrate coupling
-    let rsu = 0.0;
-    let csu = 0.0;
-
-    //Depletion Capacitances
-    let cjei0 = 1.0E-15;
-    let vdei = 0.9;
-    let zei = 0.5;
-    let ajei = 2.5;
-    let cjep0 = 1.0E-15;
-    let vdep = 0.9;
-    let zep = 0.5;
-    let ajep = 2.5;
-    let cjci0 = 1.0E-15;
-    let vdci = 0.7;
-    let zci = 0.4;
-    let vptci = 100;
-    let cjcx0 = 1.0E-15;
-    let vdcx = 0.7;
-    let zcx = 0.4;
-    let vptcx = 100;
-    let fbcpar = 0.0;
-    let fbepar = 1.0;
-    let cjs0 = 0.0;
-    let vds = 0.6;
-    let zs = 0.5;
-    let vpts = 100;
-    let cscp0 = 0.0;
-    let vdsp = 0.6;
-    let zsp = 0.5;
-    let vptsp = 100;
-
-    //Diffusion Capacitances
-    let t0 = 0.0;
-    let dt0h = 0.0;
-    let tbvl = 0.0;
-    let tef0 = 0.0;
-    let gtfe = 1.0;
-    let thcs = 0.0;
-    let ahc = 0.1;
-    let fthc = 0.0;
-    let rci0 = 150;
-    let vlim = 0.5;
-    let vces = 0.1;
-    let vpt = 100.0;
-    let aick = 1e-3;
-    let delck = 2.0;
-    let tr = 0.0;
-    let vcbar = 0.0;
-    let icbar = 0.0;
-    let acbar = 0.01;
-
-    //Isolation Capacitances
-    let cbepar = 0.0;
-    let cbcpar = 0.0;
-
-    //Non-quasi-static Effect
-    let alqf = 0.167;
-    let alit = 0.333;
-    let flnqs = 0;
-
-    //Noise
-    let kf = 0.0;
-    let af = 2.0;
-    let cfbe = -1;
-    let flcono = 0;
-
-    let kfre = 0.0;
-    let afre = 2.0;
-
-    //Lateral Geometry Scaling (at high current densities)
-    let latb = 0.0;
-    let latl = 0.0;
-
-    //Temperature dependence
-    let vgb = 1.17;
-    let alt0 = 0.0;
-    let kt0 = 0.0;
-    let zetaci = 0.0;
-    let alvs = 0.0;
-    let alces = 0.0;
-    let zetarbi = 0.0;
-    let zetarbx = 0.0;
-    let zetarcx = 0.0;
-    let zetare = 0.0;
-    let zetacx = 1.0;
-    let vge = 1.17;
-    let vgc = 1.17;
-    let vgs = 1.17;
-    let f1vg = -1.023;
-    let f2vg = 4.321;
-    let zetact = 3.0;
-    let zetabet = 3.5;
-    let alb = 0.0;
-    let dvgbe = 0;
-    let zetahjei = 1;
-    let zetavgbe = 1;
-
-    //Self-Heating
-    let flsh = 0;
-    let rth = 0.0;
-    let zetarth = 0.0;
-    let alrth = 0.0;
-    let cth = 0.0;
-
-    //Compatibility with V2.1
-    let flcomp = 0.0;
-
-    //Circuit simulator specific parameters
-    let tnom = 27.0;
-    let dt = 0.0;
-    let typpe = 1;
-    //end modelcard
-    ///////////////////////////////////////
-
-    //define node potentials
-    let vc = 1.0;
-    let vci = 0.9;
-    let vb = 1.0;
-    let vbp = 0.95;
-    let vbi = 0.9;
-    let vei = 0.1;
-    let ve = 0.0;
-    let vs = 0.0;
-    let vsi = 0.01;
-    let vtnode = 0.0;
-    let vxf1 = 0.0;
-    let vxf2 = 0.0;
-    let vxf = 0.0;
-    let vn1 = 0.0;
-    let vn2 = 0.0;
-
-    // prepare inputs
-    let temp = 298.5;
-    let mut params = AHashMap::default();
-    let mut node_voltages = AHashMap::default();
-
-    // insert modelcard
-    params.insert("c10", c10.into());
-    params.insert("qp0", qp0.into());
-    params.insert("ich", ich.into());
-    params.insert("hf0", hf0.into());
-    params.insert("hfe", hfe.into());
-    params.insert("hfc", hfc.into());
-    params.insert("hjei", hjei.into());
-    params.insert("ahjei", ahjei.into());
-    params.insert("rhjei", rhjei.into());
-    params.insert("hjci", hjci.into());
-
-    //Base-Emitter diode currents
-    params.insert("ibeis", ibeis.into());
-    params.insert("mbei", mbei.into());
-    params.insert("ireis", ireis.into());
-    params.insert("mrei", mrei.into());
-    params.insert("ibeps", ibeps.into());
-    params.insert("mbep", mbep.into());
-    params.insert("ireps", ireps.into());
-    params.insert("mrep", mrep.into());
-    params.insert("mcf", mcf.into());
-
-    //Transit time for excess recombination current at b-c barrier
-    params.insert("tbhrec", tbhrec.into());
-
-    //Base-Collector diode currents
-    params.insert("ibcis", ibcis.into());
-    params.insert("mbci", mbci.into());
-    params.insert("ibcxs", ibcxs.into());
-    params.insert("mbcx", mbcx.into());
-
-    //Base-Emitter tunneling current
-    params.insert("ibets", ibets.into());
-    params.insert("abet", abet.into());
-    params.insert("tunode", tunode.into());
-
-    //Base-Collector avalanche current
-    params.insert("favl", favl.into());
-    params.insert("qavl", qavl.into());
-    params.insert("kavl", kavl.into());
-    params.insert("alfav", alfav.into());
-    params.insert("alqav", alqav.into());
-    params.insert("alkav", alkav.into());
-
-    //Series resistances
-    params.insert("rbi0", rbi0.into());
-    params.insert("rbx", rbx.into());
-    params.insert("fgeo", fgeo.into());
-    params.insert("fdqr0", fdqr0.into());
-    params.insert("fcrbi", fcrbi.into());
-    params.insert("fqi", fqi.into());
-    params.insert("re", re.into());
-    params.insert("rcx", rcx.into());
-
-    //Substrate transistor
-    params.insert("itss", itss.into());
-    params.insert("msf", msf.into());
-    params.insert("iscs", iscs.into());
-    params.insert("msc", msc.into());
-    params.insert("tsf", tsf.into());
-
-    //Intra-device substrate coupling
-    params.insert("rsu", rsu.into());
-    params.insert("csu", csu.into());
-
-    //Depletion Capacitances
-    params.insert("cjei0", cjei0.into());
-    params.insert("vdei", vdei.into());
-    params.insert("zei", zei.into());
-    params.insert("ajei", ajei.into());
-    params.insert("cjep0", cjep0.into());
-    params.insert("vdep", vdep.into());
-    params.insert("zep", zep.into());
-    params.insert("ajep", ajep.into());
-    params.insert("cjci0", cjci0.into());
-    params.insert("vdci", vdci.into());
-    params.insert("zci", zci.into());
-    params.insert("vptci", vptci.into());
-    params.insert("cjcx0", cjcx0.into());
-    params.insert("vdcx", vdcx.into());
-    params.insert("zcx", zcx.into());
-    params.insert("vptcx", vptcx.into());
-    params.insert("fbcpar", fbcpar.into());
-    params.insert("fbepar", fbepar.into());
-    params.insert("cjs0", cjs0.into());
-    params.insert("vds", vds.into());
-    params.insert("zs", zs.into());
-    params.insert("vpts", vpts.into());
-    params.insert("cscp0", cscp0.into());
-    params.insert("vdsp", vdsp.into());
-    params.insert("zsp", zsp.into());
-    params.insert("vptsp", vptsp.into());
-
-    //Diffusion Capacitances
-    params.insert("t0", t0.into());
-    params.insert("dt0h", dt0h.into());
-    params.insert("tbvl", tbvl.into());
-    params.insert("tef0", tef0.into());
-    params.insert("gtfe", gtfe.into());
-    params.insert("thcs", thcs.into());
-    params.insert("ahc", ahc.into());
-    params.insert("fthc", fthc.into());
-    params.insert("rci0", rci0.into());
-    params.insert("vlim", vlim.into());
-    params.insert("vces", vces.into());
-    params.insert("vpt", vpt.into());
-    params.insert("aick", aick.into());
-    params.insert("delck", delck.into());
-    params.insert("tr", tr.into());
-    params.insert("vcbar", vcbar.into());
-    params.insert("icbar", icbar.into());
-    params.insert("acbar", acbar.into());
-
-    //Isolation Capacitances
-    params.insert("cbepar", cbepar.into());
-    params.insert("cbcpar", cbcpar.into());
-
-    //Non-quasi-static Effect
-    params.insert("alqf", alqf.into());
-    params.insert("alit", alit.into());
-    params.insert("flnqs", flnqs.into());
-
-    //Noise
-    params.insert("kf", kf.into());
-    params.insert("af", af.into());
-    params.insert("cfbe", cfbe.into());
-    params.insert("flcono", flcono.into());
-
-    params.insert("kfre", kfre.into());
-    params.insert("afre", afre.into());
-
-    //Lateral Geometry Scaling (at high current densities)
-    params.insert("latb", latb.into());
-    params.insert("latl", latl.into());
-
-    //Temperature dependence
-    params.insert("vgb", vgb.into());
-    params.insert("alt0", alt0.into());
-    params.insert("kt0", kt0.into());
-    params.insert("zetaci", zetaci.into());
-    params.insert("alvs", alvs.into());
-    params.insert("alces", alces.into());
-    params.insert("zetarbi", zetarbi.into());
-    params.insert("zetarbx", zetarbx.into());
-    params.insert("zetarcx", zetarcx.into());
-    params.insert("zetare", zetare.into());
-    params.insert("zetacx", zetacx.into());
-    params.insert("vge", vge.into());
-    params.insert("vgc", vgc.into());
-    params.insert("vgs", vgs.into());
-    params.insert("f1vg", f1vg.into());
-    params.insert("f2vg", f2vg.into());
-    params.insert("zetact", zetact.into());
-    params.insert("zetabet", zetabet.into());
-    params.insert("alb", alb.into());
-    params.insert("dvgbe", dvgbe.into());
-    params.insert("zetahjei", zetahjei.into());
-    params.insert("zetavgbe", zetavgbe.into());
-
-    //Self-Heating
-    params.insert("flsh", flsh.into());
-    params.insert("rth", rth.into());
-    params.insert("zetarth", zetarth.into());
-    params.insert("alrth", alrth.into());
-    params.insert("cth", cth.into());
-
-    //Compatibility with V2.1
-    params.insert("flcomp", flcomp.into());
-
-    //Circuit simulator specific parameters
-    params.insert("tnom", tnom.into());
-    params.insert("dt", dt.into());
-    params.insert("type", typpe.into());
-
-    // define node voltages
-    node_voltages.insert("c", vc);
-    node_voltages.insert("ci", vci);
-    node_voltages.insert("b", vb);
-    node_voltages.insert("bp", vbp);
-    node_voltages.insert("bi", vbi);
-    node_voltages.insert("ei", vei);
-    node_voltages.insert("e", ve);
-    node_voltages.insert("s", vs);
-    node_voltages.insert("si", vsi);
-    node_voltages.insert("tnode", vtnode);
-    node_voltages.insert("xf1", vxf1);
-    node_voltages.insert("xf2", vxf2);
-    node_voltages.insert("xf", vxf);
-    node_voltages.insert("n1", vn1);
-    node_voltages.insert("n2", vn2);
-
-    // run the interpreter
-    let _result = mir.interpret(&db, &mut literals, &params, &node_voltages, temp);
-    let _stamps_res = mir.matrix.resistive_stamps(&db);
-    let _stamps_react = mir.matrix.reactive_stamps(&db);
-    let _rhs_res = mir.residual.resistive_entries(&db);
-    let _rhs_react = mir.residual.reactive_entries(&db);
+    let (db, _, mir, _) = super::compile_to_mir(&root_file);
 
     let matrix_res = expect![[r#"
-        (bi, bi) = v47502
-        (bi, ei) = v47500
-        (bi, ci) = v47499
-        (bi, bp) = v47501
-        (bi, tnode) = v46277
-        (bi, n1) = v46279
-        (bi, inode17) = v46280
-        (bi, inode18) = v46281
-        (ei, bi) = v47504
-        (ei, ei) = v47510
-        (ei, ci) = v47509
-        (ei, bp) = v46284
-        (ei, tnode) = v46285
-        (ei, e) = v47508
-        (ei, xf2) = v46287
-        (ei, n1) = v46289
-        (ei, inode17) = v46290
-        (ei, n2) = v46289
-        (ei, inode18) = v46292
-        (ci, bi) = v47512
-        (ci, ei) = v47519
-        (ci, ci) = v47518
-        (ci, bp) = v46295
-        (ci, si) = v46296
-        (ci, tnode) = v46297
-        (ci, c) = v47517
-        (ci, xf2) = v46299
-        (ci, n2) = v46279
-        (b, tnode) = v46302
-        (b, b) = v46303
-        (b, bp) = v47520
-        (bp, bi) = v47529
-        (bp, ei) = v47524
-        (bp, ci) = v47527
-        (bp, bp) = v47530
-        (bp, si) = v46308
-        (bp, tnode) = v46309
-        (bp, b) = v46311
-        (si, bp) = v46312
-        (si, ci) = v47532
-        (si, si) = v47533
-        (si, tnode) = v46314
-        (si, s) = v47534
-        (c, tnode) = v46316
-        (c, ci) = v46317
-        (c, c) = v47535
-        (e, tnode) = v46318
-        (e, ei) = v46319
-        (e, e) = v47536
-        (s, si) = v46320
-        (s, s) = v47537
-        (tnode, bi) = v47546
-        (tnode, ei) = v47547
-        (tnode, ci) = v47549
-        (tnode, bp) = v47551
-        (tnode, si) = v46325
-        (tnode, tnode) = v46326
-        (tnode, e) = v47548
-        (tnode, c) = v47550
-        (tnode, b) = v46330
-        (xf1, bi) = v47553
-        (xf1, ei) = v47552
-        (xf1, ci) = v47554
-        (xf1, tnode) = v46333
-        (xf1, xf1) = v46334
-        (xf1, xf2) = v46335
-        (xf2, bi) = v47556
-        (xf2, ei) = v47555
-        (xf2, ci) = v47557
-        (xf2, tnode) = v46338
-        (xf2, xf1) = v46339
-        (xf2, xf2) = v46340
-        (xf, bi) = v47559
-        (xf, ei) = v47558
-        (xf, ci) = v47560
-        (xf, tnode) = v46343
-        (xf, xf) = v46344
-        (n1, n1) = v46345
-        (inode17, inode17) = v46279
-        (inode18, inode18) = v46279
-        (n2, n2) = v46345
+        (bi, bi) = v47512
+        (bi, ei) = v47510
+        (bi, ci) = v47509
+        (bi, bp) = v47511
+        (bi, tnode) = v46287
+        (bi, n1) = v46289
+        (bi, inode17) = v46290
+        (bi, inode18) = v46291
+        (ei, bi) = v47514
+        (ei, ei) = v47520
+        (ei, ci) = v47519
+        (ei, bp) = v46294
+        (ei, tnode) = v46295
+        (ei, e) = v47518
+        (ei, xf2) = v46297
+        (ei, n1) = v46299
+        (ei, inode17) = v46300
+        (ei, n2) = v46299
+        (ei, inode18) = v46302
+        (ci, bi) = v47522
+        (ci, ei) = v47529
+        (ci, ci) = v47528
+        (ci, bp) = v46305
+        (ci, si) = v46306
+        (ci, tnode) = v46307
+        (ci, c) = v47527
+        (ci, xf2) = v46309
+        (ci, n2) = v46289
+        (b, tnode) = v46312
+        (b, b) = v46313
+        (b, bp) = v47530
+        (bp, bi) = v47539
+        (bp, ei) = v47534
+        (bp, ci) = v47537
+        (bp, bp) = v47540
+        (bp, si) = v46318
+        (bp, tnode) = v46319
+        (bp, b) = v46321
+        (si, bp) = v46322
+        (si, ci) = v47542
+        (si, si) = v47543
+        (si, tnode) = v46324
+        (si, s) = v47544
+        (c, tnode) = v46326
+        (c, ci) = v46327
+        (c, c) = v47545
+        (e, tnode) = v46328
+        (e, ei) = v46329
+        (e, e) = v47546
+        (s, si) = v46330
+        (s, s) = v47547
+        (tnode, bi) = v47556
+        (tnode, ei) = v47557
+        (tnode, ci) = v47559
+        (tnode, bp) = v47561
+        (tnode, si) = v46335
+        (tnode, tnode) = v46336
+        (tnode, e) = v47558
+        (tnode, c) = v47560
+        (tnode, b) = v46340
+        (xf1, bi) = v47563
+        (xf1, ei) = v47562
+        (xf1, ci) = v47564
+        (xf1, tnode) = v46343
+        (xf1, xf1) = v46344
+        (xf1, xf2) = v46345
+        (xf2, bi) = v47566
+        (xf2, ei) = v47565
+        (xf2, ci) = v47567
+        (xf2, tnode) = v46348
+        (xf2, xf1) = v46349
+        (xf2, xf2) = v46350
+        (xf, bi) = v47569
+        (xf, ei) = v47568
+        (xf, ci) = v47570
+        (xf, tnode) = v46353
+        (xf, xf) = v46354
+        (n1, n1) = v46355
+        (inode17, inode17) = v46289
+        (inode18, inode18) = v46289
+        (n2, n2) = v46355
     "#]];
 
     let matrix_react = expect![[r#"
-        (bi, bi) = v47564
-        (bi, ei) = v47561
-        (bi, ci) = v47563
-        (bi, tnode) = v46351
-        (bi, bp) = v46352
-        (bi, xf) = v46299
-        (ei, bi) = v47566
-        (ei, ei) = v47568
-        (ei, ci) = v47567
-        (ei, bp) = v46356
-        (ei, tnode) = v46357
-        (ei, xf) = v46358
-        (ci, bi) = v47570
-        (ci, ei) = v47569
-        (ci, ci) = v47574
-        (ci, bp) = v46361
-        (ci, b) = v46362
-        (ci, si) = v46363
-        (ci, tnode) = v46364
-        (b, b) = v47576
-        (b, ci) = v47575
-        (b, tnode) = v46366
-        (b, e) = v47577
-        (bp, bi) = v47585
-        (bp, ei) = v47581
-        (bp, ci) = v47583
-        (bp, bp) = v47586
-        (bp, tnode) = v46372
-        (bp, e) = v47587
-        (e, b) = v46375
-        (e, e) = v47589
-        (e, bp) = v46376
-        (si, si) = v47591
-        (si, ci) = v47590
-        (si, tnode) = v46378
-        (si, s) = v47592
-        (s, s) = v47594
-        (s, c) = v47593
-        (s, tnode) = v46381
-        (s, si) = v46382
-        (c, s) = v46383
-        (c, c) = v47595
-        (c, tnode) = v46384
-        (tnode, tnode) = v46385
-        (xf1, xf1) = v46386
-        (xf2, xf2) = v46387
-        (xf, xf) = v46388
-        (inode17, n1) = v46389
-        (inode18, n2) = v46389
+        (bi, bi) = v47574
+        (bi, ei) = v47571
+        (bi, ci) = v47573
+        (bi, tnode) = v46361
+        (bi, bp) = v46362
+        (bi, xf) = v46309
+        (ei, bi) = v47576
+        (ei, ei) = v47578
+        (ei, ci) = v47577
+        (ei, bp) = v46366
+        (ei, tnode) = v46367
+        (ei, xf) = v46368
+        (ci, bi) = v47580
+        (ci, ei) = v47579
+        (ci, ci) = v47584
+        (ci, bp) = v46371
+        (ci, b) = v46372
+        (ci, si) = v46373
+        (ci, tnode) = v46374
+        (b, b) = v47586
+        (b, ci) = v47585
+        (b, tnode) = v46376
+        (b, e) = v47587
+        (bp, bi) = v47595
+        (bp, ei) = v47591
+        (bp, ci) = v47593
+        (bp, bp) = v47596
+        (bp, tnode) = v46382
+        (bp, e) = v47597
+        (e, b) = v46385
+        (e, e) = v47599
+        (e, bp) = v46386
+        (si, si) = v47601
+        (si, ci) = v47600
+        (si, tnode) = v46388
+        (si, s) = v47602
+        (s, s) = v47604
+        (s, c) = v47603
+        (s, tnode) = v46391
+        (s, si) = v46392
+        (c, s) = v46393
+        (c, c) = v47605
+        (c, tnode) = v46394
+        (tnode, tnode) = v46395
+        (xf1, xf1) = v46396
+        (xf2, xf2) = v46397
+        (xf, xf) = v46398
+        (inode17, n1) = v46399
+        (inode18, n2) = v46399
     "#]];
 
     matrix_res.assert_eq(&mir.matrix.print_resistive_stamps(&db));

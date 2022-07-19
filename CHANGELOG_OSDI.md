@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added support for `$limit`
 * Added support for `$abstime` (now returns a non-zero value for large signal simulations).
 * Added support for `$bound_step` (now the simulator can read the minimum value passed to `$bound_step`).
 
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* `ddx` always returned 0
 * Remove infinite loop during global value numbering optimization.
 * Linking error if cache directory was missing during batch compilation.
 * Fixed crash for nodes without any contributions besides collapsing

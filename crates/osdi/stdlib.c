@@ -24,6 +24,10 @@ char *concat(const char *s1, const char *s2) {
   return result;
 }
 
+typedef void (*osdi_log_ptr)(void *handle, char *msg, uint32_t lvl);
+extern osdi_log_ptr osdi_log;
+
+
 double simparam(void *params_, void *handle, uint32_t *flags, char *name) {
   OsdiSimParas *params = params_;
   for (int i = 0; params->names[i]; i++) {
@@ -137,4 +141,12 @@ char *fmt_binary(int val) {
   }
 
   return res;
+}
+
+void lim_discontinuity(int *flags) { *flags |= EVAL_RET_FLAG_LIM; }
+
+double store_lim(void *sim_info_, int idx, double val) {
+  OsdiSimInfo *sim_info = (OsdiSimInfo *)sim_info_;
+  sim_info->next_state[idx] = val;
+  return val;
 }

@@ -59,6 +59,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         llfunc
     }
+
     pub fn load_residual(&self, reactive: bool) -> &'ll llvm::Value {
         let OsdiCompilationUnit { inst_data, cx, module, .. } = self;
         let void_ptr = cx.ty_void_ptr();
@@ -99,11 +100,51 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         llfunc
     }
 
+    pub fn load_lim_rhs(&self, reactive: bool) -> &'ll llvm::Value {
+        let OsdiCompilationUnit { inst_data, cx, module, .. } = self;
+        let void_ptr = cx.ty_void_ptr();
+        let f64_ty = cx.ty_real();
+        let f64_ptr_ty = cx.ptr_ty(f64_ty);
+        let fun_ty = cx.ty_func(&[void_ptr, void_ptr, f64_ptr_ty], cx.ty_void());
+        let name =
+            &format!("load_lim_rhs_{}_{}", if reactive { "react" } else { "resist" }, module.sym);
+        let llfunc = cx.declare_int_c_fn(name, fun_ty);
+
+        unsafe {
+            let entry = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
+            let llbuilder = LLVMCreateBuilderInContext(cx.llcx);
+
+            LLVMPositionBuilderAtEnd(llbuilder, entry);
+
+            // get params
+            let inst = LLVMGetParam(llfunc, 0);
+            let inst = LLVMBuildPointerCast(llbuilder, inst, cx.ptr_ty(inst_data.ty), UNNAMED);
+            let dst = LLVMGetParam(llfunc, 2);
+
+            let nodes = if reactive {
+                module.mir.lim_rhs.reactive.keys()
+            } else {
+                module.mir.lim_rhs.resistive.keys()
+            };
+            for node in nodes {
+                let node = module.node_ids.unwrap_index(node);
+                if let Some(contrib) = inst_data.read_lim_rhs(node, inst, llbuilder, reactive) {
+                    inst_data.store_contrib(cx, node, inst, dst, contrib, llbuilder);
+                }
+            }
+
+            LLVMBuildRetVoid(llbuilder);
+            LLVMDisposeBuilder(llbuilder);
+        }
+
+        llfunc
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn load_spice_rhs_(
-        &mut self,
+        &self,
         tran: bool,
-        llbuilder: &mut llvm::Builder<'ll>,
+        llbuilder: &llvm::Builder<'ll>,
         inst: &'ll llvm::Value,
         model: &'ll llvm::Value,
         dst: &'ll llvm::Value,
@@ -172,6 +213,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     }
                 }
                 if let Some(mut res) = res {
+                    if let Some(lim_rhs) = inst_data.read_lim_rhs(node_id, inst, llbuilder, tran) {
+                        res = LLVMBuildFAdd(llbuilder, res, lim_rhs, UNNAMED);
+                    }
                     if tran {
                         res = LLVMBuildFMul(llbuilder, res, alpha, UNNAMED);
                         LLVMSetFastMath(res);
@@ -182,7 +226,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         }
     }
 
-    pub fn load_spice_rhs(&mut self, tran: bool) -> &'ll llvm::Value {
+    pub fn load_spice_rhs(&self, tran: bool) -> &'ll llvm::Value {
         let OsdiCompilationUnit { cx, module, .. } = self;
         let void_ptr = cx.ty_void_ptr();
         let f64_ty = cx.ty_real();
@@ -222,8 +266,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         llfunc
     }
 
-    pub fn load_jacobian(&mut self, kind: JacobianLoadType) -> &'ll llvm::Value {
-        let OsdiCompilationUnit { ref inst_data, ref model_data, ref mut cx, module, .. } = *self;
+    pub fn load_jacobian(&self, kind: JacobianLoadType) -> &'ll llvm::Value {
+        let OsdiCompilationUnit { ref inst_data, ref model_data, cx, module, .. } = *self;
         let args_ = [cx.ty_void_ptr(), cx.ty_void_ptr(), cx.ty_real()];
         let args = if kind.read_reactive() { &args_ } else { &args_[0..2] };
         let fun_ty = cx.ty_func(args, cx.ty_void());

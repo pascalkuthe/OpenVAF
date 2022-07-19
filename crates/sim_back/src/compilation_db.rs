@@ -1,8 +1,8 @@
-use std::fs;
 use std::intrinsics::transmute;
 use std::iter::once;
 use std::ops::Deref;
 use std::sync::Arc;
+use std::{fs, io};
 
 use ahash::AHashMap;
 use anyhow::{bail, Result};
@@ -52,11 +52,21 @@ impl CompilationDB {
         macro_flags: &[String],
         lints: &[(String, LintLevel)],
     ) -> Result<Self> {
+        let contents = fs::read(&root_file);
+        CompilationDB::new_(root_file.into(), contents, include_dirs, macro_flags, lints)
+    }
+
+    pub fn new_(
+        root_file: VfsPath,
+        contents: Result<Vec<u8>, io::Error>,
+        include_dirs: &[AbsPathBuf],
+        macro_flags: &[String],
+        lints: &[(String, LintLevel)],
+    ) -> Result<Self> {
         let mut vfs = Vfs::default();
         vfs.insert_std_lib();
 
-        let contents = fs::read(&root_file);
-        let root_file = vfs.ensure_file_id(root_file.into());
+        let root_file = vfs.ensure_file_id(root_file);
         vfs.set_file_contents(root_file, contents.into());
 
         let mut res =

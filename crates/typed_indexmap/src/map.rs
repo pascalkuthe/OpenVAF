@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::iter;
 use std::marker::PhantomData;
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 use ahash::RandomState;
 use indexmap::IndexMap;
@@ -105,7 +105,13 @@ where
 
 impl<I: From<usize>, K, V> TiMap<I, K, V> {
     pub fn iter_enumerated(&self) -> Iter<'_, I, K, V> {
-        self.raw.iter().enumerate().map(|(index, val)| (index.into(), val))
+        self.iter().enumerate().map(|(index, val)| (index.into(), val))
+    }
+}
+
+impl<I, K, V> TiMap<I, K, V> {
+    pub fn iter(&self) -> indexmap::map::Iter<'_, K, V> {
+        self.raw.iter()
     }
 }
 
@@ -149,6 +155,17 @@ where
 
     fn index(&self, index: I) -> &Self::Output {
         self.raw.get_index(index.into()).unwrap().1
+    }
+}
+
+impl<I, K, V> IndexMut<I> for TiMap<I, K, V>
+where
+    I: Into<usize>,
+    K: Eq + Hash,
+    V: Eq,
+{
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.raw.get_index_mut(index.into()).unwrap().1
     }
 }
 

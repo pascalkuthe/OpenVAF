@@ -197,15 +197,15 @@ impl Function {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct DerivativeInfo {
-    pub unkowns: TiSet<Unkown, Value>,
-    pub ddx_calls: AHashMap<FuncRef, (HybridBitSet<Unkown>, HybridBitSet<Unkown>)>,
+pub struct KnownDerivatives {
+    pub unknowns: TiSet<Unknown, Value>,
+    pub ddx_calls: AHashMap<FuncRef, (HybridBitSet<Unknown>, HybridBitSet<Unknown>)>,
     // pub standin_calls: AHashMap<FuncRef, u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct Unkown(pub u32);
-impl_idx_from!(Unkown(u32));
+pub struct Unknown(pub u32);
+impl_idx_from!(Unknown(u32));
 
-impl_debug!(match Unkown{Unkown(raw) => "unkown{}",raw;});
+impl_debug!(match Unknown{Unknown(raw) => "unkown{}",raw;});

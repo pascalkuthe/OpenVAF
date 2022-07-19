@@ -4,16 +4,16 @@ use lasso::Rodeo;
 use llvm::{
     IntPredicate, LLVMAddIncoming, LLVMAppendBasicBlockInContext, LLVMBuildAdd,
     LLVMBuildArrayMalloc, LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildFMul,
-    LLVMBuildFree, LLVMBuildICmp, LLVMBuildInBoundsGEP2, LLVMBuildPhi, LLVMGetParam,
-    LLVMIsDeclaration, LLVMPositionBuilderAtEnd, LLVMSetLinkage, LLVMSetUnnamedAddress,
-    UnnamedAddr, UNNAMED,
+    LLVMBuildFree, LLVMBuildICmp, LLVMBuildInBoundsGEP2, LLVMBuildLoad2, LLVMBuildPhi,
+    LLVMGetParam, LLVMIsDeclaration, LLVMPositionBuilderAtEnd, LLVMSetLinkage,
+    LLVMSetUnnamedAddress, UnnamedAddr, UNNAMED,
 };
 use llvm::{LLVMPurgeAttrs, Linkage};
 use mir::FuncRef;
 use mir_llvm::{CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use salsa::InternKey;
 use sim_back::matrix::MatrixEntry;
-use sim_back::{CompilationDB, EvalMir, ModuleInfo, SimUnkown};
+use sim_back::{CompilationDB, EvalMir, ModuleInfo, SimUnknown};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
@@ -22,8 +22,9 @@ use crate::metadata::osdi_0_3::{
     OsdiTys, LOG_FMT_ERR, LOG_LVL_DEBUG, LOG_LVL_DISPLAY, LOG_LVL_ERR, LOG_LVL_FATAL, LOG_LVL_INFO,
     LOG_LVL_WARN, STDLIB_BITCODE,
 };
+use crate::metadata::OsdiLimFunction;
 use crate::model_data::OsdiModelData;
-use crate::{lltype, OsdiMatrixId, OsdiNodeId};
+use crate::{lltype, OsdiLimId, OsdiMatrixId, OsdiNodeId};
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
 pub struct OsdiMatrixEntry {
@@ -32,7 +33,7 @@ pub struct OsdiMatrixEntry {
 }
 
 impl OsdiMatrixEntry {
-    pub fn to_middle(self, node_ids: &TiSet<OsdiNodeId, SimUnkown>) -> MatrixEntry {
+    pub fn to_middle(self, node_ids: &TiSet<OsdiNodeId, SimUnknown>) -> MatrixEntry {
         MatrixEntry { row: node_ids[self.row], col: node_ids[self.col] }
     }
 }
@@ -42,7 +43,7 @@ pub fn new_codegen<'a, 'll>(
     llmod: &'ll ModuleLlvm,
     literals: &'a Rodeo,
 ) -> CodegenCx<'a, 'll> {
-    let mut cx = unsafe { back.new_ctx(literals, llmod) };
+    let cx = unsafe { back.new_ctx(literals, llmod) };
     cx.include_bitcode(STDLIB_BITCODE);
 
     for fun in llvm::function_iter(llmod.llmod()) {
@@ -57,6 +58,15 @@ pub fn new_codegen<'a, 'll>(
         }
     }
 
+    let exp_table = cx.get_declared_value("EXP").expect("constant EXP missing from stdlib");
+    let char_table =
+        cx.get_declared_value("FMT_CHARS").expect("constant FMT_CHARS missing from stdlib");
+
+    unsafe {
+        LLVMSetLinkage(exp_table, Linkage::Internal);
+        LLVMSetLinkage(char_table, Linkage::Internal);
+    }
+
     cx
 }
 
@@ -64,42 +74,71 @@ pub struct OsdiCompilationUnit<'a, 'b, 'll> {
     pub inst_data: OsdiInstanceData<'ll>,
     pub model_data: OsdiModelData<'ll>,
     pub tys: &'a OsdiTys<'ll>,
-    pub cx: &'a mut CodegenCx<'b, 'll>,
+    pub cx: &'a CodegenCx<'b, 'll>,
     pub module: &'a OsdiModule<'b>,
+    pub lim_dispatch_table: Option<&'ll llvm::Value>,
 }
 
 impl<'a, 'b, 'll> OsdiCompilationUnit<'a, 'b, 'll> {
     pub fn new(
         module: &'a OsdiModule<'b>,
-        cx: &'a mut CodegenCx<'b, 'll>,
+        cx: &'a CodegenCx<'b, 'll>,
         tys: &'a OsdiTys<'ll>,
+        eval: bool,
     ) -> OsdiCompilationUnit<'a, 'b, 'll> {
         let inst_data = OsdiInstanceData::new(module, cx);
         let model_data = OsdiModelData::new(module, cx, &inst_data);
-        OsdiCompilationUnit { inst_data, model_data, tys, cx, module }
+        let lim_dispatch_table =
+            if eval && !module.lim_table.is_empty() && !module.mir.eval_intern.lim_state.is_empty()
+            {
+                let ty = cx.ty_array(tys.osdi_lim_function, module.lim_table.len() as u32);
+                let res = cx
+                    .define_global("OSDI_LIM_TABLE", ty)
+                    .unwrap_or_else(|| unreachable!("symbol OSDI_LIM_TABLE already defined"));
+                unsafe {
+                    llvm::LLVMSetLinkage(res, llvm::Linkage::ExternalLinkage);
+                    llvm::LLVMSetUnnamedAddress(res, llvm::UnnamedAddr::No);
+                    llvm::LLVMSetDLLStorageClass(res, llvm::DLLStorageClass::Export);
+                }
+                let ptr = cx.ptrcast(res, cx.ptr_ty(tys.osdi_lim_function));
+                Some(ptr)
+            } else {
+                None
+            };
+        OsdiCompilationUnit { inst_data, model_data, tys, cx, module, lim_dispatch_table }
+    }
+
+    pub fn lim_dispatch_table(&self) -> &'ll llvm::Value {
+        self.lim_dispatch_table.unwrap()
     }
 }
 
 pub struct OsdiModule<'a> {
     pub base: &'a ModuleInfo,
     pub mir: &'a EvalMir,
-    pub node_ids: TiSet<OsdiNodeId, SimUnkown>,
+    pub lim_table: &'a TiSet<OsdiLimId, OsdiLimFunction>,
+    pub node_ids: TiSet<OsdiNodeId, SimUnknown>,
     pub matrix_ids: TiSet<OsdiMatrixId, OsdiMatrixEntry>,
     pub num_terminals: u32,
     pub sym: String,
 }
 
 impl<'a> OsdiModule<'a> {
-    pub fn new(db: &'a CompilationDB, mir: &'a EvalMir, module: &'a ModuleInfo) -> Self {
+    pub fn new(
+        db: &'a CompilationDB,
+        mir: &'a EvalMir,
+        module: &'a ModuleInfo,
+        lim_table: &'a TiSet<OsdiLimId, OsdiLimFunction>,
+    ) -> Self {
         let module_data = db.module_data(module.id);
         let mut terminals: TiSet<_, _> =
-            module_data.ports.iter().map(|port| SimUnkown::KirchoffLaw(*port)).collect();
+            module_data.ports.iter().map(|port| SimUnknown::KirchoffLaw(*port)).collect();
         let num_terminals = terminals.len() as u32;
 
         let node_ids = {
             // add all internal nodes
             let internal_nodes =
-                module_data.internal_nodes.iter().map(|node| SimUnkown::KirchoffLaw(*node));
+                module_data.internal_nodes.iter().map(|node| SimUnknown::KirchoffLaw(*node));
 
             terminals.raw.extend(internal_nodes);
 
@@ -131,7 +170,7 @@ impl<'a> OsdiModule<'a> {
         let sym =
             base_n::encode(u32::from(module.id.as_intern_id()) as u128, base_n::CASE_INSENSITIVE);
 
-        OsdiModule { mir, node_ids, num_terminals, matrix_ids, base: module, sym }
+        OsdiModule { mir, node_ids, num_terminals, matrix_ids, base: module, sym, lim_table }
     }
 }
 
@@ -206,7 +245,11 @@ pub fn general_callbacks<'ll>(
                 }
                 CallBackKind::ParamInfo(_, _)
                 | CallBackKind::CollapseHint(_, _)
+                | CallBackKind::BuiltinLimit { .. }
+                | CallBackKind::StoreLimit(_)
+                | CallBackKind::LimDiscontinuity
                 | CallBackKind::BoundStep => return None,
+
                 CallBackKind::Print { kind, arg_tys } => {
                     let (fun, fun_ty) = print_callback(builder.cx, *kind, arg_tys);
                     CallbackFun { fun_ty, fun, state: Box::new([handle]), num_state: 0 }
@@ -218,7 +261,7 @@ pub fn general_callbacks<'ll>(
 }
 
 fn print_callback<'ll>(
-    cx: &mut CodegenCx<'_, 'll>,
+    cx: &CodegenCx<'_, 'll>,
     kind: DisplayKind,
     arg_tys: &[FmtArg],
 ) -> (&'ll llvm::Value, &'ll llvm::Type) {
@@ -342,8 +385,9 @@ fn print_callback<'ll>(
         LLVMAddIncoming(flags, [lvl, lvl_and_err].as_ptr(), [write_bb, err_bb].as_ptr(), 2);
         let msg = LLVMBuildPhi(llbuilder, cx.ty_str(), UNNAMED);
         LLVMAddIncoming(msg, [ptr, fmt_lit].as_ptr(), [write_bb, err_bb].as_ptr(), 2);
-        let fun = cx.get_func_by_name("osdi_log").expect("callback osdi_log is missing");
+        let fun_ptr = cx.get_declared_value("osdi_log").expect("symbol osdi_log is missing");
         let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str(), cx.ty_int()], cx.ty_void());
+        let fun = LLVMBuildLoad2(llbuilder, cx.ptr_ty(fun_ty), fun_ptr, UNNAMED);
         LLVMBuildCall2(llbuilder, fun_ty, fun, [handle, msg, flags].as_ptr(), 3, UNNAMED);
         llvm::LLVMBuildRetVoid(llbuilder);
         llvm::LLVMDisposeBuilder(llbuilder);

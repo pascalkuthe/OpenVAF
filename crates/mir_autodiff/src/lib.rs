@@ -1,37 +1,36 @@
 mod builder;
+mod intern;
 mod live_derivatives;
 mod postorder;
 mod subgraph;
-mod unkowns;
 
 use ahash::AHashMap;
 pub use builder::build_derivatives;
 pub use live_derivatives::LiveDerivatives;
-use mir::{DataFlowGraph, DerivativeInfo, DominatorTree, Function, Inst, Opcode, Value};
+use mir::{
+    DataFlowGraph, DominatorTree, Function, Inst, InstructionData, KnownDerivatives, Opcode, Value,
+};
 
-use crate::unkowns::{FirstOrderUnkown, Unkown, Unkowns};
+use crate::intern::{Derivative, DerivativeIntern};
 
 pub fn auto_diff(
     func: &mut Function,
     dom_tree: &DominatorTree,
-    unkowns: &DerivativeInfo,
-    extra_derivatives: &[(Value, mir::Unkown)],
-) -> AHashMap<(Value, mir::Unkown), Value> {
-    let mut unkowns = Unkowns::new(unkowns);
-    let live_derivative = LiveDerivatives::build(func, &mut unkowns, extra_derivatives, dom_tree);
-    // for inst in live_derivative.derivatives.rows() {
-    //     let unkowns_ = live_derivative.derivatives.row(inst).unwrap();
-    //     if unkowns_.is_empty() {
-    //         continue;
-    //     }
-    //     println!("{}:", func.dfg.display_inst(inst));
-    //     for unkown in unkowns_.iter() {
-    //         println!("\t{:?}", unkown)
-    //     }
-    // }
-    build_derivatives(func, &mut unkowns, &live_derivative, dom_tree.cfg_postorder())
+    derivatives: &KnownDerivatives,
+    extra_derivatives: &[(Value, mir::Unknown)],
+) -> AHashMap<(Value, mir::Unknown), Value> {
+    let mut intern = DerivativeIntern::new(derivatives);
+    let live_derivative = LiveDerivatives::build(func, &mut intern, extra_derivatives, dom_tree);
+    build_derivatives(func, &mut intern, &live_derivative, dom_tree.cfg_postorder())
 }
 
+fn is_zero_call(dfg: &DataFlowGraph, inst: Inst, intern: &DerivativeIntern) -> bool {
+    if let InstructionData::Call { func_ref, .. } = dfg.insts[inst] {
+        !intern.ddx_calls.contains_key(&func_ref)
+    } else {
+        false
+    }
+}
 fn zero_derivative(dfg: &DataFlowGraph, inst: Inst) -> bool {
     let opcode = dfg.insts[inst].opcode();
     matches!(
@@ -82,7 +81,8 @@ fn zero_derivative(dfg: &DataFlowGraph, inst: Inst) -> bool {
 
 #[derive(Debug, Clone)]
 struct ChainRule {
-    pub unkown: Unkown,
-    pub out_derivative_unkown: FirstOrderUnkown,
-    pub outer_val: Value,
+    pub inner_derivative: (Value, Derivative),
+    pub outer_derivative: Derivative,
+    pub dst_derivative: Derivative,
+    pub val: Value,
 }

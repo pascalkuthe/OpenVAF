@@ -6,7 +6,7 @@ exclude = ["exclude/*"]
 
 [profile.release]
 lto = "fat"
-incremental = false
+incremental = true
 panic = "abort"
 debug = false
 strip = true

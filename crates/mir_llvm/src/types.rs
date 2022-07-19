@@ -87,7 +87,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         self.struct_ty("fat_ptr", &[ptr, len])
     }
 
-    pub fn const_val(&mut self, val: &Const) -> &'ll Value {
+    pub fn const_val(&self, val: &Const) -> &'ll Value {
         match *val {
             Const::Float(val) => self.const_real(val.into()),
             Const::Int(val) => self.const_int(val),

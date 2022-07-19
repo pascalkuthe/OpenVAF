@@ -88,11 +88,12 @@ impl CompilationDB {
         .build(&mut literals);
 
         // remove unused sideeffects
-        for (id, kind) in intern.callbacks.iter_enumerated() {
-            if let CallBackKind::CollapseHint(_, _) = kind {
-                func.dfg.signatures[id].has_sideeffects = false;
-            }
+        for (id, _) in intern.callbacks.iter_enumerated() {
+            func.dfg.signatures[id].has_sideeffects = false;
         }
+
+        let mut output_values = BitSet::new_empty(func.dfg.num_values());
+        output_values.extend(intern.outputs.values().filter_map(|it| it.expand()));
 
         intern.insert_var_init(self, &mut func, &mut literals);
 
@@ -110,9 +111,6 @@ impl CompilationDB {
                 }
             }
         }
-
-        let mut output_values = BitSet::new_empty(func.dfg.num_values());
-        output_values.extend(intern.outputs.values().filter_map(|it| it.expand()));
 
         dead_code_elimination(&mut func, &output_values);
 

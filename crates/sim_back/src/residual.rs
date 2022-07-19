@@ -10,7 +10,7 @@ use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{
-    ControlFlowGraph, DerivativeInfo, Function, Inst, InstructionData, Opcode, Value, ValueDef,
+    ControlFlowGraph, Function, Inst, InstructionData, KnownDerivatives, Opcode, Value, ValueDef,
     FALSE, F_ZERO, TRUE,
 };
 use stdx::{impl_debug_display, impl_idx_from};
@@ -18,7 +18,7 @@ use typed_indexmap::TiMap;
 use workqueue::WorkStack;
 
 use crate::compilation_db::CompilationDB;
-use crate::{strip_optbarrier, SimUnkown};
+use crate::{strip_optbarrier, SimUnknown};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ResidualId(u32);
@@ -76,8 +76,8 @@ fn src_residual(
 
 #[derive(Default, Debug)]
 pub struct Residual {
-    pub resistive: TiMap<ResidualId, SimUnkown, Value>,
-    pub reactive: TiMap<ResidualId, SimUnkown, Value>,
+    pub resistive: TiMap<ResidualId, SimUnknown, Value>,
+    pub reactive: TiMap<ResidualId, SimUnknown, Value>,
 }
 
 fn is_opdepenent(
@@ -94,7 +94,7 @@ fn is_opdepenent(
 }
 
 impl Residual {
-    pub fn contains(&self, unkown: SimUnkown) -> bool {
+    pub fn contains(&self, unkown: SimUnknown) -> bool {
         self.resistive.contains_key(&unkown) || self.reactive.contains_key(&unkown)
     }
 
@@ -130,6 +130,14 @@ impl Residual {
                     if react_val != F_ZERO {
                         self.add_kirchoff_laws(cursor, react_val, branch, true, db);
                     }
+                    // let (hi, lo) = branch.nodes(db);
+                    // if let Some(lo) = lo {
+                    //     println!(
+                    //         "I({} {}) = {react_val}",
+                    //         db.node_data(hi).name,
+                    //         db.node_data(lo).name
+                    //     );
+                    // }
                     return;
                 }
             }
@@ -245,8 +253,8 @@ impl Residual {
             }
         };
 
-        self.add_entry(cursor, SimUnkown::Current(current), residual[0], false, false);
-        self.add_entry(cursor, SimUnkown::Current(current), residual[1], false, true);
+        self.add_entry(cursor, SimUnknown::Current(current), residual[0], false, false);
+        self.add_entry(cursor, SimUnknown::Current(current), residual[1], false, true);
 
         let current = intern.ensure_param(cursor.func, ParamKind::Current(current));
         self.add_kirchoff_laws(cursor, current, branch, false, db);
@@ -264,7 +272,7 @@ impl Residual {
 
         for equation in intern.implicit_equations.keys() {
             if let ImplicitEquationKind::DdtContrib(arg) = intern.implicit_equations[equation] {
-                let unkown = intern.params.raw[&ParamKind::ImplicitUnkown(equation)];
+                let unkown = intern.params.raw[&ParamKind::ImplicitUnknown(equation)];
 
                 if cursor.func.dfg.value_dead(unkown) {
                     continue;
@@ -358,7 +366,7 @@ impl Residual {
                     }
                     self.add_entry(
                         cursor,
-                        SimUnkown::Implicit(equation),
+                        SimUnknown::Implicit(equation),
                         strip_optbarrier(cursor.func, val.unwrap_unchecked()),
                         false,
                         dim == REACTIVE_DIM,
@@ -380,23 +388,33 @@ impl Residual {
         &self,
         func: &Function,
         intern: &HirInterner,
-        unkowns: &DerivativeInfo,
-    ) -> Vec<(Value, mir::Unkown)> {
-        let params: Vec<_> = intern
+        derivatives: &KnownDerivatives,
+    ) -> Vec<(Value, mir::Unknown)> {
+        let mut params: Vec<_> = intern
             .live_params(&func.dfg)
             .filter_map(move |(_, kind, param)| {
                 if matches!(
                     kind,
                     ParamKind::Voltage { .. }
                         | ParamKind::Current(_)
-                        | ParamKind::ImplicitUnkown(_)
+                        | ParamKind::ImplicitUnknown(_)
                 ) {
-                    Some(unkowns.unkowns.unwrap_index(&param))
+                    Some(derivatives.unknowns.unwrap_index(&param))
                 } else {
                     None
                 }
             })
             .collect();
+        let lim_derivatives = intern.lim_state.raw.values().flat_map(|vals| {
+            vals.iter().filter_map(|(val, _)| {
+                if func.dfg.value_dead(*val) {
+                    return None;
+                }
+
+                Some(derivatives.unknowns.unwrap_index(val))
+            })
+        });
+        params.extend(lim_derivatives);
 
         let num_unkowns = params.len() * (self.resistive.len() + self.reactive.len());
         let mut res = Vec::with_capacity(num_unkowns);
@@ -418,9 +436,9 @@ impl Residual {
         db: &CompilationDB,
     ) {
         let (hi, lo) = dst.nodes(db);
-        self.add_entry(cursor, SimUnkown::KirchoffLaw(hi), current, false, reactive);
+        self.add_entry(cursor, SimUnknown::KirchoffLaw(hi), current, false, reactive);
         if let Some(lo) = lo {
-            self.add_entry(cursor, SimUnkown::KirchoffLaw(lo), current, true, reactive);
+            self.add_entry(cursor, SimUnknown::KirchoffLaw(lo), current, true, reactive);
         }
     }
 
@@ -430,7 +448,7 @@ impl Residual {
         output_values: &mut BitSet<Value>,
     ) {
         fn insert_opt_barries(
-            entries: &mut TiMap<ResidualId, SimUnkown, Value>,
+            entries: &mut TiMap<ResidualId, SimUnknown, Value>,
             func: &mut FuncCursor,
             output_values: &mut BitSet<Value>,
         ) {
@@ -455,7 +473,7 @@ impl Residual {
         output_values: &mut BitSet<Value>,
     ) {
         fn strip_opt_barries(
-            entries: &mut TiMap<ResidualId, SimUnkown, Value>,
+            entries: &mut TiMap<ResidualId, SimUnknown, Value>,
             func: &mut Function,
             output_values: &mut BitSet<Value>,
         ) {
@@ -475,7 +493,7 @@ impl Residual {
     pub(crate) fn add_entry(
         &mut self,
         func: &mut FuncCursor,
-        node: SimUnkown,
+        node: SimUnknown,
         mut val: Value,
         neg: bool,
         reactive: bool,
@@ -502,12 +520,12 @@ impl Residual {
         self.reactive.raw.retain(|_, val| *val != F_ZERO);
     }
 
-    pub fn resistive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
+    pub fn resistive_entries(&self, db: &CompilationDB) -> AHashMap<String, Value> {
         self.resistive
             .raw
             .iter()
             .filter_map(|(unkown, val)| {
-                if let SimUnkown::KirchoffLaw(node) = unkown {
+                if let SimUnknown::KirchoffLaw(node) = unkown {
                     let name = db.node_data(*node).name.to_string();
                     Some((name, *val))
                 } else {
@@ -517,12 +535,12 @@ impl Residual {
             .collect()
     }
 
-    pub fn reactive_entries(&self, db: &dyn HirDefDB) -> AHashMap<String, Value> {
+    pub fn reactive_entries(&self, db: &CompilationDB) -> AHashMap<String, Value> {
         self.reactive
             .raw
             .iter()
             .filter_map(|(unkown, val)| {
-                if let SimUnkown::KirchoffLaw(node) = unkown {
+                if let SimUnknown::KirchoffLaw(node) = unkown {
                     let name = db.node_data(*node).name.to_string();
                     Some((name, *val))
                 } else {

@@ -35,7 +35,7 @@ mod tests;
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ResolvedFun {
-    User(FunctionId),
+    User { func: FunctionId, limit: bool },
     BuiltIn(BuiltIn),
     Param(ParamSysFun),
 }
@@ -463,11 +463,11 @@ impl Ctx<'_> {
         &mut self,
         stmt: StmtId,
         expr: ExprId,
-        fun: FunctionId,
+        func: FunctionId,
         args: &[ExprId],
     ) -> Option<Ty> {
-        self.result.resolved_calls.insert(expr, ResolvedFun::User(fun));
-        let fun_info = self.db.function_data(fun);
+        self.result.resolved_calls.insert(expr, ResolvedFun::User { func, limit: false });
+        let fun_info = self.db.function_data(func);
         if fun_info.args.len() != args.len() {
             self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
                 expected: fun_info.args.len(),
@@ -499,7 +499,7 @@ impl Ctx<'_> {
                 args: Cow::Owned(signature),
                 return_ty: fun_info.return_ty.clone(),
             }])),
-            Some(fun),
+            Some(func),
         )
     }
 
@@ -781,7 +781,7 @@ impl Ctx<'_> {
         let probe = args[0];
         if self.result.expr_types[probe] != Ty::Val(Type::Err)
             && !matches!(
-                self.result.resolved_calls.get(&expr),
+                self.result.resolved_calls.get(&probe),
                 Some(ResolvedFun::BuiltIn(BuiltIn::potential | BuiltIn::flow))
             )
         {
@@ -841,7 +841,7 @@ impl Ctx<'_> {
                 Some(func),
             );
 
-            self.infere_user_fun_call(stmt, expr, func, &args[2..]);
+            self.result.resolved_calls.insert(expr, ResolvedFun::User { func, limit: true });
         } else if sig == LIMIT_BUILTIN_FUNCTION {
             self.resolve_function_args(
                 stmt,

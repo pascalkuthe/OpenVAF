@@ -154,7 +154,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         }
     }
 
-    pub fn const_arr_ptr(&mut self, elem_ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
+    pub fn const_arr_ptr(&self, elem_ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
         for (i, val) in vals.iter().enumerate() {
             assert_eq!(
                 unsafe { LLVMTypeOf(val) } as *const Type,
@@ -166,7 +166,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         let val = self.const_arr(elem_ty, vals);
         let ty = self.ty_array(elem_ty, vals.len() as u32);
 
-        let sym = Self::generate_local_symbol_name(&mut self.local_gen_sym_counter, "arr");
+        let sym = self.generate_local_symbol_name("arr");
         let global = self
             .define_global(&sym, ty)
             .unwrap_or_else(|| unreachable!("symbol {} already defined", sym));

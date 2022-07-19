@@ -9,7 +9,7 @@ use hir_ty::inference::BranchWrite;
 use indexmap::IndexMap;
 use lasso::Spur;
 use mir::{
-    DataFlowGraph, DerivativeInfo, FuncRef, Function, FunctionSignature, Param, Unkown, Value,
+    DataFlowGraph, FuncRef, Function, FunctionSignature, KnownDerivatives, Param, Unknown, Value,
 };
 use stdx::packed_option::PackedOption;
 use stdx::{impl_debug_display, impl_idx_from};
@@ -22,11 +22,6 @@ mod body;
 
 #[cfg(test)]
 mod tests;
-
-// pub enum BranchKind{
-//     Explicit(BranchId),
-//     Implicit(BranchId),
-// }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImplicitEquationKind {
@@ -57,8 +52,9 @@ pub enum ParamKind {
     Param(ParamId),
     Abstime,
     EnableIntegration,
-    // PrevVal(Value),
-    // LimitChange(Value),
+    EnableLim,
+    PrevState(LimitState),
+    NewState(LimitState),
     Voltage { hi: NodeId, lo: Option<NodeId> },
     Current(CurrentKind),
     Temperature,
@@ -66,7 +62,7 @@ pub enum ParamKind {
     PortConnected { port: NodeId },
     ParamSysFun(ParamSysFun),
     HiddenState(VarId),
-    ImplicitUnkown(ImplicitEquation),
+    ImplicitUnknown(ImplicitEquation),
 }
 
 impl ParamKind {
@@ -82,10 +78,13 @@ impl ParamKind {
             self,
             ParamKind::Voltage { .. }
                 | ParamKind::Current(_)
-                | ParamKind::ImplicitUnkown(_)
+                | ParamKind::ImplicitUnknown(_)
                 | ParamKind::Abstime
                 | ParamKind::EnableIntegration
                 | ParamKind::HiddenState(_)
+                | ParamKind::PrevState(_)
+                | ParamKind::NewState(_)
+                | ParamKind::EnableLim
         )
     }
 }
@@ -199,8 +198,9 @@ pub enum CallBackKind {
     NodeDerivative(NodeId),
     ParamInfo(ParamInfoKind, ParamId),
     CollapseHint(NodeId, Option<NodeId>),
-    // Limit { name: Spur, num_args: u32 },
-    // StoreState(StateId),
+    BuiltinLimit { name: Spur, num_args: u32 },
+    StoreLimit(LimitState),
+    LimDiscontinuity,
 }
 
 impl CallBackKind {
@@ -260,24 +260,24 @@ impl CallBackKind {
                 returns: 0,
                 has_sideeffects: true,
             },
-            // CallBackKind::Limit { name, num_args } => FunctionSignature {
-            //     name: format!("$limit[{name:?}]"),
-            //     params: *num_args as u16,
-            //     returns: 1,
-            //     has_sideeffects: false,
-            // },
-            // CallBackKind::ExplicitDdt(_) => FunctionSignature {
-            //     name: "ddt!".to_owned(),
-            //     params: 1,
-            //     returns: 1,
-            //     has_sideeffects: false,
-            // },
-            // CallBackKind::StoreState(state) => FunctionSignature {
-            //     name: format!("store_{:?})", state),
-            //     params: 1,
-            //     returns: 0,
-            //     has_sideeffects: true,
-            // },
+            CallBackKind::BuiltinLimit { name, num_args } => FunctionSignature {
+                name: format!("$limit[{name:?}]"),
+                params: *num_args as u16,
+                returns: 1,
+                has_sideeffects: false,
+            },
+            CallBackKind::StoreLimit(state) => FunctionSignature {
+                name: format!("$store[{state:?}]"),
+                params: 1,
+                returns: 1,
+                has_sideeffects: false,
+            },
+            CallBackKind::LimDiscontinuity => FunctionSignature {
+                name: "$discontinuty[-1]".to_owned(),
+                params: 0,
+                returns: 0,
+                has_sideeffects: true,
+            },
         }
     }
 }
@@ -294,6 +294,13 @@ pub struct ImplicitEquation(u32);
 impl_idx_from!(ImplicitEquation(u32));
 impl_debug_display! {
     match ImplicitEquation {ImplicitEquation(i) => "inode{}", i;}
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LimitState(u32);
+impl_idx_from!(LimitState(u32));
+impl_debug_display! {
+    match LimitState {LimitState(i) => "lim_state{}", i;}
 }
 
 pub const RESISTIVE_DIM: Dim = Dim(0u32);
@@ -318,7 +325,7 @@ pub struct HirInterner {
     pub callbacks: TiSet<FuncRef, CallBackKind>,
     pub dims: TiVec<Dim, DimKind>,
     pub implicit_equations: TiVec<ImplicitEquation, ImplicitEquationKind>,
-    // pub lim_equations: IndexMap<Value, Vec<Value>, ahash::RandomState>,
+    pub lim_state: TiMap<LimitState, Value, Vec<(Value, bool)>>,
 }
 
 pub type LiveParams<'a> = FilterMap<
@@ -328,11 +335,11 @@ pub type LiveParams<'a> = FilterMap<
 
 impl HirInterner {
     fn contains_ddx(
-        ddx_calls: &mut AHashMap<FuncRef, (HybridBitSet<Unkown>, HybridBitSet<Unkown>)>,
+        ddx_calls: &mut AHashMap<FuncRef, (HybridBitSet<Unknown>, HybridBitSet<Unknown>)>,
         func: &Function,
         callbacks: &TiSet<FuncRef, CallBackKind>,
         ddx: &CallBackKind,
-        val: Unkown,
+        val: Unknown,
         neg: bool,
     ) -> bool {
         if let Some(ddx) = callbacks.index(ddx) {
@@ -352,7 +359,7 @@ impl HirInterner {
         &'a mut self,
         func: &'a mut Function,
         sim_derivatives: bool,
-    ) -> DerivativeInfo {
+    ) -> KnownDerivatives {
         let mut unknowns = TiSet::default();
         let mut ddx_calls = AHashMap::new();
         // let mut nodes: AHashMap<NodeId, HybridBitSet<Value>> = AHashMap::new();
@@ -384,10 +391,10 @@ impl HirInterner {
 
             let required = match *kind {
                 ParamKind::Voltage { hi, lo: Some(lo) } => {
-                    sim_derivatives || node_required(hi, false) | node_required(lo, true)
+                    sim_derivatives | node_required(hi, false) | node_required(lo, true)
                 }
-                ParamKind::Voltage { hi, lo: None } => sim_derivatives || node_required(hi, false),
-                ParamKind::Current(_) | ParamKind::ImplicitUnkown(_) => sim_derivatives,
+                ParamKind::Voltage { hi, lo: None } => sim_derivatives | node_required(hi, false),
+                ParamKind::Current(_) | ParamKind::ImplicitUnknown(_) => sim_derivatives,
                 _ => param_required,
             };
 
@@ -396,66 +403,45 @@ impl HirInterner {
             }
         }
 
-        //         let mut i = 0;
-        //         while let Some(&node) = required_nodes.get_index(i) {
-        //             for val in nodes[&node].iter() {
-        //                 let (hi, lo) = unknowns[&val].unwrap();
-        //                 let next = if hi == node { lo } else { hi };
-        //                 required_nodes.insert(next);
-        //             }
+        for (param, vals) in self.lim_state.iter() {
+            for &(val, neg) in vals {
+                let param = func.dfg.value_def(*param).unwrap_param();
 
-        //             i += 1;
-        //         }
+                let mut required = Self::contains_ddx(
+                    &mut ddx_calls,
+                    func,
+                    &self.callbacks,
+                    &CallBackKind::Derivative(param),
+                    unknowns.len().into(),
+                    neg,
+                );
 
-        //         let mut i = 0;
-        //         let mut res = TiMap::with_capacity(unknowns.len());
-        //         let mut nodes = HybridBitSet::new_empty();
+                let mut node_required = |node, neg| {
+                    Self::contains_ddx(
+                        &mut ddx_calls,
+                        func,
+                        &self.callbacks,
+                        &CallBackKind::NodeDerivative(node),
+                        unknowns.len().into(),
+                        neg,
+                    )
+                };
 
-        //         while let Some((&val, &diff)) = unknowns.get_index(i) {
-        //             let mut actual_diff = None;
-        //             if let Some((hi, lo)) = diff {
-        //                 if required_nodes.contains(&hi) {
-        //                     let hi_ = ParamKind::Voltage { hi, lo: None };
-        //                     let lo_ = ParamKind::Voltage { hi: lo, lo: None };
+                match *self.params.get_index(param).unwrap().0 {
+                    ParamKind::Voltage { hi, lo: None } => required |= node_required(hi, neg),
+                    ParamKind::Voltage { hi, lo: Some(lo) } => {
+                        required |= node_required(hi, false) | node_required(lo, !neg);
+                    }
+                    _ => (),
+                };
 
-        //                     let (hi_, changed) = Self::ensure_param_(&mut self.params, func, hi_);
-        //                     if changed {
-        //                         unknowns.insert(hi_, None);
-        //                         Self::contains_ddx(
-        //                             &mut ddx_calls,
-        //                             func,
-        //                             &self.callbacks,
-        //                             &CallBackKind::NodeDerivative(hi),
-        //                             hi_,
-        //                         );
-        //                     }
-        //                     let (lo_, changed) = Self::ensure_param_(&mut self.params, func, lo_);
-        //                     if changed {
-        //                         unknowns.insert(lo_, None);
-        //                         Self::contains_ddx(
-        //                             &mut ddx_calls,
-        //                             func,
-        //                             &self.callbacks,
-        //                             &CallBackKind::NodeDerivative(lo),
-        //                             lo_,
-        //                         );
-        //                     }
+                if required | sim_derivatives {
+                    unknowns.insert(val);
+                }
+            }
+        }
 
-        //                     let lo_ = unknowns.get_index_of(&lo_).unwrap().into();
-        //                     let hi_ = unknowns.get_index_of(&hi_).unwrap().into();
-
-        //                     nodes.insert_growable(hi_, unknowns.len());
-        //                     nodes.insert_growable(lo_, unknowns.len());
-
-        //                     actual_diff = Some((hi_, lo_));
-        //                 }
-        //             }
-
-        //             i += 1;
-        //             res.insert(val, actual_diff);
-        //         }
-
-        DerivativeInfo { unkowns: unknowns, ddx_calls }
+        KnownDerivatives { unknowns, ddx_calls }
     }
 
     pub fn is_param_live(&self, func: &Function, kind: &ParamKind) -> bool {
@@ -509,21 +495,4 @@ impl HirInterner {
             }
         })
     }
-
-    // pub fn map(
-    //     &mut self,
-    //     place_map: &TiSet<Place, Place>,
-    //     param_map: &TiSet<CfgParam, CfgParam>,
-    //     callback_map: &TiSet<Callback, Callback>,
-    // ) {
-    //     self.places = place_map.raw.iter().map(|place| self.places[*place].clone()).collect();
-    //     self.params = param_map.raw.iter().map(|param| self.params[*param].clone()).collect();
-    //     self.callbacks =
-    //         callback_map.raw.iter().map(|callbacks| self.callbacks[*callbacks].clone()).collect();
-    // }
 }
-
-// #[derive(PartialEq, Eq, Clone, Copy, Hash)]
-// pub struct StateId(u32);
-// impl_idx_from!(StateId(u32));
-// impl_debug!(match StateId{id => "state{}",id.0;});

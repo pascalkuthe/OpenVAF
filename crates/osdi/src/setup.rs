@@ -8,7 +8,7 @@ use llvm::{
 };
 use mir::ControlFlowGraph;
 use mir_llvm::{Builder, BuilderVal, CallbackFun, CodegenCx};
-use sim_back::{BoundStepKind, SimUnkown};
+use sim_back::{BoundStepKind, SimUnknown};
 
 use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
 use crate::inst_data::OsdiInstanceParam;
@@ -74,7 +74,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         cx.declare_ext_fn(name, fun_ty)
     }
 
-    pub fn setup_model(&mut self) -> &'ll llvm::Value {
+    pub fn setup_model(&self) -> &'ll llvm::Value {
         let llfunc = self.setup_model_prototype();
         let OsdiCompilationUnit { inst_data, model_data, tys, cx, .. } = self;
 
@@ -89,12 +89,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let handle = unsafe { llvm::LLVMGetParam(llfunc, 0) };
         let model = unsafe {
             let raw = llvm::LLVMGetParam(llfunc, 1);
-            llvm::LLVMBuildPointerCast(
-                builder.llbuilder,
-                raw,
-                builder.cx.ptr_ty(model_data.ty),
-                UNNAMED,
-            )
+            llvm::LLVMBuildPointerCast(builder.llbuilder, raw, cx.ptr_ty(model_data.ty), UNNAMED)
         };
         let simparam = unsafe { llvm::LLVMGetParam(llfunc, 2) };
 
@@ -104,21 +99,20 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let i = i as u32;
 
             let dst = intern.params.unwrap_index(&ParamKind::Param(param));
-            let loc = model_data.nth_param_loc(builder.cx, i, model);
+            let loc = model_data.nth_param_loc(cx, i, model);
             builder.params[dst] = BuilderVal::Load(Box::new(loc));
 
             let dst = intern.params.unwrap_index(&ParamKind::ParamGiven { param });
             let is_given =
-                unsafe { model_data.is_nth_param_given(builder.cx, i, model, builder.llbuilder) };
+                unsafe { model_data.is_nth_param_given(cx, i, model, builder.llbuilder) };
             builder.params[dst] = BuilderVal::Eager(is_given);
         }
 
         for (i, param) in inst_data.params.keys().enumerate() {
             let i = i as u32;
 
-            let is_given = unsafe {
-                model_data.is_nth_inst_param_given(builder.cx, i, model, builder.llbuilder)
-            };
+            let is_given =
+                unsafe { model_data.is_nth_inst_param_given(cx, i, model, builder.llbuilder) };
 
             let val = unsafe {
                 model_data.read_nth_inst_param(inst_data, i as u32, model, builder.llbuilder)
@@ -128,7 +122,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 OsdiInstanceParam::Builtin(builtin) => {
                     if let Some(dst) = intern.params.index(&ParamKind::ParamSysFun(builtin)) {
                         let default_val = builtin.default_value();
-                        let default_val = builder.cx.const_real(default_val);
+                        let default_val = cx.const_real(default_val);
                         let val = unsafe { builder.select(is_given, val, default_val) };
                         builder.params[dst] = BuilderVal::Eager(val);
                     }
@@ -142,19 +136,17 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             }
         }
 
-        // let trivial_cb = builder.cx.trivial_callbacks(&[]);
-
         let res = unsafe { llvm::LLVMGetParam(llfunc, 3) };
 
-        let err_cap = unsafe { builder.alloca(builder.cx.ty_int()) };
+        let err_cap = unsafe { builder.alloca(cx.ty_int()) };
 
         let flags = unsafe { builder.struct_gep(res, 0) };
         let err_len = unsafe { builder.struct_gep(res, 1) };
         let err_ptr = unsafe { builder.struct_gep(res, 2) };
 
-        let err_ptr_ty = builder.cx.ptr_ty(tys.osdi_init_error);
-        let nullptr = builder.cx.const_null_ptr(err_ptr_ty);
-        let zero = builder.cx.const_unsigned_int(0);
+        let err_ptr_ty = cx.ptr_ty(tys.osdi_init_error);
+        let nullptr = cx.const_null_ptr(err_ptr_ty);
+        let zero = cx.const_unsigned_int(0);
 
         unsafe {
             builder.store(err_ptr, nullptr);
@@ -163,13 +155,13 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             builder.store(flags, zero);
         }
 
-        let void_ptr_ptr = builder.cx.ptr_ty(builder.cx.ty_void_ptr());
+        let void_ptr_ptr = cx.ptr_ty(cx.ty_void_ptr());
         let err_ptr_void = unsafe { builder.ptrcast(err_ptr, void_ptr_ptr) };
 
-        let invalid_param_err = Self::invalid_param_err(builder.cx);
+        let invalid_param_err = Self::invalid_param_err(cx);
 
-        let ret_flags = unsafe { builder.alloca(builder.cx.ty_int()) };
-        unsafe { builder.store(ret_flags, builder.cx.const_int(0)) };
+        let ret_flags = unsafe { builder.alloca(cx.ty_int()) };
+        unsafe { builder.store(ret_flags, cx.const_int(0)) };
 
         builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
         for (call_id, call) in intern.callbacks.iter_enumerated() {
@@ -177,7 +169,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 if !self.module.base.params[param].is_instance {
                     let id =
                         model_data.params.get_index_of(param).unwrap() + inst_data.params.len();
-                    let err_param = builder.cx.const_unsigned_int(id as u32);
+                    let err_param = cx.const_unsigned_int(id as u32);
                     let cb = CallbackFun {
                         fun_ty: invalid_param_err.0,
                         fun: invalid_param_err.1,
@@ -248,18 +240,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     pub fn setup_instance(&mut self) -> &'ll llvm::Value {
         let mark_collapsed = self.mark_collapsed();
         let llfunc = self.setup_instance_prototype();
-        let OsdiCompilationUnit { inst_data, model_data, tys, cx, module } = self;
-
-        // unsafe {
-        //     let build = LLVMCreateBuilderInContext(cx.llcx);
-
-        //     let entry = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
-        //     LLVMPositionBuilderAtEnd(build, entry);
-
-        //     LLVMBuildRet(build, cx.const_int(0));
-        //     LLVMDisposeBuilder(build);
-        //     return llfunc;
-        // }
+        let OsdiCompilationUnit { inst_data, model_data, tys, cx, module, .. } = self;
 
         let func = &module.mir.init_inst_func;
         let cfg = &module.mir.init_inst_cfg;
@@ -270,42 +251,32 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let handle = unsafe { llvm::LLVMGetParam(llfunc, 0) };
         let instance = unsafe {
             let raw = llvm::LLVMGetParam(llfunc, 1);
-            llvm::LLVMBuildPointerCast(
-                builder.llbuilder,
-                raw,
-                builder.cx.ptr_ty(inst_data.ty),
-                UNNAMED,
-            )
+            llvm::LLVMBuildPointerCast(builder.llbuilder, raw, cx.ptr_ty(inst_data.ty), UNNAMED)
         };
         let model = unsafe {
             let raw = llvm::LLVMGetParam(llfunc, 2);
-            llvm::LLVMBuildPointerCast(
-                builder.llbuilder,
-                raw,
-                builder.cx.ptr_ty(model_data.ty),
-                UNNAMED,
-            )
+            llvm::LLVMBuildPointerCast(builder.llbuilder, raw, cx.ptr_ty(model_data.ty), UNNAMED)
         };
         let temperature = unsafe { llvm::LLVMGetParam(llfunc, 3) };
         let connected_terminals = unsafe { llvm::LLVMGetParam(llfunc, 4) };
         let simparam = unsafe { llvm::LLVMGetParam(llfunc, 5) };
         let res = unsafe { llvm::LLVMGetParam(llfunc, 6) };
 
-        let ret_flags = unsafe { builder.alloca(builder.cx.ty_int()) };
-        unsafe { builder.store(ret_flags, builder.cx.const_int(0)) };
+        let ret_flags = unsafe { builder.alloca(cx.ty_int()) };
+        unsafe { builder.store(ret_flags, cx.const_int(0)) };
 
         builder.params = vec![BuilderVal::Undef; intern.params.len()].into();
 
-        let true_ = builder.cx.const_bool(true);
+        let true_ = cx.const_bool(true);
 
         for (i, param) in inst_data.params.keys().enumerate() {
             let i = i as u32;
 
             let is_inst_given =
-                unsafe { inst_data.is_nth_param_given(builder.cx, i, instance, builder.llbuilder) };
+                unsafe { inst_data.is_nth_param_given(cx, i, instance, builder.llbuilder) };
             let is_given = unsafe {
                 let is_given_model =
-                    model_data.is_nth_inst_param_given(builder.cx, i, model, builder.llbuilder);
+                    model_data.is_nth_inst_param_given(cx, i, model, builder.llbuilder);
                 builder.select(is_inst_given, true_, is_given_model)
             };
 
@@ -319,7 +290,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 OsdiInstanceParam::Builtin(builtin) => {
                     let dst = intern.params.unwrap_index(&ParamKind::ParamSysFun(builtin));
                     let default_val = builtin.default_value();
-                    let default_val = builder.cx.const_real(default_val);
+                    let default_val = cx.const_real(default_val);
                     let val = unsafe { builder.select(is_given, val, default_val) };
                     unsafe {
                         inst_data.store_nth_param(i as u32, instance, val, builder.llbuilder);
@@ -339,14 +310,13 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let i = i as u32;
 
             if let Some(dst) = intern.params.index(&ParamKind::Param(param)) {
-                let loc = model_data.nth_param_loc(builder.cx, i, model);
+                let loc = model_data.nth_param_loc(cx, i, model);
                 builder.params[dst] = BuilderVal::Load(Box::new(loc));
             }
 
             if let Some(dst) = intern.params.index(&ParamKind::ParamGiven { param }) {
-                let is_given = unsafe {
-                    model_data.is_nth_param_given(builder.cx, i, model, builder.llbuilder)
-                };
+                let is_given =
+                    unsafe { model_data.is_nth_param_given(cx, i, model, builder.llbuilder) };
                 builder.params[dst] = BuilderVal::Eager(is_given);
             }
         }
@@ -356,7 +326,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         }
 
         for (node_id, unkown) in module.node_ids.iter_enumerated() {
-            if let SimUnkown::KirchoffLaw(node) = unkown {
+            if let SimUnknown::KirchoffLaw(node) = unkown {
                 if let Some((dst, val)) =
                     intern.params.index_and_val(&ParamKind::PortConnected { port: *node })
                 {
@@ -364,7 +334,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         continue;
                     }
 
-                    let id = builder.cx.const_unsigned_int(node_id.into());
+                    let id = cx.const_unsigned_int(node_id.into());
                     let is_connected = unsafe { builder.int_cmp(id, connected_terminals, IntSLT) };
                     builder.params[dst] = BuilderVal::Eager(is_connected)
                 }
@@ -375,19 +345,19 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         unsafe { inst_data.store_temperature(&builder, instance, temperature) };
         unsafe { inst_data.store_connected_ports(&builder, instance, connected_terminals) };
 
-        let trivial_cb = builder.cx.trivial_callbacks(&[]);
+        let trivial_cb = cx.trivial_callbacks(&[]);
 
-        let err_cap = unsafe { builder.alloca(builder.cx.ty_int()) };
+        let err_cap = unsafe { builder.alloca(cx.ty_int()) };
 
         let flags = unsafe { builder.struct_gep(res, 0) };
         let err_len = unsafe { builder.struct_gep(res, 1) };
         let err_ptr = unsafe { builder.struct_gep(res, 2) };
-        let void_ptr_ptr = builder.cx.ptr_ty(builder.cx.ty_void_ptr());
+        let void_ptr_ptr = cx.ptr_ty(cx.ty_void_ptr());
         let err_ptr_void = unsafe { builder.ptrcast(err_ptr, void_ptr_ptr) };
 
-        let err_ptr_ty = builder.cx.ptr_ty(tys.osdi_init_error);
-        let nullptr = builder.cx.const_null_ptr(err_ptr_ty);
-        let zero = builder.cx.const_unsigned_int(0);
+        let err_ptr_ty = cx.ptr_ty(tys.osdi_init_error);
+        let nullptr = cx.const_null_ptr(err_ptr_ty);
+        let zero = cx.const_unsigned_int(0);
 
         unsafe {
             builder.store(err_ptr, nullptr);
@@ -396,7 +366,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             builder.store(flags, zero);
         }
 
-        let invalid_param_err = Self::invalid_param_err(builder.cx);
+        let invalid_param_err = Self::invalid_param_err(cx);
         builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
         for (call_id, call) in intern.callbacks.iter_enumerated() {
             let cb = match call {
@@ -404,7 +374,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     if let Some(id) =
                         inst_data.params.get_index_of(&OsdiInstanceParam::User(*param))
                     {
-                        let err_param = builder.cx.const_unsigned_int(id as u32);
+                        let err_param = cx.const_unsigned_int(id as u32);
                         CallbackFun {
                             fun_ty: invalid_param_err.0,
                             fun: invalid_param_err.1,
@@ -418,14 +388,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 }
                 CallBackKind::CollapseHint(node1, node2) => {
                     let (idx, extra_indecies) = module.mir.collapse.unwrap_index_and_val(&(
-                        SimUnkown::KirchoffLaw(*node1),
-                        node2.map(SimUnkown::KirchoffLaw),
+                        SimUnknown::KirchoffLaw(*node1),
+                        node2.map(SimUnknown::KirchoffLaw),
                     ));
-                    let idx = builder.cx.const_unsigned_int(idx.into());
+                    let idx = cx.const_unsigned_int(idx.into());
                     let mut state = vec![instance, idx];
                     for &idx in extra_indecies.iter() {
                         state.push(instance);
-                        let idx = builder.cx.const_unsigned_int(idx.into());
+                        let idx = cx.const_unsigned_int(idx.into());
                         state.push(idx)
                     }
                     CallbackFun {
@@ -476,22 +446,22 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         builder.select_bb(exit_bb);
 
         for (idx, (collapse, _)) in module.mir.collapse.iter_enumerated() {
-            if let (SimUnkown::Implicit(equation), None) = collapse {
+            if let (SimUnknown::Implicit(equation), None) = collapse {
                 let should_collapse = PlaceKind::CollapseImplicitEquation(*equation);
                 let outputs = &module.mir.init_inst_intern.outputs;
                 let should_collapse = outputs[&should_collapse].unwrap_unchecked();
                 unsafe {
                     let should_collapse = builder.values[should_collapse].get(&builder);
-                    let idx = builder.cx.const_unsigned_int(idx.into());
+                    let idx = cx.const_unsigned_int(idx.into());
 
-                    let llcx = builder.cx.llcx;
+                    let llcx = cx.llcx;
                     let llbuilder = &*builder.llbuilder;
 
                     let else_bb = LLVMAppendBasicBlockInContext(llcx, builder.fun, UNNAMED);
                     let then_bb = LLVMAppendBasicBlockInContext(llcx, builder.fun, UNNAMED);
                     LLVMBuildCondBr(llbuilder, should_collapse, then_bb, else_bb);
                     LLVMPositionBuilderAtEnd(llbuilder, then_bb);
-                    inst_data.store_is_collapsible(builder.cx, builder.llbuilder, instance, idx);
+                    inst_data.store_is_collapsible(cx, builder.llbuilder, instance, idx);
                     LLVMBuildBr(llbuilder, else_bb);
                     LLVMPositionBuilderAtEnd(llbuilder, else_bb);
                 }
@@ -500,16 +470,15 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         if module.mir.bound_step == BoundStepKind::Setup {
             let bound_step_ptr = unsafe { inst_data.bound_step_ptr(&builder, instance) };
-            unsafe { builder.store(bound_step_ptr, builder.cx.const_real(f64::INFINITY)) };
+            unsafe { builder.store(bound_step_ptr, cx.const_real(f64::INFINITY)) };
 
             let func_ref = intern.callbacks.unwrap_index(&CallBackKind::BoundStep);
-            let ty_real_ptr = builder.cx.ptr_ty(builder.cx.ty_real());
+            let ty_real_ptr = cx.ptr_ty(cx.ty_real());
             let fun = builder
                 .cx
                 .get_func_by_name("bound_step")
                 .expect("stdlib function bound_step is missing");
-            let fun_ty =
-                builder.cx.ty_func(&[ty_real_ptr, builder.cx.ty_real()], builder.cx.ty_void());
+            let fun_ty = cx.ty_func(&[ty_real_ptr, cx.ty_real()], cx.ty_void());
             let cb = CallbackFun { fun_ty, fun, state: Box::new([bound_step_ptr]), num_state: 0 };
             builder.callbacks[func_ref] = Some(cb);
         }

@@ -278,7 +278,7 @@ struct TyInterpolater<'b, 'a> {
 }
 impl ToTokens for TyInterpolater<'_, '_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        if self.ty.func_args.is_some() {
+        if self.ty.func_args.is_some() || self.ty.base == BaseTy::Void {
             quote!(&'ll llvm::Value).to_tokens(tokens);
             return;
         }
@@ -356,7 +356,7 @@ impl ToTokens for LLVMValInterp<'_, '_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let ident = Ident::new(self.name, Span::call_site());
         let src = quote!(self.#ident);
-        if self.ty.func_args.is_some() {
+        if self.ty.func_args.is_some() || self.ty.base == BaseTy::Void {
             src.to_tokens(tokens);
             return;
         }
@@ -436,6 +436,9 @@ impl ToTokens for LLVMValPreInterp<'_, '_> {
                 quote!(ctx.const_str_uninterned(&*#calc_src))
             }
             BaseTy::Bool => quote!(ctx.const_c_bool(*#calc_src)),
+            BaseTy::Void if indirection == 1 => {
+                return;
+            }
             BaseTy::Void => unreachable!(),
             BaseTy::Struct(_) => {
                 quote!(#calc_src.to_ll_val(ctx, tys))
@@ -479,7 +482,8 @@ impl ToTokens for OsdiStructInterp<'_, '_> {
                 pos: pos as u32,
                 lut: self.lut,
             });
-            let has_ll = fields.iter().any(|(_, ty)| ty.func_args.is_some());
+            let has_ll =
+                fields.iter().any(|(_, ty)| ty.func_args.is_some() || ty.base == BaseTy::Void);
 
             let mut lt = quote!();
             let mut func_lt = quote!(<'ll>);
@@ -493,7 +497,7 @@ impl ToTokens for OsdiStructInterp<'_, '_> {
                 }
 
                 impl #lt #ident #lt{
-                    pub fn to_ll_val #func_lt (&self, ctx: &mut CodegenCx<'_,'ll>, tys: &'ll OsdiTys) -> &'ll llvm::Value{
+                    pub fn to_ll_val #func_lt (&self, ctx: &CodegenCx<'_,'ll>, tys: &'ll OsdiTys) -> &'ll llvm::Value{
                         #(#field_ll_arrays)*
                         let fields = [#(#field_ll_vals),*];
                         let ty = tys.#llvm_ty_ident;
