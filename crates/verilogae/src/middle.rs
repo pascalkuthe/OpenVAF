@@ -77,10 +77,11 @@ impl CompilationDB {
             self,
             info.module.into(),
             &|kind| {
-                matches!(
+                let is_output = matches!(
                     kind,
                     PlaceKind::Var(var) if outputs.contains(&var)
-                )
+                );
+                is_output
             },
             &mut outputs.iter().copied(),
         )

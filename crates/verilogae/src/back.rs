@@ -617,7 +617,7 @@ impl CodegenCtx<'_, '_> {
         param_init_func: Function,
         param_init_intern: HirInterner,
     ) {
-        let module = unsafe { self.llbackend.new_module("model_info", self.opt_lvl).unwrap() };
+        let module = unsafe { self.llbackend.new_module("model_info", OptLevel::None).unwrap() };
         let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let (fun_names, fun_symbols) = interned_model.functions(&cx);
