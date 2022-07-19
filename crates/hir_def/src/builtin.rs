@@ -96,14 +96,14 @@ pub enum BuiltIn {
     analog_port_alias = 83u8,
     test_plusargs = 84u8,
     value_plusargs = 85u8,
-    analysis = 86u8,
-    ac_stim = 87u8,
-    noise_table = 88u8,
-    noise_table_log = 89u8,
-    white_noise = 90u8,
-    flicker_noise = 91u8,
-    limit = 92u8,
-    bound_step = 93u8,
+    bound_step = 86u8,
+    analysis = 87u8,
+    ac_stim = 88u8,
+    noise_table = 89u8,
+    noise_table_log = 90u8,
+    white_noise = 91u8,
+    flicker_noise = 92u8,
+    limit = 93u8,
     absdelay = 94u8,
     ddt = 95u8,
     idt = 96u8,
@@ -159,7 +159,7 @@ impl BuiltIn {
     #[allow(clippy::match_like_matches_macro)]
     pub fn is_analog_operator_sysfun(self) -> bool {
         match self {
-            BuiltIn::limit | BuiltIn::bound_step => true,
+            BuiltIn::limit => true,
             _ => false,
         }
     }
@@ -282,6 +282,7 @@ pub fn insert_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>)
     dst.insert(sysfun::analog_port_alias, BuiltIn::analog_port_alias.into());
     dst.insert(sysfun::test_plusargs, BuiltIn::test_plusargs.into());
     dst.insert(sysfun::value_plusargs, BuiltIn::value_plusargs.into());
+    dst.insert(sysfun::bound_step, BuiltIn::bound_step.into());
     dst.insert(kw::analysis, BuiltIn::analysis.into());
     dst.insert(kw::ac_stim, BuiltIn::ac_stim.into());
     dst.insert(kw::noise_table, BuiltIn::noise_table.into());
@@ -289,7 +290,6 @@ pub fn insert_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>)
     dst.insert(kw::white_noise, BuiltIn::white_noise.into());
     dst.insert(kw::flicker_noise, BuiltIn::flicker_noise.into());
     dst.insert(sysfun::limit, BuiltIn::limit.into());
-    dst.insert(sysfun::bound_step, BuiltIn::bound_step.into());
     dst.insert(kw::absdelay, BuiltIn::absdelay.into());
     dst.insert(kw::ddt, BuiltIn::ddt.into());
     dst.insert(kw::idt, BuiltIn::idt.into());

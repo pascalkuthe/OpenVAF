@@ -23,7 +23,7 @@ const ANALOG_OPERATORS: [&str; 17] = [
     "transition",
 ];
 
-const ANALOG_OPERATORS_SYSFUN: [&str; 2] = ["$limit", "$bound_step"];
+const ANALOG_OPERATORS_SYSFUN: [&str; 1] = ["$limit"];
 
 const ANALYSIS_FUNS: [&str; 6] =
     ["analysis", "ac_stim", "noise_table", "noise_table_log", "white_noise", "flicker_noise"];
@@ -58,7 +58,7 @@ const BUILTINS: [&str; 25] = [
 
 const PARAM_SYSFUNS: [&str; 6] = ["mfactor", "xposition", "yposition", "angle", "hflip", "vflip"];
 
-const SYSFUNS: [&str; 80] = [
+const SYSFUNS: [&str; 81] = [
     "$display",
     "$strobe",
     "$write",
@@ -144,6 +144,7 @@ const SYSFUNS: [&str; 80] = [
     // "$table_model",
     "$test$plusargs",
     "$value$plusargs",
+    "$bound_step",
 ];
 
 #[test]
