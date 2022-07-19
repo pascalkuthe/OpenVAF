@@ -6,10 +6,20 @@ use basedb::lints::{self, LintLevel};
 use clap::{Arg, Command, PossibleValue, ValueHint};
 use path_absolutize::Absolutize;
 
+const ABOUT: &str = r"OpenVAF is a next generation general purpose Verilog-A compiler.
+This binary allows compilations of Verilog-A files for use in circuit simulators.
+
+Copyright (c) 2022 Pascal Kuthe. This file is part of the OpenVAF project. It is subject to the
+license terms in the LICENSE file found in the top-level directory of this distribution and at
+https://gitlab.com/DSPOM/openvaf/blob/master/LICENSE. No part of OpenVAF may be copied,
+modified, propagated, or distributed except according to the terms contained in the LICENSE file.
+";
+
 pub fn main_command() -> Command<'static> {
     Command::new("openvaf")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Pascal Kuthe - Semimod GmbH")
+        .about(ABOUT)
         .args([
             def_arg(),
             include_dir(),

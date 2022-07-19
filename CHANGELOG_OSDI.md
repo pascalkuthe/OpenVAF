@@ -7,13 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [unreleased]
+## 0.1.2 - 2022-07-19
 
 ### Added
 
 * Added support for `$limit`
 * Added support for `$abstime` (now returns a non-zero value for large signal simulations).
 * Added support for `$bound_step` (now the simulator can read the minimum value passed to `$bound_step`).
+* Add general description to the start of the help text
 
 ### Changed
 
