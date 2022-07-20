@@ -8,8 +8,8 @@ exclude = ["exclude/*"]
 lto = "fat"
 incremental = true
 panic = "abort"
-debug = true
-strip = false
+debug = false
+strip = true
 codegen-units = 1
 
 

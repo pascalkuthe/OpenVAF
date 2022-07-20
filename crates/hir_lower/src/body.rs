@@ -1896,7 +1896,11 @@ impl LoweringCtx<'_, '_> {
                 self.func.seal_block(unreachable_bb);
                 GRAVESTONE
             }
-            BuiltIn::analysis => TRUE,
+            BuiltIn::analysis => {
+                let cb = self.callback(CallBackKind::Analysis);
+                let arg = self.lower_expr(args[0]);
+                self.func.ins().call1(cb, &[arg])
+            }
             BuiltIn::ac_stim
             | BuiltIn::noise_table
             | BuiltIn::noise_table_log

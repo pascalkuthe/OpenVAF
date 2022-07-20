@@ -267,6 +267,7 @@ impl EvalMir {
                     CallBackKind::SimParam
                     | CallBackKind::SimParamOpt
                     | CallBackKind::StoreLimit(_)
+                    | CallBackKind::Analysis
                     | CallBackKind::SimParamStr => {
                         op_dependent_insts.insert(inst);
                         op_dependent.push(func.dfg.first_result(inst));

@@ -284,6 +284,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         let fun_ty = cx.ty_func(&[cx.ptr_ty(cx.ty_int())], cx.ty_void());
                         CallbackFun { fun_ty, fun, state: Box::new([ret_flags]), num_state: 0 }
                     }
+                    CallBackKind::Analysis => {
+                        let fun = builder
+                            .cx
+                            .get_func_by_name("analysis")
+                            .expect("stdlib function analysis is missing");
+                        let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str()], cx.ty_int());
+                        CallbackFun { fun_ty, fun, state: Box::new([sim_info_void]), num_state: 0 }
+                    }
                     _ => continue,
                 };
                 builder.callbacks[func] = Some(cb);

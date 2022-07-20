@@ -211,6 +211,12 @@ impl EvalMir {
                          _rets: &[Value],
                          _ptr: *mut c_void| {}
                     }
+                    hir_lower::CallBackKind::Analysis => {
+                        |state: &mut InterpreterState,
+                         _args: &[Value],
+                         rets: &[Value],
+                         _ptr: *mut c_void| { state.write(rets[0], true) }
+                    }
                 };
 
                 (res, ptr)

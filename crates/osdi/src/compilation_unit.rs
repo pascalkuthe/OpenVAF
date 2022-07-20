@@ -248,6 +248,7 @@ pub fn general_callbacks<'ll>(
                 | CallBackKind::BuiltinLimit { .. }
                 | CallBackKind::StoreLimit(_)
                 | CallBackKind::LimDiscontinuity
+                | CallBackKind::Analysis
                 | CallBackKind::BoundStep => return None,
 
                 CallBackKind::Print { kind, arg_tys } => {

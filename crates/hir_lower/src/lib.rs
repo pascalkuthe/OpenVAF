@@ -201,6 +201,7 @@ pub enum CallBackKind {
     BuiltinLimit { name: Spur, num_args: u32 },
     StoreLimit(LimitState),
     LimDiscontinuity,
+    Analysis,
 }
 
 impl CallBackKind {
@@ -277,6 +278,12 @@ impl CallBackKind {
                 params: 0,
                 returns: 0,
                 has_sideeffects: true,
+            },
+            CallBackKind::Analysis => FunctionSignature {
+                name: "analysis".to_owned(),
+                params: 1,
+                returns: 1,
+                has_sideeffects: false,
             },
         }
     }

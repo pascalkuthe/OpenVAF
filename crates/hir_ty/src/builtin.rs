@@ -174,7 +174,7 @@ bultins! {
     }
 
     ANALYSIS = const {
-        fn ANAYLSIS_SIG(Val(String)) -> Bool;
+        fn ANAYLSIS_SIG(Val(String)) -> Integer;
     }
 
     AC_STIM = const {
