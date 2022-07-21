@@ -1,1 +1,0 @@
-modelParameters             SWJUNASYM=0

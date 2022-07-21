@@ -1,7 +1,7 @@
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use bitset::BitSet;
 use hir_def::db::HirDefDB;
-use hir_def::ParamSysFun;
+use hir_def::{NodeId, ParamSysFun};
 use hir_lower::{
     HirInterner, ImplicitEquationKind, ParamKind, PlaceKind, REACTIVE_DIM, RESISTIVE_DIM,
 };
@@ -9,39 +9,18 @@ use hir_ty::inference::BranchWrite;
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{
-    ControlFlowGraph, Function, Inst, InstructionData, KnownDerivatives, Opcode, Value, ValueDef,
-    FALSE, F_ZERO, TRUE,
-};
+use mir::{ControlFlowGraph, Function, Inst, KnownDerivatives, Value, FALSE, F_ZERO, TRUE};
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
-use workqueue::WorkStack;
 
 use crate::compilation_db::CompilationDB;
-use crate::{strip_optbarrier, SimUnknown};
+use crate::util::{get_contrib, has_any_contrib, strip_optbarrier, SwitchBranchInfo};
+use crate::SimUnknown;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct ResidualId(u32);
 impl_idx_from!(ResidualId(u32));
 impl_debug_display! {match ResidualId{ResidualId(id) => "res{id}";}}
-
-fn get_contrib(
-    cursor: &mut FuncCursor,
-    intern: &HirInterner,
-    dst: BranchWrite,
-    react: bool,
-    voltage_src: bool,
-) -> Value {
-    let dim = if react { REACTIVE_DIM } else { RESISTIVE_DIM };
-    let contrib = PlaceKind::Contribute { dst, dim, voltage_src };
-
-    intern
-        .outputs
-        .get(&contrib)
-        .and_then(|val| val.expand())
-        .map(|val| strip_optbarrier(cursor.func, val))
-        .unwrap_or(F_ZERO)
-}
 
 fn src_residual(
     cursor: &mut FuncCursor,
@@ -50,8 +29,8 @@ fn src_residual(
     voltage_src: bool,
     db: &CompilationDB,
 ) -> [Value; 2] {
-    let resist_val = get_contrib(cursor, intern, dst, false, voltage_src);
-    let react_val = get_contrib(cursor, intern, dst, true, voltage_src);
+    let resist_val = get_contrib(cursor.func, intern, dst, RESISTIVE_DIM, voltage_src);
+    let react_val = get_contrib(cursor.func, intern, dst, REACTIVE_DIM, voltage_src);
 
     let unkown = if voltage_src {
         let (hi, lo) = dst.nodes(db);
@@ -80,19 +59,6 @@ pub struct Residual {
     pub reactive: TiMap<ResidualId, SimUnknown, Value>,
 }
 
-fn is_opdepenent(
-    func: &Function,
-    val: Value,
-    op_dependent: &BitSet<Inst>,
-    intern: &HirInterner,
-) -> bool {
-    match func.dfg.value_def(val) {
-        ValueDef::Result(inst, _) => op_dependent.contains(inst),
-        ValueDef::Param(param) => intern.params.get_index(param).unwrap().0.op_dependent(),
-        ValueDef::Const(_) | ValueDef::Invalid => false,
-    }
-}
-
 impl Residual {
     pub fn contains(&self, unkown: SimUnknown) -> bool {
         self.resistive.contains_key(&unkown) || self.reactive.contains_key(&unkown)
@@ -107,7 +73,7 @@ impl Residual {
         cursor: &mut FuncCursor,
         intern: &mut HirInterner,
         cfg: &mut ControlFlowGraph,
-        op_dependent: &BitSet<Inst>,
+        op_dependent_insts: &BitSet<Inst>,
     ) {
         let current = branch.into();
         let is_voltage_src = strip_optbarrier(cursor.func, is_voltage_src);
@@ -121,23 +87,14 @@ impl Residual {
                 } else {
                     // no extra unkowns required
 
-                    let resist_val = get_contrib(cursor, intern, branch, false, false);
+                    let resist_val = get_contrib(cursor.func, intern, branch, RESISTIVE_DIM, false);
+                    let react_val = get_contrib(cursor.func, intern, branch, REACTIVE_DIM, false);
                     if resist_val != F_ZERO {
                         self.add_kirchoff_laws(cursor, resist_val, branch, false, db);
                     }
-
-                    let react_val = get_contrib(cursor, intern, branch, true, false);
                     if react_val != F_ZERO {
                         self.add_kirchoff_laws(cursor, react_val, branch, true, db);
                     }
-                    // let (hi, lo) = branch.nodes(db);
-                    // if let Some(lo) = lo {
-                    //     println!(
-                    //         "I({} {}) = {react_val}",
-                    //         db.node_data(hi).name,
-                    //         db.node_data(lo).name
-                    //     );
-                    // }
                     return;
                 }
             }
@@ -148,9 +105,8 @@ impl Residual {
                 let requires_unkown =
                     intern.is_param_live(cursor.func, &ParamKind::Current(current));
 
-                let static_collapse = !requires_unkown
-                    && get_contrib(cursor, intern, branch, false, true) == F_ZERO
-                    && get_contrib(cursor, intern, branch, true, true) == F_ZERO;
+                let static_collapse =
+                    !requires_unkown && !has_any_contrib(cursor.func, intern, branch, true);
 
                 if static_collapse {
                     // just node collapsing
@@ -162,21 +118,17 @@ impl Residual {
 
             // switch branch
             _ => {
-                let requires_unkown =
-                    intern.is_param_live(cursor.func, &ParamKind::Current(current));
-                let op_dependent = is_opdepenent(cursor.func, is_voltage_src, op_dependent, intern);
+                let br_info = SwitchBranchInfo::analyze(
+                    cursor.func,
+                    intern,
+                    op_dependent_insts,
+                    is_voltage_src,
+                    branch,
+                );
+                let resist_current = get_contrib(cursor.func, intern, branch, RESISTIVE_DIM, false);
+                let react_current = get_contrib(cursor.func, intern, branch, REACTIVE_DIM, false);
 
-                let resist_voltage = get_contrib(cursor, intern, branch, false, true);
-                let react_voltage = get_contrib(cursor, intern, branch, true, true);
-                let just_current_src = !requires_unkown
-                    && !op_dependent
-                    && resist_voltage == F_ZERO
-                    && react_voltage == F_ZERO;
-
-                let resist_current = get_contrib(cursor, intern, branch, false, false);
-                let react_current = get_contrib(cursor, intern, branch, true, false);
-
-                if just_current_src {
+                if br_info.just_current_src() {
                     // no extra unkowns required so just node collapsing + current source is
                     // enough
                     if resist_current != F_ZERO {
@@ -205,18 +157,13 @@ impl Residual {
                 cursor.ins().jump(next_block);
 
                 cursor.goto_bottom(current_src_bb);
-                let introduce_unkown =
-                    requires_unkown || resist_voltage != F_ZERO || react_voltage != F_ZERO;
 
-                let current_residual = if introduce_unkown {
+                let current_residual = if br_info.introduce_unkown {
                     src_residual(cursor, intern, branch, false, db)
                 } else {
-                    let val = if op_dependent {
+                    let val = if br_info.op_dependent {
                         intern.ensure_param(cursor.func, ParamKind::Current(branch.into()))
                     } else {
-                        // TODO collapse
-                        // let func_ref = intern.;
-                        //     cursor.ins().call(func_ref, &[]);
                         F_ZERO
                     };
                     [val, F_ZERO]
@@ -233,7 +180,7 @@ impl Residual {
                     (voltage_src_bb, voltage_residual[1]),
                 ]);
 
-                if !introduce_unkown {
+                if !br_info.introduce_unkown {
                     if resist_current != F_ZERO {
                         let residual_resist = cursor
                             .ins()
@@ -266,101 +213,37 @@ impl Residual {
         cursor: &mut FuncCursor,
         intern: &mut HirInterner,
         cfg: &mut ControlFlowGraph,
-        op_dependent: &BitSet<Inst>,
+        op_dependent_insts: &BitSet<Inst>,
+        pruned: &AHashSet<NodeId>,
     ) {
-        let mut queue = WorkStack::with_none(cursor.func.dfg.num_values());
-
-        for equation in intern.implicit_equations.keys() {
-            if let ImplicitEquationKind::DdtContrib(arg) = intern.implicit_equations[equation] {
-                let unkown = intern.params.raw[&ParamKind::ImplicitUnknown(equation)];
-
-                if cursor.func.dfg.value_dead(unkown) {
-                    continue;
-                }
-
-                let arg_op_dependent = is_opdepenent(cursor.func, arg, op_dependent, intern);
-
-                if !arg_op_dependent {
-                    cursor.func.dfg.replace_uses(unkown, F_ZERO);
-                }
-
-                queue.insert(arg);
-
-                let mut requires_unkown = false;
-                while let Some(val) = queue.take() {
-                    for use_ in cursor.func.dfg.uses(val) {
-                        let (inst, arg) = cursor.func.dfg.use_to_operand(use_);
-                        let non_linear = match cursor.func.dfg.insts[inst] {
-                            InstructionData::Unary {
-                                opcode: Opcode::Fneg | Opcode::OptBarrier,
-                                ..
-                            }
-                            | InstructionData::Binary {
-                                opcode: Opcode::Fsub | Opcode::Fadd, ..
-                            }
-                            | InstructionData::Call { .. }
-                            | InstructionData::PhiNode(_) => false,
-                            InstructionData::Binary { opcode: Opcode::Fmul, args } => {
-                                let factor = args[(arg == 0) as usize];
-                                is_opdepenent(cursor.func, factor, op_dependent, intern)
-                            }
-
-                            InstructionData::Binary { opcode: Opcode::Fdiv, args: [_, factor] }
-                                if arg == 0 =>
-                            {
-                                is_opdepenent(cursor.func, factor, op_dependent, intern)
-                            }
-
-                            _ => true,
-                        };
-
-                        if non_linear {
-                            requires_unkown = true;
-                            break;
-                        }
-
-                        for res in cursor.func.dfg.inst_results(inst) {
-                            queue.insert(*res);
-                        }
-                    }
-                }
-
-                queue.clear();
-
-                let new_arg = if requires_unkown {
-                    intern.implicit_equations[equation] = ImplicitEquationKind::Ddt;
-                    F_ZERO
-                } else {
-                    cursor.func.dfg.replace_uses(unkown, F_ZERO);
-                    strip_optbarrier(cursor.func, arg)
-                };
-
-                cursor.func.dfg.replace_uses(arg, new_arg);
-            }
-        }
-
-        drop(queue);
-
+        // self.remove_linear_ddt_unkowns(cursor, intern, op_dependent_insts);
         for i in 0..intern.outputs.len() {
             let (kind, val) = intern.outputs.get_index(i).unwrap();
 
             match *kind {
-                PlaceKind::IsVoltageSrc(branch) => self.add_branch_contributions(
-                    val.unwrap_unchecked(),
-                    branch,
-                    db,
-                    cursor,
-                    intern,
-                    cfg,
-                    op_dependent,
-                ),
+                PlaceKind::IsVoltageSrc(branch) => {
+                    if let (node, None) = branch.nodes(db) {
+                        if pruned.contains(&node) {
+                            continue;
+                        }
+                    }
+                    self.add_branch_contributions(
+                        val.unwrap_unchecked(),
+                        branch,
+                        db,
+                        cursor,
+                        intern,
+                        cfg,
+                        op_dependent_insts,
+                    )
+                }
                 PlaceKind::ImplicitResidual {
                     equation,
                     dim: dim @ (RESISTIVE_DIM | REACTIVE_DIM),
                 } => {
                     if matches!(
                         intern.implicit_equations[equation],
-                        ImplicitEquationKind::DdtContrib(_)
+                        ImplicitEquationKind::LinearDdt
                     ) {
                         continue;
                     }

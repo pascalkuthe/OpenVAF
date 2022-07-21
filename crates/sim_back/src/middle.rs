@@ -1,7 +1,8 @@
+use ahash::AHashSet;
 use bitset::{BitSet, SparseBitMatrix};
 use hir_def::db::HirDefDB;
-use hir_def::Type;
-use hir_lower::{CallBackKind, CurrentKind, HirInterner, MirBuilder, PlaceKind};
+use hir_def::{NodeId, Type};
+use hir_lower::{CallBackKind, CurrentKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
 use hir_ty::inference::BranchWrite;
 use indexmap::{IndexMap, IndexSet};
 use lasso::Rodeo;
@@ -20,8 +21,10 @@ use typed_indexmap::TiMap;
 use crate::compilation_db::{CompilationDB, ModuleInfo};
 use crate::lim_rhs::LimRhs;
 use crate::matrix::JacobianMatrix;
+use crate::prune::prune_unkowns;
 use crate::residual::Residual;
-use crate::{strip_optbarrier, SimUnknown};
+use crate::util::strip_optbarrier;
+use crate::SimUnknown;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct CacheSlot(u32);
@@ -60,6 +63,7 @@ pub struct EvalMir {
 
     pub collapse: TiMap<CollapsePair, (SimUnknown, Option<SimUnknown>), Vec<CollapsePair>>,
     pub lim_rhs: LimRhs,
+    pub pruned_nodes: AHashSet<NodeId>,
 }
 
 impl EvalMir {
@@ -125,7 +129,7 @@ impl EvalMir {
             }
         }
 
-        let op_dependent: Vec<Value> = intern
+        let mut op_dependent: IndexSet<Value, _> = intern
             .params
             .raw
             .iter()
@@ -141,8 +145,17 @@ impl EvalMir {
             })
             .collect();
 
-        let mut op_dependent_insts = BitSet::new_empty(func.dfg.num_insts());
-        propagate_taint(&func, &dom_tree, &op_dependent, &mut op_dependent_insts);
+        let (mut op_dependent_insts, _is_noise, pruned) =
+            prune_unkowns(db, &mut func, &mut intern, &dom_tree, &op_dependent);
+
+        let mut pruned_nodes = AHashSet::default();
+        for pruned_param in pruned.iter() {
+            let node = match intern.params.get_index(pruned_param).unwrap().0 {
+                ParamKind::Voltage { hi, lo: None } => *hi,
+                _ => unreachable!(),
+            };
+            pruned_nodes.insert(node);
+        }
 
         let bound_step_op_dependent = op_dependent_insts.iter().any(|inst| {
             if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
@@ -154,21 +167,17 @@ impl EvalMir {
 
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
         let mut residual = Residual::default();
-        residual.populate(db, &mut cursor, &mut intern, &mut cfg, &op_dependent_insts);
 
+        residual.populate(
+            db,
+            &mut cursor,
+            &mut intern,
+            &mut cfg,
+            &op_dependent_insts,
+            &pruned_nodes,
+        );
         let new_output_bb = cursor.current_block().unwrap();
         output_block = new_output_bb;
-
-        //         for (kind, val) in intern.params.iter() {
-        //             if let ParamKind::Voltage { hi, lo } = *kind {
-        //                 if let Some(lo) = lo {
-        //                     print!("({},{})", db.node_data(hi).name, db.node_data(lo).name)
-        //                 } else {
-        //                     print!("({},gnd)", db.node_data(hi).name)
-        //                 }
-        //                 println!(" = {val}")
-        //             }
-        //         }
 
         dom_tree.compute(&func, &cfg, true, true, false);
         let derivatives = intern.unkowns(&mut func, true);
@@ -242,22 +251,6 @@ impl EvalMir {
             *out_val = val.into();
         }
 
-        let mut op_dependent: Vec<Value> = intern
-            .params
-            .raw
-            .iter()
-            .filter_map(|(param, &val)| {
-                if func.dfg.value_dead(val) {
-                    return None;
-                }
-                if param.op_dependent() {
-                    Some(val)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
         op_dependent_insts.clear();
         op_dependent_insts.ensure(func.dfg.num_insts());
         let mut has_bound_step = false;
@@ -270,7 +263,7 @@ impl EvalMir {
                     | CallBackKind::Analysis
                     | CallBackKind::SimParamStr => {
                         op_dependent_insts.insert(inst);
-                        op_dependent.push(func.dfg.first_result(inst));
+                        op_dependent.insert(func.dfg.first_result(inst));
                     }
                     CallBackKind::BoundStep if func.layout.inst_block(inst).is_some() => {
                         has_bound_step = true;
@@ -530,6 +523,7 @@ impl EvalMir {
             init_model_func,
             bound_step,
             collapse,
+            pruned_nodes,
         }
     }
 }

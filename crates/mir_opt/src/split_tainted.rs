@@ -1,4 +1,5 @@
 use bitset::BitSet;
+use indexmap::IndexSet;
 use mir::{Block, Function, Inst, InstructionData, Value};
 
 use mir::DominatorTree;
@@ -6,7 +7,7 @@ use mir::DominatorTree;
 pub fn propagate_taint(
     func: &Function,
     dom_tree: &DominatorTree,
-    tainted: &[Value],
+    tainted: &IndexSet<Value, ahash::RandomState>,
     tainted_insts: &mut BitSet<Inst>,
 ) {
     tainted_insts.ensure(func.dfg.num_insts());

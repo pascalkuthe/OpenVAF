@@ -137,8 +137,12 @@ impl<'a> OsdiModule<'a> {
 
         let node_ids = {
             // add all internal nodes
-            let internal_nodes =
-                module_data.internal_nodes.iter().map(|node| SimUnknown::KirchoffLaw(*node));
+            let internal_nodes = module_data.internal_nodes.iter().filter_map(|node| {
+                if mir.pruned_nodes.contains(node) {
+                    return None;
+                }
+                Some(SimUnknown::KirchoffLaw(*node))
+            });
 
             terminals.raw.extend(internal_nodes);
 

@@ -22,12 +22,10 @@ hir_lower = {version ="0.0.0", path ="../hir_lower"}
 hir_ty = { version = "0.0.0", path = "../hir_ty" }
 
 mir = { version = "0.0.0", path = "../mir" }
-mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
 mir_autodiff = { version = "0.0.0", path = "../mir_autodiff" }
 mir_opt = { version = "0.0.0", path = "../mir_opt" }
 workqueue = {version = "0.0.0", path = "../workqueue" }
 
-llvm = { version = "0.0.0", path = "../llvm" }
 target = { version = "0.0.0", path = "../target" }
 
 typed-index-collections = "3.0"

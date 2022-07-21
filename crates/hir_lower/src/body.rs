@@ -1918,7 +1918,7 @@ impl LoweringCtx<'_, '_> {
                     // optbarrier to allow removing this if this is not a linear contribute
                     let arg0 = self.func.ins().optbarrier(arg0);
                     self.extra_dims.as_mut().unwrap()[REACTIVE_DIM].insert(expr, arg0);
-                    ImplicitEquationKind::DdtContrib(arg0)
+                    ImplicitEquationKind::UnresolvedDdt(arg0)
                 } else {
                     ImplicitEquationKind::Ddt
                 };

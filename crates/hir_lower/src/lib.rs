@@ -26,7 +26,8 @@ mod tests;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImplicitEquationKind {
     Ddt,
-    DdtContrib(Value),
+    UnresolvedDdt(Value),
+    LinearDdt,
     Idt(IdtKind),
     NoiseSrc,
 }
