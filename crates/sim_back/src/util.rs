@@ -54,14 +54,8 @@ pub fn get_contrib_with_barrier(
 ) -> Value {
     let contrib = PlaceKind::Contribute { dst: branch, dim, voltage_src };
 
-    intern
-        .outputs
-        .get(&contrib)
-        .and_then(|val| val.expand())
-        .unwrap_or(F_ZERO)
+    intern.outputs.get(&contrib).and_then(|val| val.expand()).unwrap_or(F_ZERO)
 }
-
-
 
 pub fn has_any_contrib(
     func: &Function,

@@ -11,10 +11,10 @@ pub mod matrix;
 mod middle;
 pub mod residual;
 
+mod prune;
 #[cfg(test)]
 mod tests;
 mod util;
-mod prune;
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub enum SimUnknown {
