@@ -488,6 +488,49 @@ fn hisimsotb() {
         .assert_eq(&actual);
 }
 #[test]
+fn mextram() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/mextram.va", "");
+    let mut vfs = db.vfs().write();
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("bjt505.va");
+    vfs.add_virt_file("/bjt505.va", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("bjtd505.va");
+    vfs.add_virt_file("/bjtd505.va", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("bjtd505t.va");
+    vfs.add_virt_file("/bjtd505t.va", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("evaluate.inc");
+    vfs.add_virt_file("/evaluate.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("frontdef.inc");
+    vfs.add_virt_file("/frontdef.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("initialize.inc");
+    vfs.add_virt_file("/initialize.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("mextram.va");
+    vfs.add_virt_file("/mextram.va", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("noise.inc");
+    vfs.add_virt_file("/noise.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("op_print.inc");
+    vfs.add_virt_file("/op_print.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("opinfo.inc");
+    vfs.add_virt_file("/opinfo.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("opvars.inc");
+    vfs.add_virt_file("/opvars.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("parameters.inc");
+    vfs.add_virt_file("/parameters.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("tscaling.inc");
+    vfs.add_virt_file("/tscaling.inc", read(path).into());
+    let path = project_root().join("integration_tests").join("MEXTRAM").join("variables.inc");
+    vfs.add_virt_file("/variables.inc", read(path).into());
+    drop(vfs);
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "");
+    let def_map = db.def_map(db.root_file());
+    let actual = def_map.dump(&db);
+    expect_file![project_root().join("integration_tests").join("MEXTRAM").join("def_map.txt")]
+        .assert_eq(&actual);
+}
+#[test]
 fn mvsg_cmc() {
     if skip_slow_tests() {
         return;
@@ -505,65 +548,132 @@ fn mvsg_cmc() {
         .assert_eq(&actual);
 }
 #[test]
-fn psp() {
+fn psp102() {
     if skip_slow_tests() {
         return;
     }
-    let db = TestDataBase::new("/psp.va", "");
+    let db = TestDataBase::new("/psp102.va", "");
     let mut vfs = db.vfs().write();
     let path =
-        project_root().join("integration_tests").join("PSP").join("Common102_macrodefs.include");
+        project_root().join("integration_tests").join("PSP102").join("Common102_macrodefs.include");
     vfs.add_virt_file("/Common102_macrodefs.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("JUNCAP200_InitModel.include");
+        project_root().join("integration_tests").join("PSP102").join("JUNCAP200_InitModel.include");
     vfs.add_virt_file("/JUNCAP200_InitModel.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("JUNCAP200_macrodefs.include");
+        project_root().join("integration_tests").join("PSP102").join("JUNCAP200_macrodefs.include");
     vfs.add_virt_file("/JUNCAP200_macrodefs.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("JUNCAP200_parlist.include");
+        project_root().join("integration_tests").join("PSP102").join("JUNCAP200_parlist.include");
     vfs.add_virt_file("/JUNCAP200_parlist.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("JUNCAP200_varlist1.include");
+        project_root().join("integration_tests").join("PSP102").join("JUNCAP200_varlist1.include");
     vfs.add_virt_file("/JUNCAP200_varlist1.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("JUNCAP200_varlist2.include");
+        project_root().join("integration_tests").join("PSP102").join("JUNCAP200_varlist2.include");
     vfs.add_virt_file("/JUNCAP200_varlist2.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("PSP102_ChargesNQS.include");
+        project_root().join("integration_tests").join("PSP102").join("PSP102_ChargesNQS.include");
     vfs.add_virt_file("/PSP102_ChargesNQS.include", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("PSP102_InitNQS.include");
+    let path =
+        project_root().join("integration_tests").join("PSP102").join("PSP102_InitNQS.include");
     vfs.add_virt_file("/PSP102_InitNQS.include", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("PSP102_binning.include");
+    let path =
+        project_root().join("integration_tests").join("PSP102").join("PSP102_binning.include");
     vfs.add_virt_file("/PSP102_binning.include", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("PSP102_binpars.include");
+    let path =
+        project_root().join("integration_tests").join("PSP102").join("PSP102_binpars.include");
     vfs.add_virt_file("/PSP102_binpars.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("PSP102_macrodefs.include");
+        project_root().join("integration_tests").join("PSP102").join("PSP102_macrodefs.include");
     vfs.add_virt_file("/PSP102_macrodefs.include", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("PSP102_module.include");
-    vfs.add_virt_file("/PSP102_module.include", read(path).into());
     let path =
-        project_root().join("integration_tests").join("PSP").join("PSP102_nqs_macrodefs.include");
+        project_root().join("integration_tests").join("PSP102").join("PSP102_module.include");
+    vfs.add_virt_file("/PSP102_module.include", read(path).into());
+    let path = project_root()
+        .join("integration_tests")
+        .join("PSP102")
+        .join("PSP102_nqs_macrodefs.include");
     vfs.add_virt_file("/PSP102_nqs_macrodefs.include", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("psp.va");
-    vfs.add_virt_file("/psp.va", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("psp102_nqs.va");
+    let path = project_root().join("integration_tests").join("PSP102").join("psp102.va");
+    vfs.add_virt_file("/psp102.va", read(path).into());
+    let path = project_root().join("integration_tests").join("PSP102").join("psp102_nqs.va");
     vfs.add_virt_file("/psp102_nqs.va", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("psp102b.va");
+    let path = project_root().join("integration_tests").join("PSP102").join("psp102b.va");
     vfs.add_virt_file("/psp102b.va", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("psp102b_nqs.va");
+    let path = project_root().join("integration_tests").join("PSP102").join("psp102b_nqs.va");
     vfs.add_virt_file("/psp102b_nqs.va", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("psp102e.va");
+    let path = project_root().join("integration_tests").join("PSP102").join("psp102e.va");
     vfs.add_virt_file("/psp102e.va", read(path).into());
-    let path = project_root().join("integration_tests").join("PSP").join("psp102e_nqs.va");
+    let path = project_root().join("integration_tests").join("PSP102").join("psp102e_nqs.va");
     vfs.add_virt_file("/psp102e_nqs.va", read(path).into());
     drop(vfs);
     let diagnostics = db.lower_and_check();
     assert_eq!(&diagnostics, "");
     let def_map = db.def_map(db.root_file());
     let actual = def_map.dump(&db);
-    expect_file![project_root().join("integration_tests").join("PSP").join("def_map.txt")]
+    expect_file![project_root().join("integration_tests").join("PSP102").join("def_map.txt")]
+        .assert_eq(&actual);
+}
+#[test]
+fn psp103() {
+    if skip_slow_tests() {
+        return;
+    }
+    let db = TestDataBase::new("/psp103.va", "");
+    let mut vfs = db.vfs().write();
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("Common103_macrodefs.include");
+    vfs.add_virt_file("/Common103_macrodefs.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("JUNCAP200_InitModel.include");
+    vfs.add_virt_file("/JUNCAP200_InitModel.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("JUNCAP200_macrodefs.include");
+    vfs.add_virt_file("/JUNCAP200_macrodefs.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("JUNCAP200_parlist.include");
+    vfs.add_virt_file("/JUNCAP200_parlist.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("JUNCAP200_varlist.include");
+    vfs.add_virt_file("/JUNCAP200_varlist.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("PSP103_ChargesNQS.include");
+    vfs.add_virt_file("/PSP103_ChargesNQS.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("PSP103_InitNQS.include");
+    vfs.add_virt_file("/PSP103_InitNQS.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("PSP103_macrodefs.include");
+    vfs.add_virt_file("/PSP103_macrodefs.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("PSP103_module.include");
+    vfs.add_virt_file("/PSP103_module.include", read(path).into());
+    let path = project_root()
+        .join("integration_tests")
+        .join("PSP103")
+        .join("PSP103_nqs_macrodefs.include");
+    vfs.add_virt_file("/PSP103_nqs_macrodefs.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("PSP103_parlist.include");
+    vfs.add_virt_file("/PSP103_parlist.include", read(path).into());
+    let path =
+        project_root().join("integration_tests").join("PSP103").join("PSP103_scaling.include");
+    vfs.add_virt_file("/PSP103_scaling.include", read(path).into());
+    let path = project_root().join("integration_tests").join("PSP103").join("juncap200.va");
+    vfs.add_virt_file("/juncap200.va", read(path).into());
+    let path = project_root().join("integration_tests").join("PSP103").join("psp103.va");
+    vfs.add_virt_file("/psp103.va", read(path).into());
+    let path = project_root().join("integration_tests").join("PSP103").join("psp103_nqs.va");
+    vfs.add_virt_file("/psp103_nqs.va", read(path).into());
+    let path = project_root().join("integration_tests").join("PSP103").join("psp103t.va");
+    vfs.add_virt_file("/psp103t.va", read(path).into());
+    drop(vfs);
+    let diagnostics = db.lower_and_check();
+    assert_eq!(&diagnostics, "");
+    let def_map = db.def_map(db.root_file());
+    let actual = def_map.dump(&db);
+    expect_file![project_root().join("integration_tests").join("PSP103").join("def_map.txt")]
         .assert_eq(&actual);
 }
 #[test]

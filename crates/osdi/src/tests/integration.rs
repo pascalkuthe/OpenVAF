@@ -157,6 +157,14 @@ fn hisimsotb() {
     super::test_compile(&root_file);
 }
 #[test]
+fn mextram() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file = project_root().join("integration_tests").join("MEXTRAM").join("mextram.va");
+    super::test_compile(&root_file);
+}
+#[test]
 fn mvsg_cmc() {
     if skip_slow_tests() {
         return;
@@ -165,11 +173,19 @@ fn mvsg_cmc() {
     super::test_compile(&root_file);
 }
 #[test]
-fn psp() {
+fn psp102() {
     if skip_slow_tests() {
         return;
     }
-    let root_file = project_root().join("integration_tests").join("PSP").join("psp.va");
+    let root_file = project_root().join("integration_tests").join("PSP102").join("psp102.va");
+    super::test_compile(&root_file);
+}
+#[test]
+fn psp103() {
+    if skip_slow_tests() {
+        return;
+    }
+    let root_file = project_root().join("integration_tests").join("PSP103").join("psp103.va");
     super::test_compile(&root_file);
 }
 #[test]

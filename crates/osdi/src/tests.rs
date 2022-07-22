@@ -45,12 +45,6 @@ pub fn generate_integration_tests() {
     let tests = collect_integration_tests();
     let file = project_root().join("crates/osdi/src/tests/integration.rs");
     let test_impl = tests.into_iter().map(|(test_name, _)| {
-        // skip this test until we implement switch branches
-        // TODO switch branches
-        // if matches!(&*test_name, "ASMHEMT"|"AMPLIFIER"){
-        //     return None
-        // }
-
         let test_case = format_ident!("{}", test_name.to_lowercase());
         let root_file_name = format!("{}.va", test_name.to_lowercase());
 
