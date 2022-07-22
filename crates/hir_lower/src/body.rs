@@ -2091,8 +2091,9 @@ impl LoweringCtx<'_, '_> {
                 self.lower_expr(args[0])
             }
 
-            _ => todo!(),
-            // TODO files
+            _ => unreachable!()
+
+            // TODO impelement?
             // BuiltIn::fclose => todo!(),
             // BuiltIn::fopen => todo!(),
             // BuiltIn::fdisplay => todo!(),
@@ -2111,8 +2112,6 @@ impl LoweringCtx<'_, '_> {
             // BuiltIn::ferror => todo!(),
             // BuiltIn::feof => todo!(),
             // BuiltIn::fdebug => todo!(),
-
-            // // TODO random
             // BuiltIn::dist_chi_square => todo!(),
             // BuiltIn::dist_exponential => todo!(),
             // BuiltIn::dist_poisson => todo!(),
@@ -2129,15 +2128,11 @@ impl LoweringCtx<'_, '_> {
             // BuiltIn::rdist_erlang => todo!(),
             // BuiltIn::rdist_normal => todo!(),
             // BuiltIn::rdist_t => todo!(),
-
             // BuiltIn::simprobe => todo!(),
             // BuiltIn::analog_node_alias => todo!(),
             // BuiltIn::analog_port_alias => todo!(),
             // BuiltIn::test_plusargs => todo!(),
             // BuiltIn::value_plusargs => todo!(),
-
-            // // TODO impelement?
-            // // TODO what is the DC value?
             // BuiltIn::zi_nd => todo!(),
             // BuiltIn::zi_np => todo!(),
             // BuiltIn::zi_zd => todo!(),
@@ -2146,7 +2141,8 @@ impl LoweringCtx<'_, '_> {
             // BuiltIn::laplace_np => todo!(),
             // BuiltIn::laplace_zd => todo!(),
             // BuiltIn::laplace_zp => todo!(),
-            // BuiltIn::last_crossing => return 0f64.into(),
+            // BuiltIn::last_crossing => todo!(),
+
         }
     }
 

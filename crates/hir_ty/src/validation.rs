@@ -384,6 +384,26 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
 
                 res
             }
+            BodyValidationDiagnostic::UnsupportedFunction { expr, func } => {
+                let FileSpan { range, file } = self.expr_src(*expr);
+
+                let mut res = Report::error()
+                    .with_message(format!(
+                        "function '{func:?}' is currently not supprted by OpenVAF"
+                    ))
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: file,
+                        range: range.into(),
+                        message: "unsupported function".to_owned(),
+                    }]);
+
+                res = res.with_notes(vec![
+                        "This function is part of the Verilog-A standard but currently not implemented by OpenVAF\nIf this function is important to your application, create an issue:\nhttps://gitlab.com/DSPOM/OpenVAF/-/issues/new".to_owned(),
+                    ]);
+
+                res
+            }
         }
     }
 

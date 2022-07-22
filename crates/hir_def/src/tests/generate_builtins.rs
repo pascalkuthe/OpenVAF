@@ -23,6 +23,60 @@ const ANALOG_OPERATORS: [&str; 17] = [
     "transition",
 ];
 
+const UNSUPPORTED: [&str; 51] = [
+    "simprobe",
+    "analog_node_alias",
+    "analog_port_alias",
+    "test_plusargs",
+    "value_plusargs",
+    "absdelay",
+    "zi_nd",
+    "zi_np",
+    "zi_zd",
+    "zi_zp",
+    "laplace_nd",
+    "laplace_np",
+    "laplace_zd",
+    "laplace_zp",
+    "last_crossing",
+    "slew",
+    "transition",
+    "fclose",
+    "fopen",
+    "fdisplay",
+    "fwrite",
+    "fstrobe",
+    "fmonitor",
+    "fgets",
+    "fscanf",
+    "swrite",
+    "sformat",
+    "sscanf",
+    "rewind",
+    "fseek",
+    "ftell",
+    "fflush",
+    "ferror",
+    "feof",
+    "fdebug",
+    "dist_chi_square",
+    "dist_exponential",
+    "dist_poisson",
+    "dist_uniform",
+    "dist_erlang",
+    "dist_normal",
+    "dist_t",
+    "random",
+    "arandom",
+    "rdist_chi_square",
+    "rdist_exponential",
+    "rdist_poisson",
+    "rdist_uniform",
+    "rdist_erlang",
+    "rdist_normal",
+    "rdist_t",
+];
+
 const ANALOG_OPERATORS_SYSFUN: [&str; 1] = ["$limit"];
 
 const ANALYSIS_FUNS: [&str; 6] =
@@ -63,8 +117,6 @@ const SYSFUNS: [&str; 81] = [
     "$strobe",
     "$write",
     "$monitor",
-    // "$monitoron",
-    // "$monitoroff",
     "$debug",
     "$fclose",
     "$fopen",
@@ -91,8 +143,6 @@ const SYSFUNS: [&str; 81] = [
     "$error",
     "$info",
     "$abstime",
-    // "$bitstoreal",
-    // "$realtobits",
     "$dist_chi_square",
     "$dist_exponential",
     "$dist_poisson",
@@ -175,6 +225,7 @@ fn generate_builtins() {
 
     let analysis_funs = ANALYSIS_FUNS.into_iter().map(|op| format_ident!("{}", op));
     let analog_operators = ANALOG_OPERATORS.into_iter().map(|op| format_ident!("{}", op));
+    let unsupported = UNSUPPORTED.into_iter().map(|op| format_ident!("{}", op));
     let analog_operators_sysfun =
         ANALOG_OPERATORS_SYSFUN.into_iter().map(|op| format_ident!("{}", &op[1..]));
 
@@ -209,6 +260,14 @@ fn generate_builtins() {
             pub fn is_analog_operator_sysfun(self)->bool{
                 match self{
                     #(BuiltIn::#analog_operators_sysfun)|* =>true,
+                    _ => false
+                }
+            }
+
+            #[allow(clippy::match_like_matches_macro)]
+            pub fn is_unsupported(self)->bool{
+                match self{
+                    #(BuiltIn::#unsupported)|* =>true,
                     _ => false
                 }
             }

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Fixed
+
+* provide errors instead of crashing for unsupported Verilog-A builtins
+
 ##  0.9.0-beta8 - 2022-07-19
 
 ### Fixed

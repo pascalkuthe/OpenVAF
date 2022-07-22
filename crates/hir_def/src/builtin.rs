@@ -164,6 +164,63 @@ impl BuiltIn {
         }
     }
     #[allow(clippy::match_like_matches_macro)]
+    pub fn is_unsupported(self) -> bool {
+        match self {
+            BuiltIn::simprobe
+            | BuiltIn::analog_node_alias
+            | BuiltIn::analog_port_alias
+            | BuiltIn::test_plusargs
+            | BuiltIn::value_plusargs
+            | BuiltIn::absdelay
+            | BuiltIn::zi_nd
+            | BuiltIn::zi_np
+            | BuiltIn::zi_zd
+            | BuiltIn::zi_zp
+            | BuiltIn::laplace_nd
+            | BuiltIn::laplace_np
+            | BuiltIn::laplace_zd
+            | BuiltIn::laplace_zp
+            | BuiltIn::last_crossing
+            | BuiltIn::slew
+            | BuiltIn::transition
+            | BuiltIn::fclose
+            | BuiltIn::fopen
+            | BuiltIn::fdisplay
+            | BuiltIn::fwrite
+            | BuiltIn::fstrobe
+            | BuiltIn::fmonitor
+            | BuiltIn::fgets
+            | BuiltIn::fscanf
+            | BuiltIn::swrite
+            | BuiltIn::sformat
+            | BuiltIn::sscanf
+            | BuiltIn::rewind
+            | BuiltIn::fseek
+            | BuiltIn::ftell
+            | BuiltIn::fflush
+            | BuiltIn::ferror
+            | BuiltIn::feof
+            | BuiltIn::fdebug
+            | BuiltIn::dist_chi_square
+            | BuiltIn::dist_exponential
+            | BuiltIn::dist_poisson
+            | BuiltIn::dist_uniform
+            | BuiltIn::dist_erlang
+            | BuiltIn::dist_normal
+            | BuiltIn::dist_t
+            | BuiltIn::random
+            | BuiltIn::arandom
+            | BuiltIn::rdist_chi_square
+            | BuiltIn::rdist_exponential
+            | BuiltIn::rdist_poisson
+            | BuiltIn::rdist_uniform
+            | BuiltIn::rdist_erlang
+            | BuiltIn::rdist_normal
+            | BuiltIn::rdist_t => true,
+            _ => false,
+        }
+    }
+    #[allow(clippy::match_like_matches_macro)]
     pub fn is_analysis_var(self) -> bool {
         match self {
             BuiltIn::analysis

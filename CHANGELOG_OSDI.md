@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Automatically remove unused nodes (includes noise network until noise support is added)
 
 ### Fixed
+
 * do not generate unkowns for noise phase shifts with ddt
+* provide errors instead of crashing for unsupported Verilog-A builtins
 
 ## 0.1.2 - 2022-07-19
 

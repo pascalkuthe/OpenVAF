@@ -73,6 +73,11 @@ pub enum BodyValidationDiagnostic {
         expr: ExprId,
         stmt: StmtId,
     },
+
+    UnsupportedFunction {
+        expr: ExprId,
+        func: BuiltIn,
+    },
 }
 
 impl BodyValidationDiagnostic {
@@ -367,6 +372,10 @@ impl ExprValidator<'_, '_> {
         signature: Option<Signature>,
     ) {
         match call {
+            _ if call.is_unsupported() => self
+                .parent
+                .diagnostics
+                .push(BodyValidationDiagnostic::UnsupportedFunction { expr, func: call }),
             BuiltIn::potential | BuiltIn::flow => self.check_access(
                 |_| IllegalCtxAccessKind::NatureAccess,
                 expr,
