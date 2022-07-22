@@ -69,6 +69,7 @@ pub fn has_any_contrib(
 pub struct SwitchBranchInfo {
     pub op_dependent: bool,
     pub introduce_unkown: bool,
+    pub non_trivial_voltage: bool,
 }
 
 impl SwitchBranchInfo {
@@ -84,7 +85,7 @@ impl SwitchBranchInfo {
 
         let non_trivial_voltage = has_any_contrib(func, intern, branch, true);
         let introduce_unkown = requires_unkown || non_trivial_voltage;
-        SwitchBranchInfo { op_dependent, introduce_unkown }
+        SwitchBranchInfo { op_dependent, introduce_unkown, non_trivial_voltage }
     }
 
     pub fn just_current_src(&self) -> bool {

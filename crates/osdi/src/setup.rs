@@ -387,10 +387,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     }
                 }
                 CallBackKind::CollapseHint(node1, node2) => {
-                    let (idx, extra_indecies) = module.mir.collapse.unwrap_index_and_val(&(
-                        SimUnknown::KirchoffLaw(*node1),
-                        node2.map(SimUnknown::KirchoffLaw),
-                    ));
+                    let node1 = SimUnknown::KirchoffLaw(*node1);
+                    let node2 = node2.map(SimUnknown::KirchoffLaw);
+                    let info = module.mir.collapse.index_and_val(&(node1, node2));
+                    let (idx, extra_indecies) = if let Some(info) = info {
+                        info
+                    } else {
+                        continue;
+                    };
                     let idx = cx.const_unsigned_int(idx.into());
                     let mut state = vec![instance, idx];
                     for &idx in extra_indecies.iter() {

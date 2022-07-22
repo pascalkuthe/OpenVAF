@@ -174,11 +174,7 @@ impl<'a> UnkownPruner<'a> {
                 continue;
             }
 
-            let requires_unkown =
-                self.intern.is_param_live(self.func, &ParamKind::Current(branch.into()));
-            if requires_unkown {
-                continue;
-            }
+            let mut err = false;
 
             let voltage = if let Some(val) =
                 self.intern.params.raw.get(&ParamKind::Voltage { hi: node, lo: None })
@@ -191,6 +187,13 @@ impl<'a> UnkownPruner<'a> {
                 continue;
             };
 
+            let current = self
+                .intern
+                .params
+                .index_and_val(&ParamKind::Current(branch.into()))
+                .filter(|(_, val)| !self.func.dfg.value_dead(**val))
+                .map(|(param, _)| param);
+
             let is_voltage_src = match is_voltage_src {
                 FALSE => false,
                 TRUE => true,
@@ -202,54 +205,66 @@ impl<'a> UnkownPruner<'a> {
                         is_voltage_src,
                         branch,
                     );
-                    if !br_info.just_current_src() {
-                        continue;
+                    if br_info.non_trivial_voltage || br_info.op_dependent {
+                        err = true;
                     }
 
                     false
                 }
             };
 
-            let resistive =
+            let resist =
                 get_contrib_with_barrier(self.intern, branch, RESISTIVE_DIM, is_voltage_src);
-            let reactive =
-                get_contrib_with_barrier(self.intern, branch, REACTIVE_DIM, is_voltage_src);
-            let residual = [resistive, reactive];
+            let react = get_contrib_with_barrier(self.intern, branch, REACTIVE_DIM, is_voltage_src);
 
-            let resist_trivial = strip_optbarrier(self.func, resistive) == F_ZERO;
-            let react_trivial = strip_optbarrier(self.func, reactive) == F_ZERO;
+            let has_resist = strip_optbarrier(self.func, resist) != F_ZERO;
+            let has_react = strip_optbarrier(self.func, react) != F_ZERO;
+            let has_noise = self.has_noise(branch, is_voltage_src);
 
-            let mut known_linear = HybridBitSet::new_empty();
-            self.op_dependent_vals_no_noise.insert(*voltage);
-            propagate_taint(self.func, self.dom_tree, &self.op_dependent_vals_no_noise, &mut buf);
-            let resist_dep = self.analyse_dep(residual[0], *voltage, &mut known_linear, &buf);
-            let react_dep = self.analyse_dep(residual[1], *voltage, &mut known_linear, &buf);
-            let err = resist_dep == Dependency::NonLinear || react_dep == Dependency::NonLinear;
-            let is_linear = resist_dep == Dependency::Linear || react_dep == Dependency::Linear;
-            buf.clear();
+            let contrib = RemainingContrib {
+                resist: has_resist.then_some(resist),
+                react: has_react.then_some(react),
+                current,
+                has_noise,
+            };
+
+            let (err, is_linear) = if err {
+                (true, false)
+            } else {
+                let mut known_linear = HybridBitSet::new_empty();
+                self.op_dependent_vals_no_noise.insert(*voltage);
+                propagate_taint(
+                    self.func,
+                    self.dom_tree,
+                    &self.op_dependent_vals_no_noise,
+                    &mut buf,
+                );
+                let resist_dep = self.analyse_dep(resist, *voltage, &mut known_linear, &buf);
+                let react_dep = self.analyse_dep(react, *voltage, &mut known_linear, &buf);
+                err = resist_dep == Dependency::NonLinear || react_dep == Dependency::NonLinear;
+                let is_linear = resist_dep == Dependency::Linear || react_dep == Dependency::Linear;
+                buf.clear();
+                (err, is_linear)
+            };
 
             match res.entry(node) {
                 Entry::Occupied(mut entry) => {
-                    let (remaining, remaining_no_noise, status, has_noise) = entry.get_mut();
+                    let candidate = entry.get_mut();
 
                     if is_voltage_src || err {
-                        *status = CandidateStatus::Invalid;
+                        candidate.status = CandidateStatus::Invalid;
                     } else {
-                        status.update(is_linear);
+                        candidate.status.update(is_linear);
                     }
-                    if *status == CandidateStatus::Invalid {
+                    if candidate.status == CandidateStatus::Invalid {
                         continue;
                     }
 
-                    if !resist_trivial {
-                        remaining.push(resistive);
-                        remaining_no_noise.push(resistive);
+                    if has_resist || has_react || current.is_some() {
+                        candidate.remaining.push(contrib);
+                        candidate.remaining_no_noise.push(contrib);
                     }
-                    if !react_trivial {
-                        remaining.push(reactive);
-                        remaining_no_noise.push(reactive);
-                    }
-                    *has_noise = *has_noise || self.has_noise(branch, is_voltage_src);
+                    candidate.has_noise = candidate.has_noise || has_noise
                 }
                 Entry::Vacant(entry) => {
                     let status = if err {
@@ -260,20 +275,19 @@ impl<'a> UnkownPruner<'a> {
 
                     let mut remaining = Vec::new();
                     let mut remaining_no_noise = Vec::new();
-                    if status != CandidateStatus::Invalid {
-                        if !resist_trivial {
-                            remaining.push(resistive);
-                            remaining_no_noise.push(resistive);
-                        }
-
-                        if !react_trivial {
-                            remaining.push(reactive);
-                            remaining_no_noise.push(reactive);
-                        }
+                    if status != CandidateStatus::Invalid
+                        && (has_resist || has_react || current.is_some())
+                    {
+                        remaining.push(contrib);
+                        remaining_no_noise.push(contrib);
                     }
 
-                    let has_noise = self.has_noise(branch, is_voltage_src);
-                    entry.insert((remaining, remaining_no_noise, status, has_noise));
+                    entry.insert(PruneCandidate {
+                        remaining,
+                        remaining_no_noise,
+                        status,
+                        has_noise,
+                    });
                 }
             }
         }
@@ -295,8 +309,8 @@ impl<'a> UnkownPruner<'a> {
             res.remove(&node2);
         }
 
-        res.retain(|_, (_, _, status, _)| {
-            !matches!(status, CandidateStatus::Invalid | CandidateStatus::CurrentSrc)
+        res.retain(|_, candidate| {
+            !matches!(candidate.status, CandidateStatus::Invalid | CandidateStatus::CurrentSrc)
         });
 
         self.op_dependent_insts_no_noise = buf;
@@ -310,14 +324,15 @@ impl<'a> UnkownPruner<'a> {
         buf: &mut BitSet<Inst>,
     ) -> bool {
         let mut changed = false;
-        candidates.retain(|node, (remaining, remaining_no_noise, _, has_noise)| {
+        candidates.retain(|node, candidate| {
             let pot = self.intern.params.unwrap_index(&ParamKind::Voltage { hi: *node, lo: None });
             self.pruned.insert(pot, self.intern.params.len());
-            let old_len = remaining.len();
-            remaining.retain(|val| !is_zero(self.func, *val, self.pruned, buf));
-            if remaining.is_empty() {
+            candidate.remaining.retain_mut(|it| {
+                !it.is_zero(self.func, self.intern, self.pruned, buf, &mut changed)
+            });
+            if candidate.remaining.is_empty() {
                 let val = self.intern.params[pot];
-                if *has_noise {
+                if candidate.has_noise {
                     self.is_noise.insert(pot, self.intern.params.len());
                     self.op_dependent_vals_no_noise.remove(&val);
                 } else {
@@ -331,19 +346,15 @@ impl<'a> UnkownPruner<'a> {
             self.pruned.remove(pot);
 
             self.is_noise.insert(pot, self.intern.params.len());
-            let old_len_no_noise = remaining_no_noise.len();
-            remaining_no_noise.retain(|val| !is_zero(self.func, *val, self.is_noise, buf));
-            if remaining_no_noise.is_empty() {
-                self.is_noise.insert(pot, self.intern.params.len());
+            candidate.remaining_no_noise.retain_mut(|it| {
+                !it.is_zero(self.func, self.intern, self.pruned, buf, &mut changed)
+            });
+            if candidate.remaining_no_noise.is_empty() {
                 let val = self.intern.params[pot];
                 self.op_dependent_vals_no_noise.remove(&val);
                 changed = true;
             } else {
                 self.is_noise.remove(pot);
-            }
-
-            if remaining.len() != old_len || remaining_no_noise.len() != old_len_no_noise {
-                changed = true
             }
 
             true
@@ -417,9 +428,9 @@ impl<'a> UnkownPruner<'a> {
                 known_linear.remove(inst);
 
                 match (found_linear, found_none) {
-                    (true, false) => Dependency::Linear,
+                    (true, _) => Dependency::Linear,
                     (false, true) => Dependency::None,
-                    (false, false) | (true, true) => Dependency::NonLinear,
+                    (false, false) => Dependency::NonLinear,
                 }
             }
 
@@ -629,8 +640,60 @@ impl CandidateStatus {
     }
 }
 
-type PruneCandidates =
-    IndexMap<NodeId, (Vec<Value>, Vec<Value>, CandidateStatus, bool), ahash::RandomState>;
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+struct RemainingContrib {
+    resist: Option<Value>,
+    react: Option<Value>,
+    current: Option<Param>,
+    has_noise: bool,
+}
+
+impl RemainingContrib {
+    fn is_zero(
+        &mut self,
+        func: &mut Function,
+        intern: &HirInterner,
+        zeros: &mut HybridBitSet<Param>,
+        visited: &mut BitSet<Inst>,
+        changed: &mut bool,
+    ) -> bool {
+        if let Some(resist) = self.resist.take() {
+            if !is_zero(func, resist, zeros, visited) {
+                self.resist = Some(resist);
+                return false;
+            }
+        }
+
+        if let Some(react) = self.react.take() {
+            if !is_zero(func, react, zeros, visited) {
+                self.react = Some(react);
+                return false;
+            }
+        }
+
+        if let Some(current) = self.current {
+            if self.has_noise {
+                zeros.insert(current, intern.params.len());
+            } else {
+                let val = intern.params[current];
+                func.dfg.replace_uses(val, F_ZERO);
+            }
+            *changed = true;
+        }
+
+        true
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct PruneCandidate {
+    remaining: Vec<RemainingContrib>,
+    remaining_no_noise: Vec<RemainingContrib>,
+    status: CandidateStatus,
+    has_noise: bool,
+}
+
+type PruneCandidates = IndexMap<NodeId, PruneCandidate, ahash::RandomState>;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Dependency {

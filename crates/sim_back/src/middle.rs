@@ -152,6 +152,7 @@ impl EvalMir {
         for pruned_param in pruned.iter() {
             let node = match intern.params.get_index(pruned_param).unwrap().0 {
                 ParamKind::Voltage { hi, lo: None } => *hi,
+                ParamKind::Current(_) => continue,
                 _ => unreachable!(),
             };
             pruned_nodes.insert(node);
@@ -250,7 +251,6 @@ impl EvalMir {
             output_values.remove(old_val);
             *out_val = val.into();
         }
-
         op_dependent_insts.clear();
         op_dependent_insts.ensure(func.dfg.num_insts());
         let mut has_bound_step = false;
@@ -341,6 +341,9 @@ impl EvalMir {
                                 (SimUnknown::KirchoffLaw(hi), Some(SimUnknown::KirchoffLaw(lo))),
                                 vec![],
                             );
+                        } else if pruned_nodes.contains(&hi) {
+                            init_inst_func.dfg.zap_inst(inst);
+                            init_inst_func.layout.remove_inst(inst);
                         } else {
                             collapse.insert((SimUnknown::KirchoffLaw(hi), None), vec![]);
                         }
