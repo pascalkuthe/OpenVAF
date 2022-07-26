@@ -1,5 +1,3 @@
-#![allow(clippy::needless_option_as_deref)]
-
 use std::f64::{INFINITY, NEG_INFINITY};
 use std::mem::replace;
 
@@ -1033,7 +1031,6 @@ impl LoweringCtx<'_, '_> {
             hir_def::Expr::Select { cond, then_val, else_val } => {
                 let cond = self.lower_expr(cond);
                 let (mut then_src, mut else_src) = self.func.make_cond(cond, |func, then| {
-                    #[allow(clippy::needless_option_as_deref)]
                     let mut ctx = LoweringCtx {
                         db: self.db,
                         data: self.data,
@@ -1071,6 +1068,7 @@ impl LoweringCtx<'_, '_> {
                 ResolvedFun::User { func, limit } => self.lower_user_fun(func, limit, args),
                 ResolvedFun::BuiltIn(builtin) => self.lower_builtin(expr, builtin, args),
                 ResolvedFun::Param(param) => self.param(ParamKind::ParamSysFun(param)),
+                ResolvedFun::InvalidNatureAccess(_) => unreachable!(),
             },
             hir_def::Expr::Array(ref vals) => self.lower_array(expr, vals),
             hir_def::Expr::Literal(ref lit) => match *lit {
@@ -1472,7 +1470,6 @@ impl LoweringCtx<'_, '_> {
         mut lower_body: impl FnMut(&mut LoweringCtx, bool) -> T,
     ) -> ((Block, T), (Block, T)) {
         self.func.make_cond(cond, |func, branch| {
-            #[allow(clippy::needless_option_as_deref)]
             let mut ctx = LoweringCtx {
                 db: self.db,
                 data: self.data,
