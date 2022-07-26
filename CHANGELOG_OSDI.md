@@ -8,13 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Added support for the `analysis` function (always returned true previously)
-* Automatically remove unused nodes (includes noise network until noise support is added)
+* Added support for the `analysis` function (always returned true previously).
+* Automatically remove unused nodes (includes noise network until noise support is added).
+* Added errors for branches with incompatible disciplines.
 
 ### Fixed
 
-* do not generate unkowns for noise phase shifts with ddt
-* provide errors instead of crashing for unsupported Verilog-A builtins
+* Do not generate unkowns for noise phase shifts with ddt.
+* Provide errors instead of crashing for unsupported Verilog-A builtins.
+* Provide errors instead of crashing for illegal nature access.
 
 ## 0.1.2 - 2022-07-19
 
@@ -23,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added support for `$limit`
 * Added support for `$abstime` (now returns a non-zero value for large signal simulations).
 * Added support for `$bound_step` (now the simulator can read the minimum value passed to `$bound_step`).
-* Add general description to the start of the help text
+* Add general description to the start of the help text.
 
 ### Changed
 

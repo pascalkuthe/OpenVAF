@@ -4,8 +4,9 @@ use basedb::{AstId, ErasedAstId, FileId};
 use hir_def::nameres::diagnostics::PathResolveError;
 use hir_def::nameres::{DefMap, ScopeDefItem};
 use hir_def::{
-    AliasParamId, BranchId, BranchKind, DisciplineId, ItemTree, LocalDisciplineAttrId,
-    LocalNatureAttrId, Lookup, ModuleId, ModuleLoc, NatureId, NodeId, NodeTypeDecl,
+    AliasParamId, Branch, BranchId, BranchKind, DisciplineId, ItemLoc, ItemTree,
+    LocalDisciplineAttrId, LocalNatureAttrId, Lookup, ModuleId, ModuleLoc, NatureId, NodeId,
+    NodeTypeDecl, Path, ScopeId,
 };
 use syntax::ast::ArgListOwner;
 use syntax::name::Name;
@@ -32,6 +33,7 @@ pub enum TypeValidationDiagnostic {
     PortWithoutDirection { decl: ErasedAstId, name: Name },
     NodeWithoutDiscipline { decl: ErasedAstId, name: Name },
     ExpectedPort { node: NodeId, src: ErasedAstId },
+    IncompatibleBranch { branch: BranchId, node1: NodeId, node2: NodeId },
 }
 
 impl TypeValidationDiagnostic {
@@ -81,6 +83,32 @@ impl TypeValidationCtx<'_> {
         }
     }
 
+    fn resolve_node(
+        &mut self,
+        node: &Path,
+        scope: ScopeId,
+        branch: &ItemLoc<Branch>,
+    ) -> Option<NodeId> {
+        let node = scope.resolve_item_path::<NodeId>(self.db.upcast(), node);
+        match node {
+            Ok(node) => Some(node),
+            Err(err) => {
+                let src = SyntaxNodePtr::new(
+                    branch
+                        .source(self.db.upcast())
+                        .arg_list()
+                        .unwrap()
+                        .args()
+                        .next()
+                        .unwrap()
+                        .syntax(),
+                );
+                self.report(TypeValidationDiagnostic::PathError { err, src });
+                None
+            }
+        }
+    }
+
     fn verify_alias(&mut self, alias: AliasParamId) {
         if self.db.resolve_alias(alias).is_none() {
             let loc = alias.lookup(self.db.upcast());
@@ -89,101 +117,78 @@ impl TypeValidationCtx<'_> {
                 if let Result::Err(err) = loc.scope.resolve_path(self.db.upcast(), src) {
                     let src =
                         SyntaxNodePtr::new(loc.source(self.db.upcast()).src().unwrap().syntax());
-                    self.dst.push(TypeValidationDiagnostic::PathError { err, src })
+                    self.report(TypeValidationDiagnostic::PathError { err, src })
                 }
             }
         }
     }
 
-    fn verify_branch(&mut self, branch: BranchId) {
-        let branch_data = self.db.branch_data(branch);
+    fn report(&mut self, diag: impl Into<TypeValidationDiagnostic>) {
+        self.dst.push(diag.into())
+    }
+
+    fn verify_branch(&mut self, branch_: BranchId) {
+        let branch_data = self.db.branch_data(branch_);
         let kind = &branch_data.kind;
-        let branch = branch.lookup(self.db.upcast());
+        let branch = branch_.lookup(self.db.upcast());
         let scope = branch.scope;
         match kind {
             BranchKind::PortFlow(port) => {
-                match scope.resolve_item_path::<NodeId>(self.db.upcast(), port) {
-                    Ok(node) => {
-                        let node_ = self.db.node_data(node);
-                        if !node_.is_input && !node_.is_output {
-                            let src = branch.ast_id(self.db.upcast()).into();
-                            self.dst.push(TypeValidationDiagnostic::ExpectedPort { node, src });
-                        }
-                    }
-                    Err(err) => {
-                        let src = SyntaxNodePtr::new(
-                            branch
-                                .source(self.db.upcast())
-                                .arg_list()
-                                .unwrap()
-                                .args()
-                                .next()
-                                .unwrap()
-                                .syntax(),
-                        );
-                        self.dst.push(TypeValidationDiagnostic::PathError { err, src });
+                if let Some(node) = self.resolve_node(port, scope, &branch) {
+                    let node_ = self.db.node_data(node);
+                    if !node_.is_input && !node_.is_output {
+                        let src = branch.ast_id(self.db.upcast()).into();
+                        self.report(TypeValidationDiagnostic::ExpectedPort { node, src });
                     }
                 }
             }
             BranchKind::NodeGnd(node) => {
-                if let Err(err) = scope.resolve_item_path::<NodeId>(self.db.upcast(), node) {
-                    let src = SyntaxNodePtr::new(
-                        branch
-                            .source(self.db.upcast())
-                            .arg_list()
-                            .unwrap()
-                            .args()
-                            .next()
-                            .unwrap()
-                            .syntax(),
-                    );
-                    self.dst.push(TypeValidationDiagnostic::PathError { err, src })
-                }
+                self.resolve_node(node, scope, &branch);
             }
             BranchKind::Nodes(node1, node2) => {
-                if let Err(err) = scope.resolve_item_path::<NodeId>(self.db.upcast(), node1) {
-                    let src = SyntaxNodePtr::new(
-                        branch
-                            .source(self.db.upcast())
-                            .arg_list()
-                            .unwrap()
-                            .args()
-                            .next()
-                            .unwrap()
-                            .syntax(),
-                    );
-                    self.dst.push(TypeValidationDiagnostic::PathError { err, src })
+                let node1 = self.resolve_node(node1, scope, &branch);
+                let node2 = self.resolve_node(node2, scope, &branch);
+                let (node1, node2) = if let (Some(node1), Some(node2)) = (node1, node2) {
+                    (node1, node2)
+                } else {
+                    return;
+                };
+
+                let discipline1 = self.db.node_discipline(node1);
+                let discipline2 = self.db.node_discipline(node2);
+                // fast path
+                if discipline1 == discipline2 {
+                    return;
                 }
 
-                if let Err(err) = scope.resolve_item_path::<NodeId>(self.db.upcast(), node2) {
-                    let src = SyntaxNodePtr::new(
-                        branch
-                            .source(self.db.upcast())
-                            .arg_list()
-                            .unwrap()
-                            .args()
-                            .nth(1)
-                            .unwrap()
-                            .syntax(),
-                    );
-                    self.dst.push(TypeValidationDiagnostic::PathError { err, src })
+                let (discipline1, discipline2) =
+                    if let (Some(d1), Some(d2)) = (discipline1, discipline2) {
+                        (d1, d2)
+                    } else {
+                        return;
+                    };
+
+                if !self.db.discipline_info(discipline1).compatible(discipline2, self.db) {
+                    self.report(TypeValidationDiagnostic::IncompatibleBranch {
+                        branch: branch_,
+                        node1,
+                        node2,
+                    })
                 }
             }
             BranchKind::Missing => (),
         };
-
-        // TODO discipline compatability
     }
 
     fn verify_node(&mut self, node: NodeId, module: ModuleLoc) {
         let loc = node.lookup(self.db.upcast());
         let node_ = &self.tree[module.id].nodes[loc.id];
         if node_.decls.is_empty() {
-            self.dst.push(TypeValidationDiagnostic::PortWithoutDirection {
+            self.report(TypeValidationDiagnostic::PortWithoutDirection {
                 decl: node_.ast_id,
                 name: node_.name.clone(),
             });
-            self.dst.push(TypeValidationDiagnostic::NodeWithoutDiscipline {
+            self.report(TypeValidationDiagnostic::NodeWithoutDiscipline {
                 decl: node_.ast_id,
                 name: node_.name.clone(),
             });
@@ -199,14 +204,14 @@ impl TypeValidationCtx<'_> {
         if let Some(first) = directions.next() {
             let duplicates: Vec<_> = directions.collect();
             if !duplicates.is_empty() {
-                self.dst.push(TypeValidationDiagnostic::MultipleDirections(DuplicateItem {
+                self.report(TypeValidationDiagnostic::MultipleDirections(DuplicateItem {
                     src: node,
                     first,
                     subsequent: duplicates,
                 }))
             }
         } else if node_.decls[0].ast_id(self.tree) != node_.ast_id {
-            self.dst.push(TypeValidationDiagnostic::PortWithoutDirection {
+            self.report(TypeValidationDiagnostic::PortWithoutDirection {
                 decl: node_.ast_id,
                 name: node_.name.clone(),
             })
@@ -223,7 +228,7 @@ impl TypeValidationCtx<'_> {
                     .def_map
                     .resolve_local_item_in_scope::<DisciplineId>(self.def_map.root(), discipline)
                 {
-                    self.dst.push(TypeValidationDiagnostic::PathError {
+                    self.report(TypeValidationDiagnostic::PathError {
                         err,
                         src: SyntaxNodePtr::new(
                             decl.discipline_src(self.db.upcast(), self.root_file).unwrap().syntax(),
@@ -234,14 +239,14 @@ impl TypeValidationCtx<'_> {
 
             let duplicates: Vec<_> = disciplines.map(|(decl, _)| decl.ast_id(self.tree)).collect();
             if !duplicates.is_empty() {
-                self.dst.push(TypeValidationDiagnostic::MultipleDisciplines(DuplicateItem {
+                self.report(TypeValidationDiagnostic::MultipleDisciplines(DuplicateItem {
                     src: node,
                     first: decl.ast_id(self.tree),
                     subsequent: duplicates,
                 }))
             }
         } else {
-            self.dst.push(TypeValidationDiagnostic::NodeWithoutDiscipline {
+            self.report(TypeValidationDiagnostic::NodeWithoutDiscipline {
                 decl: node_.ast_id,
                 name: node_.name.clone(),
             });
@@ -252,7 +257,7 @@ impl TypeValidationCtx<'_> {
         if let Some(first) = gnd_declarations.next() {
             let duplicates: Vec<_> = gnd_declarations.map(|it| it.ast_id(self.tree)).collect();
             if !duplicates.is_empty() {
-                self.dst.push(TypeValidationDiagnostic::MultipleDisciplines(DuplicateItem {
+                self.report(TypeValidationDiagnostic::MultipleDisciplines(DuplicateItem {
                     src: node,
                     first: first.ast_id(self.tree),
                     subsequent: duplicates,
@@ -312,7 +317,7 @@ impl TypeValidationCtx<'_> {
 
             if !duplicates.is_empty() {
                 let err = DuplicateItem { src: def, first: id, subsequent: duplicates };
-                self.dst.push(wrap_err(err))
+                self.report(wrap_err(err))
             }
         }
     }

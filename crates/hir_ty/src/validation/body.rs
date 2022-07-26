@@ -3,8 +3,8 @@ use std::mem::replace;
 use arrayvec::ArrayVec;
 use hir_def::body::Body;
 use hir_def::{
-    BranchId, BuiltIn, DefWithBodyId, Expr, ExprId, FunctionArgLoc, Literal, Lookup, NodeId,
-    ParamId, Path, Stmt, StmtId, VarId,
+    BranchId, BuiltIn, DefWithBodyId, DisciplineId, Expr, ExprId, FunctionArgLoc, Literal, Lookup,
+    NatureId, NodeId, ParamId, Path, Stmt, StmtId, VarId,
 };
 use stdx::impl_display;
 use syntax::ast::AssignOp;
@@ -77,6 +77,24 @@ pub enum BodyValidationDiagnostic {
     UnsupportedFunction {
         expr: ExprId,
         func: BuiltIn,
+    },
+
+    IncompatibleNatureAccess {
+        candidates: [Option<(Name, Name)>; 2],
+        access_nature: Option<NatureId>,
+        access_expr: ExprId,
+        branch: String,
+    },
+
+    IllegalNatureAccess {
+        is_pot: bool,
+        access_expr: ExprId,
+    },
+
+    IncompatibleImplicitBranch {
+        access: ExprId,
+        node1: NodeId,
+        node2: NodeId,
     },
 }
 
@@ -261,7 +279,7 @@ struct ExprValidator<'a, 'b> {
 impl ExprValidator<'_, '_> {
     fn report_illegal_access(&mut self, kind: IllegalCtxAccessKind, expr: ExprId) {
         let err = IllegalCtxAccess { kind, ctx: self.parent.ctx, expr };
-        self.parent.diagnostics.push(BodyValidationDiagnostic::IllegalCtxAccess(err));
+        self.report(BodyValidationDiagnostic::IllegalCtxAccess(err));
     }
 
     fn check_access(
@@ -283,21 +301,156 @@ impl ExprValidator<'_, '_> {
         self.parent.diagnostics.push(diagnostic)
     }
 
+    fn report_illegal_nature_access(
+        &mut self,
+        branch: String,
+        discipline: DisciplineId,
+        access_nature: Option<NatureId>,
+        access_expr: ExprId,
+    ) {
+        let db = self.parent.db;
+        let discipline = db.discipline_info(discipline);
+
+        let nature_info = |nature: NatureId| {
+            let nature = nature.lookup(db.upcast());
+            let nature = &nature.item_tree(db.upcast())[nature.id];
+            Some((nature.name.clone(), nature.access.clone()?.0))
+        };
+        let pot = discipline.potential.and_then(nature_info);
+        let flow = discipline.flow.and_then(nature_info);
+        self.parent.diagnostics.push(BodyValidationDiagnostic::IncompatibleNatureAccess {
+            candidates: [pot, flow],
+            access_nature,
+            access_expr,
+            branch,
+        })
+    }
+
+    fn validate_implicit_branch(
+        &mut self,
+        expr: ExprId,
+        node1: NodeId,
+        node2: NodeId,
+    ) -> Option<DisciplineId> {
+        if let Some(discipline1) = self.parent.db.node_discipline(node1) {
+            if let Some(discipline2) = self.parent.db.node_discipline(node2) {
+                let discipline2 = self.parent.db.discipline_info(discipline2);
+                if !discipline2.compatible(discipline1, self.parent.db) {
+                    self.report(BodyValidationDiagnostic::IncompatibleImplicitBranch {
+                        access: expr,
+                        node1,
+                        node2,
+                    });
+                } else {
+                    return Some(discipline1);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn validate_flow_or_pot(&mut self, expr: ExprId, call: BuiltIn, discipline: DisciplineId) {
+        let is_pot = call == BuiltIn::potential;
+        let discipline_ = self.parent.db.discipline_info(discipline);
+        if discipline_.potential.is_none() && is_pot || discipline_.flow.is_none() && !is_pot {
+            self.report(BodyValidationDiagnostic::IllegalNatureAccess { is_pot, access_expr: expr })
+        }
+    }
+
+    fn validate_nature_access(
+        &mut self,
+        access_nature: NatureId,
+        access_expr: ExprId,
+        args: &[ExprId],
+    ) {
+        match self.parent.infer.resolved_signatures.get(&access_expr).copied() {
+            Some(NATURE_ACCESS_BRANCH) => {
+                let branch = self.parent.infer.expr_types[args[0]].unwrap_branch();
+                if let Some(branch_info) = self.parent.db.branch_info(branch) {
+                    self.report_illegal_nature_access(
+                        self.parent.db.branch_data(branch).name.to_string(),
+                        branch_info.discipline,
+                        Some(access_nature),
+                        access_expr,
+                    )
+                }
+            }
+
+            Some(NATURE_ACCESS_NODE_GND) => {
+                let node = self.parent.infer.expr_types[args[0]].unwrap_node();
+                if let Some(discipline) = self.parent.db.node_discipline(node) {
+                    let node = self.parent.db.node_data(node);
+                    self.report_illegal_nature_access(
+                        format!("({})", node.name),
+                        discipline,
+                        Some(access_nature),
+                        access_expr,
+                    )
+                }
+            }
+
+            Some(NATURE_ACCESS_NODES) => {
+                let node1 = self.parent.infer.expr_types[args[0]].unwrap_node();
+                let node2 = self.parent.infer.expr_types[args[0]].unwrap_node();
+                if let Some(discipline1) = self.parent.db.node_discipline(node1) {
+                    if let Some(discipline2) = self.parent.db.node_discipline(node2) {
+                        let discipline2 = self.parent.db.discipline_info(discipline2);
+                        if discipline2.compatible(discipline1, self.parent.db) {
+                            let node1 = self.parent.db.node_data(node1);
+                            let node2 = self.parent.db.node_data(node2);
+                            self.report_illegal_nature_access(
+                                format!("({}, {})", node1.name, node2.name),
+                                discipline1,
+                                Some(access_nature),
+                                access_expr,
+                            )
+                        } else {
+                            self.report(BodyValidationDiagnostic::IncompatibleImplicitBranch {
+                                access: access_expr,
+                                node1,
+                                node2,
+                            })
+                        }
+                    }
+                }
+            }
+
+            Some(NATURE_ACCESS_PORT_FLOW) => {
+                let node = self.parent.infer.expr_types[args[0]].unwrap_port_flow();
+                if let Some(discipline) = self.parent.db.node_discipline(node) {
+                    let node = self.parent.db.node_data(node);
+                    self.report_illegal_nature_access(
+                        format!("(<{}>)", node.name),
+                        discipline,
+                        Some(access_nature),
+                        access_expr,
+                    )
+                }
+            }
+            Some(_) => unreachable!(),
+            None => (),
+        };
+    }
+
     fn validate_expr(&mut self, expr: ExprId) {
         match self.parent.body.exprs[expr] {
             Expr::Call { ref fun, ref args, .. } => {
-                if let Some(ResolvedFun::BuiltIn(builtin)) =
-                    self.parent.infer.resolved_calls.get(&expr)
-                {
-                    let signature = self.parent.infer.resolved_signatures.get(&expr);
-                    self.validate_builtin(fun, expr, args, *builtin, signature.cloned());
-                    return;
+                match self.parent.infer.resolved_calls.get(&expr) {
+                    Some(ResolvedFun::BuiltIn(builtin)) => {
+                        let signature = self.parent.infer.resolved_signatures.get(&expr);
+                        self.validate_builtin(fun, expr, args, *builtin, signature.cloned());
+                        return;
+                    }
+                    Some(ResolvedFun::InvalidNatureAccess(nature)) => {
+                        self.validate_nature_access(*nature, expr, args);
+                        return;
+                    }
+                    _ => (),
                 }
             }
 
             Expr::Select { cond, then_val, else_val } => {
-                // false positive see https://github.com/rust-lang/rust-clippy/issues/8047
-                #[allow(clippy::needless_option_as_deref)]
                 if let Some(non_const_dominators) =
                     self.parent.validate_condition(cond, self.stmt, |s| {
                         let mut validator = ExprValidator {
@@ -321,12 +474,10 @@ impl ExprValidator<'_, '_> {
                     Ty::FuntionVar { arg: Some(arg), fun, .. } => {
                         let is_output = self.parent.db.function_data(fun).args[arg].is_output;
                         if self.write && !is_output {
-                            self.parent.diagnostics.push(
-                                BodyValidationDiagnostic::WriteToInputArg {
-                                    expr,
-                                    arg: FunctionArgLoc { fun, id: arg },
-                                },
-                            )
+                            self.report(BodyValidationDiagnostic::WriteToInputArg {
+                                expr,
+                                arg: FunctionArgLoc { fun, id: arg },
+                            })
                         }
                     }
 
@@ -342,13 +493,11 @@ impl ExprValidator<'_, '_> {
                             if def.lookup(self.parent.db.upcast()).id
                                 < param.lookup(self.parent.db.upcast()).id
                             {
-                                self.parent.diagnostics.push(
-                                    BodyValidationDiagnostic::IllegalParamAccess {
-                                        def,
-                                        expr,
-                                        param,
-                                    },
-                                )
+                                self.report(BodyValidationDiagnostic::IllegalParamAccess {
+                                    def,
+                                    expr,
+                                    param,
+                                })
                             }
                         }
                     }
@@ -417,11 +566,17 @@ impl ExprValidator<'_, '_> {
                 let hi = self.parent.infer.expr_types[args[0]].unwrap_node();
                 let lo = self.parent.infer.expr_types[args[1]].unwrap_node();
                 self.validate_node_direction_for_access(expr, hi, Some(lo), None);
+                if let Some(discipline) = self.validate_implicit_branch(expr, hi, lo) {
+                    self.validate_flow_or_pot(expr, call, discipline)
+                }
             }
 
             (BuiltIn::potential | BuiltIn::flow, Some(NATURE_ACCESS_NODE_GND)) => {
                 let node = self.parent.infer.expr_types[args[0]].unwrap_node();
                 self.validate_node_direction_for_access(expr, node, None, None);
+                if let Some(discipline) = self.parent.db.node_discipline(node) {
+                    self.validate_flow_or_pot(expr, call, discipline)
+                }
             }
 
             (BuiltIn::flow, Some(NATURE_ACCESS_PORT_FLOW)) => {
@@ -430,13 +585,9 @@ impl ExprValidator<'_, '_> {
                 if !(node_data.is_input | node_data.is_output) {
                     self.report(BodyValidationDiagnostic::ExpectedPort { node, expr })
                 }
-            }
 
-            (BuiltIn::port_connected, _) => {
-                let node = self.parent.infer.expr_types[args[0]].unwrap_node();
-                let node_data = self.parent.db.node_data(node);
-                if !(node_data.is_input | node_data.is_output) {
-                    self.report(BodyValidationDiagnostic::ExpectedPort { node, expr })
+                if let Some(discipline) = self.parent.db.node_discipline(node) {
+                    self.validate_flow_or_pot(expr, BuiltIn::flow, discipline)
                 }
             }
 
@@ -456,12 +607,14 @@ impl ExprValidator<'_, '_> {
                             })
                         }
                         BranchKind::PortFlow(node) if !self.write => {
-                            self.validate_node_direction_for_access(expr, node, None, Some(branch))
+                            self.validate_node_direction_for_access(expr, node, None, Some(branch));
+                            self.validate_flow_or_pot(expr, BuiltIn::flow, branch_info.discipline)
                         }
 
                         BranchKind::PortFlow(_) => (),
                         BranchKind::NodeGnd(node) => {
                             self.validate_node_direction_for_access(expr, node, None, Some(branch));
+                            self.validate_flow_or_pot(expr, call, branch_info.discipline)
                         }
                         BranchKind::Nodes(hi, lo) => {
                             self.validate_node_direction_for_access(
@@ -470,8 +623,18 @@ impl ExprValidator<'_, '_> {
                                 Some(lo),
                                 Some(branch),
                             );
+
+                            self.validate_flow_or_pot(expr, call, branch_info.discipline)
                         }
                     }
+                }
+            }
+
+            (BuiltIn::port_connected, _) => {
+                let node = self.parent.infer.expr_types[args[0]].unwrap_node();
+                let node_data = self.parent.db.node_data(node);
+                if !(node_data.is_input | node_data.is_output) {
+                    self.report(BodyValidationDiagnostic::ExpectedPort { node, expr })
                 }
             }
 
@@ -496,7 +659,7 @@ impl ExprValidator<'_, '_> {
                         false
                     };
 
-                    self.parent.diagnostics.push(BodyValidationDiagnostic::ConstSimparam {
+                    self.report(BodyValidationDiagnostic::ConstSimparam {
                         known,
                         expr,
                         stmt: self.stmt,

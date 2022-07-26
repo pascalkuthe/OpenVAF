@@ -4,7 +4,7 @@ use hir_def::nameres::diagnostics::PathResolveError;
 use hir_def::nameres::DefMap;
 use hir_def::{
     BranchId, DisciplineId, Intern, Lookup, NatureAttrId, NatureAttrLoc, NatureId, NatureRef,
-    NatureRefKind, NodeId, Path, ScopeId,
+    NatureRefKind, NodeId,
 };
 use syntax::name::{kw, Name};
 
@@ -177,6 +177,31 @@ impl DisciplineTy {
             None
         }
     }
+
+    pub fn compatible(&self, other: DisciplineId, db: &dyn HirTyDB) -> bool {
+        let other = db.discipline_info(other);
+        match (self.flow, other.flow) {
+            (Some(flow1), Some(flow2)) => {
+                if !NatureTy::compatible(db, flow1, flow2) {
+                    return false;
+                }
+            }
+            (None, None) => (),
+            _ => return false,
+        }
+
+        match (self.potential, other.potential) {
+            (Some(pot1), Some(pot2)) => {
+                if !NatureTy::compatible(db, pot1, pot2) {
+                    return false;
+                }
+            }
+            (None, None) => (),
+            _ => return false,
+        }
+
+        true
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -187,16 +212,30 @@ pub enum BranchKind {
 }
 
 impl BranchKind {
-    pub fn discipline(&self, db: &dyn HirTyDB, scope: ScopeId) -> Option<DisciplineId> {
-        match self {
+    pub fn discipline(&self, db: &dyn HirTyDB) -> Option<DisciplineId> {
+        match *self {
             // standard dictates that the disciplines of the two nodes need to be compatible
             // compatible disciplines behave identical during type checking
             // so we just use the discipline of the first node here
-            BranchKind::PortFlow(node) | BranchKind::NodeGnd(node) | BranchKind::Nodes(node, _) => {
-                let node = db.node_data(*node);
-                scope
-                    .resolve_item_path(db.upcast(), &Path::new_ident(node.discipline.clone()?))
-                    .ok()
+            BranchKind::PortFlow(node) | BranchKind::NodeGnd(node) => db.node_discipline(node),
+            BranchKind::Nodes(node1, node2) => {
+                let discipline1 = db.node_discipline(node1);
+                let discipline2 = db.node_discipline(node2);
+                // fast path
+                if discipline1 == discipline2 {
+                    return discipline1;
+                }
+
+                let (discipline1, discipline2) = match (discipline1, discipline2) {
+                    (None, res) | (res, None) => return res,
+                    (Some(d1), Some(d2)) => (d1, d2),
+                };
+
+                if db.discipline_info(discipline1).compatible(discipline2, db) {
+                    Some(discipline1)
+                } else {
+                    None
+                }
             }
         }
     }
@@ -240,7 +279,7 @@ impl BranchTy {
             hir_def::BranchKind::Missing => return None,
         };
 
-        Some(Arc::new(BranchTy { discipline: kind.discipline(db, scope)?, kind }))
+        Some(Arc::new(BranchTy { discipline: kind.discipline(db)?, kind }))
     }
 
     pub fn access(&self, nature: NatureId, db: &dyn HirTyDB) -> Option<DisciplineAccess> {

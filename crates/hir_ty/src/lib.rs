@@ -55,7 +55,7 @@ pub fn collect_diagnostics(db: &dyn HirTyDB, root_file: FileId, dst: &mut impl D
     let root_scope = def_map.root();
     for child in def_map[root_scope].children.values() {
         if let ScopeOrigin::Module(module) = def_map[*child].origin {
-            collect_body_diagnostcs(db, dst, module.into(), &parse, &sm, root_file)
+            collect_body_diagnostcs(db, dst, module.into(), &parse, &sm, root_file, &ast_id_map)
         }
 
         collect_scope_diagnostc(db, &def_map, &parse, &sm, &ast_id_map, root_file, dst, *child)
@@ -77,7 +77,7 @@ fn collect_scope_diagnostc(
 ) {
     for def in def_map[scope].declarations.values() {
         if let Ok(def) = (*def).try_into() {
-            collect_body_diagnostcs(db, dst, def, parse, sm, root_file);
+            collect_body_diagnostcs(db, dst, def, parse, sm, root_file, ast_id_map);
         }
 
         let def_map = match def {
@@ -128,6 +128,7 @@ fn collect_body_diagnostcs(
     parse: &Parse<SourceFile>,
     sm: &SourceMap,
     root_file: FileId,
+    ast_id_map: &AstIdMap,
 ) {
     let body_sm = db.body_source_map(def);
     let diagnostics = &db.inference_result(def).diagnostics;
@@ -137,9 +138,16 @@ fn collect_body_diagnostcs(
         dst.add_diagnostic(&diag, root_file, db.upcast())
     }
 
-    for diag in BodyValidationDiagnostic::collect(db, def) {
-        let diag =
-            BodyValidationDiagnosticWrapped { body_sm: &body_sm, diag: &diag, parse, db, sm };
+    let diagnostics = BodyValidationDiagnostic::collect(db, def);
+    for diag in diagnostics {
+        let diag = BodyValidationDiagnosticWrapped {
+            body_sm: &body_sm,
+            diag: &diag,
+            parse,
+            db,
+            sm,
+            map: ast_id_map,
+        };
         let db: &dyn HirDefDB = db.upcast();
         dst.add_diagnostic(&diag, root_file, db.upcast())
     }

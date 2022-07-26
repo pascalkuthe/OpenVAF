@@ -31,12 +31,9 @@ pub use crate::builtin::{BuiltIn, ParamSysFun};
 pub use crate::data::FunctionArg;
 use crate::db::HirDefDB;
 pub use crate::expr::{Case, Expr, ExprId, Literal, Stmt, StmtId};
-use crate::item_tree::{
-    AliasParam, Branch, Discipline, Function, ItemTreeId, Module, Nature, Param, Var,
-};
 pub use crate::item_tree::{
-    BranchKind, DisciplineAttr, ItemTree, ItemTreeNode, NatureAttr, NatureRef, NatureRefKind,
-    NodeTypeDecl,
+    AliasParam, Branch, BranchKind, Discipline, DisciplineAttr, Function, ItemTree, ItemTreeId,
+    ItemTreeNode, Module, Nature, NatureAttr, NatureRef, NatureRefKind, NodeTypeDecl, Param, Var,
 };
 use crate::nameres::ScopeDefItem;
 pub use crate::path::Path;
@@ -319,9 +316,11 @@ impl NodeLoc {
         loc.item_tree(db)[loc.id].nodes[self.id].ast_id
     }
 
-    pub fn ast_ptr(self, db: &dyn HirDefDB) -> ErasedAstId {
+    pub fn discipline_ast_id(self, db: &dyn HirDefDB) -> Option<ErasedAstId> {
         let loc = self.module.lookup(db);
-        loc.item_tree(db)[loc.id].nodes[self.id].ast_id
+        let tree = loc.item_tree(db);
+        let decls = &tree[loc.id].nodes[self.id].decls;
+        decls.iter().find(|decl| decl.discipline(&tree).is_some()).map(|it| it.ast_id(&tree))
     }
 }
 

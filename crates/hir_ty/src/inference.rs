@@ -38,6 +38,7 @@ pub enum ResolvedFun {
     User { func: FunctionId, limit: bool },
     BuiltIn(BuiltIn),
     Param(ParamSysFun),
+    InvalidNatureAccess(NatureId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -516,10 +517,10 @@ impl Ctx<'_> {
             return;
         }
 
+        let nature = acccess.0.lookup(self.db.upcast()).nature;
         // Now that we know that the arguments are valid actually resolve whether this is flow or
         // pot access
-        let acccess =
-            self.infere_access_kind(acccess.0.lookup(self.db.upcast()).nature, expr, args[0]);
+        let acccess = self.infere_access_kind(nature, expr, args[0]);
 
         // update resolved_calls in case this is actually a pot and not a flow access
         match acccess {
@@ -531,7 +532,9 @@ impl Ctx<'_> {
                 self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(BuiltIn::flow));
             }
 
-            None => (),
+            None => {
+                self.result.resolved_calls.insert(expr, ResolvedFun::InvalidNatureAccess(nature));
+            }
         }
     }
 
@@ -557,12 +560,7 @@ impl Ctx<'_> {
             var => unreachable!("{:?}", var),
         };
 
-        let node = self.db.node_data(node);
-
-        let def_map = self.db.def_map(nature.lookup(self.db.upcast()).root_file);
-        let discipline =
-            def_map.resolve_local_item_in_scope(def_map.root(), node.discipline.as_ref()?).ok()?;
-
+        let discipline = self.db.node_discipline(node)?;
         self.db.discipline_info(discipline).access(nature, self.db)
     }
 

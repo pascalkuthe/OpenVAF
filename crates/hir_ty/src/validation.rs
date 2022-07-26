@@ -1,6 +1,3 @@
-mod body;
-mod types;
-
 use basedb::diagnostics::{Diagnostic, Label, LabelStyle, Report};
 use basedb::lints::builtin::{const_simparam, variant_const_simparam};
 use basedb::lints::{Lint, LintSrc};
@@ -8,7 +5,8 @@ use basedb::{AstIdMap, BaseDB, FileId};
 pub use body::BodyValidationDiagnostic;
 use hir_def::body::BodySourceMap;
 use hir_def::{
-    DisciplineAttr, ExprId, ItemLoc, ItemTree, ItemTreeNode, Lookup, NatureAttr, NodeTypeDecl,
+    DisciplineAttr, ExprId, ItemLoc, ItemTree, ItemTreeNode, Lookup, NatureAttr, NodeId,
+    NodeTypeDecl,
 };
 use syntax::name::Name;
 use syntax::sourcemap::{FileSpan, SourceMap};
@@ -19,12 +17,75 @@ use crate::db::HirTyDB;
 use crate::validation::body::{BodyCtx, IllegalCtxAccess, IllegalCtxAccessKind};
 use crate::validation::types::DuplicateItem;
 
+mod body;
+mod types;
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct IncompatibleBranchDiagnostic {
+    branch_span: FileSpan,
+    branch_name: String,
+    node1: NodeId,
+    node2: NodeId,
+}
+
+impl IncompatibleBranchDiagnostic {
+    fn to_report(
+        self,
+        db: &dyn HirTyDB,
+        parse: &Parse<SourceFile>,
+        map: &AstIdMap,
+        sm: &SourceMap,
+    ) -> Report {
+        let Self { branch_span, branch_name, node1, node2 } = self;
+
+        let node1_ = node1.lookup(db.upcast());
+        let node1_range = map.get_syntax(node1_.discipline_ast_id(db.upcast()).unwrap()).range();
+        let node1_span = parse.to_file_span(node1_range, sm);
+        let node1 = db.node_data(node1);
+
+        let node2_ = node2.lookup(db.upcast());
+        let node2_range = map.get_syntax(node2_.discipline_ast_id(db.upcast()).unwrap()).range();
+        let node2_span = parse.to_file_span(node2_range, sm);
+        let node2 = db.node_data(node2);
+
+        let msg = format!(
+            "nodes '{}' and '{}' of branch '{}' have incompatiable disciplines!",
+            node1.name, node2.name, branch_name
+        );
+
+        Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: branch_span.file,
+                        range: branch_span.range.into(),
+                        message: format!("'{}' has missmatched disciplines", branch_name),
+                    }])
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Secondary,
+                        file_id: node1_span.file,
+                        range: node1_span.range.into(),
+                        message: format!("help: '{}' declared with discipline '{}'", node1.name, node1.discipline.as_ref().unwrap()),
+                    }])
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Secondary,
+                        file_id: node2_span.file,
+                        range: node2_span.range.into(),
+                        message: format!("help: '{}' declared with discipline '{}'", node2.name, node2.discipline.as_ref().unwrap()),
+                    }])
+                    .with_message(msg)
+                    .with_notes(vec![
+                        format!("help: disciplines are compatible if their potential and flow natures have the same 'units' attribute"),
+                    ])
+    }
+}
+
 pub struct BodyValidationDiagnosticWrapped<'a> {
     pub body_sm: &'a BodySourceMap,
     pub diag: &'a BodyValidationDiagnostic,
     pub parse: &'a Parse<SourceFile>,
     pub db: &'a dyn HirTyDB,
     pub sm: &'a SourceMap,
+    pub map: &'a AstIdMap,
 }
 
 impl BodyValidationDiagnosticWrapped<'_> {
@@ -68,10 +129,10 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
         }
     }
 
-    fn build_report(&self, root_file: basedb::FileId, db: &dyn basedb::BaseDB) -> Report {
-        match self.diag {
+    fn build_report(&self, _root_file: basedb::FileId, _db: &dyn basedb::BaseDB) -> Report {
+        match *self.diag {
             BodyValidationDiagnostic::ExpectedPort { expr, node } => {
-                let FileSpan { range, file } = self.expr_src(*expr);
+                let FileSpan { range, file } = self.expr_src(expr);
                 let node = node.lookup(self.db.upcast());
                 let module = node.module.lookup(self.db.upcast());
                 let tree = module.item_tree(self.db.upcast());
@@ -91,7 +152,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                         NodeTypeDecl::Port(_) => unreachable!(),
                     };
 
-                    let range = db.ast_id_map(root_file).get(tree[net].ast_id).range();
+                    let range = self.map.get(tree[net].ast_id).range();
                     let FileSpan { range, file } = self.parse.to_file_span(range, self.sm);
                     Label {
                         style: LabelStyle::Secondary,
@@ -113,7 +174,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     ])
             }
             BodyValidationDiagnostic::PotentialOfPortFlow { expr, branch } => {
-                let FileSpan { range, file } = self.expr_src(*expr);
+                let FileSpan { range, file } = self.expr_src(expr);
 
                 let mut labels = vec![Label {
                     style: LabelStyle::Primary,
@@ -123,7 +184,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                 }];
 
                 if let Some(branch) = branch {
-                    let (name, FileSpan { range, file }) = self.lookup(*branch);
+                    let (name, FileSpan { range, file }) = self.lookup(branch);
 
                     labels.push(Label {
                         style: LabelStyle::Secondary,
@@ -143,7 +204,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
             }
             BodyValidationDiagnostic::IllegalContribute { stmt, ctx } => {
                 let FileSpan { range, file } = self.parse.to_file_span(
-                    self.body_sm.stmt_map_back[*stmt].as_ref().unwrap().range(),
+                    self.body_sm.stmt_map_back[stmt].as_ref().unwrap().range(),
                     self.sm,
                 );
 
@@ -162,11 +223,11 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
             }
             BodyValidationDiagnostic::InvalidNodeDirectionForAccess {
                 expr,
-                nodes,
+                ref nodes,
                 branch,
                 write,
             } => {
-                let FileSpan { range, file } = self.expr_src(*expr);
+                let FileSpan { range, file } = self.expr_src(expr);
 
                 let (mut labels, notes): (Vec<_>, Vec<_>) = nodes
                     .iter()
@@ -189,7 +250,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                             })
                             .unwrap();
 
-                        let range = db.ast_id_map(root_file).get(tree[port].ast_id).range();
+                        let range = self.map.get(tree[port].ast_id).range();
                         let FileSpan { range, file } = self.parse.to_file_span(range, self.sm);
 
                         (
@@ -208,7 +269,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     })
                     .unzip();
 
-                let (message, label) = if *write {
+                let (message, label) = if write {
                     ("contribute to branch with input ports", "illegal contribution")
                 } else {
                     ("nature access of branch with output ports", "illegal branch access")
@@ -222,7 +283,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                 });
 
                 if let Some(branch) = branch {
-                    let (name, FileSpan { range, file }) = self.lookup(*branch);
+                    let (name, FileSpan { range, file }) = self.lookup(branch);
 
                     labels.push(Label {
                         style: LabelStyle::Secondary,
@@ -238,7 +299,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     .with_notes(notes)
             }
             BodyValidationDiagnostic::WriteToInputArg { expr, arg } => {
-                let FileSpan { range, file } = self.expr_src(*expr);
+                let FileSpan { range, file } = self.expr_src(expr);
                 let arg_name = arg.name(self.db.upcast());
                 let arg_src = arg.ast_ptr(self.db.upcast()).range();
                 let arg_src = self.parse.to_file_span(arg_src, self.sm);
@@ -260,9 +321,9 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     .with_notes(vec![format!("help: change direction of '{}' to inout", arg_name)])
             }
             BodyValidationDiagnostic::IllegalParamAccess { def, expr, param } => {
-                let FileSpan { range, file } = self.expr_src(*expr);
-                let (def_name, def_src) = self.lookup(*def);
-                let (ref_name, ref_src) = self.lookup(*param);
+                let FileSpan { range, file } = self.expr_src(expr);
+                let (def_name, def_src) = self.lookup(def);
+                let (ref_name, ref_src) = self.lookup(param);
 
                 Report::error()
                     .with_message(format!(
@@ -292,8 +353,12 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                             .to_owned(),
                     ])
             }
-            BodyValidationDiagnostic::IllegalCtxAccess(IllegalCtxAccess { kind, ctx, expr }) => {
-                let FileSpan { range, file } = self.expr_src(*expr);
+            BodyValidationDiagnostic::IllegalCtxAccess(IllegalCtxAccess {
+                ref kind,
+                ctx,
+                expr,
+            }) => {
+                let FileSpan { range, file } = self.expr_src(expr);
 
                 let mut res = Report::error().with_labels(vec![Label {
                     style: LabelStyle::Primary,
@@ -314,7 +379,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                         is_standard: _, // TODO add a note?
                         non_const_dominator,
                     } => {
-                        let notes = if *ctx == BodyCtx::Conditional {
+                        let notes = if ctx == BodyCtx::Conditional {
                             vec![
                                 "help: analog operators are only allowed in non-conditional behaviour".to_owned(),
                                 "help: only constant and analysis functions are allowed in conditions".to_owned()
@@ -361,7 +426,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                 }
             }
             BodyValidationDiagnostic::ConstSimparam { known, expr, .. } => {
-                let FileSpan { range, file } = self.expr_src(*expr);
+                let FileSpan { range, file } = self.expr_src(expr);
 
                 let mut res = Report::warning()
                     .with_message(
@@ -385,7 +450,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                 res
             }
             BodyValidationDiagnostic::UnsupportedFunction { expr, func } => {
-                let FileSpan { range, file } = self.expr_src(*expr);
+                let FileSpan { range, file } = self.expr_src(expr);
 
                 let mut res = Report::error()
                     .with_message(format!(
@@ -403,6 +468,75 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     ]);
 
                 res
+            }
+            BodyValidationDiagnostic::IncompatibleNatureAccess {
+                ref candidates,
+                access_nature,
+                access_expr,
+                ref branch,
+            } => {
+                let FileSpan { range, file } = self.expr_src(access_expr);
+                let access_nature = access_nature.map(|nature| self.db.nature_data(nature));
+
+                let message = if let Some(access_nature) = access_nature {
+                    format!("'{}' is not a valid nature for this branch", access_nature.name)
+                } else {
+                    "illegal access".to_owned()
+                };
+
+                let labels = vec![Label {
+                    style: LabelStyle::Primary,
+                    file_id: file,
+                    range: range.into(),
+                    message,
+                }];
+
+                let help_msg = match candidates {
+                    [None, None] => {
+                        "help: this branch has a natureless discipline and can't be accessed"
+                            .to_owned()
+                    }
+                    [None, Some((flow, flow_access))] => {
+                        format!("help: use '{}' to access '{}' (flow)", flow_access, flow)
+                    }
+                    [Some((pot, pot_access)), None] => {
+                        format!("help: use '{}' to access '{}' (potential)", pot_access, pot)
+                    }
+                    [Some((pot, pot_access)), Some((flow, flow_access))] => {
+                        format!(
+                            "help: use '{}' or '{}' to access '{}' (potential) or '{}' (flow)",
+                            pot_access, flow_access, pot, flow
+                        )
+                    }
+                };
+
+                let msg = format!("illegal access of branch '{branch}'");
+
+                Report::error().with_labels(labels).with_message(msg).with_notes(vec![help_msg])
+            }
+            BodyValidationDiagnostic::IllegalNatureAccess { is_pot, access_expr } => {
+                let name = if is_pot { "potential" } else { "flow" };
+                let src = self.expr_src(access_expr);
+                Report::error()
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: src.file,
+                        range: src.range.into(),
+                        message: format!("access of branch without {name}"),
+                    }])
+                    .with_message(format!("'{name}' access of branch without {name}"))
+                    .with_notes(vec![format!("help: this branches nodes have a discipline without the '{name}' attribute")])
+            }
+            BodyValidationDiagnostic::IncompatibleImplicitBranch { access, node1, node2 } => {
+                let node1_ = self.db.node_data(node1);
+                let node2_ = self.db.node_data(node2);
+                IncompatibleBranchDiagnostic {
+                    branch_span: self.expr_src(access),
+                    branch_name: format!("({},{})", node1_.name, node2_.name),
+                    node1,
+                    node2,
+                }
+                .to_report(self.db, self.parse, self.map, self.sm)
             }
         }
     }
@@ -556,7 +690,7 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
             }
             TypeValidationDiagnostic::ExpectedPort { node, src } => {
                 let src = self.parse.to_file_span(self.map.get_syntax(src).range(), self.sm);
-                let decl = node.lookup(self.db.upcast()).ast_ptr(self.db.upcast());
+                let decl = node.lookup(self.db.upcast()).ast_id(self.db.upcast());
                 let decl = self.parse.to_file_span(self.map.get_syntax(decl).range(), self.sm);
                 let node = self.db.node_data(node);
                 let name = &node.name;
@@ -600,6 +734,18 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
                         format!("info: disciplineless nets are digital and therefore not supprted in Verilog-A"),
                         format!("help: add a discipline with 'electrical {name}'"),
                     ])
+            }
+            TypeValidationDiagnostic::IncompatibleBranch { branch, node1, node2 } => {
+                let branch = branch.lookup(self.db.upcast());
+                let branch_range = branch.ast_ptr(self.db.upcast()).range();
+                let branch_name = branch.name(self.db.upcast()).to_string();
+                IncompatibleBranchDiagnostic {
+                    branch_span: self.parse.to_file_span(branch_range, self.sm),
+                    branch_name,
+                    node1,
+                    node2,
+                }
+                .to_report(self.db, self.parse, self.map, self.sm)
             }
         }
     }
