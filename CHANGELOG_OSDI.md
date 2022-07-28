@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added support for `absdelay`
 * Added support for the `analysis` function (always returned true previously).
 * Automatically remove unused nodes (includes noise network until noise support is added).
 * Added errors for branches with incompatible disciplines.

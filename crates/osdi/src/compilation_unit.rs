@@ -253,7 +253,8 @@ pub fn general_callbacks<'ll>(
                 | CallBackKind::StoreLimit(_)
                 | CallBackKind::LimDiscontinuity
                 | CallBackKind::Analysis
-                | CallBackKind::BoundStep => return None,
+                | CallBackKind::BoundStep
+                | CallBackKind::StoreDelayTime(_) => return None,
 
                 CallBackKind::Print { kind, arg_tys } => {
                     let (fun, fun_ty) = print_callback(builder.cx, *kind, arg_tys);

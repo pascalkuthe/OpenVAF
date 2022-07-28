@@ -4,7 +4,7 @@ use std::path::Path;
 
 use ahash::AHashMap;
 use hir_def::db::HirDefDB;
-use hir_lower::{ParamKind, PlaceKind};
+use hir_lower::{CallBackKind, ParamKind, PlaceKind};
 use lasso::{Rodeo, Spur};
 use mir::{FuncRef, Function, Param, Value};
 use mir_interpret::{Data, Func, Interpreter, InterpreterState};
@@ -138,9 +138,9 @@ impl EvalMir {
             .map(|func| {
                 let mut ptr = std::ptr::null_mut();
                 let res = match func {
-                    hir_lower::CallBackKind::Derivative(_)
-                    | hir_lower::CallBackKind::NodeDerivative(_)
-                    | hir_lower::CallBackKind::SimParam => {
+                    CallBackKind::Derivative(_)
+                    | CallBackKind::NodeDerivative(_)
+                    | CallBackKind::SimParam => {
                         |state: &mut InterpreterState,
                          _args: &[Value],
                          rets: &[Value],
@@ -148,7 +148,7 @@ impl EvalMir {
                             state.write(rets[0], 0f64);
                         }
                     }
-                    hir_lower::CallBackKind::SimParamOpt => {
+                    CallBackKind::SimParamOpt => {
                         |state: &mut InterpreterState,
                          args: &[Value],
                          rets: &[Value],
@@ -157,7 +157,7 @@ impl EvalMir {
                             state.write(rets[0], val);
                         }
                     }
-                    hir_lower::CallBackKind::SimParamStr => {
+                    CallBackKind::SimParamStr => {
                         ptr = val as *mut Spur as *mut c_void;
                         |state: &mut InterpreterState,
                          _args: &[Value],
@@ -168,26 +168,17 @@ impl EvalMir {
                         }
                     }
 
-                    hir_lower::CallBackKind::ParamInfo(_, _)
-                    | hir_lower::CallBackKind::CollapseHint(_, _) => {
+                    CallBackKind::ParamInfo(_, _)
+                    | CallBackKind::CollapseHint(_, _)
+                    | CallBackKind::Print { .. }
+                    | CallBackKind::BoundStep
+                    | CallBackKind::LimDiscontinuity => {
                         |_state: &mut InterpreterState,
                          _args: &[Value],
                          _rets: &[Value],
                          _ptr: *mut c_void| {}
                     }
-                    hir_lower::CallBackKind::Print { .. } => {
-                        |_state: &mut InterpreterState,
-                         _args: &[Value],
-                         _rets: &[Value],
-                         _ptr: *mut c_void| {}
-                    }
-                    hir_lower::CallBackKind::BoundStep => {
-                        |_state: &mut InterpreterState,
-                         _args: &[Value],
-                         _rets: &[Value],
-                         _ptr: *mut c_void| {}
-                    }
-                    hir_lower::CallBackKind::BuiltinLimit { .. } => {
+                    CallBackKind::BuiltinLimit { .. } => {
                         |state: &mut InterpreterState,
                          args: &[Value],
                          rets: &[Value],
@@ -196,7 +187,7 @@ impl EvalMir {
                             state.write(rets[0], val)
                         }
                     }
-                    hir_lower::CallBackKind::StoreLimit(_) => {
+                    CallBackKind::StoreLimit(_) | CallBackKind::StoreDelayTime(_) => {
                         |state: &mut InterpreterState,
                          args: &[Value],
                          rets: &[Value],
@@ -205,13 +196,7 @@ impl EvalMir {
                             state.write(rets[0], val)
                         }
                     }
-                    hir_lower::CallBackKind::LimDiscontinuity => {
-                        |_state: &mut InterpreterState,
-                         _args: &[Value],
-                         _rets: &[Value],
-                         _ptr: *mut c_void| {}
-                    }
-                    hir_lower::CallBackKind::Analysis => {
+                    CallBackKind::Analysis => {
                         |state: &mut InterpreterState,
                          _args: &[Value],
                          rets: &[Value],
@@ -248,7 +233,7 @@ impl EvalMir {
         let instance_init = self.interpret_func(&self.init_inst_func, params.clone(), &dummy_calls);
 
         let off = params.len();
-        params.extend((0..self.init_inst_cache_slots.len()).map(|_| Data::UNDEF));
+        params.extend((0..self.cache_slots.len()).map(|_| Data::UNDEF));
         for (&val, &pos) in &self.init_inst_cache_vals {
             if !instance_init.read::<Data>(val).is_undef() {
                 params.raw[usize::from(pos) + off] = instance_init.read(val);

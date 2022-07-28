@@ -63,6 +63,7 @@ pub fn stub_callbacks<'ll>(
                 | CallBackKind::BuiltinLimit { .. }
                 | CallBackKind::StoreLimit(_)
                 | CallBackKind::LimDiscontinuity
+                | CallBackKind::StoreDelayTime(_)
                 | CallBackKind::CollapseHint(_, _) => return None,
                 CallBackKind::Analysis => cx.const_callback(&[cx.ty_str()], cx.const_int(1)),
             };

@@ -9,18 +9,20 @@ use hir_def::{
     Stmt, StmtId, Type, VarId,
 };
 use hir_ty::builtin::{
-    ABS_INT, ABS_REAL, DDX_POT, IDTMOD_IC, IDTMOD_IC_MODULUS, IDTMOD_IC_MODULUS_OFFSET,
-    IDTMOD_IC_MODULUS_OFFSET_NATURE, IDTMOD_IC_MODULUS_OFFSET_TOL, IDTMOD_NO_IC, IDT_IC,
-    IDT_IC_ASSERT, IDT_IC_ASSERT_NATURE, IDT_IC_ASSERT_TOL, IDT_NO_IC, LIMIT_BUILTIN_FUNCTION,
-    MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND,
-    NATURE_ACCESS_PORT_FLOW, SIMPARAM_DEFAULT, SIMPARAM_NO_DEFAULT,
+    ABSDELAY_MAX, ABS_INT, ABS_REAL, DDX_POT, IDTMOD_IC, IDTMOD_IC_MODULUS,
+    IDTMOD_IC_MODULUS_OFFSET, IDTMOD_IC_MODULUS_OFFSET_NATURE, IDTMOD_IC_MODULUS_OFFSET_TOL,
+    IDTMOD_NO_IC, IDT_IC, IDT_IC_ASSERT, IDT_IC_ASSERT_NATURE, IDT_IC_ASSERT_TOL, IDT_NO_IC,
+    LIMIT_BUILTIN_FUNCTION, MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
+    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, SIMPARAM_DEFAULT, SIMPARAM_NO_DEFAULT,
 };
 use hir_ty::db::HirTyDB;
 use hir_ty::inference::{AssignDst, BranchWrite, InferenceResult, ResolvedFun};
 use hir_ty::types::{Ty as HirTy, BOOL_EQ, INT_EQ, INT_OP, REAL_EQ, REAL_OP, STR_EQ};
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
-use mir::{Block, FuncRef, Function, Opcode, Value, FALSE, F_ZERO, GRAVESTONE, TRUE, ZERO};
+use mir::{
+    Block, FuncRef, Function, Opcode, Value, FALSE, F_THREE, F_ZERO, GRAVESTONE, TRUE, ZERO,
+};
 use mir_build::{FunctionBuilder, FunctionBuilderContext, Place, RetBuilder};
 use stdx::iter::zip;
 use stdx::packed_option::ReservedValue;
@@ -979,6 +981,13 @@ impl LoweringCtx<'_, '_> {
             },
             _ => unreachable!(),
         }
+    }
+
+    pub fn lower_expr_as_contrib(&mut self, expr: ExprId) -> Value {
+        let old = replace(&mut self.contribute_rhs, true);
+        let val = self.lower_expr_(expr);
+        self.contribute_rhs = old;
+        val
     }
 
     pub fn lower_expr_maybe_linear(&mut self, expr: ExprId, is_linear: bool) -> Value {
@@ -2081,65 +2090,41 @@ impl LoweringCtx<'_, '_> {
                 }
                 GRAVESTONE
             }
-            // TODO implement properly
             BuiltIn::finish | BuiltIn::stop => GRAVESTONE,
-            // TODO properly implement slew/tranisiton/absdelay
-            BuiltIn::slew | BuiltIn::transition | BuiltIn::absdelay | BuiltIn::limit => {
+
+            BuiltIn::absdelay if self.extra_dims.is_some() => {
+                let arg = self.lower_expr_as_contrib(args[0]);
+                let mut delay = self.lower_expr(args[1]);
+                let (eq1, res) = self.implicit_eqation(ImplicitEquationKind::Absdelay);
+                let (eq2, intermediate) = self.implicit_eqation(ImplicitEquationKind::Absdelay);
+                if *signature.unwrap() == ABSDELAY_MAX {
+                    let max_delay = self.lower_expr(args[2]);
+                    let use_delay = self.func.ins().fle(delay, max_delay);
+                    delay = self.lower_select_with(use_delay, |_| delay, |_| max_delay);
+                } else {
+                    let func = self.callback(CallBackKind::StoreDelayTime(eq1));
+                    delay = self.func.ins().call1(func, &[delay]);
+                }
+
+                let mut resist_val = self.func.ins().fsub(res, arg);
+                resist_val = self.func.ins().fdiv(resist_val, delay);
+                self.define_resist_residual(resist_val, eq1);
+                self.define_react_residual(intermediate, eq1);
+
+                let mut resist_val = self.func.ins().fsub(res, intermediate);
+                resist_val = self.func.ins().fdiv(resist_val, delay);
+                self.define_resist_residual(resist_val, eq2);
+                let react_val = self.func.ins().fdiv(res, F_THREE);
+                self.define_react_residual(react_val, eq2);
+
+                res
+            }
+
+            BuiltIn::slew | BuiltIn::transition | BuiltIn::limit | BuiltIn::absdelay => {
                 self.lower_expr(args[0])
             }
 
-            _ => unreachable!()
-
-            // TODO impelement?
-            // BuiltIn::fclose => todo!(),
-            // BuiltIn::fopen => todo!(),
-            // BuiltIn::fdisplay => todo!(),
-            // BuiltIn::fwrite => todo!(),
-            // BuiltIn::fstrobe => todo!(),
-            // BuiltIn::fmonitor => todo!(),
-            // BuiltIn::fgets => todo!(),
-            // BuiltIn::fscanf => todo!(),
-            // BuiltIn::swrite => todo!(),
-            // BuiltIn::sformat => todo!(),
-            // BuiltIn::sscanf => todo!(),
-            // BuiltIn::rewind => todo!(),
-            // BuiltIn::fseek => todo!(),
-            // BuiltIn::ftell => todo!(),
-            // BuiltIn::fflush => todo!(),
-            // BuiltIn::ferror => todo!(),
-            // BuiltIn::feof => todo!(),
-            // BuiltIn::fdebug => todo!(),
-            // BuiltIn::dist_chi_square => todo!(),
-            // BuiltIn::dist_exponential => todo!(),
-            // BuiltIn::dist_poisson => todo!(),
-            // BuiltIn::dist_uniform => todo!(),
-            // BuiltIn::dist_erlang => todo!(),
-            // BuiltIn::dist_normal => todo!(),
-            // BuiltIn::dist_t => todo!(),
-            // BuiltIn::random => todo!(),
-            // BuiltIn::arandom => todo!(),
-            // BuiltIn::rdist_chi_square => todo!(),
-            // BuiltIn::rdist_exponential => todo!(),
-            // BuiltIn::rdist_poisson => todo!(),
-            // BuiltIn::rdist_uniform => todo!(),
-            // BuiltIn::rdist_erlang => todo!(),
-            // BuiltIn::rdist_normal => todo!(),
-            // BuiltIn::rdist_t => todo!(),
-            // BuiltIn::simprobe => todo!(),
-            // BuiltIn::analog_node_alias => todo!(),
-            // BuiltIn::analog_port_alias => todo!(),
-            // BuiltIn::test_plusargs => todo!(),
-            // BuiltIn::value_plusargs => todo!(),
-            // BuiltIn::zi_nd => todo!(),
-            // BuiltIn::zi_np => todo!(),
-            // BuiltIn::zi_zd => todo!(),
-            // BuiltIn::zi_zp => todo!(),
-            // BuiltIn::laplace_nd => todo!(),
-            // BuiltIn::laplace_np => todo!(),
-            // BuiltIn::laplace_zd => todo!(),
-            // BuiltIn::laplace_zp => todo!(),
-            // BuiltIn::last_crossing => todo!(),
-
+            _ => unreachable!(),
         }
     }
 

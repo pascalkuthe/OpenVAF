@@ -27,7 +27,6 @@ char *concat(const char *s1, const char *s2) {
 typedef void (*osdi_log_ptr)(void *handle, char *msg, uint32_t lvl);
 extern osdi_log_ptr osdi_log;
 
-
 double simparam(void *params_, void *handle, uint32_t *flags, char *name) {
   OsdiSimParas *params = params_;
   for (int i = 0; params->names[i]; i++) {
@@ -151,14 +150,24 @@ double store_lim(void *sim_info_, int idx, double val) {
   return val;
 }
 
-int analysis(void *sim_info_,  char*name){
-    OsdiSimInfo *sim_info = (OsdiSimInfo *)sim_info_;
-    uint32_t flags = sim_info->flags;
-    return ((flags & ANALYSIS_AC) && strcmp(name, "ac"))
-    || ((flags & ANALYSIS_DC) && strcmp(name, "dc"))
-    || ((flags & ANALYSIS_NOISE) && strcmp(name, "noise"))
-    || ((flags & ANALYSIS_TRAN) && strcmp(name, "tran"))
-    || ((flags & ANALYSIS_IC) && strcmp(name, "ic"))
-    || ((flags & ANALYSIS_STATIC) && strcmp(name, "static"))
-    || ((flags & ANALYSIS_NODESET) && strcmp(name, "nodeset"));
+int analysis(void *sim_info_, char *name) {
+  OsdiSimInfo *sim_info = (OsdiSimInfo *)sim_info_;
+  uint32_t flags = sim_info->flags;
+  return ((flags & ANALYSIS_AC) && strcmp(name, "ac")) ||
+         ((flags & ANALYSIS_DC) && strcmp(name, "dc")) ||
+         ((flags & ANALYSIS_NOISE) && strcmp(name, "noise")) ||
+         ((flags & ANALYSIS_TRAN) && strcmp(name, "tran")) ||
+         ((flags & ANALYSIS_IC) && strcmp(name, "ic")) ||
+         ((flags & ANALYSIS_STATIC) && strcmp(name, "static")) ||
+         ((flags & ANALYSIS_NODESET) && strcmp(name, "nodeset"));
+}
+
+double store_delay(void *sim_info_, double *dst, double val) {
+  OsdiSimInfo *sim_info = (OsdiSimInfo *)sim_info_;
+  if (sim_info->flags & ANALYSIS_IC) {
+    *dst = val;
+    return val;
+  }
+
+  return *dst;
 }

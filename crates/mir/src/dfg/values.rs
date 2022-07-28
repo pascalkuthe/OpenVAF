@@ -73,6 +73,7 @@ pub mod consts {
         pub const F_TWO: f64 = 2.0;
         pub const N_ONE: i32 = -1;
         pub const F_TEN: f64 = 10.0;
+        pub const F_THREE: f64 = 3.0;
     }
 }
 

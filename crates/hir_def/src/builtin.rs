@@ -171,7 +171,6 @@ impl BuiltIn {
             | BuiltIn::analog_port_alias
             | BuiltIn::test_plusargs
             | BuiltIn::value_plusargs
-            | BuiltIn::absdelay
             | BuiltIn::zi_nd
             | BuiltIn::zi_np
             | BuiltIn::zi_zd

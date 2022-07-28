@@ -2,9 +2,9 @@ use ahash::AHashMap;
 use hir_lower::{CallBackKind, CurrentKind, LimitState, ParamKind, PlaceKind};
 use llvm::IntPredicate::{IntNE, IntULT};
 use llvm::{
-    LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr,
-    LLVMBuildICmp, LLVMBuildInBoundsGEP2, LLVMBuildIntCast2, LLVMBuildLoad2, LLVMBuildOr,
-    LLVMBuildPointerCast, LLVMBuildRet, LLVMBuildStore, LLVMCreateBuilderInContext,
+    LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCall2,
+    LLVMBuildCondBr, LLVMBuildICmp, LLVMBuildInBoundsGEP2, LLVMBuildIntCast2, LLVMBuildLoad2,
+    LLVMBuildOr, LLVMBuildPointerCast, LLVMBuildRet, LLVMBuildStore, LLVMCreateBuilderInContext,
     LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd, UNNAMED,
 };
 use mir_llvm::{Builder, BuilderVal, CallbackFun, MemLoc};
@@ -191,10 +191,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         ParamKind::HiddenState(_) => unreachable!(), // TODO  hidden state
                         ParamKind::EnableIntegration => {
                             let flags = flags.read(builder.llbuilder);
-                            let is_dc =
-                                is_flag_unset(cx, CALC_REACT_JACOBIAN, flags, builder.llbuilder);
-                            let is_ic = is_flag_set(cx, ANALYSIS_IC, flags, builder.llbuilder);
-                            LLVMBuildOr(builder.llbuilder, is_dc, is_ic, UNNAMED)
+                            let is_not_dc =
+                                is_flag_set(cx, CALC_REACT_JACOBIAN, flags, builder.llbuilder);
+                            let is_not_ic =
+                                is_flag_unset(cx, ANALYSIS_IC, flags, builder.llbuilder);
+                            LLVMBuildAnd(builder.llbuilder, is_not_dc, is_not_ic, UNNAMED)
                         }
                         ParamKind::PrevState(state) => {
                             let idx =
@@ -228,7 +229,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             })
             .collect();
 
-        let cache_vals = (0..module.mir.init_inst_cache_slots.len()).map(|i| unsafe {
+        let cache_vals = (0..module.mir.cache_slots.len()).map(|i| unsafe {
             let slot = i.into();
             let val = inst_data.load_cache_slot(module, builder.llbuilder, slot, instance);
             BuilderVal::Eager(val)
@@ -238,12 +239,13 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         builder.params = params;
 
         builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
+
+        let ty_real_ptr = cx.ptr_ty(cx.ty_real());
         if module.mir.bound_step == BoundStepKind::Eval {
             let bound_step_ptr = unsafe { inst_data.bound_step_ptr(&builder, instance) };
             unsafe { builder.store(bound_step_ptr, cx.const_real(f64::INFINITY)) };
 
             let func_ref = intern.callbacks.unwrap_index(&CallBackKind::BoundStep);
-            let ty_real_ptr = cx.ptr_ty(cx.ty_real());
             let fun = builder
                 .cx
                 .get_func_by_name("bound_step")
@@ -253,49 +255,68 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             builder.callbacks[func_ref] = Some(cb);
         }
 
-        if !intern.lim_state.is_empty() {
-            for (func, kind) in intern.callbacks.iter_enumerated() {
-                let cb = match *kind {
-                    CallBackKind::BuiltinLimit { name, num_args } => {
-                        let id = module
-                            .lim_table
-                            .unwrap_index(&OsdiLimFunction { name, num_args: num_args - 2 });
-                        self.lim_func(id, num_args - 2, &flags, ret_flags)
+        let store_delay_fun = builder
+            .cx
+            .get_func_by_name("store_delay")
+            .expect("stdlib function store_delay is missing");
+        let store_delay_ty =
+            cx.ty_func(&[cx.ty_void_ptr(), ty_real_ptr, cx.ty_real()], cx.ty_void());
+
+        for (func, kind) in intern.callbacks.iter_enumerated() {
+            let cb = match *kind {
+                CallBackKind::BuiltinLimit { name, num_args } => {
+                    let id = module
+                        .lim_table
+                        .unwrap_index(&OsdiLimFunction { name, num_args: num_args - 2 });
+                    self.lim_func(id, num_args - 2, &flags, ret_flags)
+                }
+                CallBackKind::StoreLimit(state) => {
+                    let fun = builder
+                        .cx
+                        .get_func_by_name("store_lim")
+                        .expect("stdlib function store_lim is missing");
+                    let fun_ty =
+                        cx.ty_func(&[cx.ty_void_ptr(), cx.ty_int(), cx.ty_real()], cx.ty_real());
+                    CallbackFun {
+                        fun_ty,
+                        fun,
+                        state: Box::new([sim_info_void, state_idx[state]]),
+                        num_state: 0,
                     }
-                    CallBackKind::StoreLimit(state) => {
-                        let fun = builder
-                            .cx
-                            .get_func_by_name("store_lim")
-                            .expect("stdlib function store_lim is missing");
-                        let fun_ty = cx
-                            .ty_func(&[cx.ty_void_ptr(), cx.ty_int(), cx.ty_real()], cx.ty_real());
-                        CallbackFun {
-                            fun_ty,
-                            fun,
-                            state: Box::new([sim_info_void, state_idx[state]]),
-                            num_state: 0,
-                        }
+                }
+                CallBackKind::LimDiscontinuity => {
+                    let fun = builder
+                        .cx
+                        .get_func_by_name("lim_discontinuity")
+                        .expect("stdlib function lim_discontinuity is missing");
+                    let fun_ty = cx.ty_func(&[cx.ptr_ty(cx.ty_int())], cx.ty_void());
+                    CallbackFun { fun_ty, fun, state: Box::new([ret_flags]), num_state: 0 }
+                }
+                CallBackKind::Analysis => {
+                    let fun = builder
+                        .cx
+                        .get_func_by_name("analysis")
+                        .expect("stdlib function analysis is missing");
+                    let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str()], cx.ty_int());
+                    CallbackFun { fun_ty, fun, state: Box::new([sim_info_void]), num_state: 0 }
+                }
+                CallBackKind::StoreDelayTime(eq) => {
+                    let slot = if let Some(&slot) = self.module.mir.eval_cache_vals.get(&eq) {
+                        inst_data.cache_slot_ptr(builder.llbuilder, slot, instance).0
+                    } else {
+                        continue;
+                    };
+
+                    CallbackFun {
+                        fun_ty: store_delay_ty,
+                        fun: store_delay_fun,
+                        state: Box::new([sim_info_void, slot]),
+                        num_state: 0,
                     }
-                    CallBackKind::LimDiscontinuity => {
-                        let fun = builder
-                            .cx
-                            .get_func_by_name("lim_discontinuity")
-                            .expect("stdlib function lim_discontinuity is missing");
-                        let fun_ty = cx.ty_func(&[cx.ptr_ty(cx.ty_int())], cx.ty_void());
-                        CallbackFun { fun_ty, fun, state: Box::new([ret_flags]), num_state: 0 }
-                    }
-                    CallBackKind::Analysis => {
-                        let fun = builder
-                            .cx
-                            .get_func_by_name("analysis")
-                            .expect("stdlib function analysis is missing");
-                        let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str()], cx.ty_int());
-                        CallbackFun { fun_ty, fun, state: Box::new([sim_info_void]), num_state: 0 }
-                    }
-                    _ => continue,
-                };
-                builder.callbacks[func] = Some(cb);
-            }
+                }
+                _ => continue,
+            };
+            builder.callbacks[func] = Some(cb);
         }
 
         unsafe {

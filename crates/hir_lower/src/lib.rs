@@ -5,6 +5,7 @@ use bitset::HybridBitSet;
 use hir_def::{
     BranchId, FunctionId, LocalFunctionArgId, NodeId, ParamId, ParamSysFun, Type, VarId,
 };
+use hir_ty::db::HirTyDB;
 use hir_ty::inference::BranchWrite;
 use indexmap::IndexMap;
 use lasso::Spur;
@@ -30,6 +31,7 @@ pub enum ImplicitEquationKind {
     LinearDdt,
     Idt(IdtKind),
     NoiseSrc,
+    Absdelay,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -150,6 +152,22 @@ pub enum PlaceKind {
     ParamMax(ParamId),
 }
 
+impl PlaceKind {
+    pub fn ty(&self, db: &dyn HirTyDB) -> Type {
+        match *self {
+            PlaceKind::Var(var) => db.var_data(var).ty.clone(),
+            PlaceKind::FunctionReturn(fun) => db.function_data(fun).return_ty.clone(),
+            PlaceKind::FunctionArg { fun, arg } => db.function_data(fun).args[arg].ty.clone(),
+
+            PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => Type::Real,
+            PlaceKind::ParamMin(param) | PlaceKind::ParamMax(param) | PlaceKind::Param(param) => {
+                db.param_data(param).ty.clone()
+            }
+            PlaceKind::IsVoltageSrc(_) | PlaceKind::CollapseImplicitEquation(_) => Type::Bool,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum ParamInfoKind {
     Invalid,
@@ -203,6 +221,7 @@ pub enum CallBackKind {
     StoreLimit(LimitState),
     LimDiscontinuity,
     Analysis,
+    StoreDelayTime(ImplicitEquation),
 }
 
 impl CallBackKind {
@@ -282,6 +301,12 @@ impl CallBackKind {
             },
             CallBackKind::Analysis => FunctionSignature {
                 name: "analysis".to_owned(),
+                params: 1,
+                returns: 1,
+                has_sideeffects: false,
+            },
+            CallBackKind::StoreDelayTime(eq) => FunctionSignature {
+                name: format!("store_delay[{eq:?}]"),
                 params: 1,
                 returns: 1,
                 has_sideeffects: false,

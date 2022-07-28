@@ -1,14 +1,15 @@
 use ahash::AHashSet;
 use bitset::{BitSet, SparseBitMatrix};
-use hir_def::db::HirDefDB;
 use hir_def::{NodeId, Type};
-use hir_lower::{CallBackKind, CurrentKind, HirInterner, MirBuilder, ParamKind, PlaceKind};
+use hir_lower::{
+    CallBackKind, CurrentKind, HirInterner, ImplicitEquation, MirBuilder, ParamKind, PlaceKind,
+};
 use hir_ty::inference::BranchWrite;
 use indexmap::{IndexMap, IndexSet};
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{ControlFlowGraph, DominatorTree, Function, InstructionData, Value, FALSE};
+use mir::{ControlFlowGraph, DominatorTree, Function, Inst, InstructionData, Value, FALSE};
 use mir_autodiff::auto_diff;
 use mir_opt::{
     agressive_dead_code_elimination, dead_code_elimination, inst_combine, propagate_taint,
@@ -47,7 +48,8 @@ pub struct EvalMir {
     pub init_inst_func: Function,
     pub init_inst_cfg: ControlFlowGraph,
     pub init_inst_cache_vals: IndexMap<Value, CacheSlot, ahash::RandomState>,
-    pub init_inst_cache_slots: TiMap<CacheSlot, (ClassId, u32), Type>,
+    pub eval_cache_vals: IndexMap<ImplicitEquation, CacheSlot, ahash::RandomState>,
+    pub cache_slots: TiMap<CacheSlot, (PackedOption<ClassId>, u32), Type>,
     pub init_inst_intern: HirInterner,
 
     pub eval_intern: HirInterner,
@@ -286,6 +288,7 @@ impl EvalMir {
         let mut init_inst_cfg = cfg.clone();
 
         let mut init_inst_cache: IndexSet<_, ahash::RandomState> = IndexSet::default();
+        let mut eval_cache: IndexSet<_, ahash::RandomState> = IndexSet::default();
 
         for inst in func.dfg.insts.iter() {
             let bb = if let Some(bb) = init_inst_func.layout.inst_block(inst) {
@@ -297,9 +300,19 @@ impl EvalMir {
             if op_dependent_insts.contains(inst) {
                 if !func.dfg.insts[inst].is_terminator() {
                     if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
-                        if let CallBackKind::CollapseHint(_, _) = intern.callbacks[func_ref] {
-                            func.dfg.zap_inst(inst);
-                            func.layout.remove_inst(inst);
+                        match intern.callbacks[func_ref] {
+                            CallBackKind::CollapseHint(_, _) => {
+                                func.dfg.zap_inst(inst);
+                                func.layout.remove_inst(inst);
+                            }
+
+                            CallBackKind::StoreDelayTime(eq) => {
+                                let arg = func.dfg.instr_args(inst)[0];
+                                if init_inst_func.dfg.value_def(arg).inst().is_some() {
+                                    eval_cache.insert((arg, eq));
+                                }
+                            }
+                            _ => (),
                         }
                     }
                     init_inst_func.dfg.zap_inst(inst);
@@ -351,6 +364,22 @@ impl EvalMir {
                 }
                 func.dfg.zap_inst(inst);
                 func.layout.remove_inst(inst);
+            } else if let InstructionData::Call { func_ref, .. } = func.dfg.insts[inst] {
+                if let CallBackKind::StoreDelayTime(_) = intern.callbacks[func_ref] {
+                    func.dfg.zap_inst(inst);
+                    func.layout.remove_inst(inst);
+                    init_inst_func.dfg.zap_inst(inst);
+                    init_inst_func.layout.remove_inst(inst);
+
+                    let arg = func.dfg.instr_args(inst)[0];
+                    let res = func.dfg.first_result(inst);
+                    func.dfg.replace_uses(res, arg);
+                    init_inst_func.dfg.replace_uses(res, arg);
+                    if func.dfg.value_def(arg).inst().is_some() {
+                        let param = init_inst_cache.insert_full(arg).0 + intern.params.len();
+                        func.dfg.values.make_param_at(param.into(), arg);
+                    }
+                }
             }
         }
 
@@ -388,57 +417,60 @@ impl EvalMir {
         simplify_cfg(&mut func, &mut cfg);
 
         let mut extra_class = 0;
-        let mut init_inst_cache_slots: TiMap<CacheSlot, _, _> = TiMap::default();
+        let mut cache_slots: TiMap<CacheSlot, _, _> = TiMap::default();
+        let mut ensure_cache_slot = |inst: Option<Inst>, res, ty| {
+            let class = inst.and_then(|inst| gvn.inst_class(inst).expand());
+            let equiv_class = class.unwrap_or_else(|| {
+                let class = gvn.num_class() + extra_class;
+                extra_class += 1;
+                class.into()
+            });
+            cache_slots.insert_full((equiv_class.into(), res as u32), ty).0
+        };
+
         let init_inst_cache_vals: IndexMap<_, _, _> = init_inst_cache
             .iter()
-            .filter_map(|val| {
-                if func.dfg.value_dead(*val) && !output_values.contains(*val) {
-                    func.dfg.values.fconst_at(0f64.into(), *val);
+            .filter_map(|&val| {
+                if func.dfg.value_dead(val) && !output_values.contains(val) {
+                    func.dfg.values.fconst_at(0f64.into(), val);
                     return None;
                 }
 
-                let ty = if let Some(tag) = func.dfg.tag(*val) {
+                let ty = if let Some(tag) = func.dfg.tag(val) {
                     let idx = usize::from(tag);
-                    let kind = *intern.outputs.get_index(idx).unwrap().0;
-                    match kind {
-                        PlaceKind::Var(var) => db.var_data(var).ty.clone(),
-                        PlaceKind::FunctionReturn(fun) => db.function_data(fun).return_ty.clone(),
-                        PlaceKind::FunctionArg { fun, arg } => {
-                            db.function_data(fun).args[arg].ty.clone()
-                        }
-
-                        PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => {
-                            Type::Real
-                        }
-                        PlaceKind::ParamMin(_)
-                        | PlaceKind::ParamMax(_)
-                        | PlaceKind::CollapseImplicitEquation(_)
-                        | PlaceKind::Param(_) => {
-                            unreachable!()
-                        }
-                        PlaceKind::IsVoltageSrc(_) => Type::Bool,
-                    }
+                    let place = intern.outputs.get_index(idx).unwrap().0;
+                    place.ty(db)
                 } else {
                     Type::Real
                 };
 
-                let (inst, res) = init_inst_func.dfg.value_def(*val).unwrap_result();
+                let (inst, res) = init_inst_func.dfg.value_def(val).unwrap_result();
+                let pos = ensure_cache_slot(Some(inst), res, ty);
 
-                let equiv_class = gvn.inst_class(inst).expand().unwrap_or_else(|| {
-                    let res = gvn.num_class() + extra_class;
-                    extra_class += 1;
-                    res.into()
-                });
-                let pos = init_inst_cache_slots.insert_full((equiv_class, res as u32), ty).0;
-
-                func.dfg.values.make_param_at((pos.0 as usize + intern.params.len()).into(), *val);
-                let inst = init_inst_func.dfg.value_def(*val).unwrap_inst();
+                func.dfg.values.make_param_at((pos.0 as usize + intern.params.len()).into(), val);
                 let val = FuncCursor::new(&mut init_inst_func)
                     .after_inst_no_phi(inst)
                     .ins()
-                    .optbarrier(*val);
+                    .optbarrier(val);
 
                 Some((val, pos))
+            })
+            .collect();
+        let eval_cache_vals = eval_cache
+            .iter()
+            .filter_map(|&(val, eq)| {
+                if func.dfg.value_dead(val) && !output_values.contains(val) {
+                    func.dfg.values.fconst_at(0f64.into(), val);
+                    return None;
+                }
+
+                let (inst, res) = match func.dfg.value_def(val).result() {
+                    Some((inst, res)) => (Some(inst), res),
+                    None => (None, 0),
+                };
+
+                let pos = ensure_cache_slot(inst, res, Type::Real);
+                Some((eq, pos))
             })
             .collect();
 
@@ -513,7 +545,8 @@ impl EvalMir {
             init_inst_func,
             init_inst_cfg,
             init_inst_cache_vals,
-            init_inst_cache_slots,
+            eval_cache_vals,
+            cache_slots,
             init_inst_intern,
             eval_intern,
             lim_rhs,

@@ -244,7 +244,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let connected_ports = cx.ty_int();
 
         let mut cache_slots: TiVec<_, _> =
-            cgunit.mir.init_inst_cache_slots.raw.values().map(|ty| lltype(ty, cx)).collect();
+            cgunit.mir.cache_slots.raw.values().map(|ty| lltype(ty, cx)).collect();
 
         let bound_step = if cgunit.mir.bound_step != BoundStepKind::None {
             Some(cache_slots.push_and_get_key(cx.ty_real()))
@@ -743,7 +743,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let (ptr, ty) = self.cache_slot_ptr(llbuilder, slot, ptr);
         let mut val = LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED);
 
-        if module.mir.init_inst_cache_slots[slot] == Type::Bool {
+        if module.mir.cache_slots[slot] == Type::Bool {
             val = LLVMBuildICmp(
                 llbuilder,
                 IntPredicate::IntNE,
@@ -765,7 +765,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         mut val: &'ll llvm::Value,
     ) {
         let (ptr, ty) = self.cache_slot_ptr(llbuilder, slot, ptr);
-        if module.mir.init_inst_cache_slots[slot] == Type::Bool {
+        if module.mir.cache_slots[slot] == Type::Bool {
             val = LLVMBuildIntCast2(llbuilder, val, ty, llvm::False, UNNAMED);
         }
         LLVMBuildStore(llbuilder, val, ptr);
