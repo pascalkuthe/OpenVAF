@@ -6,7 +6,9 @@ fn main() {
         println!("cargo:rustc-link-search=native={}", src.to_str().unwrap());
     }
 
-    println!("cargo:rustc-link-lib=dylib=verilogae");
+    if std::env::var("CARGO_FEATURE_STATIC").is_err() {
+        println!("cargo:rustc-link-lib=dylib=verilogae");
+    }
 }
 
 pub fn project_root() -> PathBuf {
