@@ -13,8 +13,6 @@ doctest = false
 mir = {version = "0.0.0", path = "../mir" }
 
 stdx = {version = "0.0.0", path = "../stdx" }
-bforest = {version = "0.0.0" , path = "../bforest"}
-list_pool = {version = "0.0.0" , path = "../list_pool"}
 workqueue = {version = "0.0.0", path = "../workqueue" }
 bitset = {version = "0.0.0", path = "../bitset" }
 
@@ -22,7 +20,6 @@ typed-index-collections = "3.0"
 ahash = "0.7"
 hashbrown = {version = "0.12", features = ["raw"]}
 indexmap = "1.6"
-dot = "0.1.4"
 
 [dev-dependencies]
 expect-test = "1.1"
