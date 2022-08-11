@@ -12,9 +12,8 @@ name = "verilogae_py"
 
 [dependencies]
 pyo3-ffi = { version = "0.16", features = ["extension-module"]}
-verilogae_ffi = { version = "0.9.0-beta8", path = "../verilogae_ffi"}
+verilogae_ffi = { version = "0.9.0-beta8", path = "../verilogae_ffi", default_features=false}
 libc = "0.2"
-ahash = "0.7"
 
 [build-dependencies]
 
@@ -23,5 +22,5 @@ pyo3-build-config = {version = "0.16", features = ["resolve-config"]}
 
 [features]
 
-default = ["build"]
-build = ["verilogae_ffi/build"]
+default = ["static"]
+static = ["verilogae_ffi/static"]

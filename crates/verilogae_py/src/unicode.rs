@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 #[cfg(windows)]
 use libc::wchar_t;
@@ -40,10 +39,10 @@ impl OsStr {
         if fs_encoded_bytes.is_null() {
             return None;
         }
-        let ptr = unsafe { PyBytes_AS_STRING(fs_encoded_bytes) as *mut u8 };
+        let ptr = unsafe { PyBytes_AS_STRING(fs_encoded_bytes) as *const u8 };
         let len = unsafe { PyBytes_GET_SIZE(fs_encoded_bytes) as usize };
 
-        Some(OsStr { py: fs_encoded_bytes, data: NativePath { ptr, len, _phantom_0: PhantomData } })
+        Some(OsStr { py: fs_encoded_bytes, data: NativePath::from_raw_parts(ptr, len) })
     }
 
     #[cfg(windows)]
@@ -60,11 +59,11 @@ impl OsStr {
         assert_eq!(bytes_read, size);
 
         let len = buffer.len();
-        let ptr = Box::into_raw(buffer.into_boxed_slice()) as *mut wchar_t;
+        let ptr = Box::into_raw(buffer.into_boxed_slice());
 
         // Copy wide char buffer into OsString
 
-        Some(OsStr { data: NativePath { ptr, len, _phantom_0: PhantomData } })
+        Some(OsStr { data: NativePath::from_raw_parts(ptr, len) })
     }
 }
 

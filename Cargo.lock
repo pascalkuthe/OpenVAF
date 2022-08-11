@@ -1128,7 +1128,6 @@ version = "0.9.0-beta8"
 dependencies = [
  "ahash",
  "anyhow",
- "arrayvec",
  "base_n",
  "basedb",
  "bitset",
@@ -1172,7 +1171,6 @@ dependencies = [
 name = "verilogae_py"
 version = "0.9.0-beta8"
 dependencies = [
- "ahash",
  "libc",
  "pyo3-build-config",
  "pyo3-ffi",

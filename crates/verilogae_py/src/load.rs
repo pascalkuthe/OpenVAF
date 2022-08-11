@@ -8,7 +8,6 @@ use crate::typeref;
 use crate::unicode::OsStr;
 use crate::util::unlikely;
 
-use std::marker::PhantomData;
 use std::ptr;
 
 macro_rules! handle_opt {
@@ -19,8 +18,7 @@ macro_rules! handle_opt {
             if unlikely(model.is_null()) {
                 return raise_type_exception(concat!($fun, "() module kwarg is not a str"));
             }
-            $dst.write().model =
-                Slice { ptr: model as *mut u8, len: size as usize, _phantom_0: PhantomData };
+            $dst.write().model = Slice::from_raw_parts(model, size as usize);
             true
         } else if $arg == typeref::VFS_STR {
             match py_to_vfs($fun, $val) {

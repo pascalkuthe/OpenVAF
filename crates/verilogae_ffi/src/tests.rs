@@ -4,7 +4,7 @@ use xshell::{cmd, Shell};
 #[test]
 fn gen_ffi() {
     // messes with caching
-    if std::env::var("CI").is_ok() || std::env::var("RUN_SLOW_TEST").is_err() {
+    if std::env::var("CI").is_ok() || std::env::var("RUN_SLOW_TESTS").is_err() {
         return;
     }
     let vae_dir = project_root().join("crates/verilogae");
@@ -38,6 +38,6 @@ fn gen_ffi() {
     }
     let file_string = format!("{}\n{}", "use super::{NativePath, FatPtr};", &res[off..]);
     let file_string = add_preamble("gen_ffi", reformat(file_string));
-    let file = project_root().join("crates/verilogae_ffi/src/ffi.rs");
+    let file = project_root().join("crates/verilogae_ffi/src/ffi/generated.rs");
     ensure_file_contents(&file, &file_string);
 }
