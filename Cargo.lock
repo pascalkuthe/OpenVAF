@@ -339,7 +339,6 @@ dependencies = [
  "sourcegen",
  "stdx",
  "syntax",
- "text-size",
  "typed-index-collections",
 ]
 
@@ -378,7 +377,6 @@ dependencies = [
  "basedb",
  "expect-test",
  "hir_def",
- "indexmap",
  "parking_lot",
  "proc-macro2",
  "quote",
@@ -387,7 +385,6 @@ dependencies = [
  "sourcegen",
  "stdx",
  "syntax",
- "text-size",
  "typed-index-collections",
 ]
 
@@ -450,7 +447,6 @@ name = "linker"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "libc",
  "target",
 ]
 
@@ -538,13 +534,10 @@ version = "0.0.0"
 dependencies = [
  "ahash",
  "arena",
- "arrayvec",
- "bforest",
  "bitset",
  "expect-test",
  "float-cmp",
  "indexmap",
- "list_pool",
  "mir",
  "mir_interpret",
  "mir_reader",
@@ -558,19 +551,15 @@ dependencies = [
 name = "mir_build"
 version = "0.0.0"
 dependencies = [
- "ahash",
  "bforest",
  "bitset",
  "expect-test",
- "indexmap",
  "lasso",
- "list_pool",
  "mir",
  "mir_reader",
  "smallvec",
  "stdx",
  "typed-index-collections",
- "typed_indexmap",
 ]
 
 [[package]]
@@ -578,9 +567,7 @@ name = "mir_interpret"
 version = "0.0.0"
 dependencies = [
  "lasso",
- "list_pool",
  "mir",
- "stdx",
  "typed-index-collections",
 ]
 
@@ -595,7 +582,6 @@ dependencies = [
  "libc",
  "llvm",
  "mir",
- "stdx",
  "target",
  "typed-index-collections",
 ]
@@ -605,13 +591,10 @@ name = "mir_opt"
 version = "0.0.0"
 dependencies = [
  "ahash",
- "bforest",
  "bitset",
- "dot",
  "expect-test",
  "hashbrown 0.12.3",
  "indexmap",
- "list_pool",
  "mir",
  "mir_reader",
  "stdx",
@@ -626,10 +609,7 @@ dependencies = [
  "bforest",
  "expect-test",
  "lasso",
- "list_pool",
  "mir",
- "stdx",
- "typed-index-collections",
 ]
 
 [[package]]
@@ -667,33 +647,22 @@ checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
 name = "openvaf-driver"
 version = "0.1.2"
 dependencies = [
- "ahash",
  "anyhow",
  "base_n",
  "basedb",
  "clap",
  "directories-next",
- "hir_def",
- "hir_lower",
- "hir_ty",
- "indexmap",
- "lasso",
  "linker",
  "llvm",
  "md5",
  "mimalloc",
  "mir_llvm",
  "osdi",
- "parking_lot",
  "path-absolutize",
  "paths",
  "sim_back",
- "stdx",
- "syntax",
  "target",
  "termcolor",
- "typed-index-collections",
- "typed_indexmap",
 ]
 
 [[package]]
@@ -707,10 +676,7 @@ name = "osdi"
 version = "0.0.0"
 dependencies = [
  "ahash",
- "anyhow",
  "base_n",
- "basedb",
- "bitset",
  "expect-test",
  "float-cmp",
  "hir_def",
@@ -720,11 +686,8 @@ dependencies = [
  "lasso",
  "llvm",
  "mir",
- "mir_autodiff",
  "mir_interpret",
  "mir_llvm",
- "mir_opt",
- "parking_lot",
  "paths",
  "proc-macro2",
  "quote",
@@ -734,7 +697,6 @@ dependencies = [
  "smol_str",
  "sourcegen",
  "stdx",
- "syntax",
  "target",
  "typed-index-collections",
  "typed_indexmap",
@@ -962,7 +924,6 @@ dependencies = [
  "sourcegen",
  "stdx",
  "syntax",
- "target",
  "typed-index-collections",
  "typed_indexmap",
  "workqueue",

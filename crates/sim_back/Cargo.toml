@@ -26,8 +26,6 @@ mir_autodiff = { version = "0.0.0", path = "../mir_autodiff" }
 mir_opt = { version = "0.0.0", path = "../mir_opt" }
 workqueue = {version = "0.0.0", path = "../workqueue" }
 
-target = { version = "0.0.0", path = "../target" }
-
 typed-index-collections = "3.0"
 ahash = "0.7"
 lasso = {version = "0.6", features = ["ahash"]}
