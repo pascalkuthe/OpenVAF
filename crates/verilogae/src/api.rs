@@ -184,7 +184,7 @@ expose_named_ptrs! {
 macro_rules! expose_named_consts {
     ($($name: ident: $ty:ty = $sym: literal;)*) => {
         $(
-        #[doc = concat!("This funprefix_with_name = falsection returns a pointer to the `", $sym, "` global")]
+        #[doc = concat!("This funtion returns a pointer to the `", $sym, "` global")]
         /// of a VerilogAE model loaded with `load`.
         ///
         /// # Safety
@@ -236,6 +236,20 @@ pub union Meta<T: Copy> {
 pub struct FatPtr<T: Copy> {
     pub ptr: *mut T,
     pub meta: Meta<T>,
+}
+
+impl<T: Copy> FatPtr<T> {
+    #[inline(always)]
+    pub fn set_scalar(&mut self, val: T) {
+        self.ptr = std::ptr::null_mut();
+        self.meta.scalar = val
+    }
+
+    #[inline(always)]
+    pub fn set_ptr(&mut self, ptr: *mut T, stride: isize) {
+        self.ptr = ptr;
+        self.meta.stride = stride as u64;
+    }
 }
 
 pub type VaeFun = Option<
@@ -463,13 +477,38 @@ impl<T> Default for Slice<T> {
 }
 
 impl<T> Slice<T> {
-    pub(crate) unsafe fn into_box(self) -> Box<[T]> {
+    pub fn from_raw_parts(ptr: *const T, len: usize) -> Self {
+        Self { ptr: ptr as *mut T, len }
+    }
+    /// # Safety
+    /// Pointer must be valid for reads
+    /// Pointer must be allocated by rust
+    pub unsafe fn into_box(self) -> Box<[T]> {
         let raw = std::ptr::slice_from_raw_parts_mut(self.ptr, self.len);
         Box::from_raw(raw)
     }
 
-    pub(crate) unsafe fn read(&self) -> &[T] {
+    /// # Safety
+    /// Pointer must be valid for reads or null
+    /// Pointer must be allocated by rust
+    pub unsafe fn into_box_opt(self) -> Option<Box<[T]>> {
+        if self.ptr.is_null() {
+            None
+        } else {
+            Some(self.into_box())
+        }
+    }
+
+    /// # Safety
+    /// Pointer must be valid for reads
+    pub unsafe fn read(&self) -> &[T] {
         slice::from_raw_parts(self.ptr, self.len)
+    }
+}
+
+impl<T: 'static> From<&'_ [T]> for Slice<T> {
+    fn from(src: &'_ [T]) -> Self {
+        Self { ptr: src.as_ptr() as *mut T, len: src.len() }
     }
 }
 
@@ -482,6 +521,7 @@ impl From<Box<str>> for Slice<u8> {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct VfsEntry {
     pub name: Slice<u8>,
     pub data: Slice<u8>,
@@ -494,7 +534,7 @@ pub type Vfs = Slice<VfsEntry>;
 /// * opts must be valid for reads or null
 /// * opts must only contain valid data
 #[no_mangle]
-pub unsafe extern "C" fn verilogae_export_vfs(path: NativePath, opts: *const Opts) -> Vfs {
+pub unsafe extern "C" fn verilogae_export_vfs(path: NativePath, opts: *mut Opts) -> Vfs {
     let path = path.to_path();
     let opts_;
 

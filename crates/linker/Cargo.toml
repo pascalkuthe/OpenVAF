@@ -12,5 +12,4 @@ doctest = false
 
 [dependencies]
 target = { version = "0.0.0", path = "../target" }
-libc = "0.2"
 anyhow = "1"

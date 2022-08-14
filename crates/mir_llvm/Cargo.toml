@@ -10,7 +10,6 @@ doctest = false
 
 
 [dependencies]
-stdx = { version = "0.0.0", path = "../stdx" }
 llvm = { version = "0.0.0", path = "../llvm" }
 mir = { version = "0.0.0", path = "../mir" }
 target = { version = "0.0.0", path = "../target" }

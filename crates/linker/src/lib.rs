@@ -222,7 +222,7 @@ fn exec_linker(
 
         if let &Ok(ref out) = command_output {
             if out.status.success() {
-                if let Ok(of) = fs::OpenOptions::new().write(true).open(out_filename) {
+                if let Ok(of) = std::fs::OpenOptions::new().write(true).open(out_filename) {
                     of.sync_all()?;
                 }
             }

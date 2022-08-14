@@ -26,13 +26,9 @@ impl crate::flags::Build {
         }
 
         let pythons = find_py();
-        let ld_lib_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-        let ld_lib_path =
-            format!("{}:{}/target/release", ld_lib_path, sh.current_dir().to_str().unwrap());
         for (py, _tag) in &pythons {
             cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
                 .env("PYO3_PYTHON", &py)
-                .env("LD_LIBRARY_PATH", &ld_lib_path)
                 .run()?;
             // cmd!("auditwheel repair "$whl" -w /io/dist/")
         }
@@ -40,14 +36,12 @@ impl crate::flags::Build {
         if self.manylinux {
             for file in sh.read_dir("wheels")? {
                 cmd!(sh, "auditwheel repair {file}  -w wheels")
-                    .env("LD_LIBRARY_PATH", &ld_lib_path)
                     .run()?;
                 std::fs::remove_file(file)?;
             }
         } else {
             for file in sh.read_dir("wheels")? {
                 cmd!(sh, "auditwheel repair {file}  -w wheels --plat linux_x86_64")
-                    .env("LD_LIBRARY_PATH", &ld_lib_path)
                     .run()?;
             }
         }

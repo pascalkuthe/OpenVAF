@@ -7,10 +7,8 @@ license = "GPL-3.0"
 
 [lib]
 doctest = false
-crate-type = ["rlib", "cdylib"]
+crate-type = ["lib", "cdylib"]
 name = "verilogae"
-
-
 
 [dependencies]
 
@@ -47,7 +45,6 @@ smol_str = {version = "0.1.23", default_features=false}
 parking_lot = "0.12"
 typed-index-collections = "3"
 ahash = "0.7"
-arrayvec = "0.7"
 
 anyhow = "1"
 termcolor = "1.1"

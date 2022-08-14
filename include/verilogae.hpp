@@ -332,7 +332,7 @@ const double *verilogae_fun_voltage_defaults(const void *lib, const char *fun);
 ///`sym_name` must batch the schema fun.{NUM}currents.default
 const double *verilogae_fun_current_defaults(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `params.real.cnt` global
+///This funtion returns a pointer to the `params.real.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -340,7 +340,7 @@ const double *verilogae_fun_current_defaults(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_real_fun_param_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `params.integer.cnt` global
+///This funtion returns a pointer to the `params.integer.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -348,7 +348,7 @@ uintptr_t verilogae_real_fun_param_cnt(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_int_fun_param_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `params.string.cnt` global
+///This funtion returns a pointer to the `params.string.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -356,7 +356,7 @@ uintptr_t verilogae_int_fun_param_cnt(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_str_fun_param_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `depbreak.real.cnt` global
+///This funtion returns a pointer to the `depbreak.real.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -364,7 +364,7 @@ uintptr_t verilogae_str_fun_param_cnt(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_real_fun_depbreak_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `depbreak.integer.cnt` global
+///This funtion returns a pointer to the `depbreak.integer.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -372,7 +372,7 @@ uintptr_t verilogae_real_fun_depbreak_cnt(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_int_fun_depbreak_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `voltages.cnt` global
+///This funtion returns a pointer to the `voltages.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -380,7 +380,7 @@ uintptr_t verilogae_int_fun_depbreak_cnt(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_fun_voltage_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `currents.cnt` global
+///This funtion returns a pointer to the `currents.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -388,7 +388,7 @@ uintptr_t verilogae_fun_voltage_cnt(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_fun_current_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `voltages.default.cnt` global
+///This funtion returns a pointer to the `voltages.default.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -396,7 +396,7 @@ uintptr_t verilogae_fun_current_cnt(const void *lib, const char *fun);
 /// `lib` must be a valid pointer returned by the `load` functions or `dlopen`
 uintptr_t verilogae_fun_voltage_default_cnt(const void *lib, const char *fun);
 
-///This funprefix_with_name = falsection returns a pointer to the `currents.default.cnt` global
+///This funtion returns a pointer to the `currents.default.cnt` global
 /// of a VerilogAE model loaded with `load`.
 ///
 /// # Safety
@@ -447,7 +447,7 @@ void verilogae_free_opts(Opts *opts);
 /// * path must be valid for reads
 /// * opts must be valid for reads or null
 /// * opts must only contain valid data
-Vfs verilogae_export_vfs(NativePath path, const Opts *opts);
+Vfs verilogae_export_vfs(NativePath path, Opts *opts);
 
 /// # Safety
 /// * path must be valid for reads

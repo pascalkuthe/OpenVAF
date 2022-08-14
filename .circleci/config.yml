@@ -1,0 +1,33 @@
+version: 2.1
+
+orbs:
+  ferris-ci: pascalkuthe/ferris-ci@0.2
+target_matrix: &target_matrix
+  matrix:
+    parameters:
+      target: ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+workflows:
+  ci:
+    when: 
+      or:
+        - equal: [ trying, << pipeline.git.branch >> ]
+        - equal: [ staging, << pipeline.git.branch >> ]
+
+    jobs:
+      - ferris-ci/vendor:
+          context: github
+      - ferris-ci/clippy:
+          requires: [ferris-ci/vendor]
+          context: github
+      - ferris-ci/build-tests:
+          name: build-tests-<< matrix.target >>
+          <<: *target_matrix
+          requires: [ferris-ci/vendor]
+          context:
+            - github
+            - s3-api
+      - ferris-ci/run-tests:
+          requires: [build-tests-<< matrix.target >>]
+          <<: *target_matrix
+      - ferris-ci/cargo-machete
+      - ferris-ci/rustfmt
