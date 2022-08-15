@@ -18,11 +18,7 @@ extern "C" void LLVMSetPartialFastMath(LLVMValueRef V) {
   }
 }
 
-// Enable some fast-math flags for an operation
-// These flags are used for derivatives by default because they only change
-// the rounding behaviour which is not relevant for automatically generated code
-// (derivatives in OpenVAF)
-//
+// Enable fast-math flags for an operation
 // https://llvm.org/docs/LangRef.html#fast-math-flags
 extern "C" void LLVMSetFastMath(LLVMValueRef V) {
   if (auto I = dyn_cast<Instruction>(unwrap<Value>(V))) {
