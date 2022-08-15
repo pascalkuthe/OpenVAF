@@ -326,11 +326,11 @@ pub type DiagnosticHandler = Option<extern "C" fn(diag: &DiagnosticInfo, ctx: *m
 pub type LLVMYieldCallback = Option<extern "C" fn(arg1: &Context, ctx: *mut c_void)>;
 
 pub fn get_version() -> (u32, u32, u32) {
-    // Can be called without initializing LLVM
+    // If RUST_CHECK is set we do not link LLVM and the version is not known, just use dummy values in that case
     (
-        env!("LLVM_VERSION_MAJOR").parse().unwrap(),
-        env!("LLVM_VERSION_MINOR").parse().unwrap(),
-        env!("LLVM_VERSION_PATCH").parse().unwrap(),
+        option_env!("LLVM_VERSION_MAJOR").map_or(14, |it| it.parse().unwrap()),
+        option_env!("LLVM_VERSION_MINOR").map_or(0, |it| it.parse().unwrap()),
+        option_env!("LLVM_VERSION_PATCH").map_or(6, |it| it.parse().unwrap()),
     )
 }
 

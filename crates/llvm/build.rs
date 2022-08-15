@@ -61,10 +61,14 @@ fn detect_llvm_link() -> (&'static str, &'static str) {
 }
 
 fn main() {
-    // if tracked_env_var_os("RUST_CHECK").is_some() {
-    //     // If we're just running `check`, there's no need for LLVM to be built.
-    //     return;
-    // }
+    if std::env::var("COMPILER_NAME").is_err() {
+        println!("cargo:rustc-env=COMPILER_NAME=openvaf");
+    }
+
+    if tracked_env_var_os("RUST_CHECK").is_some() {
+        // If we're just running `check`, there's no need for LLVM to be built.
+        return;
+    }
 
     // build_helper::restore_library_path();
 
@@ -186,10 +190,6 @@ fn main() {
         }
     } else {
         fail(&format!("Invalid LLVM version {:?}!\nExpected 3 components (major, minor, path) but found the following {} components\n{:?}", version, components.len(),components))
-    }
-
-    if std::env::var("COMPILER_NAME").is_err() {
-        println!("cargo:rustc-env=COMPILER_NAME=openvaf");
     }
 
     let mut cfg = cc::Build::new();
