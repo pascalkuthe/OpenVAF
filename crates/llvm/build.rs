@@ -60,6 +60,13 @@ fn detect_llvm_link() -> (&'static str, &'static str) {
     }
 }
 
+fn winepath(path: &str) -> PathBuf {
+    let mut cmd = Command::new("winepath");
+    cmd.arg(path);
+    let path = output(&mut cmd);
+    Path::new(path.trim()).to_owned()
+}
+
 fn main() {
     if std::env::var("COMPILER_NAME").is_err() {
         println!("cargo:rustc-env=COMPILER_NAME=openvaf");
@@ -120,6 +127,7 @@ fn main() {
     let target = env::var("TARGET").expect("TARGET was not set");
     let host = env::var("HOST").expect("HOST was not set");
     let is_crossed = target != host;
+    let is_wine = is_crossed && target.contains("windows-msvc") && !host.contains("windows");
 
     let optional_components = &[
         "x86", "arm", "aarch64",
@@ -258,6 +266,7 @@ fn main() {
     cmd.args(&components);
 
     for lib in output(&mut cmd).split_whitespace() {
+        let tmp;
         let name = if let Some(stripped) = lib.strip_prefix("-l") {
             stripped
         } else if let Some(stripped) = lib.strip_prefix('-') {
@@ -267,6 +276,18 @@ fn main() {
             // we're only interested in the name part
             let name = Path::new(lib).file_name().unwrap().to_str().unwrap();
             name.trim_end_matches(".lib")
+        } else if is_wine {
+            // for wine the same rules as MSVC exist but we have to translate paths with winepath
+            if lib.contains('\\') {
+                tmp = winepath(lib);
+                let name = tmp.file_name().and_then(OsStr::to_str).unwrap_or("?");
+                if !tmp.exists() {
+                    fail(&format!("llvm lib {name} not found at {} ({lib})", tmp.display()));
+                }
+                name.trim_end_matches(".lib")
+            } else {
+                lib.trim_end_matches(".lib")
+            }
         } else if lib.ends_with(".lib") {
             // Some MSVC libraries just come up with `.lib` tacked on, so chop
             // that off
@@ -298,7 +319,11 @@ fn main() {
     cmd.arg(llvm_link_arg).arg("--ldflags");
     for lib in output(&mut cmd).split_whitespace() {
         if is_crossed {
-            if let Some(stripped) = lib.strip_prefix("-LIBPATH:") {
+            if is_wine {
+                let lib = lib.strip_prefix("-LIBPATH:").expect("ldflags must start with when corss compiling with wine -LIBPATH:");
+                let path = winepath(lib).to_str().expect("all paths are valid utf-8").to_owned();
+                println!("cargo:rustc-link-search=native={}", path);
+            } else if let Some(stripped) = lib.strip_prefix("-LIBPATH:") {
                 println!("cargo:rustc-link-search=native={}", stripped.replace(&host, &target));
             } else if let Some(stripped) = lib.strip_prefix("-L") {
                 println!("cargo:rustc-link-search=native={}", stripped.replace(&host, &target));
