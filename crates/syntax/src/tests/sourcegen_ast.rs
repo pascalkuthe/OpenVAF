@@ -12,6 +12,7 @@ use sourcegen::{
     add_preamble, ensure_file_contents, pluralize, project_root, reformat, to_lower_snake_case,
     to_pascal_case, to_upper_snake_case,
 };
+use stdx::SKIP_HOST_TESTS;
 use ungrammar::{Grammar, Rule};
 
 use crate::tests::ast_src::{
@@ -20,6 +21,10 @@ use crate::tests::ast_src::{
 
 #[test]
 pub fn sourcegen_ast() {
+    if SKIP_HOST_TESTS{
+        return ;
+    }
+
     let src = include_str!("../../veriloga.ungram");
     let grammar = src.parse().unwrap();
 

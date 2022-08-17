@@ -8,6 +8,7 @@ use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
+use stdx::SKIP_HOST_TESTS;
 use syntax::{Parse, SourceFile};
 use vfs::{FileId, Vfs, VfsEntry};
 
@@ -72,6 +73,10 @@ impl VfsStorage for TestDataBase {
 
 #[test]
 pub fn generate_integration_tests() {
+    if SKIP_HOST_TESTS{
+        return ;
+    }
+
     let tests = collect_integration_tests();
     let file = project_root().join("crates/basedb/src/tests/parser_integration.rs");
     let test_impl = tests.into_iter().map(|(test_name,files)|{

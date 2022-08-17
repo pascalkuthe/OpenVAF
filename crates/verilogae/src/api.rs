@@ -545,7 +545,7 @@ pub unsafe extern "C" fn verilogae_export_vfs(path: NativePath, opts: *mut Opts)
         &*opts
     };
 
-    let res = std::panic::catch_unwind(|| export_vfs(path, opts));
+    let res = std::panic::catch_unwind(|| export_vfs(&path, opts));
 
     if let Ok(res) = res {
         match res {
@@ -593,11 +593,11 @@ pub unsafe extern "C" fn verilogae_load(
         &*opts
     };
 
-    let res = std::panic::catch_unwind(|| load(path, full_compile, opts));
+    let res = std::panic::catch_unwind(|| load(&path, full_compile, opts));
 
     if let Ok(res) = res {
         match res {
-            Ok(lib) => return lib.into_raw(),
+            Ok(lib) => return lib.into_raw() as *const c_void,
             Err(err) => eprintln!("{:?}", err),
         }
     }

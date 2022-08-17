@@ -2,12 +2,9 @@
 
 use std::fmt::Debug;
 
-#[cfg(windows)]
-use libc::wchar_t;
 use pyo3_ffi::*;
 use verilogae_ffi::NativePath;
 
-use crate::ffi::{PyBytes_AS_STRING, PyBytes_GET_SIZE};
 use crate::typeref::PATHLIB_PATH;
 
 // #[derive(Debug)]
@@ -34,6 +31,8 @@ impl OsStr {
 
     #[cfg(not(windows))]
     pub fn new(py: *mut PyObject) -> Option<OsStr> {
+        use crate::ffi::{PyBytes_AS_STRING, PyBytes_GET_SIZE};
+
         // Decode from Python's lossless bytes string representation back into raw bytes
         let fs_encoded_bytes = unsafe { PyUnicode_EncodeFSDefault(py) };
         if fs_encoded_bytes.is_null() {
@@ -59,7 +58,7 @@ impl OsStr {
         assert_eq!(bytes_read, size);
 
         let len = buffer.len();
-        let ptr = Box::into_raw(buffer.into_boxed_slice());
+        let ptr = Box::into_raw(buffer.into_boxed_slice()) as *mut u16;
 
         // Copy wide char buffer into OsString
 
@@ -78,8 +77,14 @@ impl Drop for OsStr {
 
 impl Debug for OsStr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[cfg(not(windows))]
         let slice = unsafe {
             std::str::from_utf8(std::slice::from_raw_parts(self.data.ptr, self.data.len)).unwrap()
+        };
+
+        #[cfg(windows)]
+        let slice = unsafe {
+            String::from_utf16(std::slice::from_raw_parts(self.data.ptr, self.data.len)).unwrap()
         };
         write!(f, "{}", slice)
     }

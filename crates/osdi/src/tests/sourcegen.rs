@@ -6,9 +6,14 @@ use indexmap::IndexMap;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote, ToTokens, TokenStreamExt};
 use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat, to_lower_snake_case};
+use stdx::SKIP_HOST_TESTS;
 
 #[test]
 fn gen_osdi_structs() {
+    if SKIP_HOST_TESTS{
+        return ;
+    }
+
     let header_dir = project_root().join("crates").join("osdi").join("header");
     let headers: Vec<_> = read_dir(header_dir)
         .unwrap()
