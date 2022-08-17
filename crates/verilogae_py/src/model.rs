@@ -404,9 +404,9 @@ impl VaeParam {
         unit: *const c_char,
         group: *const c_char,
     ) -> (*mut PyObject, *mut PyObject) {
-        let min = PyLong_FromLong(min as i64);
-        let max = PyLong_FromLong(max as i64);
-        let default = PyLong_FromLong(default as i64);
+        let min = PyLong_FromLong(min as c_long);
+        let max = PyLong_FromLong(max as c_long);
+        let default = PyLong_FromLong(default as c_long);
         VaeParam::new(name, default, min, max, flags, description, unit, group)
     }
 

@@ -1,6 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat};
+use stdx::SKIP_HOST_TESTS;
 
 use crate::builder::InstBuilder;
 use crate::cursor::{Cursor, FuncCursor};
@@ -31,6 +32,10 @@ fn reuse_results() {
 
 #[test]
 fn gen_instr_builder() {
+    if SKIP_HOST_TESTS{
+        return ;
+    }
+
     struct InstrBuilderFunc {
         format: &'static str,
         opcode: &'static OpcodeInfo,

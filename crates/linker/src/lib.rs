@@ -1,8 +1,9 @@
 use anyhow::{bail, Result};
+use cc::windows_registry;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::{ascii, io, mem};
+use std::{ascii, env, io, mem};
 use target::spec::{LinkerFlavor, Target};
 
 pub fn link(
@@ -89,11 +90,14 @@ fn linker_with_args(
 
     add_objects(&mut **cmd);
     cmd.output_filename(out_filename);
+    cmd.set_output_kind();
 
     // FIXME: Built-in target specs occasionally use this for linking system libraries,
     // eliminate all such uses by migrating them to `#[link]` attributes in `lib(std,c,unwind)`
     // and remove the option.
     cmd.add_post_link_args(target, flavor);
+
+    println!("{:?}", cmd.cmd());
 
     cmd.take_cmd()
 }
@@ -110,34 +114,33 @@ fn escape_stdout_stderr_string(s: &[u8]) -> String {
 //// path for MSVC to find its DLLs, and gcc to find its bundled
 //// toolchain
 fn get_linker<'a>(linker: &Path, flavor: LinkerFlavor, target: &'a Target) -> Box<dyn Linker + 'a> {
-    let cmd = Command::new(linker);
+    let mut cmd = Command::new(linker);
 
-    // TODO neccessarry?
-    // let msvc_tool = windows_registry::find_tool(&target.llvm_target, "link.exe");
-    // let mut new_path = sess.get_tools_search_paths(self_contained);
-    // // The compiler's sysroot often has some bundled tools, so add it to the
-    // // PATH for the child.
-    // let mut msvc_changed_path = false;
-    // if target.options.is_like_msvc {
-    //     if let Some(ref tool) = msvc_tool {
-    //         // cmd.args(tool.args());
-    //         for &(ref k, ref v) in tool.env() {
-    //             if k == "PATH" {
-    //                 new_path.extend(env::split_paths(v));
-    //                 msvc_changed_path = true;
-    //             } else {
-    //                 cmd.env(k, v);
-    //             }
-    //         }
-    //     }
-    // }
+    let msvc_tool = windows_registry::find_tool(&target.llvm_target, "link.exe");
+    let mut new_path = Vec::new();
+    // The compiler's sysroot often has some bundled tools, so add it to the
+    // PATH for the child.
+    let mut msvc_changed_path = false;
+    if target.options.is_like_msvc {
+        if let Some(ref tool) = msvc_tool {
+            cmd.args(tool.args());
+            for &(ref k, ref v) in tool.env() {
+                if k == "PATH" {
+                    new_path.extend(env::split_paths(v));
+                    msvc_changed_path = true;
+                } else {
+                    cmd.env(k, v);
+                }
+            }
+        }
+    }
 
-    // if !msvc_changed_path {
-    //     if let Some(path) = env::var_os("PATH") {
-    //         new_path.extend(env::split_paths(&path));
-    //     }
-    // }
-    // cmd.env("PATH", env::join_paths(new_path).unwrap())
+    if !msvc_changed_path {
+        if let Some(path) = env::var_os("PATH") {
+            new_path.extend(env::split_paths(&path));
+        }
+    }
+    cmd.env("PATH", env::join_paths(new_path).unwrap());
 
     match flavor {
         LinkerFlavor::Msvc => Box::new(MsvcLinker { cmd }) as Box<dyn Linker>,
@@ -236,11 +239,11 @@ fn exec_linker(
     //    err.raw_os_error() == Some(::libc::E2BIG)
     //}
 
-    //#[cfg(windows)]
-    //fn command_line_too_big(err: &io::Error) -> bool {
-    //    const ERROR_FILENAME_EXCED_RANGE: i32 = 206;
-    //    err.raw_os_error() == Some(ERROR_FILENAME_EXCED_RANGE)
-    //}
+    // #[cfg(windows)]
+    // fn command_line_too_big(err: &io::Error) -> bool {
+    //     const ERROR_FILENAME_EXCED_RANGE: i32 = 206;
+    //     err.raw_os_error() == Some(ERROR_FILENAME_EXCED_RANGE)
+    // }
 
     //#[cfg(not(any(unix, windows)))]
     //fn command_line_too_big(_: &io::Error) -> bool {
@@ -366,6 +369,7 @@ pub trait Linker {
     fn cmd(&mut self) -> &mut Command;
     fn output_filename(&mut self, path: &Path);
     fn add_object(&mut self, path: &Path);
+    fn set_output_kind(&mut self);
 }
 
 impl dyn Linker + '_ {
@@ -452,7 +456,6 @@ impl<'a> GccLinker<'a> {
 
 impl<'a> Linker for GccLinker<'a> {
     fn cmd(&mut self) -> &mut Command {
-        self.build_dylib();
         &mut self.cmd
     }
 
@@ -462,6 +465,9 @@ impl<'a> Linker for GccLinker<'a> {
     fn add_object(&mut self, path: &Path) {
         self.cmd.arg(path);
     }
+    fn set_output_kind(&mut self) {
+        self.build_dylib();
+    }
 }
 
 pub struct MsvcLinker {
@@ -470,20 +476,23 @@ pub struct MsvcLinker {
 
 impl Linker for MsvcLinker {
     fn cmd(&mut self) -> &mut Command {
-        self.cmd.arg("/DLL");
         // let mut arg: OsString = "/IMPLIB:".into();
         // arg.push(out_filename.with_extension("dll.lib"));
         // self.cmd.arg(arg);
         &mut self.cmd
     }
 
-    fn add_object(&mut self, path: &Path) {
-        self.cmd.arg(path);
-    }
-
     fn output_filename(&mut self, path: &Path) {
         let mut arg = OsString::from("/OUT:");
         arg.push(path);
         self.cmd.arg(&arg);
+    }
+
+    fn add_object(&mut self, path: &Path) {
+        self.cmd.arg(path);
+    }
+
+    fn set_output_kind(&mut self) {
+        self.cmd.arg("/DLL");
     }
 }

@@ -1,5 +1,4 @@
 use core::slice;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -121,7 +120,7 @@ impl Opts {
     pub(crate) fn include_dirs(&self) -> impl Iterator<Item = Result<AbsPathBuf>> + '_ {
         let data = &self.include_dirs;
         let data = unsafe { data.read() };
-        data.iter().map(|slice| unsafe { abs_path(slice.to_path()) })
+        data.iter().map(|slice| unsafe { abs_path(&slice.to_path()) })
     }
 }
 
@@ -129,15 +128,23 @@ impl NativePath {
     /// # Safety
     ///
     /// `self.ptr` must be valid for `self.len` reads
-    pub unsafe fn to_path(&self) -> &Path {
+    pub unsafe fn to_path(&self) -> PathBuf {
         let path = self.read();
 
         #[cfg(not(windows))]
-        let path: &OsStr = std::os::unix::ffi::OsStrExt::from_bytes(path);
+        {
+            use std::ffi::OsStr;
+            use std::os::unix::ffi::OsStrExt;
+            let path = OsStr::from_bytes(path);
+            path.into()
+        }
         #[cfg(windows)]
-        let path: &OsStr = std::os::windows::fii::OsStrExt::from_wide(path);
+        {
+            use std::os::windows::ffi::OsStringExt;
+            use std::ffi::OsString;
+            OsString::from_wide(path).into()
+        }
 
-        Path::new(path)
     }
 }
 

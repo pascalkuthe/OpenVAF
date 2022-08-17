@@ -1,5 +1,6 @@
 use quote::{format_ident, quote};
 use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat};
+use stdx::SKIP_HOST_TESTS;
 use stdx::iter::zip;
 
 pub(crate) struct OpcodeInfo {
@@ -157,6 +158,10 @@ opcodes! {
 
 #[test]
 fn gen_opcodes() {
+    if SKIP_HOST_TESTS{
+        return ;
+    }
+
     let opcodes = INSTRUCTION_FORMATS.iter().flat_map(|format| format.opcodes.iter());
 
     let formats: Vec<_> =

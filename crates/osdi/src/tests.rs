@@ -8,6 +8,7 @@ use mir_llvm::LLVMBackend;
 use paths::AbsPathBuf;
 use quote::format_ident;
 use sim_back::CompilationDB;
+use stdx::SKIP_HOST_TESTS;
 use target::spec::Target;
 
 use quote::quote;
@@ -42,6 +43,9 @@ fn test_compile(root_file: &Path) {
 
 #[test]
 pub fn generate_integration_tests() {
+    if SKIP_HOST_TESTS{
+        return;
+    }
     let tests = collect_integration_tests();
     let file = project_root().join("crates/osdi/src/tests/integration.rs");
     let test_impl = tests.into_iter().map(|(test_name, _)| {

@@ -6,6 +6,7 @@ use quote::{format_ident, quote};
 use sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
+use stdx::SKIP_HOST_TESTS;
 
 use crate::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use crate::nameres::{DefMap, LocalScopeId, ScopeDefItem};
@@ -87,6 +88,9 @@ impl Upcast<dyn BaseDB> for TestDataBase {
 
 #[test]
 pub fn generate_integration_tests() {
+    if SKIP_HOST_TESTS{
+        return ;
+    }
     let tests = collect_integration_tests();
     let file = project_root().join("crates/hir_def/src/tests/integration.rs");
     let test_impl = tests.into_iter().map(|(test_name,files)|{

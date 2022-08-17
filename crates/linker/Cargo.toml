@@ -13,3 +13,4 @@ doctest = false
 [dependencies]
 target = { version = "0.0.0", path = "../target" }
 anyhow = "1"
+cc = "1.0.73"

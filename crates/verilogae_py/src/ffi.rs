@@ -1,7 +1,6 @@
 use std::mem::size_of;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_ulong};
 
-use libc::c_ulonglong;
 use pyo3_ffi::*;
 
 #[allow(non_snake_case)]
@@ -11,18 +10,21 @@ pub unsafe fn PyDict_GET_SIZE(op: *mut PyObject) -> Py_ssize_t {
 }
 
 #[repr(C)]
+#[cfg(not(windows))]
 pub struct PyBytesObject {
     pub ob_base: PyVarObject,
     pub ob_shash: Py_hash_t,
     pub ob_sval: [c_char; 1],
 }
 
+#[cfg(not(windows))]
 #[allow(non_snake_case)]
 #[inline(always)]
 pub unsafe fn PyBytes_AS_STRING(op: *mut PyObject) -> *const c_char {
     &(*op.cast::<PyBytesObject>()).ob_sval as *const c_char
 }
 
+#[cfg(not(windows))]
 #[allow(non_snake_case)]
 #[inline(always)]
 pub unsafe fn PyBytes_GET_SIZE(op: *mut PyObject) -> Py_ssize_t {
@@ -35,11 +37,11 @@ pub unsafe fn PyBytes_GET_SIZE(op: *mut PyObject) -> Py_ssize_t {
 // const Py_TPFLAGS_HAVE_VECTORCALL: c_ulonglong = 0;
 
 #[cfg(Py_3_10)]
-const PY_TPFLAGS_IMMUTABLETYPE: c_ulonglong = pyo3_ffi::Py_TPFLAGS_IMMUTABLETYPE;
+const PY_TPFLAGS_IMMUTABLETYPE: c_ulong = pyo3_ffi::Py_TPFLAGS_IMMUTABLETYPE;
 #[cfg(not(Py_3_10))]
-const PY_TPFLAGS_IMMUTABLETYPE: c_ulonglong = 0;
+const PY_TPFLAGS_IMMUTABLETYPE: c_ulong = 0;
 
-const TY_FLAGS: c_ulonglong = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | PY_TPFLAGS_IMMUTABLETYPE;
+const TY_FLAGS: c_ulong = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | PY_TPFLAGS_IMMUTABLETYPE;
 // | Py_TPFLAGS_HAVE_VECTORCALL;
 
 macro_rules! zero {

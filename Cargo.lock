@@ -447,6 +447,7 @@ name = "linker"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "cc",
  "target",
 ]
 
@@ -787,6 +788,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5b65b546c35d8a3b1b2f0ddbac7c6a569d759f357f2b9df884f5d6b719152c8"
 dependencies = [
  "once_cell",
+ "python3-dll-a",
  "target-lexicon",
 ]
 
@@ -798,6 +800,15 @@ checksum = "c275a07127c1aca33031a563e384ffdd485aee34ef131116fcd58e3430d1742b"
 dependencies = [
  "libc",
  "pyo3-build-config",
+]
+
+[[package]]
+name = "python3-dll-a"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89d69b6def12427d492758e65679b317842d427fc1bb8195edc411cc89b36206"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
