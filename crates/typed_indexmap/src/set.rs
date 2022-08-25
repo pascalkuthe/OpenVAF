@@ -4,7 +4,7 @@ use std::iter;
 use std::marker::PhantomData;
 use std::ops::Index;
 
-use indexmap::IndexSet;
+use indexmap::{Equivalent, IndexSet};
 
 pub type Iter<'a, K, V> =
     iter::Map<iter::Enumerate<indexmap::set::Iter<'a, V>>, fn((usize, &'a V)) -> (K, &'a V)>;
@@ -129,11 +129,17 @@ where
         (id.into(), changed)
     }
 
-    pub fn index(&self, val: &V) -> Option<K> {
+    pub fn index<Q: ?Sized>(&self, val: &Q) -> Option<K>
+    where
+        Q: Hash + Equivalent<V>,
+    {
         self.raw.get_index_of(val).map(K::from)
     }
 
-    pub fn contains(&self, val: &V) -> bool {
+    pub fn contains<Q: ?Sized>(&self, val: &Q) -> bool
+    where
+        Q: Hash + Equivalent<V>,
+    {
         self.raw.contains(val)
     }
 

@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
 use ahash::RandomState;
-use indexmap::IndexMap;
+use indexmap::{Equivalent, IndexMap};
 
 pub type Iter<'a, I, K, V> = iter::Map<
     iter::Enumerate<indexmap::map::Iter<'a, K, V>>,
@@ -40,13 +40,6 @@ impl<I, K, V> Default for TiMap<I, K, V> {
     fn default() -> Self {
         Self { raw: IndexMap::default(), _marker: PhantomData }
     }
-}
-
-impl<I, K, V> Eq for TiMap<I, K, V>
-where
-    K: Hash + Eq,
-    V: Eq,
-{
 }
 
 impl<I, K, V> PartialEq for TiMap<I, K, V>
@@ -93,6 +86,10 @@ where
     K: Eq + Hash,
     I: From<usize>,
 {
+    pub fn next_index(&self) -> I {
+        self.raw.len().into()
+    }
+
     pub fn insert(&mut self, key: K, val: V) -> Option<V> {
         self.raw.insert(key, val)
     }
@@ -107,6 +104,10 @@ impl<I: From<usize>, K, V> TiMap<I, K, V> {
     pub fn iter_enumerated(&self) -> Iter<'_, I, K, V> {
         self.iter().enumerate().map(|(index, val)| (index.into(), val))
     }
+
+    pub fn keys(&self) -> impl Iterator<Item = I> + ExactSizeIterator{
+        (0..self.len()).map(|i| i.into())
+    }
 }
 
 impl<I, K, V> TiMap<I, K, V> {
@@ -120,7 +121,10 @@ where
     I: From<usize> + Into<usize>,
     K: Eq + Hash,
 {
-    pub fn index(&self, key: &K) -> Option<I> {
+    pub fn index<Q: ?Sized>(&self, key: &Q) -> Option<I>
+    where
+        Q: Hash + Equivalent<K>,
+    {
         self.raw.get_index_of(key).map(I::from)
     }
 
@@ -128,7 +132,10 @@ where
         self.raw.get_index_of(key).unwrap().into()
     }
 
-    pub fn index_and_val(&self, key: &K) -> Option<(I, &V)> {
+    pub fn index_and_val<Q: ?Sized>(&self, key: &Q) -> Option<(I, &V)>
+    where
+        Q: Hash + Equivalent<K>,
+    {
         self.raw.get_full(key).map(|(index, _, val)| (index.into(), val))
     }
 
@@ -149,7 +156,6 @@ impl<I, K, V> Index<I> for TiMap<I, K, V>
 where
     I: Into<usize>,
     K: Eq + Hash,
-    V: Eq,
 {
     type Output = V;
 
@@ -162,7 +168,6 @@ impl<I, K, V> IndexMut<I> for TiMap<I, K, V>
 where
     I: Into<usize>,
     K: Eq + Hash,
-    V: Eq,
 {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         self.raw.get_index_mut(index.into()).unwrap().1
