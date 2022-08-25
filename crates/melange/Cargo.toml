@@ -1,0 +1,23 @@
+[package]
+name = "melange"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+
+[lib]
+doctest = false
+
+[dependencies]
+termcolor = "1.1"
+ahash = "0.7"
+anyhow = "1"
+stdx = {version="0.0.0", path="../stdx"}
+typed_indexmap = {version="0.0.0", path="../typed_indexmap"}
+typed-index-collections = "3.0"
+camino = "1.1.1"
+indexmap = "1.6"
+lasso = {version = "0.6", features = ["ahash"]}
+klu-rs = {version = "0.2" ,path="../../../klu-rs/klu"}
+num-complex  = "0.4.2"

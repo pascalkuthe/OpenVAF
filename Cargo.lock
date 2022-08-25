@@ -102,6 +102,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88ad0e1e3e88dd237a156ab9f571021b8a158caa0ae44b1968a241efb5144c1e"
+
+[[package]]
 name = "cc"
 version = "1.0.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -399,6 +405,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "klu-rs"
+version = "0.2.0"
+dependencies = [
+ "klu_sys",
+ "num-complex",
+]
+
+[[package]]
+name = "klu_sys"
+version = "0.2.0"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "lasso"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -491,6 +513,23 @@ name = "md5"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
+
+[[package]]
+name = "melange"
+version = "0.0.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "camino",
+ "indexmap",
+ "klu-rs",
+ "lasso",
+ "num-complex",
+ "stdx",
+ "termcolor",
+ "typed-index-collections",
+ "typed_indexmap",
+]
 
 [[package]]
 name = "memoffset"
@@ -611,6 +650,15 @@ dependencies = [
  "expect-test",
  "lasso",
  "mir",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ae39348c8bc5fbd7f40c727a9925f03517afd2ab27d46702108b6a7e5414c19"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
