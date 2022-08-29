@@ -10,14 +10,12 @@ use camino::Utf8PathBuf;
 use typed_index_collections::TiVec;
 
 use crate::circuit::{Circuit, DeviceId, InstanceId, ModelId, NameSpaceEntry, Node};
-use crate::devices::VaCompiler;
-use crate::expr::ExprArena;
-use crate::Expr;
+use crate::{veriloga, Arena, Expr};
 
 /// A textual description of a circuit from which a circuit can be built.
 /// This serves primarly as an intermediate step for the netlist parser.
 /// By providing a netlist format independent representation, multiple netlist format can be easily
-/// supported withcout code duplication.
+/// supterminaled withcout code duplication.
 /// Furthermore downstream users might prefer the textual format over the builder API provided by
 /// [`Circuit`]
 ///
@@ -34,7 +32,7 @@ pub struct CircuitDescription {
     pub va_files: Vec<Utf8PathBuf>,
 
     /// Arena allocator for expressions
-    pub earena: ExprArena,
+    pub earena: Arena,
 }
 
 /// A device instance inside a [`CircuitDescription`](create::circuit::CircuitDescription).
@@ -65,13 +63,13 @@ pub struct CircuitInstanceDescription {
     /// choosen interpretation.
     pub parameters: ParamDescription,
 
-    /// Names of nodes connected to the ports of the device
+    /// Names of nodes connected to the terminals of the device
     ///
-    /// The number of connected ports can be smaller then the number of nodes of the devics (but
+    /// The number of connected terminals can be smaller then the number of nodes of the devics (but
     /// never larger). The device can decide how to handle this case.
     /// While linear devices (vsource, resistor, isource) will emit an error, Verilog-A devices
-    /// usually handle this case using the `$port_connected` function.
-    pub port_connections: Vec<String>,
+    /// usually handle this case using the `$terminal_connected` function.
+    pub terminal_connections: Vec<String>,
 }
 
 pub struct CircuitModelDescription {
@@ -91,11 +89,11 @@ impl CircuitDescription {
     /// * resolve any model/subcircuit/device references to their definition
     /// * create implicit models for instances without seperate model definition
     /// * match model/instance parameters to parameter ids provided by device
-    /// * for each node name connected to a device port create a node
+    /// * for each node name connected to a device terminal create a node
     ///
     /// All these tasks can fail if the user provided an invalid circuit descriptor.
     /// Currently only the first error is retruned using anyhow. In the future all errors should be
-    /// reported similar to OpenVAF.
+    /// reterminaled similar to OpenVAF.
     ///
     /// # Returns
     ///
@@ -105,14 +103,10 @@ impl CircuitDescription {
     /// If any of the following conditions occurs, an error is retruned instead:
     /// * Verilog-A compilation fails
     /// * A model/subcircuit/device is not found
-    pub fn elaborate(
-        self,
-        earena: &mut ExprArena,
-        va_compiler: &mut dyn VaCompiler,
-    ) -> Result<Circuit> {
+    pub fn elaborate(self, earena: &mut Arena, opts: &veriloga::Opts) -> Result<Circuit> {
         let mut res = Circuit::new(self.name, earena);
         for va_file in self.va_files {
-            res.load_veriloga_file(va_file, va_compiler)?;
+            res.load_veriloga_file(va_file, opts)?;
         }
 
         for model in self.models {
@@ -149,23 +143,23 @@ impl Circuit {
     fn elaborate_dev_terminals(
         &mut self,
         dev: DeviceId,
-        connected_ports: Vec<String>,
+        connected_terminals: Vec<String>,
     ) -> Result<Vec<Node>> {
         let dev_info = &self[dev];
-        if connected_ports.len() > dev_info.ports.len() {
+        if connected_terminals.len() > dev_info.terminals.len() {
             bail!(
-                "device has ports {} {:?} but {} ports were connected",
-                dev_info.ports.len(),
-                dev_info.ports,
-                connected_ports.len(),
+                "device has terminals {} {:?} but {} terminals were connected",
+                dev_info.terminals.len(),
+                dev_info.terminals,
+                connected_terminals.len(),
             );
         }
 
-        Ok(self.elaborate_terminals(connected_ports))
+        Ok(self.elaborate_terminals(connected_terminals))
     }
 
-    fn elaborate_terminals(&mut self, connected_ports: Vec<String>) -> Vec<Node> {
-        connected_ports.into_iter().map(|port| self.nodes.ensure(port).0).collect()
+    fn elaborate_terminals(&mut self, connected_terminals: Vec<String>) -> Vec<Node> {
+        connected_terminals.into_iter().map(|terminal| self.node(terminal)).collect()
     }
 
     pub fn elaborate_instance(
@@ -175,8 +169,8 @@ impl Circuit {
         let inst = match self.namespace.get(&instance.master).copied() {
             Some(NameSpaceEntry::Model(model)) => {
                 let dev = self[model].device;
-                let ports = self.elaborate_dev_terminals(dev, instance.port_connections)?;
-                let inst = self.new_model_instance(instance.name, model, ports)?;
+                let terminals = self.elaborate_dev_terminals(dev, instance.terminal_connections)?;
+                let inst = self.new_model_instance(instance.name, model, terminals)?;
                 for (param_name, val) in instance.parameters {
                     self.set_instance_param(inst, &*param_name, val)?;
                 }
@@ -184,8 +178,8 @@ impl Circuit {
             }
 
             Some(NameSpaceEntry::Device(dev)) => {
-                let ports = self.elaborate_dev_terminals(dev, instance.port_connections)?;
-                let (inst, model) = self.new_device_instance(instance.name, dev, ports)?;
+                let terminals = self.elaborate_dev_terminals(dev, instance.terminal_connections)?;
+                let (inst, model) = self.new_device_instance(instance.name, dev, terminals)?;
                 for (param_name, val) in instance.parameters {
                     self.set_model_param(model, &*param_name, val)?;
                 }

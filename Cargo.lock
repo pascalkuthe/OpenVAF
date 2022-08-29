@@ -102,6 +102,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bstr"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba3569f383e8f1598449f1a423e72e99569137b47740b1da11ef19af3d5c3223"
+dependencies = [
+ "lazy_static",
+ "memchr",
+ "regex-automata",
+ "serde",
+]
+
+[[package]]
 name = "camino"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -141,6 +153,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
+]
+
+[[package]]
+name = "cli-table"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adfbb116d9e2c4be7011360d0c0bee565712c11e969c9609b25b619366dc379d"
+dependencies = [
+ "cli-table-derive",
+ "csv",
+ "termcolor",
+ "unicode-width",
+]
+
+[[package]]
+name = "cli-table-derive"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2af3bfb9da627b0a6c467624fb7963921433774ed435493b5c08a3053e829ad4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -202,6 +237,28 @@ checksum = "7d82ee10ce34d7bc12c2122495e7593a9c41347ecdd64185af4ecf72cb1a7f83"
 dependencies = [
  "cfg-if",
  "once_cell",
+]
+
+[[package]]
+name = "csv"
+version = "1.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22813a6dc45b335f9bade10bf7271dc477e81113e89eb251a0bc2a8a81c536e1"
+dependencies = [
+ "bstr",
+ "csv-core",
+ "itoa",
+ "ryu",
+ "serde",
+]
+
+[[package]]
+name = "csv-core"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b2466559f260f48ad25fe6317b3c8dac77b5bdb5763ac7d9d6103530663bc90"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -405,8 +462,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "itoa"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
+
+[[package]]
 name = "klu-rs"
 version = "0.2.0"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "597c822714b38a8decdab1ef224bd8fe066930ce1c396b9a184671a93dba2349"
 dependencies = [
  "klu_sys",
  "num-complex",
@@ -415,6 +481,8 @@ dependencies = [
 [[package]]
 name = "klu_sys"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7f729c295c52f9ad3058f5e61db78bde2b8c6f1e30abf4ccf09d2df4f3a689"
 dependencies = [
  "cc",
  "libc",
@@ -429,6 +497,12 @@ dependencies = [
  "ahash",
  "hashbrown 0.11.2",
 ]
+
+[[package]]
+name = "lazy_static"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "lexer"
@@ -520,16 +594,41 @@ version = "0.0.0"
 dependencies = [
  "ahash",
  "anyhow",
+ "base_n",
+ "basedb",
+ "bitflags",
  "camino",
+ "cli-table",
+ "directories-next",
  "indexmap",
  "klu-rs",
  "lasso",
+ "libc",
+ "libloading",
+ "linker",
+ "llvm",
+ "log",
+ "md5",
+ "mir_llvm",
  "num-complex",
+ "osdi",
+ "path-absolutize",
+ "paths",
+ "pretty_dtoa",
+ "sim_back",
  "stdx",
+ "target",
  "termcolor",
+ "text-size",
  "typed-index-collections",
  "typed_indexmap",
 ]
+
+[[package]]
+name = "memchr"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
 name = "memoffset"
@@ -821,6 +920,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pretty_dtoa"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a239bcdfda2c685fda1add3b4695c06225f50075e3cfb5b954e91545587edff2"
+dependencies = [
+ "ryu_floating_decimal",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -901,6 +1009,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex-automata"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
+
+[[package]]
 name = "rowan"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -918,6 +1032,18 @@ name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
+name = "ryu"
+version = "1.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4501abdff3ae82a1c1b477a17252eb69cee9e66eb915c1abaa4f44d873df9f09"
+
+[[package]]
+name = "ryu_floating_decimal"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "700de91d5fd6091442d00fdd9ee790af6d4f0f480562b0f5a1e8f59e90aafe73"
 
 [[package]]
 name = "salsa"
@@ -954,6 +1080,12 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
+
+[[package]]
+name = "serde"
+version = "1.0.144"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f747710de3dcd43b88c9168773254e809d8ddbdf9653b84e2554ab219f17860"
 
 [[package]]
 name = "sim_back"

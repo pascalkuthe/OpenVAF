@@ -4,12 +4,14 @@ use ahash::AHashMap;
 use anyhow::{bail, Result};
 use camino::Utf8PathBuf;
 use indexmap::IndexMap;
+use log::warn;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::{TiMap, TiSet};
 
-use crate::devices::{default_devices, DeviceImpl, DeviceInfo, ParamId, VaCompiler};
-use crate::expr::{CircuitParam, CircuitParamCtx, ExprArena};
+use crate::devices::{default_devices, DeviceImpl, DeviceInfo, ParamId};
+use crate::expr::{Arena, CircuitParam, CircuitParamCtx};
+use crate::veriloga::{self, compile_va};
 use crate::Expr;
 
 /// A circuit is the core data structure of melange, it contains a complete discription of a
@@ -25,7 +27,7 @@ pub struct Circuit {
     /// The name of the circuit
     pub name: String,
     pub(crate) ctx: CircuitParamCtx,
-    pub(crate) nodes: TiSet<Node, String>,
+    nodes: TiSet<Node, String>,
     devices: TiMap<DeviceId, &'static str, DeviceInfo>,
     models: TiVec<ModelId, CircuitModel>,
     instances: TiVec<InstanceId, CircuitInstance>,
@@ -35,7 +37,7 @@ pub struct Circuit {
 
 impl Circuit {
     /// Creates a new empty circuit
-    pub fn new(name: String, earena: &mut ExprArena) -> Circuit {
+    pub fn new(name: String, earena: &mut Arena) -> Circuit {
         let mut circ = Circuit {
             name,
             ctx: earena.add_ctx(),
@@ -54,6 +56,32 @@ impl Circuit {
         }
 
         circ
+    }
+
+    /// returns the number of external circuit nodes (including ground).
+    /// This does not include internal nodes created by the various devices
+    pub fn num_nodes(&self) -> u32 {
+        assert!(
+            self.nodes.len() < i32::MAX as usize,
+            "at most {} nodes are supterminaled",
+            i32::MAX
+        );
+        self.nodes.len() as u32
+    }
+
+    /// returns the number of external circuit nodes whose potential is unkown (so excluding ground).
+    /// This does not include internal nodes created by the various devices
+    pub fn num_unkowns(&self) -> u32 {
+        assert!(
+            self.nodes.len() < i32::MAX as usize,
+            "at most {} nodes are supterminaled",
+            i32::MAX
+        );
+        self.nodes.len() as u32 - 1
+    }
+
+    pub fn nodes(&self) -> impl Iterator<Item = Node> {
+        (0..self.num_nodes()).map(Node)
     }
 
     pub fn models(&self) -> impl Iterator<Item = ModelId> {
@@ -130,10 +158,10 @@ impl Circuit {
         &mut self,
         name: String,
         device: &str,
-        port_connections: Vec<Node>,
+        terminal_connections: Vec<Node>,
     ) -> Result<(InstanceId, ModelId)> {
         if let Some(device) = self.lookup_device(device) {
-            self.new_device_instance(name, device, port_connections)
+            self.new_device_instance(name, device, terminal_connections)
         } else {
             bail!("unkown device '{device}'")
         }
@@ -145,7 +173,7 @@ impl Circuit {
     ///
     /// * **`name`** - the name of the created instance
     /// * **`device`** - the device for which an instance is created
-    /// * **`port_connections`** - list of nodes that are connected to this instance
+    /// * **`terminal_connections`** - list of nodes that are connected to this instance
     ///
     /// # Returns
     ///
@@ -157,7 +185,7 @@ impl Circuit {
         &mut self,
         name: String,
         device: DeviceId,
-        port_connections: Vec<Node>,
+        terminal_connections: Vec<Node>,
     ) -> Result<(InstanceId, ModelId)> {
         let instance_id = self.instances.next_key();
         let model = CircuitModel {
@@ -166,7 +194,7 @@ impl Circuit {
             parameters: ParamList::default(),
         };
         let model = self.models.push_and_get_key(model);
-        let id = self.new_model_instance(name, model, port_connections)?;
+        let id = self.new_model_instance(name, model, terminal_connections)?;
         Ok((id, model))
     }
 
@@ -176,7 +204,7 @@ impl Circuit {
     ///
     /// * **`name`** - the name of the created instance
     /// * **`model`** - the model that is used for the created instance
-    /// * **`port_connections`** - list of nodes that are connected to this instance
+    /// * **`terminal_connections`** - list of nodes that are connected to this instance
     ///
     /// # Returns
     ///
@@ -188,13 +216,13 @@ impl Circuit {
         &mut self,
         name: String,
         model: ModelId,
-        port_connections: Vec<Node>,
+        terminal_connections: Vec<Node>,
     ) -> Result<InstanceId> {
         let instance = CircuitInstance {
             name: name.clone(),
             model,
             parameters: ParamList::default(),
-            port_connections,
+            connections: terminal_connections,
         };
         let id = self.instances.push_and_get_key(instance);
         self.insert_into_namespace(name, id)?;
@@ -255,7 +283,7 @@ impl Circuit {
 
         let dev_info = DeviceInfo {
             va_file: None,
-            ports: dev_impl.get_ports(),
+            terminals: dev_impl.get_terminals(),
             parameters: dev_impl.get_params(),
             dev_impl,
             name,
@@ -283,11 +311,11 @@ impl Circuit {
     pub fn load_veriloga_file(
         &mut self,
         path: Utf8PathBuf,
-        va_compiler: &mut dyn VaCompiler,
+        opts: &veriloga::Opts,
     ) -> Result<Vec<DeviceId>> {
         let mut new_devices = Vec::new();
         let mut ret_err = None;
-        let compilation_result = va_compiler.build(path.as_std_path())?;
+        let compilation_result = compile_va(&path, opts)?;
         for dev_impl in compilation_result {
             let name = dev_impl.get_name();
             if let Some(old_dev) = self.devices.raw.get(name) {
@@ -305,7 +333,7 @@ impl Circuit {
 
             let dev_info = DeviceInfo {
                 va_file: None,
-                ports: dev_impl.get_ports(),
+                terminals: dev_impl.get_terminals(),
                 parameters: dev_impl.get_params(),
                 dev_impl,
                 name,
@@ -385,7 +413,7 @@ impl Circuit {
     ) -> Result<()> {
         let inst = &mut self.instances[instance];
         let dev = &self.devices[self.models[inst.model].device];
-        let (id, info) = match dev.parameters.index_and_val(param_name) {
+        let (id, info) = match dev.parameters.lookup_param(param_name) {
             Some((id, info)) => (id, info),
             None => bail!("unkown parameter '{param_name}' for {}", dev.name),
         };
@@ -413,7 +441,7 @@ impl Circuit {
     pub fn set_model_param(&mut self, model: ModelId, param_name: &str, val: Expr) -> Result<()> {
         let model = &mut self.models[model];
         let dev = &self.devices[model.device];
-        let id = match dev.parameters.index(param_name) {
+        let id = match dev.parameters.lookup_param_id(param_name) {
             Some(id) => id,
             None => bail!("unkown parameter '{param_name}' for {}", dev.name),
         };
@@ -432,7 +460,7 @@ impl Circuit {
         &mut self,
         name: String,
         default_val: Option<Expr>,
-        earena: &mut ExprArena,
+        earena: &mut Arena,
     ) -> Result<(CircuitParam, Expr)> {
         let (param, read_expr) = earena.def_param(self.ctx, name)?;
         if let Some(default_val) = default_val {
@@ -447,7 +475,7 @@ impl Circuit {
     ///
     /// The parameters index and an expression that can be used to read the parameter.
     /// `None` if no parameter `name` was found
-    pub fn lookup_param(&mut self, name: &str, earena: &ExprArena) -> Option<(CircuitParam, Expr)> {
+    pub fn lookup_param(&mut self, name: &str, earena: &Arena) -> Option<(CircuitParam, Expr)> {
         earena.lookup_param_by_name(self.ctx, name)
     }
 }
@@ -602,11 +630,11 @@ pub struct CircuitInstance {
     /// [`new_instance`](crate::devices::ModelImpl::new_instance)
     pub parameters: ParamList,
 
-    /// Nodes connected to the ports of the device
+    /// Nodes connected to the terminals of the device
     ///
-    /// The number of connected ports can be smaller then the number of nodes of the devics (but
+    /// The number of connected terminal can be smaller then the number of terminals of the devics (but
     /// never larger). The device can decide how to handle this case.
     /// While linear devices (vsource, resistor, isource) will emit an error, Verilog-A devices
-    /// usually handle this case using the `$port_connected` function.
-    pub port_connections: Vec<Node>,
+    /// usually handle this case using the `$terminal_connected` function.
+    pub connections: Vec<Node>,
 }

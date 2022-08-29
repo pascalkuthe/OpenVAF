@@ -16,12 +16,12 @@ temp = 300
 # create circuit
 circ = Circuit("test_circuit")
 circ.load_veriloga_file("bsimbulk.va")
-fet = CircuitInstance("test_fet", "bsimbulk", ports=["drain", "gate" ,"gnd", "gnd"])
+fet = CircuitInstance(circ, "test_fet", "bsimbulk", ports=["drain", "gate" ,"gnd", "gnd"])
 fet.set_param("RSH", 1e-3) # real model has many more paramter
-vdd = CircuitInstance("vdd", "vsource", ports=["drain", "gnd"])
+vdd = CircuitInstance(circ, "vdd", "vsource", ports=["drain", "gnd"])
 vdd.set_param("dc", 2)
 vdd.set_param("ac", 0)
-vin = CircuitInstance("vin", "vsource", ports=["gate", "gnd"])
+vin = CircuitInstance(circ, "vin", "vsource", ports=["gate", "gnd"])
 vin.set_param("dc", "gate_bias")
 vin.set_param("ac", 1)
 

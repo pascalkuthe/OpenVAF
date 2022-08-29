@@ -5,15 +5,11 @@ use std::rc::Rc;
 use anyhow::{bail, Result};
 use stdx::iter::zip;
 use typed_index_collections::TiSlice;
-use typed_indexmap::TiMap;
 
+use super::{ModelImpl, ParamId, SimInfo};
 use crate::circuit::Node;
-use crate::devices::{update_matrix_entry, DeviceImpl, InstanceImpl, Type};
-use crate::expr::ExprEvalCtxRef;
+use crate::devices::{update_matrix_entry, DeviceImpl, DeviceParams, InstanceImpl, Type};
 use crate::simulation::{MatrixEntryIter, SimBuilder};
-use crate::{Expr, Value};
-
-use super::{ModelImpl, ParamId, ParamInfo, SimInfo};
 
 pub struct Resistor;
 
@@ -28,34 +24,18 @@ impl DeviceImpl for Resistor {
         "resistor"
     }
 
-    fn get_ports(&self) -> &'static [&'static str] {
-        &["A", "C"]
+    fn get_terminals(&self) -> Box<[&'static str]> {
+        vec!["A", "C"].into_boxed_slice()
     }
 
-    fn get_params(&self) -> TiMap<ParamId, &'static str, ParamInfo> {
-        let mut res = TiMap::default();
-        res.insert("r", ParamInfo { ty: Type::Real, is_instance_param: true });
+    fn get_params(&self) -> DeviceParams {
+        let mut res = DeviceParams::default();
+        res.insert_instance_param("r", Type::Real);
         res
     }
 
-    fn new_model(
-        &self,
-        mut eval_ctx: ExprEvalCtxRef,
-        params: &[(ParamId, Expr)],
-    ) -> Result<Rc<dyn ModelImpl>> {
-        let mut res = None;
-        for &(param, val) in params {
-            let dst = match param {
-                R => &mut res,
-                _ => unreachable!("vsource: unkown parameter"),
-            };
-
-            match val.eval(eval_ctx.borrow()) {
-                Value::Num(val) => *dst = Some(val),
-                Value::Str(_) | Value::UNDEF => bail!("expected real value"),
-            }
-        }
-        Ok(Rc::new(ResistorModel { res }))
+    fn new_model(&self) -> Rc<dyn ModelImpl> {
+        Rc::new(ResistorModel::default())
     }
 }
 
@@ -68,52 +48,29 @@ const MATRIX_CATHODE_CATHODE: usize = 3;
 
 #[derive(Default, Clone)]
 struct ResistorModel {
-    res: Option<f64>,
+    res: Cell<Option<f64>>,
 }
 
 impl ModelImpl for ResistorModel {
-    fn new_instance(
-        self: Rc<Self>,
-        builder: &mut SimBuilder,
-        mut eval_ctx: ExprEvalCtxRef,
-        params: &[(ParamId, Expr)],
-        ports: &[Node],
-    ) -> Result<Box<dyn super::InstanceImpl>> {
-        let [anode, cathode] = if let &[anode, cathode] = ports {
-            [anode, cathode]
-        } else {
-            bail!("expected at least 2 connections")
+    fn process_params(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_real_param(&self, param: ParamId, val: f64) {
+        match param {
+            R => self.res.set(Some(val)),
+            _ => unreachable!("vsource: unkown numeric parameter {param:?}"),
         };
+    }
 
-        // IMPORTANT: keep the order here in syn with the MATRIX_ indicies
-        builder.ensure_matrix_entry(anode, anode);
-        builder.ensure_matrix_entry(anode, cathode);
-        builder.ensure_matrix_entry(cathode, anode);
-        builder.ensure_matrix_entry(cathode, cathode);
-
-        let mut res = self.res;
-        for &(param, val) in params {
-            let dst = match param {
-                R => &mut res,
-                _ => unreachable!("vsource: unkown parameter"),
-            };
-
-            match val.eval(eval_ctx.borrow()) {
-                Value::Num(val) => *dst = Some(val),
-                Value::Str(_) | Value::UNDEF => bail!("expected real value"),
-            }
-        }
-
-        let res = if let Some(res) = res { res } else { bail!("parameter 'r' is required") };
-
-        let inst = Box::new(ResistorInstance {
-            anode,
-            cathode,
-            conductance: 1.0 / res,
+    fn new_instance(self: Rc<Self>) -> Box<dyn super::InstanceImpl> {
+        Box::new(ResistorInstance {
+            anode: Node::GROUND,
+            cathode: Node::GROUND,
+            res: self.res.get(),
             matrix_entries: [NonNull::dangling(); 4],
-        });
-
-        Ok(inst)
+            conductance: 0.0,
+        })
     }
 }
 
@@ -121,6 +78,7 @@ struct ResistorInstance {
     anode: Node,
     cathode: Node,
     conductance: f64,
+    res: Option<f64>,
     matrix_entries: [NonNull<Cell<f64>>; 4],
 }
 
@@ -131,29 +89,23 @@ impl InstanceImpl for ResistorInstance {
         }
     }
 
-    fn eval(&mut self, _sim_info: SimInfo<'_>) {}
+    fn eval(&mut self, _sim_info: SimInfo<'_>) -> Result<()> {
+        Ok(())
+    }
 
-    unsafe fn load_matrix_resist(&mut self) {
+    unsafe fn load_matrix_resist(&self) {
         update_matrix_entry(self.matrix_entries[MATRIX_ANODE_ANODE].as_ref(), self.conductance);
         update_matrix_entry(self.matrix_entries[MATRIX_ANODE_CATHODE].as_ref(), -self.conductance);
         update_matrix_entry(self.matrix_entries[MATRIX_CATHODE_ANODE].as_ref(), -self.conductance);
         update_matrix_entry(self.matrix_entries[MATRIX_CATHODE_CATHODE].as_ref(), self.conductance);
     }
 
-    unsafe fn load_matrix_react(&mut self, _alpha: f64) {}
+    unsafe fn load_matrix_react(&self, _alpha: f64) {}
 
-    fn load_residual_react(
-        &mut self,
-        _prev_solve: &TiSlice<Node, f64>,
-        _rhs: &mut TiSlice<Node, f64>,
-    ) {
+    fn load_residual_react(&self, _prev_solve: &TiSlice<Node, f64>, _rhs: &mut TiSlice<Node, f64>) {
     }
 
-    fn load_residual_resist(
-        &mut self,
-        prev_solve: &TiSlice<Node, f64>,
-        rhs: &mut TiSlice<Node, f64>,
-    ) {
+    fn load_residual_resist(&self, prev_solve: &TiSlice<Node, f64>, rhs: &mut TiSlice<Node, f64>) {
         let voltage = prev_solve[self.anode] - prev_solve[self.cathode];
         rhs[self.anode] += voltage * self.conductance;
         rhs[self.cathode] -= voltage * self.conductance;
@@ -166,4 +118,38 @@ impl InstanceImpl for ResistorInstance {
     }
 
     fn load_lead_current_react(&self, _dc_solve: &TiSlice<Node, f64>, _dst: &mut [f64]) {}
+
+    fn process_params(
+        &mut self,
+        _temp: f64,
+        sim_builder: &mut SimBuilder,
+        terminals: &[Node],
+    ) -> Result<()> {
+        let (anode, cathode) = if let &[anode, cathode] = terminals {
+            (anode, cathode)
+        } else {
+            bail!("resistor: all terminals must be connected")
+        };
+
+        self.anode = anode;
+        self.cathode = cathode;
+
+        sim_builder.ensure_matrix_entry(anode, anode);
+        sim_builder.ensure_matrix_entry(anode, cathode);
+        sim_builder.ensure_matrix_entry(cathode, anode);
+        sim_builder.ensure_matrix_entry(cathode, cathode);
+
+        match self.res {
+            Some(res) => self.conductance = 1.0 / res,
+            None => bail!("resistor: resistance must be set"),
+        };
+        Ok(())
+    }
+
+    fn set_real_param(&mut self, param: ParamId, val: f64) {
+        match param {
+            R => self.res = Some(val),
+            _ => unreachable!("vsource: unkown numeric parameter {param:?}"),
+        };
+    }
 }
