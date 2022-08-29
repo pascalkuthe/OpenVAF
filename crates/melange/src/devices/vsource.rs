@@ -1,4 +1,5 @@
 use std::cell::Cell;
+
 use std::ptr::NonNull;
 use std::rc::Rc;
 
@@ -6,15 +7,12 @@ use anyhow::{bail, Result};
 use num_complex::Complex64;
 use stdx::iter::zip;
 use typed_index_collections::TiSlice;
-use typed_indexmap::TiMap;
 
 use crate::circuit::Node;
-use crate::devices::{update_matrix_entry, DeviceImpl, InstanceImpl, Tolerance, Type};
-use crate::expr::ExprEvalCtxRef;
+use crate::devices::{update_matrix_entry, DeviceImpl, DeviceParams, InstanceImpl, Type};
 use crate::simulation::{MatrixEntryIter, SimBuilder};
-use crate::{Expr, Value};
 
-use super::{ModelImpl, ParamId, ParamInfo, SimInfo};
+use super::{ModelImpl, ParamId, SimInfo};
 
 pub struct VoltageSrc;
 
@@ -38,100 +36,54 @@ impl DeviceImpl for VoltageSrc {
         "vsource"
     }
 
-    fn get_ports(&self) -> &'static [&'static str] {
-        &["A", "C"]
+    fn get_terminals(&self) -> Box<[&'static str]> {
+        vec!["A", "C"].into_boxed_slice()
     }
 
-    fn get_params(&self) -> TiMap<ParamId, &'static str, ParamInfo> {
-        let mut res = TiMap::default();
-        res.insert("dc", ParamInfo { ty: Type::Real, is_instance_param: true });
-        res.insert("mag", ParamInfo { ty: Type::Real, is_instance_param: true });
-        res.insert("phase", ParamInfo { ty: Type::Real, is_instance_param: true });
+    fn get_params(&self) -> DeviceParams {
+        let mut res = DeviceParams::default();
+        res.insert_instance_param("dc", Type::Real);
+        res.insert_instance_param("mag", Type::Real);
+        res.insert_instance_param("phase", Type::Real);
         res
     }
 
-    fn new_model(
-        &self,
-        mut eval_ctx: ExprEvalCtxRef,
-        params: &[(ParamId, Expr)],
-    ) -> Result<Rc<dyn ModelImpl>> {
-        let mut dc = 0f64;
-        let mut mag = 0f64;
-        let mut phase = 0f64;
-        for &(param, val) in params {
-            let dst = match param {
-                DC => &mut dc,
-                MAG => &mut mag,
-                PHASE => &mut phase,
-                _ => unreachable!("vsource: unkown parameter"),
-            };
-
-            match val.eval(eval_ctx.borrow()) {
-                Value::Num(val) => *dst = val,
-                Value::Str(_) | Value::UNDEF => bail!("expected real value"),
-            }
-        }
-
-        let src = VoltageSrcModel { dc, mag, phase };
-
-        Ok(Rc::new(src))
+    fn new_model(&self) -> Rc<dyn ModelImpl> {
+        Rc::new(VoltageSrcModel::default())
     }
 }
 
+#[derive(Default)]
 struct VoltageSrcModel {
-    dc: f64,
-    mag: f64,
-    phase: f64,
+    dc: Cell<f64>,
+    mag: Cell<f64>,
+    phase: Cell<f64>,
 }
 
 impl ModelImpl for VoltageSrcModel {
-    fn new_instance(
-        self: Rc<Self>,
-        builder: &mut SimBuilder,
-        mut eval_ctx: ExprEvalCtxRef,
-        params: &[(ParamId, Expr)],
-        ports: &[Node],
-    ) -> Result<Box<dyn super::InstanceImpl>> {
-        let [anode, cathode] = if let &[anode, cathode] = ports {
-            [anode, cathode]
-        } else {
-            bail!("expected at least 2 connections")
+    fn process_params(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_real_param(&self, param: ParamId, val: f64) {
+        let dst = match param {
+            DC => &self.dc,
+            MAG => &self.mag,
+            PHASE => &self.phase,
+            _ => unreachable!("vsource: unkown num param {param:?}"),
         };
+        dst.set(val);
+    }
 
-        let branch = builder.new_internal_node(Tolerance::Voltage);
-        // IMPORTANT: keep the order here in syn with the MATRIX_ indicies
-        builder.ensure_matrix_entry(anode, branch);
-        builder.ensure_matrix_entry(branch, anode);
-        builder.ensure_matrix_entry(cathode, branch);
-        builder.ensure_matrix_entry(branch, cathode);
-
-        let mut dc = self.dc;
-        let mut mag = self.mag;
-        let mut phase = self.phase;
-        for &(param, val) in params {
-            let dst = match param {
-                DC => &mut dc,
-                MAG => &mut mag,
-                PHASE => &mut phase,
-                _ => unreachable!("vsource: unkown parameter"),
-            };
-
-            match val.eval(eval_ctx.borrow()) {
-                Value::Num(val) => *dst = val,
-                Value::Str(_) | Value::UNDEF => bail!("expected real value"),
-            }
-        }
-
-        let inst = Box::new(VoltageSrcInstance {
-            anode,
-            cathode,
-            branch,
-            dc,
-            ac: Complex64::from_polar(mag, phase),
+    fn new_instance(self: Rc<Self>) -> Box<dyn super::InstanceImpl> {
+        Box::new(VoltageSrcInstance {
+            anode: Node::GROUND,
+            cathode: Node::GROUND,
+            branch: Node::GROUND,
+            dc: self.dc.get(),
+            ac: Complex64::from_polar(self.mag.get(), self.phase.get()),
             matrix_entries: [NonNull::dangling(); 4],
-        });
-
-        Ok(inst)
+        })
     }
 }
 
@@ -145,43 +97,72 @@ struct VoltageSrcInstance {
 }
 
 impl InstanceImpl for VoltageSrcInstance {
+    fn process_params(
+        &mut self,
+        _temp: f64,
+        builder: &mut SimBuilder,
+        terminals: &[Node],
+    ) -> Result<()> {
+        let [anode, cathode] = if let &[anode, cathode] = terminals {
+            [anode, cathode]
+        } else {
+            bail!("expected at least 2 connections")
+        };
+
+        let branch = builder.new_internal_branch("branch");
+        self.anode = anode;
+        self.cathode = cathode;
+        self.branch = branch;
+
+        // IMPORTANT: keep the order here in syn with the MATRIX_ indicies
+        builder.ensure_matrix_entry(anode, branch);
+        builder.ensure_matrix_entry(branch, anode);
+        builder.ensure_matrix_entry(cathode, branch);
+        builder.ensure_matrix_entry(branch, cathode);
+
+        Ok(())
+    }
+
+    fn set_real_param(&mut self, param: ParamId, val: f64) {
+        match param {
+            DC => self.dc = val,
+            MAG => self.ac = Complex64::from_polar(val, self.ac.arg()),
+            PHASE => self.ac = Complex64::from_polar(self.ac.norm_sqr(), val),
+            _ => unreachable!("vsource: unkown num param {param:?}"),
+        };
+    }
+
     fn populate_matrix_ptrs(&mut self, matrix_entries: MatrixEntryIter) {
         for (dst, entry) in zip(&mut self.matrix_entries, matrix_entries) {
             *dst = entry.resist();
         }
     }
 
-    fn eval(&mut self, _sim_info: SimInfo<'_>) {}
+    fn eval(&mut self, _sim_info: SimInfo<'_>) -> Result<()> {
+        Ok(())
+    }
 
-    unsafe fn load_matrix_resist(&mut self) {
+    unsafe fn load_matrix_resist(&self) {
         update_matrix_entry(self.matrix_entries[MATRIX_ANODE_BR].as_ref(), 1.0);
         update_matrix_entry(self.matrix_entries[MATRIX_BR_ANODE].as_ref(), 1.0);
         update_matrix_entry(self.matrix_entries[MATRIX_CATHODE_BR].as_ref(), -1.0);
         update_matrix_entry(self.matrix_entries[MATRIX_BR_CATHODE].as_ref(), -1.0);
     }
 
-    unsafe fn load_matrix_react(&mut self, _alpha: f64) {}
+    unsafe fn load_matrix_react(&self, _alpha: f64) {}
 
-    fn load_residual_react(
-        &mut self,
-        _prev_solve: &TiSlice<Node, f64>,
-        _rhs: &mut TiSlice<Node, f64>,
-    ) {
+    fn load_residual_react(&self, _prev_solve: &TiSlice<Node, f64>, _rhs: &mut TiSlice<Node, f64>) {
     }
 
-    fn load_residual_resist(
-        &mut self,
-        prev_solve: &TiSlice<Node, f64>,
-        rhs: &mut TiSlice<Node, f64>,
-    ) {
+    fn load_residual_resist(&self, prev_solve: &TiSlice<Node, f64>, rhs: &mut TiSlice<Node, f64>) {
         rhs[self.anode] += prev_solve[self.branch];
         rhs[self.cathode] -= prev_solve[self.branch];
-        rhs[self.branch] += self.dc;
-        rhs[self.branch] -= prev_solve[self.anode] - prev_solve[self.cathode];
+        rhs[self.branch] -= self.dc;
+        rhs[self.branch] += prev_solve[self.anode] - prev_solve[self.cathode];
     }
 
     fn load_ac_residual(
-        &mut self,
+        &self,
         _prev_solve: &TiSlice<Node, f64>,
         rhs: &mut TiSlice<Node, Complex64>,
     ) {

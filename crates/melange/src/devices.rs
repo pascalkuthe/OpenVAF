@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::path::Path;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
@@ -8,38 +7,35 @@ use camino::Utf8PathBuf;
 use num_complex::Complex64;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiSlice;
-use typed_indexmap::TiMap;
 
 use crate::circuit::Node;
+pub use crate::devices::params::{DeviceParams, ParamId, Type};
 use crate::devices::resistor::Resistor;
 use crate::devices::vsource::VoltageSrc;
-use crate::expr::ExprEvalCtxRef;
 use crate::simulation::{MatrixEntryIter, SimBuilder, SimInfo};
-use crate::Expr;
 
+mod params;
 mod resistor;
 mod vsource;
 
 pub trait DeviceImpl {
     fn get_name(&self) -> &'static str;
-    fn get_ports(&self) -> &'static [&'static str];
-    fn get_params(&self) -> TiMap<ParamId, &'static str, ParamInfo>;
-
-    fn new_model(
-        &self,
-        eval_ctx: ExprEvalCtxRef,
-        params: &[(ParamId, Expr)],
-    ) -> Result<Rc<dyn ModelImpl>>;
+    fn get_terminals(&self) -> Box<[&'static str]>;
+    fn get_params(&self) -> DeviceParams;
+    fn new_model(&self) -> Rc<dyn ModelImpl>;
 }
 
 pub trait ModelImpl {
-    fn new_instance(
-        self: Rc<Self>,
-        builder: &mut SimBuilder,
-        eval_ctx: ExprEvalCtxRef,
-        params: &[(ParamId, Expr)],
-        ports: &[Node],
-    ) -> Result<Box<dyn InstanceImpl>>;
+    fn process_params(&self) -> Result<()>;
+    fn set_real_param(&self, param: ParamId, val: f64);
+    fn set_int_param(&self, param: ParamId, _val: i32) {
+        unreachable!("unkown int param {param:?}")
+    }
+
+    fn set_str_param(&self, param: ParamId, _val: &str) {
+        unreachable!("unkown str param {param:?}")
+    }
+    fn new_instance(self: Rc<Self>) -> Box<dyn InstanceImpl>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -75,22 +71,33 @@ pub fn update_matrix_entry(dst: &Cell<f64>, val: f64) {
 }
 
 pub trait InstanceImpl {
+    fn process_params(
+        &mut self,
+        temp: f64,
+        sim_builder: &mut SimBuilder,
+        terminals: &[Node],
+    ) -> Result<()>;
+    fn set_real_param(&mut self, param: ParamId, val: f64);
+
+    fn set_int_param(&mut self, param: ParamId, _val: i32) {
+        unreachable!("unkown int param {param:?}")
+    }
+
+    fn set_str_param(&mut self, param: ParamId, _val: &str) {
+        unreachable!("unkown str param {param:?}")
+    }
+
     fn populate_matrix_ptrs(&mut self, matrix_entries: MatrixEntryIter);
-    fn eval(&mut self, sim_info: SimInfo<'_>);
-    unsafe fn load_matrix_resist(&mut self);
-    unsafe fn load_matrix_react(&mut self, alpha: f64);
-    fn load_residual_react(
-        &mut self,
-        prev_solve: &TiSlice<Node, f64>,
-        rhs: &mut TiSlice<Node, f64>,
-    );
-    fn load_residual_resist(
-        &mut self,
-        prev_solve: &TiSlice<Node, f64>,
-        rhs: &mut TiSlice<Node, f64>,
-    );
+
+    fn eval(&mut self, sim_info: SimInfo<'_>) -> Result<()>;
+
+    unsafe fn load_matrix_resist(&self);
+    unsafe fn load_matrix_react(&self, alpha: f64);
+
+    fn load_residual_react(&self, prev_solve: &TiSlice<Node, f64>, rhs: &mut TiSlice<Node, f64>);
+    fn load_residual_resist(&self, prev_solve: &TiSlice<Node, f64>, rhs: &mut TiSlice<Node, f64>);
     fn load_ac_residual(
-        &mut self,
+        &self,
         _dc_solve: &TiSlice<Node, f64>,
         _rhs: &mut TiSlice<Node, Complex64>,
     ) {
@@ -101,42 +108,14 @@ pub trait InstanceImpl {
     fn load_ac_lead_current(&self, _ac_solve: &TiSlice<Node, Complex64>, _dst: &mut [Complex64]) {}
 }
 
-// TODO advanced options => tight OpenVAF integration
-pub trait VaCompiler {
-    fn build(&mut self, file: &Path) -> Result<Vec<Box<dyn DeviceImpl>>>;
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ParamId(pub u32);
-impl_debug_display!(match ParamId{ ParamId(id) => "dev{:?}", id;});
-impl_idx_from!(ParamId(u32));
-
-pub struct ParamInfo {
-    pub ty: Type,
-    pub is_instance_param: bool,
-}
-
-pub enum Type {
-    Real,
-    Int,
-    String,
-}
-
 pub struct DeviceInfo {
     pub name: &'static str,
     pub dev_impl: Box<dyn DeviceImpl>,
     pub va_file: Option<Utf8PathBuf>,
-    pub ports: &'static [&'static str],
-    pub parameters: TiMap<ParamId, &'static str, ParamInfo>,
+    pub terminals: Box<[&'static str]>,
+    pub parameters: DeviceParams,
 }
 
 pub(crate) fn default_devices() -> impl Iterator<Item = Box<dyn DeviceImpl>> {
     [VoltageSrc::init_dev(), Resistor::init_dev()].into_iter()
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Tolerance {
-    Current,
-    Voltage,
-    Other(f64),
 }

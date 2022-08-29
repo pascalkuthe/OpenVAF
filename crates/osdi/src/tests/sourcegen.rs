@@ -10,8 +10,8 @@ use stdx::SKIP_HOST_TESTS;
 
 #[test]
 fn gen_osdi_structs() {
-    if SKIP_HOST_TESTS{
-        return ;
+    if SKIP_HOST_TESTS {
+        return;
     }
 
     let header_dir = project_root().join("crates").join("osdi").join("header");
@@ -23,11 +23,13 @@ fn gen_osdi_structs() {
         })
         .collect();
 
-    let src_dir = project_root().join("crates").join("osdi").join("src").join("metadata");
+    let osdi_src_dir = project_root().join("crates").join("osdi").join("src").join("metadata");
+    let melange_src_dir =
+        project_root().join("crates").join("melange").join("src").join("veriloga");
 
     for header in &headers {
         let res = HeaderParser { header, res: ParseResults::default(), off: 0 }.run();
-        let tys = gen_tys(&res.tys);
+        let tys = gen_llvm_tys(&res.tys);
         let consts = gen_defines(&res.defines);
         let file_header = "use mir_llvm::CodegenCx;\n";
         let version_str = format!("{}_{}", header.version_major, header.version_minor);
@@ -36,7 +38,15 @@ fn gen_osdi_structs() {
         let file_string = add_preamble("gen_osdi_structs", reformat(file_string));
         let file_name = format!("osdi_{}_{}.rs", header.version_major, header.version_minor);
 
-        ensure_file_contents(&src_dir.join(file_name), &file_string);
+        ensure_file_contents(&osdi_src_dir.join(file_name), &file_string);
+
+        let bindings = gen_bindings(&res.tys);
+        let file_header = "use std::os::raw::{c_char, c_void};";
+        let file_string = format!("{file_header}\n\n{consts}\n\n{bindings}");
+        let file_string = add_preamble("gen_osdi_structs", reformat(file_string));
+        let file_name = format!("osdi_{}_{}.rs", header.version_major, header.version_minor);
+
+        ensure_file_contents(&melange_src_dir.join(file_name), &file_string);
     }
 }
 
@@ -193,8 +203,9 @@ impl<'a> HeaderParser<'a> {
                 assert!(self.eat("("));
                 let mut args = Vec::new();
                 while !self.eat(")") {
-                    args.push(self.parse_ty());
-                    self.eat_ident();
+                    let ty = self.parse_ty();
+                    let name = self.eat_ident().unwrap();
+                    args.push((name, ty));
                     self.eat(",");
                 }
                 ty.func_args = Some(args);
@@ -250,7 +261,7 @@ impl ToTokens for BaseTy<'_> {
 struct Ty<'a> {
     base: BaseTy<'a>,
     indirection: u32,
-    func_args: Option<Vec<Ty<'a>>>,
+    func_args: Option<Vec<(&'a str, Ty<'a>)>>,
 }
 
 struct BaseTyInterpolater<'b, 'a> {
@@ -342,7 +353,7 @@ impl ToTokens for LLVMTyInterp<'_, '_> {
         }
 
         if let Some(args) = &self.ty.func_args {
-            let args = args.iter().map(|ty| LLVMTyInterp { ty, lut: self.lut });
+            let args = args.iter().map(|(_, ty)| LLVMTyInterp { ty, lut: self.lut });
             quote!(ctx.ptr_ty(ctx.ty_func(&[#(#args),*], #ty))).to_tokens(tokens)
         } else {
             ty.to_tokens(tokens)
@@ -550,7 +561,129 @@ impl ToTokens for OsdiStructInterp<'_, '_> {
     }
 }
 
-fn gen_tys<'a>(tys: &IndexMap<&'a str, OsdiStruct<'a>, RandomState>) -> String {
+struct RustStruct<'a>(&'a OsdiStruct<'a>);
+impl ToTokens for RustStruct<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let OsdiStruct { is_union, ident, ref fields, .. } = *self.0;
+        let private =
+            if matches!(ident, "OsdiDescriptor") { quote!(__private: ()) } else { quote!() };
+        let ident = format_ident!("{ident}");
+        let kind = if is_union { quote!(union) } else { quote!(struct) };
+        let field_names = fields.iter().map(|(name, _)| format_ident!("{name}"));
+        let field_tys = fields.iter().map(|(_, ty)| RustTy(ty));
+        quote! {
+            #[repr(C)]
+            pub #kind #ident {
+                #(pub #field_names: #field_tys,)*
+                #private
+            }
+        }
+        .to_tokens(tokens);
+
+        let funcs: Vec<_> = fields
+            .iter()
+            .filter_map(|(name, ty)| {
+                Some(RustFunc {
+                    name,
+                    ret_ty: RustReturnTy(RustBasicTy {
+                        base: ty.base,
+                        indirection: ty.indirection,
+                    }),
+                    args: ty.func_args.as_ref()?,
+                })
+            })
+            .collect();
+        if !funcs.is_empty() {
+            quote! {
+                impl #ident{
+                    #(#funcs)*
+                }
+            }
+            .to_tokens(tokens)
+        }
+    }
+}
+
+struct RustBasicTy<'a> {
+    base: BaseTy<'a>,
+    indirection: u32,
+}
+
+impl ToTokens for RustBasicTy<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let RustBasicTy { base, indirection } = *self;
+        let ident = match base {
+            BaseTy::F64 => "f64",
+            BaseTy::I32 => "i32",
+            BaseTy::U32 => "u32",
+            BaseTy::Usize => "usize",
+            BaseTy::Bool => "bool",
+            BaseTy::Str => "c_char",
+            BaseTy::Void => "c_void",
+            BaseTy::Struct(name) => name,
+        };
+
+        let base = Ident::new(ident, Span::call_site());
+        let ptr = (0..indirection).map(|_| quote!(*mut));
+        quote!(#(#ptr)* #base).to_tokens(tokens)
+    }
+}
+
+struct RustReturnTy<'a>(RustBasicTy<'a>);
+
+impl ToTokens for RustReturnTy<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let ty = &self.0;
+        if ty.indirection != 0 || ty.base != BaseTy::Void {
+            quote!(-> #ty).to_tokens(tokens)
+        }
+    }
+}
+struct RustTy<'a>(&'a Ty<'a>);
+
+impl ToTokens for RustTy<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let Ty { base, indirection, ref func_args } = *self.0;
+        let base = RustBasicTy { base, indirection };
+        match func_args {
+            Some(args) => {
+                let base = RustReturnTy(base);
+                let arg_tys = args.iter().map(|(_, ty)| RustTy(ty));
+                quote!(fn(#(#arg_tys),*) #base).to_tokens(tokens)
+            }
+            None => base.to_tokens(tokens),
+        }
+    }
+}
+
+struct RustFunc<'a> {
+    name: &'a str,
+    ret_ty: RustReturnTy<'a>,
+    args: &'a [(&'a str, Ty<'a>)],
+}
+
+impl ToTokens for RustFunc<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let RustFunc { name, ret_ty, args } = self;
+        let name = format_ident!("{name}");
+        let arg_names = args.iter().map(|(name, _)| format_ident!("{name}"));
+        let arg_tys = args.iter().map(|(_, ty)| RustTy(ty));
+        let arg_name_refs = args.iter().map(|(name, _)| format_ident!("{name}"));
+        quote! {
+            pub fn #name(&self, #(#arg_names: #arg_tys),*) #ret_ty{
+                (self.#name)(#(#arg_name_refs),*)
+            }
+        }
+        .to_tokens(tokens)
+    }
+}
+
+fn gen_bindings<'a>(tys: &IndexMap<&'a str, OsdiStruct<'a>, RandomState>) -> String {
+    let tys = tys.iter().map(|(_, ty)| RustStruct(ty));
+    quote!(#(#tys)*).to_string()
+}
+
+fn gen_llvm_tys<'a>(tys: &IndexMap<&'a str, OsdiStruct<'a>, RandomState>) -> String {
     let fields = tys.values().map(|it| Ident::new(&it.llvm_ty_ident, Span::call_site()));
     let fields2 = fields.clone();
     let fields3 = fields.clone();

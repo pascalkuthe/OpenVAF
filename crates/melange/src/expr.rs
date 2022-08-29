@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use anyhow::{bail, Result};
-use lasso::Spur;
+use lasso::{Rodeo, Spur};
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::{TiSlice, TiVec};
 use typed_indexmap::TiMap;
@@ -15,37 +15,42 @@ pub enum Expr {
 impl Expr {
     pub const UNDEF: Expr = Expr::Value(Value::UNDEF);
 
-    pub fn eval(self, ctx: ExprEvalCtxRef) -> Value {
+    pub fn eval(self, ctx: ExprEvalCtxRef) -> Result<Value> {
         match self {
-            Expr::Value(val) => val,
+            Expr::Value(val) => Ok(val),
             Expr::Eval(ptr) => ptr.eval(ctx),
         }
     }
 
-    fn eval_real(&self, ctx: ExprEvalCtxRef) -> f64 {
-        self.eval(ctx).unwrap_real()
+    pub fn eval_num(&self, ctx: ExprEvalCtxRef) -> Result<f64> {
+        self.eval(ctx)?.to_num()
     }
 
-    pub fn param(arena: &mut ExprArena, param: CircuitParam) -> Expr {
+    pub fn eval_str<'a>(&self, ctx: ExprEvalCtxRef<'a>) -> Result<&'a str> {
+        Ok(ctx.intern.resolve(&self.eval(ctx)?.to_str()?))
+    }
+
+    pub fn param(arena: &mut Arena, param: CircuitParam) -> Expr {
         Expr::Eval(arena.alloc(ExprData::Param(param)))
     }
 
-    pub fn cond(arena: &mut ExprArena, cond: Expr, then_val: Expr, else_val: Expr) -> Expr {
-        match cond {
+    pub fn cond(arena: &mut Arena, cond: Expr, then_val: Expr, else_val: Expr) -> Result<Expr> {
+        let res = match cond {
             _ if then_val == else_val => then_val,
             Expr::Eval(cond) => arena.alloc(Cond { cond, then_val, else_val }.into()).into(),
             Expr::Value(val) => {
-                if val.unwrap_bool() {
+                if val.to_bool()? {
                     then_val
                 } else {
                     else_val
                 }
             }
-        }
+        };
+        Ok(res)
     }
 
     pub fn func_call(
-        arena: &mut ExprArena,
+        arena: &mut Arena,
         ctx: CircuitParamCtx,
         func_val: Expr,
         args: Box<[Expr]>,
@@ -58,7 +63,7 @@ impl Expr {
         }
     }
 
-    pub fn eq(arena: &mut ExprArena, lhs: Expr, rhs: Expr) -> Expr {
+    pub fn eq(arena: &mut Arena, lhs: Expr, rhs: Expr) -> Expr {
         match (lhs, rhs) {
             _ if lhs == rhs => true.into(),
             (Expr::Eval(lhs), rhs) | (rhs, Expr::Eval(lhs)) => {
@@ -68,7 +73,7 @@ impl Expr {
         }
     }
 
-    pub fn neq(arena: &mut ExprArena, lhs: Expr, rhs: Expr) -> Expr {
+    pub fn neq(arena: &mut Arena, lhs: Expr, rhs: Expr) -> Expr {
         match (lhs, rhs) {
             _ if lhs == rhs => false.into(),
             (Expr::Eval(lhs), rhs) | (rhs, Expr::Eval(lhs)) => {
@@ -78,8 +83,8 @@ impl Expr {
         }
     }
 
-    pub fn inv(arena: &mut ExprArena, arg: Expr) -> Expr {
-        match arg {
+    pub fn inv(arena: &mut Arena, arg: Expr) -> Result<Expr> {
+        let res = match arg {
             Expr::Eval(arg) => {
                 let ptr = if let ExprData::Unary { op: UnaryOp::Inv, arg } = *arena.lookup(arg) {
                     arg
@@ -88,13 +93,14 @@ impl Expr {
                 };
                 ptr.into()
             }
-            Expr::Value(arg) => (1.0 / arg.unwrap_real()).into(),
-        }
+            Expr::Value(arg) => (1.0 / arg.to_num()?).into(),
+        };
+        Ok(res)
     }
 
-    pub fn mul(arena: &mut ExprArena, lhs: Expr, rhs: Expr) -> Expr {
-        match (lhs, rhs) {
-            (Expr::Value(lhs), Expr::Value(rhs)) => (lhs.unwrap_real() + rhs.unwrap_real()).into(),
+    pub fn mul(arena: &mut Arena, lhs: Expr, rhs: Expr) -> Result<Expr> {
+        let res = match (lhs, rhs) {
+            (Expr::Value(lhs), Expr::Value(rhs)) => (lhs.to_num()? * rhs.to_num()?).into(),
             (Expr::Eval(lhs), rhs) | (rhs, Expr::Eval(lhs)) => {
                 match rhs {
                     Expr::Value(Value::Num(rhs)) => match *arena.lookup(lhs) {
@@ -103,8 +109,8 @@ impl Expr {
                             rhs: Expr::Value(ref mut dst),
                             ..
                         } => {
-                            *dst = (dst.unwrap_real() * rhs).into();
-                            return lhs.into();
+                            *dst = (dst.to_num()? * rhs).into();
+                            return Ok(lhs.into());
                         }
                         ExprData::Unary { op: UnaryOp::Inv, arg, .. } => {
                             if let ExprData::Commutative {
@@ -113,8 +119,8 @@ impl Expr {
                                 ..
                             } = arena.lookup(arg)
                             {
-                                *dst = (dst.unwrap_real() / rhs).into();
-                                return lhs.into();
+                                *dst = (dst.to_num()? / rhs).into();
+                                return Ok(lhs.into());
                             }
                         }
 
@@ -125,7 +131,7 @@ impl Expr {
                             if let ExprData::Unary { op: UnaryOp::Inv, arg: lhs } =
                                 *arena.lookup(lhs)
                             {
-                                let arg = Expr::mul(arena, lhs.into(), rhs.into());
+                                let arg = Expr::mul(arena, lhs.into(), rhs.into())?;
                                 return Expr::inv(arena, arg);
                             }
                         }
@@ -134,10 +140,11 @@ impl Expr {
                 }
                 arena.alloc(ExprData::Commutative { op: CommutativeOp::Mul, lhs, rhs }).into()
             }
-        }
+        };
+        Ok(res)
     }
 
-    pub fn neg(arena: &mut ExprArena, arg: Expr) -> Expr {
+    pub fn neg(arena: &mut Arena, arg: Expr) -> Result<Expr> {
         match arg {
             Expr::Eval(arg) => {
                 let ptr = if let ExprData::Unary { op: UnaryOp::Neg, arg } = *arena.lookup(arg) {
@@ -145,15 +152,15 @@ impl Expr {
                 } else {
                     arena.alloc(ExprData::Unary { op: UnaryOp::Neg, arg })
                 };
-                ptr.into()
+                Ok(ptr.into())
             }
-            Expr::Value(arg) => (1.0 / arg.unwrap_real()).into(),
+            Expr::Value(arg) => Ok((1.0 / arg.to_num()?).into()),
         }
     }
 
-    pub fn add(arena: &mut ExprArena, lhs: Expr, rhs: Expr) -> Expr {
-        match (lhs, rhs) {
-            (Expr::Value(lhs), Expr::Value(rhs)) => (lhs.unwrap_real() + rhs.unwrap_real()).into(),
+    pub fn add(arena: &mut Arena, lhs: Expr, rhs: Expr) -> Result<Expr> {
+        let res = match (lhs, rhs) {
+            (Expr::Value(lhs), Expr::Value(rhs)) => (lhs.to_num()? + rhs.to_num()?).into(),
             (Expr::Eval(lhs), rhs) | (rhs, Expr::Eval(lhs)) => {
                 match rhs {
                     Expr::Value(Value::Num(rhs)) => match *arena.lookup(lhs) {
@@ -162,8 +169,8 @@ impl Expr {
                             rhs: Expr::Value(ref mut dst),
                             ..
                         } => {
-                            *dst = (dst.unwrap_real() + rhs).into();
-                            return lhs.into();
+                            *dst = (dst.to_num()? + rhs).into();
+                            return Ok(lhs.into());
                         }
                         ExprData::Unary { op: UnaryOp::Neg, arg, .. } => {
                             if let ExprData::Commutative {
@@ -172,8 +179,8 @@ impl Expr {
                                 ..
                             } = arena.lookup(arg)
                             {
-                                *dst = (dst.unwrap_real() - rhs).into();
-                                return lhs.into();
+                                *dst = (dst.to_num()? - rhs).into();
+                                return Ok(lhs.into());
                             }
                         }
 
@@ -184,7 +191,7 @@ impl Expr {
                             if let ExprData::Unary { op: UnaryOp::Neg, arg: lhs } =
                                 *arena.lookup(lhs)
                             {
-                                let arg = Expr::add(arena, lhs.into(), rhs.into());
+                                let arg = Expr::add(arena, lhs.into(), rhs.into())?;
                                 return Expr::neg(arena, arg);
                             }
                         }
@@ -193,31 +200,34 @@ impl Expr {
                 }
                 arena.alloc(ExprData::Commutative { op: CommutativeOp::Add, lhs, rhs }).into()
             }
-        }
+        };
+        Ok(res)
     }
 
-    fn unary_op(arena: &mut ExprArena, op: UnaryOp, arg: Expr) -> Expr {
-        match arg {
-            Expr::Value(arg) => op.eval(arg.unwrap_real()).into(),
+    fn unary_op(arena: &mut Arena, op: UnaryOp, arg: Expr) -> Result<Expr> {
+        let res = match arg {
+            Expr::Value(arg) => op.eval(arg.to_num()?).into(),
             Expr::Eval(arg) => arena.alloc(ExprData::Unary { op, arg }).into(),
-        }
+        };
+        Ok(res)
     }
 
-    fn bin_op(arena: &mut ExprArena, op: BinOp, lhs: Expr, rhs: Expr) -> Expr {
-        if let (Expr::Value(lhs), Expr::Value(rhs)) = (lhs, rhs) {
-            return op.eval(lhs.unwrap_real(), rhs.unwrap_real()).into();
-        }
-
-        arena.alloc(ExprData::Binary { op, lhs, rhs }).into()
+    fn bin_op(arena: &mut Arena, op: BinOp, lhs: Expr, rhs: Expr) -> Result<Expr> {
+        let res = if let (Expr::Value(lhs), Expr::Value(rhs)) = (lhs, rhs) {
+            op.eval(lhs.to_num()?, rhs.to_num()?).into()
+        } else {
+            arena.alloc(ExprData::Binary { op, lhs, rhs }).into()
+        };
+        Ok(res)
     }
 
-    fn commutative_op(arena: &mut ExprArena, op: CommutativeOp, lhs: Expr, rhs: Expr) -> Expr {
+    fn commutative_op(arena: &mut Arena, op: CommutativeOp, lhs: Expr, rhs: Expr) -> Result<Expr> {
         match (lhs, rhs) {
             (Expr::Value(lhs), Expr::Value(rhs)) => {
-                op.eval(lhs.unwrap_real(), rhs.unwrap_real()).into()
+                Ok(op.eval(lhs.to_num()?, rhs.to_num()?).into())
             }
             (Expr::Eval(lhs), rhs) | (rhs, Expr::Eval(lhs)) => {
-                arena.alloc(ExprData::Commutative { op, lhs, rhs }).into()
+                Ok(arena.alloc(ExprData::Commutative { op, lhs, rhs }).into())
             }
         }
     }
@@ -231,21 +241,28 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn unwrap_real(self) -> f64 {
+    pub fn to_str(self) -> Result<Spur> {
         match self {
-            Value::Num(val) => return val,
-            Value::Str(_) | Value::UNDEF => (),
+            Value::Num(_) => bail!("expected string but found number"),
+            Value::Str(val) => Ok(val),
+            Value::UNDEF => unreachable!("encountered UNDEF value"),
         }
-
-        f64::NAN
     }
 
-    pub fn unwrap_int(self) -> i32 {
-        self.unwrap_real().round() as i32
+    pub fn to_num(self) -> Result<f64> {
+        match self {
+            Value::Num(val) => Ok(val),
+            Value::Str(_) => bail!("expected number but found string"),
+            Value::UNDEF => unreachable!("encountered UNDEF value"),
+        }
     }
 
-    pub fn unwrap_bool(self) -> bool {
-        self.unwrap_real() != 0.0
+    pub fn to_int(self) -> Result<i32> {
+        Ok(self.to_num()?.round() as i32)
+    }
+
+    pub fn to_bool(self) -> Result<bool> {
+        Ok(self.to_num()? != 0.0)
     }
 }
 
@@ -285,7 +302,6 @@ impl_debug_display!(match ExprPtr{ ExprPtr(id) => "expr{:?}", id;});
 
 #[derive(PartialEq, Debug, Clone)]
 enum ExprData {
-    Param(CircuitParam),
     Cond(Box<Cond>),
     Equal(ExprPtr, Expr),
     NotEqual(ExprPtr, Expr),
@@ -293,6 +309,7 @@ enum ExprData {
     Commutative { op: CommutativeOp, lhs: ExprPtr, rhs: Expr },
     Binary { op: BinOp, lhs: Expr, rhs: Expr },
     Unary { op: UnaryOp, arg: ExprPtr },
+    Param(CircuitParam),
 }
 
 impl From<Cond> for ExprData {
@@ -328,7 +345,7 @@ macro_rules! op_enums {
         $($op: ident $(= $fn: ident)?),*
     })*) => {$(
         op_enums!(@impl
-            $builder, arena, (arena: &mut ExprArena, $($arg: Expr),*), ($($arg),*),  $enum, $($op $(= $fn)?,)*
+            $builder, arena, (arena: &mut Arena, $($arg: Expr),*), ($($arg),*),  $enum, $($op $(= $fn)?,)*
         );)*
     };
 
@@ -349,7 +366,7 @@ macro_rules! op_enums {
         impl Expr{
             $(
                 $(
-                    pub fn $fn $args -> Expr{
+                    pub fn $fn $args -> Result<Expr>{
                         op_enums!(@call $builder [($arena, $enum::$op), $args_forward])
                     }
                 )*
@@ -406,56 +423,58 @@ op_enums! {
         XOR = xolr,
         Min = min,
         Max = max,
-        // spectre does not support any short circuiting so we don't either
+        // spectre does not supterminal any short circuiting so we don't either
         LogcialOr = logic_or,
         LogcialAnd = logic_and
     }
 }
 
 impl ExprData {
-    fn eval(&self, mut ctx: ExprEvalCtxRef) -> Value {
-        match *self {
+    fn eval(&self, mut ctx: ExprEvalCtxRef) -> Result<Value> {
+        let val = match *self {
             ExprData::Param(param) => ctx[param],
-            ExprData::Cond(ref cond) => cond.eval(ctx),
-            ExprData::UserFunc(ref func) => func.eval(ctx),
+            ExprData::Cond(ref cond) => return cond.eval(ctx),
+            ExprData::UserFunc(ref func) => return func.eval(ctx),
             ExprData::Equal(lhs, rhs) => {
-                let lhs = lhs.eval(ctx.borrow());
-                let rhs = rhs.eval(ctx);
+                let lhs = lhs.eval(ctx.borrow())?;
+                let rhs = rhs.eval(ctx)?;
                 (lhs == rhs).into()
             }
             ExprData::NotEqual(lhs, rhs) => {
-                let lhs = lhs.eval(ctx.borrow());
-                let rhs = rhs.eval(ctx);
+                let lhs = lhs.eval(ctx.borrow())?;
+                let rhs = rhs.eval(ctx)?;
                 (lhs != rhs).into()
             }
             ExprData::Commutative { op, lhs, rhs } => {
-                let lhs = lhs.eval_real(ctx.borrow());
-                let rhs = rhs.eval_real(ctx);
+                let lhs = lhs.eval_num(ctx.borrow())?;
+                let rhs = rhs.eval_num(ctx)?;
                 op.eval(lhs, rhs).into()
             }
             ExprData::Binary { op, lhs, rhs } => {
-                let lhs = lhs.eval_real(ctx.borrow());
-                let rhs = rhs.eval_real(ctx);
+                let lhs = lhs.eval_num(ctx.borrow())?;
+                let rhs = rhs.eval_num(ctx)?;
                 op.eval(lhs, rhs).into()
             }
-            ExprData::Unary { op, arg } => op.eval(arg.eval_real(ctx)).into(),
-        }
+            ExprData::Unary { op, arg } => op.eval(arg.eval_num(ctx)?).into(),
+        };
+
+        Ok(val)
     }
 }
 
 impl ExprPtr {
-    fn eval(self, ctx: ExprEvalCtxRef) -> Value {
+    fn eval(self, ctx: ExprEvalCtxRef) -> Result<Value> {
         ctx.lookup(self).eval(ctx)
     }
 
-    fn eval_real(self, ctx: ExprEvalCtxRef) -> f64 {
-        self.eval(ctx).unwrap_real()
+    fn eval_num(self, ctx: ExprEvalCtxRef) -> Result<f64> {
+        ctx.lookup(self).eval(ctx)?.to_num()
     }
 }
 
 impl Cond {
-    fn eval(&self, mut ctx: ExprEvalCtxRef) -> Value {
-        if self.cond.eval(ctx.borrow()).unwrap_bool() {
+    fn eval(&self, mut ctx: ExprEvalCtxRef) -> Result<Value> {
+        if self.cond.eval(ctx.borrow())?.to_bool()? {
             self.then_val.eval(ctx)
         } else {
             self.else_val.eval(ctx)
@@ -464,10 +483,10 @@ impl Cond {
 }
 
 impl UserFunc {
-    fn eval(&self, mut eval_ctx: ExprEvalCtxRef) -> Value {
+    fn eval(&self, mut eval_ctx: ExprEvalCtxRef) -> Result<Value> {
         for (i, val) in self.args.iter().enumerate() {
             let param = CircuitParam { param: i.into(), ctx: self.ctx };
-            let val = val.eval(eval_ctx.borrow());
+            let val = val.eval(eval_ctx.borrow())?;
             eval_ctx.set_param(param, val);
         }
         self.expr.eval(eval_ctx)
@@ -559,14 +578,19 @@ impl CircuitParam {
         CircuitParam { param: LocalCircuitParam(0), ctx: CircuitParamCtx::ROOT };
 }
 
-pub struct ExprArena {
+pub struct Arena {
     exprs: Vec<ExprData>,
     params: TiVec<CircuitParamCtx, TiMap<LocalCircuitParam, String, ParamInfo>>,
+    intern: Rodeo,
 }
 
-impl ExprArena {
-    pub fn new() -> ExprArena {
-        let mut res = ExprArena { exprs: Vec::with_capacity(256), params: TiVec::default() };
+impl Arena {
+    pub fn new() -> Arena {
+        let mut res = Arena {
+            exprs: Vec::with_capacity(256),
+            params: TiVec::default(),
+            intern: Rodeo::new(),
+        };
         let _root = res.add_ctx();
         debug_assert_eq!(_root, CircuitParamCtx::ROOT);
         res.def_param(CircuitParamCtx::ROOT, "temp".to_owned())
@@ -658,9 +682,9 @@ struct ParamInfo {
     read_expr: Expr,
 }
 
-impl Default for ExprArena {
+impl Default for Arena {
     fn default() -> Self {
-        ExprArena::new()
+        Arena::new()
     }
 }
 
@@ -669,6 +693,7 @@ pub struct ExprEvalCtxRef<'a> {
     arena: &'a [ExprData],
     params: &'a mut [Value],
     ctx_offsets: &'a TiSlice<CircuitParamCtx, u32>,
+    intern: &'a Rodeo,
 }
 
 impl<'a> ExprEvalCtxRef<'a> {
@@ -678,6 +703,7 @@ impl<'a> ExprEvalCtxRef<'a> {
             arena: self.arena,
             params: &mut *self.params,
             ctx_offsets: self.ctx_offsets,
+            intern: self.intern,
         }
     }
 
@@ -703,12 +729,13 @@ impl<'a> Index<CircuitParam> for ExprEvalCtxRef<'a> {
 #[derive(Debug)]
 pub struct ExprEvalCtx<'a> {
     arena: &'a [ExprData],
+    intern: &'a Rodeo,
     params: Box<[Value]>,
     ctx_offsets: Box<TiSlice<CircuitParamCtx, u32>>,
 }
 
 impl<'a> ExprEvalCtx<'a> {
-    pub fn new(arena: &'a ExprArena) -> ExprEvalCtx<'a> {
+    pub fn new(arena: &'a Arena) -> ExprEvalCtx<'a> {
         let mut num_params = 0;
         let ctx_offsets = arena
             .params
@@ -721,6 +748,7 @@ impl<'a> ExprEvalCtx<'a> {
             .collect();
         ExprEvalCtx {
             arena: &*arena.exprs,
+            intern: &arena.intern,
             params: vec![Value::UNDEF; num_params].into_boxed_slice(),
             ctx_offsets,
         }
@@ -730,33 +758,20 @@ impl<'a> ExprEvalCtx<'a> {
     pub fn borrow(&mut self) -> ExprEvalCtxRef<'_> {
         ExprEvalCtxRef {
             arena: self.arena,
+            intern: self.intern,
             params: &mut *self.params,
             ctx_offsets: &*self.ctx_offsets,
         }
     }
-
-    // fn lookup(&self, ptr: ExprPtr) -> &'a ExprData {
-    //     &self.arena[ptr.0 as usize]
-    // }
 
     pub fn set_param(&mut self, param: CircuitParam, val: Value) {
         let off: u32 = self.ctx_offsets[param.ctx] + u32::from(param.param);
         self.params[off as usize] = val;
     }
 
-    // pub fn is_set(&self, earena: &ExprArena) -> Vec<CircuitParam> {
-    //     let mut res = Vec::new();
-    //     for (ctx, off) in self.ctx_offsets.iter_enumerated() {
-    //         for param in earena.params[ctx].keys() {
-    //             let off: u32 = self.ctx_offsets[ctx] + u32::from(param);
-    //             if self.params[off as usize] == Value::UNDEF {
-    //                 res.push(CircuitParam { param, ctx })
-    //             }
-    //         }
-    //     }
-
-    //     res
-    // }
+    pub fn resolve_str(&self, str: Spur) -> &'a str {
+        self.intern.resolve(&str)
+    }
 }
 
 impl<'a> Index<CircuitParam> for ExprEvalCtx<'a> {
