@@ -18,6 +18,7 @@ use anyhow::Result;
 use xshell::Shell;
 
 // mod cache;
+mod msvcrt;
 
 fn main() -> Result<()> {
     let mut sh = Shell::new()?;
@@ -29,9 +30,8 @@ fn main() -> Result<()> {
             println!("{}", flags::Xtask::HELP);
             Ok(())
         }
-        // flags::XtaskCmd::Cache(cmd) => cmd.run(),
-        // flags::XtaskCmd::Vendor(cmd) => cmd.run(),
         flags::XtaskCmd::Verilogae(cmd) => cmd.run(&mut sh),
+        flags::XtaskCmd::GenMsvcrt(cmd) => cmd.run(&sh),
     }
 }
 

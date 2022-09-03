@@ -1,11 +1,12 @@
 use core::slice;
-use std::path::{Path, PathBuf};
+use std::str;
 
 use anyhow::{bail, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use paths::AbsPathBuf;
 use target::spec::Target;
 
-use crate::api::{NativePath, OptLevel, Opts, Slice};
+use crate::api::{OptLevel, Opts, Slice};
 
 impl From<OptLevel> for llvm::OptLevel {
     fn from(lvl: OptLevel) -> Self {
@@ -24,7 +25,7 @@ impl Opts {
             Ok(None)
         } else {
             let raw = unsafe { slice::from_raw_parts(self.model.ptr, self.model.len) };
-            Ok(Some(std::str::from_utf8(raw).context("model name must be valid utf8!")?))
+            Ok(Some(str::from_utf8(raw).context("model name must be valid utf8!")?))
         }
     }
 
@@ -33,7 +34,7 @@ impl Opts {
             Ok(None)
         } else {
             let raw = unsafe { slice::from_raw_parts(self.target_cpu.ptr, self.target_cpu.len) };
-            Ok(Some(std::str::from_utf8(raw).context("target_cpu must be valid utf8!")?))
+            Ok(Some(str::from_utf8(raw).context("target_cpu must be valid utf8!")?))
         }
     }
 
@@ -42,7 +43,7 @@ impl Opts {
             Target::host_target().unwrap()
         } else {
             let raw = unsafe { slice::from_raw_parts(self.target.ptr, self.target.len) };
-            let name = std::str::from_utf8(raw).context("target must be valid utf8")?;
+            let name = str::from_utf8(raw).context("target must be valid utf8")?;
             match Target::search(name) {
                 Some(target) => target,
                 None => bail!("specified target not found"),
@@ -52,15 +53,20 @@ impl Opts {
         Ok(target)
     }
 
-    pub(crate) fn cache_dir(&self) -> Result<PathBuf> {
+    pub(crate) fn cache_dir(&self) -> Result<Utf8PathBuf> {
         let res = if self.cache_dir.ptr.is_null() {
-            directories_next::ProjectDirs::from("com", "semimod", "verilogae")
+            let path = directories_next::ProjectDirs::from("com", "semimod", "verilogae")
                 .context("failed to find cache directory\nhelp: consider setting it manually")?
                 .cache_dir()
-                .to_owned()
+                .to_owned();
+
+            if let Ok(path) = Utf8PathBuf::from_path_buf(path) {
+                path
+            } else {
+                bail!("failed to find cache directory\nhelp: consider setting it manually")
+            }
         } else {
-            let path = unsafe { self.cache_dir.to_path() };
-            path.canonicalize().context("specified cache directory was not found")?
+            unsafe { self.cache_dir.to_path() }
         };
         Ok(res)
     }
@@ -96,8 +102,7 @@ impl Opts {
                     .iter()
                     .map(move |entry| {
                         let path = entry.name.read();
-                        let path =
-                            std::str::from_utf8(path).context("vfs-paths must be valid utf8")?;
+                        let path = str::from_utf8(path).context("vfs-paths must be valid utf8")?;
 
                         let contents = entry.data.read();
                         Ok((path, contents))
@@ -112,7 +117,7 @@ impl Opts {
         let data = unsafe { data.read() };
         data.iter().map(move |slice| {
             let raw = unsafe { slice.read() };
-            let res = std::str::from_utf8(raw).expect("lint names must be valid utf8!");
+            let res = str::from_utf8(raw).expect("lint names must be valid utf8!");
             res
         })
     }
@@ -124,32 +129,18 @@ impl Opts {
     }
 }
 
-impl NativePath {
+impl Slice<u8> {
     /// # Safety
     ///
     /// `self.ptr` must be valid for `self.len` reads
-    pub unsafe fn to_path(&self) -> PathBuf {
-        let path = self.read();
-
-        #[cfg(not(windows))]
-        {
-            use std::ffi::OsStr;
-            use std::os::unix::ffi::OsStrExt;
-            let path = OsStr::from_bytes(path);
-            path.into()
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::ffi::OsStringExt;
-            use std::ffi::OsString;
-            OsString::from_wide(path).into()
-        }
-
+    pub unsafe fn to_path(&self) -> Utf8PathBuf {
+        let path: &str = str::from_utf8(self.read()).expect("all paths must be utf-8");
+        Utf8Path::new(path).to_owned()
     }
 }
 
-pub(crate) fn abs_path(path: &Path) -> Result<AbsPathBuf> {
-    let path = path.canonicalize().with_context(|| format!("failed to read {}", path.display()))?;
+pub(crate) fn abs_path(path: &Utf8Path) -> Result<AbsPathBuf> {
+    let path = path.canonicalize().with_context(|| format!("failed to read {}", path))?;
     let path = AbsPathBuf::assert(path);
     Ok(path.normalize())
 }

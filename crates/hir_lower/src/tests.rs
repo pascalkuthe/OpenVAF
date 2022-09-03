@@ -92,8 +92,8 @@ impl Upcast<dyn BaseDB> for TestDataBase {
 
 #[test]
 pub fn generate_integration_tests() {
-    if SKIP_HOST_TESTS{
-        return ;
+    if SKIP_HOST_TESTS {
+        return;
     }
     let tests = collect_integration_tests();
     let file = project_root().join("crates/hir_lower/src/tests/integration.rs");

@@ -1,4 +1,5 @@
 use base_n::CASE_INSENSITIVE;
+use camino::{Utf8Path, Utf8PathBuf};
 use hir_def::{Lookup, Type};
 use hir_lower::{CallBackKind, ParamKind};
 use lasso::Rodeo;
@@ -12,7 +13,6 @@ use target::spec::Target;
 use typed_indexmap::TiSet;
 
 use std::ffi::CString;
-use std::path::{Path, PathBuf};
 
 use crate::compilation_unit::{new_codegen, OsdiCompilationUnit, OsdiModule};
 use crate::metadata::osdi_0_3::OsdiTys;
@@ -36,12 +36,12 @@ const OSDI_VERSION: (u32, u32) = (0, 3);
 pub fn compile(
     db: &CompilationDB,
     modules: &[ModuleInfo],
-    dst: &Path,
+    dst: &Utf8Path,
     target: &Target,
     back: &LLVMBackend,
     emit: bool,
     opt_lvl: OptLevel,
-) -> Vec<PathBuf> {
+) -> Vec<Utf8PathBuf> {
     let mut literals = Rodeo::new();
     let mut lim_table = TiSet::default();
     let mir: Vec<_> = modules
@@ -56,9 +56,9 @@ pub fn compile(
             mir
         })
         .collect();
-    let name = dst.file_stem().unwrap().to_string_lossy().to_owned();
+    let name = dst.file_stem().expect("destition is a file").to_owned();
 
-    let mut paths: Vec<PathBuf> = (0..modules.len() * 4)
+    let mut paths: Vec<Utf8PathBuf> = (0..modules.len() * 4)
         .map(|i| {
             let num = base_n::encode((i + 1) as u128, CASE_INSENSITIVE);
             let extension = format!("o{num}");
@@ -103,7 +103,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(&*path), Ok(()))
+                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
                 }
             });
 
@@ -120,7 +120,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 1];
                     // llmod.optimize();
-                    assert_eq!(llmod.emit_obect(&*path), Ok(()))
+                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
                 }
             });
 
@@ -137,7 +137,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 2];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(&*path), Ok(()))
+                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
                 }
             });
 
@@ -156,12 +156,12 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 3];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(&*path), Ok(()))
+                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
                 }
             });
         }
 
-        let llmod = unsafe { back.new_module(&*name, opt_lvl).unwrap() };
+        let llmod = unsafe { back.new_module(&name, opt_lvl).unwrap() };
         let cx = new_codegen(back, &llmod, &literals);
         let tys = OsdiTys::new(&cx, target_data);
 
@@ -219,7 +219,7 @@ pub fn compile(
             // println!("{}", llmod.to_str());
             llmod.optimize();
             // println!("{}", llmod.to_str());
-            assert_eq!(llmod.emit_obect(&*main_file), Ok(()))
+            assert_eq!(llmod.emit_obect(main_file.as_ref()), Ok(()))
         }
     });
 

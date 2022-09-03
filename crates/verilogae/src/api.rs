@@ -10,18 +10,12 @@ use libloading::os::windows::Library;
 
 use crate::{export_vfs, load};
 
-#[cfg(unix)]
-pub type NativePath = Slice<u8>;
-
-#[cfg(windows)]
-pub type NativePath = Slice<u16>;
-
 #[repr(C)]
 #[derive(Default)]
 pub struct Opts {
     pub model: Slice<u8>,
-    pub cache_dir: NativePath,
-    pub include_dirs: Slice<NativePath>,
+    pub cache_dir: Slice<u8>,
+    pub include_dirs: Slice<Slice<u8>>,
     pub macro_flags: Slice<Slice<u8>>,
     pub allow_lints: Slice<Slice<u8>>,
     pub warn_lints: Slice<Slice<u8>>,
@@ -534,7 +528,7 @@ pub type Vfs = Slice<VfsEntry>;
 /// * opts must be valid for reads or null
 /// * opts must only contain valid data
 #[no_mangle]
-pub unsafe extern "C" fn verilogae_export_vfs(path: NativePath, opts: *mut Opts) -> Vfs {
+pub unsafe extern "C" fn verilogae_export_vfs(path: Slice<u8>, opts: *mut Opts) -> Vfs {
     let path = path.to_path();
     let opts_;
 
@@ -579,7 +573,7 @@ pub unsafe extern "C" fn verilogae_free_vfs(vfs: Vfs) {
 /// * opts must only contain valid data
 #[no_mangle]
 pub unsafe extern "C" fn verilogae_load(
-    path: NativePath,
+    path: Slice<u8>,
     full_compile: bool,
     opts: *const Opts,
 ) -> *const c_void {

@@ -251,7 +251,7 @@ pub unsafe extern "C" fn load_vfs(
     kwnames: *mut PyObject,
 ) -> *mut PyObject {
     parse_args!("load_vfs", args, nargs, kwnames, path, opts);
-    let vfs = VfsExport::new(path.data, &opts);
+    let vfs = VfsExport::new(path.data.read(), &opts);
     match vfs {
         Some(vfs) => vfs_to_py(vfs),
         None => raise_runtime_runtime_exception("load_vfs() failed to create vfs"),

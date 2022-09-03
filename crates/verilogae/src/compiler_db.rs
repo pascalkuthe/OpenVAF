@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::fs;
 use std::intrinsics::transmute;
 use std::iter::{once, repeat};
@@ -12,6 +11,7 @@ use basedb::diagnostics::{
 };
 use basedb::lints::{Lint, LintLevel};
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsPath, VfsStorage, STANDARD_FLAGS};
+use camino::Utf8Path;
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::ScopeDefItem;
 use hir_def::{BranchId, Lookup, ModuleId, NodeId, ParamId, Path, ScopeId, Type, VarId};
@@ -42,7 +42,7 @@ pub(crate) struct CompilationDB {
 
 impl Upcast<dyn HirDefDB> for CompilationDB {
     fn upcast(&self) -> &(dyn HirDefDB + 'static) {
-        &*self
+        self
     }
 }
 
@@ -53,7 +53,7 @@ impl Upcast<dyn BaseDB> for CompilationDB {
 }
 
 impl CompilationDB {
-    pub(crate) fn new(root_file: &std::path::Path, opts: &Opts) -> Result<Self> {
+    pub(crate) fn new(root_file: &Utf8Path, opts: &Opts) -> Result<Self> {
         let mut vfs = Vfs::default();
         vfs.insert_std_lib();
 
@@ -61,11 +61,7 @@ impl CompilationDB {
             for (path, data) in vfs_export {
                 vfs.add_virt_file(path, data.to_owned().into());
             }
-            let root_file = root_file.to_str();
-            let root_file = match root_file {
-                Some(file) => file,
-                None => bail!("For VFS operations all paths must be representable as utf8!"),
-            };
+            let root_file = root_file.to_string();
 
             if !root_file.starts_with('/') {
                 bail!("VFS paths must start with '/'")
@@ -243,11 +239,7 @@ pub struct ModelInfo {
 }
 
 impl ModelInfo {
-    pub(crate) fn collect(
-        db: &CompilationDB,
-        file_name: &impl Display,
-        name: Option<&str>,
-    ) -> Result<Self> {
+    pub(crate) fn collect(db: &CompilationDB, file_name: &str, name: Option<&str>) -> Result<Self> {
         let root_file = db.root_file;
 
         let mut sink = ConsoleSink::new(Config::default(), db.upcast());
@@ -255,7 +247,7 @@ impl ModelInfo {
         sink.add_diagnostics(db.parse(root_file).errors(), root_file, db);
         collect_diagnostics(db, root_file, &mut sink);
 
-        if sink.summary(file_name) {
+        if sink.summary(&file_name) {
             bail!("compiation failed");
         }
 
@@ -561,7 +553,7 @@ impl ModelInfo {
             _ => (),
         });
 
-        if sink.summary(file_name) {
+        if sink.summary(&file_name) {
             bail!("compilation failed");
         }
 

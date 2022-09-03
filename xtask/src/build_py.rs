@@ -27,22 +27,18 @@ impl crate::flags::Build {
 
         let pythons = find_py();
         for (py, _tag) in &pythons {
-            cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
-                .env("PYO3_PYTHON", &py)
-                .run()?;
+            cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps").env("PYO3_PYTHON", &py).run()?;
             // cmd!("auditwheel repair "$whl" -w /io/dist/")
         }
 
         if self.manylinux {
             for file in sh.read_dir("wheels")? {
-                cmd!(sh, "auditwheel repair {file}  -w wheels")
-                    .run()?;
+                cmd!(sh, "auditwheel repair {file}  -w wheels").run()?;
                 std::fs::remove_file(file)?;
             }
         } else {
             for file in sh.read_dir("wheels")? {
-                cmd!(sh, "auditwheel repair {file}  -w wheels --plat linux_x86_64")
-                    .run()?;
+                cmd!(sh, "auditwheel repair {file}  -w wheels --plat linux_x86_64").run()?;
             }
         }
 

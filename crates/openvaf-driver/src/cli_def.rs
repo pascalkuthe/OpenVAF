@@ -3,6 +3,8 @@ use std::path::Path;
 
 use anyhow::bail;
 use basedb::lints::{self, LintLevel};
+use camino::Utf8Path;
+use clap::builder::ValueParser;
 use clap::{Arg, Command, PossibleValue, ValueHint};
 use path_absolutize::Absolutize;
 
@@ -167,66 +169,70 @@ fn cache_dir() -> Arg<'static> {
 }
 
 fn dir_path_arg(name: &'static str) -> Arg<'static> {
+    let parse = |raw: &str| {
+        let path = Utf8Path::new(raw).to_owned();
+
+        match fs::metadata(&path) {
+            Err(err) => bail!("{err}"),
+            Ok(info) if !info.is_dir() => bail!("is not a directory"),
+            _ => Ok(path),
+        }
+    };
+
     Arg::new(name)
         .value_name("DIR")
         .value_hint(ValueHint::DirPath)
-        .allow_invalid_utf8(true)
-        .validator_os(|val| {
-            let path = Path::new(val);
-            match fs::metadata(path) {
-                Err(err) => bail!("{err}"),
-                Ok(info) if !info.is_dir() => bail!("is not a directory"),
-                _ => Ok(()),
-            }
-        })
+        .value_parser(ValueParser::new(parse))
 }
 
 fn output_file_path_arg(name: &'static str) -> Arg<'static> {
+    let parse = |raw: &str| {
+        let path = Utf8Path::new(raw).to_owned();
+
+        if path.exists() {
+            match fs::metadata(&path) {
+                Err(err) => bail!("{err}"),
+                Ok(info) if !info.is_file() => bail!("is not a file"),
+                _ => Ok(path),
+            }
+        } else {
+            let raw_path: &Path = path.as_ref();
+            let raw_path = match raw_path.absolutize() {
+                Ok(path) => path,
+                Err(err) => bail!("failed to access {err}"),
+            };
+
+            let parent = match raw_path.parent() {
+                Some(parent) => parent,
+                None => bail!("is not a file"),
+            };
+
+            match fs::metadata(&parent) {
+                Err(err) => bail!("{} {err}", parent.display()),
+                Ok(info) if !info.is_dir() => bail!("{} is not a directory", parent.display()),
+                _ => Ok(path),
+            }
+        }
+    };
+
     Arg::new(name)
         .value_name("FILE")
         .value_hint(ValueHint::FilePath)
-        .allow_invalid_utf8(true)
-        .validator_os(|val| {
-            let path = Path::new(val);
-            if path.exists() {
-                match fs::metadata(path) {
-                    Err(err) => bail!("{err}"),
-                    Ok(info) if !info.is_file() => bail!("is not a file"),
-                    _ => Ok(()),
-                }
-            } else {
-                let path = match path.absolutize() {
-                    Ok(path) => path,
-                    Err(err) => bail!("failed to access {err}"),
-                };
-
-                let parent = match path.parent() {
-                    Some(parent) => parent,
-                    None => bail!("is not a file"),
-                };
-
-                match fs::metadata(&parent) {
-                    Err(err) => bail!("{} {err}", parent.display()),
-                    Ok(info) if !info.is_dir() => bail!("{} is not a directory", parent.display()),
-                    _ => Ok(()),
-                }
-            }
-        })
+        .value_parser(ValueParser::new(parse))
 }
 
 fn input_file_path_arg(name: &'static str) -> Arg<'static> {
-    Arg::new(name)
-        .value_name("FILE")
-        .allow_invalid_utf8(true)
-        .value_hint(ValueHint::FilePath)
-        .validator_os(|val| {
-            let path = Path::new(val);
-            match fs::metadata(path) {
-                Err(err) => bail!("{err}"),
-                Ok(info) if !info.is_file() => bail!("is not a file"),
-                _ => Ok(()),
-            }
-        })
+    let parse = |raw: &str| {
+        let path = Utf8Path::new(raw).to_owned();
+
+        match fs::metadata(&path) {
+            Err(err) => bail!("{err}"),
+            Ok(info) if !info.is_file() => bail!("is not a file"),
+            _ => Ok(path),
+        }
+    };
+
+    Arg::new(name).value_name("FILE").value_parser(parse)
 }
 
 fn opt_lvl() -> Arg<'static> {

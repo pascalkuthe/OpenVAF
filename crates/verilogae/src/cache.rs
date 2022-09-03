@@ -1,10 +1,10 @@
 use core::slice;
 use std::mem::{size_of, size_of_val};
-use std::path::PathBuf;
 
 use anyhow::Result;
 use basedb::lints::LintLevel;
 use basedb::BaseDB;
+use camino::Utf8PathBuf;
 
 use crate::compiler_db::CompilationDB;
 use crate::Opts;
@@ -50,7 +50,7 @@ pub(crate) fn lookup(
     db: &CompilationDB,
     full_compile: bool,
     opts: &Opts,
-) -> Result<(PathBuf, bool)> {
+) -> Result<(Utf8PathBuf, bool)> {
     let hash = u128::from_ne_bytes(*hash(db, opts.module_name()?));
     let hash = base_n::encode(hash, base_n::CASE_INSENSITIVE);
     let extension = if full_compile { "mod" } else { "modinfo" };

@@ -10,6 +10,7 @@ pub use cli_def::main_command;
 pub use cli_process::Opts;
 use linker::link;
 use mir_llvm::LLVMBackend;
+use paths::AbsPathBuf;
 use sim_back::CompilationDB;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -27,7 +28,9 @@ const DATA_ERROR: i32 = 65;
 pub fn run(matches: ArgMatches) -> Result<i32> {
     let start = Instant::now();
     let opts = Opts::new(matches)?;
-    let db = CompilationDB::new(opts.input.clone(), &opts.include, &opts.defines, &opts.lints)?;
+
+    let path = AbsPathBuf::assert(opts.input.canonicalize()?);
+    let db = CompilationDB::new(path, &opts.include, &opts.defines, &opts.lints)?;
     let modules = if let Some(modules) = db.collect_modules() {
         modules
     } else {
@@ -49,7 +52,7 @@ pub fn run(matches: ArgMatches) -> Result<i32> {
     let back = LLVMBackend::new(&opts.codegen_opts, &opts.target, opts.target_cpu, &[]);
     let paths =
         osdi::compile(&db, &modules, opts.input.as_ref(), &opts.target, &back, true, opts.opt_lvl);
-    link(&opts.target, None, None, out.as_ref(), |linker| {
+    link(&opts.target, out.as_ref(), |linker| {
         for path in &paths {
             linker.add_object(path);
         }
@@ -64,12 +67,7 @@ pub fn run(matches: ArgMatches) -> Result<i32> {
     stderr.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
     write!(&mut stderr, "Finished")?;
     stderr.set_color(&ColorSpec::new())?;
-    writeln!(
-        &mut stderr,
-        " building {} in {:.2}s",
-        opts.input.file_name().unwrap().to_string_lossy(),
-        seconds
-    )?;
+    writeln!(&mut stderr, " building {} in {:.2}s", opts.input.file_name().unwrap(), seconds)?;
 
     if opts.batch {
         print_path(out.as_ref());
