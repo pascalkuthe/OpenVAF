@@ -3,7 +3,10 @@ use crate::spec::{LinkerFlavor, Target};
 pub fn target() -> Target {
     let mut base = super::linux_base::opts();
     base.cpu = "x86-64".to_string();
-    base.pre_link_args.entry(LinkerFlavor::Gcc).or_default().push("-m64".to_string());
+    let link_args = base.pre_link_args.entry(LinkerFlavor::Ld).or_default();
+    for arg in "-m elf_x86_64".split(' ') {
+        link_args.push(arg.to_owned())
+    }
 
     Target {
         llvm_target: "x86_64-unknown-linux-gnu".to_string(),

@@ -130,7 +130,8 @@ fn main() {
     let is_wine = is_crossed && target.contains("windows-msvc") && !host.contains("windows");
 
     let optional_components = &[
-        "x86", "arm", "aarch64",
+        "x86", "arm",
+        "aarch64",
         // "amdgpu",
         // "avr",
         // "m68k",
@@ -143,7 +144,7 @@ fn main() {
         // "sparc",
         // "nvptx",
         // "hexagon",
-        "riscv",
+        // "riscv",
         // "bpf",
     ];
 
@@ -152,10 +153,13 @@ fn main() {
         "bitreader",
         "bitwriter",
         // "linker",
+        "option",
         // "asmparser",
-        // "lto",
-        // "coverage",
-        // "instrumentation",
+        "lto",
+        "debuginfopdb",
+        "windowsmanifest",
+        "libdriver", // "coverage",
+                     // "instrumentation",
     ];
 
     let components = output(Command::new(&llvm_config).arg("--components"));
@@ -243,6 +247,7 @@ fn main() {
 
     rerun_if_changed_anything_in_dir(Path::new("wrapper"));
     cfg.cpp(true)
+        .warnings(true)
         .file("wrapper/OpenVafWrapper.cpp")
         .cpp_link_stdlib(None) // we handle this below
         .compile("llvm-wrapper");
@@ -253,60 +258,63 @@ fn main() {
     // we don't pick up system libs because unfortunately they're for the host
     // of llvm-config, not the target that we're attempting to link.
     let mut cmd = Command::new(&llvm_config);
-    cmd.arg(llvm_link_arg).arg("--libs");
-
-    if !is_crossed {
-        cmd.arg("--system-libs");
-    } else if target.contains("windows-gnu") {
-        println!("cargo:rustc-link-lib=shell32");
-        println!("cargo:rustc-link-lib=uuid");
-    } else if target.contains("netbsd") || target.contains("haiku") || target.contains("darwin") {
-        println!("cargo:rustc-link-lib=z");
-    }
+    cmd.arg(llvm_link_arg).arg("--libnames");
     cmd.args(&components);
 
-    for lib in output(&mut cmd).split_whitespace() {
-        let tmp;
-        let name = if let Some(stripped) = lib.strip_prefix("-l") {
-            stripped
-        } else if let Some(stripped) = lib.strip_prefix('-') {
-            stripped
-        } else if Path::new(lib).exists() {
-            // On MSVC llvm-config will print the full name to libraries, but
-            // we're only interested in the name part
-            let name = Path::new(lib).file_name().unwrap().to_str().unwrap();
-            name.trim_end_matches(".lib")
-        } else if is_wine {
-            // for wine the same rules as MSVC exist but we have to translate paths with winepath
-            if lib.contains('\\') {
-                tmp = winepath(lib);
-                let name = tmp.file_name().and_then(OsStr::to_str).unwrap_or("?");
-                if !tmp.exists() {
-                    fail(&format!("llvm lib {name} not found at {} ({lib})", tmp.display()));
-                }
-                name.trim_end_matches(".lib")
-            } else {
-                lib.trim_end_matches(".lib")
-            }
-        } else if lib.ends_with(".lib") {
-            // Some MSVC libraries just come up with `.lib` tacked on, so chop
-            // that off
-            lib.trim_end_matches(".lib")
-        } else {
-            continue;
-        };
+    for mut lib in output(&mut cmd).split_whitespace() {
+        lib = lib
+            .trim_end_matches(".lib")
+            .trim_end_matches(".so")
+            .trim_end_matches(".a")
+            .trim_start_matches("lib");
 
         // Don't need or want this library, but LLVM's CMake build system
         // doesn't provide a way to disable it, so filter it here even though we
         // may or may not have built it. We don't reference anything from this
         // library and it otherwise may just pull in extra dependencies on
         // libedit which we don't want
-        if name == "LLVMLineEditor" {
+        if lib == "LLVMLineEditor" {
             continue;
         }
 
-        let kind = if name.starts_with("LLVM") { llvm_kind } else { "dylib" };
-        println!("cargo:rustc-link-lib={}={}", kind, name);
+        println!("cargo:rustc-link-lib={llvm_kind}={}", lib);
+    }
+
+    // Link in all LLVM libraries, if we're using the "wrong" llvm-config then
+    // we don't pick up system libs because unfortunately they're for the host
+    // of llvm-config, not the target that we're attempting to link.
+    let mut cmd = Command::new(&llvm_config);
+    cmd.arg(llvm_link_arg);
+
+    if !is_crossed {
+        cmd.arg("--system-libs");
+        cmd.args(&components);
+
+        for lib in output(&mut cmd).split_whitespace() {
+            let name = if let Some(stripped) = lib.strip_prefix("-l") {
+                stripped
+            } else if let Some(stripped) = lib.strip_prefix('-') {
+                stripped
+            } else if Path::new(lib).exists() {
+                // On MSVC llvm-config will print the full name to libraries, but
+                // we're only interested in the name part
+                let name = Path::new(lib).file_name().unwrap().to_str().unwrap();
+                name.trim_end_matches(".lib")
+            } else if lib.ends_with(".lib") {
+                // Some MSVC libraries just come up with `.lib` tacked on, so chop
+                // that off
+                lib.trim_end_matches(".lib")
+            } else {
+                continue;
+            };
+
+            println!("cargo:rustc-link-lib=dylib={}", name);
+        }
+    } else if target.contains("windows-gnu") {
+        println!("cargo:rustc-link-lib=shell32");
+        println!("cargo:rustc-link-lib=uuid");
+    } else if target.contains("netbsd") || target.contains("haiku") || target.contains("darwin") {
+        println!("cargo:rustc-link-lib=z");
     }
 
     // LLVM ldflags
@@ -316,30 +324,14 @@ fn main() {
     // hack around this by replacing the host triple with the target and pray
     // that those -L directories are the same!
     let mut cmd = Command::new(&llvm_config);
-    cmd.arg(llvm_link_arg).arg("--ldflags");
-    for lib in output(&mut cmd).split_whitespace() {
-        if is_crossed {
-            if is_wine {
-                let lib = lib.strip_prefix("-LIBPATH:").expect("ldflags must start with when corss compiling with wine -LIBPATH:");
-                let path = winepath(lib).to_str().expect("all paths are valid utf-8").to_owned();
-                println!("cargo:rustc-link-search=native={}", path);
-            } else if let Some(stripped) = lib.strip_prefix("-LIBPATH:") {
-                println!("cargo:rustc-link-search=native={}", stripped.replace(&host, &target));
-            } else if let Some(stripped) = lib.strip_prefix("-L") {
-                println!("cargo:rustc-link-search=native={}", stripped.replace(&host, &target));
-            }
-        } else if let Some(stripped) = lib.strip_prefix("-LIBPATH:") {
-            println!("cargo:rustc-link-search=native={}", stripped);
-        } else if let Some(stripped) = lib.strip_prefix("-l") {
-            println!("cargo:rustc-link-lib={}", stripped);
-        } else if let Some(stripped) = lib.strip_prefix("-L") {
-            println!("cargo:rustc-link-search=native={}", stripped);
-        }
+    let mut libdir = output(cmd.arg(llvm_link_arg).arg("--libdir"));
+
+    if is_wine {
+        libdir = winepath(&libdir).to_str().expect("all paths are valid utf-8").to_owned();
     }
 
-    // Some LLVM linker flags (-L and -l) may be needed for example when using static libc++,
-    // we may need to manually specify the library search path and -ldl -lpthread as link
-    // dependencies.
+    println!("cargo:rustc-link-search=native={}", libdir);
+
     let llvm_linker_flags = tracked_env_var_os("LLVM_LINKER_FLAGS");
     if let Some(s) = llvm_linker_flags {
         for lib in s.into_string().unwrap().split_whitespace() {
@@ -402,4 +394,12 @@ fn main() {
     if target.contains("windows-gnu") {
         println!("cargo:rustc-link-lib=static:-bundle=pthread");
     }
+
+    // linking lld is not handeled by llvm-config
+    println!("cargo:rustc-link-lib={llvm_kind}=lldCommon");
+    println!("cargo:rustc-link-lib={llvm_kind}=lldCOFF");
+    println!("cargo:rustc-link-lib={llvm_kind}=lldELF");
+    println!("cargo:rustc-link-lib={llvm_kind}=lldMachO");
+    // println!("cargo:rustc-link-lib={llvm_kind}=lldMinGW");
+    // println!("cargo:rustc-link-lib={llvm_kind}=lldWasm");
 }

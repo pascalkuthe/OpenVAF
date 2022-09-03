@@ -1,16 +1,25 @@
+use crate::spec::apple_base::macos_llvm_target;
 use crate::spec::{LinkerFlavor, Target};
 
+use super::apple_base;
+
 pub fn target() -> Target {
-    let mut base = super::apple_base::opts();
+    let mut base = apple_base::opts();
     base.cpu = "core2".to_string();
     base.pre_link_args.insert(
-        LinkerFlavor::Gcc,
-        vec!["-m64".to_string(), "-arch".to_string(), "x86_64".to_string()],
+        LinkerFlavor::Ld64,
+        vec![
+            "-m64".to_string(),
+            "-arch".to_string(),
+            "x86_64".to_string(),
+            "-undefined".to_string(),
+            "dynamic_lookup".to_string(),
+        ],
     );
     // Clang automatically chooses a more specific target based on
     // MACOSX_DEPLOYMENT_TARGET.  To integrate correctly with the target simulator we do too
     let arch = "x86_64";
-    let llvm_target = super::apple_base::macos_llvm_target(arch);
+    let llvm_target = macos_llvm_target(arch);
 
     Target {
         llvm_target,

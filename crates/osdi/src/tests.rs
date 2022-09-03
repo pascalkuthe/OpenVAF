@@ -3,6 +3,7 @@ use std::path::Path;
 use ::sourcegen::{
     add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
 };
+use camino::Utf8Path;
 use llvm::OptLevel;
 use mir_llvm::LLVMBackend;
 use paths::AbsPathBuf;
@@ -23,7 +24,15 @@ fn test_compile(root_file: &Path) {
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, "native".to_owned(), &[]);
     let emit = !stdx::IS_CI;
-    crate::compile(&db, &modules, Path::new("foo.o"), &target, &back, emit, OptLevel::Aggressive);
+    crate::compile(
+        &db,
+        &modules,
+        Utf8Path::new("foo.o"),
+        &target,
+        &back,
+        emit,
+        OptLevel::Aggressive,
+    );
 }
 
 #[test]

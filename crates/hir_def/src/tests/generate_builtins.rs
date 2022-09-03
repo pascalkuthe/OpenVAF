@@ -1,8 +1,8 @@
 use indexmap::IndexSet;
 use quote::{format_ident, quote};
 use sourcegen::{add_preamble, ensure_file_contents, project_root, reformat, to_upper_snake_case};
-use stdx::SKIP_HOST_TESTS;
 use stdx::iter::multiunzip;
+use stdx::SKIP_HOST_TESTS;
 
 const ANALOG_OPERATORS: [&str; 17] = [
     "absdelay",
@@ -199,8 +199,8 @@ const SYSFUNS: [&str; 81] = [
 
 #[test]
 fn generate_builtins() {
-    if SKIP_HOST_TESTS{
-        return ;
+    if SKIP_HOST_TESTS {
+        return;
     }
     let iter = BUILTINS
         .into_iter()

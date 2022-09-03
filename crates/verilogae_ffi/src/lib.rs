@@ -24,8 +24,8 @@ pub struct VfsExport(ffi::Vfs);
 
 impl VfsExport {
     #[inline]
-    pub fn new(path: NativePath, opts: &Opts) -> Option<VfsExport> {
-        let raw = unsafe { verilogae_export_vfs(path, opts.to_ffi()) };
+    pub fn new(path: &[u8], opts: &Opts) -> Option<VfsExport> {
+        let raw = unsafe { verilogae_export_vfs(path.into(), opts.to_ffi()) };
         if raw.ptr.is_null() {
             return None;
         }

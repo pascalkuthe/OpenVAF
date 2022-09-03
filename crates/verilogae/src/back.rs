@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
-use std::path::Path;
 
+use camino::Utf8Path;
 use hir_def::db::HirDefDB;
 use hir_def::Type;
 use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
@@ -287,7 +287,7 @@ impl CodegenCtx<'_, '_> {
         func: &Function,
         cfg: &ControlFlowGraph,
         intern: &HirInterner,
-        dst: &Path,
+        dst: &Utf8Path,
     ) {
         let ret_info = db.var_data(spec.var);
 
@@ -424,7 +424,7 @@ impl CodegenCtx<'_, '_> {
         debug_assert!(module.verify_and_print(), "Invalid code generated");
         module.optimize();
 
-        module.emit_obect(dst).expect("code generation failed!")
+        module.emit_obect(dst.as_ref()).expect("code generation failed!")
     }
 
     pub(crate) fn ensure_names(&mut self, db: &CompilationDB, intern: &HirInterner) {
@@ -614,7 +614,7 @@ impl CodegenCtx<'_, '_> {
 
     pub(crate) fn compile_model_info(
         &self,
-        dst: &Path,
+        dst: &Utf8Path,
         interned_model: InternedModel,
         param_init_func: Function,
         param_init_intern: HirInterner,
@@ -776,7 +776,7 @@ impl CodegenCtx<'_, '_> {
         module.optimize();
         // println!("{}", module.to_str());
 
-        module.emit_obect(dst).expect("code generation failed!");
+        module.emit_obect(dst.as_ref()).expect("code generation failed!");
     }
 }
 

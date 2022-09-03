@@ -37,6 +37,8 @@ xflags::xflags! {
 
         }
 
+        cmd gen-msvcrt {}
+
     }
 }
 // generated start
@@ -51,6 +53,7 @@ pub struct Xtask {
 pub enum XtaskCmd {
     Help(Help),
     Verilogae(Verilogae),
+    GenMsvcrt(GenMsvcrt),
 }
 
 #[derive(Debug)]
@@ -82,6 +85,9 @@ pub struct Test;
 
 #[derive(Debug)]
 pub struct Publish;
+
+#[derive(Debug)]
+pub struct GenMsvcrt;
 
 impl Xtask {
     pub const HELP: &'static str = Self::HELP_;

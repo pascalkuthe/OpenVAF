@@ -18,7 +18,7 @@ fn main() {
     // popualte dummys
     let no_gen = tracked_env_var_os("RUST_CHECK").is_some();
     let sh = Shell::new().unwrap();
-    let osdi_dir = sourcegen::project_root().join("crates").join("osdi");
+    let osdi_dir = stdx::project_root().join("crates").join("osdi");
     let src_file = osdi_dir.join("stdlib.c");
 
     sh.change_dir(osdi_dir);

@@ -1,10 +1,10 @@
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
 use basedb::{BaseDB, VfsStorage};
+use camino::{Utf8Path, Utf8PathBuf};
 use lasso::Rodeo;
 use linker::link;
 use mir_llvm::LLVMBackend;
@@ -32,7 +32,7 @@ mod compiler_db;
 mod middle;
 mod opts;
 
-pub fn export_vfs(path: &Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
+pub fn export_vfs(path: &Utf8Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
     let db = CompilationDB::new(path, opts)?;
     db.preprocess(db.root_file);
     let vfs = db.vfs().read();
@@ -54,13 +54,13 @@ pub fn export_vfs(path: &Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
     Ok(res)
 }
 
-pub fn load(path: &Path, full_compile: bool, opts: &Opts) -> Result<Library> {
+pub fn load(path: &Utf8Path, full_compile: bool, opts: &Opts) -> Result<Library> {
     let lib = build_local_model(path, full_compile, opts)?;
     let lib = unsafe { Library::new(lib).expect("failed to open lib") };
     Ok(lib)
 }
 
-fn build_local_model(path: &Path, full_compile: bool, opts: &Opts) -> Result<PathBuf> {
+fn build_local_model(path: &Utf8Path, full_compile: bool, opts: &Opts) -> Result<Utf8PathBuf> {
     let db = CompilationDB::new(path, opts)?;
     let (file, found) = cache::lookup(&db, full_compile, opts)?;
     if found {
@@ -73,20 +73,18 @@ fn build_local_model(path: &Path, full_compile: bool, opts: &Opts) -> Result<Pat
 impl CompilationDB {
     fn build_model(
         self,
-        path: &Path,
+        path: &Utf8Path,
         full_compile: bool,
         local: bool,
         opts: &Opts,
-        dst: &Path,
+        dst: &Utf8Path,
     ) -> Result<()> {
         let start = Instant::now();
         let db = self;
 
-        let file = path.file_name().to_owned().unwrap().to_string_lossy();
+        let file = path.file_name().to_owned().unwrap();
 
-        // FIXME display osstring directly instead of wrapping in a path? wtf does osstr not have a
-        // display method
-        let info = ModelInfo::collect(&db, &file, opts.module_name()?)?;
+        let info = ModelInfo::collect(&db, file, opts.module_name()?)?;
 
         let target_cpu = match opts.target_cpu()? {
             Some(cpu) => cpu,
@@ -119,7 +117,7 @@ impl CompilationDB {
 
             cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
 
-            let dst_name = dst.file_name().to_owned().unwrap().to_string_lossy();
+            let dst_name = dst.file_name().to_owned().unwrap();
             object_files.extend(
                 info.functions
                     .iter()
@@ -157,7 +155,7 @@ impl CompilationDB {
             cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
         }
 
-        link(&target, None, None, dst, |linker| {
+        link(&target, dst, |linker| {
             for obj in &object_files {
                 linker.add_object(obj)
             }

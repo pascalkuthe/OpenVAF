@@ -1,5 +1,5 @@
 use std::mem::size_of;
-use std::os::raw::{c_char, c_ulong};
+use std::os::raw::c_ulong;
 
 use pyo3_ffi::*;
 
@@ -7,28 +7,6 @@ use pyo3_ffi::*;
 #[inline(always)]
 pub unsafe fn PyDict_GET_SIZE(op: *mut PyObject) -> Py_ssize_t {
     (*op.cast::<PyDictObject>()).ma_used
-}
-
-#[repr(C)]
-#[cfg(not(windows))]
-pub struct PyBytesObject {
-    pub ob_base: PyVarObject,
-    pub ob_shash: Py_hash_t,
-    pub ob_sval: [c_char; 1],
-}
-
-#[cfg(not(windows))]
-#[allow(non_snake_case)]
-#[inline(always)]
-pub unsafe fn PyBytes_AS_STRING(op: *mut PyObject) -> *const c_char {
-    &(*op.cast::<PyBytesObject>()).ob_sval as *const c_char
-}
-
-#[cfg(not(windows))]
-#[allow(non_snake_case)]
-#[inline(always)]
-pub unsafe fn PyBytes_GET_SIZE(op: *mut PyObject) -> Py_ssize_t {
-    (*op.cast::<PyVarObject>()).ob_size
 }
 
 // #[cfg(Py_3_8)]

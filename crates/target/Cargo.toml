@@ -9,3 +9,7 @@ rust-version = "1.56"
 
 [lib]
 doctest = false
+
+[build-dependencies]
+xshell = "0.2.1"
+stdx = {version ="0.0.0", path ="../stdx"}

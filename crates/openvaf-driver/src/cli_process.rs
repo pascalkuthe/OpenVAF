@@ -1,13 +1,11 @@
-use std::ffi::OsStr;
 use std::io::Write;
-use std::path::Path;
 use std::process::exit;
 
 use anyhow::{bail, Context, Result};
 use basedb::lints::{self, LintLevel};
+use camino::Utf8PathBuf;
 use clap::ArgMatches;
 use llvm::OptLevel;
-use path_absolutize::Absolutize;
 use paths::AbsPathBuf;
 use target::host_triple;
 use target::spec::{get_targets, Target};
@@ -21,24 +19,15 @@ use crate::cli_def::{
 pub struct Opts {
     pub defines: Vec<String>,
     pub codegen_opts: Vec<String>,
-    pub cache_dir: AbsPathBuf,
+    pub cache_dir: Utf8PathBuf,
     pub lints: Vec<(String, LintLevel)>,
-    pub input: AbsPathBuf,
-    pub output: AbsPathBuf,
+    pub input: Utf8PathBuf,
+    pub output: Utf8PathBuf,
     pub include: Vec<AbsPathBuf>,
     pub batch: bool,
     pub opt_lvl: OptLevel,
     pub target: Target,
     pub target_cpu: String,
-}
-
-fn input_path_arg(raw: &OsStr) -> Result<AbsPathBuf> {
-    Ok(AbsPathBuf::assert(Path::new(raw).canonicalize()?))
-}
-
-fn output_path_arg(raw: &OsStr) -> Result<AbsPathBuf> {
-    let path = Path::new(raw).absolutize()?.into_owned();
-    Ok(AbsPathBuf::assert(path))
 }
 
 impl Opts {
@@ -52,13 +41,12 @@ impl Opts {
             exit(0)
         }
 
-        let input = input_path_arg(matches.value_of_os(INPUT).unwrap())?;
+        let input: Utf8PathBuf = matches.get_one::<Utf8PathBuf>(INPUT).unwrap().clone();
 
-        let output = if let Some(output) = matches.value_of_os(OUTPUT) {
-            output_path_arg(output)?
+        let output = if let Some(output) = matches.get_one::<Utf8PathBuf>(OUTPUT) {
+            output.clone()
         } else {
-            let path: &Path = input.as_ref();
-            AbsPathBuf::assert(path.with_extension("osdi"))
+            input.with_extension("osdi")
         };
 
         let mut lints = Vec::new();
@@ -75,38 +63,38 @@ impl Opts {
         }
 
         let batch = matches.is_present(BATCHMODE);
-        let cache_dir = if let Some(val) = matches.value_of_os(CACHE_DIR) {
-            Path::new(val).canonicalize().unwrap()
+        let cache_dir = if let Some(val) = matches.get_one::<Utf8PathBuf>(CACHE_DIR) {
+            val.clone()
         } else if batch {
-            directories_next::ProjectDirs::from("com", "semimod", "openvaf")
+            let path = directories_next::ProjectDirs::from("com", "semimod", "openvaf")
                 .context(
                     "failed to find cache directory\nhelp: use --cache-dir to aquire it manually",
                 )?
                 .cache_dir()
-                .to_owned()
+                .to_owned();
+            if let Ok(res) = Utf8PathBuf::from_path_buf(path) {
+                res
+            } else {
+                bail!("failed to find cache directory\nhelp: use --cache-dir to aquire it manually",)
+            }
         } else {
-            Path::new(input.as_os_str()).to_owned()
+            input.clone()
         };
-
-        let cache_dir = AbsPathBuf::assert(cache_dir);
 
         let codegen_opts = matches
             .values_of(CODEGEN)
             .map_or_else(Vec::new, |values| values.map(String::from).collect());
 
-        let defines = matches.values_of(CODEGEN).map_or_else(Vec::new, |values| {
-            values
-                .map(|opt| {
-                    // let (name, val) = opt.split_once('=').unwrap_or((opt, "1"));
-                    // (name.to_owned(), val.to_owned())
-                    opt.to_owned()
-                })
-                .collect()
-        });
+        let defines = matches
+            .values_of(CODEGEN)
+            .map_or_else(Vec::new, |values| values.map(|opt| opt.to_owned()).collect());
 
-        let include: Result<_> = matches
-            .values_of_os(INCLUDE)
-            .map_or_else(|| Ok(Vec::new()), |includes| includes.map(input_path_arg).collect());
+        let include: Result<_> = matches.get_many::<Utf8PathBuf>(INCLUDE).map_or_else(
+            || Ok(Vec::new()),
+            |include| include.map(|path| Ok(AbsPathBuf::assert(path.canonicalize()?))).collect(),
+        );
+
+        let include = include?;
 
         let opt_lvl = match matches.value_of(OPT_LVL).unwrap() {
             "0" => OptLevel::None,
@@ -136,7 +124,7 @@ impl Opts {
             cache_dir,
             codegen_opts,
             defines,
-            include: include?,
+            include,
             output,
             opt_lvl,
             target,
