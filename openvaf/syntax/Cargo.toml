@@ -1,0 +1,36 @@
+[package]
+name = "syntax"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+repository= "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler frontend for VerilogA aimed predominently at compact modelling"
+license="GPL-3.0"
+readme="../README.md"
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[lib]
+doctest = false
+
+[dependencies]
+
+parser = {version = "0.0.0", path = "../parser" }
+preprocessor = {version = "0.0.0", path = "../preprocessor" }
+vfs = {version = "0.0.0", path = "../vfs" }
+stdx = {version = "0.0.0", path = "../../lib/stdx" }
+tokens = {version="0.0.0", path="../tokens"}
+
+text-size = "1.1"
+
+rowan = "0.15"
+smol_str = {version = "0.1.23", default_features=false}
+
+
+[dev-dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+ungrammar = "1.14"
+sourcegen = {version = "0.0.0", path="../sourcegen"}
+

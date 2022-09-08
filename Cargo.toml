@@ -1,8 +1,8 @@
 
 [workspace]
 resolver = "2"
-members = ["crates/*","xtask/", "lib/*"]
-exclude = ["exclude/*"]
+members = ["openvaf/*","melange/*", "verilogae/*", "xtask/", "lib/*"]
+exclude = ["melange/examples", "verilogae/tests"]
 
 [profile.release]
 lto = "off"

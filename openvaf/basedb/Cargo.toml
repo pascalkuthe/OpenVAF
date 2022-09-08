@@ -1,0 +1,45 @@
+[package]
+name = "basedb"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+repository = "https://gitlab.com/DSPOM/OpenVAF"
+description = "A compiler framework for VerilogA aimed predominently at compact modelling"
+license = "GPL-3.0"
+readme = "../README.md"
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+
+[lib]
+doctest = false
+
+
+[dependencies]
+
+salsa = "0.17.0-pre.2"
+
+stdx = { version = "0.0.0", path = "../../lib/stdx" }
+vfs = { version = "0.0.0", path = "../vfs" }
+syntax = { version = "0.0.0", path = "../syntax" }
+arena = { version = "0.0.0", path = "../../lib/arena" }
+
+codespan-reporting = "0.11"
+
+# Netype Wrappers
+text-size = "1.1"
+typed-index-collections = "3.0"
+
+# Performant collections
+parking_lot = "0.12"
+indexmap = "1.6"
+ahash = "0.7"
+
+
+[dev-dependencies]
+
+proc-macro2 = "1.0"
+quote = "1.0"
+sourcegen = { version = "0.0.0", path = "../sourcegen" }
+expect-test = "1.1"

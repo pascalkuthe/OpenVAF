@@ -32,7 +32,7 @@ impl GenMsvcrt {
         cmd!(sh, "git clone --depth 1 --single-branch --branch {tag} {MINGW_URL} {src_dir}")
             .run()?;
         let crt_src_dir = src_dir.join("mingw-w64-crt");
-        let dst_dir = sh.current_dir().join("crates").join("target").join("ucrt");
+        let dst_dir = sh.current_dir().join("openvaf").join("target").join("ucrt");
 
         self.copy_ucrt_defs(sh, &crt_src_dir, &dst_dir)?;
         sh.remove_path(src_dir)?;

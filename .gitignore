@@ -1,6 +1,9 @@
 /target/
 /crates/*/target/
 /libs/*/target/
+/openvaf/*/target/
+/melange/*/target/
+/verilogae/*/target/
 .direnv
 .envrc
 cargo-timing*.html

@@ -1,0 +1,29 @@
+[package]
+name = "mir_autodiff"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+[lib]
+doctest = false
+
+
+[dependencies]
+mir = {version = "0.0.0", path = "../mir" }
+
+stdx = {version = "0.0.0", path = "../../lib/stdx" }
+workqueue = {version = "0.0.0", path = "../../lib/workqueue" }
+bitset = {version = "0.0.0", path = "../../lib/bitset" }
+typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
+arena = { version = "0.0.0", path = "../../lib/arena" }
+
+indexmap = "1.6"
+typed-index-collections = "3.0"
+ahash = "0.7"
+
+[dev-dependencies]
+expect-test = "1.1"
+mir_reader = {version = "0.0.0", path = "../mir_reader" }
+mir_interpret = {version = "0.0.0", path = "../mir_interpret" }
+float-cmp =  "0.9"
