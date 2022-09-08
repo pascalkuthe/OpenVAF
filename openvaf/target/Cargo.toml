@@ -1,0 +1,15 @@
+[package]
+name = "target"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+readme = "../README.md"
+rust-version = "1.56"
+
+[lib]
+doctest = false
+
+[build-dependencies]
+xshell = "0.2.1"
+stdx = {version ="0.0.0", path ="../../lib/stdx"}

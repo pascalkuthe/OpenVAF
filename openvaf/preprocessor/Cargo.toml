@@ -1,0 +1,32 @@
+[package]
+name = "preprocessor"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+
+[lib]
+doctest = false
+
+[dependencies]
+
+typed-index-collections = "3.0"
+text-size = "1.1"
+
+ahash = "0.7"
+
+# tracing = {version="0.1",default_features=false,features=["std"]}
+
+vfs = {version = "0.0.0", path = "../vfs" }
+stdx = {version="0.0.0", path="../../lib/stdx"}
+lexer = {version="0.0.0", path="../lexer"}
+tokens = {version="0.0.0", path="../tokens"}
+
+
+[dev-dependencies]
+expect-test = "1.1.0"
+
+
+# data-structures = {version = "0.0.0", path = "../data_structures" }
+

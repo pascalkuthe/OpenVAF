@@ -1,0 +1,27 @@
+[package]
+name = "mir"
+version = "0.0.0"
+authors = ["DSPOM"]
+edition = "2021"
+license="GPL-3.0"
+
+[lib]
+doctest = false
+
+
+[dependencies]
+stdx = {version = "0.0.0", path = "../../lib/stdx" }
+bforest = {version = "0.0.0" , path = "../../lib/bforest"}
+list_pool = {version = "0.0.0" , path = "../../lib/list_pool"}
+typed-index-collections = "3.0"
+lasso = {version = "0.6", features = ["ahash"]}
+ahash = "0.7"
+bitset = {version = "0.0.0", path = "../../lib/bitset" }
+typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
+dot = "0.1.4"
+
+[dev-dependencies]
+expect-test = "1.1"
+proc-macro2 = "1.0"
+quote = "1.0"
+sourcegen = {version = "0.0.0",path ="../sourcegen"}
