@@ -1,0 +1,6 @@
+error: unexpected token 'an identifier'; expected 'discipline', 'nature' or 'module'
+  ┌─ /source_map.va:7:1
+  │
+7 │ foo
+  │ ^^^ expected 'discipline', 'nature' or 'module'
+

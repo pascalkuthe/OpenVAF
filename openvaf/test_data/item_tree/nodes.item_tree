@@ -1,0 +1,5 @@
+module test
+
+    node foo = {is_input: true, is_output:true, gnd: false , discipline Some(Name("electrical"))}
+    node test = {is_input: true, is_output:true, gnd: false , discipline Some(Name("electrical"))}
+    node bar = {is_input: false, is_output:false, gnd: false , discipline Some(Name("electrical"))}

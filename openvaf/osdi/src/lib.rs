@@ -28,8 +28,6 @@ mod model_data;
 mod eval;
 mod load;
 mod setup;
-#[cfg(test)]
-mod tests;
 
 const OSDI_VERSION: (u32, u32) = (0, 3);
 

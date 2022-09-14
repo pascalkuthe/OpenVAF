@@ -1,0 +1,7 @@
+`define foo(result, x);
+
+`define y_fv(fv,y);
+
+`define expLin(result, x);
+
+foo

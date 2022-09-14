@@ -84,7 +84,7 @@ fn target() -> Arg<'static> {
         .long(TARGET)
         .help("Target triple for which the code is compiled.")
         .long_help("Target triple for which the code is compiled.\nBy default the target of the host is used.")
-        .possible_values(target::spec::get_targets())
+        .possible_values(target::spec::get_target_names())
         .value_name("TARGET")
         .required(false)
         .value_hint(ValueHint::Other)

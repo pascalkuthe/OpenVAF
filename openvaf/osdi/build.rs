@@ -2,6 +2,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::path::Path;
+use target::spec::get_targets;
 
 use xshell::{cmd, Shell};
 
@@ -37,14 +38,21 @@ fn main() {
         let version_str = name.strip_prefix("osdi_").unwrap();
 
         let out_dir = env::var_os("OUT_DIR").unwrap();
-        let out_file = Path::new(&out_dir).join(&format!("stdlib_{version_str}.bc"));
-        if no_gen {
-            sh.write_file(out_file, &[]).expect("failed to write dummy file");
-        } else {
-            println!("cargo:rerun-if-changed={}", file.display());
-            cmd!(sh, "clang -emit-llvm -O0 -D{def_name} -o {out_file} -c {src_file} -fPIC")
-                .run()
-                .expect("failed to generate bitcode");
+        for target in get_targets() {
+            let target_name = &target.llvm_target;
+            let out_file =
+                Path::new(&out_dir).join(&format!("stdlib_{version_str}_{target_name}.bc"));
+            if no_gen {
+                sh.write_file(out_file, &[]).expect("failed to write dummy file");
+            } else {
+                println!("cargo:rerun-if-changed={}", file.display());
+
+                let mut cmd = cmd!(sh, "clang -emit-llvm -O3 -D{def_name} -DNO_STD -o {out_file} -c {src_file} -target {target_name}");
+                if !target.options.is_like_windows {
+                    cmd = cmd.arg("-fPIC");
+                }
+                cmd.run().expect("failed to generate bitcode");
+            }
         }
     }
 

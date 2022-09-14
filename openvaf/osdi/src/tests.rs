@@ -1,18 +1,12 @@
 use std::path::Path;
 
-use ::sourcegen::{
-    add_preamble, collect_integration_tests, ensure_file_contents, project_root, reformat,
-};
 use camino::Utf8Path;
 use llvm::OptLevel;
 use mir_llvm::LLVMBackend;
 use paths::AbsPathBuf;
-use quote::format_ident;
 use sim_back::CompilationDB;
 use stdx::SKIP_HOST_TESTS;
 use target::spec::Target;
-
-use quote::quote;
 
 mod integration;
 mod sourcegen;

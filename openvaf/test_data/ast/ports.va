@@ -1,0 +1,14 @@
+module test1;
+endmodule
+
+module test2 (a,b,c,d,e,f,g);
+    output a;
+    input b;
+    inout ground c;
+    inout electrical d;
+    output electrical e,f;
+    inout electrical ground g;
+endmodule
+
+module test3 (output a,b, input electrical c,d,e, (*foo*) inout electrical ground f);
+endmodule

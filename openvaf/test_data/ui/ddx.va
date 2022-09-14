@@ -1,0 +1,29 @@
+`include "disciplines.va"
+module diode(a, c);
+    real x;
+    inout c;
+    inout a;
+    electrical a;
+    electrical c;
+    branch (a,c) br_ac;
+    real foo;
+    analog begin
+        x = ddx(1.0,V(a));
+        x = ddx(1.0,I(br_ac));
+
+        // Non standard
+        x = ddx(1.0,V(a,c));
+        x = ddx(1.0,$temperature);
+
+        // these must be rejected
+        x = ddx(1.0,V(br_ac));
+        x = ddx(1.0,I(a,c));
+        x = ddx(1.0,I(a));
+        x = ddx(1.0,I(<a>));
+        x = ddx(1.0,V(<a>));
+
+        // random fuzz
+        x = ddx(1.0,1.0);
+        x = ddx(1.0,foo);
+    end
+endmodule

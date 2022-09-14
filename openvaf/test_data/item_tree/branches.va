@@ -1,0 +1,8 @@
+module test(a);
+    electrical a;
+    inout a;
+    electrical c;
+    branch (a,c) br_ac;
+    branch (<a>) br_a_port;
+
+endmodule

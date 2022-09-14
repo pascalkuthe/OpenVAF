@@ -1,14 +1,14 @@
 
 [workspace]
 resolver = "2"
-members = ["openvaf/*","melange/*", "verilogae/*", "xtask/", "lib/*"]
-exclude = ["melange/examples", "verilogae/tests"]
+members = ["openvaf/*","melange/*", "verilogae/*", "xtask/", "lib/*", "sourcegen"]
+exclude = ["melange/examples", "verilogae/tests", "openvaf/test_data"]
 
 [profile.release]
 lto = "off"
 incremental = true
 panic = "abort"
-debug = false
+debug = true
 
 
 [profile.dev]

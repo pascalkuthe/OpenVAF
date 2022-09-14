@@ -8,7 +8,7 @@ use clap::ArgMatches;
 use llvm::OptLevel;
 use paths::AbsPathBuf;
 use target::host_triple;
-use target::spec::{get_targets, Target};
+use target::spec::{get_target_names, Target};
 use termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
 
 use crate::cli_def::{
@@ -173,7 +173,7 @@ fn print_targets() {
     writeln!(&mut stdout, "TARGETS:").unwrap();
     stdout.set_color(&ColorSpec::new()).unwrap();
 
-    for target in get_targets() {
+    for target in get_target_names() {
         writeln!(&mut stdout, "    {}", target).unwrap();
     }
 }

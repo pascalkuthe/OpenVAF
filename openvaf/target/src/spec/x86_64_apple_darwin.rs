@@ -1,4 +1,3 @@
-use crate::spec::apple_base::macos_llvm_target;
 use crate::spec::{LinkerFlavor, Target};
 
 use super::apple_base;
@@ -16,14 +15,10 @@ pub fn target() -> Target {
             "dynamic_lookup".to_string(),
         ],
     );
-    // Clang automatically chooses a more specific target based on
-    // MACOSX_DEPLOYMENT_TARGET.  To integrate correctly with the target simulator we do too
-    let arch = "x86_64";
-    let llvm_target = macos_llvm_target(arch);
 
     Target {
-        llvm_target,
-        arch: arch.to_string(),
+        llvm_target: "x86_64-apple-macosx10.15.0".to_owned(),
+        arch: "x86_64".to_owned(),
         data_layout: "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
             .to_string(),
         options: base,

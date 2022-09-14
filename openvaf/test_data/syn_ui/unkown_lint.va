@@ -1,0 +1,3 @@
+module test();
+        (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar=0.0;
+endmodule

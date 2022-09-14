@@ -1,0 +1,13 @@
+module test
+
+    param real foo
+    param real bar
+    block Some(Name("test"))
+
+        param real foo
+        block Some(Name("test_nested"))
+
+            param real bar
+    block Some(Name("test2"))
+
+        var real bar

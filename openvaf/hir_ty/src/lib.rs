@@ -27,9 +27,6 @@ use crate::validation::{
     BodyValidationDiagnostic, BodyValidationDiagnosticWrapped, TypeValidationDiagnosticWrapped,
 };
 
-#[cfg(test)]
-mod tests;
-
 pub fn collect_diagnostics(db: &dyn HirTyDB, root_file: FileId, dst: &mut impl DiagnosticSink) {
     let def_map = db.def_map(root_file);
     let ast_id_map = db.ast_id_map(root_file);

@@ -1,6 +1,17 @@
+#define NO_STD
+#ifdef NO_STD
+typedef int uint32_t;
+typedef unsigned char bool;
+typedef __SIZE_TYPE__ size_t;
+#define NULL ((void*)0)
+#else
 #include <math.h>
 #include <stdio.h>
-#ifdef OSDI_0_3
+#include "stdlib.h"
+#include "string.h"
+#endif
+
+#ifndef OSDI_0_3
 #include "header/osdi_0_3.h"
 #endif
 
@@ -9,8 +20,6 @@
 #include "header/osdi_0_3.h"
 #endif
 
-#include "stdlib.h"
-#include "string.h"
 
 char *concat(const char *s1, const char *s2) {
   const size_t len1 = strlen(s1);

@@ -1,17 +1,12 @@
-// mod allowed_options;
 pub mod body;
+mod builtin;
+mod data;
 pub mod db;
 pub mod expr;
 mod item_tree;
 pub mod nameres;
 mod path;
 mod types;
-
-mod builtin;
-
-mod data;
-#[cfg(test)]
-mod tests;
 
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;

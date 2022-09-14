@@ -11,8 +11,8 @@ use crate::{AstIdMap, BaseDB, ErasedAstId};
 
 mod diagnostics;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct LintAttrTree {
@@ -33,7 +33,6 @@ impl LintAttrTree {
             let cst = ast_ptr.to_node(cst);
             let overwrites = resolve_overwrites(&registry, attrs(&cst), &mut res.diagnostics, id);
             res.overwrites.extend(overwrites.map(|(lint, lvl)| ((id, lint), lvl)));
-            // for
         }
 
         Arc::new(res)

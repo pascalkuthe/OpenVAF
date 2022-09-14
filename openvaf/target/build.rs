@@ -46,7 +46,7 @@ fn gen_msvcrt_importlib(sh: &Shell, arch: &str, target: &str, machine: &str, che
 
     let ucrt_src = stdx::project_root().join("openvaf").join("target").join("ucrt").join("ucrt.c");
     println!("cargo:rerun-if-changed={}", ucrt_src.display());
-    let ucrt_obj = out_dir.join("ucrt.obj");
+    let ucrt_obj = out_dir.join(format!("ucrt_{arch}.obj"));
     cmd!(
         sh,
         "clang-cl /c /Zl /GS- /clang:--target={target}-pc-windows-msvc /clang:-o{ucrt_obj} {ucrt_src}"
@@ -55,7 +55,9 @@ fn gen_msvcrt_importlib(sh: &Shell, arch: &str, target: &str, machine: &str, che
     .expect("ucrt compilation succedes");
     libs.push(ucrt_obj);
     let libs_ref = &libs;
-    cmd!(sh, "llvm-lib {libs_ref...} /OUT:{out_file}").run().expect("successfull linking");
+    cmd!(sh, "llvm-lib /machine:{arch} {libs_ref...} /OUT:{out_file}")
+        .run()
+        .expect("successfull linking");
 
     for lib in &libs {
         let _ = sh.remove_path(lib);

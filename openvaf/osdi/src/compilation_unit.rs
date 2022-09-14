@@ -19,8 +19,8 @@ use typed_indexmap::TiSet;
 
 use crate::inst_data::OsdiInstanceData;
 use crate::metadata::osdi_0_3::{
-    OsdiTys, LOG_FMT_ERR, LOG_LVL_DEBUG, LOG_LVL_DISPLAY, LOG_LVL_ERR, LOG_LVL_FATAL, LOG_LVL_INFO,
-    LOG_LVL_WARN, STDLIB_BITCODE,
+    stdlib_bitcode, OsdiTys, LOG_FMT_ERR, LOG_LVL_DEBUG, LOG_LVL_DISPLAY, LOG_LVL_ERR,
+    LOG_LVL_FATAL, LOG_LVL_INFO, LOG_LVL_WARN,
 };
 use crate::metadata::OsdiLimFunction;
 use crate::model_data::OsdiModelData;
@@ -44,11 +44,11 @@ pub fn new_codegen<'a, 'll>(
     literals: &'a Rodeo,
 ) -> CodegenCx<'a, 'll> {
     let cx = unsafe { back.new_ctx(literals, llmod) };
-    cx.include_bitcode(STDLIB_BITCODE);
+    cx.include_bitcode(stdlib_bitcode(back.target()));
 
     for fun in llvm::function_iter(llmod.llmod()) {
         unsafe {
-            LLVMPurgeAttrs(fun);
+            // LLVMPurgeAttrs(fun);
             if LLVMIsDeclaration(fun) != llvm::False {
                 continue;
             }

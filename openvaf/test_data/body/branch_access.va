@@ -1,0 +1,8 @@
+module test;
+    analog begin
+        x = V(a,b);
+        y = V(x);
+        z = I(<x>);
+        z = I(br_ab);
+    end
+endmodule

@@ -41,15 +41,7 @@ smol_str = {version = "0.1.23", default_features=false}
 
 [dev-dependencies]
 
-
-sourcegen = {version ="0.0.0", path ="../sourcegen"}
-proc-macro2 = "1.0"
-quote = "1.0"
-
-
 expect-test = "1.1"
 
 mir_interpret = {version = "0.0.0", path = "../mir_interpret" }
 float-cmp =  "0.9"
-
-

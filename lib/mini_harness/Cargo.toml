@@ -1,0 +1,14 @@
+[package]
+name = "mini_harness"
+version = "0.0.1"
+authors = ["DSPOM"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A cargo-next compatible test runner that runs tests in a directory"
+repository = "https://github.com/pascalkuthe/OpenVAF/tree/master/libs/dirtest"
+
+[lib]
+doctest = false
+
+[dependencies]
+xflags = "0.2"
