@@ -23,7 +23,7 @@ mir = { version = "0.0.0", path = "../mir" }
 mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
 
 llvm = { version = "0.0.0", path = "../llvm" }
-target = { version = "0.0.0", path = "../target" }
+target = { version = "0.0.0", path = "../target"}
 
 typed-index-collections = "3.0"
 ahash = "0.7"
@@ -43,17 +43,15 @@ camino = "1.1.1"
 
 xshell = "0.2.1"
 stdx = {version ="0.0.0", path ="../../lib/stdx"}
+target = { version = "0.0.0", path = "../target" }
 
 [dev-dependencies]
 
-xshell = "0.2.1"
-sourcegen = {version ="0.0.0", path ="../sourcegen"}
-proc-macro2 = "1.0"
-quote = "1.0"
-
 expect-test = "1.1"
-
 mir_interpret = {version = "0.0.0", path = "../mir_interpret" }
 float-cmp =  "0.9"
+mini_harness = { version = "0.0.1", path = "../../lib/mini_harness" }
 
-
+[[test]]
+name = "data_tests"
+harness = false

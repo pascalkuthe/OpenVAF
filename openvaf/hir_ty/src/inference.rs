@@ -30,8 +30,6 @@ use crate::lower::{BranchKind, BranchTy, DisciplineAccess};
 use crate::types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement};
 
 mod fmt_parser;
-#[cfg(test)]
-mod tests;
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ResolvedFun {

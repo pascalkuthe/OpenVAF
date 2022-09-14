@@ -1,0 +1,6 @@
+module test
+
+    node a = {is_input: true, is_output:true, gnd: false , discipline Some(Name("electrical"))}
+    node c = {is_input: false, is_output:false, gnd: false , discipline Some(Name("electrical"))}
+    branch br_ac = Nodes(a, c)
+    branch br_a_port = PortFlow(a)

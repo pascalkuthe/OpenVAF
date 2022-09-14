@@ -1,0 +1,6 @@
+module diode;
+    analog begin 
+        $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+        $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+    end
+endmodule

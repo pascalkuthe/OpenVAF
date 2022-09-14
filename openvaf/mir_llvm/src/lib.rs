@@ -121,6 +121,9 @@ impl<'t> LLVMBackend<'t> {
     ) -> CodegenCx<'a, 'll> {
         CodegenCx::new(literals, module, self.target, &self.target_cpu)
     }
+    pub fn target(&self) -> &'t Target {
+        self.target
+    }
 }
 
 impl Drop for LLVMBackend<'_> {

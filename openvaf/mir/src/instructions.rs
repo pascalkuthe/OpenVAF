@@ -3,9 +3,6 @@ use std::hash::Hash;
 
 use crate::entities::{Block, FuncRef, Use, Value};
 
-#[cfg(test)]
-pub(crate) mod tests;
-
 #[rustfmt::skip]
 mod generated;
 pub use generated::*;

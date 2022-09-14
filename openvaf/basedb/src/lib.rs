@@ -4,9 +4,6 @@ pub mod line_index;
 mod lint_attrs;
 pub mod lints;
 
-#[cfg(test)]
-mod tests;
-
 use std::fs;
 use std::intrinsics::transmute;
 use std::sync::Arc;
@@ -20,8 +17,7 @@ use salsa::Durability;
 use syntax::sourcemap::SourceMap;
 use syntax::{Parse, Preprocess, SourceFile, SourceProvider, TextRange, TextSize};
 use typed_index_collections::{TiSlice, TiVec};
-pub use vfs::{FileId, Vfs, VfsPath};
-use vfs::{FileReadError, VfsEntry};
+pub use vfs::{AbsPathBuf, FileId, FileReadError, Vfs, VfsEntry, VfsPath};
 
 pub trait VfsStorage {
     fn vfs(&self) -> &RwLock<Vfs>;
@@ -248,11 +244,12 @@ macro_rules! impl_intern_key {
 impl dyn BaseDB {
     pub fn setup_test_db(
         &mut self,
-        root_file_name: &str,
-        root_file: VfsEntry,
+        root_file_path: VfsPath,
+        root_file_contents: VfsEntry,
         vfs: &mut Vfs,
     ) -> FileId {
-        let root_file = vfs.add_virt_file(root_file_name, root_file);
+        let root_file = vfs.ensure_file_id(root_file_path);
+        vfs.set_file_contents(root_file, root_file_contents);
         vfs.insert_std_lib();
 
         let include_dirs = Arc::from(vec![VfsPath::new_virtual_path("/std".to_owned())]);

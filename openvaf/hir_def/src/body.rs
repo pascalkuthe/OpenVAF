@@ -17,10 +17,7 @@ use crate::{
 };
 
 mod lower;
-
 mod pretty;
-#[cfg(test)]
-mod tests;
 
 /// The body of an item
 #[derive(Debug, Eq, PartialEq, Default)]

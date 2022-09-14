@@ -15,7 +15,6 @@ pub fn opts() -> TargetOptions {
     TargetOptions {
         //       dll_prefix: "".to_string(),
         is_like_windows: true,
-        is_like_msvc: true,
         linker_flavor: LinkerFlavor::Msvc,
         pre_link_args,
         // post_link_args,

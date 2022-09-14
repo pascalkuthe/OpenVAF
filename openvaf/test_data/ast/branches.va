@@ -1,0 +1,9 @@
+module test (inout a,input b);
+    electrical a, b;
+    branch (a,b) ab1,ab2;
+    branch (a) a_gnd;
+    branch (<$root.test.b>) port_flow_b;
+    analog begin
+        I(a_gnd) <+ V(ab1) + V(ab2) - V(a_gnd) + I(port_flow_b);
+    end
+endmodule

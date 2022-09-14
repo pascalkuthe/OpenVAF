@@ -1,0 +1,8 @@
+module cmos();
+endmodule
+
+
+(*openvaf_deny="vams_keyword_compat"*)module cmos();
+endmodule
+(*openvaf_allow="vams_keyword_compat"*)module cmos();
+endmodule

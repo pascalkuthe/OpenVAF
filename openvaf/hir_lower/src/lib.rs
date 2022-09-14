@@ -21,9 +21,6 @@ pub use crate::body::MirBuilder;
 
 mod body;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImplicitEquationKind {
     Ddt,

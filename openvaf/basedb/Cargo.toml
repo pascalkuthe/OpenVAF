@@ -36,10 +36,11 @@ parking_lot = "0.12"
 indexmap = "1.6"
 ahash = "0.7"
 
-
 [dev-dependencies]
-
-proc-macro2 = "1.0"
-quote = "1.0"
-sourcegen = { version = "0.0.0", path = "../sourcegen" }
 expect-test = "1.1"
+mini_harness = { version = "0.0.1", path = "../../lib/mini_harness" }
+
+
+[[test]]
+name = "data_tests"
+harness = false

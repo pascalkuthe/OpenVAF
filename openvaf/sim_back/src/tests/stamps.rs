@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 use expect_test::expect;
 use float_cmp::assert_approx_eq;
-use sourcegen::project_root;
+use stdx::project_root;
 
 #[test]
 fn resistor() {
@@ -312,14 +312,14 @@ fn diode() {
     let mut params = AHashMap::default();
     let mut node_voltages = AHashMap::default();
 
-    params.insert("Is", is.into());
-    params.insert("Rs", rs.into());
-    params.insert("N", n.into());
-    params.insert("Cj0", cj0.into());
-    params.insert("Vj", vj.into());
-    params.insert("M", m.into());
-    params.insert("Rth", rth.into());
-    params.insert("Tnom", tnom.into());
+    params.insert("is", is.into());
+    params.insert("rs", rs.into());
+    params.insert("n", n.into());
+    params.insert("cj0", cj0.into());
+    params.insert("vj", vj.into());
+    params.insert("m", m.into());
+    params.insert("rth", rth.into());
+    params.insert("tnom", tnom.into());
     params.insert("zetars", zetars.into());
     params.insert("zetarth", zetarth.into());
     params.insert("zetais", zetais.into());

@@ -22,9 +22,6 @@ mod collect;
 pub mod diagnostics;
 mod pretty;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(PartialEq, Eq, Clone, Debug, Copy, Hash)]
 pub enum DefMapSource {
     Block(BlockId),

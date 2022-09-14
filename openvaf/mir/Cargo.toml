@@ -22,6 +22,3 @@ dot = "0.1.4"
 
 [dev-dependencies]
 expect-test = "1.1"
-proc-macro2 = "1.0"
-quote = "1.0"
-sourcegen = {version = "0.0.0",path ="../sourcegen"}

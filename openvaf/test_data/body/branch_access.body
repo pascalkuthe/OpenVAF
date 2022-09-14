@@ -1,0 +1,7 @@
+analog begin: (Root)
+
+    x=V(a, b, );
+    y=V(x, );
+    z=I(<x>, );
+    z=I(br_ab, );
+end

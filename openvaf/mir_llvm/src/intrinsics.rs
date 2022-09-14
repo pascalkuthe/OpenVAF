@@ -55,7 +55,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         ifn!("atanh", fn(t_f64) -> t_f64);
 
         if name == "hypot" {
-            let name = if self.target.options.is_like_msvc { "_hypot" } else { "hypot" };
+            let name = if self.target.options.is_like_windows { "_hypot" } else { "hypot" };
             return Some(self.insert_intrinsic(name, &[t_f64], t_f64, false));
         }
 

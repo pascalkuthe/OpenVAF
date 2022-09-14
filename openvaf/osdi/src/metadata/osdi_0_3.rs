@@ -2,7 +2,29 @@
 
 use mir_llvm::CodegenCx;
 
-pub const STDLIB_BITCODE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/stdlib_0_3.bc"));
+const STDLIB_BITCODE_X86_64_UNKNOWN_LINUX_GNU: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/stdlib_0_3_x86_64-unknown-linux-gnu.bc"));
+const STDLIB_BITCODE_X86_64_PC_WINDOWS_MSVC: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/stdlib_0_3_x86_64-pc-windows-msvc.bc"));
+const STDLIB_BITCODE_X86_64_APPLE_MACOSX10_15_0: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/stdlib_0_3_x86_64-apple-macosx10.15.0.bc"));
+const STDLIB_BITCODE_AARCH64_UNKNOWN_LINUX_GNU: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/stdlib_0_3_aarch64-unknown-linux-gnu.bc"));
+const STDLIB_BITCODE_AARCH64_PC_WINDOWS_MSVC: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/stdlib_0_3_aarch64-pc-windows-msvc.bc"));
+const STDLIB_BITCODE_ARM64_APPLE_MACOSX11_0_0: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/stdlib_0_3_arm64-apple-macosx11.0.0.bc"));
+pub fn stdlib_bitcode(target: &target::spec::Target) -> &'static [u8] {
+    match &*target.llvm_target {
+        "x86_64-unknown-linux-gnu" => STDLIB_BITCODE_X86_64_UNKNOWN_LINUX_GNU,
+        "x86_64-pc-windows-msvc" => STDLIB_BITCODE_X86_64_PC_WINDOWS_MSVC,
+        "x86_64-apple-macosx10.15.0" => STDLIB_BITCODE_X86_64_APPLE_MACOSX10_15_0,
+        "aarch64-unknown-linux-gnu" => STDLIB_BITCODE_AARCH64_UNKNOWN_LINUX_GNU,
+        "aarch64-pc-windows-msvc" => STDLIB_BITCODE_AARCH64_PC_WINDOWS_MSVC,
+        "arm64-apple-macosx11.0.0" => STDLIB_BITCODE_ARM64_APPLE_MACOSX11_0_0,
+        triple => unreachable!("unkown target triple {triple}"),
+    }
+}
 pub const OSDI_VERSION_MAJOR_CURR: u32 = 0;
 pub const OSDI_VERSION_MINOR_CURR: u32 = 3;
 pub const PARA_TY_MASK: u32 = 3;

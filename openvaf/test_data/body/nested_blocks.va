@@ -1,0 +1,10 @@
+module test;
+    analog begin
+        begin : Model_initialization
+           parameter real foo = 0.0;
+           x = 0.0;
+           y = exp(x+1);
+
+        end
+    end
+endmodule

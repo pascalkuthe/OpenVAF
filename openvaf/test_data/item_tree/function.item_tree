@@ -1,0 +1,10 @@
+module test
+
+    function hypsmooth
+
+        arg Real x = { is_input = true, is_output = false}
+        arg Real c = { is_input = true, is_output = false}
+        arg String y = { is_input = false, is_output = true}
+        arg Integer z = { is_input = false, is_output = true}
+        arg Integer m = { is_input = true, is_output = true}
+        arg String l = { is_input = true, is_output = true}

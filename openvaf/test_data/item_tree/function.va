@@ -1,0 +1,13 @@
+module test();
+        analog function real hypsmooth;
+            input x , c;
+            output y , z;
+            inout m , l;
+            real x , c;
+            integer m , z;
+            string l , y;
+            begin
+                hypsmooth = 0.5 * (x + sqrt(x*x + 4.0*c*c));
+            end
+        endfunction
+endmodule

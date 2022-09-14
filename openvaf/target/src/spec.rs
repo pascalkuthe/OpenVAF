@@ -93,7 +93,6 @@ pub struct TargetOptions {
 
     /// Whether the target toolchain is like Windows
     pub is_like_windows: bool,
-    pub is_like_msvc: bool,
     pub is_like_osx: bool,
 }
 
@@ -104,7 +103,6 @@ impl Default for TargetOptions {
             cpu: "generic".to_string(),
             features: "".to_string(),
             is_like_windows: false,
-            is_like_msvc: false,
             is_like_osx: false,
             linker_flavor: LinkerFlavor::Ld,
             pre_link_args: BTreeMap::default(),
@@ -117,16 +115,16 @@ impl Default for TargetOptions {
 pub type TargetResult = Result<Target, String>;
 
 macro_rules! supported_targets {
-    ( $(($( $triple:literal, )+ $module:ident ),)+ ) => {
+    ( $(( $triple:literal,  $module:ident ),)+ ) => {
         $ ( mod $ module; ) +
 
         /// List of supported targets
-        const TARGETS: &[&str] = &[$($($triple),+),+];
+        const TARGETS: &[&str] = &[$($triple),+];
 
         fn load_specific(target: &str) -> Option<Target> {
             match target {
                 $(
-                    $($triple)|+ => {
+                    $triple => {
                         let mut t = $module::target();
                         t.options.is_builtin = true;
 
@@ -137,8 +135,16 @@ macro_rules! supported_targets {
             }
         }
 
-        pub fn get_targets() -> impl Iterator<Item = &'static str> {
+        pub fn get_target_names() -> impl Iterator<Item = &'static str> {
             TARGETS.iter().copied()
+        }
+
+        pub fn get_targets() -> impl Iterator<Item = Target> + Clone {
+            [$({
+                let mut t = $module::target();
+                t.options.is_builtin = true;
+                t
+            }),*].into_iter()
         }
     }
 }

@@ -1,0 +1,12 @@
+module bar;
+endmodule
+module test;
+        parameter real foo=0.0;
+        real bar;
+        analog function real test;
+            input x;
+            input y;
+            real x,y;
+            test = x*y;
+        endfunction
+endmodule

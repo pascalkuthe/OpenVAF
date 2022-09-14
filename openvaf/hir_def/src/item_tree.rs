@@ -13,9 +13,6 @@
 mod lower;
 mod pretty;
 
-#[cfg(test)]
-mod tests;
-
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Index;

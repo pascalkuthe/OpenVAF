@@ -30,7 +30,10 @@ pub trait DiagnosticSink {
     }
 }
 
-struct FileSrc<'a>(&'a dyn BaseDB);
+struct FileSrc<'a> {
+    db: &'a dyn BaseDB,
+    anon_paths: bool,
+}
 
 impl<'a> Files<'_> for FileSrc<'a> {
     type FileId = FileId;
@@ -40,14 +43,19 @@ impl<'a> Files<'_> for FileSrc<'a> {
     type Source = Arc<str>;
 
     fn name(&self, id: FileId) -> Result<Self::Name, codespan_reporting::files::Error> {
-        Ok(self.0.file_path(id))
+        let mut path = self.db.file_path(id);
+        if self.anon_paths {
+            path = VfsPath::new_virtual_path(format!("/{}", path.name().unwrap()))
+        }
+
+        Ok(path)
     }
 
     fn source(&self, id: Self::FileId) -> Result<Self::Source, codespan_reporting::files::Error> {
-        match self.0.file_text(id) {
+        match self.db.file_text(id) {
             Ok(src) => Ok(src),
             Err(_) => {
-                let vfs = self.0.vfs().read();
+                let vfs = self.db.vfs().read();
                 let contents = Arc::from(vfs.file_contents_unchecked(id));
                 Ok(contents)
             }
@@ -59,7 +67,7 @@ impl<'a> Files<'_> for FileSrc<'a> {
         file: Self::FileId,
         byte_index: usize,
     ) -> Result<usize, codespan_reporting::files::Error> {
-        Ok(self.0.line(byte_index.try_into().unwrap(), file).into())
+        Ok(self.db.line(byte_index.try_into().unwrap(), file).into())
     }
 
     fn line_range(
@@ -67,7 +75,7 @@ impl<'a> Files<'_> for FileSrc<'a> {
         file: Self::FileId,
         line_index: usize,
     ) -> Result<std::ops::Range<usize>, codespan_reporting::files::Error> {
-        Ok(self.0.line_range(line_index.into(), file).into())
+        Ok(self.db.line_range(line_index.into(), file).into())
     }
 }
 
@@ -77,6 +85,7 @@ pub struct ConsoleSink<'a> {
     config: Config,
     db: &'a dyn BaseDB,
     dst: Box<dyn WriteColor + 'a>,
+    anon_paths: bool,
 }
 
 impl<'a> ConsoleSink<'a> {
@@ -117,7 +126,7 @@ impl<'a> ConsoleSink<'a> {
         emit(
             &mut self.dst,
             &self.config,
-            &FileSrc(self.db),
+            &FileSrc { db: self.db, anon_paths: self.anon_paths },
             &Report::new(severity).with_message(msg),
         )
         .expect("Span emitting should never fail");
@@ -128,7 +137,12 @@ impl<'a> ConsoleSink<'a> {
         db: &'a dyn BaseDB,
         dst: Box<dyn WriteColor + 'a>,
     ) -> ConsoleSink<'a> {
-        ConsoleSink { warning_cnt: 0, error_cnt: 0, config, db, dst }
+        ConsoleSink { warning_cnt: 0, error_cnt: 0, config, db, dst, anon_paths: false }
+    }
+
+    /// only print the filename instead of the full path, this is useful for UI tests where we do not want to expose the full path
+    pub fn annonymize_paths(&mut self) {
+        self.anon_paths = true;
     }
 }
 
@@ -154,8 +168,13 @@ impl DiagnosticSink for ConsoleSink<'_> {
             _ => (),
         }
 
-        emit(&mut self.dst, &self.config, &FileSrc(self.db), &report)
-            .expect("Span emitting should never fail");
+        emit(
+            &mut self.dst,
+            &self.config,
+            &FileSrc { db: self.db, anon_paths: self.anon_paths },
+            &report,
+        )
+        .expect("Span emitting should never fail");
     }
 }
 

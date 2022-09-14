@@ -1,0 +1,16 @@
+ module foo();
+        (*openvaf_allow="vams_keyword_compat"*) analog begin: cmos
+            parameter real nmos = 0.0;
+        end
+endmodule
+
+ (*openvaf_allow="vams_keyword_compat"*) module foo();
+        parameter real nmos = 0.0;
+        (*openvaf_deny="vams_keyword_compat"*) analog begin: bar
+             parameter real nmos = 0.0;
+
+            (*openvaf_allow="vams_keyword_compat"*) begin: bar
+                parameter real nmos = 0.0;
+            end
+        end
+endmodule

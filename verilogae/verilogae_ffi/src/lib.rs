@@ -14,9 +14,6 @@ pub const PARAM_FLAGS_INVALID: ParamFlags = 4;
 #[cfg(feature = "static")]
 pub const PARAM_FLAGS_GIVEN: ParamFlags = 8;
 
-#[cfg(test)]
-mod tests;
-
 use core::slice;
 use std::ptr;
 

@@ -26,11 +26,12 @@ indexmap = "1.6"
 lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
-
-sourcegen = {version ="0.0.0", path ="../sourcegen"}
-parking_lot = "0.12"
-expect-test = "1.1"
-proc-macro2 = "1.0"
-quote = "1.0"
-basedb = { version = "0.0.0", path = "../basedb" }
 salsa = "0.17.0-pre.2"
+expect-test = "1.1"
+mini_harness = { version = "0.0.1", path = "../../lib/mini_harness" }
+basedb = { version = "0.0.0", path = "../basedb" }
+parking_lot = "0.12"
+
+[[test]]
+name = "data_tests"
+harness = false
