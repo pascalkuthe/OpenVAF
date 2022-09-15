@@ -11,4 +11,4 @@ doctest = false
 
 [dependencies]
 indexmap = "1.6"
-ahash = "0.7"
+ahash = "0.8"

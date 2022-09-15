@@ -30,7 +30,7 @@ salsa = "0.17.0-pre.2"
 typed-index-collections = "3.0"
 # text-size = "1.1"
 
-ahash = "0.7"
+ahash = "0.8"
 # indexmap = "1.6"
 arrayvec = "0.7"
 smol_str = {version = "0.1.23", default_features=false}

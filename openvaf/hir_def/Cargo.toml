@@ -28,7 +28,7 @@ once_cell = "1.3"
 typed-index-collections = "3.0"
 
 # Performant collections
-ahash = "0.7"
+ahash = "0.8"
 indexmap = "1.6"
 
 [dev-dependencies]

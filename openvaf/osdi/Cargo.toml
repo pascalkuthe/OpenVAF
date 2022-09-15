@@ -26,7 +26,7 @@ llvm = { version = "0.0.0", path = "../llvm" }
 target = { version = "0.0.0", path = "../target"}
 
 typed-index-collections = "3.0"
-ahash = "0.7"
+ahash = "0.8"
 lasso = {version = "0.6", features = ["ahash"]}
 
 salsa = "0.17.0-pre.2"

@@ -20,7 +20,7 @@ arena = { version = "0.0.0", path = "../../lib/arena" }
 
 indexmap = "1.6"
 typed-index-collections = "3.0"
-ahash = "0.7"
+ahash = "0.8"
 
 [dev-dependencies]
 expect-test = "1.1"

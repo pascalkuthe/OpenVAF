@@ -13,4 +13,4 @@ doctest = false
 
 paths = {path="../../lib/paths",version="0.0.0"}
 indexmap = "1.6"
-ahash = "0.7"
+ahash = "0.8"
