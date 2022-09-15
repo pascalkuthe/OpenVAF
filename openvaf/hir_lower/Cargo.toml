@@ -20,7 +20,7 @@ hir_ty = { version = "0.0.0", path = "../hir_ty" }
 mir = {version = "0.0.0", path = "../mir" }
 mir_build = {version = "0.0.0", path = "../mir_build" }
 
-ahash = "0.7"
+ahash = "0.8"
 typed-index-collections = "3.0"
 indexmap = "1.6"
 lasso = {version = "0.6", features = ["ahash"]}

@@ -11,13 +11,13 @@ crate-type = ["cdylib"]
 name = "verilogae_py"
 
 [dependencies]
-pyo3-ffi = { version = "0.16", features = ["extension-module", "generate-import-lib"]}
+pyo3-ffi = { version = "0.17", features = ["extension-module", "generate-import-lib"]}
 verilogae_ffi = { version = "0.9.0-beta8", path = "../verilogae_ffi", default_features=false}
 libc = "0.2"
 
 [build-dependencies]
 
-pyo3-build-config = {version = "0.16", features = ["resolve-config"]}
+pyo3-build-config = {version = "0.17", features = ["resolve-config"]}
 
 
 [features]

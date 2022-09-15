@@ -27,7 +27,7 @@ mir_opt = { version = "0.0.0", path = "../mir_opt" }
 workqueue = {version = "0.0.0", path = "../../lib/workqueue" }
 
 typed-index-collections = "3.0"
-ahash = "0.7"
+ahash = "0.8"
 lasso = {version = "0.6", features = ["ahash"]}
 parking_lot = "0.12"
 

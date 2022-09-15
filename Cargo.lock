@@ -14,6 +14,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ahash"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57e6e951cfbb2db8de1828d49073a113a29fd7117b1596caa781a258c7e38d72"
+dependencies = [
+ "cfg-if",
+ "getrandom",
+ "once_cell",
+ "version_check",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -63,7 +75,7 @@ version = "1.0.0"
 name = "basedb"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "arena",
  "codespan-reporting",
  "expect-test",
@@ -297,7 +309,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
 ]
 
 [[package]]
@@ -306,7 +318,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
 ]
 
 [[package]]
@@ -340,7 +352,7 @@ dependencies = [
 name = "hir_def"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "arena",
  "basedb",
  "expect-test",
@@ -358,7 +370,7 @@ dependencies = [
 name = "hir_lower"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "basedb",
  "bitset",
  "expect-test",
@@ -381,7 +393,7 @@ dependencies = [
 name = "hir_ty"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "arena",
  "arrayvec",
  "basedb",
@@ -432,7 +444,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aeb7b21a526375c5ca55f1a6dfd4e1fad9fa4edd750f530252a718a44b2608f0"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
  "hashbrown 0.11.2",
 ]
 
@@ -491,7 +503,7 @@ dependencies = [
 name = "llvm"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "cc",
  "libc",
 ]
@@ -525,7 +537,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 name = "melange-core"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "anyhow",
  "base_n",
  "basedb",
@@ -584,7 +596,7 @@ dependencies = [
 name = "mir"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "bforest",
  "bitset",
  "dot",
@@ -600,7 +612,7 @@ dependencies = [
 name = "mir_autodiff"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "arena",
  "bitset",
  "expect-test",
@@ -643,7 +655,7 @@ dependencies = [
 name = "mir_llvm"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "arrayvec",
  "base_n",
  "lasso",
@@ -658,7 +670,7 @@ dependencies = [
 name = "mir_opt"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "bitset",
  "expect-test",
  "hashbrown 0.12.3",
@@ -753,7 +765,7 @@ checksum = "9ff7415e9ae3fff1225851df9e0d9e4e5479f947619774677a63572e55e80eff"
 name = "osdi"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "base_n",
  "camino",
  "expect-test",
@@ -838,7 +850,7 @@ version = "0.0.0"
 name = "preprocessor"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "expect-test",
  "lexer",
  "stdx",
@@ -868,9 +880,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-build-config"
-version = "0.16.6"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c819d397859445928609d0ec5afc2da5204e0d0f73d6bf9e153b04e83c9cdc2"
+checksum = "fc4cf18c20f4f09995f3554e6bcf9b09bd5e4d6b67c562fdfaafa644526ba479"
 dependencies = [
  "once_cell",
  "python3-dll-a",
@@ -879,9 +891,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-ffi"
-version = "0.16.6"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca882703ab55f54702d7bfe1189b41b0af10272389f04cae38fe4cd56c65f75f"
+checksum = "a41877f28d8ebd600b6aa21a17b40c3b0fc4dfe73a27b6e81ab3d895e401b0e9"
 dependencies = [
  "libc",
  "pyo3-build-config",
@@ -939,9 +951,9 @@ dependencies = [
 
 [[package]]
 name = "rowan"
-version = "0.15.8"
+version = "0.15.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e88acf7b001007e9e8c989fe7449f6601d909e5dd2c56399fc158977ad6c56e8"
+checksum = "7aeb3c95eac7794161baf500b5d4647217ffb32b6660c04d3bb087c834cb58f4"
 dependencies = [
  "countme",
  "hashbrown 0.12.3",
@@ -1002,7 +1014,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 name = "sim_back"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "anyhow",
  "basedb",
  "bitset",
@@ -1044,7 +1056,7 @@ checksum = "7475118a28b7e3a2e157ce0131ba8c5526ea96e90ee601d9f6bb2e286a35ab44"
 name = "sourcegen"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "indexmap",
  "proc-macro2",
  "quote",
@@ -1161,7 +1173,7 @@ checksum = "183496e014253d15abbe6235677b1392dba2d40524c88938991226baa38ac7c4"
 name = "typed_indexmap"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "indexmap",
 ]
 
@@ -1193,7 +1205,7 @@ checksum = "c0edd1e5b14653f783770bce4a4dabb4a5108a5370a5f5d8cfe8710c361f6c8b"
 name = "verilogae"
 version = "0.9.0-beta8"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "anyhow",
  "base_n",
  "basedb",
@@ -1253,7 +1265,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vfs"
 version = "0.0.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.0",
  "indexmap",
  "paths",
 ]

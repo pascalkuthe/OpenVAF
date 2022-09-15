@@ -21,7 +21,7 @@ indexmap = "1.6"
 proc-macro2 = "1.0"
 quote = "1.0"
 ungrammar = "1.14"
-ahash = "0.7"
+ahash = "0.8"
 
 stdx = {version = "0.0.0", path = "../lib/stdx" }
 target = {version = "0.0.0", path = "../openvaf/target" }

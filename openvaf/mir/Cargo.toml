@@ -15,7 +15,7 @@ bforest = {version = "0.0.0" , path = "../../lib/bforest"}
 list_pool = {version = "0.0.0" , path = "../../lib/list_pool"}
 typed-index-collections = "3.0"
 lasso = {version = "0.6", features = ["ahash"]}
-ahash = "0.7"
+ahash = "0.8"
 bitset = {version = "0.0.0", path = "../../lib/bitset" }
 typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
 dot = "0.1.4"

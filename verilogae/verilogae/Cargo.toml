@@ -44,7 +44,7 @@ rayon-core = "1"
 smol_str = { version = "0.1.23", default_features = false }
 parking_lot = "0.12"
 typed-index-collections = "3"
-ahash = "0.7"
+ahash = "0.8"
 
 anyhow = "1"
 termcolor = "1.1"

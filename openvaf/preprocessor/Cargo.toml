@@ -14,7 +14,7 @@ doctest = false
 typed-index-collections = "3.0"
 text-size = "1.1"
 
-ahash = "0.7"
+ahash = "0.8"
 
 # tracing = {version="0.1",default_features=false,features=["std"]}
 

@@ -17,7 +17,7 @@ workqueue = {version = "0.0.0", path = "../../lib/workqueue" }
 bitset = {version = "0.0.0", path = "../../lib/bitset" }
 
 typed-index-collections = "3.0"
-ahash = "0.7"
+ahash = "0.8"
 hashbrown = {version = "0.12", features = ["raw"]}
 indexmap = "1.6"
 

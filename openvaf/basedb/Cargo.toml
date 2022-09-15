@@ -34,7 +34,7 @@ typed-index-collections = "3.0"
 # Performant collections
 parking_lot = "0.12"
 indexmap = "1.6"
-ahash = "0.7"
+ahash = "0.8"
 
 [dev-dependencies]
 expect-test = "1.1"
