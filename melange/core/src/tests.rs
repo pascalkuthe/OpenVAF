@@ -95,10 +95,11 @@ fn veriloga() -> Result<()> {
         .join("DIODE")
         .join("diode.va");
     circ.load_veriloga_file(path, &veriloga::Opts::default())?;
+    let (vdc_param, vdc) = arena.def_param(circ.ctx, "vdc".to_owned())?;
 
     let (vsrc1, _) =
         circ.new_device_instance_by_name("vsrc1".to_owned(), "vsource", vec![node_x, gnd])?;
-    circ.set_instance_param(vsrc1, "dc", 0.9.into())?;
+    circ.set_instance_param(vsrc1, "dc", vdc)?;
     circ.set_instance_param(vsrc1, "mag", 1.0.into())?;
 
     let (_, diode1) =
@@ -113,15 +114,25 @@ fn veriloga() -> Result<()> {
     circ.set_model_param(diode1, "m", 0.6.into())?;
 
     let mut ctx = ExprEvalCtx::new(&arena);
+
+    let vdc = 0.9;
+    let delta = 0.01;
+    ctx.set_param(vdc_param, (vdc + delta).into());
     ctx.set_param(CircuitParam::TEMPERATURE, 300.15.into());
 
     let mut sim = circ.prepare_simulation(ctx.borrow(), &arena, SimConfig::default())?;
-    // sim.config.debug = true;
+    let curr_delta = sim.dc_lead_current(vsrc1)?[0];
+
+    ctx.set_param(vdc_param, vdc.into());
+    sim.prepare_solver(ctx.borrow(), &arena)?;
+
     let curr = sim.dc_lead_current(vsrc1)?[0];
     assert_approx_eq!(curr, -0.0365);
-
     sim.set_omega(10.0 * std::f64::consts::TAU);
+    let deriv = (curr_delta - curr) / delta;
     let curr = sim.ac_lead_current(vsrc1)?[0];
+
+    assert_approx_eq!(deriv, curr.re);
     assert_approx_eq_cmplx!(curr, -0.1792 - j 5.09e-18);
 
     Ok(())

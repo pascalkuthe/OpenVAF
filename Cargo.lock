@@ -408,7 +408,9 @@ dependencies = [
 
 [[package]]
 name = "klu-rs"
-version = "0.3.1"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f0326c3bebaae9e354d82d0425b8abeebe41e9df313063ac3845ae93aa43181"
 dependencies = [
  "klu_sys",
  "num-complex",
@@ -417,6 +419,8 @@ dependencies = [
 [[package]]
 name = "klu_sys"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7f729c295c52f9ad3058f5e61db78bde2b8c6f1e30abf4ccf09d2df4f3a689"
 dependencies = [
  "cc",
  "libc",

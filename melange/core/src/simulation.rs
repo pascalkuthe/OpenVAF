@@ -202,6 +202,7 @@ impl Simulation<'_> {
     }
 
     pub fn prepare_solver(&mut self, mut eval_ctx: ExprEvalCtxRef, arena: &Arena) -> Result<()> {
+        self.wipe_solution();
         for param in arena.ctx_params(self.circ.ctx) {
             if self.circ.param_assignments.contains_key(&param) {
                 continue;
@@ -409,7 +410,7 @@ impl Simulation<'_> {
             }
 
             // reset matrix
-            matrix.nonlinear_matrix.write_all(0.0);
+            matrix.nonlinear_matrix.write_zero();
             let mut found_solution = true;
             for ((dst, delta), node_info) in
                 zip(&mut self.solution.raw[1..], &mut self.residual_resist.raw[1..])
@@ -458,8 +459,10 @@ impl Simulation<'_> {
 
         let matrix =
             self.matrix.as_mut().context("simulation must be setup before ac() is called")?;
-
+        matrix.nonlinear_matrix.write_zero();
+        matrix.ac_matrix.write_zero();
         self.ac_solution.raw.fill(Complex64::default());
+
         if self.state.contains(SimulationState::HAS_AC_EVAL) {
             for inst in &mut *self.instance_data {
                 unsafe {
