@@ -100,7 +100,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
         }
 
         for arg in args {
-            add(&(*arg), true);
+            add(arg, true);
         }
     }
 

@@ -588,7 +588,7 @@ fn lower_enum(grammar: &Grammar, rule: &Rule) -> Option<(Vec<AstEnumVariant>, Op
             _ => return None,
         }
     }
-    seen_non_token.then(|| (variants, nested))
+    seen_non_token.then_some((variants, nested))
 }
 
 const MANUAL_ENUMS: [&str; 1] = ["Literal"];

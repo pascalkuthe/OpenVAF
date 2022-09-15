@@ -28,7 +28,7 @@ pub struct Opts {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptLevel {
     None = 0,
     Less = 1,
@@ -446,7 +446,7 @@ pub extern "C" fn verilogae_new_opts() -> *mut Opts {
 /// `opts` must be a valid pointer created with `new_opts`
 #[no_mangle]
 pub unsafe extern "C" fn verilogae_free_opts(opts: *mut Opts) {
-    Box::from_raw(opts);
+    drop(Box::from_raw(opts))
 }
 
 #[repr(C)]

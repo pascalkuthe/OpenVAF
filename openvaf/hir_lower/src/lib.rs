@@ -336,7 +336,7 @@ impl_debug_display! {
 pub const RESISTIVE_DIM: Dim = Dim(0u32);
 pub const REACTIVE_DIM: Dim = Dim(1u32);
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DimKind {
     Resistive,
     Reactive,

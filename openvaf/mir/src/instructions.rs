@@ -100,7 +100,7 @@ impl InstructionData {
             InstructionData::Unary { arg, .. } | InstructionData::Branch { cond: arg, .. } => {
                 core::slice::from_ref(arg)
             }
-            InstructionData::Binary { args, .. } => &*args,
+            InstructionData::Binary { args, .. } => args,
             InstructionData::Call { args, .. } | InstructionData::PhiNode(PhiNode { args, .. }) => {
                 args.as_slice(pool)
             }

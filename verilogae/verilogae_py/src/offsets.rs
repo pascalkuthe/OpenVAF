@@ -24,7 +24,7 @@ macro_rules! with_offsets {
             )*
         }
 
-        #[allow(nonstandard_style)]
+        #[allow(nonstandard_style, dead_code)]
         const _: () = {
             pub
             struct StructOffsets {

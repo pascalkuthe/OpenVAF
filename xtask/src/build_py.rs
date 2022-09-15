@@ -46,7 +46,7 @@ impl crate::flags::Build {
             for file in sh.read_dir("wheels")? {
                 println!("{file:?}");
                 for (py, tag) in &pythons {
-                    if file.to_str().unwrap().contains(&*tag) {
+                    if file.to_str().unwrap().contains(tag) {
                         cmd!(sh, "{py} -m pip install --force-reinstall {file}").run()?;
                         break;
                     }

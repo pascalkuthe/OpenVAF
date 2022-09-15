@@ -158,7 +158,7 @@ pub enum TargetData {}
 pub enum TargetMachine {}
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptLevel {
     None = 0,
     Less = 1,
@@ -171,7 +171,7 @@ pub enum OptLevel {
 // this for each module as done in rustc
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelocMode {
     Default = 0,
     // Static = 1,
@@ -183,7 +183,7 @@ pub enum RelocMode {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodeModel {
     Default = 0,
     // JITDefault = 1,
@@ -195,14 +195,14 @@ pub enum CodeModel {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodeGenFileType {
     AssemblyFile = 0,
     ObjectFile = 1,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Linkage {
     ExternalLinkage = 0,
     AvailableExternallyLinkage = 1,
@@ -224,7 +224,7 @@ pub enum Linkage {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Visibility {
     Default = 0,
     Hidden = 1,
@@ -232,7 +232,7 @@ pub enum Visibility {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnnamedAddr {
     /// Address of the GV is significant.
     No,
@@ -243,7 +243,7 @@ pub enum UnnamedAddr {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DLLStorageClass {
     Default = 0,
     Import = 1,
@@ -251,7 +251,7 @@ pub enum DLLStorageClass {
 }
 
 // LLVM CallingConv::ID. Should we wrap this?
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(C)]
 pub enum CallConv {
     CCallConv = 0,
@@ -273,7 +273,7 @@ pub enum CallConv {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IntPredicate {
     IntEQ = 32,
     IntNE = 33,
@@ -288,7 +288,7 @@ pub enum IntPredicate {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd)]
 pub enum DiagnosticSeverity {
     Error = 0,
     Warning = 1,
@@ -297,7 +297,7 @@ pub enum DiagnosticSeverity {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RealPredicate {
     RealPredicateFalse = 0,
     RealOEQ = 1,
@@ -341,7 +341,7 @@ pub fn get_version() -> (u32, u32, u32) {
 pub const UNNAMED: *const c_char = b"\0".as_ptr() as *const c_char;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TypeKind {
     Void = 0,
     Half = 1,

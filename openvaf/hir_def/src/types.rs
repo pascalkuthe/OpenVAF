@@ -112,9 +112,9 @@ impl Type {
 
     pub fn dim(&self) -> Vec<u32> {
         if let Type::Array { ref ty, len } = *self {
-            let mut dims: Vec<_> = successors(Some((&*ty, len)), |(ty, _)| {
+            let mut dims: Vec<_> = successors(Some((ty, len)), |(ty, _)| {
                 if let Type::Array { ref ty, len } = ***ty {
-                    Some((&*ty, len))
+                    Some((ty, len))
                 } else {
                     None
                 }

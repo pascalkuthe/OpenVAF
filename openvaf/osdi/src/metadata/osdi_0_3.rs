@@ -91,7 +91,7 @@ impl<'ll> OsdiLimFunction<'ll> {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_lim_function(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [ctx.ty_str(), ctx.ty_int(), ctx.ty_void_ptr()];
         let ty = ctx.struct_ty("OsdiLimFunction", &fields);
         self.osdi_lim_function = Some(ty);
@@ -99,7 +99,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_sim_paras(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [
             ctx.ptr_ty(ctx.ty_str()),
             ctx.ptr_ty(ctx.ty_real()),
@@ -112,7 +112,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_sim_info(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [
             self.osdi_sim_paras.unwrap(),
             ctx.ty_real(),
@@ -127,7 +127,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_init_error_payload(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         unsafe {
             let align = [llvm::LLVMABIAlignmentOfType(self.target_data, ctx.ty_int())]
                 .into_iter()
@@ -146,7 +146,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_init_error(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [ctx.ty_int(), self.osdi_init_error_payload.unwrap()];
         let ty = ctx.struct_ty("OsdiInitError", &fields);
         self.osdi_init_error = Some(ty);
@@ -154,7 +154,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_init_info(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [ctx.ty_int(), ctx.ty_int(), ctx.ptr_ty(self.osdi_init_error.unwrap())];
         let ty = ctx.struct_ty("OsdiInitInfo", &fields);
         self.osdi_init_info = Some(ty);
@@ -173,7 +173,7 @@ impl OsdiNodePair {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_node_pair(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [ctx.ty_int(), ctx.ty_int()];
         let ty = ctx.struct_ty("OsdiNodePair", &fields);
         self.osdi_node_pair = Some(ty);
@@ -197,7 +197,7 @@ impl OsdiJacobianEntry {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_jacobian_entry(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [self.osdi_node_pair.unwrap(), ctx.ty_int(), ctx.ty_int()];
         let ty = ctx.struct_ty("OsdiJacobianEntry", &fields);
         self.osdi_jacobian_entry = Some(ty);
@@ -231,7 +231,7 @@ impl OsdiNode {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_node(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [
             ctx.ty_str(),
             ctx.ty_str(),
@@ -256,7 +256,7 @@ pub struct OsdiParamOpvar {
 }
 impl OsdiParamOpvar {
     pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
-        let arr_0: Vec<_> = self.name.iter().map(|it| ctx.const_str_uninterned(&*it)).collect();
+        let arr_0: Vec<_> = self.name.iter().map(|it| ctx.const_str_uninterned(it)).collect();
         let fields = [
             ctx.const_arr_ptr(ctx.ty_str(), &arr_0),
             ctx.const_unsigned_int(self.num_alias),
@@ -271,7 +271,7 @@ impl OsdiParamOpvar {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_param_opvar(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [
             ctx.ptr_ty(ctx.ty_str()),
             ctx.ty_int(),
@@ -297,7 +297,7 @@ impl OsdiNoiseSource {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_noise_source(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [ctx.ty_str(), self.osdi_node_pair.unwrap()];
         let ty = ctx.struct_ty("OsdiNoiseSource", &fields);
         self.osdi_noise_source = Some(ty);
@@ -392,7 +392,7 @@ impl<'ll> OsdiDescriptor<'ll> {
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_descriptor(&mut self) {
-        let ctx = &*self.ctx;
+        let ctx = self.ctx;
         let fields = [
             ctx.ty_str(),
             ctx.ty_int(),
