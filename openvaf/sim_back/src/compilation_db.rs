@@ -35,7 +35,7 @@ pub struct CompilationDB {
 
 impl Upcast<dyn HirDefDB> for CompilationDB {
     fn upcast(&self) -> &(dyn HirDefDB + 'static) {
-        &*self
+        self
     }
 }
 

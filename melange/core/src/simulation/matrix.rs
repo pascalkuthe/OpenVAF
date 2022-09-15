@@ -65,9 +65,7 @@ pub(crate) struct MatrixBuilder {
 
 impl Drop for MatrixBuilder {
     fn drop(&mut self) {
-        unsafe {
-            Box::from_raw(self.dump.as_ptr());
-        }
+        unsafe { drop(Box::from_raw(self.dump.as_ptr())) }
     }
 }
 

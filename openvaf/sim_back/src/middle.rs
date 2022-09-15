@@ -493,7 +493,7 @@ impl EvalMir {
         let inst_params: Vec<_> = module
             .params
             .iter()
-            .filter_map(|(param, info)| info.is_instance.then(|| *param))
+            .filter_map(|(param, info)| info.is_instance.then_some(*param))
             .collect();
         init_inst_intern.insert_param_init(
             db,

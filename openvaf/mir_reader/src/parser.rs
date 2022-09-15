@@ -330,7 +330,7 @@ impl<'a> Parser<'a> {
                     self.consume();
                     Ok(SourceLoc::new(num))
                 }
-                Err(_) => return err!(self.loc, "invalid source location: {}", text),
+                Err(_) => err!(self.loc, "invalid source location: {}", text),
             }
         } else {
             Ok(Default::default())

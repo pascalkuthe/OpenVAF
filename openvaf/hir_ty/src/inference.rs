@@ -803,7 +803,7 @@ impl Ctx<'_> {
             let output_args: Vec<_> = fun_info
                 .args
                 .iter_enumerated()
-                .filter_map(|(id, info)| info.is_output.then(|| id))
+                .filter_map(|(id, info)| info.is_output.then_some(id))
                 .collect();
 
             let invalid_ret = !matches!(fun_info.return_ty, Type::Real | Type::Err);

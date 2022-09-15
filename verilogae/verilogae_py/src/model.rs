@@ -1136,7 +1136,7 @@ fn raise_eval_illegal_array_exception(
 #[cold]
 #[inline(never)]
 fn raise_eval_illegal_data_type_exception(name: &str) -> *mut PyObject {
-    return raise_eval_exception(&format!("eval() recived unsupprted data type for '{}'", name,));
+    raise_eval_exception(&format!("eval() recived unsupprted data type for '{}'", name,))
 }
 
 #[cold]

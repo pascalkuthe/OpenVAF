@@ -34,7 +34,7 @@ pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
         Type::Real => cx.ty_real(),
         Type::Integer => cx.ty_int(),
         Type::String => cx.ty_str(),
-        Type::Array { ty, len } => cx.ty_array(lltype(&*ty, cx), *len),
+        Type::Array { ty, len } => cx.ty_array(lltype(ty, cx), *len),
         Type::EmptyArray => cx.ty_array(cx.ty_int(), 0),
         Type::Bool => cx.ty_bool(),
         Type::Void => cx.ty_void(),
@@ -112,7 +112,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
     unsafe fn read_str_params(&mut self, ptr: &'ll llvm::Value) {
         let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
             if let ParamKind::Param(param) = *kind {
-                (self.db.param_data(param).ty == Type::String).then(|| (id, param))
+                (self.db.param_data(param).ty == Type::String).then_some((id, param))
             } else {
                 None
             }
@@ -131,7 +131,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
     unsafe fn read_params(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value, ty: Type) {
         let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
             if let ParamKind::Param(param) = kind {
-                (self.db.param_data(*param).ty == ty).then(|| (id, *param))
+                (self.db.param_data(*param).ty == ty).then_some((id, *param))
             } else {
                 None
             }
@@ -316,14 +316,8 @@ impl CodegenCtx<'_, '_> {
         // setup builder
         let mut builder = Builder::new(&cx, func, llfun);
 
-        let mut codegen = Codegen {
-            db: &*db,
-            model_info: &*self.model_info,
-            intern: &*intern,
-            builder: &mut builder,
-            func: &*func,
-            spec: &*spec,
-        };
+        let mut codegen =
+            Codegen { db, model_info: self.model_info, intern, builder: &mut builder, func, spec };
 
         // read parameters
 

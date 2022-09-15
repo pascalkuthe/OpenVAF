@@ -125,7 +125,7 @@ pub fn function_iter(module: &Module) -> impl Iterator<Item = &Value> + '_ {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerifierFailureAction {
     /// Print to stderr and abort the process.
     AbortProcess = 0,

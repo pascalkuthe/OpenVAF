@@ -82,7 +82,7 @@ impl ast::Path {
         let segment = self.segment()?;
         let is_valid =
             self.qualifier().is_none() && matches!(segment.kind, ast::PathSegmentKind::Name);
-        is_valid.then(|| segment.syntax)
+        is_valid.then_some(segment.syntax)
     }
 }
 #[derive(PartialEq, Eq, Debug, Clone)]

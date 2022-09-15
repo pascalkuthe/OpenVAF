@@ -464,7 +464,7 @@ impl ToTokens for LLVMValPreInterp<'_, '_> {
             BaseTy::U32 => quote!(ctx.const_unsigned_int(*#calc_src)),
             BaseTy::Usize => quote!(ctx.const_usize(*#calc_src)),
             BaseTy::Str => {
-                quote!(ctx.const_str_uninterned(&*#calc_src))
+                quote!(ctx.const_str_uninterned(#calc_src))
             }
             BaseTy::Bool => quote!(ctx.const_c_bool(*#calc_src)),
             BaseTy::Void if indirection == 1 => {
@@ -547,7 +547,7 @@ impl ToTokens for OsdiStructInterp<'_, '_> {
             quote! {
                 impl OsdiTyBuilder<'_, '_, '_>{
                     fn #llvm_ty_ident(&mut self){
-                        let ctx = &*self.ctx;
+                        let ctx = self.ctx;
                         unsafe{
                             let align = [#(llvm::LLVMABIAlignmentOfType(self.target_data, #field_ll_tys)),*].into_iter().max().unwrap();
                             let mut size = [#(llvm::LLVMABISizeOfType(self.target_data, #field_ll_tys2)),*].into_iter().max().unwrap() as u32;
@@ -564,7 +564,7 @@ impl ToTokens for OsdiStructInterp<'_, '_> {
             quote! {
                 impl OsdiTyBuilder<'_, '_, '_>{
                     fn #llvm_ty_ident(&mut self){
-                        let ctx = &*self.ctx;
+                        let ctx = self.ctx;
                         let fields = [#(#field_ll_tys),*];
                         let ty = ctx.struct_ty(#ident, &fields);
                         self.#llvm_ty_ident = Some(ty);

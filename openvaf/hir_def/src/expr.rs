@@ -33,7 +33,7 @@ pub enum Literal {
 impl Literal {
     pub fn unwrap_str(&self) -> &str {
         if let Literal::String(lit) = self {
-            &*lit
+            lit
         } else {
             unreachable!("called unwrap str on {self:?}")
         }

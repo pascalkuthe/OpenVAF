@@ -50,7 +50,7 @@ pub fn lookup(
     defines: &[String],
     cache_dir: &Utf8PathBuf,
 ) -> (Utf8PathBuf, bool) {
-    let hash = u128::from_ne_bytes(*hash(db, &defines));
+    let hash = u128::from_ne_bytes(*hash(db, defines));
     let hash = base_n::encode(hash, base_n::CASE_INSENSITIVE);
     let path = cache_dir.join(format!("{}.osdi", hash));
     let exists = path.exists();

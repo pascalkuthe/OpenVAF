@@ -157,7 +157,7 @@ pub fn collect_path(path: &[Name], name: &Name) -> SmolStr {
         // fast path
         return name.clone().into();
     }
-    path.iter().flat_map(|path| [&*path, "."]).chain(once(name.deref())).collect()
+    path.iter().flat_map(|path| [path, "."]).chain(once(name.deref())).collect()
 }
 
 pub fn visit_relative_defs(

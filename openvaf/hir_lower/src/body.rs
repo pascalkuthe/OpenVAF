@@ -141,7 +141,7 @@ impl<'a> MirBuilder<'a> {
             infere: &infere,
             tagged_vars: &self.tagged_reads,
             places: &mut places,
-            extra_dims: self.split_contribute.then(|| &mut extra_dims),
+            extra_dims: self.split_contribute.then_some(&mut extra_dims),
             path: &path,
             contribute_rhs: false,
             inside_lim: false,

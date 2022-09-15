@@ -1,6 +1,7 @@
 use hir_def::db::HirDefDB;
 use hir_lower::{CallBackKind, DisplayKind, FmtArg, FmtArgKind, HirInterner};
 use lasso::Rodeo;
+use llvm::Linkage;
 use llvm::{
     IntPredicate, LLVMAddIncoming, LLVMAppendBasicBlockInContext, LLVMBuildAdd,
     LLVMBuildArrayMalloc, LLVMBuildBr, LLVMBuildCall2, LLVMBuildCondBr, LLVMBuildFMul,
@@ -8,7 +9,6 @@ use llvm::{
     LLVMGetParam, LLVMIsDeclaration, LLVMPositionBuilderAtEnd, LLVMSetLinkage,
     LLVMSetUnnamedAddress, UnnamedAddr, UNNAMED,
 };
-use llvm::{LLVMPurgeAttrs, Linkage};
 use mir::FuncRef;
 use mir_llvm::{CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use salsa::InternKey;

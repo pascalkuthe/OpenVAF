@@ -58,7 +58,7 @@ use stdx::packed_option::ReservedValue;
 ///
 /// The index stored in an `ListHandle` points to part 2, the list elements. The value 0 is
 /// reserved for the empty list which isn't allocated in the vector.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListHandle<T: ReservedValue> {
     index: u32,
     unused: PhantomData<T>,
@@ -207,7 +207,7 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListPool<T> {
 
         if elems_to_copy > 0 {
             let (old, new) = self.mut_slices(block, new_block);
-            (&mut new[0..elems_to_copy]).copy_from_slice(&old[0..elems_to_copy]);
+            new[0..elems_to_copy].copy_from_slice(&old[0..elems_to_copy]);
         }
 
         self.free(block, from_sclass);

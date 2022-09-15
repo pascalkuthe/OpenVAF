@@ -496,7 +496,7 @@ where
 ///
 /// All operations that involve an element will panic if the element is equal
 /// to or greater than the domain size.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GrowableBitSet<T: From<usize> + Into<usize> + Copy + PartialEq + Debug> {
     bit_set: BitSet<T>,
 }

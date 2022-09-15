@@ -52,7 +52,7 @@ impl TsTokenSource {
         let token_offset_pairs: Vec<_> = raw_tokens
             .iter()
             .enumerate()
-            .filter_map(|(pos, t)| (!t.kind.is_trivia()).then(|| (t.kind, pos)))
+            .filter_map(|(pos, t)| (!t.kind.is_trivia()).then_some((t.kind, pos)))
             .collect();
         let curr = (mk_token(0, &token_offset_pairs), 0);
         TsTokenSource { token_offset_pairs, curr }
