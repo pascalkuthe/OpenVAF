@@ -539,8 +539,6 @@ version = "0.0.0"
 dependencies = [
  "ahash 0.8.0",
  "anyhow",
- "base_n",
- "basedb",
  "bitflags",
  "camino",
  "cli-table",
@@ -550,18 +548,12 @@ dependencies = [
  "lasso",
  "libc",
  "libloading",
- "linker",
- "llvm",
  "log",
  "md5",
- "mir_llvm",
  "num-complex",
- "osdi",
- "paths",
+ "openvaf",
  "pretty_dtoa",
- "sim_back",
  "stdx",
- "target",
  "termcolor",
  "typed-index-collections",
  "typed_indexmap",
@@ -733,25 +725,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
 
 [[package]]
-name = "openvaf-driver"
+name = "openvaf"
 version = "0.1.2"
 dependencies = [
  "anyhow",
  "base_n",
  "basedb",
  "camino",
- "clap",
- "directories-next",
  "linker",
  "llvm",
  "md5",
- "mimalloc",
  "mir_llvm",
  "osdi",
- "path-absolutize",
  "paths",
  "sim_back",
  "target",
+ "termcolor",
+]
+
+[[package]]
+name = "openvaf-driver"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "camino",
+ "clap",
+ "directories-next",
+ "mimalloc",
+ "openvaf",
+ "path-absolutize",
  "termcolor",
 ]
 
