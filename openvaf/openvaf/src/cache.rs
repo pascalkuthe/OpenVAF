@@ -3,8 +3,9 @@ use std::mem::{size_of, size_of_val};
 
 use basedb::lints::LintLevel;
 use basedb::BaseDB;
-use camino::Utf8PathBuf;
 use sim_back::CompilationDB;
+
+use crate::Opts;
 
 fn hash(db: &CompilationDB, defines: &[String]) -> md5::Digest {
     let mut hash_builder = md5::Context::new();
@@ -45,14 +46,8 @@ fn hash(db: &CompilationDB, defines: &[String]) -> md5::Digest {
     hash_builder.compute()
 }
 
-pub fn lookup(
-    db: &CompilationDB,
-    defines: &[String],
-    cache_dir: &Utf8PathBuf,
-) -> (Utf8PathBuf, bool) {
-    let hash = u128::from_ne_bytes(*hash(db, defines));
+pub fn file_name(db: &CompilationDB, opts: &Opts) -> String {
+    let hash = u128::from_ne_bytes(*hash(db, &opts.defines));
     let hash = base_n::encode(hash, base_n::CASE_INSENSITIVE);
-    let path = cache_dir.join(format!("{}.osdi", hash));
-    let exists = path.exists();
-    (path, exists)
+    format!("{}.osdi", hash)
 }

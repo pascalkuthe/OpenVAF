@@ -21,18 +21,7 @@ indexmap = "1.6"
 lasso = { version = "0.6", features = ["ahash"] }
 klu-rs = "0.4.0"
 num-complex = "0.4.2"
-
-basedb = { version = "0.0.0", path = "../../openvaf/basedb" }
-sim_back = { version = "0.0.0", path = "../../openvaf/sim_back" }
-osdi = { version = "0.0.0", path = "../../openvaf/osdi" }
-
-llvm = { version = "0.0.0", path = "../../openvaf/llvm" }
-mir_llvm = { version = "0.0.0", path = "../../openvaf/mir_llvm" }
-target = { version = "0.0.0", path = "../../openvaf/target" }
-linker = { version = "0.0.0", path = "../../openvaf/linker" }
-
-base_n = { version = "1", path = "../../lib/base_n" }
-paths = { version = "0.0", path = "../../lib/paths" }
+openvaf = { version = "0.1.2", path = "../../openvaf/openvaf" }
 
 md5 = "0.7"
 directories-next = "2"

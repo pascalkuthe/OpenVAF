@@ -5,35 +5,19 @@ authors = ["DSPOM"]
 edition = "2021"
 license = "GPL-3.0"
 
-[lib]
-doctest = false
-
 [[bin]]
 name = "openvaf"
 path = "src/main.rs"
 
-
 [dependencies]
 
-basedb = { version = "0.0.0", path = "../basedb" }
-sim_back = { version = "0.0.0", path = "../sim_back" }
-osdi = { version = "0.0.0", path = "../osdi" }
-
-llvm = { version = "0.0.0", path = "../llvm" }
-mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
-target = { version = "0.0.0", path = "../target" }
-linker = { version = "0.0.0", path = "../linker" }
-
-base_n = {version = "1", path = "../../lib/base_n"}
-paths = {version = "0.0", path = "../../lib/paths"}
+openvaf = { version = "0.1.2", path = "../openvaf" }
 
 clap = "3.1.18"
-md5 = "0.7"
 directories-next = "2"
 path-absolutize = "3.0.13"
-
 anyhow = "1"
 termcolor = "1.1"
-
-mimalloc = { version = "*", default-features = false }
 camino = "1.1.1"
+
+mimalloc = { version = "*", default-features = false}

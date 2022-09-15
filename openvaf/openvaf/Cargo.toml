@@ -1,0 +1,30 @@
+[package]
+name = "openvaf"
+version = "0.1.2"
+authors = ["DSPOM"]
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+doctest = false
+
+[dependencies]
+
+basedb = { version = "0.0.0", path = "../basedb" }
+sim_back = { version = "0.0.0", path = "../sim_back" }
+osdi = { version = "0.0.0", path = "../osdi" }
+
+llvm = { version = "0.0.0", path = "../llvm" }
+mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
+target = { version = "0.0.0", path = "../target" }
+linker = { version = "0.0.0", path = "../linker" }
+
+base_n = { version = "1", path = "../../lib/base_n" }
+paths = { version = "0.0", path = "../../lib/paths" }
+
+md5 = "0.7"
+
+anyhow = "1"
+termcolor = "1.1"
+camino = "1.1.1"
+

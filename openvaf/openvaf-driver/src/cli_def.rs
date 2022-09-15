@@ -2,10 +2,10 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::bail;
-use basedb::lints::{self, LintLevel};
 use camino::Utf8Path;
 use clap::builder::ValueParser;
 use clap::{Arg, Command, PossibleValue, ValueHint};
+use openvaf::{builtin_lints, get_target_names, LintLevel};
 use path_absolutize::Absolutize;
 
 const ABOUT: &str = r"OpenVAF is a next generation general purpose Verilog-A compiler.
@@ -84,7 +84,7 @@ fn target() -> Arg<'static> {
         .long(TARGET)
         .help("Target triple for which the code is compiled.")
         .long_help("Target triple for which the code is compiled.\nBy default the target of the host is used.")
-        .possible_values(target::spec::get_target_names())
+        .possible_values(get_target_names())
         .value_name("TARGET")
         .required(false)
         .value_hint(ValueHint::Other)
@@ -268,7 +268,7 @@ fn lint_arg(lvl: LintLevel) -> Arg<'static> {
             .long_help("Make this lint an error.\nAccepts any lint (obtained with --lints) or on of the following:\n\nall - all lints\nwarnings - all lints whose lvl is set to warn"),
     };
 
-    let all_lints = lints::builtin::ALL.iter().map(|lint| PossibleValue::new(lint.name));
+    let all_lints = builtin_lints::ALL.iter().map(|lint| PossibleValue::new(lint.name));
 
     arg.takes_value(true)
         .multiple_occurrences(true)
