@@ -54,6 +54,15 @@ fn gen_msvcrt_importlib(sh: &Shell, arch: &str, target: &str, machine: &str, che
     .run()
     .expect("ucrt compilation succedes");
     libs.push(ucrt_obj);
+
+    if arch == "x64" {
+        let chkstk_obj = out_dir.join(format!("chkstk_{arch}.obj"));
+        let chkstk_src =
+            stdx::project_root().join("openvaf").join("target").join("ucrt").join("chkstk.S");
+        println!("cargo:rerun-if-changed={}", chkstk_src.display());
+        cmd!(sh, "clang-cl /c /Zl /GS- /clang:--target={target}-pc-windows-msvc /clang:-o{chkstk_obj} {chkstk_src}").run().expect("chkstk compilation succedes");
+        libs.push(chkstk_obj);
+    }
     let libs_ref = &libs;
     cmd!(sh, "llvm-lib /machine:{arch} {libs_ref...} /OUT:{out_file}")
         .run()

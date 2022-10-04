@@ -88,9 +88,10 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
         lvl => bail!("unkown opt lvl {lvl}"),
     };
 
-    let target = matches
-        .value_of(TARGET)
-        .map_or_else(|| host_triple().to_owned(), |target| target.to_owned());
+    let host = host_triple();
+    let target =
+        matches.value_of(TARGET).map_or_else(|| host.to_owned(), |target| target.to_owned());
+    let default_cpu = if host != target { "generic" } else { "native" };
 
     let target = if let Some(target) = openvaf::Target::search(&target) {
         target
@@ -99,7 +100,7 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
         bail!("The target {target} is not supported by  this binary")
     };
 
-    let target_cpu = matches.value_of(TARGET_CPU).unwrap().to_owned();
+    let target_cpu = matches.value_of(TARGET_CPU).unwrap_or(default_cpu).to_owned();
 
     Ok(Opts { input, lints, codegen_opts, defines, include, output, opt_lvl, target, target_cpu })
 }

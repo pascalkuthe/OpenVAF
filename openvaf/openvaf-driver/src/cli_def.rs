@@ -113,10 +113,9 @@ fn target_cpu() -> Arg<'static> {
     Arg::new(TARGET_CPU)
         .long(TARGET_CPU)
         .help("Target cpu for which the code is compiled.")
-        .long_help("Target cpu for which the code is compile.\nBy default \'native\' is used to allow best possible performance.\nIn this case the best optimizations for the current hardware are used.\nTo distribute the output to people with unkown hardware set this option to generic.\n\nEXAMPLES: skylake, native, generic")
+        .long_help("Target cpu for which the code is compile.\nBy default \'native\' is used to allow best possible performance.\nFor cross compilation \'generic\' is used instead. In this case the best optimizations for the current hardware are used.\nTo distribute the output to people with unkown hardware set this option to generic.\n\nEXAMPLES: skylake, native, generic")
         .value_name("CPU")
         .required(false)
-        .default_value("native")
         .value_hint(ValueHint::Other)
 }
 
