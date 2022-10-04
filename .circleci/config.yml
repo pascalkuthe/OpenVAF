@@ -1,7 +1,8 @@
 version: 2.1
 
 orbs:
-  ferris-ci: pascalkuthe/ferris-ci@0.2
+  ferris-ci: pascalkuthe/ferris-ci@0.3
+
 target_matrix: &target_matrix
   matrix:
     parameters:
@@ -29,5 +30,6 @@ workflows:
       - ferris-ci/run-tests:
           requires: [build-tests-<< matrix.target >>]
           <<: *target_matrix
+          context: github
       - ferris-ci/cargo-machete
       - ferris-ci/rustfmt
