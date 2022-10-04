@@ -8,17 +8,17 @@ use openvaf::{builtin_lints, get_target_names, host_triple, AbsPathBuf, LintLeve
 use termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
 
 use crate::cli_def::{
-    ALLOW, BATCHMODE, CACHE_DIR, CODEGEN, DENY, INCLUDE, INPUT, LINTS, OPT_LVL, OUTPUT,
+    ALLOW, BATCHMODE, CACHE_DIR, CODEGEN, DEFINE, DENY, INCLUDE, INPUT, LINTS, OPT_LVL, OUTPUT,
     SUPPORTED_TARGETS, TARGET, TARGET_CPU, WARN,
 };
 use crate::{CompilationDestination, Opts};
 
 pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
-    if matches.is_present(LINTS) {
+    if matches.get_flag(LINTS) {
         print_lints();
         exit(0)
     }
-    if matches.is_present(SUPPORTED_TARGETS) {
+    if matches.get_flag(SUPPORTED_TARGETS) {
         print_targets();
         exit(0)
     }
@@ -27,18 +27,18 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
 
     let mut lints = Vec::new();
 
-    if let Some(allow) = matches.values_of(ALLOW) {
+    if let Some(allow) = matches.get_many::<String>(ALLOW) {
         lints.extend(allow.map(|lint| (lint.to_owned(), LintLevel::Allow)));
     }
 
-    if let Some(warn) = matches.values_of(WARN) {
+    if let Some(warn) = matches.get_many::<String>(WARN) {
         lints.extend(warn.map(|lint| (lint.to_owned(), LintLevel::Warn)));
     }
-    if let Some(deny) = matches.values_of(DENY) {
+    if let Some(deny) = matches.get_many::<String>(DENY) {
         lints.extend(deny.map(|lint| (lint.to_owned(), LintLevel::Deny)));
     }
 
-    let output = if matches.is_present(BATCHMODE) {
+    let output = if matches.get_flag(BATCHMODE) {
         let cache_dir = if let Some(val) = matches.get_one::<Utf8PathBuf>(CACHE_DIR) {
             val.clone()
         } else {
@@ -66,12 +66,12 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
     };
 
     let codegen_opts = matches
-        .values_of(CODEGEN)
-        .map_or_else(Vec::new, |values| values.map(String::from).collect());
+        .get_many::<String>(CODEGEN)
+        .map_or_else(Vec::new, |values| values.cloned().collect());
 
     let defines = matches
-        .values_of(CODEGEN)
-        .map_or_else(Vec::new, |values| values.map(|opt| opt.to_owned()).collect());
+        .get_many::<String>(DEFINE)
+        .map_or_else(Vec::new, |values| values.cloned().collect());
 
     let include: Result<_> = matches.get_many::<Utf8PathBuf>(INCLUDE).map_or_else(
         || Ok(Vec::new()),
@@ -80,7 +80,7 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
 
     let include = include?;
 
-    let opt_lvl = match matches.value_of(OPT_LVL).unwrap() {
+    let opt_lvl = match &**matches.get_one::<String>(OPT_LVL).unwrap() {
         "0" => OptLevel::None,
         "1" => OptLevel::Less,
         "2" => OptLevel::Default,
@@ -89,8 +89,7 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
     };
 
     let host = host_triple();
-    let target =
-        matches.value_of(TARGET).map_or_else(|| host.to_owned(), |target| target.to_owned());
+    let target = matches.get_one::<String>(TARGET).cloned().unwrap_or_else(|| host.to_owned());
     let default_cpu = if host != target { "generic" } else { "native" };
 
     let target = if let Some(target) = openvaf::Target::search(&target) {
@@ -100,9 +99,19 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
         bail!("The target {target} is not supported by  this binary")
     };
 
-    let target_cpu = matches.value_of(TARGET_CPU).unwrap_or(default_cpu).to_owned();
+    let target_cpu = *matches.get_one(TARGET_CPU).unwrap_or(&default_cpu);
 
-    Ok(Opts { input, lints, codegen_opts, defines, include, output, opt_lvl, target, target_cpu })
+    Ok(Opts {
+        input,
+        lints,
+        codegen_opts,
+        defines,
+        include,
+        output,
+        opt_lvl,
+        target,
+        target_cpu: String::from(target_cpu),
+    })
 }
 
 fn print_lints() {

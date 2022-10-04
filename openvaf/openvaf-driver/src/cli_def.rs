@@ -3,21 +3,14 @@ use std::path::Path;
 
 use anyhow::bail;
 use camino::Utf8Path;
-use clap::builder::ValueParser;
-use clap::{Arg, Command, PossibleValue, ValueHint};
-use openvaf::{builtin_lints, get_target_names, LintLevel};
+use clap::builder::{PossibleValue, PossibleValuesParser, ValueParser};
+use clap::{Arg, ArgAction, Command, ValueHint};
+use openvaf::{builtin_lints, get_target_names, host_triple, LintLevel};
 use path_absolutize::Absolutize;
 
-const ABOUT: &str = r"OpenVAF is a next generation general purpose Verilog-A compiler.
-This binary allows compilations of Verilog-A files for use in circuit simulators.
+const ABOUT: &str = r"OpenVAF - The next generation Verilog-A compiler";
 
-Copyright (c) 2022 Pascal Kuthe. This file is part of the OpenVAF project. It is subject to the
-license terms in the LICENSE file found in the top-level directory of this distribution and at
-https://gitlab.com/DSPOM/openvaf/blob/master/LICENSE. No part of OpenVAF may be copied,
-modified, propagated, or distributed except according to the terms contained in the LICENSE file.
-";
-
-pub fn main_command() -> Command<'static> {
+pub fn main_command() -> Command {
     Command::new("openvaf")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Pascal Kuthe - Semimod GmbH")
@@ -61,92 +54,96 @@ pub const ALLOW: &str = "allow";
 pub const WARN: &str = "warn";
 pub const DENY: &str = "deny";
 
-fn interface() -> Arg<'static> {
+fn interface() -> Arg {
     Arg::new(INTERFACE)
         .long(INTERFACE)
         .help("Simulator interface for which the code is compiled.")
-        .long_help("Simulator interface for which the code is compiled.\n\npossible values\n\nOSDI - Open Source Device Interface supported by NGSPICE and XYCE")
+        .long_help("Simulator interface for which the code is compiled.\n\npossible values\n\nOSDI - Open Source Device Interface supported by NGSPICE")
         .short('i')
-        .possible_values(["OSDI"])
+        .value_parser(["OSDI"])
         .default_value("OSDI")
-        .takes_value(true)
+        .num_args(1)
         .hide_possible_values(true)
         .required(false)
 }
 
-fn batchmode() -> Arg<'static> {
+fn batchmode() -> Arg {
     flag(BATCHMODE, "batch").short('b').help("Enable batchmode compilation.").
         long_help("Enable batchmode compilation. In this mode files are only recompiled when required and the results are stored")
 }
 
-fn target() -> Arg<'static> {
+fn target() -> Arg {
+    let vals = get_target_names().fold(String::new(), |mut dst, it| {
+        dst.push('\n');
+        dst.push_str(it);
+        dst
+    });
     Arg::new(TARGET)
         .long(TARGET)
         .help("Target triple for which the code is compiled.")
-        .long_help("Target triple for which the code is compiled.\nBy default the target of the host is used.")
-        .possible_values(get_target_names())
+        .long_help(format!(
+            "Target triple for which the code is compiled.\n\npossible values:\n{vals}"
+        ))
+        .value_parser(PossibleValuesParser::new(get_target_names()))
+        .default_value(host_triple())
         .value_name("TARGET")
         .required(false)
         .value_hint(ValueHint::Other)
         .hide_possible_values(true)
 }
 
-fn supported_targets() -> Arg<'static> {
-    Arg::new(SUPPORTED_TARGETS)
-        .long(SUPPORTED_TARGETS)
+fn supported_targets() -> Arg {
+    flag(SUPPORTED_TARGETS, SUPPORTED_TARGETS)
         .help("Print target triples supported by OpenVAF.")
-        .long_help("Print target triples supported by OpenVAF.\nOnly these values can be passed to --target.")
-        .takes_value(false)
-        .required(false)
+        .long_help(
+        "Print target triples supported by OpenVAF.\nOnly these values can be passed to --target.",
+    )
 }
 
-fn lints() -> Arg<'static> {
-    Arg::new(LINTS)
-        .long(LINTS)
+fn lints() -> Arg {
+    flag(LINTS, LINTS)
         .help("Print a list of all known lints.")
         .long_help("Print a list of all known lints.\nOnly these values can be passed to --allow, --warn, and --deny.")
-        .takes_value(false)
-        .required(false)
 }
 
-fn target_cpu() -> Arg<'static> {
+fn target_cpu() -> Arg {
     Arg::new(TARGET_CPU)
         .long(TARGET_CPU)
         .help("Target cpu for which the code is compiled.")
-        .long_help("Target cpu for which the code is compile.\nBy default \'native\' is used to allow best possible performance.\nFor cross compilation \'generic\' is used instead. In this case the best optimizations for the current hardware are used.\nTo distribute the output to people with unkown hardware set this option to generic.\n\nEXAMPLES: skylake, native, generic")
+        .long_help("Target cpu for which the code is compile.\nBy default \'native\' is used to allow best possible performance.\nIn this case the best optimizations for the current hardware are used.\nTo distribute the output to people with unkown hardware set this option to generic.\nFor cross compilation \'generic\' is used by default.\n\nEXAMPLES: skylake, native, generic")
         .value_name("CPU")
         .required(false)
         .value_hint(ValueHint::Other)
 }
 
-fn codegen_opts() -> Arg<'static> {
+fn codegen_opts() -> Arg {
     Arg::new(CODEGEN)
         .long(CODEGEN)
         .short('C')
         .help("Set a codegen option.")
         .long_help("Set a codegen option.\nThese options are passed directly to LLVM.")
         .value_name("OPT[=VALUE]")
-        .multiple_occurrences(true)
+        .action(ArgAction::Append)
         .required(false)
         .value_hint(ValueHint::Other)
 }
 
-fn input() -> Arg<'static> {
+fn input() -> Arg {
     input_file_path_arg(INPUT)
         .help("The root Verilog-A file.")
         .required_unless_present_any([LINTS, SUPPORTED_TARGETS])
 }
 
-fn include_dir() -> Arg<'static> {
+fn include_dir() -> Arg {
     dir_path_arg(INCLUDE)
         .long(INCLUDE)
         .short('I')
         .help("Search directory for include files.")
         .required(false)
-        .multiple_occurrences(true)
+        .action(ArgAction::Append)
 }
 
-fn output() -> Arg<'static> {
+fn output() -> Arg {
     output_file_path_arg(OUTPUT)
         .long(OUTPUT)
         .short('o')
@@ -155,11 +152,11 @@ fn output() -> Arg<'static> {
         .required(false)
 }
 
-fn flag(name: &'static str, long: &'static str) -> Arg<'static> {
-    Arg::new(name).long(long).takes_value(false).required(false)
+fn flag(name: &'static str, long: &'static str) -> Arg {
+    Arg::new(name).long(long).action(ArgAction::SetTrue)
 }
 
-fn cache_dir() -> Arg<'static> {
+fn cache_dir() -> Arg {
     dir_path_arg(CACHE_DIR)
         .long(CACHE_DIR)
         .help("Directory where artifacts are stored in batchmode.")
@@ -167,7 +164,7 @@ fn cache_dir() -> Arg<'static> {
         .requires("batchmode")
 }
 
-fn dir_path_arg(name: &'static str) -> Arg<'static> {
+fn dir_path_arg(name: &'static str) -> Arg {
     let parse = |raw: &str| {
         let path = Utf8Path::new(raw).to_owned();
 
@@ -184,7 +181,7 @@ fn dir_path_arg(name: &'static str) -> Arg<'static> {
         .value_parser(ValueParser::new(parse))
 }
 
-fn output_file_path_arg(name: &'static str) -> Arg<'static> {
+fn output_file_path_arg(name: &'static str) -> Arg {
     let parse = |raw: &str| {
         let path = Utf8Path::new(raw).to_owned();
 
@@ -220,7 +217,7 @@ fn output_file_path_arg(name: &'static str) -> Arg<'static> {
         .value_parser(ValueParser::new(parse))
 }
 
-fn input_file_path_arg(name: &'static str) -> Arg<'static> {
+fn input_file_path_arg(name: &'static str) -> Arg {
     let parse = |raw: &str| {
         let path = Utf8Path::new(raw).to_owned();
 
@@ -234,7 +231,7 @@ fn input_file_path_arg(name: &'static str) -> Arg<'static> {
     Arg::new(name).value_name("FILE").value_parser(parse)
 }
 
-fn opt_lvl() -> Arg<'static> {
+fn opt_lvl() -> Arg {
     Arg::new(OPT_LVL)
         .long(OPT_LVL)
         .short('O')
@@ -242,22 +239,22 @@ fn opt_lvl() -> Arg<'static> {
         .long_help("Set how much the generated machine code is optimized:\nA higher optimization level means slower compile times but faster simulations.\n\npossible values\n\n0 - no optimizations\n1 - optimize minimally\n2 - optimize more\n3 - optimize even more")
         .value_name("LEVEL")
         .value_hint(ValueHint::Other)
-        .possible_values(["0","1","2","3"])
+        .value_parser(["0","1","2","3"])
         .hide_possible_values(true)
         .default_value("3").required(false)
 }
 
-fn def_arg() -> Arg<'static> {
+fn def_arg() -> Arg {
     Arg::new(DEFINE)
         .short('D')
         .help("Defines a MACRO for use within the preprocessors")
         .long_help("Defines a MACO for use within the preprocessors.\nIf the value is omitted \"1\" is used.")
         .value_name("MACRO[=VALUE]")
-        .multiple_occurrences(true)
+        .action(ArgAction::Append)
         .value_hint(ValueHint::Other).required(false)
 }
 
-fn lint_arg(lvl: LintLevel) -> Arg<'static> {
+fn lint_arg(lvl: LintLevel) -> Arg {
     let arg = match lvl {
         LintLevel::Warn => Arg::new(WARN).long(WARN).short('W').help("Make this lint a warning.")
             .long_help("Make this lint a warning.\nAccepts any lint (obtained with --lints) or on of the following:\n\nall - all lints\nerrors - all lints whose lvl is set to deny"),
@@ -269,11 +266,11 @@ fn lint_arg(lvl: LintLevel) -> Arg<'static> {
 
     let all_lints = builtin_lints::ALL.iter().map(|lint| PossibleValue::new(lint.name));
 
-    arg.takes_value(true)
-        .multiple_occurrences(true)
+    arg.num_args(1)
+        .action(ArgAction::Append)
         .value_name("LINT")
         .value_hint(ValueHint::Other)
-        .possible_values(
+        .value_parser(PossibleValuesParser::new(
             [
                 PossibleValue::new("all").help("all lints"),
                 PossibleValue::new("warnings").help("all lints whose lvl is set to warn"),
@@ -281,7 +278,7 @@ fn lint_arg(lvl: LintLevel) -> Arg<'static> {
             ]
             .into_iter()
             .chain(all_lints),
-        )
+        ))
         .required(false)
         .hide_possible_values(true)
 }
