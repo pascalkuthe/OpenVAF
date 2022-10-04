@@ -10,7 +10,6 @@ license = "GPL-3.0"
 doctest = false
 
 [dependencies]
-termcolor = "1.1"
 ahash = "0.8"
 anyhow = "1"
 stdx = { version = "0.0.0", path = "../../lib/stdx" }
@@ -23,7 +22,6 @@ klu-rs = "0.4.0"
 num-complex = "0.4.2"
 openvaf = { version = "0.1.2", path = "../../openvaf/openvaf" }
 
-md5 = "0.7"
 directories-next = "2"
 libc = "0.2"
 libloading = "0.7"
