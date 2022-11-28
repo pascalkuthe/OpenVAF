@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Do not generate unkowns for noise phase shifts with ddt.
 * Provide errors instead of crashing for unsupported Verilog-A builtins.
 * Provide errors instead of crashing for illegal nature access.
+* Rare miss-compilations/crashes caused by treating a branch instruction as a jump instruction during CFG simplification.
 
 ## 0.1.2 - 2022-07-19
 

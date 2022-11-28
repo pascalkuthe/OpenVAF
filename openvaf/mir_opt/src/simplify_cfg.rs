@@ -249,6 +249,16 @@ impl<'a> SimplifyCfg<'a> {
             return false;
         }
 
+        // in case the terminator is an unoptimized br _, bb, bb
+        if let Some(terminator) = self.func.layout.last_inst(pred) {
+            debug_assert!(self.func.dfg.insts[terminator].is_terminator());
+            if let InstructionData::Branch { then_dst, else_dst, .. } =
+                self.func.dfg.insts[terminator]
+            {
+                debug_assert_eq!(then_dst, else_dst);
+                self.func.dfg.zap_inst(terminator);
+            }
+        }
         // update phis in sucessors
         for succ in self.cfg.succ_iter(bb) {
             self.vals_changed.insert(succ);
