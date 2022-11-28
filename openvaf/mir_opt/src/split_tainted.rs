@@ -59,6 +59,9 @@ impl TaintSolver<'_> {
 
             if let Some(next) = self.dom_tree.ipdom(block) {
                 block = next;
+            } else {
+                debug_assert_eq!(end, None);
+                break;
             }
         }
     }
