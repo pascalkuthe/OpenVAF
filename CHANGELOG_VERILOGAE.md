@@ -11,11 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 * Added errors for branches with incompatible disciplines.
-* Rare miss-compilations/crashes caused by treating a branch instruction as a jump instruction during CFG simplification.
+* Statically integrate the `lld` linker and C runtime shims to remove any external dependencies.
 
 ### Fixed
 
 * Provide errors instead of crashing for illegal nature access.
+* Rare miss-compilations/crashes caused by treating a branch instruction as a jump instruction during CFG simplification.
 
 ##  0.9.0-beta8 - 2022-07-19
 
