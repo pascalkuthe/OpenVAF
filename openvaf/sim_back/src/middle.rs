@@ -186,6 +186,18 @@ impl EvalMir {
         let derivatives = intern.unkowns(&mut func, true);
         let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &derivatives);
         let ad = auto_diff(&mut func, &dom_tree, &derivatives, &extra_derivatives);
+        cfg.clear();
+        cfg.compute(&func);
+
+        while let Some(terminator) = func.layout.block_terminator(output_block) {
+            match func.dfg.insts[terminator] {
+                // auto_diff does not generate loops and keeps the dominance structure intact
+                // so just follow any jumps/branches to the end of the function
+                InstructionData::Branch { then_dst, .. } => output_block = then_dst,
+                InstructionData::Jump { destination } => output_block = destination,
+                _ => break, // terminator is not a jump we found the exit
+            }
+        }
 
         let mut cursor = FuncCursor::new(&mut func).at_bottom(output_block);
         let mut matrix =
@@ -535,11 +547,6 @@ impl EvalMir {
         } else {
             BoundStepKind::None
         };
-
-        // let num_insts =
-        //     func.dfg.insts.iter().filter(|inst| func.layout.inst_block(*inst).is_some()).count();
-
-        // println!("{num_insts}");
 
         EvalMir {
             init_inst_func,

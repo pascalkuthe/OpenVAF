@@ -417,17 +417,13 @@ fn merge_block() {
     let v4 = func.dfg.iconst(3);
     let v5 = func.dfg.iconst(4);
 
-    let e0 = func.layout.make_block();
-    let e1 = func.layout.make_block();
-    let e2 = func.layout.make_block();
+    let e0 = func.layout.append_new_block();
+    let e1 = func.layout.append_new_block();
 
-    let mut cursor = FuncCursor::new(&mut func);
-
-    cursor.insert_block(e0);
+    let mut cursor = FuncCursor::new(&mut func).at_bottom(e0);
     let v6 = cursor.ins().iadd(v4, v5);
     cursor.ins().jump(e1);
-
-    cursor.insert_block(e1);
+    cursor = cursor.at_bottom(e1);
     let v7 = cursor.ins().isub(v6, v5);
 
     func.layout.merge_blocks(e0, e1);
@@ -450,12 +446,14 @@ fn merge_block() {
     assert_eq!(func.layout.inst_block(i1), Some(e0));
     assert!(!func.layout.is_block_inserted(e1));
 
+    let e2 = func.layout.append_new_block();
+    func.layout.append_block(e1);
     let mut cursor = FuncCursor::new(&mut func).after_inst(i1);
     cursor.ins().jump(e1);
-    cursor.insert_block(e1);
+    cursor = cursor.at_first_insertion_point(e1);
     let v8 = cursor.ins().imul(v7, v4);
     cursor.ins().jump(e2);
-    cursor.insert_block(e2);
+    cursor = cursor.at_first_insertion_point(e2);
     cursor.ins().imul(v8, v8);
 
     func.layout.merge_blocks(e0, e1);

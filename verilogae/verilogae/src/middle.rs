@@ -119,7 +119,8 @@ impl CompilationDB {
         dom_tree.compute(&func, &cfg, true, false, true);
         let unkowns = intern.unkowns(&mut func, false);
         auto_diff(&mut func, &dom_tree, &unkowns, &[]);
-
+        cfg.clear();
+        cfg.compute(&func);
         sparse_conditional_constant_propagation(&mut func, &cfg);
         inst_combine(&mut func);
         simplify_cfg(&mut func, &mut cfg);

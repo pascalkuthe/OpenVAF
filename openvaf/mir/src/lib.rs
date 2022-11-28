@@ -15,7 +15,7 @@
 //! faster compile times. This break comes quite naturally as the various algorithms that operate on the
 //! MIR are not concerned with language-level concepts.
 //! Translation from HIR to MIR and mappings from MIR objects to the language-level HIR objects are
-//! found in the `hir_lower` crate which is the only bridge between the various MIR openvaf and the HIR.
+//! found in the `hir_lower` crate which is the only bridge between the various MIR crates and the HIR.
 //!
 //! [`cranelift`]: https://github.com/bytecodealliance/wasmtime/tree/main/cranelift
 //! [`llvm`]: https://github.com/llvm/llvm-project
@@ -121,6 +121,56 @@ impl Function {
     /// Adds a signature which can later be used to declare an external function import.
     pub fn import_function(&mut self, signature: FunctionSignature) -> FuncRef {
         self.dfg.signatures.push_and_get_key(signature)
+    }
+
+    pub fn update_phi_edges(&mut self, bb: Block, old_pred: Block, new_pred: Block) {
+        for inst in self.layout.block_insts(bb) {
+            if let InstructionData::PhiNode(PhiNode { ref mut blocks, .. }) = self.dfg.insts[inst] {
+                let pos = blocks.remove(old_pred, &mut self.dfg.phi_forest, &()).unwrap();
+                blocks.insert(new_pred, pos, &mut self.dfg.phi_forest, &());
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Split the block containing `before` in two.
+    ///
+    /// Insert `new_block` after the old block and move `before` and the following instructions to
+    /// `new_block`:
+    ///
+    /// ```text
+    /// old_block:
+    ///     i1
+    ///     i2
+    ///     i3 << before
+    ///     i4
+    /// ```
+    /// becomes:
+    ///
+    /// ```text
+    /// old_block:
+    ///     i1
+    ///     i2
+    /// new_block:
+    ///     i3 << before
+    ///     i4
+    /// ```
+    pub fn split_block(&mut self, new_block: Block, before: Inst) {
+        let old_block = self.layout.inst_block(before).unwrap();
+        self.layout.split_block(new_block, before);
+        if let Some(term) = self.layout.block_terminator(new_block) {
+            match self.dfg.insts[term] {
+                InstructionData::Jump { destination } => {
+                    self.update_phi_edges(destination, old_block, new_block)
+                }
+                InstructionData::Branch { then_dst, else_dst, .. } => {
+                    self.update_phi_edges(then_dst, old_block, new_block);
+                    self.update_phi_edges(else_dst, old_block, new_block);
+                }
+                _ => (),
+            }
+        }
     }
 }
 
