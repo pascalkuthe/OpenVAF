@@ -136,32 +136,60 @@ impl LineEndings {
         // safe even if a panic occurs.
 
         let mut buf = src.into_bytes();
-        let mut gap_len = 0;
+        let mut off = 0;
         let mut tail = buf.as_mut_slice();
         loop {
-            let idx = match find_crlf(&tail[gap_len..]) {
-                None => tail.len(),
-                Some(idx) => idx + gap_len,
-            };
-            tail.copy_within(gap_len..idx, 0);
-            tail = &mut tail[idx - gap_len..];
-            if tail.len() == gap_len {
-                break;
+            match find_crlf(&tail[off..]) {
+                None => {
+                    tail.copy_within(off.., 0);
+                }
+                Some((bytes_to_copy, true)) => {
+                    // found a crlf (\r\n), skip the \r
+                    // copy the bytes until the \r\n
+                    tail.copy_within(off..(off + bytes_to_copy), 0);
+                    // advance the number of bytes between the terminator
+                    tail = &mut tail[bytes_to_copy..];
+                    if tail.len() == off {
+                        break;
+                    }
+                    // ensure we skip the \r on the next iteraation
+                    off += 1;
+                }
+                Some((mut bytes_to_copy, false)) => {
+                    // found a cr (\r) without lf (\n), convert \r to \n
+                    debug_assert_eq!(tail[off + bytes_to_copy], b'\r');
+                    tail[off + bytes_to_copy] = b'\n';
+                    // also copy the line terminator so it doesn't get reexamined later
+                    bytes_to_copy += 1;
+
+                    tail.copy_within(off..(off + bytes_to_copy), 0);
+                    // advance the number of bytes between the terminator
+                    tail = &mut tail[bytes_to_copy..];
+                    if tail.len() == off {
+                        break;
+                    }
+                }
             }
-            gap_len += 1;
         }
 
         // Account for removed `\r`.
         // After `set_len`, `buf` is guaranteed to contain utf-8 again.
-        let new_len = buf.len() - gap_len;
+        let new_len = buf.len() - off;
         let src = unsafe {
             buf.set_len(new_len);
             String::from_utf8_unchecked(buf)
         };
         return (src, LineEndings::Dos);
 
-        fn find_crlf(src: &[u8]) -> Option<usize> {
-            src.windows(2).position(|it| it == b"\r\n")
+        fn find_crlf(src: &[u8]) -> Option<(usize, bool)> {
+            let res = src.windows(2).enumerate().find(|(_, it)| it[0] == b'\r');
+            match res {
+                Some((i, it)) => Some((i, it[1] == b'\n')),
+                None => {
+                    let terminating_newline = *src.last()? == b'\r';
+                    terminating_newline.then_some((src.len() - 1, false))
+                }
+            }
         }
     }
 }
