@@ -1,4 +1,12 @@
-![OpenVAF](logo.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="logo_light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="logo_dark.svg">
+  <img alt="OpenVAF" src="logo_dark.svg">
+</picture>
+
+<br>    
+<br>
+<br>
 
 
 OpenVAF is a Verilog-A compiler that can compile Verilog-A files for use in circuit simulator.
