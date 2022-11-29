@@ -147,17 +147,6 @@ impl CompilationDB {
         config.styles.primary_label_error.set_bold(true);
         config.styles.primary_label_warning.set_bold(true);
         config.styles.secondary_label.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
-        // config.styles.note_bullet.set_bold(true);
         let mut sink = ConsoleSink::new(config, self.upcast());
         sink.add_diagnostics(&*self.preprocess(root_file).diagnostics, root_file, self);
         sink.add_diagnostics(self.parse(root_file).errors(), root_file, self);

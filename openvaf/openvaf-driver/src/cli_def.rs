@@ -31,6 +31,7 @@ pub fn main_command() -> Command {
             target_cpu(),
             codegen_opts(),
             interface(),
+            expand(),
             input(),
         ])
         .subcommand_required(false)
@@ -50,6 +51,7 @@ pub const OUTPUT: &str = "output";
 pub const CACHE_DIR: &str = "cache-dir";
 pub const OPT_LVL: &str = "opt_lvl";
 pub const DEFINE: &str = "define";
+pub const PRINT_EXPANSION: &str = "print-expansion";
 pub const ALLOW: &str = "allow";
 pub const WARN: &str = "warn";
 pub const DENY: &str = "deny";
@@ -242,6 +244,16 @@ fn opt_lvl() -> Arg {
         .value_parser(["0","1","2","3"])
         .hide_possible_values(true)
         .default_value("3").required(false)
+}
+
+fn expand() -> Arg {
+    flag(PRINT_EXPANSION, "print-expansion")
+        .help("Abort after preprocessing and print expanded sourcecode.")
+        .long_help(
+            "Aborts the compilation after the preprocessor finishes.
+The sourcecode with all macros (`define) expanded and preprocessor
+directives (`inlude) resolved is emitted to stdout.",
+        )
 }
 
 fn def_arg() -> Arg {

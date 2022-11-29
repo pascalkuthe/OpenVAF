@@ -4,7 +4,8 @@ use std::time::Instant;
 
 use anyhow::Context;
 use anyhow::Result;
-use basedb::BaseDB;
+use basedb::diagnostics::{Chars, ConsoleSink, DiagnosticSink};
+use basedb::{diagnostics, BaseDB};
 use camino::Utf8PathBuf;
 use linker::link;
 use mir_llvm::LLVMBackend;
@@ -42,7 +43,7 @@ pub struct Opts {
     pub target_cpu: String,
 }
 
-pub fn run(opts: &Opts) -> Result<CompilationTermination> {
+pub fn expand(opts: &Opts) -> Result<CompilationTermination> {
     let start = Instant::now();
 
     let input =
@@ -50,7 +51,60 @@ pub fn run(opts: &Opts) -> Result<CompilationTermination> {
     let input = AbsPathBuf::assert(input);
     let db = CompilationDB::new(input, &opts.include, &opts.defines, &opts.lints)?;
 
-    if !db.preprocess(db.root_file).diagnostics.is_empty() {
+    let preprocess = db.preprocess(db.root_file);
+
+    for token in preprocess.ts.iter() {
+        let span = token.span.to_file_span(&preprocess.sm);
+        let text = db.file_text(span.file).unwrap();
+        print!("{}", &text[span.range]);
+    }
+    println!();
+
+    let mut config =
+        diagnostics::Config { chars: Chars::ascii(), ..diagnostics::Config::default() };
+    config.styles.header_error.set_intense(false);
+    config.styles.header_warning.set_intense(false);
+    config.styles.header_help.set_intense(false);
+    config.styles.header_bug.set_intense(false);
+    config.styles.header_note.set_intense(false);
+
+    config.styles.note_bullet.set_bold(true).set_intense(true);
+    config.styles.line_number.set_bold(true).set_intense(true);
+    config.styles.source_border.set_bold(true).set_intense(true);
+    config.styles.primary_label_bug.set_bold(true);
+    config.styles.primary_label_note.set_bold(true);
+    config.styles.primary_label_help.set_bold(true);
+    config.styles.primary_label_error.set_bold(true);
+    config.styles.primary_label_warning.set_bold(true);
+    config.styles.secondary_label.set_bold(true);
+    let mut sink = ConsoleSink::new(config, &db);
+    sink.add_diagnostics(&*preprocess.diagnostics, db.root_file, &db);
+
+    if sink.summary(&opts.input.file_name().unwrap()) {
+        return Ok(CompilationTermination::FatalDiagnostic);
+    }
+
+    let seconds = Instant::elapsed(&start).as_secs_f64();
+    let mut stderr = StandardStream::stderr(ColorChoice::Auto);
+    stderr.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
+    write!(&mut stderr, "Finished")?;
+    stderr.set_color(&ColorSpec::new())?;
+    writeln!(&mut stderr, " preprocessing {} in {:.2}s", opts.input.file_name().unwrap(), seconds)?;
+
+    Ok(CompilationTermination::Compiled { lib_file: Utf8PathBuf::default() })
+}
+
+pub fn compile(opts: &Opts) -> Result<CompilationTermination> {
+    let start = Instant::now();
+
+    let input =
+        opts.input.canonicalize().with_context(|| format!("failed to resolve {}", opts.input))?;
+    let input = AbsPathBuf::assert(input);
+    let db = CompilationDB::new(input, &opts.include, &opts.defines, &opts.lints)?;
+
+    let preprocess = db.preprocess(db.root_file);
+
+    if !preprocess.diagnostics.is_empty() {
         db.collect_modules();
         return Ok(CompilationTermination::FatalDiagnostic);
     }

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Automatically remove unused nodes (includes noise network until noise support is added).
 * Added errors for branches with incompatible disciplines.
 * Statically integrate the `lld` linker and C runtime shims to remove any external dependencies.
+* Added `--print-expansion` CLI option to print the preprocessed file.
 
 ### Fixed
 
