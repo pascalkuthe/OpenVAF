@@ -141,7 +141,10 @@ impl LineEndings {
         loop {
             match find_crlf(&tail[off..]) {
                 None => {
-                    tail.copy_within(off.., 0);
+                    if off != 0 {
+                        tail.copy_within(off.., 0);
+                    }
+                    break;
                 }
                 Some((bytes_to_copy, true)) => {
                     // found a crlf (\r\n), skip the \r
