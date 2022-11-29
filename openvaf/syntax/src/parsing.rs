@@ -2,7 +2,7 @@ mod text_tree_sink;
 mod tokenstream_token_src;
 
 use ::preprocessor::sourcemap::SourceContext;
-use ::preprocessor::{preprocess, Preprocess, SourceProvider};
+use ::preprocessor::{Preprocess, SourceProvider};
 use rowan::{TextRange, TextSize};
 use text_tree_sink::TextTreeSink;
 use vfs::FileId;
@@ -14,15 +14,11 @@ use crate::SyntaxError;
 pub(crate) fn parse_text(
     sources: &dyn SourceProvider,
     root_file: FileId,
+    Preprocess { ts, sm, .. }: &Preprocess,
 ) -> (GreenNode, Vec<SyntaxError>, Vec<(TextRange, SourceContext, TextSize)>) {
-    // TODO integrate the preprocessor into a salsa DB (with pre file parse trees and so forth) to
-    // allow suggesting and renaming macros
-
-    let Preprocess { ts, sm, .. }: Preprocess = preprocess(sources, root_file);
-
     let ts: Vec<_> = ts.iter().cloned().map(preprocessor::Token::from).collect();
     let mut token_source = TsTokenSource::new(&ts);
-    let mut tree_sink = TextTreeSink::new(sources, root_file, &ts, &sm);
+    let mut tree_sink = TextTreeSink::new(sources, root_file, &ts, sm);
 
     parser::parse(&mut token_source, &mut tree_sink);
 

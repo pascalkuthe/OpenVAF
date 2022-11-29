@@ -185,13 +185,13 @@ impl Parse<SourceFile> {
 pub use crate::ast::SourceFile;
 
 impl SourceFile {
-    pub fn parse(db: &dyn SourceProvider, root_file: FileId) -> Parse<SourceFile> {
-        let (green, mut errors, ctx_map) = parsing::parse_text(db, root_file);
+    pub fn parse(
+        db: &dyn SourceProvider,
+        root_file: FileId,
+        preprocess: &Preprocess,
+    ) -> Parse<SourceFile> {
+        let (green, mut errors, ctx_map) = parsing::parse_text(db, root_file, preprocess);
         let root = SyntaxNode::new_root(green.clone());
-
-        // if cfg!(debug_assertions) {
-        //     validation::validate_block_structure(&root);
-        // }
 
         validation::validate(&root, &mut errors);
 
