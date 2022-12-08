@@ -158,7 +158,7 @@ pub enum TargetData {}
 pub enum TargetMachine {}
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OptLevel {
     None = 0,
     Less = 1,

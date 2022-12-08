@@ -2,10 +2,11 @@
 #include "llvm/Support/CrashRecoveryContext.h"
 #include <llvm/IR/Attributes.h>
 #include <llvm/IR/Function.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
+#include <iostream>
 #include <mutex>
 #include <stdlib.h>
-#include <iostream>
 
 #include <lld/Common/Driver.h>
 
@@ -56,6 +57,11 @@ void LLVMPurgeAttrs(LLVMValueRef V) {
   }
 }
 
+void LLVMPassManagerBuilderSLPVectorize(LLVMPassManagerBuilderRef PMB) {
+  PassManagerBuilder *Builder = unwrap(PMB);
+  Builder->SLPVectorize = true;
+}
+
 enum LldFlavor {
   Elf = 0,
   MachO = 1,
@@ -101,7 +107,7 @@ LldInvokeResult lld_link(LldFlavor flavor, int argc, const char **argv) {
   // ensures reporduce binaries on linux. Done here instead of the main compiler
   // because the mutex ensure thread save behaviour with regard to env variables
   putenv(strdup("ZERO_AR_DATE=1"));
-  
+
   bool success = false;
   {
     // The crash recovery is here only to be able to recover from arbitrary
@@ -127,7 +133,7 @@ LldInvokeResult lld_link(LldFlavor flavor, int argc, const char **argv) {
     }
   }
   std::string resultMessage = errorString + outputString;
-  return {.ret_code = success?0: 1, .messages = lld_alloc_str(resultMessage)};
+  return {.ret_code = success ? 0 : 1,
+          .messages = lld_alloc_str(resultMessage)};
 }
 }
-
