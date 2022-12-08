@@ -15,6 +15,7 @@ extern "C" {
 
     fn LLVMPassManagerBuilderSetOptLevel(PMB: &PassManagerBuilder, OptLevel: c_uint);
     pub fn LLVMPassManagerBuilderSetSizeLevel(PMB: &PassManagerBuilder, SizeLevel: c_uint);
+    fn LLVMPassManagerBuilderSLPVectorize(PMB: &PassManagerBuilder);
 
     pub fn LLVMPassManagerBuilderSetDisableUnitAtATime(PMB: &PassManagerBuilder, Value: Bool);
     pub fn LLVMPassManagerBuilderSetDisableUnrollLoops(PMB: &PassManagerBuilder, Value: Bool);
@@ -43,7 +44,10 @@ extern "C" {
 /// This should always be save but this low level wrapper purposefully refrains from making Safety
 /// garantuees
 pub unsafe fn pass_manager_builder_set_opt_lvl(pmb: &PassManagerBuilder, opt_lvl: OptLevel) {
-    LLVMPassManagerBuilderSetOptLevel(pmb, opt_lvl as c_uint)
+    LLVMPassManagerBuilderSetOptLevel(pmb, opt_lvl as c_uint);
+    if opt_lvl > OptLevel::Less {
+        LLVMPassManagerBuilderSLPVectorize(pmb);
+    }
 }
 
 // Core->Pass managers
