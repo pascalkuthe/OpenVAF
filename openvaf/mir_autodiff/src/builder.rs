@@ -41,13 +41,14 @@ pub fn build_derivatives(
         known_values,
         dst: (0u32.into(), SourceLoc::new(0)),
         cyclical_phis: Vec::with_capacity(64),
+        new_block: None,
     };
 
     builder.run(post_order);
     builder.derivative_values
 }
 
-type CacheData = [PackedOption<Value>; 2];
+type CacheData = [PackedOption<Value>; 3];
 
 pub(crate) struct DerivativeBuilder<'a, 'u> {
     func: &'a mut Function,
@@ -58,6 +59,7 @@ pub(crate) struct DerivativeBuilder<'a, 'u> {
     derivative_values: AHashMap<(Value, Unknown), Value>,
     known_values: BitSet<Value>,
     dst: (Inst, SourceLoc),
+    new_block: Option<Block>,
 
     cyclical_phis: Vec<(Inst, Derivative)>,
 }
@@ -72,7 +74,16 @@ impl<'f> InstInserterBase<'f> for &'f mut DerivativeBuilder<'_, '_> {
     }
 
     fn insert_built_inst(self, inst: Inst) -> &'f mut mir::DataFlowGraph {
-        self.func.layout.append_inst(inst, self.dst.0);
+        if let Some(new_block) = self.new_block.take() {
+            if let Some(first_inst) = self.func.layout.first_inst(new_block) {
+                self.func.layout.prepend_inst(inst, first_inst);
+            } else {
+                self.func.layout.append_inst_to_bb(inst, new_block);
+            }
+        } else {
+            self.func.layout.append_inst(inst, self.dst.0);
+        }
+
         if self.func.srclocs.len() <= inst.into() {
             self.func.srclocs.resize(inst.into(), SourceLoc::default());
             self.func.srclocs.push(self.dst.1);
@@ -105,7 +116,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                 let mut srcloc = self.func.srclocs.get(inst).copied().unwrap_or_default();
                 srcloc.0 *= -1;
                 self.dst = (inst, srcloc);
-                self.build_inst(&mut cache);
+                self.build_inst_derivatives(&mut cache);
             }
         }
 
@@ -169,7 +180,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         derivative
     }
 
-    fn build_inst(&mut self, bcache: &mut BuilderCache) {
+    fn build_inst_derivatives(&mut self, bcache: &mut BuilderCache) {
         let derivatives = self.live_derivatives.of_inst(self.dst.0);
 
         let inst = self.dst.0;
@@ -201,7 +212,6 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                     }
 
                     debug_assert!(self.live_derivatives.conversions.get(&inst).is_none());
-                    return;
                 }
             }
 
@@ -235,10 +245,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                         }
                     } else {
                         for derivative in derivatives.iter() {
-                            let prev_order = match self.intern.previous_order(derivative) {
-                                Some(val) => self.derivative_of(res, val),
-                                None => res, // 0th order is the original result
-                            };
+                            let prev_order = self.prev_order_derivative_of(res, derivative);
                             let unknown = self.intern.get_unknown(derivative);
 
                             let edges: Vec<_> = self
@@ -259,42 +266,110 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                 }
 
                 self.insert_conversions(inst);
-                return;
             }
-            _ => (),
-        }
+            InstructionData::Binary { opcode: Opcode::Pow, args: [base, _] } => {
+                if let Some(derivatives) = derivatives {
+                    let inst = self.dst.0;
+                    let is_base_zero = self.ins().feq(base, F_ZERO);
 
-        if let Some(derivatives) = derivatives {
-            // add the original instruction
-            bcache.resolved_derivatives.insert(None, ResolvedDerivative::root_instr(self.dst.0));
+                    let old_block =
+                        self.func.layout.inst_block(inst).expect("instruction is attachted");
+                    let new_block = self.func.layout.make_block();
 
-            for derivative in derivatives.iter() {
-                let prev_order = self.intern.previous_order(derivative);
-                let base = self.intern.get_unknown(derivative);
+                    if let Some(next_inst) = self.func.layout.next_inst(self.dst.0) {
+                        self.func.split_block(new_block, next_inst);
+                    } else {
+                        self.func.layout.append_block(new_block);
+                    };
+                    let calculate_derivative_block = self.func.layout.make_block();
+                    self.func.layout.insert_block_after(calculate_derivative_block, new_block);
+                    self.ins().br(is_base_zero, new_block, calculate_derivative_block);
 
-                let origin = bcache.resolved_derivatives[&prev_order].clone();
-                let cache = self.ensure_cache(prev_order, &origin, bcache);
+                    // insert into the newly created block
+                    self.new_block = Some(calculate_derivative_block);
+                    self.dst.0 = inst;
+                    self.build_normal_inst_derivatives(bcache, derivatives);
+                    self.ins().jump(new_block);
 
-                let inst_start = self.func.dfg.num_insts().into();
-
-                for (inst, cache_data_i) in zip(origin.instructions(), cache.data) {
+                    self.new_block = Some(new_block);
                     let res = self.func.dfg.first_result(inst);
-                    if !self.derivative_values.contains_key(&(res, base)) {
-                        self.inst_derivative(inst, base, bcache.cache_data[cache_data_i]);
+
+                    // replace the calculates derivatives with phis that return
+                    // 0 in case that base is zero to ensure numerical stability
+                    // requires collecting derivatives into a temporary vector
+                    // because we are going to overwrite derivatives that are required
+                    // for looking up higher order derivatives
+                    let new_derivatives: Vec<_> = derivatives
+                        .iter()
+                        .filter_map(|derivative| {
+                            let val = self.derivative_of(res, derivative);
+                            if val == F_ZERO {
+                                return None;
+                            }
+
+                            let checked_val = self
+                                .ins()
+                                .phi(&[(old_block, F_ZERO), (calculate_derivative_block, val)]);
+                            Some((checked_val, derivative))
+                        })
+                        .collect();
+
+                    for (val, derivative) in new_derivatives {
+                        let prev_order = self.prev_order_derivative_of(res, derivative);
+                        let unknown = self.intern.get_unknown(derivative);
+                        self.derivative_values.insert((prev_order, unknown), val);
                     }
+
+                    // println!("hello {} {:?}", self.func.dfg.display_inst(self.dst.0), self.new_block);
+                    self.insert_conversions(inst);
+                    self.new_block.take();
                 }
+            }
+            _ => {
+                if let Some(derivatives) = derivatives {
+                    self.build_normal_inst_derivatives(bcache, derivatives);
+                    self.insert_conversions(inst);
+                }
+            }
+        }
+    }
 
-                let inst_end = self.func.dfg.num_insts().into();
+    fn build_normal_inst_derivatives(
+        &mut self,
+        bcache: &mut BuilderCache,
+        derivatives: &'a HybridBitSet<Derivative>,
+    ) {
+        // add the original instruction
+        bcache.resolved_derivatives.insert(None, ResolvedDerivative::root_instr(self.dst.0));
 
-                bcache.resolved_derivatives.insert(
-                    Some(derivative),
-                    ResolvedDerivative { instrs: inst_start..inst_end, cache_instrs: cache.instrs },
-                );
+        for derivative in derivatives.iter() {
+            let prev_order = self.intern.previous_order(derivative);
+            let base = self.intern.get_unknown(derivative);
+
+            let origin = bcache.resolved_derivatives[&prev_order].clone();
+            let cache = self.ensure_cache(prev_order, &origin, bcache);
+
+            let inst_start = self.func.dfg.num_insts().into();
+
+            for (inst, cache_data_i) in zip(origin.instructions(), cache.data) {
+                if !self.func.dfg.has_results(inst) {
+                    continue;
+                }
+                let res = self.func.dfg.first_result(inst);
+                if !self.derivative_values.contains_key(&(res, base)) {
+                    self.inst_derivative(inst, base, bcache.cache_data[cache_data_i]);
+                }
             }
 
-            bcache.clear();
-            self.insert_conversions(inst);
+            let inst_end = self.func.dfg.num_insts().into();
+
+            bcache.resolved_derivatives.insert(
+                Some(derivative),
+                ResolvedDerivative { instrs: inst_start..inst_end, cache_instrs: cache.instrs },
+            );
         }
+
+        bcache.clear();
     }
 
     fn insert_conversions(&mut self, inst: Inst) {
@@ -401,14 +476,13 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                 let old_inst = self.func.dfg.display_inst(old_inst);
                 let new_inst = self.func.dfg.value_def(val).unwrap_inst();
                 let new_inst = self.func.dfg.display_inst(new_inst);
-                // println!("{:?}", self.func);
                 panic!("derivative of {original} by {unknown:?} generated twice: {old} {val}\norg: {original_inst}\n{new_inst}\n{old_inst}")
             }
         }
     }
 
     fn inst_cache(&mut self, inst: Inst) -> CacheData {
-        let mut cache = [None.into(), None.into()];
+        let mut cache = [None.into(), None.into(), None.into()];
 
         let op = self.func.dfg.insts[inst].opcode();
         let args = self.func.dfg.instr_args(inst);
@@ -473,15 +547,11 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
             Opcode::Atan2 => {
                 let lhs_squared = self.ins().fmul(arg0, arg0);
                 let rhs_squared = self.ins().fmul(arg1, arg1);
-
                 let bot = self.ins().fadd(lhs_squared, rhs_squared);
 
-                let lhs_cache = self.ins().fdiv(arg1, bot);
-
-                let rhs_cache = self.ins().fdiv(arg0, bot);
-
-                cache[1] = rhs_cache.into();
-                lhs_cache
+                cache[2] = bot.into();
+                cache[1] = arg0.into();
+                arg1
             }
 
             // sinh(x) -> cosh(x)
@@ -541,18 +611,13 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
             //     lhs_cache
             // }
 
-            // pow(x,y) -> pow(x,y-1)*x'*y + ln(x) * y' * pow(x,y)
+            // pow(x,y) -> pow(x,y)*(x'*y/x + ln(x) * y')
             Opcode::Pow => {
-                // this formulation is important for numeric stability in case x=0 numeric stability :/
-                let y_m1 = self.ins().fsub(arg1, F_ONE);
-                let y_pow_m1 = self.ins().pow(arg0, y_m1);
-                let lhs_cache = self.ins().fmul(y_pow_m1, arg1);
-
+                let arg1_div_arg0 = if arg1 == arg0 { F_ONE } else { self.ins().fdiv(arg1, arg0) };
                 let ln_x = self.ins().ln(arg0);
-                let rhs_cache = self.ins().fmul(ln_x, res);
-
-                cache[1] = rhs_cache.into();
-                lhs_cache
+                cache[2] = res.into();
+                cache[1] = ln_x.into();
+                arg1_div_arg0
             }
             _ => return cache,
         };
@@ -751,8 +816,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                     self.ins().fdiv(darg, cache[0].unwrap_unchecked())
                 }
 
-            Opcode::Pow | Opcode::Atan2
-                => {
+            Opcode::Pow | Opcode::Atan2 => {
                 let dlhs = arg_derivative(self, 0);
                 let drhs = arg_derivative(self, 1);
 
@@ -760,11 +824,14 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                     F_ZERO
                 }else if dlhs == F_ONE{
                    cache[0].unwrap_unchecked()
-                }else{
+                }else if cache[0].unwrap_unchecked() == F_ONE{
+                    dlhs
+                }
+                else{
                     self.ins().fmul(dlhs, cache[0].unwrap_unchecked())
                 };
 
-                if drhs == F_ZERO{
+                let inner = if drhs == F_ZERO{
                     sum1
                 }else{
                     let sum2 = if drhs == F_ONE{
@@ -773,10 +840,16 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                         self.ins().fmul(drhs, cache[1].unwrap_unchecked())
                     };
 
-                    if dlhs == F_ZERO{
-                        return
+                    if sum1 == F_ZERO{
+                        sum2
+                    }else{
+                        self.ins().fadd(sum1, sum2)
                     }
-                    self.ins().fadd(sum1, sum2)
+                };
+                if inner == F_ZERO{
+                    F_ZERO
+                }else{
+                    self.ins().fmul(inner, cache[2].unwrap_unchecked())
                 }
             }
 
@@ -786,7 +859,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                 let sum = self.ins().fadd(dlhs, drhs);
                 self.ins().fdiv(sum, cache[0].unwrap_unchecked())
             }
-            Opcode::Br | Opcode::Jmp |Opcode::Phi => unreachable!(),
+            Opcode::Br | Opcode::Jmp | Opcode::Phi  => unreachable!(),
         };
 
         self.insert_derivative(res, unknown, val)

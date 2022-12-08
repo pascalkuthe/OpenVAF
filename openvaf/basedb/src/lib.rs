@@ -141,7 +141,7 @@ fn empty_global_lint_overwrites(db: &dyn BaseDB) -> TiVec<Lint, Option<LintLevel
 // }
 
 fn parse(db: &dyn BaseDB, root_file: FileId) -> Parse<SourceFile> {
-    SourceFile::parse(&db.as_src_provider(), root_file)
+    SourceFile::parse(&db.as_src_provider(), root_file, &db.preprocess(root_file))
 }
 
 fn preprocess(db: &dyn BaseDB, root_file: FileId) -> Preprocess {

@@ -667,28 +667,24 @@ fn second_order_pow() {
 
         block0:
             v12 = pow v10, v10
-            v101 = fsub v10, v6
-            v102 = pow v10, v101
-            v103 = fmul v102, v10
-            v104 = ln v10
-            v105 = fmul v104, v12
-            v106 = fadd v103, v105
-            v107 = fsub v101, v6
-            v108 = pow v10, v107
-            v109 = fmul v108, v101
-            v110 = ln v10
-            v111 = fmul v110, v102
-            v112 = fsub v6, v3
-            v113 = fmul v112, v111
-            v114 = fadd v109, v113
-            v115 = fmul v114, v10
-            v116 = fadd v115, v102
-            v117 = fdiv v6, v10
-            v118 = fmul v117, v12
-            v119 = fmul v106, v104
-            v120 = fadd v118, v119
-            v121 = fadd v116, v120
-            v100 = optbarrier v121
+            v101 = feq v10, v3
+            br v101, block1, block2
+
+        block1:
+            v110 = phi [v3, block0], [v104, block2]
+            v111 = phi [v3, block0], [v109, block2]
+            v100 = optbarrier v111
+
+        block2:
+            v102 = ln v10
+            v103 = fadd v6, v102
+            v104 = fmul v103, v12
+            v105 = fdiv v6, v10
+            v106 = fadd v3, v105
+            v107 = fmul v106, v12
+            v108 = fmul v104, v103
+            v109 = fadd v107, v108
+            jmp block1
         }
     "#]];
 

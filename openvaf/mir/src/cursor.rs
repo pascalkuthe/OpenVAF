@@ -503,36 +503,6 @@ pub trait Cursor {
         self.layout_mut().remove_inst(inst);
         inst
     }
-
-    /// Insert a block at the current position and switch to it.
-    ///
-    /// As far as possible, this method behaves as if the block header were an instruction inserted
-    /// at the current position.
-    ///
-    /// - If the cursor is pointing at an existing instruction, *the current block is split in two*
-    ///   and the current instruction becomes the first instruction in the inserted block.
-    /// - If the cursor points at the bottom of a block, the new block is inserted after the current
-    ///   one, and moved to the bottom of the new block where instructions can be appended.
-    /// - If the cursor points to the top of a block, the new block is inserted above the current one.
-    /// - If the cursor is not pointing at anything, the new block is placed last in the layout.
-    ///
-    /// This means that it is always valid to call this method, and it always leaves the cursor in
-    /// a state that will insert instructions into the new block.
-    fn insert_block(&mut self, new_block: Block) {
-        use self::CursorPosition::*;
-        match self.position() {
-            At(inst) => {
-                self.layout_mut().split_block(new_block, inst);
-                // All other cases move to `After(block)`, but in this case we'll stay `At(inst)`.
-                return;
-            }
-            Nowhere => self.layout_mut().append_block(new_block),
-            Before(block) => self.layout_mut().insert_block(new_block, block),
-            After(block) => self.layout_mut().insert_block_after(new_block, block),
-        }
-        // For everything but `At(inst)` we end up appending to the new block.
-        self.set_position(After(new_block));
-    }
 }
 
 /// Function cursor.

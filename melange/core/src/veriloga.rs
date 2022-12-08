@@ -75,7 +75,7 @@ pub fn compile_va(path: &Utf8Path, opts: &Opts) -> Result<Vec<Box<dyn DeviceImpl
         target_cpu: "native".to_owned(),
     };
 
-    let res = openvaf::run(&openvaf_opts);
+    let res = openvaf::compile(&openvaf_opts);
     let res = res.with_context(|| format!("openvaf: compilation of {path} failed"))?;
     let lib_file = match res {
         CompilationTermination::Compiled { lib_file } => lib_file,

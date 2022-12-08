@@ -5,10 +5,9 @@ use crate::{Function, ValueDef};
 #[test]
 fn reuse_results() {
     let mut func = Function::new();
-    let block0 = func.layout.make_block();
+    let block0 = func.layout.append_new_block();
     let arg0 = func.dfg.make_param(0u32.into());
-    let mut pos = FuncCursor::new(&mut func);
-    pos.insert_block(block0);
+    let mut pos = FuncCursor::new(&mut func).at_bottom(block0);
 
     let c0 = pos.func.dfg.iconst(17);
     let v0 = pos.ins().iadd(arg0, c0);

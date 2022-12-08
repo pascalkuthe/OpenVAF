@@ -12,12 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added support for the `analysis` function (always returned true previously).
 * Automatically remove unused nodes (includes noise network until noise support is added).
 * Added errors for branches with incompatible disciplines.
+* Statically integrate the `lld` linker and C runtime shims to remove any external dependencies.
+* Added `--print-expansion` CLI option to print the preprocessed file.
 
 ### Fixed
 
 * Do not generate unkowns for noise phase shifts with ddt.
 * Provide errors instead of crashing for unsupported Verilog-A builtins.
 * Provide errors instead of crashing for illegal nature access.
+* Rare miss-compilations/crashes caused by treating a branch instruction as a jump instruction during CFG simplification.
+* Discontinuity in the derivative of `pow(x,y)` for `x=0`.
 
 ## 0.1.2 - 2022-07-19
 

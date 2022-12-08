@@ -2,9 +2,7 @@ use std::hash::{Hash, Hasher};
 use std::iter::repeat;
 
 use bitset::BitSet;
-use mir::{
-    Block, ControlFlowGraph, Function, InstructionData, PhiNode, Value, ValueDef, FALSE, TRUE,
-};
+use mir::{Block, ControlFlowGraph, Function, InstructionData, Value, ValueDef, FALSE, TRUE};
 
 #[cfg(test)]
 mod tests;
@@ -249,10 +247,21 @@ impl<'a> SimplifyCfg<'a> {
             return false;
         }
 
+        // in case the terminator is an unoptimized br _, bb, bb
+        if let Some(terminator) = self.func.layout.last_inst(pred) {
+            debug_assert!(self.func.dfg.insts[terminator].is_terminator());
+            if let InstructionData::Branch { then_dst, else_dst, .. } =
+                self.func.dfg.insts[terminator]
+            {
+                debug_assert_eq!(then_dst, else_dst);
+                self.func.dfg.zap_inst(terminator);
+            }
+        }
+
         // update phis in sucessors
         for succ in self.cfg.succ_iter(bb) {
             self.vals_changed.insert(succ);
-            self.update_phi_edges(succ, bb, pred);
+            self.func.update_phi_edges(succ, bb, pred);
         }
 
         self.func.layout.merge_blocks(pred, bb);
@@ -263,19 +272,6 @@ impl<'a> SimplifyCfg<'a> {
         self.cfg.recompute_block(self.func, bb);
 
         true
-    }
-
-    fn update_phi_edges(&mut self, bb: Block, old_pred: Block, new_pred: Block) {
-        for inst in self.func.layout.block_insts(bb) {
-            if let InstructionData::PhiNode(PhiNode { ref mut blocks, .. }) =
-                self.func.dfg.insts[inst]
-            {
-                let pos = blocks.remove(old_pred, &mut self.func.dfg.phi_forest, &()).unwrap();
-                blocks.insert(new_pred, pos, &mut self.func.dfg.phi_forest, &());
-            } else {
-                break;
-            }
-        }
     }
 
     fn remove_phi_edges(&mut self, bb: Block, dead_pred: Block) {

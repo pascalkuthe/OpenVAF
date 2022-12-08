@@ -548,7 +548,7 @@ impl Layout {
     ///     i3 << before
     ///     i4
     /// ```
-    pub fn split_block(&mut self, new_block: Block, before: Inst) {
+    pub(crate) fn split_block(&mut self, new_block: Block, before: Inst) {
         let old_block =
             self.inst_block(before).expect("The `before` instruction must be in the layout");
         debug_assert!(!self.is_block_inserted(new_block));

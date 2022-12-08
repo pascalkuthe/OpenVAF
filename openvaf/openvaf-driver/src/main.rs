@@ -8,8 +8,9 @@ use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use cli_def::{main_command, INPUT};
-use openvaf::{run, CompilationDestination, CompilationTermination, Opts};
+use openvaf::{compile, expand, CompilationDestination, CompilationTermination, Opts};
 
+use crate::cli_def::PRINT_EXPANSION;
 use crate::cli_process::matches_to_opts;
 
 mod cli_def;
@@ -49,8 +50,17 @@ pub fn main() {
 pub const DATA_ERROR: i32 = 65;
 
 fn wrapped_main(matches: ArgMatches) -> Result<i32> {
+    let print_expansion = matches.get_flag(PRINT_EXPANSION);
     let opts = matches_to_opts(matches)?;
-    match run(&opts)? {
+    if print_expansion {
+        let res = match expand(&opts)? {
+            CompilationTermination::Compiled { .. } => 0,
+            CompilationTermination::FatalDiagnostic => DATA_ERROR,
+        };
+        return Ok(res);
+    }
+
+    let res = match compile(&opts)? {
         CompilationTermination::Compiled { lib_file } => {
             if matches!(opts.output, CompilationDestination::Cache { .. }) {
                 println!("{lib_file}");
@@ -60,5 +70,5 @@ fn wrapped_main(matches: ArgMatches) -> Result<i32> {
         CompilationTermination::FatalDiagnostic => DATA_ERROR,
     };
 
-    Ok(0)
+    Ok(res)
 }
