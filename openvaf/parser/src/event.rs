@@ -9,8 +9,8 @@
 //! this stream to a real tree.
 use std::mem;
 
+use crate::output::Output;
 use crate::SyntaxKind::{self, *};
-use crate::TreeSink;
 
 /// `Parser` produces a flat list of `Event`s.
 /// They are converted to a tree-structure in
@@ -67,7 +67,7 @@ pub(crate) enum Event {
     Token(SyntaxKind),
 
     Error {
-        msg: crate::SyntaxError,
+        err: crate::SyntaxError,
     },
 }
 
@@ -78,13 +78,12 @@ impl Event {
 }
 
 /// Generate the syntax tree with the control of events.
-pub(super) fn process(sink: &mut dyn TreeSink, mut events: Vec<Event>) {
+pub(super) fn process(mut events: Vec<Event>) -> Output {
+    let mut res = Output::default();
     let mut forward_parents = Vec::new();
 
     for i in 0..events.len() {
         match mem::replace(&mut events[i], Event::tombstone()) {
-            Event::Start { kind: TOMBSTONE, .. } => (),
-
             Event::Start { kind, forward_parent } => {
                 // For events[A, B, C], B is A's forward_parent, C is B's forward_parent,
                 // in the normal control flow, the parent-child relation: `A -> B -> C`,
@@ -99,9 +98,7 @@ pub(super) fn process(sink: &mut dyn TreeSink, mut events: Vec<Event>) {
                     // append `A`'s forward_parent `B`
                     fp = match mem::replace(&mut events[idx], Event::tombstone()) {
                         Event::Start { kind, forward_parent } => {
-                            if kind != TOMBSTONE {
-                                forward_parents.push(kind);
-                            }
+                            forward_parents.push(kind);
                             forward_parent
                         }
                         _ => unreachable!(),
@@ -110,14 +107,18 @@ pub(super) fn process(sink: &mut dyn TreeSink, mut events: Vec<Event>) {
                 }
 
                 for kind in forward_parents.drain(..).rev() {
-                    sink.start_node(kind);
+                    if kind != TOMBSTONE {
+                        res.enter_node(kind);
+                    }
                 }
             }
-            Event::Finish => sink.finish_node(),
+            Event::Finish => res.leave_node(),
             Event::Token(kind) => {
-                sink.token(kind);
+                res.token(kind);
             }
-            Event::Error { msg } => sink.error(msg),
+            Event::Error { err: msg } => res.error(msg),
         }
     }
+
+    res
 }

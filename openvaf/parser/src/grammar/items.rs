@@ -1,30 +1,16 @@
 use super::*;
 use crate::grammar::paths::path;
 mod module;
-use module::{module, MODULE_ITEM_OR_ATTR_RECOVERY};
+pub(super) use module::module;
+use module::MODULE_ITEM_OR_ATTR_RECOVERY;
 
-const ITEM_RECOVERY_SET: TokenSet = TokenSet::new(&[DISCIPLINE_KW, NATURE_KW, MODULE_KW, EOF]);
-const ITEM_OR_ATTR_RECOVERY_SET: TokenSet = ITEM_RECOVERY_SET.union(TokenSet::new(&[T!["(*"]]));
-
-pub(super) fn root_item(p: &mut Parser) {
-    let m = p.start();
-    attrs(p, ITEM_RECOVERY_SET);
-    match p.current() {
-        DISCIPLINE_KW => discipline(p, m),
-        NATURE_KW => nature(p, m),
-        MODULE_KW => module(p, m),
-        _ => {
-            m.abandon(p);
-            let err = p.unexpected_tokens_msg(vec![DISCIPLINE_KW, NATURE_KW, MODULE_KW]);
-            p.err_recover(err, ITEM_OR_ATTR_RECOVERY_SET);
-        }
-    }
-}
+pub(super) const ITEM_RECOVERY_SET: TokenSet =
+    TokenSet::new(&[DISCIPLINE_KW, NATURE_KW, MODULE_KW, EOF]);
 
 const DISCIPLINE_RECOVERY_SET: TokenSet =
     ITEM_RECOVERY_SET.union(TokenSet::unique(ENDDISCIPLINE_KW));
 
-fn discipline(p: &mut Parser, m: Marker) {
+pub(super) fn discipline(p: &mut Parser, m: Marker) {
     p.bump(T![discipline]);
     name_r(p, TokenSet::new(&[T![;]]));
     p.eat(T![;]);
@@ -45,7 +31,7 @@ fn discipline(p: &mut Parser, m: Marker) {
 
 const NATURE_RECOVERY_SET: TokenSet = ITEM_RECOVERY_SET.union(TokenSet::unique(ENDNATURE_KW));
 
-fn nature(p: &mut Parser, m: Marker) {
+pub(super) fn nature(p: &mut Parser, m: Marker) {
     p.bump(T![nature]);
     name_r(p, TokenSet::new(&[T![;], T![:]]));
     if p.eat(T![:]) {

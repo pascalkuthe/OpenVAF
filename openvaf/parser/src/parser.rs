@@ -7,8 +7,8 @@ use stdx::pretty::List;
 
 use crate::event::Event;
 use crate::token_set::TokenSet;
+use crate::SyntaxError;
 use crate::SyntaxKind::{self, EOF, ERROR, TOMBSTONE};
-use crate::{SyntaxError, TokenSource};
 
 /// `Parser` struct provides the low-level API for
 /// navigating through the stream of tokens and
@@ -20,14 +20,15 @@ use crate::{SyntaxError, TokenSource};
 /// "start expression, consume number literal,
 /// finish expression". See `Event` docs for more.
 pub(crate) struct Parser<'t> {
-    token_source: &'t mut dyn TokenSource,
+    tokens: &'t [SyntaxKind],
+    pos: u32,
     events: Vec<Event>,
     steps: Cell<u32>,
 }
 
 impl<'t> Parser<'t> {
-    pub(super) fn new(token_source: &'t mut dyn TokenSource) -> Parser<'t> {
-        Parser { token_source, events: Vec::new(), steps: Cell::new(0) }
+    pub(super) fn new(tokens: &'t [SyntaxKind]) -> Parser<'t> {
+        Parser { tokens, events: Vec::new(), steps: Cell::new(0), pos: 0 }
     }
 
     pub(crate) fn finish(self) -> Vec<Event> {
@@ -50,7 +51,7 @@ impl<'t> Parser<'t> {
         assert!(steps <= 10_000_000, "the parser seems stuck");
         self.steps.set(steps + 1);
 
-        self.token_source.lookahead_nth(n)
+        self.tokens.get(self.pos as usize + n).copied().unwrap_or(SyntaxKind::EOF)
     }
 
     pub(crate) fn nth_at_ts(&self, n: usize, ts: TokenSet) -> bool {
@@ -62,7 +63,7 @@ impl<'t> Parser<'t> {
     }
 
     pub(crate) fn nth_at(&self, n: usize, kind: SyntaxKind) -> bool {
-        self.token_source.lookahead_nth(n) == kind
+        self.nth(n) == kind
     }
 
     /// Consume the next token if `kind` matches.
@@ -114,8 +115,10 @@ impl<'t> Parser<'t> {
         self.do_bump(kind)
     }
 
-    pub(crate) fn error(&mut self, msg: SyntaxError) {
-        self.push_event(Event::Error { msg })
+    pub(crate) fn error(&mut self, err: SyntaxError) {
+        let m = self.start();
+        self.push_event(Event::Error { err });
+        m.complete(self, ERROR);
     }
 
     /// Consume the next token if it is `kind` or emit an error
@@ -170,28 +173,20 @@ impl<'t> Parser<'t> {
 
     /// Create an error node and consume the next token.
     pub(crate) fn err_recover(&mut self, err: SyntaxError, recovery: TokenSet) -> bool {
-        // match self.current() {
-        //     T![begin] | T![end]  => {
-        //         self.error(message);
-        //         return;
-        //     }
-        //     _ => (),
-        // }
-
         if self.at_ts(recovery) {
             self.error(err);
             return true;
         }
 
         let m = self.start();
-        self.error(err);
+        self.push_event(Event::Error { err });
         self.bump_any();
         m.complete(self, ERROR);
         false
     }
 
     fn do_bump(&mut self, kind: SyntaxKind) {
-        self.token_source.bump();
+        self.pos += 1;
 
         self.push_event(Event::Token(kind));
     }
@@ -226,7 +221,7 @@ impl Marker {
         }
         let finish_pos = p.events.len() as u32;
         p.push_event(Event::Finish);
-        CompletedMarker::new(self.pos, finish_pos, kind)
+        CompletedMarker::new(self.pos, finish_pos)
     }
 
     /// Abandons the syntax tree node. All its children
@@ -245,14 +240,12 @@ impl Marker {
 
 pub(crate) struct CompletedMarker {
     start_pos: u32,
-    // finish_pos: u32,
-    // kind: SyntaxKind,
+    finish_pos: u32,
 }
 
 impl CompletedMarker {
-    fn new(start_pos: u32, _finish_pos: u32, _kind: SyntaxKind) -> Self {
-        // CompletedMarker { start_pos, finish_pos, kind }
-        CompletedMarker { start_pos }
+    fn new(start_pos: u32, finish_pos: u32) -> Self {
+        CompletedMarker { start_pos, finish_pos }
     }
 
     /// This method allows to create a new node which starts
@@ -279,22 +272,18 @@ impl CompletedMarker {
         new_pos
     }
 
-    // /// Undo this completion and turns into a `Marker`
-    // pub(crate) fn undo_completion(self, p: &mut Parser) -> Marker {
-    //     let start_idx = self.start_pos as usize;
-    //     let finish_idx = self.finish_pos as usize;
-    //     match &mut p.events[start_idx] {
-    //         Event::Start { kind, forward_parent: None } => *kind = TOMBSTONE,
-    //         _ => unreachable!(),
-    //     }
-    //     match &mut p.events[finish_idx] {
-    //         slot @ Event::Finish => *slot = Event::tombstone(),
-    //         _ => unreachable!(),
-    //     }
-    //     Marker::new(self.start_pos)
-    // }
-
-    // pub(crate) fn kind(&self) -> SyntaxKind {
-    //     self.kind
-    // }
+    /// Undo this completion and turns into a `Marker`
+    pub(crate) fn undo_completion(self, p: &mut Parser) -> Marker {
+        let start_idx = self.start_pos as usize;
+        let finish_idx = self.finish_pos as usize;
+        match &mut p.events[start_idx] {
+            Event::Start { kind, forward_parent: None } => *kind = TOMBSTONE,
+            _ => unreachable!(),
+        }
+        match &mut p.events[finish_idx] {
+            slot @ Event::Finish => *slot = Event::tombstone(),
+            _ => unreachable!(),
+        }
+        Marker::new(self.start_pos)
+    }
 }

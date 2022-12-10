@@ -25,6 +25,7 @@ use items::{parameter_decl, var_decl};
 use stmts::{stmt, stmt_with_attrs};
 use tokens::T;
 
+use crate::grammar::items::ITEM_RECOVERY_SET;
 use crate::parser::{CompletedMarker, Marker, Parser};
 use crate::SyntaxKind::{self, *};
 use crate::TokenSet;
@@ -33,8 +34,42 @@ const TYPE_TS: TokenSet = TokenSet::new(&[REAL_KW, INTEGER_KW, STRING_KW]);
 
 pub(crate) fn source_file(p: &mut Parser) {
     let m = p.start();
+    let mut error_range: Option<CompletedMarker> = None;
     while !p.at(EOF) {
-        items::root_item(p);
+        let m = p.start();
+        attrs(p, ITEM_RECOVERY_SET);
+        match p.current() {
+            DISCIPLINE_KW => {
+                error_range.take();
+                items::discipline(p, m);
+            }
+            NATURE_KW => {
+                error_range.take();
+                items::nature(p, m)
+            }
+            MODULE_KW => {
+                error_range.take();
+                items::module(p, m)
+            }
+            _ => {
+                error_range = if let Some(error_range) = error_range {
+                    m.abandon(p);
+                    p.bump_any();
+                    while !p.at_ts(ITEM_RECOVERY_SET) {
+                        p.bump_any();
+                    }
+                    Some(error_range.undo_completion(p).complete(p, ERROR))
+                } else {
+                    let err = p.unexpected_tokens_msg(vec![DISCIPLINE_KW, NATURE_KW, MODULE_KW]);
+                    p.error(err);
+                    p.bump_any();
+                    while !p.at_ts(ITEM_RECOVERY_SET) {
+                        p.bump_any();
+                    }
+                    Some(m.complete(p, ERROR))
+                }
+            }
+        }
     }
     m.complete(p, SOURCE_FILE);
 }

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Provide errors instead of crashing for illegal nature access.
 * Rare miss-compilations/crashes caused by treating a branch instruction as a jump instruction during CFG simplification.
 * Discontinuity in the derivative of `pow(x,y)` for `x=0`.
+* Unhelpful syntax errors for item declarations
 
 ##  0.9.0-beta8 - 2022-07-19
 

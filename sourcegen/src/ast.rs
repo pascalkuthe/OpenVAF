@@ -427,18 +427,18 @@ fn generate_syntax_kinds(grammar: KindsSrc<'_>) -> String {
                 let pretty = match self{
                     #(Self::#punctuation => #punctuation_pretty,)*
                     #(Self::#all_keywords => #keywords_pretty,)*
-                    Self::INT_NUMBER => "an integer",
-                    Self::STD_REAL_NUMBER| Self::SI_REAL_NUMBER  => "a real number",
-                    Self::STR_LIT => "a string literal",
-                    Self::LITERAL => "any literal value",
-                    Self::IDENT|  Self::NAME => "an identifier",
-                    Self::SYSFUN => "a system function identifier",
-                    Self::WHITESPACE => "a whitespace",
-                    Self::COMMENT => "a comment",
-                    Self::FUNCTION => "a function decl.",
-                    Self::PORT_DECL => "a port decl.",
-                    Self::NET_DECL => "a net decl.",
-                    Self::ANALOG_BEHAVIOUR => "an analog block",
+                    Self::INT_NUMBER => "integer",
+                    Self::STD_REAL_NUMBER| Self::SI_REAL_NUMBER  => "real number",
+                    Self::STR_LIT => "string literal",
+                    Self::LITERAL => "literal",
+                    Self::IDENT|  Self::NAME => "identifier",
+                    Self::SYSFUN => "system function identifier",
+                    Self::WHITESPACE => "whitespace",
+                    Self::COMMENT => "comment",
+                    Self::FUNCTION => "function decl.",
+                    Self::PORT_DECL => "port decl.",
+                    Self::NET_DECL => "net decl.",
+                    Self::ANALOG_BEHAVIOUR => "analog block",
                     _ => return std::fmt::Debug::fmt(self,f)
                 };
                 write!(f,"{}",pretty)
