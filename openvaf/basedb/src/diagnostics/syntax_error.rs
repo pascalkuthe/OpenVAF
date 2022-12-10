@@ -44,6 +44,7 @@ impl Diagnostic for SyntaxError {
                 span,
                 expected_at: Some(expected_at),
                 missing_delimeter,
+                panic_end: None,
                 ..
             } => {
                 let (file_id, [expected_at, range]) =
@@ -60,6 +61,34 @@ impl Diagnostic for SyntaxError {
                         file_id,
                         range: range.into(),
                         message: "unexpected token".to_owned(),
+                    },
+                ])
+            }
+            SyntaxError::UnexpectedToken {
+                ref expected,
+                span,
+                missing_delimeter,
+                panic_end: Some(panic_end),
+                ..
+            } => {
+                let message = if expected.data.len() < 4 {
+                    format!("expected {}", expected)
+                } else {
+                    "unexpected_token".to_owned()
+                };
+
+                let (file_id, [range, skipped]) = text_ranges_to_unified_spans(
+                    &sm,
+                    &parse,
+                    [span, TextRange::new(span.start(), panic_end)],
+                );
+                syntax_err_report(missing_delimeter).with_labels(vec![
+                    Label { style: LabelStyle::Primary, file_id, range: range.into(), message },
+                    Label {
+                        style: LabelStyle::Secondary,
+                        file_id,
+                        range: usize::from(range.end())..usize::from(skipped.end()),
+                        message: "skipping to next valid declaration".to_owned(),
                     },
                 ])
             }
@@ -88,10 +117,10 @@ impl Diagnostic for SyntaxError {
                         style: LabelStyle::Primary,
                         file_id,
                         range: range.into(),
-                        message: format!("unexpected '{}'", found),
+                        message: format!("unexpected {}", found),
                     }])
                     .with_notes(vec![format!(
-                        "the '{}' token is not required here; simply remove it",
+                        "the {} token is not required here; simply remove it",
                         found
                     )])
             }
@@ -103,7 +132,7 @@ impl Diagnostic for SyntaxError {
                         style: LabelStyle::Secondary,
                         file_id,
                         range: expected_at.into(),
-                        message: format!("'{}' might be missing here", expected),
+                        message: format!("{} might be missing here", expected),
                     },
                     Label {
                         style: LabelStyle::Primary,
@@ -526,7 +555,7 @@ impl Diagnostic for SyntaxError {
                         style: LabelStyle::Secondary,
                         file_id: head.file,
                         range: head.range.into(),
-                        message: format!("help: add '{name}' here"),
+                        message: format!("help: add {name} here"),
                     },
                     Label {
                         style: LabelStyle::Primary,

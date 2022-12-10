@@ -11,6 +11,7 @@ const MODULE_ITEM_RECOVERY: TokenSet = DIRECTION_TS.union(TokenSet::new(&[
     PARAMETER_KW,
     LOCALPARAM_KW,
     ENDMODULE_KW,
+    EOF,
 ]));
 pub(super) const MODULE_ITEM_OR_ATTR_RECOVERY: TokenSet =
     MODULE_ITEM_RECOVERY.union(TokenSet::unique(T!["(*"]));
@@ -25,9 +26,7 @@ pub(crate) fn module(p: &mut Parser, m: Marker) {
         m.complete(p, MODULE_PORTS);
     }
     p.expect(T![;]);
-    while !p.at_ts(ITEM_RECOVERY_SET.union(TokenSet::unique(ENDMODULE_KW))) {
-        module_item(p);
-    }
+    module_items(p);
 
     p.expect(ENDMODULE_KW);
 
@@ -102,38 +101,59 @@ fn module_port(p: &mut Parser) -> bool {
     !(p.at(T![,]) && p.nth_at_ts(1, MODULE_PORT_RECOVERY))
 }
 
-fn module_item(p: &mut Parser) {
-    let m = p.start();
-    attrs(p, MODULE_ITEM_RECOVERY);
-    match p.current() {
-        ANALOG_KW if p.nth(1) == FUNCTION_KW => func_decl(p, m),
-        ANALOG_KW => {
-            p.bump(ANALOG_KW);
-            stmt_with_attrs(p);
-            m.complete(p, ANALOG_BEHAVIOUR);
-        }
-        NET_TYPE => {
-            net_decl::<true>(p, m);
-        }
-        IDENT => {
-            net_decl::<false>(p, m);
-        }
-        PARAMETER_KW | LOCALPARAM_KW => {
-            parameter_decl(p, m);
-        }
-        ALIASPARAM_KW => {
-            alias_parameter_decl(p, m);
-        }
-        BRANCH_KW => {
-            branch_decl(p, m);
-        }
-        INTEGER_KW | REAL_KW | STRING_KW => var_decl(p, m),
-        INPUT_KW | OUTPUT_KW | INOUT_KW => port_decl::<false>(p, m),
-        _ => {
-            m.abandon(p);
-            let err =
-                p.unexpected_tokens_msg(vec![FUNCTION, PORT_DECL, NET_DECL, ANALOG_BEHAVIOUR]);
-            p.err_recover(err, MODULE_ITEM_RECOVERY);
+fn module_items(p: &mut Parser) {
+    let mut error_range: Option<CompletedMarker> = None;
+    while !p.at_ts(ITEM_RECOVERY_SET.union(TokenSet::unique(ENDMODULE_KW))) {
+        let m = p.start();
+        attrs(p, MODULE_ITEM_RECOVERY);
+
+        match p.current() {
+            ANALOG_KW if p.nth(1) == FUNCTION_KW => func_decl(p, m),
+            ANALOG_KW => {
+                p.bump(ANALOG_KW);
+                stmt_with_attrs(p);
+                m.complete(p, ANALOG_BEHAVIOUR);
+            }
+            NET_TYPE => {
+                net_decl::<true>(p, m);
+            }
+            IDENT => {
+                net_decl::<false>(p, m);
+            }
+            PARAMETER_KW | LOCALPARAM_KW => {
+                parameter_decl(p, m);
+            }
+            ALIASPARAM_KW => {
+                alias_parameter_decl(p, m);
+            }
+            BRANCH_KW => {
+                branch_decl(p, m);
+            }
+            INTEGER_KW | REAL_KW | STRING_KW => var_decl(p, m),
+            INPUT_KW | OUTPUT_KW | INOUT_KW => port_decl::<false>(p, m),
+            _ => {
+                error_range = if let Some(error_range) = error_range {
+                    m.abandon(p);
+                    p.bump_any();
+                    while !p.at_ts(MODULE_ITEM_RECOVERY) {
+                        p.bump_any();
+                    }
+                    Some(error_range.undo_completion(p).complete(p, ERROR))
+                } else {
+                    let err = p.unexpected_tokens_msg(vec![
+                        FUNCTION,
+                        PORT_DECL,
+                        NET_DECL,
+                        ANALOG_BEHAVIOUR,
+                    ]);
+                    p.error(err);
+                    p.bump_any();
+                    while !p.at_ts(MODULE_ITEM_RECOVERY) {
+                        p.bump_any();
+                    }
+                    Some(m.complete(p, ERROR))
+                }
+            }
         }
     }
 }
@@ -203,7 +223,7 @@ fn func_arg(p: &mut Parser, m: Marker) {
 fn branch_decl(p: &mut Parser, m: Marker) {
     p.bump(BRANCH_KW);
     if !p.at(T!['(']) {
-        p.error(p.unexpected_token_msg(T!['(']))
+        p.error(p.unexpected_token_msg(T!['(']));
     }
     arg_list(p);
     decl_list(p, T![;], decl_name, MODULE_ITEM_OR_ATTR_RECOVERY);

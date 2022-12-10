@@ -1,3 +1,4 @@
+use rowan::TextSize;
 use stdx::{impl_display, pretty};
 use text_size::TextRange;
 
@@ -9,6 +10,7 @@ pub enum SyntaxError {
         expected: pretty::List<Vec<SyntaxKind>>,
         found: SyntaxKind,
         span: TextRange,
+        panic_end: Option<TextSize>,
         expected_at: Option<TextRange>,
         missing_delimeter: bool,
     },
@@ -112,9 +114,9 @@ use SyntaxError::*;
 
 impl_display! {
     match SyntaxError{
-        UnexpectedToken {expected,found,..} => "unexpected token '{}'; expected {}", found, expected;
-        SurplusToken {found,..} => "unexpected token '{}'", found;
-        MissingToken{expected, ..} => "unexpected token; expected '{}'", expected;
+        UnexpectedToken {expected,found,..} => "unexpected token {}; expected {}", found, expected;
+        SurplusToken {found,..} => "unexpected token {}", found;
+        MissingToken{expected, ..} => "unexpected token; expected {}", expected;
         IllegalRootSegment { ..} =>  "$root is only allowed as a prefix";
         BlockItemsAfterStmt{..}  => "declarations in blocks are only allowed before the first stmt";
         BlockItemsWithoutScope { ..} => "declarations in blocks require an explicit scope";

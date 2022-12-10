@@ -1,33 +1,31 @@
-//! See [`TextTreeSink`].
-
 use std::mem;
 use std::sync::Arc;
 
-use parser::TreeSink;
 use preprocessor::sourcemap::{CtxSpan, SourceContext, SourceMap};
 use preprocessor::{SourceProvider, Token};
+use rowan::{GreenNodeBuilder, Language};
 use vfs::FileId;
 
-use crate::syntax_node::{GreenNode, SyntaxTreeBuilder};
+use crate::syntax_node::{GreenNode, VerilogALanguage};
 use crate::{SyntaxError, SyntaxKind, TextRange, TextSize, T};
 
-/// Bridges the parser with our specific syntax tree representation.
-///
-/// `TextTreeSink` also handles attachment of trivia (whitespace) to nodes.
-pub(crate) struct TextTreeSink<'a> {
+pub(crate) struct SyntaxTreeBuilder<'a> {
     tokens: &'a [Token],
     text_pos: TextSize,
     token_pos: usize,
 
     state: State,
 
-    inner: SyntaxTreeBuilder,
+    errors: Vec<SyntaxError>,
+    last_error: Option<SyntaxError>,
+
+    inner: GreenNodeBuilder<'static>,
 
     db: &'a dyn SourceProvider,
 
     current_src: Arc<str>,
     panic: bool,
-    at_err: bool,
+    err_depth: u32,
     sm: &'a SourceMap,
     ranges: Vec<(TextRange, SourceContext, TextSize)>,
     current_range: CtxSpan,
@@ -39,8 +37,8 @@ enum State {
     PendingFinish,
 }
 
-impl<'a> TreeSink for TextTreeSink<'a> {
-    fn token(&mut self, kind: SyntaxKind) {
+impl<'a> SyntaxTreeBuilder<'a> {
+    pub(super) fn token(&mut self, kind: SyntaxKind) {
         match mem::replace(&mut self.state, State::Normal) {
             State::PendingStart => unreachable!(),
             State::PendingFinish => self.inner.finish_node(),
@@ -51,14 +49,14 @@ impl<'a> TreeSink for TextTreeSink<'a> {
         self.panic &= !matches!(
             kind,
             T![;] | T![end] | T![endnature] | T![endmodule] | T![enddiscipline] | T![endfunction]
-        ) | self.at_err;
+        ) || self.err_depth != u32::MAX;
         self.do_token(kind, span);
     }
 
-    fn start_node(&mut self, kind: SyntaxKind) {
+    pub(super) fn start_node(&mut self, kind: SyntaxKind) {
         match mem::replace(&mut self.state, State::Normal) {
             State::PendingStart => {
-                self.inner.start_node(kind);
+                self.inner.start_node(VerilogALanguage::kind_to_raw(kind));
                 // No need to attach trivias to previous node: there is no
                 // previous node.
                 return;
@@ -67,38 +65,38 @@ impl<'a> TreeSink for TextTreeSink<'a> {
             State::Normal => (),
         }
 
-        self.at_err = kind == SyntaxKind::ERROR;
-
-        // let n_trivias =
-        //     self.tokens[self.token_pos..].iter().take_while(|it| it.is_trivia()).count();
-        // let leading_trivias = &self.tokens[self.token_pos..self.token_pos + n_trivias];
-        // let mut trivia_end = self.text_pos + leading_trivias.iter().map(|it| it.len()).sum();
-
-        // let n_attached_trivias = {
-        //     let leading_trivias = leading_trivias.iter().rev().map(|it| {
-        //         let next_end = trivia_end - it.len;
-        //         let range = TextRange::new(next_end, trivia_end);
-        //         trivia_end = next_end;
-        //         (it.kind, &self.current_src[range])
-        //     });
-        //     n_attached_trivias(kind, leading_trivias)
-        // };
-        // self.eat_n_trivias(n_trivias);
+        if self.err_depth != u32::MAX {
+            self.err_depth += 1
+        } else if kind == SyntaxKind::ERROR {
+            self.err_depth = 0
+        };
         self.eat_trivias();
-        self.inner.start_node(kind);
-        // self.eat_n_trivias(n_attached_trivias);
+        self.inner.start_node(VerilogALanguage::kind_to_raw(kind));
     }
 
-    fn finish_node(&mut self) {
+    pub(super) fn finish_node(&mut self) {
         match mem::replace(&mut self.state, State::PendingFinish) {
             State::PendingStart => unreachable!(),
             State::PendingFinish => self.inner.finish_node(),
             State::Normal => (),
         }
-        self.at_err = false
+        if self.err_depth == 0 {
+            if let Some(mut err) = self.last_error.take() {
+                if let SyntaxError::UnexpectedToken { span, panic_end, .. } = &mut err {
+                    if span.end() != self.text_pos {
+                        *panic_end = Some(self.text_pos);
+                    }
+                }
+
+                self.errors.push(err)
+            }
+            self.err_depth = u32::MAX;
+        } else if self.err_depth != u32::MAX {
+            self.err_depth -= 1;
+        }
     }
 
-    fn error(&mut self, error: parser::SyntaxError) {
+    pub(super) fn error(&mut self, error: parser::SyntaxError) {
         let n_trivias =
             self.tokens[self.token_pos..].iter().take_while(|it| it.kind.is_trivia()).count();
         let leading_trivias = &self.tokens[self.token_pos..self.token_pos + n_trivias];
@@ -121,14 +119,15 @@ impl<'a> TreeSink for TextTreeSink<'a> {
                 ),
                 expected_at,
                 missing_delimeter,
+                panic_end: None,
             };
-            self.inner.error(error);
+            self.errors.push(error);
             return;
         }
         let len = self.tokens[self.token_pos + n_trivias].span.range.len();
 
         let panic = mem::replace(&mut self.panic, true);
-        if panic && !missing_delimeter {
+        if panic && !missing_delimeter || self.last_error.is_some() {
             return;
         }
 
@@ -143,12 +142,11 @@ impl<'a> TreeSink for TextTreeSink<'a> {
             span: TextRange::at(pos, len),
             expected_at,
             missing_delimeter,
+            panic_end: None,
         };
-        self.inner.error(error)
+        self.last_error = Some(error)
     }
-}
 
-impl<'a> TextTreeSink<'a> {
     pub(super) fn new(
         db: &'a dyn SourceProvider,
         root_file: FileId,
@@ -161,7 +159,7 @@ impl<'a> TextTreeSink<'a> {
             text_pos: 0.into(),
             token_pos: 0,
             state: State::PendingStart,
-            inner: SyntaxTreeBuilder::default(),
+            inner: Default::default(),
             db,
             sm,
             current_src,
@@ -171,7 +169,9 @@ impl<'a> TextTreeSink<'a> {
                 range: TextRange::empty(TextSize::from(0)),
             },
             panic: false,
-            at_err: false,
+            err_depth: u32::MAX,
+            errors: Vec::new(),
+            last_error: None,
         }
     }
 
@@ -188,8 +188,7 @@ impl<'a> TextTreeSink<'a> {
         let start = self.ranges.last().map_or(0.into(), |(range, _, _)| range.end());
         let range = TextRange::new(start, self.text_pos);
         self.ranges.push((range, self.current_range.ctx, self.current_range.range.start()));
-        let (root_node, errors) = self.inner.finish_raw();
-        (root_node, errors, self.ranges)
+        (self.inner.finish(), self.errors, self.ranges)
     }
 
     fn eat_trivias(&mut self) {
@@ -200,14 +199,6 @@ impl<'a> TextTreeSink<'a> {
             self.do_token(token.kind, token.span);
         }
     }
-
-    // fn eat_n_trivias(&mut self, n: usize) {
-    //     for _ in 0..n {
-    //         let token = self.tokens[self.token_pos].unwrap_token();
-    //         assert!(token.kind.is_trivia());
-    //         self.do_token(token.kind, token.len);
-    //     }
-    // }
 
     fn do_token(&mut self, kind: SyntaxKind, span: CtxSpan) {
         let same_ctx = span.ctx == self.current_range.ctx;
@@ -233,7 +224,7 @@ impl<'a> TextTreeSink<'a> {
         let text = &self.current_src[range];
         self.text_pos += range.len();
         self.token_pos += 1;
-        self.inner.token(kind, text);
+        self.inner.token(VerilogALanguage::kind_to_raw(kind), text);
     }
 }
 
@@ -261,5 +252,98 @@ impl<'a> TextTreeSink<'a> {
 //             res
 //         }
 //         _ => 0,
+//     }
+// }
+
+// #[derive(Debug)]
+// pub enum RawStep<'a> {
+//     Token { kind: SyntaxKind, text: &'a str },
+//     Enter { kind: SyntaxKind },
+//     Exit,
+//     Error { msg: &'a str, pos: usize },
+// }
+
+// struct Builder<'a, F> {
+//     tokens: &'a [preprocessor::Token],
+//     pos: usize,
+//     state: State,
+//     sm: &'a SourceMap,
+//     ranges: Vec<(TextRange, SourceContext, TextSize)>,
+//     current_range: CtxSpan,
+//     inner: SyntaxTreeBuilder
+// }
+
+// enum State {
+//     PendingEnter,
+//     Normal,
+//     PendingExit,
+// }
+
+// impl<F: FnMut(RawStep)> Builder<'_, F> {
+//     fn token(&mut self, kind: SyntaxKind) {
+//         match mem::replace(&mut self.state, State::Normal) {
+//             State::PendingEnter => unreachable!(),
+//             State::PendingExit => (self.sink)(RawStep::Exit),
+//             State::Normal => (),
+//         }
+//         self.eat_trivias();
+//         let span = self.tokens[self.pos].span;
+//         self.do_token(kind, span);
+//     }
+
+//     fn enter(&mut self, kind: SyntaxKind) {
+//         match mem::replace(&mut self.state, State::Normal) {
+//             State::PendingEnter => {
+//                 (self.sink)(RawStep::Enter { kind });
+//                 // No need to attach trivias to previous node: there is no
+//                 // previous node.
+//                 return;
+//             }
+//             State::PendingExit => (self.sink)(RawStep::Exit),
+//             State::Normal => (),
+//         }
+
+//         let n_trivias =
+//             (self.pos..self.lexed.len()).take_while(|&it| self.lexed.kind(it).is_trivia()).count();
+//         let leading_trivias = self.pos..self.pos + n_trivias;
+//         let n_attached_trivias = n_attached_trivias(
+//             kind,
+//             leading_trivias.rev().map(|it| (self.lexed.kind(it), self.lexed.text(it))),
+//         );
+//         self.eat_n_trivias(n_trivias - n_attached_trivias);
+//         (self.sink)(RawStep::Enter { kind });
+//         self.eat_n_trivias(n_attached_trivias);
+//     }
+
+//     fn exit(&mut self) {
+//         match mem::replace(&mut self.state, State::PendingExit) {
+//             State::PendingEnter => unreachable!(),
+//             State::PendingExit => (self.sink)(RawStep::Exit),
+//             State::Normal => (),
+//         }
+//     }
+
+//     fn eat_trivias(&mut self) {
+//         while self.pos < self.lexed.len() {
+//             let kind = self.lexed.kind(self.pos);
+//             if !kind.is_trivia() {
+//                 break;
+//             }
+//             self.do_token(kind, 1);
+//         }
+//     }
+
+//     fn eat_n_trivias(&mut self, n: usize) {
+//         for _ in 0..n {
+//             let kind = self.lexed.kind(self.pos);
+//             assert!(kind.is_trivia());
+//             self.do_token(kind, 1);
+//         }
+//     }
+
+//     fn do_token(&mut self, kind: SyntaxKind, span: CtxSpan) {
+//         let text = &self.lexed.range_text(self.pos..self.pos + n_tokens);
+//         self.pos += n_tokens;
+//         (self.sink)(RawStep::Token { kind, text });
 //     }
 // }

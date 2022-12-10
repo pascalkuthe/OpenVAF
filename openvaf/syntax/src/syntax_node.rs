@@ -7,9 +7,9 @@
 //! module just wraps its API.
 
 pub(crate) use rowan::GreenNode;
-use rowan::{GreenNodeBuilder, Language};
+use rowan::Language;
 
-use crate::{SyntaxError, SyntaxKind};
+use crate::SyntaxKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum VerilogALanguage {}
@@ -30,42 +30,6 @@ pub type SyntaxToken = rowan::SyntaxToken<VerilogALanguage>;
 // pub type SyntaxElement = rowan::SyntaxElement<VerilogALanguage>;
 pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<VerilogALanguage>;
 pub type SyntaxElementChildren = rowan::SyntaxElementChildren<VerilogALanguage>;
-
-#[derive(Default)]
-pub struct SyntaxTreeBuilder {
-    errors: Vec<SyntaxError>,
-    inner: GreenNodeBuilder<'static>,
-}
-
-impl SyntaxTreeBuilder {
-    pub(crate) fn finish_raw(self) -> (GreenNode, Vec<SyntaxError>) {
-        let green = self.inner.finish();
-        (green, self.errors)
-    }
-
-    // pub fn finish(self) -> Parse<SyntaxNode> {
-    //     let (green, errors) = self.finish_raw();
-    //     Parse::new(green, errors)
-    // }
-
-    pub fn token(&mut self, kind: SyntaxKind, text: &str) {
-        let kind = VerilogALanguage::kind_to_raw(kind);
-        self.inner.token(kind, text)
-    }
-
-    pub fn start_node(&mut self, kind: SyntaxKind) {
-        let kind = VerilogALanguage::kind_to_raw(kind);
-        self.inner.start_node(kind)
-    }
-
-    pub fn finish_node(&mut self) {
-        self.inner.finish_node()
-    }
-
-    pub fn error(&mut self, error: SyntaxError) {
-        self.errors.push(error)
-    }
-}
 
 // Syntax node children iterated in reverse order
 // Fairly trivial but sadly lacking from rowan
