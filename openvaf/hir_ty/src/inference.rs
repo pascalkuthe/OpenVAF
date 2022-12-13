@@ -387,7 +387,8 @@ impl Ctx<'_> {
                     &[then_val, else_val],
                     Cow::Borrowed(TiSlice::from_ref(SignatureData::SELECT)),
                     None,
-                )?
+                )
+                .0?
             }
 
             Expr::Call { ref fun, ref args } => {
@@ -429,7 +430,7 @@ impl Ctx<'_> {
             ScopeDefItem::FunctionId(fun) => self.infere_user_fun_call(stmt, expr, fun, args),
             ScopeDefItem::BuiltIn(builtin) => {
                 self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(builtin));
-                self.infere_builtin(stmt, expr, builtin, args)
+                self.infere_builtin(stmt, expr, builtin, args).0
             }
             ScopeDefItem::ParamSysFun(param) => {
                 self.result.resolved_calls.insert(expr, ResolvedFun::Param(param));
@@ -500,6 +501,7 @@ impl Ctx<'_> {
             }])),
             Some(func),
         )
+        .0
     }
 
     fn infere_nature_acces(
@@ -511,7 +513,7 @@ impl Ctx<'_> {
     ) {
         // resolve as flow first because we don't yet know if this is a flow or pot access
         // This choise is arbitrary (but must be consistent with the code below
-        if self.infere_builtin(stmt, expr, BuiltIn::flow, args).is_none() {
+        if !self.infere_builtin(stmt, expr, BuiltIn::flow, args).1 {
             return;
         }
 
@@ -568,7 +570,7 @@ impl Ctx<'_> {
         expr: ExprId,
         builtin: BuiltIn,
         args: &[ExprId],
-    ) -> Option<Ty> {
+    ) -> (Option<Ty>, bool) {
         let info: BuiltinInfo = builtin.into();
 
         let exact = Some(info.min_args) == info.max_args;
@@ -580,7 +582,7 @@ impl Ctx<'_> {
                 exact,
             };
             self.result.diagnostics.push(err);
-            return default_return_ty(info.signatures);
+            return (default_return_ty(info.signatures), false);
         }
 
         if info.max_args.map_or(false, |max_args| max_args < args.len()) {
@@ -590,14 +592,14 @@ impl Ctx<'_> {
                 expr,
                 exact,
             });
-            return default_return_ty(info.signatures);
+            return (default_return_ty(info.signatures), false);
         }
 
         let mut infere_args = args;
         let signatures = match builtin {
             BuiltIn::ddx => {
                 self.infere_ddx(stmt, expr, args[0], args[1]);
-                return Some(Ty::Val(Type::Real));
+                return (Some(Ty::Val(Type::Real)), true);
             }
 
             BuiltIn::limit => {
@@ -617,7 +619,13 @@ impl Ctx<'_> {
 
         debug_assert_ne!(&signatures.raw, &[]);
 
-        let ty = self.resolve_function_args(stmt, expr, infere_args, signatures, None)?;
+        let (ty, valid) = if let (Some(ty), valid) =
+            self.resolve_function_args(stmt, expr, infere_args, signatures, None)
+        {
+            (ty, valid)
+        } else {
+            return (default_return_ty(info.signatures), false);
+        };
 
         match builtin {
             BuiltIn::limit => self.infere_limit(stmt, expr, args),
@@ -634,7 +642,7 @@ impl Ctx<'_> {
             _ => (),
         }
 
-        Some(ty)
+        (Some(ty), valid)
     }
 
     fn check_display_dynamic_arg(&mut self, fmt_expr: ExprId, arg: Option<ExprId>, off: TextSize) {
@@ -992,7 +1000,7 @@ impl Ctx<'_> {
         };
         let signatures = Cow::Borrowed(TiSlice::from_ref(signatures));
 
-        self.resolve_function_args(stmt, expr, &[lhs, rhs], signatures, None)
+        self.resolve_function_args(stmt, expr, &[lhs, rhs], signatures, None).0
     }
 
     /// Resolves the arguments of a function Call
@@ -1005,9 +1013,10 @@ impl Ctx<'_> {
         args: &[ExprId],
         signatures: Cow<'static, TiSlice<Signature, SignatureData>>,
         src: Option<FunctionId>,
-    ) -> Option<Ty> {
+    ) -> (Option<Ty>, bool) {
         debug_assert!(signatures.iter().any(|sig| sig.args.len() == args.len()));
         let arg_types: Vec<_> = args.iter().map(|arg| self.infere_expr(stmt, *arg)).collect();
+        let mut valid_args = true;
 
         let mut canditates: Vec<_> = signatures.keys().collect();
         let mut new_candidates = Vec::new();
@@ -1035,6 +1044,8 @@ impl Ctx<'_> {
                 } else {
                     mem::swap(&mut new_candidates, &mut canditates)
                 }
+            } else {
+                valid_args = false;
             }
         }
 
@@ -1053,7 +1064,7 @@ impl Ctx<'_> {
                 }
                 .into(),
             );
-            return default_return_ty(&signatures.raw);
+            return (default_return_ty(&signatures.raw), false);
         }
 
         let res = match canditates.as_slice() {
@@ -1062,7 +1073,7 @@ impl Ctx<'_> {
             }
             [res] => *res,
             _ if arg_types.iter().any(|ty| ty.is_none()) => {
-                return default_return_ty(&signatures.raw);
+                return (default_return_ty(&signatures.raw), false)
             }
             _ => {
                 new_candidates.clone_from(&canditates);
@@ -1116,7 +1127,7 @@ impl Ctx<'_> {
             self.result.resolved_signatures.insert(expr, res);
         }
 
-        Some(Ty::Val(signatures[res].return_ty.clone()))
+        (Some(Ty::Val(signatures[res].return_ty.clone())), valid_args)
     }
 
     fn expect<const EXACT: bool>(
