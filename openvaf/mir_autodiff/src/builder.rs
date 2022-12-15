@@ -320,7 +320,6 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                         self.derivative_values.insert((prev_order, unknown), val);
                     }
 
-                    // println!("hello {} {:?}", self.func.dfg.display_inst(self.dst.0), self.new_block);
                     self.insert_conversions(inst);
                     self.new_block.take();
                 }
@@ -374,7 +373,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
 
     fn insert_conversions(&mut self, inst: Inst) {
         if let Some(conversion) = self.live_derivatives.conversions.get(&inst) {
-            for chain_rule in conversion {
+            for chain_rule in conversion.iter().rev() {
                 let outer_derivative =
                     self.derivative_of(chain_rule.val, chain_rule.outer_derivative);
                 if outer_derivative == F_ZERO {
@@ -390,6 +389,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
 
                 let prev_order =
                     self.prev_order_derivative_of(chain_rule.val, chain_rule.dst_derivative);
+                debug_assert_ne!(prev_order, F_ZERO);
                 let unknown = self.intern.get_unknown(chain_rule.dst_derivative);
                 let val = self.ins().fmul(inner_derivative, outer_derivative);
                 self.derivative_values.insert((prev_order, unknown), val);

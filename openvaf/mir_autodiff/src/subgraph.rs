@@ -69,13 +69,6 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
             return None;
         }
 
-        if self.func.dfg.uses_head_cursor(self.func.dfg.first_result(inst))
-            == self.func.dfg.uses_tail_cursor(self.func.dfg.first_result(inst))
-        {
-            // just a single use... no need ;)
-            return None;
-        }
-
         self.curr_subgraph_unkowns = HybridBitSet::new_empty();
 
         for derivative in derivatives.iter().copied() {
@@ -253,7 +246,10 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
 
         let dst = self.derivatives.conversions.entry(inst).or_default();
 
-        for (&old_deriv, &(new_deriv, inner_deriv)) in self.derivative_map.iter() {
+        // chain rules are interated in rev order to ensure that they cancel
+        // however derivatives must be iterated in forward order to ensure they work correctly
+        // therefore reverse again here so the reversals cancel
+        for (&old_deriv, &(new_deriv, inner_deriv)) in self.derivative_map.iter().rev() {
             dst.push(ChainRule {
                 inner_derivative: (inner_derivative_val, inner_deriv),
                 outer_derivative: new_deriv,
