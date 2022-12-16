@@ -15,22 +15,25 @@ fn check_simple(src: &str, data_flow_result: Expect) {
     let mut dom_tree = DominatorTree::default();
     dom_tree.compute(&func, &cfg, true, false, true);
 
-    let unkowns = [10u32.into(), 11u32.into()].into_iter().collect();
+    let unknowns = [10u32.into(), 11u32.into(), 12u32.into()].into_iter().collect();
 
     let mut call1 = HybridBitSet::new_empty();
-    call1.insert(0u32.into(), 2);
+    call1.insert(0u32.into(), 3);
     let mut call2 = HybridBitSet::new_empty();
-    call2.insert(1u32.into(), 2);
+    call2.insert(1u32.into(), 3);
+    let mut call3 = HybridBitSet::new_empty();
+    call3.insert(2u32.into(), 3);
     let ddx_calls = [
         (0u32.into(), (call1, HybridBitSet::new_empty())),
         (1u32.into(), (call2, HybridBitSet::new_empty())),
+        (2u32.into(), (call3, HybridBitSet::new_empty())),
     ]
     .into_iter()
     .collect();
 
-    let unkowns = KnownDerivatives { unknowns: unkowns, ddx_calls };
+    let unknowns = KnownDerivatives { unknowns, ddx_calls };
 
-    auto_diff(&mut func, &dom_tree, &unkowns, &[]);
+    auto_diff(&mut func, &dom_tree, &unknowns, &[]);
     data_flow_result.assert_eq(&func.to_debug_string());
 }
 
@@ -834,4 +837,94 @@ fn third_order_log10() {
     let v11 = 2f64;
     let res = 2.0 / 10f64.ln() / v11 / v11 / v11;
     check_num(src, expect, &[v11], res);
+}
+
+#[test]
+fn subgraph() {
+    let src = r##"
+        function %bar(v10, v11, v12) {
+            fn0 = const fn %ddx_v10(1) -> 1
+            fn1 = const fn %ddx_v11(1) -> 1
+            fn2 = const fn %ddx_v12(1) -> 1
+            v20 = fconst 0x1.bcb7b1526e50ep-2
+
+        block0:
+            v22 = fadd v10, v11
+            v14 = fadd v22, v12
+            v15 = fmul v14, v20
+            v16 = fmul v15, v20
+            v17 = fmul v16, v20
+            v23 = fmul v22, v20
+            v24 = fmul v23, v20
+            v25 = fmul v24, v20
+            v26 = fmul v25, v20
+            v27 = fmul v26, v20
+            v18 = fmul v17, v20
+            v19 = fmul v18, v20
+            v40 = fmul v19, v20
+            v41 = fmul v40, v20
+            v28 = call fn0 (v41)
+            v39 = call fn1 (v41)
+            v30 = call fn2 (v41)
+            v31 = call fn0 (v27)
+            v32 = call fn1 (v27)
+            v101 = optbarrier v28
+            v102 = optbarrier v29
+            v103 = optbarrier v30
+            v104 = optbarrier v31
+            v105 = optbarrier v32
+        }"##;
+    let expect = expect![[r#"
+        function %bar(v10, v11, v12) {
+            inst0 = const fn %ddx_v10(1) -> 1
+            inst1 = const fn %ddx_v11(1) -> 1
+            inst2 = const fn %ddx_v12(1) -> 1
+            v3 = fconst 0.0
+            v6 = fconst 0x1.0000000000000p0
+            v20 = fconst 0x1.bcb7b1526e50ep-2
+
+        block0:
+            v22 = fadd v10, v11
+            v106 = fadd v6, v3
+            v107 = fadd v3, v6
+            v14 = fadd v22, v12
+            v108 = fadd v3, v6
+            v109 = fadd v6, v3
+            v15 = fmul v14, v20
+            v16 = fmul v15, v20
+            v110 = fmul v20, v20
+            v17 = fmul v16, v20
+            v111 = fmul v110, v20
+            v23 = fmul v22, v20
+            v24 = fmul v23, v20
+            v112 = fmul v20, v20
+            v25 = fmul v24, v20
+            v113 = fmul v112, v20
+            v26 = fmul v25, v20
+            v114 = fmul v113, v20
+            v27 = fmul v26, v20
+            v115 = fmul v114, v20
+            v116 = fmul v106, v115
+            v117 = fmul v107, v115
+            v18 = fmul v17, v20
+            v118 = fmul v111, v20
+            v19 = fmul v18, v20
+            v119 = fmul v118, v20
+            v40 = fmul v19, v20
+            v120 = fmul v119, v20
+            v41 = fmul v40, v20
+            v121 = fmul v120, v20
+            v122 = fmul v108, v121
+            v123 = fmul v109, v121
+            v124 = fmul v106, v123
+            v125 = fmul v107, v123
+            v101 = optbarrier v124
+            v102 = optbarrier v29
+            v103 = optbarrier v122
+            v104 = optbarrier v116
+            v105 = optbarrier v117
+        }
+    "#]];
+
+    check_simple(src, expect);
 }
