@@ -8,13 +8,14 @@ use clap::{Arg, ArgAction, Command, ValueHint};
 use openvaf::{builtin_lints, get_target_names, host_triple, LintLevel};
 use path_absolutize::Absolutize;
 
-const ABOUT: &str = r"OpenVAF - The next generation Verilog-A compiler";
+const ABOUT: &str = r"For further information visit https://openvaf.semimod.de.";
 
 pub fn main_command() -> Command {
     Command::new("openvaf")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Pascal Kuthe - Semimod GmbH")
-        .about(ABOUT)
+        .after_long_help(ABOUT)
+        .after_help(ABOUT)
         .args([
             def_arg(),
             include_dir(),
