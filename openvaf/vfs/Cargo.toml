@@ -14,3 +14,8 @@ doctest = false
 paths = {path="../../lib/paths",version="0.0.0"}
 indexmap = "1.6"
 ahash = "0.8"
+encoding_rs = "0.8"
+chardetng = "0.1"
+
+[package.metadata.cargo-machete]
+ignored = ["encoding_rs"]

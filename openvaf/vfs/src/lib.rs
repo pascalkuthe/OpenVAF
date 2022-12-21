@@ -43,7 +43,6 @@ mod path_interner;
 pub mod va_std;
 mod vfs_path;
 
-use std::borrow::Cow;
 use std::char::REPLACEMENT_CHARACTER;
 use std::ops::Range;
 use std::sync::Arc;
@@ -84,16 +83,18 @@ impl From<Result<Vec<u8>, io::ErrorKind>> for VfsEntry {
 
 impl From<Vec<u8>> for VfsEntry {
     fn from(contents: Vec<u8>) -> Self {
-        let (contents, err) = if let Cow::Owned(src) = String::from_utf8_lossy(&contents) {
-            let err =
-                Some(FileReadError::InvalidTextFormat(InvalidTextFormatErr::from_lossy(&src)));
-            (src, err)
+        // TODO allow back transformations
+        let mut detector = chardetng::EncodingDetector::new();
+        if contents.len() > u16::MAX as usize {
+            detector.feed(&contents[..u16::MAX as usize], false);
         } else {
-            (unsafe { String::from_utf8_unchecked(contents) }, None)
-        };
+            detector.feed(&contents, true);
+        }
+        let (res, _, malformed) = detector.guess(None, true).decode(&contents);
+        let err = malformed
+            .then(|| FileReadError::InvalidTextFormat(InvalidTextFormatErr::from_lossy(&res)));
 
-        // TODO rember this and allow back transformations
-        let contents = LineEndings::normalize(contents).0;
+        let contents = LineEndings::normalize(res.into()).0;
 
         VfsEntry { contents: contents.into_boxed_str(), err }
     }
