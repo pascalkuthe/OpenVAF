@@ -202,9 +202,10 @@ impl<'a> SyntaxTreeBuilder<'a> {
 
     fn do_token(&mut self, kind: SyntaxKind, span: CtxSpan) {
         let same_ctx = span.ctx == self.current_range.ctx;
-        let is_continous = same_ctx && span.range.end() == self.current_range.range.start();
-
-        if !is_continous {
+        let is_continous = same_ctx && span.range.start() == self.current_range.range.end();
+        if is_continous {
+            self.current_range.range = self.current_range.range.cover(span.range);
+        } else {
             let start = self.ranges.last().map_or(0.into(), |(range, _, _)| range.end());
             let range = TextRange::new(start, self.text_pos);
             let old_range = mem::replace(&mut self.current_range, span);
