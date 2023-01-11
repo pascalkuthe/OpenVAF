@@ -113,14 +113,13 @@ impl EvalMir {
         gvn.remove_unnecessary_insts(&mut func, &dom_tree);
         gvn.clear(&mut func);
 
-        let mut output_block = {
-            let inst = intern
-                .outputs
-                .values()
-                .find_map(|val| val.expand().and_then(|val| func.dfg.value_def(val).inst()))
-                .unwrap();
-            func.layout.inst_block(inst).unwrap()
-        };
+        let mut output_block = intern
+            .outputs
+            .values()
+            .find_map(|val| val.expand().and_then(|val| func.dfg.value_def(val).inst()))
+            .map_or(func.layout.entry_block().unwrap(), |inst| {
+                func.layout.inst_block(inst).unwrap()
+            });
 
         output_values.clear();
         for (kind, val) in intern.outputs.iter() {
