@@ -162,7 +162,7 @@ fn net_decl<const NET_TYPE_FIRST: bool>(p: &mut Parser, m: Marker) {
     //direction and type ar both optional since only one is required
     if NET_TYPE_FIRST {
         p.bump(NET_TYPE);
-        if !p.nth_at(1, T![,]) {
+        if !p.nth_at_ts(1, TokenSet::new(&[T![,], T![;]])) {
             eat_name_ref(p);
         }
     } else {
