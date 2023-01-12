@@ -56,11 +56,29 @@ Melange is currently in early development and most features are not complete.
 Some mockups of planned usage can be found in `melange/examples`.
 Some working minimal examples (in rust) can be found in `melange/core/test.rs`.
 
-## Building OpenVAF
+## Building OpenVAF using docker
 
-Building OpenVAF requires rust/cargo 1.63 (best installed with [rustup](https://rustup.rs/)).
+Building OpenVAF requires a specific version of LLVM-14 which can be difficult to install. We are working on simplifying the process.
+In the meantime it's recommended to use the official docker image for compiling openvaf. Simply run the following commands
+
+``` shell
+git clone https://github.com/pascalkuthe/OpenVAF.git && cd openvaf
+docker pull ghcr.io/pascalkuthe/ferris_ci_build_x86_64-unknown-linux-gnu:latest
+podman run -ti -v $(pwd):/io:Z ferris_ci_build_x86_64-unknown-linux-gnu:latest
+
+# Now you are inside the docker container
+cd /io
+cargo build --release
+# OpenVAF will be build this can take a while
+# afterwards the binary is available in target/release/openvaf
+# inside the repository 
+```
+
+## General Build Instructions 
+
+OpenVAF requires rust/cargo 1.63 (best installed with [rustup](https://rustup.rs/)).
 Furthermore, LLVM-14 development libraries and toolchain are required.
-Older versions are not supported and will produce compilation errors.
+Older or newever versions are not supported and will produce compilation errors.
 Newer version might work, however OpenVAF directly uses some internals of the `lld-linker` that may change between versions.
 OpenVAF requires the following components of the LLVM toolchain:
 
@@ -69,9 +87,10 @@ OpenVAF requires the following components of the LLVM toolchain:
 - lld development libraries
 - LLVM development libraries
 
-On fedora these can be installed with `sudo dnf install llvm-devel lld-devel`. 
+On fedora 37 these can be installed with `sudo dnf install llvm-devel lld-devel`. 
 On debian based distros the [llvm provided packages](https://apt.llvm.org/) can be used instead.
 Windows developers must compile LLVM themselves.
+
 Once all dependencies are satisfied you can build the entire project by running:
 
 ``` shell
