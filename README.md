@@ -8,7 +8,6 @@
 <br>
 <br>
 
-
 OpenVAF is a Verilog-A compiler that can compile Verilog-A files for use in circuit simulator.
 The major aim of this Project is to provide a high-quality standard compliant compiler for Verilog-A.
 Furthermore, the project aims to bring modern compiler construction algorithms/data structures to a field with a lack of such tooling.
@@ -20,6 +19,9 @@ Some highlights of OpenVAF include:
 * **easy setup** (no runtime dependencies even for cross compilation)
 * **fast simulations** surpassing existing solutions by 30%-60%, often matching handwritten models
 * IDE aware design
+
+Detailed documentation, examples and precompiled binaries of all release are **available on our [website](https://openvaf.semimod.de)**. To test the latest development version you can download nightly version of OpenVAF for linux [here](https://openva.fra1.cdn.digitaloceanspaces.com/openvaf_devel_linux_amd64.tar.gz).
+
 
 ## Projects
 
