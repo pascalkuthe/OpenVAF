@@ -10,6 +10,12 @@ incremental = true
 panic = "abort"
 debug = true
 
+[profile.opt]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+
 
 [profile.dev]
 # Disabling debug info speeds up builds a bunch,

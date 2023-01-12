@@ -4,6 +4,16 @@ All notable changes to OpenVAF relevant to OSDI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+
+### Fixed
+
+* Correctly detect file encoding.
+* Invocations of `$limit` that use user defined functions.
+* Correctly parse net declarations without attached discipline (usually `ground`).
+* Panic that occurs when a model contains no branch contributes.
+* Panic for voltage sources when the associated current is unused.
+
 ## 22.12.0 - 2022-12-16
 
 ### Added

@@ -172,7 +172,6 @@ impl<'a> MirBuilder<'a> {
 
         builder.ins().ret();
 
-        // println!("{}", builder.func.to_debug_string());
         builder.finalize();
 
         (func, interner)
@@ -1527,7 +1526,7 @@ impl LoweringCtx<'_, '_> {
                     cx.func.def_var(old_val_place, old_val);
                     cx.lower_user_fun_impl(fun, args, true)
                 },
-                |_| enable_lim,
+                |_| new_val,
             );
 
             self.insert_limit(state, res)
@@ -1535,27 +1534,22 @@ impl LoweringCtx<'_, '_> {
             self.lower_user_fun_impl(fun, args, false)
         }
     }
-    fn lower_user_fun_impl(
-        &mut self,
-        fun: FunctionId,
-        mut args: &[ExprId],
-        inside_lim: bool,
-    ) -> Value {
+    fn lower_user_fun_impl(&mut self, fun: FunctionId, args: &[ExprId], inside_lim: bool) -> Value {
         let info = self.db.function_data(fun);
 
         // FIXME proper path for functions
         let mut path = self.path.to_owned();
-        path.push_str(&*info.name);
+        path.push_str(&info.name);
 
         let body = self.db.body(fun.into());
         let infere = self.db.inference_result(fun.into());
-        let mut arg_info = &*info.args;
+        let mut args = zip(info.args.iter_enumerated(), args);
+        // skip the first two arguments
         if inside_lim {
-            arg_info = &arg_info[2u32.into()..];
-            args = &args[2..];
+            args.next();
+            args.next();
         }
-
-        for ((arg, info), expr) in zip(arg_info.iter_enumerated(), args) {
+        for ((arg, info), expr) in args.clone() {
             let place = self.place(PlaceKind::FunctionArg { fun, arg });
             let init = if info.is_input {
                 self.lower_expr(*expr)
@@ -1596,7 +1590,7 @@ impl LoweringCtx<'_, '_> {
         ctx.lower_entry_stmts();
 
         // write outputs back to original (including possibly required cast)
-        for ((arg, info), expr) in zip(info.args.iter_enumerated(), args) {
+        for ((arg, info), expr) in args {
             if info.is_output {
                 let src_place = self.place(PlaceKind::FunctionArg { fun, arg });
                 let dst_place = self.lower_expr_as_lhs(*expr);

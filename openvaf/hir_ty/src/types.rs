@@ -177,7 +177,7 @@ impl Ty {
             | (Ty::PortFlow(_), TyRequirement::PortFlow)
             | (Ty::Nature(_), TyRequirement::Nature)
             | (Ty::Param(_, _), TyRequirement::AnyParam)
-            | (Ty::BuiltInFunction, TyRequirement::Function)
+            | (Ty::UserFunction(_), TyRequirement::Function)
             | (Ty::Branch(_), TyRequirement::Branch) => true,
 
             (

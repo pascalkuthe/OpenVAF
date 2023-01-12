@@ -113,14 +113,13 @@ impl EvalMir {
         gvn.remove_unnecessary_insts(&mut func, &dom_tree);
         gvn.clear(&mut func);
 
-        let mut output_block = {
-            let inst = intern
-                .outputs
-                .values()
-                .find_map(|val| val.expand().and_then(|val| func.dfg.value_def(val).inst()))
-                .unwrap();
-            func.layout.inst_block(inst).unwrap()
-        };
+        let mut output_block = intern
+            .outputs
+            .values()
+            .find_map(|val| val.expand().and_then(|val| func.dfg.value_def(val).inst()))
+            .map_or(func.layout.entry_block().unwrap(), |inst| {
+                func.layout.inst_block(inst).unwrap()
+            });
 
         output_values.clear();
         for (kind, val) in intern.outputs.iter() {
@@ -265,6 +264,21 @@ impl EvalMir {
             output_values.remove(old_val);
             *out_val = val.into();
         }
+
+        // it's possible that the residual generated new op_dependent
+        // variables or that previous ones were removed so recompute them here
+        op_dependent.clear();
+        op_dependent.extend(intern.params.raw.iter().filter_map(|(param, &val)| {
+            if func.dfg.value_dead(val) {
+                return None;
+            }
+            if param.op_dependent() {
+                Some(val)
+            } else {
+                None
+            }
+        }));
+
         op_dependent_insts.clear();
         op_dependent_insts.ensure(func.dfg.num_insts());
         let mut has_bound_step = false;
