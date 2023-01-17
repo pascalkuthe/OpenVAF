@@ -224,7 +224,7 @@ impl Body {
                 let val = match constraint.val()? {
                     ast::ConstraintValue::Val(val) => {
                         let val = ctx.collect_expr(val);
-                        let stmt = ctx.alloc_stmt_desugared(Stmt::Expr(default));
+                        let stmt = ctx.alloc_stmt_desugared(Stmt::Expr(val));
                         entry_stmts.push(stmt);
                         ConstraintValue::Value(val)
                     }
