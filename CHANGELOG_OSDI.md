@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Panic that occurs when a model contains no branch contributes.
 * Panic for voltage sources when the associated current is unused.
 * Panic for parameters with `exclude` expressions.
+* Panic for instance parameters.
 
 ## 22.12.0 - 2022-12-16
 
