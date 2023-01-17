@@ -66,10 +66,10 @@ In the meantime it's recommended to use the official docker image for compiling 
 ``` shell
 git clone https://github.com/pascalkuthe/OpenVAF.git && cd openvaf
 # On REHL distros and fedora replace docker with podman
-# on all commands below
+# on all commands below. 
 docker pull ghcr.io/pascalkuthe/ferris_ci_build_x86_64-unknown-linux-gnu:latest
 # On Linux distros that enable SELinux linux RHEL based distros and fedora use $(pwd):/io:Z
-docker run -ti -v $(pwd):/io ferris_ci_build_x86_64-unknown-linux-gnu:latest
+docker run -ti -v $(pwd):/io ghcr.io/pascalkuthe/ferris_ci_build_x86_64-unknown-linux-gnu:latest
 
 # Now you are inside the docker container
 cd /io

@@ -237,11 +237,6 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         let term = match func.layout.first_inst(entry) {
-            Some(term) if Some(term) == func.layout.last_inst(entry) => {
-                func.layout.remove_inst(term);
-                term
-            }
-
             Some(_) => {
                 let old_entry = entry;
                 entry = func.layout.make_block();
