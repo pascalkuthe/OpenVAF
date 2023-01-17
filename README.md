@@ -20,7 +20,7 @@ Some highlights of OpenVAF include:
 * **fast simulations** surpassing existing solutions by 30%-60%, often matching handwritten models
 * IDE aware design
 
-Detailed documentation, examples and precompiled binaries of all release are **available on our [website](https://openvaf.semimod.de)**. To test the latest development version you can download nightly version of OpenVAF for linux [here](https://openva.fra1.cdn.digitaloceanspaces.com/openvaf_devel_linux_amd64.tar.gz).
+Detailed documentation, examples and precompiled binaries of all release are **available on our [website](https://openvaf.semimod.de)**. To test the latest development version you can download nightly version of OpenVAF for [linux](https://openva.fra1.digitaloceanspaces.com/openvaf_devel-x86_64-unknown-linux-gnu.tar.gz) or [windows](https://openva.fra1.digitaloceanspaces.com/openvaf_devel-x86_64-pc-windows-msvc.tar.gz).
 
 
 ## Projects

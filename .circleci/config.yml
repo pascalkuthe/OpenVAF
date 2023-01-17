@@ -1,12 +1,36 @@
 version: 2.1
 
 orbs:
-  ferris-ci: pascalkuthe/ferris-ci@0.3
+  ferris-ci: pascalkuthe/ferris-ci@0.3.2
 
 target_matrix: &target_matrix
   matrix:
     parameters:
       target: ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+
+jobs:
+  build_nightly:
+    parameters:
+      target:
+        type: string
+        description: cargo target to build
+        default: x86_64-unknown-linux-gnu
+    executor:
+      name: ferris-ci/cross
+      image: build
+      target: << parameters.target >>
+      resource_class: large
+    steps:
+      - ferris-ci/with-rust:
+          steps:
+            - checkout
+            - attach_workspace:
+                at: .
+            - run: cargo build --release --target << parameters.target >>
+            - ferris-ci/upload: 
+                target: << parameters.target >>
+                bin: openvaf
+                archive-prefix: openvaf_devel
 workflows:
   ci:
     when: 
@@ -33,3 +57,18 @@ workflows:
           context: github
       - ferris-ci/cargo-machete
       - ferris-ci/rustfmt
+  nightly_builds:
+    when: 
+      or:
+        - equal: [ master, << pipeline.git.branch >> ]
+
+    jobs:
+      - ferris-ci/vendor:
+          context: github
+      - build_nightly:
+          name: build-nightly-<< matrix.target >>
+          <<: *target_matrix
+          requires: [ferris-ci/vendor]
+          context:
+            - github
+            - s3-api

@@ -7,11 +7,11 @@ exclude = ["melange/examples", "verilogae/tests", "openvaf/test_data"]
 [profile.release]
 lto = "off"
 incremental = true
-panic = "abort"
 debug = true
 
 [profile.opt]
 inherits = "release"
+panic = "abort"
 lto = "fat"
 codegen-units = 1
 opt-level = 3
