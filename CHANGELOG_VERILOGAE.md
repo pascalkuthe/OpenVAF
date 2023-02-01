@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Discontinuity in the derivative of `pow(x,y)` for `x=0`.
 * Unhelpful syntax errors for item declarations
 * Crash when encountering potential/flow probe with no arguments
+* Swapped signatures for `slew` and `transition`
 
 ##  0.9.0-beta8 - 2022-07-19
 

@@ -256,18 +256,18 @@ bultins! {
     }
 
     SLEW = const {
+        fn SLEW_NO_MAX(Val(Real)) -> Real;
+        fn SLEW_POS_MAX(Val(Real),Val(Real)) -> Real;
+        fn SLEW_NEG_MAX(Val(Real),Val(Real),Val(Real)) -> Real;
+    }
+
+
+    TRANSITION = const {
         fn TRANSITION_NO_ARGS(Val(Integer)) -> Real;
         fn TRANSITION_DELAY(Val(Integer),Val(Real)) -> Real;
         fn TRANSITION_DELAY_RISET(Val(Integer),Val(Real)) -> Real;
         fn TRANSITION_DELAY_RISET_FALLT(Val(Integer),Val(Real),Val(Real)) -> Real;
         fn TRANSITION_DELAY_RISET_FALLT_TOL(Val(Integer),Val(Real),Val(Real), Val(Real)) -> Real;
-    }
-
-
-    TRANSITION = const {
-        fn SLEW_NO_MAX(Val(Real)) -> Real;
-        fn SLEW_POS_MAX(Val(Real),Val(Real)) -> Real;
-        fn SLEW_NEG_MAX(Val(Real),Val(Real),Val(Real)) -> Real;
     }
 
 
