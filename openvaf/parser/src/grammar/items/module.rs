@@ -63,7 +63,7 @@ pub(super) fn alias_parameter_decl(p: &mut Parser, m: Marker) {
         path(p);
     }
     p.eat(T![;]);
-    m.complete(p, PARAM_DECL);
+    m.complete(p, ALIAS_PARAM);
 }
 
 const DIRECTION_TS: TokenSet = TokenSet::new(&[T![inout], T![output], T![input]]);

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Unhelpful syntax errors for item declarations
 * Crash when encountering potential/flow probe with no arguments
 * Swapped signatures for `slew` and `transition`
+* `aliasparam` declarations being ignored
 
 ##  0.9.0-beta8 - 2022-07-19
 

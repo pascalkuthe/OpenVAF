@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Breaking Changes
 
 * Removed LLD integration which made packaging exceptionally difficult and caused crashes on Windows.
-  That mean that OpenVAF now requires that the system linker (and ucrt.lib when targeting windows) are available.
+  That mean that OpenVAF now requires that the system linker (and `ucrt.lib` when targeting windows) are available.
 
 ### Fixed
 
@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Panic for parameters with `exclude` expressions.
 * Panic for instance parameters.
 * Swapped signatures for `slew` and `transition`
+* `aliasparam` declarations being ignored
 
 ## 22.12.0 - 2022-12-16
 
