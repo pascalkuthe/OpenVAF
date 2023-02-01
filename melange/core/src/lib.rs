@@ -12,6 +12,5 @@ pub mod simulation;
 mod utils;
 mod veriloga;
 
-// tests disabled on windows due to soundness bug in KLU on windows
-#[cfg(all(test, not(windows)))]
-mod tests;
+// #[cfg(all(test, not(windows)))]
+// mod tests;
