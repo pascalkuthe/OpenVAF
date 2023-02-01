@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## Breaking Changes
+
+* Removed LLD integration which made packaging exceptionally difficult and caused crashes on Windows.
+  That mean that OpenVAF now requires that the system linker (and ucrt.lib when targeting windows) are available.
+
 ### Fixed
 
 * Correctly detect file encoding.

@@ -155,7 +155,8 @@ impl CompilationDB {
             cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
         }
 
-        link(&target, dst, |linker| {
+        // TODO configure linker
+        link(None, &target, dst, |linker| {
             for obj in &object_files {
                 linker.add_object(obj)
             }

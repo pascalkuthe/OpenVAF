@@ -130,7 +130,8 @@ pub fn compile(opts: &Opts) -> Result<CompilationTermination> {
 
     let back = LLVMBackend::new(&opts.codegen_opts, &opts.target, opts.target_cpu.clone(), &[]);
     let paths = osdi::compile(&db, &modules, &lib_file, &opts.target, &back, true, opts.opt_lvl);
-    link(&opts.target, lib_file.as_ref(), |linker| {
+    // TODO configure linker
+    link(None, &opts.target, lib_file.as_ref(), |linker| {
         for path in &paths {
             linker.add_object(path);
         }

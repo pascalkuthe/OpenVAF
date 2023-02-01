@@ -88,9 +88,6 @@ pub struct TargetOptions {
     /// libraries that should be always be linked to, usually go here.
     pub post_link_args: LinkArgs,
 
-    /// On windows a manually genrated importlib is required because unresolved symbols are not allowed
-    pub import_lib: &'static [u8],
-
     /// Whether the target toolchain is like Windows
     pub is_like_windows: bool,
     pub is_like_osx: bool,
@@ -107,7 +104,6 @@ impl Default for TargetOptions {
             linker_flavor: LinkerFlavor::Ld,
             pre_link_args: BTreeMap::default(),
             post_link_args: BTreeMap::default(),
-            import_lib: &[],
         }
     }
 }
