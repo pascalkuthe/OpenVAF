@@ -82,18 +82,11 @@ cargo build --release
 ## General Build Instructions 
 
 OpenVAF requires rust/cargo 1.63 (best installed with [rustup](https://rustup.rs/)).
-Furthermore, LLVM-14 development libraries and toolchain are required.
-Older or newever versions are not supported and will produce compilation errors.
-Newer version might work, however OpenVAF directly uses some internals of the `lld-linker` that may change between versions.
-OpenVAF requires the following components of the LLVM toolchain:
+Furthermore, the LLVM-14 development libraries are required.
+Older or newever versions of LLVM are not supported.
 
-- llvm-ar/llvm-link/llvm-dlltool
-- clang/clang-cl
-- lld development libraries
-- LLVM development libraries
 
-On fedora 37 these can be installed with `sudo dnf install llvm-devel lld-devel`. 
-On debian based distros the [llvm provided packages](https://apt.llvm.org/) can be used instead.
+On debian based distros the [llvm provided packages](https://apt.llvm.org/) can be used.
 Windows developers must compile LLVM themselves.
 
 Once all dependencies are satisfied you can build the entire project by running:
@@ -102,17 +95,12 @@ Once all dependencies are satisfied you can build the entire project by running:
 cargo build
 ```
 
-By default, OpenVAF will link against the static LLVM libraries, to avoid runtime dependencies.
-However, package managers usually do not provide all required static libraries so shared libraries are usually used during development.
-Simply set the `LLVM_LINK_SHARED` environment variable during linking to use the shared system libraries.
-If multiple LLVM versions are installed (often the case on debian) the `LLVM_CONFIG` environment variable can be set to the path of the correct `llvm-config` binary.
-Release binaries are built in [special docker images](https://github.com/pascalkuthe/ferris-ci) that include all necessary dependencies.
+By default, OpenVAF will link against the static LLVM libraries, to avoid runtime dependencies. This is great for creating portable binaries but sometimes building with shared libraries is preferable. Simply set the `LLVM_LINK_SHARED` environment variable during linking to use the shared system libraries. If multiple LLVM versions are installed (often the case on debian) the `LLVM_CONFIG` environment variable can be used to specify the path of the correct `llvm-config` binary.
 An example build invocation using shared libraries on debian is shown below:
 
 ``` shell
 LLVM_LINK_SHARED=1 LLVM_CONFIG="llvm-config-14" cargo build
 ```
-
 OpenVAF includes many integration and unit tests inside its source code.
 For development [cargo-nexttest](https://nexte.st/) is recommended to run these tests as it significantly reduces the test runtime.
 However, the built-in cargo test runner (requires no extra installation) can also be used.

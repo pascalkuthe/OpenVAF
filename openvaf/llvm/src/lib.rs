@@ -30,7 +30,7 @@ pub mod bitcode;
 pub mod builder;
 pub mod context;
 pub mod initialization;
-pub mod lld;
+// pub mod lld;
 pub mod module;
 pub mod pass_manager;
 pub mod support;

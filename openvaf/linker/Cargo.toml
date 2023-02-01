@@ -12,6 +12,6 @@ doctest = false
 
 [dependencies]
 target = { version = "0.0.0", path = "../target" }
-llvm = { version = "0.0.0", path = "../llvm" }
 anyhow = "1"
 camino = "1.1.1"
+cc = "1.0.73"

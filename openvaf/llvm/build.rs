@@ -240,10 +240,10 @@ fn main() {
     //         cfg.define("LLVM_RUSTLLVM", None);
     //     }
 
-    if tracked_env_var_os("LLVM_NDEBUG").is_some() {
-        cfg.define("NDEBUG", None);
-        cfg.debug(false);
-    }
+    // if tracked_env_var_os("LLVM_NDEBUG").is_some() {
+    cfg.define("NDEBUG", None);
+    cfg.debug(false);
+    // }
 
     rerun_if_changed_anything_in_dir(Path::new("wrapper"));
     cfg.cpp(true)
@@ -273,7 +273,7 @@ fn main() {
         // may or may not have built it. We don't reference anything from this
         // library and it otherwise may just pull in extra dependencies on
         // libedit which we don't want
-        if lib == "LLVMLineEditor" {
+        if lib.contains("LLVMLineEditor") {
             continue;
         }
 
@@ -394,12 +394,4 @@ fn main() {
     if target.contains("windows-gnu") {
         println!("cargo:rustc-link-lib=static:-bundle=pthread");
     }
-
-    // linking lld is not handeled by llvm-config
-    println!("cargo:rustc-link-lib={llvm_kind}=lldCommon");
-    println!("cargo:rustc-link-lib={llvm_kind}=lldCOFF");
-    println!("cargo:rustc-link-lib={llvm_kind}=lldELF");
-    println!("cargo:rustc-link-lib={llvm_kind}=lldMachO");
-    // println!("cargo:rustc-link-lib={llvm_kind}=lldMinGW");
-    // println!("cargo:rustc-link-lib={llvm_kind}=lldWasm");
 }

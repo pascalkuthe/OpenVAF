@@ -504,7 +504,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "camino",
- "llvm",
+ "cc",
  "target",
 ]
 
@@ -1283,6 +1283,7 @@ version = "0.0.0"
 dependencies = [
  "ahash 0.8.0",
  "chardetng",
+ "encoding_rs",
  "indexmap",
  "paths",
 ]
