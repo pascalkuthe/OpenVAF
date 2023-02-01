@@ -66,9 +66,12 @@ fn event_stmt(p: &mut Parser, m: Marker) {
     );
     if p.eat(T!['(']) {
         while !p.at_ts(TokenSet::new(&[T![')'], T![begin], ENDMODULE_KW])) {
-            p.expect(STR_LIT);
+            let mut succ = p.expect(STR_LIT);
             if !p.at(T![')']) {
-                p.expect_with(T![,], &[T![')'], T![,]]);
+                succ |= p.expect_with(T![,], &[T![')'], T![,]]);
+                if !succ {
+                    p.bump_any()
+                }
             }
         }
         p.eat(T![')']);
