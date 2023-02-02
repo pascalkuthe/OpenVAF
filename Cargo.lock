@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "openvaf-driver"
-version = "22.12.0"
+version = "23.2.0"
 dependencies = [
  "anyhow",
  "camino",

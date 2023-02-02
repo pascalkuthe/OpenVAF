@@ -10,12 +10,13 @@ pub fn opts() -> TargetOptions {
     pre_link_args.insert(LinkerFlavor::Msvc, pre_link_args_msvc);
 
     let mut post_link_args = LinkArgs::new();
-    post_link_args.insert(LinkerFlavor::Msvc, vec!["ucrt.lib".to_owned()]);
+    post_link_args.insert(LinkerFlavor::Msvc, vec!["msvcrt.lib".to_owned()]);
 
     TargetOptions {
         is_like_windows: true,
         linker_flavor: LinkerFlavor::Msvc,
         pre_link_args,
+        post_link_args,
         ..Default::default()
     }
 }

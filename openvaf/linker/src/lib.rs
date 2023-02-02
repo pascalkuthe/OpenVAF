@@ -2,8 +2,9 @@ use anyhow::{bail, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cc::windows_registry;
 
-use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
+use std::mem::take;
+use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::{ascii, env, io};
 use target::spec::{LinkerFlavor, Target};
@@ -64,7 +65,7 @@ fn linker_with_args<'a>(
     add_objects: impl FnOnce(&mut dyn Linker),
 ) -> Box<dyn Linker + 'a> {
     let flavor = target.options.linker_flavor;
-    let mut cmd = get_linker(path, flavor, target);
+    let mut cmd = get_linker(path.map(|path| path.into_std_path_buf()), flavor, target);
     disable_localization(cmd.cmd());
     // This environment variable is pretty magical but is intended for
     // producing deterministic builds. This was first discovered to be used
@@ -89,14 +90,21 @@ fn linker_with_args<'a>(
 //// path for MSVC to find its DLLs, and gcc to find its bundled
 //// toolchain
 fn get_linker<'a>(
-    path: Option<Utf8PathBuf>,
+    path: Option<PathBuf>,
     flavor: LinkerFlavor,
     target: &'a Target,
 ) -> Box<dyn Linker + 'a> {
     match flavor {
         LinkerFlavor::Msvc => {
-            let mut cmd = Command::new(path.unwrap_or_else(|| "link.exe".into()));
             let msvc_tool = windows_registry::find_tool(&target.llvm_target, "link.exe");
+            let path = match path {
+                Some(path) => path,
+                None => match msvc_tool {
+                    Some(ref tool) => tool.path().to_owned(),
+                    None => Path::new("link.exe").to_owned(),
+                },
+            };
+            let mut cmd = Command::new(path);
             let mut new_path = Vec::new();
             // The compiler's sysroot often has some bundled tools, so add it to the
             // PATH for the child.
@@ -202,7 +210,7 @@ impl dyn Linker + '_ {
     pub fn take_cmd(&mut self) -> std::process::Command {
         let cmd = self.cmd();
         let mut res = std::process::Command::new(cmd.command.as_os_str());
-        res.args(cmd.args.iter()).envs(cmd.env.iter());
+        res.args(cmd.args.iter()).envs(take(&mut cmd.env));
         res
     }
 }
@@ -277,14 +285,14 @@ impl Linker for MsvcLinker {
 }
 
 pub struct Command {
-    command: Utf8PathBuf,
+    command: PathBuf,
     args: Vec<OsString>,
-    env: HashMap<OsString, OsString>,
+    env: Vec<(OsString, OsString)>,
 }
 
 impl Command {
-    fn new(command: Utf8PathBuf) -> Command {
-        Command { command, args: Vec::new(), env: HashMap::new() }
+    fn new(command: PathBuf) -> Command {
+        Command { command, args: Vec::new(), env: Vec::new() }
     }
     fn args<I: AsRef<OsStr>>(&mut self, args: impl IntoIterator<Item = I>) {
         self.args.extend(args.into_iter().map(|arg| arg.as_ref().to_owned()))
@@ -296,7 +304,7 @@ impl Command {
     }
 
     fn env(&mut self, env: impl AsRef<OsStr>, val: impl AsRef<OsStr>) -> &mut Self {
-        self.env.insert(env.as_ref().to_owned(), val.as_ref().to_owned());
+        self.env.push((env.as_ref().to_owned(), val.as_ref().to_owned()));
         self
     }
 
