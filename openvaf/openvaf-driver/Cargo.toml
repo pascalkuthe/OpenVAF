@@ -13,11 +13,11 @@ path = "src/main.rs"
 
 openvaf = { version = "0.1.2", path = "../openvaf" }
 
-clap = "4.0"
+clap = "4.1"
 directories-next = "2"
-path-absolutize = "3.0.13"
+path-absolutize = "3.0.14"
 anyhow = "1"
-termcolor = "1.1"
-camino = "1.1.1"
+termcolor = "1.2"
+camino = "1.1.2"
 
 mimalloc = { version = "*", default-features = false}

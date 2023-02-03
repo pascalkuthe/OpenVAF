@@ -16,11 +16,11 @@ maintenance = { status = "actively-developed" }
 
 
 [dev-dependencies]
-xshell = "0.2.1"
-indexmap = "1.6"
+xshell = "0.2.3"
+indexmap = "1.9"
 proc-macro2 = "1.0"
 quote = "1.0"
-ungrammar = "1.14"
+ungrammar = "1.16"
 ahash = "0.8"
 
 stdx = {version = "0.0.0", path = "../lib/stdx" }

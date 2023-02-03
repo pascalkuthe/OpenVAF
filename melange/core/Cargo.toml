@@ -14,12 +14,12 @@ ahash = "0.8"
 anyhow = "1"
 stdx = { version = "0.0.0", path = "../../lib/stdx" }
 typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
-typed-index-collections = "3.0"
-camino = "1.1.1"
-indexmap = "1.6"
+typed-index-collections = "3.1"
+camino = "1.1.2"
+indexmap = "1.9"
 lasso = { version = "0.6", features = ["ahash"] }
 klu-rs = "0.4.0"
-num-complex = "0.4.2"
+num-complex = "0.4.3"
 openvaf = { version = "0.1.2", path = "../../openvaf/openvaf" }
 
 directories-next = "2"

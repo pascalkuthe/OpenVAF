@@ -12,5 +12,5 @@ doctest = false
 [dependencies]
 mir = {version = "0.0.0", path = "../mir" }
 
-typed-index-collections = "3.0"
+typed-index-collections = "3.1"
 lasso = {version = "0.6", features = ["ahash"]}

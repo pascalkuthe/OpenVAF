@@ -18,12 +18,12 @@ bitset = {version = "0.0.0", path = "../../lib/bitset" }
 typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
 arena = { version = "0.0.0", path = "../../lib/arena" }
 
-indexmap = "1.6"
-typed-index-collections = "3.0"
+indexmap = "1.9"
+typed-index-collections = "3.1"
 ahash = "0.8"
 
 [dev-dependencies]
-expect-test = "1.1"
+expect-test = "1.4"
 mir_reader = {version = "0.0.0", path = "../mir_reader" }
 mir_interpret = {version = "0.0.0", path = "../mir_interpret" }
 float-cmp =  "0.9"

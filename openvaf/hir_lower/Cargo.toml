@@ -21,13 +21,13 @@ mir = {version = "0.0.0", path = "../mir" }
 mir_build = {version = "0.0.0", path = "../mir_build" }
 
 ahash = "0.8"
-typed-index-collections = "3.0"
-indexmap = "1.6"
+typed-index-collections = "3.1"
+indexmap = "1.9"
 lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
 salsa = "0.17.0-pre.2"
-expect-test = "1.1"
+expect-test = "1.4"
 mini_harness = { version = "0.0.1", path = "../../lib/mini_harness" }
 basedb = { version = "0.0.0", path = "../basedb" }
 parking_lot = "0.12"
