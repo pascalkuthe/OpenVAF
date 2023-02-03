@@ -25,6 +25,6 @@ paths = { version = "0.0", path = "../../lib/paths" }
 md5 = "0.7"
 
 anyhow = "1"
-termcolor = "1.1"
-camino = "1.1.1"
+termcolor = "1.2"
+camino = "1.1.2"
 

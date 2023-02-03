@@ -10,5 +10,5 @@ license="GPL-3.0"
 doctest = false
 
 [dependencies]
-indexmap = "1.6"
+indexmap = "1.9"
 ahash = "0.8"

@@ -15,4 +15,4 @@ bforest = {version = "0.0.0" , path = "../../lib/bforest"}
 lasso = {version = "0.6", features = ["ahash"]}
 
 [dev-dependencies]
-expect-test = "1.1"
+expect-test = "1.4"

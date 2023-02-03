@@ -15,7 +15,7 @@ mir = { version = "0.0.0", path = "../mir" }
 target = { version = "0.0.0", path = "../target" }
 base_n = {version = "1", path="../../lib/base_n"}
 
-typed-index-collections = "3.0"
+typed-index-collections = "3.1"
 arrayvec = "0.7"
 ahash = "0.8"
 lasso = { version = "0.6", features = ["ahash"] }

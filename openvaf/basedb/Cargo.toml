@@ -29,15 +29,15 @@ codespan-reporting = "0.11"
 
 # Netype Wrappers
 text-size = "1.1"
-typed-index-collections = "3.0"
+typed-index-collections = "3.1"
 
 # Performant collections
 parking_lot = "0.12"
-indexmap = "1.6"
+indexmap = "1.9"
 ahash = "0.8"
 
 [dev-dependencies]
-expect-test = "1.1"
+expect-test = "1.4"
 mini_harness = { version = "0.0.1", path = "../../lib/mini_harness" }
 
 
