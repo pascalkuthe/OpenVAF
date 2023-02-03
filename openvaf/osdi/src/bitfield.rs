@@ -7,9 +7,9 @@ use llvm::{
 };
 use mir_llvm::{CodegenCx, MemLoc};
 
-type WORD = u32;
+type Word = u32;
 
-const WORD_BYTES: u32 = size_of::<WORD>() as u32;
+const WORD_BYTES: u32 = size_of::<Word>() as u32;
 const WORD_BITS: u32 = WORD_BYTES * 8;
 
 fn word_index_and_mask(pos: u32) -> (u32, u32) {

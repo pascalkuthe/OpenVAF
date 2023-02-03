@@ -81,8 +81,8 @@ cargo build --release
 
 ## General Build Instructions 
 
-OpenVAF requires rust/cargo 1.63 (best installed with [rustup](https://rustup.rs/)).
-Furthermore, the LLVM-14 development libraries are required.
+OpenVAF **requires rust/cargo 1.64 or newer** (best installed with [rustup](https://rustup.rs/)).
+Furthermore, the **LLVM-14** development libraries are required.
 Older or newever versions of LLVM are not supported.
 
 
