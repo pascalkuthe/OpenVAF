@@ -74,7 +74,7 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
             post_order.clear();
         }
 
-        self.post_order_parts = post_order.to_parts();
+        self.post_order_parts = post_order.into_parts();
     }
 
     /// This function deterimes where a derivative (of higher order) is reachable in the DFG.
@@ -141,7 +141,7 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
                 )
             }
         }
-        self.post_order_parts = post_order.to_parts();
+        self.post_order_parts = post_order.into_parts();
     }
 
     fn initial_live_derivative_workque(&mut self) -> WorkQueue<Inst> {
@@ -155,7 +155,7 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
         workqueue.extend(&mut post_order);
         self.visited = post_order.visited.clone();
 
-        self.post_order_parts = post_order.to_parts();
+        self.post_order_parts = post_order.into_parts();
         workqueue
     }
 

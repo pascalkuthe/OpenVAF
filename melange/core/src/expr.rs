@@ -359,6 +359,7 @@ macro_rules! op_enums {
         $($op: ident $(= $fn: ident)?,)*
     ) => {
         #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+        #[allow(clippy::upper_case_acronyms)]
         enum $enum {
             $($op),*
         }

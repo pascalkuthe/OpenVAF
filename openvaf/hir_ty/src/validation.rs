@@ -29,7 +29,7 @@ struct IncompatibleBranchDiagnostic {
 }
 
 impl IncompatibleBranchDiagnostic {
-    fn to_report(
+    fn into_report(
         self,
         db: &dyn HirTyDB,
         parse: &Parse<SourceFile>,
@@ -536,7 +536,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     node1,
                     node2,
                 }
-                .to_report(self.db, self.parse, self.map, self.sm)
+                .into_report(self.db, self.parse, self.map, self.sm)
             }
         }
     }
@@ -745,7 +745,7 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
                     node1,
                     node2,
                 }
-                .to_report(self.db, self.parse, self.map, self.sm)
+                .into_report(self.db, self.parse, self.map, self.sm)
             }
         }
     }

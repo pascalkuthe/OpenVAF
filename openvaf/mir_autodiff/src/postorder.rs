@@ -42,7 +42,7 @@ impl<'a, 'b, 'c> Postorder<'a, 'b, 'c> {
     //     }
     // }
 
-    pub fn to_parts(self) -> PostorderParts<'a> {
+    pub fn into_parts(self) -> PostorderParts<'a> {
         (self.visited, self.visit_stack)
     }
 
