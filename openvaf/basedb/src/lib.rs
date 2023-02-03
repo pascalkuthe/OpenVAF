@@ -186,7 +186,7 @@ fn sourcemap(db: &dyn BaseDB, root_file: FileId) -> Arc<SourceMap> {
     db.preprocess(root_file).sm
 }
 
-pub const STANDARD_FLAGS: [&str; 3] = [" __OPENVAF__", "__VAMS__", "__VAMS_COMPACT_MODELING__"];
+pub const STANDARD_FLAGS: [&str; 3] = ["__OPENVAF__", "__VAMS__", "__VAMS_COMPACT_MODELING__"];
 
 pub trait Upcast<T: ?Sized> {
     fn upcast(&self) -> &T;
