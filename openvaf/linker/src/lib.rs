@@ -1,8 +1,10 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cc::windows_registry;
 
 use std::ffi::{OsStr, OsString};
+use std::fs::{remove_file, File};
+use std::io::Write;
 use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
@@ -17,7 +19,17 @@ pub fn link(
 ) -> Result<()> {
     let mut linker = linker_with_args(path, target, out_filename, add_objects);
 
-    match exec_linker(linker.take_cmd(), out_filename) {
+    let import_lib_path = out_filename.with_file_name("__openvaf__import.lib");
+    if !target.options.import_lib.is_empty() {
+        let mut file = File::create(&import_lib_path).context("failed to create importlib")?;
+        file.write_all(target.options.import_lib).context("failed to write importlib")?;
+        linker.add_object(&import_lib_path);
+    }
+    let res = exec_linker(linker.take_cmd(), out_filename);
+    if !target.options.import_lib.is_empty() {
+        remove_file(import_lib_path).context("failed to delete importlib")?;
+    }
+    match res {
         Ok(prog) if !prog.status.success() => {
             let mut output = prog.stderr.clone();
             output.extend_from_slice(&prog.stdout);
