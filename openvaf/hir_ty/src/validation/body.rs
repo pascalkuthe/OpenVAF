@@ -104,7 +104,8 @@ impl BodyValidationDiagnostic {
         let infere = db.inference_result(def);
 
         let ctx = match def {
-            DefWithBodyId::ModuleId(_) => BodyCtx::AnalogBlock,
+            DefWithBodyId::ModuleId { initial: false, .. } => BodyCtx::AnalogBlock,
+            DefWithBodyId::ModuleId { initial: true, .. } => BodyCtx::AnalogInitialBlock,
             DefWithBodyId::FunctionId(_) => BodyCtx::Function,
             _ => BodyCtx::Const,
         };
@@ -130,6 +131,7 @@ impl BodyValidationDiagnostic {
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum BodyCtx {
     AnalogBlock,
+    AnalogInitialBlock,
     Conditional,
     EventControl,
     Function,
@@ -161,7 +163,8 @@ impl BodyCtx {
 
 impl_display! {
     match BodyCtx{
-       BodyCtx::AnalogBlock => "module analog block";
+       BodyCtx::AnalogBlock => "analog block";
+       BodyCtx::AnalogInitialBlock => "analog inital block";
        BodyCtx::Conditional => "conditions";
        BodyCtx::EventControl => "events";
        BodyCtx::Function => "analog functions";

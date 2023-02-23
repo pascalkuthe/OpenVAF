@@ -72,7 +72,7 @@ impl EvalMir {
     pub fn new(db: &CompilationDB, module: &ModuleInfo, literals: &mut Rodeo) -> EvalMir {
         let (mut func, mut intern) = MirBuilder::new(
             db,
-            module.id.into(),
+            module.id,
             &|kind| match kind {
                 PlaceKind::Contribute { .. }
                 | PlaceKind::ImplicitResidual { .. }

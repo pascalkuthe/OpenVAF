@@ -66,8 +66,8 @@ impl Body {
                 let (body, sm, _) = db.param_body_with_sourcemap(param);
                 return (body, sm);
             }
-            DefWithBodyId::ModuleId(id) => {
-                let ModuleLoc { scope, id: item_tree } = id.lookup(db);
+            DefWithBodyId::ModuleId { initial, module } => {
+                let ModuleLoc { scope, id: item_tree } = module.lookup(db);
 
                 let ast_id = tree[item_tree].ast_id();
                 let ast = ast_id_map.get(ast_id).to_node(ast.syntax());
@@ -81,8 +81,11 @@ impl Body {
                     curr_scope,
                     registry: &registry,
                 };
-                body.entry_stmts =
-                    ast.analog_behaviour().map(|stmt| ctx.collect_stmt(stmt)).collect();
+                body.entry_stmts = if initial {
+                    ast.analog_initial_behaviour().map(|stmt| ctx.collect_stmt(stmt)).collect()
+                } else {
+                    ast.analog_behaviour().map(|stmt| ctx.collect_stmt(stmt)).collect()
+                };
             }
 
             DefWithBodyId::FunctionId(id) => {

@@ -92,6 +92,7 @@ pub(crate) const KINDS_SRC: KindsSrc = KindsSrc {
         "while",
         "root",
         "initial_step",
+        "initial",
         "final_step",
         "aliasparam",
     ],

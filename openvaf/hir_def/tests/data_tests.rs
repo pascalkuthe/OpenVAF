@@ -8,6 +8,7 @@ use basedb::{
 use expect_test::expect_file;
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::{DefMap, LocalScopeId, ScopeDefItem, ScopeOrigin};
+use hir_def::DefWithBodyId;
 use mini_harness::{harness, Result};
 use parking_lot::RwLock;
 use stdx::{is_va_file, openvaf_test_data, project_root, run_dev_tests};
@@ -109,7 +110,8 @@ fn body_test(file: &Path) -> Result {
     let mut actual = String::new();
     for (_, scope) in &def_map[def_map.entry()].children {
         if let ScopeOrigin::Module(module) = def_map[*scope].origin {
-            actual.push_str(&db.body(module.into()).dump(&db));
+            let analog_block = DefWithBodyId::ModuleId { initial: false, module };
+            actual.push_str(&db.body(analog_block).dump(&db));
             for (_, scope) in &def_map[*scope].children {
                 if let ScopeOrigin::Function(func) = def_map[*scope].origin {
                     actual.push_str(&db.body(func.into()).dump(&db))

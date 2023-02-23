@@ -412,6 +412,7 @@ pub struct AnalogBehaviour {
 impl ast::AttrsOwner for AnalogBehaviour {}
 impl AnalogBehaviour {
     pub fn analog_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![analog]) }
+    pub fn initial_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![initial]) }
     pub fn stmt(&self) -> Option<Stmt> { support::child(&self.syntax) }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

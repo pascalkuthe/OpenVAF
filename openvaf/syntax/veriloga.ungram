@@ -201,7 +201,7 @@ ModulePort = kind: ModulePortKind
 ModulePortKind = PortDecl| Name
 
 AnalogBehaviour =
-  AttrList* 'analog' Stmt
+  AttrList* 'analog' 'initial'? Stmt
 
 VarDecl =
   AttrList* Type (Var (',' Var)*) ';'
