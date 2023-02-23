@@ -52,7 +52,24 @@ pub fn collect_diagnostics(db: &dyn HirTyDB, root_file: FileId, dst: &mut impl D
     let root_scope = def_map.root();
     for child in def_map[root_scope].children.values() {
         if let ScopeOrigin::Module(module) = def_map[*child].origin {
-            collect_body_diagnostcs(db, dst, module.into(), &parse, &sm, root_file, &ast_id_map)
+            collect_body_diagnostcs(
+                db,
+                dst,
+                DefWithBodyId::ModuleId { initial: true, module },
+                &parse,
+                &sm,
+                root_file,
+                &ast_id_map,
+            );
+            collect_body_diagnostcs(
+                db,
+                dst,
+                DefWithBodyId::ModuleId { initial: false, module },
+                &parse,
+                &sm,
+                root_file,
+                &ast_id_map,
+            )
         }
 
         collect_scope_diagnostc(db, &def_map, &parse, &sm, &ast_id_map, root_file, dst, *child)
@@ -61,7 +78,6 @@ pub fn collect_diagnostics(db: &dyn HirTyDB, root_file: FileId, dst: &mut impl D
 
 // FIXME bundle required syntax info into struct in BaseDB
 #[allow(clippy::too_many_arguments)]
-
 fn collect_scope_diagnostc(
     db: &dyn HirTyDB,
     def_map: &DefMap,

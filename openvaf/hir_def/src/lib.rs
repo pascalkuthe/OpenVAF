@@ -390,7 +390,7 @@ impl_intern!(NatureAttrId, NatureAttrLoc, intern_nature_attr, lookup_intern_natu
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DefWithBodyId {
     ParamId(ParamId),
-    ModuleId(ModuleId),
+    ModuleId { initial: bool, module: ModuleId },
     FunctionId(FunctionId),
     VarId(VarId),
     NatureAttrId(NatureAttrId),
@@ -401,7 +401,7 @@ impl DefWithBodyId {
     pub fn file(self, db: &dyn HirDefDB) -> FileId {
         match self {
             DefWithBodyId::ParamId(id) => id.lookup(db).scope.root_file,
-            DefWithBodyId::ModuleId(id) => id.lookup(db).scope.root_file,
+            DefWithBodyId::ModuleId { module, .. } => module.lookup(db).scope.root_file,
             DefWithBodyId::FunctionId(id) => id.lookup(db).scope.root_file,
             DefWithBodyId::VarId(id) => id.lookup(db).scope.root_file,
             DefWithBodyId::NatureAttrId(id) => id.lookup(db).nature.lookup(db).root_file,
@@ -410,17 +410,15 @@ impl DefWithBodyId {
     }
 }
 
-impl_from!(ParamId, ModuleId,FunctionId,VarId,NatureAttrId,DisciplineAttrId for DefWithBodyId);
+impl_from!(ParamId, FunctionId,VarId,NatureAttrId,DisciplineAttrId for DefWithBodyId);
 impl TryFrom<ScopeDefItem> for DefWithBodyId {
     type Error = ();
     fn try_from(src: ScopeDefItem) -> Result<DefWithBodyId, ()> {
         let res = match src {
-            ScopeDefItem::ModuleId(module) => module.into(),
             ScopeDefItem::VarId(var) => var.into(),
             ScopeDefItem::ParamId(param) => param.into(),
             ScopeDefItem::FunctionId(fun) => fun.into(),
             ScopeDefItem::NatureAttrId(attr) => attr.into(),
-            // ScopeDefItem::DisciplineAttrId(attr) => attr.into(),
             _ => return Err(()),
         };
         Ok(res)

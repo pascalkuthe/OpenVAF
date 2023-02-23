@@ -71,7 +71,7 @@ impl TestDataBase {
                 let mut required_vars = [].into_iter();
                 let builder = MirBuilder::new(
                     self,
-                    id.into(),
+                    id,
                     &|kind| {
                         matches!(
                             kind,
@@ -122,18 +122,17 @@ fn mir_test(file: &Path) -> Result {
     let def_map = db.def_map(db.root_file());
     assert_eq!(db.check(), "");
 
-    let def = *def_map[def_map.root()]
+    let module = *def_map[def_map.root()]
         .declarations
         .values()
         .find_map(|def| if let ScopeDefItem::ModuleId(id) = def { Some(id) } else { None })
         .unwrap();
-    let def = def.into();
 
     let mut empty_iter = [].into_iter();
     let mut literals = Rodeo::new();
     let mir = MirBuilder::new(
         &db,
-        def,
+        module,
         &|kind| {
             matches!(
                 kind,

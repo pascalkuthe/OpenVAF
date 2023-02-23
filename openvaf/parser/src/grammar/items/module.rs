@@ -4,6 +4,7 @@ use crate::grammar::stmts::{STMT_RECOVER, STMT_TS};
 const MODULE_ITEM_RECOVERY: TokenSet = DIRECTION_TS.union(TokenSet::new(&[
     NET_TYPE,
     ANALOG_KW,
+    INITIAL_KW,
     BRANCH_KW,
     STRING_KW,
     REAL_KW,
@@ -111,6 +112,7 @@ fn module_items(p: &mut Parser) {
             ANALOG_KW if p.nth(1) == FUNCTION_KW => func_decl(p, m),
             ANALOG_KW => {
                 p.bump(ANALOG_KW);
+                p.eat(INITIAL_KW);
                 stmt_with_attrs(p);
                 m.complete(p, ANALOG_BEHAVIOUR);
             }

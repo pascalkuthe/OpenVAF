@@ -149,7 +149,15 @@ impl ast::IfStmt {
 
 impl ast::ModuleDecl {
     pub fn analog_behaviour(&self) -> impl Iterator<Item = Stmt> {
-        support::children::<AnalogBehaviour>(self.syntax()).filter_map(|it| it.stmt())
+        support::children::<AnalogBehaviour>(self.syntax())
+            .filter(|it| it.initial_token().is_none())
+            .filter_map(|it| it.stmt())
+    }
+
+    pub fn analog_initial_behaviour(&self) -> impl Iterator<Item = Stmt> {
+        support::children::<AnalogBehaviour>(self.syntax())
+            .filter(|it| it.initial_token().is_some())
+            .filter_map(|it| it.stmt())
     }
 
     pub fn body_ports(&self) -> AstChildren<ast::BodyPortDecl> {

@@ -5,8 +5,8 @@ use ahash::{AHashMap, AHashSet};
 use hir_def::body::{Body, ConstraintKind, ConstraintValue, ParamConstraint};
 use hir_def::expr::{CaseCond, NZERO, PZERO};
 use hir_def::{
-    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, NodeId, ParamId, ParamSysFun,
-    Stmt, StmtId, Type, VarId,
+    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, ModuleId, NodeId, ParamId,
+    ParamSysFun, Stmt, StmtId, Type, VarId,
 };
 use hir_ty::builtin::{
     ABSDELAY_MAX, ABS_INT, ABS_REAL, DDX_POT, IDTMOD_IC, IDTMOD_IC_MODULUS,
@@ -38,7 +38,7 @@ use syntax::ast::{BinaryOp, UnaryOp};
 
 pub struct MirBuilder<'a> {
     db: &'a dyn HirTyDB,
-    def: DefWithBodyId,
+    module: ModuleId,
     is_output: &'a dyn Fn(PlaceKind) -> bool,
     required_vars: &'a mut dyn Iterator<Item = VarId>,
     tagged_reads: AHashSet<VarId>,
@@ -50,13 +50,13 @@ pub struct MirBuilder<'a> {
 impl<'a> MirBuilder<'a> {
     pub fn new(
         db: &'a dyn HirTyDB,
-        def: DefWithBodyId,
+        module: ModuleId,
         is_output: &'a dyn Fn(PlaceKind) -> bool,
         required_vars: &'a mut dyn Iterator<Item = VarId>,
     ) -> MirBuilder<'a> {
         MirBuilder {
             db,
-            def,
+            module,
             tagged_reads: AHashSet::new(),
             is_output,
             required_vars,
@@ -116,14 +116,16 @@ impl<'a> MirBuilder<'a> {
         };
 
         let mut builder = FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
+        let path = self.db.module_data(self.module).name.to_string();
 
-        let body = self.db.body(self.def);
-        let path = if let DefWithBodyId::ModuleId(module) = self.def {
-            self.db.module_data(module).name.to_string()
-        } else {
-            String::new()
-        };
-        let infere = self.db.inference_result(self.def);
+        let analog_inital = DefWithBodyId::ModuleId { initial: true, module: self.module };
+        let analog_inital_body = self.db.body(analog_inital);
+        let analog_inital_infere = self.db.inference_result(analog_inital);
+
+        let analog = DefWithBodyId::ModuleId { initial: false, module: self.module };
+        let analog_body = self.db.body(analog);
+        let analog_infere = self.db.inference_result(analog);
+
         let mut places = TiSet::default();
         let mut extra_dims = TiVec::new();
         if self.split_contribute {
@@ -137,8 +139,8 @@ impl<'a> MirBuilder<'a> {
             db: self.db,
             func: &mut builder,
             data: &mut interner,
-            body: &body,
-            infere: &infere,
+            body: &analog_inital_body,
+            infere: &analog_inital_infere,
             tagged_vars: &self.tagged_reads,
             places: &mut places,
             extra_dims: self.split_contribute.then_some(&mut extra_dims),
@@ -147,6 +149,12 @@ impl<'a> MirBuilder<'a> {
             inside_lim: false,
         };
 
+        // lower analog inital blocks first
+        ctx.lower_entry_stmts();
+
+        // ... and normal analog blocks afterwards
+        ctx.body = &analog_body;
+        ctx.infere = &analog_infere;
         ctx.lower_entry_stmts();
 
         for var in self.required_vars {

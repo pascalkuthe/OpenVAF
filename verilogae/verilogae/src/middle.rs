@@ -75,7 +75,7 @@ impl CompilationDB {
         let mut literals = Rodeo::new();
         let (mut func, mut intern) = MirBuilder::new(
             self,
-            info.module.into(),
+            info.module,
             &|kind| {
                 let is_output = matches!(
                     kind,
