@@ -36,7 +36,10 @@ pub trait Diagnostic {
             let mut report = self.build_report(root_file, db);
 
             if is_default {
-                let hint = format!("{} is set to {} by default", name, lvl);
+                let hint = format!(
+                    "{} is set to {} by default\nuse a CLI argument or an attribute to overwrite",
+                    name, lvl
+                );
                 report.notes.push(hint)
             }
 
