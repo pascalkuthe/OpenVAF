@@ -96,7 +96,7 @@ fn var(p: &mut Parser) -> bool {
 
 pub(super) fn parameter_decl(p: &mut Parser, m: Marker) {
     p.bump_any();
-    ty(p);
+    eat_ty(p);
     decl_list(p, T![;], parameter, MODULE_ITEM_OR_ATTR_RECOVERY);
     p.eat(T![;]);
     m.complete(p, PARAM_DECL);

@@ -157,7 +157,7 @@ impl<'a> Printer<'a> {
 
     fn print_parameter(&mut self, param: ItemTreeId<Param>) {
         let param = &self.tree[param];
-        wln!(self, "param {} {}", param.ty, param.name);
+        wln!(self, "param {} {}", param.ty.as_ref().unwrap_or(&crate::Type::Err), param.name);
     }
 
     fn print_var(&mut self, var: ItemTreeId<Var>) {

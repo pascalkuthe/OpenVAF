@@ -1,0 +1,14 @@
+module param_ty;
+	parameter real explicit_real1 = 0.0;
+	parameter real explicit_real2 = 0;
+	parameter integer explicit_int1 = 0.0;
+	parameter integer explicit_int2 = 0;
+	parameter infer_int = 0;
+	parameter infer_real = 0.0;
+	parameter infer_string = "string";
+	real err, ok;
+	analog begin
+		err = ~infer_real + ~explicit_real1 + ~explicit_real2 + infer_string;
+		ok = ~infer_int + ~explicit_int1 + ~explicit_int2;
+	end
+endmodule

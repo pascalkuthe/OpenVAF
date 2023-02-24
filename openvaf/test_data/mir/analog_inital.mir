@@ -1,0 +1,16 @@
+function %(v16, v19, v22) {
+    v15 = iconst 2
+    v20 = iconst 3
+                                block0:
+@0004                               v17 = imul v15, v16
+@0004                               v18 = ifcast v17
+@0006                               v21 = ifcast v20
+@0002                               v23 = ifcast v16
+@0004                               v24 = fadd v23, v18
+@0006                               v25 = fadd v24, v21
+                                    v26 = optbarrier v18
+                                    v27 = optbarrier v25
+                                    jmp block1
+
+                                block1:
+}

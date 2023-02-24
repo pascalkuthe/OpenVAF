@@ -212,7 +212,7 @@ Var =
 
 
 ParamDecl =
-  AttrList* ('parameter'|'localparam') Type paras:(Param (',' Param)*) ';'
+  AttrList* ('parameter'|'localparam') Type? paras:(Param (',' Param)*) ';'
 
 AliasParam =
   AttrList* 'aliasparam' name: Name '=' src: ParamRef ';'

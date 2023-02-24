@@ -4,6 +4,7 @@ use camino::Utf8Path;
 use hir_def::db::HirDefDB;
 use hir_def::Type;
 use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
+use hir_ty::db::HirTyDB;
 use lasso::Rodeo;
 use llvm::{OptLevel, UNNAMED};
 use mir::{ControlFlowGraph, FuncRef, Function};
@@ -112,7 +113,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
     unsafe fn read_str_params(&mut self, ptr: &'ll llvm::Value) {
         let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
             if let ParamKind::Param(param) = *kind {
-                (self.db.param_data(param).ty == Type::String).then_some((id, param))
+                (self.db.param_ty(param) == Type::String).then_some((id, param))
             } else {
                 None
             }
@@ -131,7 +132,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
     unsafe fn read_params(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value, ty: Type) {
         let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
             if let ParamKind::Param(param) = kind {
-                (self.db.param_data(*param).ty == ty).then_some((id, *param))
+                (self.db.param_ty(*param) == ty).then_some((id, *param))
             } else {
                 None
             }

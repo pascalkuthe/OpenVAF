@@ -371,6 +371,7 @@ impl Ctx {
                     if nodes.iter().all(|node| node.name != name) {
                         let node = nodes.push_and_get_key(Node {
                             name,
+                            is_port: true,
                             ast_id: ast_id.into(),
                             decls: Vec::new(),
                         });
@@ -412,6 +413,7 @@ impl Ctx {
                 None => {
                     let node = nodes.push_and_get_key(Node {
                         name,
+                        is_port: true,
                         ast_id: ast_id.into(),
                         decls: vec![id.into()],
                     });
@@ -446,6 +448,7 @@ impl Ctx {
                 None => {
                     let node = nodes.push_and_get_key(Node {
                         name,
+                        is_port: false,
                         ast_id: ast_id.into(),
                         decls: vec![id.into()],
                     });
@@ -542,7 +545,7 @@ impl Ctx {
     }
 
     fn lower_param<T: From<ItemTreeId<Param>>>(&mut self, decl: ast::ParamDecl, dst: &mut Vec<T>) {
-        let ty = decl.ty().as_type();
+        let ty = decl.ty().map(|ty| ty.as_type());
         for param in decl.paras() {
             if let Some(name) = param.name() {
                 let ast_id = self.source_ast_id_map.ast_id(&param);

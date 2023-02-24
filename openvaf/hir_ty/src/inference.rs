@@ -96,12 +96,18 @@ impl InferenceResult {
             ..Default::default()
         };
 
-        let expr_stmt_ty = match id {
-            DefWithBodyId::ParamId(param) => Some(db.param_data(param).ty.clone()),
+        let mut ctx = Ctx { result, body: &body, db, expr_stmt_ty: None };
+        ctx.expr_stmt_ty = match id {
+            DefWithBodyId::ParamId(param) => match &db.param_data(param).ty {
+                Some(ty) => Some(ty.clone()),
+                // paramter type is inferred if omitted
+                None => ctx
+                    .infere_expr(body.entry_stmts[0], db.param_exprs(param).default)
+                    .and_then(|ty| ty.to_value()),
+            },
             DefWithBodyId::VarId(var) => Some(db.var_data(var).ty.clone()),
             _ => None,
         };
-        let mut ctx = Ctx { result, body: &body, db, expr_stmt_ty };
 
         for stmt in &*body.entry_stmts {
             ctx.infere_stmt(*stmt);
@@ -296,12 +302,10 @@ impl Ctx<'_> {
                 ScopeDefItem::DisciplineId(discipline) => Ty::Discipline(discipline),
                 ScopeDefItem::NodeId(node) => Ty::Node(node),
                 ScopeDefItem::VarId(var) => Ty::Var(self.db.var_data(var).ty.clone(), var),
-                ScopeDefItem::ParamId(param) => {
-                    Ty::Param(self.db.param_data(param).ty.clone(), param)
-                }
+                ScopeDefItem::ParamId(param) => Ty::Param(self.db.param_ty(param), param),
                 ScopeDefItem::AliasParamId(param) => {
                     let param = self.db.resolve_alias(param)?;
-                    Ty::Param(self.db.param_data(param).ty.clone(), param)
+                    Ty::Param(self.db.param_ty(param), param)
                 }
                 ScopeDefItem::BranchId(branch) => Ty::Branch(branch),
                 ScopeDefItem::BuiltIn(_) | ScopeDefItem::NatureAccess(_) => Ty::BuiltInFunction,
@@ -1092,24 +1096,7 @@ impl Ctx<'_> {
                     if canditates.is_empty() {
                         canditates = new_candidates;
                     }
-                } else if canditates.is_empty() {
-                    let sig: Vec<_> =
-                        new_candidates.iter().map(|canditate| &signatures[*canditate]).collect();
-
-                    unreachable!(
-                        "ambigous signature {:#?} all match {:?} (nothing matches exactly...)",
-                        sig, arg_types
-                    );
                 }
-
-                /*if canditates.len() != 1 {
-                    let sig: Vec<_> =
-                        canditates.iter().map(|canditate| &signatures[*canditate]).collect();
-                    println!(
-                        "ambigous signature {:?} all match {:?} (using first variant)",
-                        sig, arg_types
-                    );
-                } else*/
 
                 canditates[0]
             }

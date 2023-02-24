@@ -134,7 +134,7 @@ impl VarData {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamData {
     pub name: Name,
-    pub ty: Type,
+    pub ty: Option<Type>,
 }
 
 impl ParamData {

@@ -158,7 +158,7 @@ impl PlaceKind {
 
             PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => Type::Real,
             PlaceKind::ParamMin(param) | PlaceKind::ParamMax(param) | PlaceKind::Param(param) => {
-                db.param_data(param).ty.clone()
+                db.param_ty(param)
             }
             PlaceKind::IsVoltageSrc(_) | PlaceKind::CollapseImplicitEquation(_) => Type::Bool,
         }

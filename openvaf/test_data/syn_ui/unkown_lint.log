@@ -6,6 +6,7 @@ error[L008]: unknown lint 'bar'
   │
   = help: this attribute has no effect
   = lint_not_found is set to deny by default
+    use a CLI argument or an attribute to overwrite
 
 error[L008]: unknown lint 'foo'
   ┌─ /unkown_lint.va:2:25
@@ -15,4 +16,5 @@ error[L008]: unknown lint 'foo'
   │
   = help: this attribute has no effect
   = lint_not_found is set to deny by default
+    use a CLI argument or an attribute to overwrite
 

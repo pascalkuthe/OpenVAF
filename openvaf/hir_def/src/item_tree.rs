@@ -290,7 +290,7 @@ pub struct Var {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Param {
     pub name: Name,
-    pub ty: Type,
+    pub ty: Option<Type>,
     pub is_local: bool,
     pub ast_id: AstId<ast::Param>,
 }
@@ -493,6 +493,7 @@ impl NodeTypeDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     pub name: Name,
+    pub is_port: bool,
     pub ast_id: ErasedAstId,
     // TODO small vec?
     pub decls: Vec<NodeTypeDecl>,
@@ -500,7 +501,14 @@ pub struct Node {
 
 impl Node {
     pub fn direction(&self, tree: &ItemTree) -> (bool, bool) {
-        self.decls.iter().find_map(|decl| decl.direction(tree)).unwrap_or((false, false))
+        match self.decls.iter().find_map(|decl| decl.direction(tree)) {
+            Some(direction) => direction,
+            // default to inout to avoid confusing error messages
+            // and to allow omitting direction specification
+            // for backwards compatability with cadence, see #40
+            None if self.is_port => (true, true),
+            None => (false, false),
+        }
     }
 
     pub fn is_gnd(&self, tree: &ItemTree) -> bool {

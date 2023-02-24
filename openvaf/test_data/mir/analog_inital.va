@@ -1,0 +1,15 @@
+`include "disciplines.va"
+
+module test;
+    parameter integer foo = 0;
+	electrical a,b;
+    real test;
+    real test2;
+    analog begin
+        test2 = foo + test + test2;
+    end
+    analog initial begin
+        test = 2 * foo;
+        test2 = 3;
+    end
+endmodule

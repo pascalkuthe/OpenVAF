@@ -7,6 +7,7 @@ warning[L012]: reserved keyword 'cmos' was used as an identifier
   = 'cmos' will likely never be used in the implemented language subset so this use is allowed
   = to maintain compatibility with the VAMS standard this should be renamed
   = vams_keyword_compat is set to warn by default
+    use a CLI argument or an attribute to overwrite
 
 error[L012]: reserved keyword 'cmos' was used as an identifier
   ┌─ /overwrite_reserved_ident.va:5:46

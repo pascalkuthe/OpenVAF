@@ -6,13 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 1.0 - 2023-02-01
+## [unreleased]
 
 ### Added
 
 * Added errors for branches with incompatible disciplines.
 * Statically integrate the `lld` linker and C runtime shims to remove any external dependencies.
 * Enable LLVM Scalar Vectorization to automatically use SIMD instructions where possible.
+* Allow parameter declaration without explicit types
 
 ### Fixed
 
@@ -23,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Crash when encountering potential/flow probe with no arguments
 * Swapped signatures for `slew` and `transition`
 * `aliasparam` declarations being ignored
+* Allow parameter declaration without explicit types
+* Crash when using engineering real format specifier `%r`
 
 ##  0.9.0-beta8 - 2022-07-19
 
