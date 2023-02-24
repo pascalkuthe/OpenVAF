@@ -333,6 +333,7 @@ fn print_callback<'ll>(
                         2,
                         UNNAMED,
                     );
+                    let exp = LLVMBuildLoad2(llbuilder, cx.ty_real(), exp, UNNAMED);
                     let num = LLVMBuildFMul(llbuilder, val, exp, UNNAMED);
                     args.push(num);
                     let scale_char = LLVMBuildInBoundsGEP2(

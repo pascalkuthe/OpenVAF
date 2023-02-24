@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Fixed
 
 * Allow parameter declaration without explicit types
+* Crash when using engineering real format specifier `%r`
 
 ## 23.2.0 - 2023-02-01
 

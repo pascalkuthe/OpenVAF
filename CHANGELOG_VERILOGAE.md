@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Swapped signatures for `slew` and `transition`
 * `aliasparam` declarations being ignored
 * Allow parameter declaration without explicit types
+* Crash when using engineering real format specifier `%r`
 
 ##  0.9.0-beta8 - 2022-07-19
 
