@@ -10,6 +10,7 @@ warning[L011]: unkown supplied to the ddx operator is not standard compilant
      branch current acces: I(branch), I(a,b)
      node voltage: V(x)
    = non_standard_code is set to warn by default
+     use a CLI argument or an attribute to overwrite
 
 error: invalid unkown was supplied to the ddx operator
    ┌─ /ddx.va:19:21

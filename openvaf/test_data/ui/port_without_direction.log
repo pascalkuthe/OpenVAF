@@ -1,0 +1,20 @@
+error[L016]: no direction declared for port 'x'
+  ┌─ /port_without_direction.va:3:14
+  │
+3 │ module error(x);
+  │              ^ 'x' is declared here without direction
+  │
+  = if port_without_direction is set to warn/allow the direciton will be set to 'inout'.
+  = note: port directions are always required by the language standard.
+  = port_without_direction is set to deny by default
+    use a CLI argument or an attribute to overwrite
+
+warning[L016]: no direction declared for port 'x'
+  ┌─ /port_without_direction.va:8:16
+  │
+8 │ module warning(x);
+  │                ^ 'x' is declared here without direction
+  │
+  = if port_without_direction is set to warn/allow the direciton will be set to 'inout'.
+  = note: port directions are always required by the language standard.
+
