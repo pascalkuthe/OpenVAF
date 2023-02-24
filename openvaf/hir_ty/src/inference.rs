@@ -1096,24 +1096,7 @@ impl Ctx<'_> {
                     if canditates.is_empty() {
                         canditates = new_candidates;
                     }
-                } else if canditates.is_empty() {
-                    let sig: Vec<_> =
-                        new_candidates.iter().map(|canditate| &signatures[*canditate]).collect();
-
-                    unreachable!(
-                        "ambigous signature {:#?} all match {:?} (nothing matches exactly...)",
-                        sig, arg_types
-                    );
                 }
-
-                /*if canditates.len() != 1 {
-                    let sig: Vec<_> =
-                        canditates.iter().map(|canditate| &signatures[*canditate]).collect();
-                    println!(
-                        "ambigous signature {:?} all match {:?} (using first variant)",
-                        sig, arg_types
-                    );
-                } else*/
 
                 canditates[0]
             }
