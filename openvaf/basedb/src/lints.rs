@@ -50,6 +50,10 @@ pub struct LintSrc {
 }
 
 impl LintSrc {
+    pub fn item(ast: ErasedAstId) -> LintSrc {
+        Self { overwrite: None, ast: Some(ast) }
+    }
+
     pub fn lvl(&self, lint: Lint, root_file: FileId, db: &dyn BaseDB) -> (LintLevel, bool) {
         match self.overwrite {
             Some(lvl) => (lvl, false),
@@ -173,5 +177,6 @@ pub mod builtin {
         pub const non_standard_analog_operator = LintData{default_lvl: Deny, documentation_id: 13};
         pub const const_simparam = LintData{default_lvl: Allow, documentation_id: 14};
         pub const variant_const_simparam = LintData{default_lvl: Warn, documentation_id: 15};
+        pub const port_without_direction = LintData{default_lvl: Deny, documentation_id: 16};
     }
 }

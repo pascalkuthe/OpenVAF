@@ -1,0 +1,10 @@
+`include "disciplines.va"
+
+module error(x);
+    electrical x;
+endmodule
+
+(* openvaf_warn = "port_without_direction" *)
+module warning(x);
+    electrical x;
+endmodule

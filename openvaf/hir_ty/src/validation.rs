@@ -1,6 +1,6 @@
 use basedb::diagnostics::{Diagnostic, Label, LabelStyle, Report};
 use basedb::lints::builtin::{const_simparam, variant_const_simparam};
-use basedb::lints::{Lint, LintSrc};
+use basedb::lints::{self, Lint, LintSrc};
 use basedb::{AstIdMap, BaseDB, FileId};
 pub use body::BodyValidationDiagnostic;
 use hir_def::body::BodySourceMap;
@@ -687,6 +687,9 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
                         message: format!("'{}' is declared here without direction", name),
                     }])
                     .with_message(format!("no direction declared for port '{}'", name))
+                    .with_notes(vec![
+                        "if port_without_direction is set to warn/allow the direciton will be set to 'inout'.".to_owned(), 
+                        "note: port directions are always required by the language standard.".to_owned()])
             }
             TypeValidationDiagnostic::ExpectedPort { node, src } => {
                 let src = self.parse.to_file_span(self.map.get_syntax(src).range(), self.sm);
@@ -747,6 +750,15 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
                 }
                 .into_report(self.db, self.parse, self.map, self.sm)
             }
+        }
+    }
+
+    fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
+        match *self.diag {
+            TypeValidationDiagnostic::PortWithoutDirection { decl, .. } => {
+                Some((lints::builtin::port_without_direction, LintSrc::item(decl)))
+            }
+            _ => None,
         }
     }
 }

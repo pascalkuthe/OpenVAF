@@ -1,0 +1,21 @@
+error[L016]: no direction declared for port 'x'
+  ┌─ /port_without_direction.va:3:14
+  │
+3 │ module error(x);
+  │              ^ 'x' is declared here without direction
+  │
+  = note: Port directions are required by the standard but are often omitted in practice.
+    For maximum compatability with other tools mark the port as inout.
+    If this lint is set to warn/allow OpenVAF will do so automatically.
+  = port_without_direction is set to deny by default
+
+warning[L016]: no direction declared for port 'x'
+  ┌─ /port_without_direction.va:8:16
+  │
+8 │ module warning(x);
+  │                ^ 'x' is declared here without direction
+  │
+  = note: Port directions are required by the standard but are often omitted in practice.
+    For maximum compatability with other tools mark the port as inout.
+    If this lint is set to warn/allow OpenVAF will do so automatically.
+

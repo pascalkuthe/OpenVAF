@@ -371,6 +371,7 @@ impl Ctx {
                     if nodes.iter().all(|node| node.name != name) {
                         let node = nodes.push_and_get_key(Node {
                             name,
+                            is_port: true,
                             ast_id: ast_id.into(),
                             decls: Vec::new(),
                         });
@@ -412,6 +413,7 @@ impl Ctx {
                 None => {
                     let node = nodes.push_and_get_key(Node {
                         name,
+                        is_port: true,
                         ast_id: ast_id.into(),
                         decls: vec![id.into()],
                     });
@@ -446,6 +448,7 @@ impl Ctx {
                 None => {
                     let node = nodes.push_and_get_key(Node {
                         name,
+                        is_port: false,
                         ast_id: ast_id.into(),
                         decls: vec![id.into()],
                     });
