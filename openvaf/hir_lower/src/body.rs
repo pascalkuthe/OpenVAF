@@ -260,14 +260,13 @@ impl HirInterner {
             let body = db.body(param.into());
             let infere = db.inference_result(param.into());
             let info = db.param_exprs(param);
-            let data = db.param_data(param).clone();
-            let ty = &data.ty;
+            let ty = db.param_ty(param);
 
             // create a temporary to hold onto the uses
             let new_val = builder.make_param(0u32.into());
             builder.func.dfg.replace_uses(param_val, new_val);
 
-            let ops = CmpOps::from_ty(ty);
+            let ops = CmpOps::from_ty(&ty);
 
             let (then_src, else_src) = builder.make_cond(param_given, |builder, param_given| {
                 if param_given {

@@ -39,6 +39,9 @@ pub trait HirTyDB: HirDefDB + Upcast<dyn HirDefDB> {
     #[salsa::transparent]
     fn node_discipline(&self, node: NodeId) -> Option<DisciplineId>;
 
+    #[salsa::transparent]
+    fn param_ty(&self, param: ParamId) -> Type;
+
     #[salsa::input]
     fn known_limit_functions(&self) -> Option<Arc<[LimitSignature]>>;
 }
@@ -85,4 +88,16 @@ fn node_discipline(db: &dyn HirTyDB, node: NodeId) -> Option<DisciplineId> {
     let node = db.node_data(node);
     let discipline = node.discipline.as_ref()?;
     def_map.resolve_local_item_in_scope(def_map.root(), discipline).ok()
+}
+
+fn param_ty(db: &dyn HirTyDB, param: ParamId) -> Type {
+    match db.param_data(param).ty.clone() {
+        Some(ty) => ty,
+        None => {
+            let default_expr = db.param_exprs(param).default;
+            db.inference_result(param.into()).expr_types[default_expr]
+                .to_value()
+                .unwrap_or(Type::Err)
+        }
+    }
 }

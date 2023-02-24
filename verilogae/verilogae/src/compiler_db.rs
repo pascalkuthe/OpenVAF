@@ -449,7 +449,7 @@ impl ModelInfo {
                 let range = ast.syntax().text_range();
 
                 let resolve_param_info = || {
-                    let ty = db.param_data(param).ty.clone();
+                    let ty = db.param_ty(param);
                     if !matches!(ty, Type::Real | Type::Integer | Type::String) {
                         sink.add_diagnostic(
                             &IllegalType { range, allowed: "real, integer and string parameters" },

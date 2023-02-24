@@ -290,7 +290,7 @@ pub struct Var {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Param {
     pub name: Name,
-    pub ty: Type,
+    pub ty: Option<Type>,
     pub is_local: bool,
     pub ast_id: AstId<ast::Param>,
 }

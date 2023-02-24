@@ -370,7 +370,7 @@ impl ModuleInfo {
                 let range = ast.syntax().text_range();
 
                 let resolve_param_info = || {
-                    let ty = db.param_data(param).ty.clone();
+                    let ty = db.param_ty(param);
                     let type_ = resolve_str_attr(sink, &ast, "type");
                     let is_instance = match type_.as_deref() {
                         Some("instance") => true,

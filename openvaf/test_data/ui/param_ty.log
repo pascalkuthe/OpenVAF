@@ -1,0 +1,24 @@
+error: type missmatch: expected integer value but found real parameter ref
+   ┌─ /param_ty.va:11:10
+   │
+11 │         err = ~infer_real + ~explicit_real1 + ~explicit_real2 + infer_string;
+   │                ^^^^^^^^^^ expected integer value
+
+error: type missmatch: expected integer value but found real parameter ref
+   ┌─ /param_ty.va:11:24
+   │
+11 │         err = ~infer_real + ~explicit_real1 + ~explicit_real2 + infer_string;
+   │                              ^^^^^^^^^^^^^^ expected integer value
+
+error: type missmatch: expected integer value but found real parameter ref
+   ┌─ /param_ty.va:11:42
+   │
+11 │         err = ~infer_real + ~explicit_real1 + ~explicit_real2 + infer_string;
+   │                                                ^^^^^^^^^^^^^^ expected integer value
+
+error: type missmatch: expected integer value or real value but found string parameter ref
+   ┌─ /param_ty.va:11:59
+   │
+11 │         err = ~infer_real + ~explicit_real1 + ~explicit_real2 + infer_string;
+   │                                                                 ^^^^^^^^^^^^ expected integer value or real value
+

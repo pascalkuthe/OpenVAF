@@ -545,7 +545,7 @@ impl Ctx {
     }
 
     fn lower_param<T: From<ItemTreeId<Param>>>(&mut self, decl: ast::ParamDecl, dst: &mut Vec<T>) {
-        let ty = decl.ty().as_type();
+        let ty = decl.ty().map(|ty| ty.as_type());
         for param in decl.paras() {
             if let Some(name) = param.name() {
                 let ast_id = self.source_ast_id_map.ast_id(&param);

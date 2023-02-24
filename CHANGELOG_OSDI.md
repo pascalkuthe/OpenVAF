@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * support for `analog initial` blocks
 * Allow ignoring errors when a port is declared without direction
 
+## Fixed
+
+* Allow parameter declaration without explicit types
+
 ## 23.2.0 - 2023-02-01
 
 ## Breaking Changes
