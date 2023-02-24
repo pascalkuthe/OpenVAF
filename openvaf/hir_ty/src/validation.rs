@@ -464,7 +464,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     }]);
 
                 res = res.with_notes(vec![
-                        "This function is part of the Verilog-A standard but currently not implemented by OpenVAF\nIf this function is important to your application, create an issue:\nhttps://gitlab.com/DSPOM/OpenVAF/-/issues/new".to_owned(),
+                        "This function is part of the Verilog-A standard but currently not implemented by OpenVAF\nIf this function is important to your application, create an issue:\nhttps://github.com/pascalkuthe/openvaf/issues/new".to_owned(),
                     ]);
 
                 res
