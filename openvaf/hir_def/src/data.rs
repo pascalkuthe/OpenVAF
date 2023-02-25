@@ -175,16 +175,6 @@ impl NodeData {
     pub fn is_port(&self) -> bool {
         self.is_input | self.is_output
     }
-
-    #[inline]
-    pub fn read_only(&self) -> bool {
-        self.is_input & !self.is_output
-    }
-
-    #[inline]
-    pub fn write_only(&self) -> bool {
-        self.is_output & !self.is_input
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,6 +1,5 @@
 use std::mem::replace;
 
-use arrayvec::ArrayVec;
 use hir_def::body::Body;
 use hir_def::{
     BranchId, BuiltIn, DefWithBodyId, DisciplineId, Expr, ExprId, FunctionArgLoc, Literal, Lookup,
@@ -47,12 +46,6 @@ pub enum BodyValidationDiagnostic {
     IllegalContribute {
         stmt: StmtId,
         ctx: BodyCtx,
-    },
-    InvalidNodeDirectionForAccess {
-        expr: ExprId,
-        nodes: ArrayVec<NodeId, 2>,
-        branch: Option<BranchId>,
-        write: bool,
     },
 
     WriteToInputArg {
@@ -568,7 +561,6 @@ impl ExprValidator<'_, '_> {
             (BuiltIn::potential | BuiltIn::flow, Some(NATURE_ACCESS_NODES)) => {
                 let hi = self.parent.infer.expr_types[args[0]].unwrap_node();
                 let lo = self.parent.infer.expr_types[args[1]].unwrap_node();
-                self.validate_node_direction_for_access(expr, hi, Some(lo), None);
                 if let Some(discipline) = self.validate_implicit_branch(expr, hi, lo) {
                     self.validate_flow_or_pot(expr, call, discipline)
                 }
@@ -576,7 +568,6 @@ impl ExprValidator<'_, '_> {
 
             (BuiltIn::potential | BuiltIn::flow, Some(NATURE_ACCESS_NODE_GND)) => {
                 let node = self.parent.infer.expr_types[args[0]].unwrap_node();
-                self.validate_node_direction_for_access(expr, node, None, None);
                 if let Some(discipline) = self.parent.db.node_discipline(node) {
                     self.validate_flow_or_pot(expr, call, discipline)
                 }
@@ -603,30 +594,21 @@ impl ExprValidator<'_, '_> {
 
                 if let Some(branch_info) = self.parent.db.branch_info(branch) {
                     match branch_info.kind {
-                        BranchKind::PortFlow(_) if call == BuiltIn::potential => {
-                            self.report(BodyValidationDiagnostic::PotentialOfPortFlow {
-                                expr,
-                                branch: Some(branch),
-                            })
+                        BranchKind::PortFlow(_) => {
+                            if call == BuiltIn::potential {
+                                self.report(BodyValidationDiagnostic::PotentialOfPortFlow {
+                                    expr,
+                                    branch: Some(branch),
+                                })
+                            } else if !self.write {
+                                self.validate_flow_or_pot(
+                                    expr,
+                                    BuiltIn::flow,
+                                    branch_info.discipline,
+                                )
+                            }
                         }
-                        BranchKind::PortFlow(node) if !self.write => {
-                            self.validate_node_direction_for_access(expr, node, None, Some(branch));
-                            self.validate_flow_or_pot(expr, BuiltIn::flow, branch_info.discipline)
-                        }
-
-                        BranchKind::PortFlow(_) => (),
-                        BranchKind::NodeGnd(node) => {
-                            self.validate_node_direction_for_access(expr, node, None, Some(branch));
-                            self.validate_flow_or_pot(expr, call, branch_info.discipline)
-                        }
-                        BranchKind::Nodes(hi, lo) => {
-                            self.validate_node_direction_for_access(
-                                expr,
-                                hi,
-                                Some(lo),
-                                Some(branch),
-                            );
-
+                        BranchKind::NodeGnd(_) | BranchKind::Nodes(_, _) => {
                             self.validate_flow_or_pot(expr, call, branch_info.discipline)
                         }
                     }
@@ -714,37 +696,5 @@ impl ExprValidator<'_, '_> {
         self.validate_expr(expr);
         self.cond_diagnostic_sink = sink;
         self.parent.ctx = old;
-    }
-
-    fn validate_node_direction_for_access(
-        &mut self,
-        expr: ExprId,
-        hi: NodeId,
-        lo: Option<NodeId>,
-        branch: Option<BranchId>,
-    ) {
-        let mut nodes = ArrayVec::new();
-        if self.is_invalid_node_direction_for_access(hi) {
-            nodes.push(hi)
-        }
-        if let Some(lo) = lo {
-            if self.is_invalid_node_direction_for_access(lo) {
-                nodes.push(lo)
-            }
-        }
-
-        if !nodes.is_empty() {
-            self.report(BodyValidationDiagnostic::InvalidNodeDirectionForAccess {
-                nodes,
-                branch,
-                write: self.write,
-                expr,
-            })
-        }
-    }
-
-    fn is_invalid_node_direction_for_access(&self, node: NodeId) -> bool {
-        let node = self.parent.db.node_data(node);
-        self.write && node.read_only() || !self.write && node.write_only()
     }
 }
