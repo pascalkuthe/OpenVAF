@@ -209,6 +209,9 @@ pub fn compile(
         let val = cx.const_null_ptr(cx.ptr_ty(fun_ty));
         unsafe {
             llvm::LLVMSetInitializer(osdi_log, val);
+            llvm::LLVMSetLinkage(osdi_log, llvm::Linkage::ExternalLinkage);
+            llvm::LLVMSetUnnamedAddress(osdi_log, llvm::UnnamedAddr::No);
+            llvm::LLVMSetDLLStorageClass(osdi_log, llvm::DLLStorageClass::Export);
         }
 
         debug_assert!(llmod.verify_and_print());
