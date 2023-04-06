@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Allow parameter declaration without explicit types
 * Crash when using engineering real format specifier `%r`
+* Crash on windows when calling $display (missing osdi_log symbol)
+* `idt` operator not working (reactive dimension was undefined)
 
 ## 23.2.0 - 2023-02-01
 
