@@ -1714,7 +1714,7 @@ impl LoweringCtx<'_, '_> {
         };
 
         self.define_resist_residual(residual[0], equation);
-        self.define_resist_residual(residual[1], equation);
+        self.define_react_residual(residual[1], equation);
 
         val
     }
