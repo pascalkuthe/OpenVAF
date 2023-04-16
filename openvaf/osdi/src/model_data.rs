@@ -198,6 +198,16 @@ impl<'ll> OsdiModelData<'ll> {
         Some(res)
     }
 
+    pub unsafe fn set_nth_inst_param_given(
+        &self,
+        cx: &CodegenCx<'_, 'll>,
+        pos: u32,
+        ptr: &'ll llvm::Value,
+        llbuilder: &llvm::Builder<'ll>,
+    ) {
+        let arr_ptr = LLVMBuildStructGEP2(llbuilder, self.ty, ptr, 0, UNNAMED);
+        bitfield::set_bit(cx, pos + self.params.len() as u32, arr_ptr, self.param_given, llbuilder)
+    }
     pub unsafe fn set_nth_param_given(
         &self,
         cx: &CodegenCx<'_, 'll>,
