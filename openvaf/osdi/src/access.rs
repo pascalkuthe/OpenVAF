@@ -103,7 +103,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 let ret = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
                 LLVMBuildCondBr(llbuilder, write_flag_set, write, ret);
                 LLVMPositionBuilderAtEnd(llbuilder, write);
-                model_data.set_nth_param_given(cx, param_idx as u32, model, llbuilder);
+                model_data.set_nth_inst_param_given(cx, param_idx as u32, model, llbuilder);
                 LLVMBuildBr(llbuilder, ret);
 
                 // return the poiner
