@@ -100,7 +100,7 @@ impl InferenceResult {
         ctx.expr_stmt_ty = match id {
             DefWithBodyId::ParamId(param) => match &db.param_data(param).ty {
                 Some(ty) => Some(ty.clone()),
-                // paramter type is inferred if omitted
+                // parameter type is inferred if omitted
                 None => ctx
                     .infere_expr(body.entry_stmts[0], db.param_exprs(param).default)
                     .and_then(|ty| ty.to_value()),
@@ -123,7 +123,7 @@ struct Ctx<'a> {
     db: &'a dyn HirTyDB,
     /// A Body that only represent expressions have expr stmts as entry_stmts.
     /// These need to be type checked properly.
-    /// For behavioural (anlog body and function) and untype (nature attr)
+    /// For behavioural (analog body and function) and untype (nature attr)
     /// bodys this is simply none
     expr_stmt_ty: Option<Type>,
 }
