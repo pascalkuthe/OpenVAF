@@ -499,7 +499,7 @@ impl DefMap {
                     Some(ScopeDefItem::BranchId(branch)) if path.get(i + 1) == Some(&kw::flow) => {
                         let rem = &path[(i + 1)..];
                         if let [name] = rem {
-                            return Ok(ResolvedPath::FlowAttriubte {
+                            return Ok(ResolvedPath::FlowAttribute {
                                 branch: *branch,
                                 name: name.clone(),
                             });
@@ -539,14 +539,14 @@ impl DefMap {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedPath {
-    FlowAttriubte { branch: BranchId, name: Name },
+    FlowAttribute { branch: BranchId, name: Name },
     PotentialAttribute { branch: BranchId, name: Name },
     ScopeDefItem(ScopeDefItem),
 }
 
 impl_display! {
     match ResolvedPath{
-        ResolvedPath::FlowAttriubte{..}  => "nature attribute";
+        ResolvedPath::FlowAttribute{..}  => "nature attribute";
         ResolvedPath::PotentialAttribute{..} => "nature attribute";
         ResolvedPath::ScopeDefItem(item) => "{}", item.item_kind();
     }

@@ -270,7 +270,7 @@ impl FromStr for Format {
         match text {
             "pretty" => Ok(Format::Pretty),
             "terse" => Ok(Format::Terse),
-            _ => Err("Unkown format"),
+            _ => Err("Unknown format"),
         }
     }
 }

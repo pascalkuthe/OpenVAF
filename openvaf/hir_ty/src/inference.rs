@@ -864,21 +864,21 @@ impl Ctx<'_> {
         }
     }
 
-    fn infere_ddx(&mut self, stmt: StmtId, expr: ExprId, val: ExprId, unkown: ExprId) {
+    fn infere_ddx(&mut self, stmt: StmtId, expr: ExprId, val: ExprId, unknown: ExprId) {
         if let Some(ty) = self.infere_expr(stmt, val) {
             self.expect::<false>(expr, None, ty, Cow::Borrowed(&[TyRequirement::Val(Type::Real)]));
         }
 
-        let ty = self.infere_expr(stmt, unkown);
+        let ty = self.infere_expr(stmt, unknown);
         if ty.is_some() {
             let (call, signature) = if let (Some(ResolvedFun::BuiltIn(fun)), Some(signature)) = (
-                self.result.resolved_calls.get(&unkown),
-                self.result.resolved_signatures.get(&unkown),
+                self.result.resolved_calls.get(&unknown),
+                self.result.resolved_signatures.get(&unknown),
             ) {
                 (*fun, *signature)
             } else {
                 if !matches!(&self.body.exprs[expr], Expr::Call { .. }) {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnknown { e: unknown });
                 }
                 return;
             };
@@ -887,7 +887,7 @@ impl Ctx<'_> {
                 (BuiltIn::potential, NATURE_ACCESS_NODES) => {
                     self.result
                         .diagnostics
-                        .push(InferenceDiagnostic::NonStandardUnkown { e: unkown, stmt });
+                        .push(InferenceDiagnostic::NonStandardUnknown { e: unknown, stmt });
                     DDX_POT_DIFF
                 }
                 (BuiltIn::potential, NATURE_ACCESS_NODE_GND) => DDX_POT,
@@ -895,11 +895,11 @@ impl Ctx<'_> {
                 (BuiltIn::temperature, _) => {
                     self.result
                         .diagnostics
-                        .push(InferenceDiagnostic::NonStandardUnkown { e: unkown, stmt });
+                        .push(InferenceDiagnostic::NonStandardUnknown { e: unknown, stmt });
                     DDX_TEMP
                 }
                 _ => {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnknown { e: unknown });
                     return;
                 }
             };
@@ -1161,7 +1161,7 @@ impl Ctx<'_> {
         };
 
         let attr = match resolved_path {
-            ResolvedPath::FlowAttriubte { branch, ref name } => {
+            ResolvedPath::FlowAttribute { branch, ref name } => {
                 BranchTy::flow_attr(self.db, branch, name)?
             }
 
@@ -1259,10 +1259,10 @@ pub enum InferenceDiagnostic {
     TypeMissmatch(TypeMissmatch),
     SignatureMissmatch(SignatureMissmatch),
     ArrayTypeMissmatch(ArrayTypeMissmatch),
-    InvalidUnkown {
+    InvalidUnknown {
         e: ExprId,
     },
-    NonStandardUnkown {
+    NonStandardUnknown {
         e: ExprId,
         stmt: StmtId,
     },

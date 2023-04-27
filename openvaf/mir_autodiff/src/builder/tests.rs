@@ -42,7 +42,7 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
     let mut cfg = ControlFlowGraph::new();
     cfg.compute(&func);
 
-    let unkowns = [10u32.into(), 11u32.into()].into_iter().collect();
+    let unknowns = [10u32.into(), 11u32.into()].into_iter().collect();
 
     let mut call1 = HybridBitSet::new_empty();
     call1.insert(0u32.into(), 2);
@@ -55,11 +55,11 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
     .into_iter()
     .collect();
 
-    let unkowns = KnownDerivatives { unknowns: unkowns, ddx_calls };
+    let unknowns = KnownDerivatives { unknowns: unknowns, ddx_calls };
 
     let mut dom_tree = DominatorTree::default();
     dom_tree.compute(&func, &cfg, true, false, true);
-    auto_diff(&mut func, &dom_tree, &unkowns, &[]);
+    auto_diff(&mut func, &dom_tree, &unknowns, &[]);
     let mut interpret = Interpreter::new(
         &func,
         TiSlice::from_ref(&[]),
@@ -67,7 +67,7 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
     );
     interpret.run();
     let val: f64 = interpret.state.read(100u32.into());
-    // we use mathmatically simplified formulations which can round quite differently so use a more
+    // we use mathematically simplified formulations which can round quite differently so use a more
     // generate epsilon (relative error of 1.6e-15 is fine)
     let margin = F64Margin::default().epsilon(10f64 * f64::EPSILON);
     if !val.approx_eq(num, margin) {

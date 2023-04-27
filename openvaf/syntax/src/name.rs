@@ -350,7 +350,7 @@ pub mod kw {
     }
 }
 
-/// keywords that will never be used by openvaf because they belong to (exeotic parts) of the
+/// keywords that will never be used by openvaf because they belong to (exotic parts) of the
 /// digital subset of VerilogAMS. According to the standard these are still reserved.
 /// However some compact models still use these and OpenVAF should allow that.
 /// Therefore we emit a (warn by default) lint when these are used

@@ -50,8 +50,8 @@ impl From<i32> for Data {
 
 impl From<Data> for f64 {
     fn from(data: Data) -> Self {
-        // Safey: This is save because we only ever hand out zero inizalized unions
-        // So the memory is always inizalized to zero.
+        // Safey: This is save because we only ever hand out zero initialized unions
+        // So the memory is always initialized to zero.
         // For f64 all bit patterns are valid
         unsafe { data.float }
     }
@@ -59,8 +59,8 @@ impl From<Data> for f64 {
 
 impl From<Data> for i32 {
     fn from(data: Data) -> Self {
-        // Safey: This is save because we only ever hand out zero inizalized unions
-        // So the memory is always inizalized to zero.
+        // Safey: This is save because we only ever hand out zero initialized unions
+        // So the memory is always initialized to zero.
         // For i32 all bit patterns are valid
         unsafe { data.int }
     }
@@ -68,8 +68,8 @@ impl From<Data> for i32 {
 
 impl From<Data> for Spur {
     fn from(data: Data) -> Self {
-        // Safey: This is save because we only ever hand out zero inizalized unions
-        // So the memory is always inizalized to zero.
+        // Safey: This is save because we only ever hand out zero initialized unions
+        // So the memory is always initialized to zero.
         // For Spur all non zero bit patterns are valid (checked with assert)
 
         unsafe {
@@ -81,8 +81,8 @@ impl From<Data> for Spur {
 
 impl From<Data> for bool {
     fn from(data: Data) -> Self {
-        // Safey: This is save because we only ever hand out zero inizalized unions
-        // So the memory is always inizalized to zero.
+        // Safey: This is save because we only ever hand out zero initialized unions
+        // So the memory is always initialized to zero.
         // For bool all bit patterns are valid
 
         unsafe { data.bool }

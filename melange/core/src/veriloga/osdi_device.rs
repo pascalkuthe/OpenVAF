@@ -65,7 +65,7 @@ impl OsdiDescriptor {
                         format_to!(msg, "vale supplied for parameter '{param}' is out of bounds\n")
                     }
 
-                    code => format_to!(msg, "unkown error: {code}\n"),
+                    code => format_to!(msg, "unknown error: {code}\n"),
                 }
             }
 
@@ -97,7 +97,7 @@ fn osdi_param_ty(flags: u32) -> Type {
         PARA_TY_REAL => Type::Real,
         PARA_TY_INT => Type::Int,
         PARA_TY_STR => Type::String,
-        _ => unreachable!("unkown osdi type {}", flags & PARA_TY_MASK),
+        _ => unreachable!("unknown osdi type {}", flags & PARA_TY_MASK),
     }
 }
 
@@ -391,7 +391,7 @@ impl InstanceImpl for OsdiInstance {
             let name = unsafe { osdi_str(node_info.name) };
             let units = unsafe { osdi_str(node_info.units) };
             let residual_units = unsafe { osdi_str(node_info.residual_units) };
-            *node = sim_builder.new_internal_unkown(name, tol, units, residual_units).into();
+            *node = sim_builder.new_internal_unknown(name, tol, units, residual_units).into();
         }
 
         let node_mapping = self.node_mapping();

@@ -226,7 +226,7 @@ impl ControlFlowGraph {
                 InstructionData::Jump { destination } => self.add_edge(block, destination),
                 InstructionData::Branch { then_dst, else_dst, .. } => {
                     // CAREFUL: Do not change the order of edges here. We want postorder
-                    // trasnversal to always take the loop free path
+                    // transversal to always take the loop free path
                     self.add_edge(block, else_dst);
                     self.add_edge(block, then_dst);
                 }

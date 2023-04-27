@@ -258,7 +258,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     .with_message(format!("type mismatch: {} but found {}", expected, found_ty))
                     .with_notes(vec!["help: all array elements must have the same type".to_owned()])
             }
-            InferenceDiagnostic::InvalidUnkown { e } => {
+            InferenceDiagnostic::InvalidUnknown { e } => {
                 let src = self
                     .parse
                     .to_file_span(self.body_sm.expr_map_back[e].as_ref().unwrap().range(), self.sm);
@@ -275,7 +275,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         "help: expected one of the following\nbranch current acces: I(branch), I(a,b)\nnode voltage: V(x)\nexplicit voltage: V(x,y)\ntemperature: $temperature".to_owned(),
                     ])
             }
-            InferenceDiagnostic::NonStandardUnkown { e, .. } => {
+            InferenceDiagnostic::NonStandardUnknown { e, .. } => {
                 let src = self
                     .parse
                     .to_file_span(self.body_sm.expr_map_back[e].as_ref().unwrap().range(), self.sm);
@@ -486,7 +486,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
     }
 
     fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
-        if let InferenceDiagnostic::NonStandardUnkown { stmt, .. } = *self.diag {
+        if let InferenceDiagnostic::NonStandardUnknown { stmt, .. } = *self.diag {
             Some((non_standard_code, self.body_sm.lint_src(stmt, non_standard_code)))
         } else {
             None

@@ -69,7 +69,7 @@ impl MatrixEntries {
     ) -> MatrixEntries {
         let mut res = MatrixEntries::default();
         for (entry, val) in src.iter() {
-            if let (SimUnknown::KirchoffLaw(row), SimUnknown::KirchoffLaw(col)) =
+            if let (SimUnknown::KirchhoffLaw(row), SimUnknown::KirchhoffLaw(col)) =
                 (entry.row, entry.col)
             {
                 let row = db.node_data(row).name.to_string();
@@ -103,7 +103,7 @@ impl JacobianMatrix {
         for (entry, val) in &self.resistive.raw {
             let num: f64 = vals.read(*val);
 
-            if let (SimUnknown::KirchoffLaw(row), SimUnknown::KirchoffLaw(col)) =
+            if let (SimUnknown::KirchhoffLaw(row), SimUnknown::KirchhoffLaw(col)) =
                 (entry.row, entry.col)
             {
                 println!(

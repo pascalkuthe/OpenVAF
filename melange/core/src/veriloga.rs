@@ -132,7 +132,7 @@ unsafe fn osdi_log_impl(handle: *mut c_void, msg: *const c_char, lvl: u32) {
             LOG_LVL_WARN => warn!("{instance} - {msg}"),
             LOG_LVL_ERR => error!("{instance} - {msg}"),
             LOG_LVL_FATAL => error!("{instance} - FATAL {msg}"),
-            _ => error!("{instance} - UNKOWN_LOG_LVL {msg}"),
+            _ => error!("{instance} - UNKNOWN_LOG_LVL {msg}"),
         }
     } else {
         match lvl & LOG_LVL_MASK {
@@ -142,7 +142,7 @@ unsafe fn osdi_log_impl(handle: *mut c_void, msg: *const c_char, lvl: u32) {
             LOG_LVL_WARN => warn!("{instance} - failed to format\"{msg}\""),
             LOG_LVL_ERR => error!("{instance} - failed to format\"{msg}\""),
             LOG_LVL_FATAL => error!("{instance} - FATAL failed to format\"{msg}\""),
-            _ => error!("{instance} - UNKOWN_LOG_LVL failed to format\"{msg}\""),
+            _ => error!("{instance} - UNKNOWN_LOG_LVL failed to format\"{msg}\""),
         }
     }
 }

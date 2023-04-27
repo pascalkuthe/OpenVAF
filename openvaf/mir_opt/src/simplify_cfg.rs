@@ -258,7 +258,7 @@ impl<'a> SimplifyCfg<'a> {
             }
         }
 
-        // update phis in sucessors
+        // update phis in successors
         for succ in self.cfg.succ_iter(bb) {
             self.vals_changed.insert(succ);
             self.func.update_phi_edges(succ, bb, pred);
@@ -267,7 +267,7 @@ impl<'a> SimplifyCfg<'a> {
         self.func.layout.merge_blocks(pred, bb);
         self.local_changed = true;
 
-        // update sucessors/predecessors
+        // update successors/predecessors
         self.cfg.recompute_block(self.func, pred);
         self.cfg.recompute_block(self.func, bb);
 
@@ -282,7 +282,7 @@ impl<'a> SimplifyCfg<'a> {
         }
     }
 
-    // TODO porperly implement this... its a bit tricky and not high prio right now
+    // TODO properly implement this... its a bit tricky and not high prio right now
     //    fn sink_common_code_from_predecessors(&mut self, bb: Block) -> bool {
     //        // We support two situations:
     //        //   (1) all incoming arcs are unconditional
@@ -341,13 +341,13 @@ impl<'a> SimplifyCfg<'a> {
 
     //        let res = match unconditional_preds.as_mut_slice() {
     //            [] | [_] => false,
-    //            [first_uncoditional, unconditional_preds @ ..] => {
+    //            [first_unconditional, unconditional_preds @ ..] => {
     //                let mut dst = None;
     //                let mut changed = false;
 
-    //                // in the future we may create phis for missmatched operands however this becomes a cost
-    //                // tradeoff that could actually impead some optimizations (aka const prop)
-    //                while let Some(inst) = first_uncoditional.1.next_back(&self.func.layout) {
+    //                // in the future we may create phis for mismatched operands however this becomes a cost
+    //                // tradeoff that could actually impede some optimizations (aka const prop)
+    //                while let Some(inst) = first_unconditional.1.next_back(&self.func.layout) {
     //                    let inst_data = self.func.dfg.insts[inst];
     //                    let all_eq = unconditional_preds.iter().all(|(_, cursor)| {
     //                        cursor.tail.map_or(false, |it| {
@@ -455,7 +455,7 @@ impl<'a> SimplifyCfg<'a> {
             }
         }
 
-        // check that the sucessors phis can be merged
+        // check that the successors phis can be merged
         for inst in self.func.layout.block_insts(dst) {
             if let InstructionData::PhiNode(phi) = self.func.dfg.insts[inst].clone() {
                 // prepare for update
@@ -614,7 +614,7 @@ impl<'a> SimplifyCfg<'a> {
         // pred, and if there is only one distinct successor of the predecessor, and
         // if there are no PHI nodes.
         if self.merge_block_into_predecessor(bb) {
-            // nothign to do for this blog anymore its removed
+            // nothing to do for this blog anymore its removed
             return;
         }
 

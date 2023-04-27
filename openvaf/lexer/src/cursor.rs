@@ -25,7 +25,7 @@ impl<'a> Cursor<'a> {
             chars: input.chars(),
             #[cfg(debug_assertions)]
             prev: EOF_CHAR,
-            // Tokens are on averge a length of about 4
+            // Tokens are on average a length of about 4
             dst: Vec::with_capacity(input.len() / 4),
             marker: None,
         }

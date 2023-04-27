@@ -1,5 +1,5 @@
 error[L008]: unknown lint 'bar'
-  ┌─ /unkown_lint.va:2:44
+  ┌─ /unknown_lint.va:2:44
   │
 2 │         (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar=0.0;
   │                                            ^^^^^ unknown lint
@@ -9,7 +9,7 @@ error[L008]: unknown lint 'bar'
     use a CLI argument or an attribute to overwrite
 
 error[L008]: unknown lint 'foo'
-  ┌─ /unkown_lint.va:2:25
+  ┌─ /unknown_lint.va:2:25
   │
 2 │         (*openvaf_allow="foo",openvaf_warn="bar"*) parameter real bar=0.0;
   │                         ^^^^^ unknown lint

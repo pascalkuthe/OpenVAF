@@ -334,7 +334,7 @@ impl<'ll> Builder<'_, '_, 'll> {
             UNNAMED,
         );
 
-        // forgett this is a real footgun
+        // forget this is a real footgun
         let cconv = llvm::LLVMGetFunctionCallConv(fun);
         llvm::LLVMSetInstructionCallConv(res, cconv);
         res
@@ -463,7 +463,7 @@ impl<'ll> Builder<'_, '_, 'll> {
                 let callback = if let Some(res) = self.callbacks[func_ref].as_ref() {
                     res
                 } else {
-                    return; // assume nooop
+                    return; // assume noop
                 };
 
                 let args = args.as_slice(&self.func.dfg.insts.value_lists);

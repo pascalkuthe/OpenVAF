@@ -43,7 +43,7 @@ impl SourceProvider for TestSourceProvider {
     }
 }
 
-fn check_prepocessor(sources: TestSourceProvider, root_file: FileId, test_name: &'static str) {
+fn check_preprocessor(sources: TestSourceProvider, root_file: FileId, test_name: &'static str) {
     let Preprocess { ts, diagnostics, sm } = preprocess(&sources, root_file);
     assert_eq!(diagnostics.as_slice(), &[]);
     let actual_tokens: String = ts.iter().map(|token| format!("{:?}\n", token.kind,)).collect();
@@ -64,11 +64,11 @@ fn check_prepocessor(sources: TestSourceProvider, root_file: FileId, test_name: 
     expect_file![expected].assert_eq(&actual_content);
 }
 
-fn check_prepocessor_single_file(src: &str, test_name: &'static str) {
+fn check_preprocessor_single_file(src: &str, test_name: &'static str) {
     let sources = TestSourceProvider::new(vec![]);
     let file =
         sources.vfs.borrow_mut().add_virt_file("/macro_expansion_test.va", src.to_owned().into());
-    check_prepocessor(sources, file, test_name)
+    check_preprocessor(sources, file, test_name)
 }
 
 #[test]
@@ -109,12 +109,12 @@ ERROR
 `test6(a,b,c)
 "#;
 
-    check_prepocessor_single_file(SRC, "smoke_test")
+    check_preprocessor_single_file(SRC, "smoke_test")
 }
 
 #[test]
 fn whitespaces() {
-    check_prepocessor_single_file(
+    check_preprocessor_single_file(
         r#"
         `define FOO BAR
         // foo
@@ -127,7 +127,7 @@ fn whitespaces() {
 
 #[test]
 fn condition_enabled() {
-    check_prepocessor_single_file(
+    check_preprocessor_single_file(
         r#"
 `ifdef DISABLE_STROBE
 	`define STROBE(X)
@@ -147,7 +147,7 @@ fn condition_enabled() {
 
 #[test]
 fn condition_disabled() {
-    check_prepocessor_single_file(
+    check_preprocessor_single_file(
         r#"
 `define DISABLE_STROBE
 `ifdef DISABLE_STROBE
@@ -168,7 +168,7 @@ fn condition_disabled() {
 
 #[test]
 fn source_map_triple_replacement() {
-    check_prepocessor_single_file(
+    check_preprocessor_single_file(
         r#"
 `include "constants.va"
 

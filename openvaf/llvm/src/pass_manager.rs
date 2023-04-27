@@ -42,7 +42,7 @@ extern "C" {
 
 /// # Safety
 /// This should always be save but this low level wrapper purposefully refrains from making Safety
-/// garantuees
+/// guarantees
 pub unsafe fn pass_manager_builder_set_opt_lvl(pmb: &PassManagerBuilder, opt_lvl: OptLevel) {
     LLVMPassManagerBuilderSetOptLevel(pmb, opt_lvl as c_uint);
     if opt_lvl > OptLevel::Less {
