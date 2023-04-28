@@ -1,10 +1,10 @@
-warning[L011]: unknown supplied to the ddx operator is not standard compilant
+warning[L011]: unknown supplied to the ddx operator is not standard compliant
    ┌─ /ddx.va:15:21
    │
 15 │         x = ddx(1.0,V(a,c));
    │                     ^^^^^^ unknown is not standard compliant
    │
-   = note: this functionality is fully suported by openvaf
+   = note: this functionality is fully supported by openvaf
      but other Verilog-A compilers might not support it
    = help: expected one of the following
      branch current acces: I(branch), I(a,b)
