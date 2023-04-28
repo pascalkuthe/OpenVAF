@@ -14,7 +14,7 @@
 //! compile times (no regex/lazy static), cross compilation and dynamic linking
 //!
 //! Furthermore the types/functions exported here are reduced to only those actually used in OpenVAF to
-//! further imporve compile times
+//! further improve compile times
 
 use std::fmt;
 

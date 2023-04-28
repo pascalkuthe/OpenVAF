@@ -117,7 +117,7 @@ fn validate_module_ports(
 
     if !names.is_empty() && has_decl {
         errors.push(SyntaxError::MixedModuleHead { module_ports: AstPtr::new(ports) });
-        // Don't lint body ports when the head is ambigous
+        // Don't lint body ports when the head is ambiguous
         return None;
     }
 
@@ -439,10 +439,10 @@ fn validate_discipline_decl(discipline: ast::DisciplineDecl, errors: &mut Vec<Sy
 
                     "domain" => {
                         let src = val.syntax().text();
-                        if src != "continous" && src != "discrete" {
+                        if src != "continuous" && src != "discrete" {
                             errors.push(SyntaxError::IllegalAttriubte {
                                 attr: "domain",
-                                expected: "continous or discrete",
+                                expected: "continuous or discrete",
                                 range: val.syntax().text_range(),
                             })
                         }

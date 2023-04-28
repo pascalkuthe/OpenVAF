@@ -70,7 +70,7 @@ impl ModelImpl for VoltageSrcModel {
             DC => &self.dc,
             MAG => &self.mag,
             PHASE => &self.phase,
-            _ => unreachable!("vsource: unkown num param {param:?}"),
+            _ => unreachable!("vsource: unknown num param {param:?}"),
         };
         dst.set(val);
     }
@@ -128,7 +128,7 @@ impl InstanceImpl for VoltageSrcInstance {
             DC => self.dc = val,
             MAG => self.ac = Complex64::from_polar(val, self.ac.arg()),
             PHASE => self.ac = Complex64::from_polar(self.ac.norm_sqr(), val),
-            _ => unreachable!("vsource: unkown num param {param:?}"),
+            _ => unreachable!("vsource: unknown num param {param:?}"),
         };
     }
 

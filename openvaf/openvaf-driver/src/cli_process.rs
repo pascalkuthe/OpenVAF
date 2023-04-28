@@ -44,14 +44,16 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
         } else {
             let path = directories_next::ProjectDirs::from("com", "semimod", "openvaf")
                 .context(
-                    "failed to find cache directory\nhelp: use --cache-dir to aquire it manually",
+                    "failed to find cache directory\nhelp: use --cache-dir to acquire it manually",
                 )?
                 .cache_dir()
                 .to_owned();
             if let Ok(res) = Utf8PathBuf::from_path_buf(path) {
                 res
             } else {
-                bail!("failed to find cache directory\nhelp: use --cache-dir to aquire it manually",)
+                bail!(
+                    "failed to find cache directory\nhelp: use --cache-dir to acquire it manually",
+                )
             }
         };
         CompilationDestination::Cache { cache_dir }
@@ -85,7 +87,7 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
         "1" => OptLevel::Less,
         "2" => OptLevel::Default,
         "3" => OptLevel::Aggressive,
-        lvl => bail!("unkown opt lvl {lvl}"),
+        lvl => bail!("unknown opt lvl {lvl}"),
     };
 
     let host = host_triple();
@@ -95,7 +97,7 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
     let target = if let Some(target) = openvaf::Target::search(&target) {
         target
     } else {
-        // shold never happend but helpful to provide support just in case
+        // should never happen but helpful to provide support just in case
         bail!("The target {target} is not supported by  this binary")
     };
 

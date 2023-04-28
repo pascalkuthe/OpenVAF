@@ -132,7 +132,7 @@ impl<'a> OsdiModule<'a> {
     ) -> Self {
         let module_data = db.module_data(module.id);
         let mut terminals: TiSet<_, _> =
-            module_data.ports.iter().map(|port| SimUnknown::KirchoffLaw(*port)).collect();
+            module_data.ports.iter().map(|port| SimUnknown::KirchhoffLaw(*port)).collect();
         let num_terminals = terminals.len() as u32;
 
         let node_ids = {
@@ -141,16 +141,16 @@ impl<'a> OsdiModule<'a> {
                 if mir.pruned_nodes.contains(node) {
                     return None;
                 }
-                Some(SimUnknown::KirchoffLaw(*node))
+                Some(SimUnknown::KirchhoffLaw(*node))
             });
 
             terminals.raw.extend(internal_nodes);
 
-            // add all other implicit unkowns
-            let other_unkowns =
+            // add all other implicit unknowns
+            let other_unknowns =
                 mir.residual.resistive.raw.keys().chain(mir.residual.reactive.raw.keys()).copied();
 
-            terminals.raw.extend(other_unkowns);
+            terminals.raw.extend(other_unknowns);
 
             terminals
         };

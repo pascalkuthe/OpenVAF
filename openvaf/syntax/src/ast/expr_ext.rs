@@ -299,7 +299,7 @@ impl ast::SelectExpr {
 }
 
 pub enum AsssigmentOp {
-    /// a variable assigment stmt
+    /// a variable assignment stmt
     /// lhs must be an indentifier (example `I = V(a,c)/R;`)
     Eq,
 

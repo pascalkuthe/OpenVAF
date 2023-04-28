@@ -156,7 +156,7 @@ impl LineEndings {
                     if tail.len() == off {
                         break;
                     }
-                    // ensure we skip the \r on the next iteraation
+                    // ensure we skip the \r on the next iteration
                     off += 1;
                 }
                 Some((mut bytes_to_copy, false)) => {

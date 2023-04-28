@@ -477,8 +477,8 @@ impl Layout {
         self.blocks[block].last_inst.into()
     }
 
-    /// Merges `succ` ito `pred` by remvoing the terminator from `pred` and appding all instructions
-    /// to `pred`. Aftwars `succ` is removed from the layout
+    /// Merges `succ` ito `pred` by remvoing the terminator from `pred` and appending all instructions
+    /// to `pred`. Afterwards `succ` is removed from the layout
     ///
     /// #Note
     /// It is up to the caller to ensure that this merge is valid:
@@ -514,7 +514,7 @@ impl Layout {
 
             self.blocks[pred].last_inst = self.blocks[succ].last_inst;
         } else {
-            // sucessor is empty... Kind of odd but probably valid (collapse empty jump the
+            // successor is empty... Kind of odd but probably valid (collapse empty jump the
             // terminator). Just remove the branch
             self.remove_inst(self.last_inst(pred).unwrap())
         }

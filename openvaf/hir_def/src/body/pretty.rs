@@ -149,7 +149,7 @@ impl Printer<'_> {
                 self.pretty_print_expr(lhs);
                 match op {
                     Some(op) => w!(self, " {} ", op),
-                    None => w!(self, " <ivalid> "),
+                    None => w!(self, " <invalid> "),
                 }
                 self.pretty_print_expr(rhs)
             }

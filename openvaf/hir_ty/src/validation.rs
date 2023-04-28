@@ -49,7 +49,7 @@ impl IncompatibleBranchDiagnostic {
         let node2 = db.node_data(node2);
 
         let msg = format!(
-            "nodes '{}' and '{}' of branch '{}' have incompatiable disciplines!",
+            "nodes '{}' and '{}' of branch '{}' have incompatible disciplines!",
             node1.name, node2.name, branch_name
         );
 
@@ -58,7 +58,7 @@ impl IncompatibleBranchDiagnostic {
                         style: LabelStyle::Primary,
                         file_id: branch_span.file,
                         range: branch_span.range.into(),
-                        message: format!("'{}' has missmatched disciplines", branch_name),
+                        message: format!("'{}' has mismatched disciplines", branch_name),
                     }])
                     .with_labels(vec![Label {
                         style: LabelStyle::Secondary,
@@ -272,7 +272,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                         message: format!(".. to parameter '{}' defined here", ref_name),
                     }])
                     .with_notes(vec![
-                        "help: parameters may only refere to parameters (textually) defined before them"
+                        "help: parameters may only refer to parameters (textually) defined before them"
                             .to_owned(),
                     ])
             }
@@ -340,7 +340,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                             style: LabelStyle::Secondary,
                             file_id: file,
                             range: range.into(),
-                            message: format!("help: '{}' was declard here", name),
+                            message: format!("help: '{}' was declared here", name),
                         });
                         res.with_message(
                             "constant expressions must not contain variable references".to_owned(),
@@ -353,7 +353,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
 
                 let mut res = Report::warning()
                     .with_message(
-                        "call to $simparam in a constant is evaluted before the simulation"
+                        "call to $simparam in a constant is evaluated before the simulation"
                             .to_owned(),
                     )
                     .with_labels(vec![Label {
@@ -365,7 +365,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
 
                 if !known {
                     res = res.with_notes(vec![
-                        "help: the value of paramaeters like \"gmin\' or \"sourceScaleFactor\" may vary between iterations"
+                        "help: the value of parameters like \"gmin\" or \"sourceScaleFactor\" may vary between iterations"
                             .to_owned(),
                     ])
                 }
@@ -377,7 +377,7 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
 
                 let mut res = Report::error()
                     .with_message(format!(
-                        "function '{func:?}' is currently not supprted by OpenVAF"
+                        "function '{func:?}' is currently not supported by OpenVAF"
                     ))
                     .with_labels(vec![Label {
                         style: LabelStyle::Primary,
@@ -611,7 +611,7 @@ impl Diagnostic for TypeValidationDiagnosticWrapped<'_> {
                     }])
                     .with_message(format!("no direction declared for port '{}'", name))
                     .with_notes(vec![
-                        "if port_without_direction is set to warn/allow the direciton will be set to 'inout'.".to_owned(), 
+                        "if port_without_direction is set to warn/allow the direction will be set to 'inout'.".to_owned(), 
                         "note: port directions are always required by the language standard.".to_owned()])
             }
             TypeValidationDiagnostic::ExpectedPort { node, src } => {

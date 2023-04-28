@@ -119,7 +119,7 @@ impl GenMsvcrt {
                 continue;
             }
 
-            if line.is_empty() || line.starts_with(&[';', '#']) {
+            if line.is_empty() || line.starts_with([';', '#']) {
                 continue;
             }
             res.push_str(line);

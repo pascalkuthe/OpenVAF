@@ -43,7 +43,7 @@ fn main() {
             let out_file =
                 Path::new(&out_dir).join(&format!("stdlib_{version_str}_{target_name}.bc"));
             if no_gen {
-                sh.write_file(out_file, &[]).expect("failed to write dummy file");
+                sh.write_file(out_file, []).expect("failed to write dummy file");
             } else {
                 println!("cargo:rerun-if-changed={}", file.display());
 

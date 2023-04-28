@@ -31,9 +31,9 @@ impl Debug for DerivativeFmt<'_> {
         )
         .unwrap();
         let items = self.derivatives.rows().flat_map(|inst| {
-            self.derivatives.iter(inst).map(move |unkown| {
+            self.derivatives.iter(inst).map(move |unknown| {
                 let val = self.func.dfg.first_result(inst);
-                OneLinePrinter(val, unkown)
+                OneLinePrinter(val, unknown)
             })
         });
         fmt.debug_set().entries(items).finish()
@@ -43,7 +43,7 @@ impl Debug for DerivativeFmt<'_> {
 fn check(src: &str, data_flow_result: Expect) {
     let (func, _) = parse_function(src).unwrap();
 
-    let unkowns = [10u32.into(), 11u32.into()].into_iter().collect();
+    let unknowns = [10u32.into(), 11u32.into()].into_iter().collect();
 
     let mut call1 = HybridBitSet::new_empty();
     call1.insert(0u32.into(), 2);
@@ -61,15 +61,15 @@ fn check(src: &str, data_flow_result: Expect) {
     .into_iter()
     .collect();
 
-    let derivative_info = KnownDerivatives { unknowns: unkowns, ddx_calls };
-    let mut unkowns = DerivativeIntern::new(&derivative_info);
+    let derivative_info = KnownDerivatives { unknowns, ddx_calls };
+    let mut unknowns = DerivativeIntern::new(&derivative_info);
 
     let mut cfg = ControlFlowGraph::new();
     cfg.compute(&func);
     let mut dom_tree = DominatorTree::default();
     dom_tree.compute(&func, &cfg, true, false, true);
 
-    let res = LiveDerivatives::build(&func, &mut unkowns, &[], &dom_tree);
+    let res = LiveDerivatives::build(&func, &mut unknowns, &[], &dom_tree);
     let printer = DerivativeFmt { func: &func, derivatives: &res.mat };
 
     let actual = format!("{:#?}", printer);
@@ -179,7 +179,7 @@ fn multi_derivative() {
 ///
 /// but its nice to test anyway
 ///
-/// even this simple testcase can't be handeled without SSA/DFA while its trivial with this
+/// even this simple testcase can't be handled without SSA/DFA while its trivial with this
 /// implementation
 #[test]
 fn back_edge() {

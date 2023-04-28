@@ -138,7 +138,7 @@ impl DefCollector<'_> {
         debug_assert_eq!(self.map.root(), root);
 
         // Copy the modules and their parameters since these are the only declarations outside
-        // of the function itself that are accessible insdie an analog funciton
+        // of the function itself that are accessible inside an analog function
         let main_root_scope = &root_def_map.scopes[root_def_map.root()];
 
         let mut parent_module_ = None;

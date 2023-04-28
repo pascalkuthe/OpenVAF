@@ -236,7 +236,7 @@ bultins! {
         fn IDTMOD_IC_MODULUS_OFFSET_NATURE(Val(Real),Val(Real),Val(Real),Val(Real), Val(Real)) -> Real;
     }
 
-    // all laplace fitlers have the same signature
+    // all laplace filters have the same signature
     LAPLACE_FILTER = const {
         fn LAPLACE_NO_TOL(Val(Real),ArrayAnyLength{ty: Real},ArrayAnyLength{ty: Real}) -> Real;
         fn LAPALCE_TOL(Val(Real),ArrayAnyLength{ty: Real},ArrayAnyLength{ty: Real}, Val(Real)) -> Real;

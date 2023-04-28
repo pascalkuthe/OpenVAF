@@ -74,7 +74,7 @@ impl MatrixBuilder {
         let instance_entries =
             vec![Vec::with_capacity(16); circ.num_instances() as usize].into_boxed_slice().into();
         MatrixBuilder {
-            inner: KluMatrixBuilder::new(circ.num_unkowns() as i32),
+            inner: KluMatrixBuilder::new(circ.num_unknowns() as i32),
             instance_entries,
             dump: Box::leak(Box::new(Cell::new(0f64))).into(),
         }
@@ -90,7 +90,7 @@ impl MatrixBuilder {
     }
 
     pub fn reset(&mut self, circ: &Circuit) {
-        self.inner.reset(circ.num_unkowns() as i32);
+        self.inner.reset(circ.num_unknowns() as i32);
         for instance_entries in &mut *self.instance_entries {
             instance_entries.clear()
         }

@@ -44,9 +44,9 @@ double simparam(void *params_, void *handle, uint32_t *flags, char *name) {
     }
   }
   *flags |= EVAL_RET_FLAG_FATAL;
-  char *msg = concat("unkown $simparam", name);
+  char *msg = concat("unknown $simparam", name);
   if (msg == NULL) {
-    osdi_log(handle, "unkown $simparam %s", LOG_LVL_FATAL | LOG_FMT_ERR);
+    osdi_log(handle, "unknown $simparam %s", LOG_LVL_FATAL | LOG_FMT_ERR);
   } else {
     osdi_log(handle, msg, LOG_LVL_FATAL);
   }
@@ -74,9 +74,9 @@ char *simparam_str(void *params_, void *handle, uint32_t *flags, char *name) {
   }
   *flags |= EVAL_RET_FLAG_FATAL;
 
-  char *msg = concat("unkown $simparam_str", name);
+  char *msg = concat("unknown $simparam_str", name);
   if (msg == NULL) {
-    osdi_log(handle, "unkown $simparam_str %s", LOG_LVL_FATAL | LOG_FMT_ERR);
+    osdi_log(handle, "unknown $simparam_str %s", LOG_LVL_FATAL | LOG_FMT_ERR);
   } else {
     osdi_log(handle, msg, LOG_LVL_FATAL);
   }

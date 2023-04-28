@@ -90,7 +90,7 @@ impl<'a> DerivativeIntern<'a> {
             .map(|unknown| self.get_unknown(unknown))
     }
 
-    #[allow(clippy::needless_collect)] // false positive can't revese successors
+    #[allow(clippy::needless_collect)] // false positive can't reverse successors
     pub fn unknowns_rev(&self, derivative: Derivative) -> impl Iterator<Item = Unknown> + '_ {
         let unknowns: Vec<_> = iter::successors(Some(derivative), |it| self.previous_order(*it))
             .map(|unknown| self.get_unknown(unknown))

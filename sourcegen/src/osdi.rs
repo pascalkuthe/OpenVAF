@@ -34,7 +34,7 @@ fn gen_osdi_structs() {
         let stdlib_idents_: Vec<_> = targets
             .clone()
             .map(|target| {
-                format_ident!("STDLIB_BITCODE_{}", target.to_uppercase().replace(&['-', '.'], "_"))
+                format_ident!("STDLIB_BITCODE_{}", target.to_uppercase().replace(['-', '.'], "_"))
             })
             .collect();
         let stdlib_idents = &stdlib_idents_;
@@ -46,7 +46,7 @@ fn gen_osdi_structs() {
             pub fn stdlib_bitcode(target: &target::spec::Target) -> &'static [u8]{
                 match &*target.llvm_target {
                     #(#targets => #stdlib_idents,)*
-                    triple => unreachable!("unkown target triple {triple}")
+                    triple => unreachable!("unknown target triple {triple}")
                 }
             }
         };

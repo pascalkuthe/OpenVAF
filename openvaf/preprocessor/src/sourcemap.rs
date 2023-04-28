@@ -9,7 +9,7 @@ use vfs::{FileId, VfsPath};
 
 use crate::SourceProvider;
 
-/// Representents a continous range of Text inside a particular file.
+/// Representents a continuous range of Text inside a particular file.
 /// This representation is the only representation that can be used to actually obtain the src code
 /// of a particular TextRange
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -56,14 +56,14 @@ impl FileSpan {
     #[must_use]
     pub fn file_text(&self, db: &dyn SourceProvider) -> Arc<str> {
         db.file_text(self.file).expect("FileSpan was created with invalid FileId")
-        // Spans are only created after a file was read succesfully
+        // Spans are only created after a file was read successfully
     }
 
     pub fn extend_to_line_end(&mut self, db: &dyn SourceProvider) -> TextRange {
         let src = self.file_text(db);
 
         let range = self.range;
-        // Map or is used because the start of slice is inclusive but we dont want to include the newline
+        // Map or is used because the start of slice is inclusive but we don't want to include the newline
         let line_start =
             src[..range.start().into()].rfind('\n').map_or(0, |pos| pos + 1).try_into().unwrap();
         let line_end = src[range.end().into()..]
@@ -75,8 +75,8 @@ impl FileSpan {
     }
 }
 
-/// A CtxSpan refers a contious range of Text a SourceContext (macro expansion or file).
-/// The range is relative to the start of the particular context so thgat ranges can be changed
+/// A CtxSpan refers to a continuous range of Text in a SourceContext (macro expansion or file).
+/// The range is relative to the start of the particular context so that ranges can be changed
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub struct CtxSpan {
     pub range: TextRange,
@@ -204,7 +204,8 @@ impl SourceMap {
                 return (current, call_span, current_call_span);
             }
 
-            let span = self.ctx_tree[current].call_site.expect("CTXT paths dont intersect at root");
+            let span =
+                self.ctx_tree[current].call_site.expect("CTXT paths do not intersect at root");
             current = span.ctx;
             current_call_span = span.range;
         }

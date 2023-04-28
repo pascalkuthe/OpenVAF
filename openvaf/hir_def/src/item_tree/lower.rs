@@ -90,7 +90,7 @@ impl Ctx {
                         kw::domain if domain.is_none() => {
                             match attr.val().and_then(|e| e.as_ident()).as_deref() {
                                 Some(kw::continuous) => {
-                                    domain = Some((Domain::Continous, id.into()));
+                                    domain = Some((Domain::Continuous, id.into()));
                                 }
                                 Some(kw::discrete) => {
                                     domain = Some((Domain::Discrete, id.into()));

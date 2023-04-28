@@ -95,7 +95,7 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
             Opcode::Fneg => return self.simplify_sub_inst::<FP>(F_ZERO, arg),
             Opcode::Ineg => return self.simplify_sub_inst::<i32>(ZERO, arg),
             Opcode::FIcast => Opcode::IFcast,
-            // When the inverse is lossy not transofmration is possible
+            // When the inverse is lossy no transfomration is possible
             Opcode::IFcast
             | Opcode::BIcast
             | Opcode::BFcast
@@ -175,7 +175,7 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
 
             // we only care about instructions that
             //
-            // * have a dervative
+            // * have a derivative
             // * are commonly used in compact models
             //
             // other (more complex) optimizations are better left to LLVM.
@@ -540,7 +540,7 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
     /// Given operands for an `A::DIV` instruction, see if we can fold the result.
     /// If not, this returns None.
     fn simplify_pow_inst(&mut self, mut lhs: Value, mut rhs: Value) -> Option<Value> {
-        // before const fold to avoid iconsisten behaviour between rust powf and LLVM pow
+        // before const fold to avoid inconsistent behaviour between rust powf and LLVM pow
         if rhs == F_ZERO {
             return Some(F_ONE);
         }

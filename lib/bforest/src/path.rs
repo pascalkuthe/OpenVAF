@@ -459,7 +459,7 @@ impl<F: Forest> Path<F> {
         // If we get here we have split the original root node and need to add an extra level.
         let rhs_node = ins_node.expect("empty path");
         let root = pool.alloc_node(NodeData::inner(orig_root, key, rhs_node));
-        let entry = if self.node[0] == rhs_node { 1 } else { 0 };
+        let entry = u8::from(self.node[0] == rhs_node);
         self.size += 1;
         slice_insert(&mut self.node[0..self.size], 0, root);
         slice_insert(&mut self.entry[0..self.size], 0, entry);
