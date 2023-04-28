@@ -878,7 +878,9 @@ impl Ctx<'_> {
                 (*fun, *signature)
             } else {
                 if !matches!(&self.body.exprs[expr], Expr::Call { .. }) {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnknown { e: unknown });
+                    self.result
+                        .diagnostics
+                        .push(InferenceDiagnostic::InvalidUnknown { e: unknown });
                 }
                 return;
             };
@@ -899,7 +901,9 @@ impl Ctx<'_> {
                     DDX_TEMP
                 }
                 _ => {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnknown { e: unknown });
+                    self.result
+                        .diagnostics
+                        .push(InferenceDiagnostic::InvalidUnknown { e: unknown });
                     return;
                 }
             };

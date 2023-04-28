@@ -55,7 +55,7 @@ fn check_num(src: &str, data_flow_result: Expect, args: &[f64], num: f64) {
     .into_iter()
     .collect();
 
-    let unknowns = KnownDerivatives { unknowns: unknowns, ddx_calls };
+    let unknowns = KnownDerivatives { unknowns, ddx_calls };
 
     let mut dom_tree = DominatorTree::default();
     dom_tree.compute(&func, &cfg, true, false, true);

@@ -51,7 +51,9 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
             if let Ok(res) = Utf8PathBuf::from_path_buf(path) {
                 res
             } else {
-                bail!("failed to find cache directory\nhelp: use --cache-dir to acquire it manually",)
+                bail!(
+                    "failed to find cache directory\nhelp: use --cache-dir to acquire it manually",
+                )
             }
         };
         CompilationDestination::Cache { cache_dir }

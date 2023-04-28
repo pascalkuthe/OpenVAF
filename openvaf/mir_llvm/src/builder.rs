@@ -112,7 +112,7 @@ impl<'ll> BuilderVal<'ll> {
             BuilderVal::Undef => unreachable!("attempted to read undefined value"),
             BuilderVal::Eager(val) => val,
             BuilderVal::Load(loc) => loc.read(builder.llbuilder),
-            BuilderVal::Call(call) => builder.call(call.fun_ty, call.fun, &*call.state),
+            BuilderVal::Call(call) => builder.call(call.fun_ty, call.fun, &call.state),
         }
     }
 

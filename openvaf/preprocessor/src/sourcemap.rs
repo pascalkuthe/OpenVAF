@@ -204,7 +204,8 @@ impl SourceMap {
                 return (current, call_span, current_call_span);
             }
 
-            let span = self.ctx_tree[current].call_site.expect("CTXT paths do not intersect at root");
+            let span =
+                self.ctx_tree[current].call_site.expect("CTXT paths do not intersect at root");
             current = span.ctx;
             current_call_span = span.range;
         }

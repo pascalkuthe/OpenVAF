@@ -61,7 +61,7 @@ fn check(src: &str, data_flow_result: Expect) {
     .into_iter()
     .collect();
 
-    let derivative_info = KnownDerivatives { unknowns: unknowns, ddx_calls };
+    let derivative_info = KnownDerivatives { unknowns, ddx_calls };
     let mut unknowns = DerivativeIntern::new(&derivative_info);
 
     let mut cfg = ControlFlowGraph::new();

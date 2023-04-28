@@ -165,7 +165,7 @@ impl ModuleLlvm {
 
         let data_layout = CString::new(&*target_data_layout).unwrap();
         llvm::LLVMSetDataLayout(llmod, data_layout.as_ptr());
-        llvm::set_normalized_target(llmod, &*target.llvm_target);
+        llvm::set_normalized_target(llmod, &target.llvm_target);
 
         let tm = llvm::create_target(
             &target.llvm_target,

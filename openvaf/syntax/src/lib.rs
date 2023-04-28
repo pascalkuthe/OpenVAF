@@ -120,7 +120,7 @@ impl<T: AstNode> Parse<T> {
     }
 
     pub fn errors(&self) -> &[SyntaxError] {
-        &*self.errors
+        &self.errors
     }
 
     pub fn ok(self) -> Result<T, Arc<Vec<SyntaxError>>> {

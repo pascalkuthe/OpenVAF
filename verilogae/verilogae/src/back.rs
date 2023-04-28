@@ -292,7 +292,7 @@ impl CodegenCtx<'_, '_> {
     ) {
         let ret_info = db.var_data(spec.var);
 
-        let module = unsafe { self.llbackend.new_module(&*ret_info.name, self.opt_lvl).unwrap() };
+        let module = unsafe { self.llbackend.new_module(&ret_info.name, self.opt_lvl).unwrap() };
         let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let ret_ty = lltype(&ret_info.ty, &cx);

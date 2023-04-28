@@ -39,19 +39,19 @@ impl GVNExprPayLoad {
         unsafe { self.default }
     }
     fn phi(&self) -> &PhiExprPayLoad {
-        unsafe { &*self.phi }
+        unsafe { &self.phi }
     }
 
     fn phi_mut(&mut self) -> &mut PhiExprPayLoad {
-        unsafe { &mut *self.phi }
+        unsafe { &mut self.phi }
     }
 
     fn call(&self) -> &CallExprPayLoad {
-        unsafe { &*self.call }
+        unsafe { &self.call }
     }
 
     fn call_mut(&mut self) -> &mut CallExprPayLoad {
-        unsafe { &mut *self.call }
+        unsafe { &mut self.call }
     }
 }
 
