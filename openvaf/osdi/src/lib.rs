@@ -233,6 +233,9 @@ impl OsdiModule<'_> {
     fn intern_names(&self, literals: &mut Rodeo, db: &CompilationDB) {
         literals.get_or_intern(&*self.base.id.lookup(db).name(db));
         self.intern_node_strs(literals, db);
+        literals.get_or_intern_static("Multiplier (Verilog-A $mfactor)");
+        literals.get_or_intern_static("deg");
+        literals.get_or_intern_static("m");
 
         for param in self.base.params.values() {
             for alias in &param.alias {
