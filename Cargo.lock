@@ -421,7 +421,6 @@ version = "0.0.0"
 dependencies = [
  "ahash 0.8.3",
  "arena",
- "arrayvec",
  "basedb",
  "expect-test",
  "hir_def",
