@@ -130,11 +130,18 @@ impl<'ll> OsdiInstanceData<'ll> {
             None
         });
 
+        let alias_inst_params = cgunit
+            .base
+            .sys_fun_alias
+            .keys()
+            .map(|param| (OsdiInstanceParam::Builtin(*param), ty_f64));
+
         let user_inst_params = cgunit.base.params.iter().filter_map(|(param, info)| {
             info.is_instance.then(|| (OsdiInstanceParam::User(*param), lltype(&info.ty, cx)))
         });
 
-        let params: IndexMap<_, _, _> = builtin_inst_params.chain(user_inst_params).collect();
+        let params: IndexMap<_, _, _> =
+            builtin_inst_params.chain(alias_inst_params).chain(user_inst_params).collect();
 
         let mut eval_outputs = TiMap::default();
 

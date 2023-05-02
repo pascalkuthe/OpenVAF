@@ -1037,7 +1037,13 @@ impl LoweringCtx<'_, '_> {
                 HirTy::NatureAttr(_, attr) => {
                     self.data.lower_expr_body(self.db, attr.into(), 0, self.func)
                 }
-                ref expr => unreachable!("{:?}", expr),
+                ref ty => {
+                    if let ResolvedFun::Param(param) = self.infere.resolved_calls[&expr] {
+                        self.param(ParamKind::ParamSysFun(param))
+                    } else {
+                        unreachable!("{ty:?}")
+                    }
+                }
             },
             hir_def::Expr::BinaryOp { lhs, rhs, op: Some(op) } => {
                 self.lower_bin_op(expr, lhs, rhs, op)

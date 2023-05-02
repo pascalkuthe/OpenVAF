@@ -113,11 +113,28 @@ impl TypeValidationCtx<'_> {
         if self.db.resolve_alias(alias).is_none() {
             let loc = alias.lookup(self.db.upcast());
             let data = self.db.alias_data(alias);
-            if let Some(src) = data.src.as_ref() {
-                if let Result::Err(err) = loc.scope.resolve_path(self.db.upcast(), src) {
-                    let src =
-                        SyntaxNodePtr::new(loc.source(self.db.upcast()).src().unwrap().syntax());
-                    self.report(TypeValidationDiagnostic::PathError { err, src })
+            if let Some(path) = data.src.as_ref() {
+                match loc.scope.resolve_path(self.db.upcast(), path) {
+                    // TODO: better errors for cycels
+                    Ok(found) => {
+                        let src = SyntaxNodePtr::new(
+                            loc.source(self.db.upcast()).src().unwrap().syntax(),
+                        );
+                        self.report(TypeValidationDiagnostic::PathError {
+                            err: PathResolveError::ExpectedItemKind {
+                                name: path.segments.last().unwrap().clone(),
+                                expected: "paramter",
+                                found,
+                            },
+                            src,
+                        })
+                    }
+                    Err(err) => {
+                        let src = SyntaxNodePtr::new(
+                            loc.source(self.db.upcast()).src().unwrap().syntax(),
+                        );
+                        self.report(TypeValidationDiagnostic::PathError { err, src })
+                    }
                 }
             }
         }
