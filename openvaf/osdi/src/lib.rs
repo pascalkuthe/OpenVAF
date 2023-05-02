@@ -251,6 +251,12 @@ impl OsdiModule<'_> {
             literals.get_or_intern(&opvar.description);
         }
 
+        for alias_list in self.base.sys_fun_alias.values() {
+            for alias in alias_list {
+                literals.get_or_intern(&**alias);
+            }
+        }
+
         for param in self.mir.eval_intern.params.raw.keys() {
             if let ParamKind::ParamSysFun(param) = param {
                 literals.get_or_intern(format!("${param:?}"));

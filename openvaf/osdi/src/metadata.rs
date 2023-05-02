@@ -56,32 +56,32 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             }
         }
 
-        let inst_params = inst_data.params.keys().map(|param| {
-            match param {
-                OsdiInstanceParam::Builtin(builtin) => OsdiParamOpvar {
-                    // TODO alias
-                    name: vec![format!("${builtin:?}")],
-                    num_alias: 0,
+        let inst_params = inst_data.params.keys().map(|param| match param {
+            OsdiInstanceParam::Builtin(builtin) => {
+                let mut name = vec![format!("${builtin:?}")];
+                if let Some(alias) = self.module.base.sys_fun_alias.get(builtin) {
+                    name.extend(alias.iter().map(SmolStr::to_string))
+                }
+                OsdiParamOpvar {
+                    num_alias: name.len() as u32 - 1,
+                    name,
                     description: "".to_owned(),
                     units: "".to_owned(),
                     flags: PARA_TY_REAL | PARA_KIND_INST,
                     len: 0,
-                },
-                OsdiInstanceParam::User(param) => {
-                    let param = &module.base.params[param];
+                }
+            }
+            OsdiInstanceParam::User(param) => {
+                let param = &module.base.params[param];
 
-                    let flags = para_ty_flags(&param.ty) | PARA_KIND_INST;
-                    OsdiParamOpvar {
-                        name: once(&param.name)
-                            .chain(&*param.alias)
-                            .map(SmolStr::to_string)
-                            .collect(),
-                        num_alias: param.alias.len() as u32,
-                        description: param.description.clone(),
-                        units: param.unit.clone(),
-                        flags,
-                        len: ty_len(&param.ty).unwrap_or(0),
-                    }
+                let flags = para_ty_flags(&param.ty) | PARA_KIND_INST;
+                OsdiParamOpvar {
+                    name: once(&param.name).chain(&*param.alias).map(SmolStr::to_string).collect(),
+                    num_alias: param.alias.len() as u32,
+                    description: param.description.clone(),
+                    units: param.unit.clone(),
+                    flags,
+                    len: ty_len(&param.ty).unwrap_or(0),
                 }
             }
         });

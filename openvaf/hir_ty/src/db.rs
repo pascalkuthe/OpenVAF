@@ -5,7 +5,7 @@ use hir_def::db::HirDefDB;
 use hir_def::nameres::{ResolvedPath, ScopeDefItem};
 use hir_def::{
     AliasParamId, BranchId, DefWithBodyId, DisciplineId, Lookup, NatureAttrId, NatureId, NodeId,
-    ParamId, Type,
+    ParamId, ParamSysFun, Type,
 };
 
 use crate::inference::InferenceResult;
@@ -34,7 +34,7 @@ pub trait HirTyDB: HirDefDB + Upcast<dyn HirDefDB> {
     fn nature_attr_ty(&self, id: NatureAttrId) -> Option<Type>;
 
     #[salsa::cycle(resolve_alias_recover)]
-    fn resolve_alias(&self, id: AliasParamId) -> Option<ParamId>;
+    fn resolve_alias(&self, id: AliasParamId) -> Option<Alias>;
 
     #[salsa::transparent]
     fn node_discipline(&self, node: NodeId) -> Option<DisciplineId>;
@@ -67,17 +67,27 @@ fn resolve_alias_recover(
     _db: &dyn HirTyDB,
     _cycel: &salsa::Cycle,
     _id: &AliasParamId,
-) -> Option<ParamId> {
-    None
+) -> Option<Alias> {
+    Some(Alias::Cycel)
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum Alias {
+    Cycel,
+    Param(ParamId),
+    ParamSysFun(ParamSysFun),
 }
 
 // TODO validate
 // TODO allow $mfactor etc
-fn resolve_alias(db: &dyn HirTyDB, id: AliasParamId) -> Option<ParamId> {
+fn resolve_alias(db: &dyn HirTyDB, id: AliasParamId) -> Option<Alias> {
     let loc = id.lookup(db.upcast());
     let data = db.alias_data(id);
     match loc.scope.resolve_path(db.upcast(), data.src.as_ref()?).ok()? {
-        ResolvedPath::ScopeDefItem(ScopeDefItem::ParamId(param)) => Some(param),
+        ResolvedPath::ScopeDefItem(ScopeDefItem::ParamId(param)) => Some(Alias::Param(param)),
+        ResolvedPath::ScopeDefItem(ScopeDefItem::ParamSysFun(param)) => {
+            Some(Alias::ParamSysFun(param))
+        }
         ResolvedPath::ScopeDefItem(ScopeDefItem::AliasParamId(alias)) => db.resolve_alias(alias),
         _ => None,
     }

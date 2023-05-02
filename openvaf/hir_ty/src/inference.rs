@@ -23,7 +23,7 @@ use crate::builtin::{
     DDX_FLOW, DDX_POT, DDX_POT_DIFF, DDX_TEMP, LIMIT_BUILTIN_FUNCTION, LIMIT_USER_FUNCTION,
     NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
 };
-use crate::db::HirTyDB;
+use crate::db::{Alias, HirTyDB};
 use crate::diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch};
 use crate::inference::fmt_parser::parse_real_fmt_spec;
 use crate::lower::{BranchKind, BranchTy, DisciplineAccess};
@@ -303,10 +303,14 @@ impl Ctx<'_> {
                 ScopeDefItem::NodeId(node) => Ty::Node(node),
                 ScopeDefItem::VarId(var) => Ty::Var(self.db.var_data(var).ty.clone(), var),
                 ScopeDefItem::ParamId(param) => Ty::Param(self.db.param_ty(param), param),
-                ScopeDefItem::AliasParamId(param) => {
-                    let param = self.db.resolve_alias(param)?;
-                    Ty::Param(self.db.param_ty(param), param)
-                }
+                ScopeDefItem::AliasParamId(param) => match self.db.resolve_alias(param)? {
+                    Alias::Cycel => return None,
+                    Alias::Param(param) => Ty::Param(self.db.param_ty(param), param),
+                    Alias::ParamSysFun(param) => {
+                        self.result.resolved_calls.insert(expr, ResolvedFun::Param(param));
+                        Ty::Val(Type::Real)
+                    }
+                },
                 ScopeDefItem::BranchId(branch) => Ty::Branch(branch),
                 ScopeDefItem::BuiltIn(_) | ScopeDefItem::NatureAccess(_) => Ty::BuiltInFunction,
 

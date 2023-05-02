@@ -13,8 +13,8 @@ use basedb::lints::{Lint, LintLevel};
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsPath, VfsStorage, STANDARD_FLAGS};
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::ScopeDefItem;
-use hir_def::{Lookup, ModuleId, ParamId, Type, VarId};
-use hir_ty::db::{HirTyDB, HirTyDatabase};
+use hir_def::{Lookup, ModuleId, ParamId, ParamSysFun, Type, VarId};
+use hir_ty::db::{Alias, HirTyDB, HirTyDatabase};
 use hir_ty::{collect_diagnostics, collect_path, visit_relative_defs};
 use indexmap::IndexMap;
 use parking_lot::RwLock;
@@ -270,6 +270,7 @@ pub struct OpVar {
 pub struct ModuleInfo {
     pub id: ModuleId,
     pub params: IndexMap<ParamId, ParamInfo, ahash::RandomState>,
+    pub sys_fun_alias: IndexMap<ParamSysFun, Vec<SmolStr>, ahash::RandomState>,
     pub op_vars: IndexMap<VarId, OpVar, ahash::RandomState>,
 }
 
@@ -278,6 +279,8 @@ impl ModuleInfo {
         let root_file = db.root_file;
 
         let mut params: IndexMap<ParamId, ParamInfo, ahash::RandomState> = IndexMap::default();
+        let mut sys_fun_alias: IndexMap<ParamSysFun, Vec<SmolStr>, ahash::RandomState> =
+            IndexMap::default();
         let mut op_vars = IndexMap::default();
 
         let parse = db.parse(root_file);
@@ -406,21 +409,26 @@ impl ModuleInfo {
                 params.insert(param, info);
             }
 
-            ScopeDefItem::AliasParamId(alias) => {
-                let param = db.resolve_alias(alias).unwrap();
-                let dst = params.entry(param).or_insert_with(|| ParamInfo {
-                    name: SmolStr::new_inline(""),
-                    alias: Vec::new(),
-                    unit: String::new(),
-                    description: String::new(),
-                    group: String::new(),
-                    ty: Type::Err,
-                    is_instance: false,
-                });
-
-                let name = collect_path(path, &db.alias_data(alias).name);
-                dst.alias.push(name)
-            }
+            ScopeDefItem::AliasParamId(alias) => match db.resolve_alias(alias).unwrap() {
+                Alias::Cycel => unreachable!(),
+                Alias::Param(param) => {
+                    let dst = params.entry(param).or_insert_with(|| ParamInfo {
+                        name: SmolStr::new_inline(""),
+                        alias: Vec::new(),
+                        unit: String::new(),
+                        description: String::new(),
+                        group: String::new(),
+                        ty: Type::Err,
+                        is_instance: false,
+                    });
+                    let name = collect_path(path, &db.alias_data(alias).name);
+                    dst.alias.push(name)
+                }
+                Alias::ParamSysFun(sys_fun) => sys_fun_alias
+                    .entry(sys_fun)
+                    .or_default()
+                    .push(collect_path(path, &db.alias_data(alias).name)),
+            },
 
             // ScopeDefItem::NodeId(node) => {
             //     let data = db.node_data(node);
@@ -431,6 +439,6 @@ impl ModuleInfo {
             _ => (),
         });
 
-        ModuleInfo { id: module, params, op_vars }
+        ModuleInfo { id: module, params, op_vars, sys_fun_alias }
     }
 }
