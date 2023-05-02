@@ -34,12 +34,13 @@ jobs:
 workflows:
   ci:
     when: 
-      or:
-        - equal: [ trying, << pipeline.git.branch >> ]
-        - equal: [ staging, << pipeline.git.branch >> ]
+      not: {equal: [ master, << pipeline.git.branch >> ]}
 
     jobs:
+      - hold:
+          type: approval # presents manual approval button in the UI
       - ferris-ci/vendor:
+          requires: ["hold"]
           context: github
       - ferris-ci/clippy:
           requires: [ferris-ci/vendor]
