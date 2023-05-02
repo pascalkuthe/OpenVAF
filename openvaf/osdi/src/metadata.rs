@@ -1,7 +1,7 @@
 use std::iter::once;
 
 use hir_def::db::HirDefDB;
-use hir_def::{Lookup, Type};
+use hir_def::{Lookup, ParamSysFun, Type};
 use hir_lower::CurrentKind;
 use hir_ty::db::HirTyDB;
 use lasso::{Rodeo, Spur};
@@ -65,8 +65,15 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 OsdiParamOpvar {
                     num_alias: name.len() as u32 - 1,
                     name,
-                    description: "".to_owned(),
-                    units: "".to_owned(),
+                    description: match builtin {
+                        ParamSysFun::mfactor => "Multiplier (Verilog-A $mfactor)".to_owned(),
+                        _ => "".to_owned(),
+                    },
+                    units: match builtin {
+                        ParamSysFun::yposition | ParamSysFun::xposition => "m".to_owned(),
+                        ParamSysFun::angle => "deg".to_owned(),
+                        _ => "".to_owned(),
+                    },
                     flags: PARA_TY_REAL | PARA_KIND_INST,
                     len: 0,
                 }
