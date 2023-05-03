@@ -22,7 +22,7 @@ use typed_indexmap::TiMap;
 use crate::compilation_db::{CompilationDB, ModuleInfo};
 use crate::lim_rhs::LimRhs;
 use crate::matrix::JacobianMatrix;
-use crate::prune::prune_unkowns;
+use crate::prune::prune_unknowns;
 use crate::residual::Residual;
 use crate::util::strip_optbarrier;
 use crate::SimUnknown;
@@ -147,7 +147,7 @@ impl EvalMir {
             .collect();
 
         let (mut op_dependent_insts, _is_noise, pruned) =
-            prune_unkowns(db, &mut func, &mut intern, &dom_tree, &op_dependent);
+            prune_unknowns(db, &mut func, &mut intern, &dom_tree, &op_dependent);
 
         let mut pruned_nodes = AHashSet::default();
         for pruned_param in pruned.iter() {
@@ -182,7 +182,7 @@ impl EvalMir {
         output_block = new_output_bb;
 
         dom_tree.compute(&func, &cfg, true, true, false);
-        let derivatives = intern.unkowns(&mut func, true);
+        let derivatives = intern.unknowns(&mut func, true);
         let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &derivatives);
         let ad = auto_diff(&mut func, &dom_tree, &derivatives, &extra_derivatives);
         cfg.clear();
@@ -377,14 +377,14 @@ impl EvalMir {
                     if let CallBackKind::CollapseHint(hi, lo) = intern.callbacks[func_ref] {
                         if let Some(lo) = lo {
                             collapse.insert(
-                                (SimUnknown::KirchoffLaw(hi), Some(SimUnknown::KirchoffLaw(lo))),
+                                (SimUnknown::KirchhoffLaw(hi), Some(SimUnknown::KirchhoffLaw(lo))),
                                 vec![],
                             );
                         } else if pruned_nodes.contains(&hi) {
                             init_inst_func.dfg.zap_inst(inst);
                             init_inst_func.layout.remove_inst(inst);
                         } else {
-                            collapse.insert((SimUnknown::KirchoffLaw(hi), None), vec![]);
+                            collapse.insert((SimUnknown::KirchhoffLaw(hi), None), vec![]);
                         }
                     }
                 }
@@ -417,11 +417,11 @@ impl EvalMir {
                         CurrentKind::Unnamed { hi, lo } => (hi, lo),
                         CurrentKind::Port(_) => continue,
                     };
-                    let lo = lo.map(SimUnknown::KirchoffLaw);
-                    let hi = SimUnknown::KirchoffLaw(hi);
+                    let lo = lo.map(SimUnknown::KirchhoffLaw);
+                    let hi = SimUnknown::KirchhoffLaw(hi);
                     if collapse.contains_key(&(hi, lo)) {
                         // careful, if we insert extra derivatives for currents then we need to
-                        // check that we are not overwritign that list here
+                        // check that we are not overwriting that list here
                         let pair = collapse.insert_full((*node, None), vec![]).0;
                         if let Some(extra_collapse) = collapse.raw.get_mut(&(hi, lo)) {
                             extra_collapse.push(pair)
@@ -503,7 +503,7 @@ impl EvalMir {
         dom_tree.compute(&init_inst_func, &init_inst_cfg, false, true, false);
         dom_tree.compute_postdom_frontiers(&init_inst_cfg, &mut control_dep);
 
-        // TODO seperate model dependent code
+        // TODO separate model dependent code
         agressive_dead_code_elimination(
             &mut init_inst_func,
             &mut init_inst_cfg,

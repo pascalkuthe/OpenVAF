@@ -292,7 +292,7 @@ impl CodegenCtx<'_, '_> {
     ) {
         let ret_info = db.var_data(spec.var);
 
-        let module = unsafe { self.llbackend.new_module(&*ret_info.name, self.opt_lvl).unwrap() };
+        let module = unsafe { self.llbackend.new_module(&ret_info.name, self.opt_lvl).unwrap() };
         let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let ret_ty = lltype(&ret_info.ty, &cx);
@@ -419,7 +419,7 @@ impl CodegenCtx<'_, '_> {
         debug_assert!(module.verify_and_print(), "Invalid code generated");
         module.optimize();
 
-        module.emit_obect(dst.as_ref()).expect("code generation failed!")
+        module.emit_object(dst.as_ref()).expect("code generation failed!")
     }
 
     pub(crate) fn ensure_names(&mut self, db: &CompilationDB, intern: &HirInterner) {
@@ -771,7 +771,7 @@ impl CodegenCtx<'_, '_> {
         module.optimize();
         // println!("{}", module.to_str());
 
-        module.emit_obect(dst.as_ref()).expect("code generation failed!");
+        module.emit_object(dst.as_ref()).expect("code generation failed!");
     }
 }
 

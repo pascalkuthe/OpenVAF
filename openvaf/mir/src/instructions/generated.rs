@@ -367,7 +367,7 @@ impl std::str::FromStr for Opcode {
             "jmp" => Ok(Opcode::Jmp),
             "call" => Ok(Opcode::Call),
             "phi" => Ok(Opcode::Phi),
-            _ => Err("Unkown opcode"),
+            _ => Err("Unknown opcode"),
         }
     }
 }

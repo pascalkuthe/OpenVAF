@@ -60,7 +60,7 @@ impl JacobianMatrix {
                 }
                 let (col_hi, col_lo) = match kind {
                     ParamKind::Voltage { hi, lo } => {
-                        (SimUnknown::KirchoffLaw(*hi), lo.map(SimUnknown::KirchoffLaw))
+                        (SimUnknown::KirchhoffLaw(*hi), lo.map(SimUnknown::KirchhoffLaw))
                     }
 
                     ParamKind::ImplicitUnknown(equation) => (SimUnknown::Implicit(*equation), None),
@@ -69,8 +69,8 @@ impl JacobianMatrix {
                     _ => continue,
                 };
 
-                let unkown = derivative_info.unknowns.unwrap_index(val);
-                if let Some(ddx) = derivatives.get(&(*residual, unkown)).copied() {
+                let unknown = derivative_info.unknowns.unwrap_index(val);
+                if let Some(ddx) = derivatives.get(&(*residual, unknown)).copied() {
                     if ddx != F_ZERO {
                         self.ensure_entry(func, *row, col_hi, ddx, false, react);
                         if let Some(col_lo) = col_lo {
@@ -81,8 +81,8 @@ impl JacobianMatrix {
 
                 if let Some(lim_vals) = intern.lim_state.raw.get(val) {
                     for (val, neg) in lim_vals {
-                        let unkown = derivative_info.unknowns.unwrap_index(val);
-                        if let Some(ddx) = derivatives.get(&(*residual, unkown)).copied() {
+                        let unknown = derivative_info.unknowns.unwrap_index(val);
+                        if let Some(ddx) = derivatives.get(&(*residual, unknown)).copied() {
                             if ddx != F_ZERO {
                                 self.ensure_entry(func, *row, col_hi, ddx, *neg, react);
 
@@ -181,13 +181,13 @@ impl JacobianMatrix {
     pub fn print_resistive_stamps(&self, db: &dyn HirDefDB) -> String {
         let mut res = String::new();
         for (entry, val) in &self.resistive.raw {
-            if let SimUnknown::KirchoffLaw(node) = entry.row {
+            if let SimUnknown::KirchhoffLaw(node) = entry.row {
                 format_to!(res, "({}, ", db.node_data(node).name);
             } else {
                 format_to!(res, "({:?}, ", entry.row);
             }
 
-            if let SimUnknown::KirchoffLaw(node) = entry.col {
+            if let SimUnknown::KirchhoffLaw(node) = entry.col {
                 format_to!(res, "{}", db.node_data(node).name);
             } else {
                 format_to!(res, "{:?}", entry.col);
@@ -201,13 +201,13 @@ impl JacobianMatrix {
     pub fn print_reactive_stamps(&self, db: &dyn HirDefDB) -> String {
         let mut res = String::new();
         for (entry, val) in &self.reactive.raw {
-            if let SimUnknown::KirchoffLaw(node) = entry.row {
+            if let SimUnknown::KirchhoffLaw(node) = entry.row {
                 format_to!(res, "({}, ", db.node_data(node).name);
             } else {
                 format_to!(res, "({:?}, ", entry.row);
             }
 
-            if let SimUnknown::KirchoffLaw(node) = entry.col {
+            if let SimUnknown::KirchhoffLaw(node) = entry.col {
                 format_to!(res, "{}", db.node_data(node).name);
             } else {
                 format_to!(res, "{:?}", entry.col);

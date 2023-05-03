@@ -12,7 +12,7 @@ pub enum SyntaxError {
         span: TextRange,
         panic_end: Option<TextSize>,
         expected_at: Option<TextRange>,
-        missing_delimeter: bool,
+        missing_delimiter: bool,
     },
     SurplusToken {
         found: SyntaxKind,
@@ -127,7 +127,7 @@ impl_display! {
         IllegalBranchNodeExpr{..} => "illegal expr was used to declare a branch node!";
         IllegalInfToken{..} => "unexpected token 'inf'; expected an expression";
         UnitsExpectedStringLiteral{..} => "'units' attribute must be a string literal";
-        IllegalDisciplineAttrIdent{..} => "illegal discpline attribute identifier!";
+        IllegalDisciplineAttrIdent{..} => "illegal discipline attribute identifier!";
         IllegalNatureIdent{..} => "illegal nature identifier";
         IllegalAttriubte{attr,..} => "illegal value provided for {} attribute", attr;
         ReservedIdentifier{name,..} => "reserved keyword '{}' was used as an identifier",name;

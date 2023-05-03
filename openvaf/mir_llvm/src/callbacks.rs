@@ -6,7 +6,7 @@ use crate::CodegenCx;
 pub struct CallbackFun<'ll> {
     pub fun_ty: &'ll llvm::Type,
     pub fun: &'ll llvm::Value,
-    /// Some Callbacks need to read/modify some state (typicaly passed as pointers)
+    /// Some Callbacks need to read/modify some state (typically passed as pointers)
     /// outside of the arguments provided in Verilog-A.
     /// These arguments are always passed before any arguments specified in the CFG
     pub state: Box<[&'ll llvm::Value]>,

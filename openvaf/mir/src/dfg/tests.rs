@@ -41,7 +41,7 @@ fn make_inst() {
     assert_eq!(dfg.uses(v4).count(), 2);
 
     // linked list is fifo so reverse the iterator.
-    // The code does not make any garuntee about the order of the iterator just the contents so if
+    // The code does not make any guarantee about the order of the iterator just the contents so if
     // this test ever fails because of order its ok to change this
     assert_eq!(dfg.uses_double_ended(v4).rev().collect::<Vec<_>>(), dfg.operands(inst));
     // test that updating is a noop when nothing has changed

@@ -1,4 +1,4 @@
-error: type missmatch: expected real value but found string literal
+error: type mismatch: expected real value but found string literal
   ┌─ /formatting.va:3:45
   │
 3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
@@ -6,7 +6,7 @@ error: type missmatch: expected real value but found string literal
   │                         │                    
   │                         help: expected because of this fmt specifier
 
-error: type missmatch: expected integer value but found real literal
+error: type mismatch: expected integer value but found real literal
   ┌─ /formatting.va:3:52
   │
 3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
@@ -14,7 +14,7 @@ error: type missmatch: expected integer value but found real literal
   │                                 │                   
   │                                 help: expected because of this fmt specifier
 
-error: type missmatch: expected real value but found string literal
+error: type mismatch: expected real value but found string literal
   ┌─ /formatting.va:3:57
   │
 3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
@@ -22,7 +22,7 @@ error: type missmatch: expected real value but found string literal
   │                            │                             
   │                            help: expected because of this fmt specifier
 
-error: type missmatch: expected integer value but found real literal
+error: type mismatch: expected integer value but found real literal
   ┌─ /formatting.va:3:64
   │
 3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
@@ -30,7 +30,7 @@ error: type missmatch: expected integer value but found real literal
   │                                    │                            
   │                                    help: expected because of this fmt specifier
 
-error: type missmatch: expected integer value but found real literal
+error: type mismatch: expected integer value but found real literal
   ┌─ /formatting.va:4:47
   │
 4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
@@ -38,7 +38,7 @@ error: type missmatch: expected integer value but found real literal
   │                          │                     
   │                          help: expected because of this fmt specifier
 
-error: type missmatch: expected real value but found string literal
+error: type mismatch: expected real value but found string literal
   ┌─ /formatting.va:4:52
   │
 4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
@@ -54,7 +54,7 @@ error: failed to parse format specifier; unexpected character .
   │
   = help: expected '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' or '*'
 
-error: type missmatch: expected string value but found real literal
+error: type mismatch: expected string value but found real literal
   ┌─ /formatting.va:4:64
   │
 4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);

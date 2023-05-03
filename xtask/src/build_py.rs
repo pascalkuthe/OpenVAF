@@ -27,7 +27,7 @@ impl crate::flags::Build {
 
         let pythons = find_py();
         for (py, _tag) in &pythons {
-            cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps").env("PYO3_PYTHON", &py).run()?;
+            cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps").env("PYO3_PYTHON", py).run()?;
             // cmd!("auditwheel repair "$whl" -w /io/dist/")
         }
 

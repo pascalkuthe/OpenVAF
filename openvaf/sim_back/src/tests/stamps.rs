@@ -165,7 +165,7 @@ fn cccs() {
     // let im_ip: f64 = result.read(stamps[&("Inm", "Inp")]);
     // let im_im: f64 = result.read(stamps[&("Inm", "Inm")]);
 
-    // gin is the derivative of the input BRANCH by the input voltages not the input kirchoff laws
+    // gin is the derivative of the input BRANCH by the input voltages not the input kirchhoff laws
     // calculate the expected values for the stamps
     // let gin = 1.0 / rin;
     let gout = 1.0 / rout;

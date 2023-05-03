@@ -22,7 +22,7 @@ pub fn stdlib_bitcode(target: &target::spec::Target) -> &'static [u8] {
         "aarch64-unknown-linux-gnu" => STDLIB_BITCODE_AARCH64_UNKNOWN_LINUX_GNU,
         "aarch64-pc-windows-msvc" => STDLIB_BITCODE_AARCH64_PC_WINDOWS_MSVC,
         "arm64-apple-macosx11.0.0" => STDLIB_BITCODE_ARM64_APPLE_MACOSX11_0_0,
-        triple => unreachable!("unkown target triple {triple}"),
+        triple => unreachable!("unknown target triple {triple}"),
     }
 }
 pub const OSDI_VERSION_MAJOR_CURR: u32 = 0;

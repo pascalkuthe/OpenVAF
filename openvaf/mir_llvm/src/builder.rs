@@ -112,7 +112,7 @@ impl<'ll> BuilderVal<'ll> {
             BuilderVal::Undef => unreachable!("attempted to read undefined value"),
             BuilderVal::Eager(val) => val,
             BuilderVal::Load(loc) => loc.read(builder.llbuilder),
-            BuilderVal::Call(call) => builder.call(call.fun_ty, call.fun, &*call.state),
+            BuilderVal::Call(call) => builder.call(call.fun_ty, call.fun, &call.state),
         }
     }
 
@@ -334,7 +334,7 @@ impl<'ll> Builder<'_, '_, 'll> {
             UNNAMED,
         );
 
-        // forgett this is a real footgun
+        // forget this is a real footgun
         let cconv = llvm::LLVMGetFunctionCallConv(fun);
         llvm::LLVMSetInstructionCallConv(res, cconv);
         res
@@ -463,7 +463,7 @@ impl<'ll> Builder<'_, '_, 'll> {
                 let callback = if let Some(res) = self.callbacks[func_ref].as_ref() {
                     res
                 } else {
-                    return; // assume nooop
+                    return; // assume noop
                 };
 
                 let args = args.as_slice(&self.func.dfg.insts.value_lists);

@@ -58,7 +58,7 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
         }
     }
 
-    /// This function deterimes which unknowns are reachable where in the DFG.
+    /// This function determines which unknowns are reachable where in the DFG.
     /// If a derivative is not reachable at a certain instruction it can be assumed that its value is 0 here.
     /// The results are stored in `self.reachable_derivatives`.
     fn populate_reachable_unknowns(&mut self) {
@@ -77,7 +77,7 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
         self.post_order_parts = post_order.into_parts();
     }
 
-    /// This function deterimes where a derivative (of higher order) is reachable in the DFG.
+    /// This function determines where a derivative (of higher order) is reachable in the DFG.
     /// If a derivative is not reachable at a certain instruction it can be assumed that its value is 0 here.
     /// The results are stored in `self.reachable_derivatives`.
     ///
@@ -159,7 +159,7 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
         workqueue
     }
 
-    /// Runs a fixpoint iteration to finde the live derivatives at any instruction: That is any derivative that we
+    /// Runs a fixpoint iteration to find the live derivatives at any instruction: That is any derivative that we
     /// care about at a certain instruction regardless [^1]  of whether this derivative is
     /// non-zero here. Most importantly this pass finds any higher order derivatives that might be
     /// required.
@@ -169,8 +169,8 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
     ///
     ///
     /// [^1]: We use a postorder visit of the dataflow graph starting from the first order
-    /// derivative values. Therefore we do in fact ignore any derivatives which are trivally
-    /// zero. However this is just a performance optimzation and still produces a lot of unneded
+    /// derivative values. Therefore we do in fact ignore any derivatives which are trivially
+    /// zero. However this is just a performance optimization and still produces a lot of unneeded
     /// derivatives. Furthermore we only generate higher order derivatives if their first order
     /// derivative is reachable at this point
     fn live_derivative_fixpoint(&mut self, workqueue: &mut WorkQueue<Inst>) {
@@ -221,9 +221,9 @@ impl<'a, 'b> LiveDerivativeBuilder<'a, 'b> {
         }
     }
 
-    /// This function strip unneded live derivatives by taking an intersection with the reachable
+    /// This function strip unneeded live derivatives by taking an intersection with the reachable
     /// derivatives
-    fn strip_unneded_derivatives(&mut self) {
+    fn strip_unneeded_derivatives(&mut self) {
         let mut reachable_derivatives = take(&mut self.reachable_derivatives);
         self.live_derivatives.mat.ensure_columns(self.intern.num_derivatives());
         reachable_derivatives.ensure_columns(self.intern.num_derivatives());
@@ -262,7 +262,7 @@ impl LiveDerivatives {
         builder.insert_extra_derivative(extra_derivatives);
         let mut workqueue = builder.initial_live_derivative_workque();
         builder.live_derivative_fixpoint(&mut workqueue);
-        builder.strip_unneded_derivatives();
+        builder.strip_unneeded_derivatives();
         let (mut res, buf) = builder.finish();
 
         res.run_subgraph_opt(func, intern, extra_derivatives, dom_tree, buf);

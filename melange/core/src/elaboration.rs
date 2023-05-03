@@ -135,7 +135,7 @@ impl Circuit {
 
         let model = self.new_model(descr.name, device)?;
         for (param_name, val) in descr.parameters {
-            self.set_model_param(model, &*param_name, val)?;
+            self.set_model_param(model, &param_name, val)?;
         }
         Ok(model)
     }
@@ -172,7 +172,7 @@ impl Circuit {
                 let terminals = self.elaborate_dev_terminals(dev, instance.terminal_connections)?;
                 let inst = self.new_model_instance(instance.name, model, terminals)?;
                 for (param_name, val) in instance.parameters {
-                    self.set_instance_param(inst, &*param_name, val)?;
+                    self.set_instance_param(inst, &param_name, val)?;
                 }
                 inst
             }
@@ -181,7 +181,7 @@ impl Circuit {
                 let terminals = self.elaborate_dev_terminals(dev, instance.terminal_connections)?;
                 let (inst, model) = self.new_device_instance(instance.name, dev, terminals)?;
                 for (param_name, val) in instance.parameters {
-                    self.set_model_param(model, &*param_name, val)?;
+                    self.set_model_param(model, &param_name, val)?;
                 }
                 inst
             }

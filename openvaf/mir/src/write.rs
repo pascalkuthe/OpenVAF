@@ -320,7 +320,7 @@ pub fn write_operands(w: &mut dyn Write, dfg: &DataFlowGraph, inst: Inst) -> fmt
     }
 }
 
-// /// Write block args using optional parantheses.
+// /// Write block args using optional parentheses.
 // fn write_block_args(w: &mut dyn Write, args: &[Value]) -> fmt::Result {
 //     if args.is_empty() {
 //         Ok(())

@@ -540,8 +540,8 @@ impl<'f> FuncCursor<'f> {
     /// If `inst` is a phi instruction this function will advance until the following instruction
     /// is not a phi instruction.
     ///
-    /// This is intended for situtions where an instruction will be inserted after the definition
-    /// of an unkown value.
+    /// This is intended for situations where an instruction will be inserted after the definition
+    /// of an unknown value.
     pub fn after_inst_no_phi(self, mut inst: Inst) -> Self
     where
         Self: Sized,

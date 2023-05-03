@@ -16,7 +16,7 @@ pub fn strip_optbarrier(func: &Function, mut val: Value) -> Value {
     val
 }
 
-pub fn is_op_depenent(
+pub fn is_op_dependent(
     func: &Function,
     val: Value,
     op_dependent_insts: &BitSet<Inst>,
@@ -68,7 +68,7 @@ pub fn has_any_contrib(
 
 pub struct SwitchBranchInfo {
     pub op_dependent: bool,
-    pub introduce_unkown: bool,
+    pub introduce_unknown: bool,
     pub non_trivial_voltage: bool,
 }
 
@@ -80,15 +80,15 @@ impl SwitchBranchInfo {
         is_voltage_src: Value,
         branch: BranchWrite,
     ) -> SwitchBranchInfo {
-        let requires_unkown = intern.is_param_live(func, &ParamKind::Current(branch.into()));
-        let op_dependent = is_op_depenent(func, is_voltage_src, op_dependent_insts, intern);
+        let requires_unknown = intern.is_param_live(func, &ParamKind::Current(branch.into()));
+        let op_dependent = is_op_dependent(func, is_voltage_src, op_dependent_insts, intern);
 
         let non_trivial_voltage = has_any_contrib(func, intern, branch, true);
-        let introduce_unkown = requires_unkown || non_trivial_voltage;
-        SwitchBranchInfo { op_dependent, introduce_unkown, non_trivial_voltage }
+        let introduce_unknown = requires_unknown || non_trivial_voltage;
+        SwitchBranchInfo { op_dependent, introduce_unknown, non_trivial_voltage }
     }
 
     pub fn just_current_src(&self) -> bool {
-        !self.op_dependent && !self.introduce_unkown
+        !self.op_dependent && !self.introduce_unknown
     }
 }

@@ -99,7 +99,7 @@ impl_display! {
         Ty::Nature(_) => "nature reference";
         Ty::Discipline(_) => "discipline reference";
         Ty::Var(ty,_) => "{} variable reference", ty;
-        Ty::NatureAttr(ty,_) => "{} nature attriubte reference", ty;
+        Ty::NatureAttr(ty,_) => "{} nature attribute reference", ty;
         Ty::FuntionVar{ty,..} => "{} variable reference", ty;
         Ty::Param(ty,_) => "{} parameter ref", ty;
         Ty::Literal(ty) => "{} literal", ty;

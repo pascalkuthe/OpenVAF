@@ -78,7 +78,7 @@ impl InstructionData {
     ///
     /// # Note
     ///
-    /// It is up to the caller to ensure that uses are updates as approriate
+    /// It is up to the caller to ensure that uses are updates as appropriate
     pub fn arguments_mut<'a>(&'a mut self, pool: &'a mut ValueListPool) -> &mut [Value] {
         match self {
             InstructionData::Unary { arg, .. } | InstructionData::Branch { cond: arg, .. } => {

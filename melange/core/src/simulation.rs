@@ -63,13 +63,13 @@ impl<'a> SimBuilder<'a> {
     }
 
     pub fn new_internal_branch(&mut self, name: &'static str) -> Node {
-        self.new_internal_unkown(name, self.config.voltage_atol, "V", "A")
+        self.new_internal_unknown(name, self.config.voltage_atol, "V", "A")
     }
 
     pub fn new_internal_node(&mut self, name: &'static str) -> Node {
-        self.new_internal_unkown(name, self.config.current_atol, "A", "V")
+        self.new_internal_unknown(name, self.config.current_atol, "A", "V")
     }
-    pub fn new_internal_unkown(
+    pub fn new_internal_unknown(
         &mut self,
         name: &'static str,
         atol: f64,

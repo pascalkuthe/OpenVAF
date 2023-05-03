@@ -104,7 +104,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
         let pos =
             self.text_pos + leading_trivias.iter().map(|it| it.span.range.len()).sum::<TextSize>();
         let parser::SyntaxError::UnexpectedToken { expected, found }: parser::SyntaxError = error;
-        let missing_delimeter = found == T![end];
+        let missing_delimiter = found == T![end];
         if self.token_pos + n_trivias == self.tokens.len() {
             let expected_at = expected
                 .data
@@ -119,7 +119,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
                     self.tokens.last().map_or_else(|| TextSize::from(0), |t| t.span.range.len()),
                 ),
                 expected_at,
-                missing_delimeter,
+                missing_delimiter,
                 panic_end: None,
             };
             self.errors.push(error);
@@ -128,7 +128,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
         let len = self.tokens[self.token_pos + n_trivias].span.range.len();
 
         let panic = mem::replace(&mut self.panic, true);
-        if panic && !missing_delimeter || self.last_error.is_some() {
+        if panic && !missing_delimiter || self.last_error.is_some() {
             return;
         }
 
@@ -142,7 +142,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
             found,
             span: TextRange::at(pos, len),
             expected_at,
-            missing_delimeter,
+            missing_delimiter,
             panic_end: None,
         };
         self.last_error = Some(error)
@@ -203,8 +203,8 @@ impl<'a> SyntaxTreeBuilder<'a> {
 
     fn do_token(&mut self, kind: SyntaxKind, span: CtxSpan) {
         let same_ctx = span.ctx == self.current_range.ctx;
-        let is_continous = same_ctx && span.range.start() == self.current_range.range.end();
-        if is_continous {
+        let is_continuous = same_ctx && span.range.start() == self.current_range.range.end();
+        if is_continuous {
             self.current_range.range = self.current_range.range.cover(span.range);
         } else {
             let start = self.ranges.last().map_or(0.into(), |(range, _, _)| range.end());
@@ -216,7 +216,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
         if !same_ctx {
             // We are in a different ctx and therefore the text comes from somewhere else...
             // Switch the src code
-            // Unwrap is okay here because the file was already read succesffully by he preprocessor or the SourceContext wouldn't exist
+            // Unwrap is okay here because the file was already read successfully by he preprocessor or the SourceContext wouldn't exist
             let decl = self.sm.ctx_data(span.ctx).decl;
             let src = self.db.file_text(decl.file).unwrap();
             self.current_src = src;

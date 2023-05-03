@@ -117,8 +117,8 @@ impl CompilationDB {
 
         let mut dom_tree = DominatorTree::default();
         dom_tree.compute(&func, &cfg, true, false, true);
-        let unkowns = intern.unkowns(&mut func, false);
-        auto_diff(&mut func, &dom_tree, &unkowns, &[]);
+        let unknowns = intern.unknowns(&mut func, false);
+        auto_diff(&mut func, &dom_tree, &unknowns, &[]);
         cfg.clear();
         cfg.compute(&func);
         sparse_conditional_constant_propagation(&mut func, &cfg);

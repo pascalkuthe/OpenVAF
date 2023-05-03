@@ -26,7 +26,7 @@ pub enum TokenKind {
     /// a normal identifier
     SimpleIdent,
 
-    /// an escaped identifer starts with \ and ends with a whitespace
+    /// an escaped identifier starts with \ and ends with a whitespace
     EscapedIdent,
 
     /// a system call Identifier

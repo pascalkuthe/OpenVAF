@@ -177,7 +177,7 @@ pub enum Stmt {
     If { cond: ExprId, then_branch: StmtId, else_branch: StmtId },
     ForLoop { init: StmtId, cond: ExprId, incr: StmtId, body: StmtId },
     WhileLoop { cond: ExprId, body: StmtId },
-    Case { discr: ExprId, case_arms: Vec<Case> }, // TODO lint on unrechable
+    Case { discr: ExprId, case_arms: Vec<Case> }, // TODO lint on unreachable
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -186,7 +186,7 @@ pub enum GlobalEvent {
     FinalStep,
 }
 
-// non_exhaustive because currently the full standard is not implementd
+// non_exhaustive because currently the full standard is not implemented
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 #[non_exhaustive]
 pub enum Event {

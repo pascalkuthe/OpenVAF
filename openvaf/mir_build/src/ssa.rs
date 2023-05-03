@@ -51,7 +51,7 @@ pub struct SSABuilder {
 #[derive(Clone, Default)]
 struct SSABlockData {
     // The predecessors of the Block with the block and branch instruction.
-    // The elemets of this array MUST be kept in order.
+    // The elements of this array MUST be kept in order.
     // Ideally only `add_predecessor` is used to modify it
     predecessors: SmallVec<[Block; 4]>,
     // A block is sealed if all of its predecessors have been declared.
@@ -254,7 +254,7 @@ impl SSABuilder {
                 // Define the operandless param added above to prevent lookup cycles.
                 self.def_var(var, val, block);
 
-                // Look up a use_var for each precessor.
+                // Look up a use_var for each predecessor.
                 self.begin_predecessors_lookup(val, block);
             }
         } else {

@@ -123,9 +123,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 .into()
                         }
                         ParamKind::Voltage { hi, lo } => {
-                            let hi = prev_solve[&SimUnknown::KirchoffLaw(hi)];
+                            let hi = prev_solve[&SimUnknown::KirchhoffLaw(hi)];
                             if let Some(lo) = lo {
-                                let lo = prev_solve[&SimUnknown::KirchoffLaw(lo)];
+                                let lo = prev_solve[&SimUnknown::KirchhoffLaw(lo)];
                                 llvm::LLVMBuildFSub(builder.llbuilder, hi, lo, UNNAMED)
                             } else {
                                 hi
@@ -177,7 +177,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             }
                         }
                         ParamKind::PortConnected { port } => {
-                            let id = module.node_ids.unwrap_index(&SimUnknown::KirchoffLaw(port));
+                            let id = module.node_ids.unwrap_index(&SimUnknown::KirchhoffLaw(port));
                             let id = cx.const_unsigned_int(id.into());
                             builder.int_cmp(id, connected_ports, IntULT)
                         }

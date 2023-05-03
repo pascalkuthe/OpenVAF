@@ -78,7 +78,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 inst_data.set_nth_param_given(cx, param_idx as u32, inst, llbuilder);
                 LLVMBuildBr(llbuilder, ret);
 
-                // return the poiner
+                // return the pointer
                 LLVMPositionBuilderAtEnd(llbuilder, ret);
                 LLVMBuildRet(llbuilder, ptr);
             }
@@ -106,7 +106,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 model_data.set_nth_inst_param_given(cx, param_idx as u32, model, llbuilder);
                 LLVMBuildBr(llbuilder, ret);
 
-                // return the poiner
+                // return the pointer
                 LLVMPositionBuilderAtEnd(llbuilder, ret);
                 LLVMBuildRet(llbuilder, ptr);
             }
@@ -129,7 +129,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 model_data.set_nth_param_given(cx, param_idx as u32, model, llbuilder);
                 LLVMBuildBr(llbuilder, ret);
 
-                // return the poiner
+                // return the pointer
                 LLVMPositionBuilderAtEnd(llbuilder, ret);
                 LLVMBuildRet(llbuilder, ptr);
             }
@@ -156,7 +156,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 LLVMBuildRet(llbuilder, ptr);
             }
 
-            //return NULL on unkown id
+            //return NULL on unknown id
             LLVMPositionBuilderAtEnd(llbuilder, err_exit);
             LLVMBuildRet(llbuilder, null_ptr);
 

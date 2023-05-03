@@ -69,9 +69,9 @@ impl Circuit {
         self.nodes.len() as u32
     }
 
-    /// returns the number of external circuit nodes whose potential is unkown (so excluding ground).
+    /// returns the number of external circuit nodes whose potential is unknown (so excluding ground).
     /// This does not include internal nodes created by the various devices
-    pub fn num_unkowns(&self) -> u32 {
+    pub fn num_unknowns(&self) -> u32 {
         assert!(
             self.nodes.len() < i32::MAX as usize,
             "at most {} nodes are supterminaled",
@@ -121,7 +121,7 @@ impl Circuit {
         if let Some(device) = self.lookup_device(device) {
             self.new_model(name, device)
         } else {
-            bail!("unkown device '{device}'")
+            bail!("unknown device '{device}'")
         }
     }
 
@@ -163,7 +163,7 @@ impl Circuit {
         if let Some(device) = self.lookup_device(device) {
             self.new_device_instance(name, device, terminal_connections)
         } else {
-            bail!("unkown device '{device}'")
+            bail!("unknown device '{device}'")
         }
     }
 
@@ -415,7 +415,7 @@ impl Circuit {
         let dev = &self.devices[self.models[inst.model].device];
         let (id, info) = match dev.parameters.lookup_param(param_name) {
             Some((id, info)) => (id, info),
-            None => bail!("unkown parameter '{param_name}' for {}", dev.name),
+            None => bail!("unknown parameter '{param_name}' for {}", dev.name),
         };
 
         if !info.is_instance_param {
@@ -443,7 +443,7 @@ impl Circuit {
         let dev = &self.devices[model.device];
         let id = match dev.parameters.lookup_param_id(param_name) {
             Some(id) => id,
-            None => bail!("unkown parameter '{param_name}' for {}", dev.name),
+            None => bail!("unknown parameter '{param_name}' for {}", dev.name),
         };
 
         model.parameters.push((id, val));
@@ -612,7 +612,7 @@ pub enum CircuitModelSrc {
 }
 
 /// Information about a (device) instance in a [`Circuit`](create::circuit::Circuit).
-/// An instance corresponds to a single simulation entity that has its own unkowns, matrix entries
+/// An instance corresponds to a single simulation entity that has its own unknowns, matrix entries
 /// etc.
 #[derive(PartialEq, Clone, Debug)]
 #[non_exhaustive]

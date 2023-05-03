@@ -99,7 +99,7 @@ fn supported_targets() -> Arg {
     flag(SUPPORTED_TARGETS, SUPPORTED_TARGETS)
         .help("Print target triples supported by OpenVAF.")
         .long_help(
-        "Print target triples supported by OpenVAF.\nOnly these values can be passed to --target.",
+        "Print target triples supported by OpenVAF.\nOnly thhese values can be passed to --target.",
     )
 }
 
@@ -113,7 +113,7 @@ fn target_cpu() -> Arg {
     Arg::new(TARGET_CPU)
         .long(TARGET_CPU)
         .help("Target cpu for which the code is compiled.")
-        .long_help("Target cpu for which the code is compile.\nBy default \'native\' is used to allow best possible performance.\nIn this case the best optimizations for the current hardware are used.\nTo distribute the output to people with unkown hardware set this option to generic.\nFor cross compilation \'generic\' is used by default.\n\nEXAMPLES: skylake, native, generic")
+        .long_help("Target cpu for which the code is compile.\nBy default \'native\' is used to allow best possible performance.\nIn this case the best optimizations for the current hardware are used.\nTo distribute the output to people with unknown hardware set this option to generic.\nFor cross compilation \'generic\' is used by default.\n\nEXAMPLES: skylake, native, generic")
         .value_name("CPU")
         .required(false)
         .value_hint(ValueHint::Other)
@@ -206,7 +206,7 @@ fn output_file_path_arg(name: &'static str) -> Arg {
                 None => bail!("is not a file"),
             };
 
-            match fs::metadata(&parent) {
+            match fs::metadata(parent) {
                 Err(err) => bail!("{} {err}", parent.display()),
                 Ok(info) if !info.is_dir() => bail!("{} is not a directory", parent.display()),
                 _ => Ok(path),
@@ -253,7 +253,7 @@ fn expand() -> Arg {
         .long_help(
             "Aborts the compilation after the preprocessor finishes.
 The sourcecode with all macros (`define) expanded and preprocessor
-directives (`inlude) resolved is emitted to stdout.",
+directives (`include) resolved is emitted to stdout.",
         )
 }
 

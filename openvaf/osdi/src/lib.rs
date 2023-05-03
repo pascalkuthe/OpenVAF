@@ -54,7 +54,7 @@ pub fn compile(
             mir
         })
         .collect();
-    let name = dst.file_stem().expect("destition is a file").to_owned();
+    let name = dst.file_stem().expect("destination is a file").to_owned();
 
     let mut paths: Vec<Utf8PathBuf> = (0..modules.len() * 4)
         .map(|i| {
@@ -101,7 +101,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
 
@@ -118,7 +118,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 1];
                     // llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
 
@@ -135,7 +135,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 2];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
 
@@ -154,7 +154,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 3];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
         }
@@ -167,7 +167,7 @@ pub fn compile(
             .iter()
             .map(|module| {
                 let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
-                let descriptor = cguint.descriptor(target_data, &*db);
+                let descriptor = cguint.descriptor(target_data, &db);
                 descriptor.to_ll_val(&cx, &tys)
             })
             .collect();
@@ -204,7 +204,7 @@ pub fn compile(
         }
 
         let osdi_log =
-            cx.get_declared_value("osdi_log").expect("symbol osdi_log mising from std lib");
+            cx.get_declared_value("osdi_log").expect("symbol osdi_log missing from std lib");
         let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str(), cx.ty_int()], cx.ty_void());
         let val = cx.const_null_ptr(cx.ptr_ty(fun_ty));
         unsafe {
@@ -220,7 +220,7 @@ pub fn compile(
             // println!("{}", llmod.to_str());
             llmod.optimize();
             // println!("{}", llmod.to_str());
-            assert_eq!(llmod.emit_obect(main_file.as_ref()), Ok(()))
+            assert_eq!(llmod.emit_object(main_file.as_ref()), Ok(()))
         }
     });
 

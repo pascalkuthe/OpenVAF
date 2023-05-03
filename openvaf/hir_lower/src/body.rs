@@ -70,8 +70,8 @@ impl<'a> MirBuilder<'a> {
         self.tagged_reads.insert(var)
     }
 
-    pub fn with_tagged_reads(mut self, taged_vars: AHashSet<VarId>) -> Self {
-        self.tagged_reads = taged_vars;
+    pub fn with_tagged_reads(mut self, tagged_vars: AHashSet<VarId>) -> Self {
+        self.tagged_reads = tagged_vars;
         self
     }
 
@@ -364,7 +364,7 @@ impl HirInterner {
             // let last_inst = builder.func.layout.last_inst(else_src.0).unwrap();
             builder.ins().with_result(new_val).phi(&[then_src, else_src]);
 
-            // we purposfull insert these reversed here (new val into params and old val into
+            // we purposefully insert these reversed here (new val into params and old val into
             // outputs). This ensures that the code generated for other parameters uses the
             // correct value. After code generation is complete we swap these two again
             self.params.insert(ParamKind::Param(param), new_val);
@@ -391,7 +391,7 @@ impl HirInterner {
 
             let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
 
-            let precomuted_vals = if build_min_max {
+            let precomputed_vals = if build_min_max {
                 let min_inclusive =
                     ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
 
@@ -529,7 +529,7 @@ impl HirInterner {
             ctx.check_param(
                 param_val,
                 &info.bounds,
-                &precomuted_vals,
+                &precomputed_vals,
                 ConstraintKind::From,
                 ops,
                 invalid,
@@ -539,7 +539,7 @@ impl HirInterner {
             ctx.check_param(
                 param_val,
                 &info.bounds,
-                &precomuted_vals,
+                &precomputed_vals,
                 ConstraintKind::Exclude,
                 ops,
                 invalid,
@@ -681,7 +681,7 @@ impl LoweringCtx<'_, '_> {
         match kind {
             ConstraintKind::From => {
                 if let Some(exit) = exit {
-                    // error on falltrough
+                    // error on fallthrough
                     self.func.ins().call(invalid, &[]);
                     self.func.ins().jump(global_exit);
 
@@ -693,7 +693,7 @@ impl LoweringCtx<'_, '_> {
                 self.func.ins().jump(global_exit);
 
                 if let Some(exit) = exit {
-                    // error on falltrough
+                    // error on fallthrough
                     self.func.switch_to_block(exit);
                     self.func.ins().call(invalid, &[]);
                     self.func.ins().jump(global_exit);
@@ -715,7 +715,7 @@ impl LoweringCtx<'_, '_> {
                 self.lower_expr(expr);
             }
             Stmt::EventControl { body, .. } => {
-                // TODO handle porperly
+                // TODO handle properly
                 self.lower_stmt(body);
             }
             Stmt::Assigment { val, .. } => {
@@ -1132,7 +1132,7 @@ impl LoweringCtx<'_, '_> {
             (Type::Array { .. }, Type::EmptyArray) | (Type::EmptyArray, Type::Array { .. }) => {
                 return val
             }
-            _ => unreachable!("unkown cast found  {:?} -> {:?}", src, dst),
+            _ => unreachable!("unknown cast found  {:?} -> {:?}", src, dst),
         };
         let inst = self.func.ins().unary(op, val).0;
         self.func.func.dfg.first_result(inst)
@@ -1253,7 +1253,7 @@ impl LoweringCtx<'_, '_> {
                 (lo, None)
             }
             (Some(hi), Some(lo)) => {
-                let existis = if let Some(dims) = self.extra_dims.as_deref() {
+                let exists = if let Some(dims) = self.extra_dims.as_deref() {
                     dims.keys().any(|dim| {
                         self.places.contains(&PlaceKind::Contribute {
                             dst: BranchWrite::Unnamed { hi: lo, lo: Some(hi) },
@@ -1268,7 +1268,7 @@ impl LoweringCtx<'_, '_> {
                         voltage_src,
                     })
                 };
-                if existis {
+                if exists {
                     *negate = true;
                     (lo, Some(hi))
                 } else {
@@ -1622,7 +1622,7 @@ impl LoweringCtx<'_, '_> {
         self.func.use_var(ret_place)
     }
 
-    fn implicit_eqation(&mut self, kind: ImplicitEquationKind) -> (ImplicitEquation, Value) {
+    fn implicit_equation(&mut self, kind: ImplicitEquationKind) -> (ImplicitEquation, Value) {
         let equation = self.data.implicit_equations.push_and_get_key(kind);
         let place = self.place(PlaceKind::CollapseImplicitEquation(equation));
         self.func.def_var(place, FALSE);
@@ -1644,14 +1644,14 @@ impl LoweringCtx<'_, '_> {
 
     fn limit_state(&mut self, probe: ExprId) -> (Value, LimitState) {
         let new_val = self.lower_expr(probe);
-        let mut unkown = new_val;
-        if let Some(inst) = self.func.func.dfg.value_def(unkown).inst() {
+        let mut unknown = new_val;
+        if let Some(inst) = self.func.func.dfg.value_def(unknown).inst() {
             debug_assert_eq!(self.func.func.dfg.insts[inst].opcode(), Opcode::Fneg);
-            unkown = self.func.func.dfg.instr_args(inst)[0];
+            unknown = self.func.func.dfg.instr_args(inst)[0];
         }
-        let dst = self.data.lim_state.raw.entry(unkown);
+        let dst = self.data.lim_state.raw.entry(unknown);
         let state = LimitState::from(dst.index());
-        dst.or_default().push((new_val, new_val != unkown));
+        dst.or_default().push((new_val, new_val != unknown));
 
         (new_val, state)
     }
@@ -1664,7 +1664,7 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn lower_integral(&mut self, kind: IdtKind, args: &[ExprId]) -> Value {
-        let (equation, val) = self.implicit_eqation(ImplicitEquationKind::Idt(kind));
+        let (equation, val) = self.implicit_equation(ImplicitEquationKind::Idt(kind));
 
         let mut enable_integral = self.param(ParamKind::EnableIntegration);
         let residual = if kind.has_ic() {
@@ -1936,7 +1936,7 @@ impl LoweringCtx<'_, '_> {
                     ImplicitEquationKind::Ddt
                 };
 
-                let (equation, val) = self.implicit_eqation(equation_kind);
+                let (equation, val) = self.implicit_equation(equation_kind);
                 self.define_resist_residual(val, equation);
                 let react_residual = self.func.ins().fneg(arg0);
                 self.define_react_residual(react_residual, equation);
@@ -2102,8 +2102,8 @@ impl LoweringCtx<'_, '_> {
             BuiltIn::absdelay if self.extra_dims.is_some() => {
                 let arg = self.lower_expr_as_contrib(args[0]);
                 let mut delay = self.lower_expr(args[1]);
-                let (eq1, res) = self.implicit_eqation(ImplicitEquationKind::Absdelay);
-                let (eq2, intermediate) = self.implicit_eqation(ImplicitEquationKind::Absdelay);
+                let (eq1, res) = self.implicit_equation(ImplicitEquationKind::Absdelay);
+                let (eq2, intermediate) = self.implicit_equation(ImplicitEquationKind::Absdelay);
                 if *signature.unwrap() == ABSDELAY_MAX {
                     let max_delay = self.lower_expr(args[2]);
                     let use_delay = self.func.ins().fle(delay, max_delay);

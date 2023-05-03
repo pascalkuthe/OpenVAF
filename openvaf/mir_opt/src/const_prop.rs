@@ -104,7 +104,7 @@ impl ConstSolver<'_> {
             || !self.inst_work_list.is_empty()
             || !self.overdef_work_list.is_empty()
         {
-            // seperate overdef worklist to drive the solver to termination faster
+            // separate overdef worklist to drive the solver to termination faster
             while let Some(inst) = self.overdef_work_list.pop() {
                 if let Some(bb) = self.func.layout.inst_block(inst) {
                     if self.executable_blocks.contains(bb) {
@@ -166,7 +166,7 @@ impl ConstSolver<'_> {
                         break;
                     }
                     let res = res[i];
-                    self.mark_overdefinied(res);
+                    self.mark_overdefined(res);
                     i += 1;
                 }
             }
@@ -180,7 +180,7 @@ impl ConstSolver<'_> {
         if lattice == FlatSet::Top {
             return;
         } else if !eval_phi {
-            self.mark_overdefinied(res);
+            self.mark_overdefined(res);
             return;
         }
 
@@ -192,7 +192,7 @@ impl ConstSolver<'_> {
             let incoming_lattice = self.vals[val];
             match (incoming_lattice, lattice) {
                 (FlatSet::Top, _) => {
-                    self.mark_overdefinied(res);
+                    self.mark_overdefined(res);
                     return;
                 }
 
@@ -202,7 +202,7 @@ impl ConstSolver<'_> {
                 }
 
                 (FlatSet::Elem(old), FlatSet::Elem(new)) if new != old => {
-                    self.mark_overdefinied(res);
+                    self.mark_overdefined(res);
                     return;
                 }
 
@@ -232,10 +232,10 @@ impl ConstSolver<'_> {
                 if let Some(val) = simplify.simplify_unary_op(op, arg) {
                     self.mark_inst_const(inst, val)
                 } else {
-                    self.mark_inst_overdefinied(inst)
+                    self.mark_inst_overdefined(inst)
                 }
             }
-            FlatSet::Top => self.mark_inst_overdefinied(inst),
+            FlatSet::Top => self.mark_inst_overdefined(inst),
         }
     }
 
@@ -270,7 +270,7 @@ impl ConstSolver<'_> {
         }
 
         if overdef {
-            self.mark_inst_overdefinied(inst)
+            self.mark_inst_overdefined(inst)
         }
     }
 
@@ -279,12 +279,12 @@ impl ConstSolver<'_> {
         self.mark_const(res, val);
     }
 
-    fn mark_inst_overdefinied(&mut self, inst: Inst) {
+    fn mark_inst_overdefined(&mut self, inst: Inst) {
         let res = self.func.dfg.first_result(inst);
-        self.mark_overdefinied(res);
+        self.mark_overdefined(res);
     }
 
-    fn mark_overdefinied(&mut self, val: Value) {
+    fn mark_overdefined(&mut self, val: Value) {
         if self.vals[val] != FlatSet::Top {
             self.vals[val] = FlatSet::Top;
             for use_ in self.func.dfg.uses(val) {

@@ -29,7 +29,7 @@ impl Clone for GVNExpression {
 
 union GVNExprPayLoad {
     default: DefaultExprPayLoad,
-    // this is basically copy but ihat just makes the API of ValueList really akward
+    // this is basically copy but ihat just makes the API of ValueList really awkward
     phi: ManuallyDrop<PhiExprPayLoad>,
     call: ManuallyDrop<CallExprPayLoad>,
 }
@@ -39,19 +39,19 @@ impl GVNExprPayLoad {
         unsafe { self.default }
     }
     fn phi(&self) -> &PhiExprPayLoad {
-        unsafe { &*self.phi }
+        unsafe { &self.phi }
     }
 
     fn phi_mut(&mut self) -> &mut PhiExprPayLoad {
-        unsafe { &mut *self.phi }
+        unsafe { &mut self.phi }
     }
 
     fn call(&self) -> &CallExprPayLoad {
-        unsafe { &*self.call }
+        unsafe { &self.call }
     }
 
     fn call_mut(&mut self) -> &mut CallExprPayLoad {
-        unsafe { &mut *self.call }
+        unsafe { &mut self.call }
     }
 }
 
@@ -556,11 +556,11 @@ impl GVN {
     fn process_inst(&mut self, func: &mut Function, inst: Inst) {
         if let Some(res) = GVNExpression::new(self, func, inst) {
             let eclass = res.into_clas(inst, self, func);
-            self.update_congurence_class(func, inst, eclass)
+            self.update_congruence_class(func, inst, eclass)
         }
     }
 
-    fn update_congurence_class(&mut self, func: &mut Function, inst: Inst, eclass: ClassId) {
+    fn update_congruence_class(&mut self, func: &mut Function, inst: Inst, eclass: ClassId) {
         let iclass = self.class_map.inst_class[inst];
         let class_changed = iclass != eclass.into();
 

@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* Do not generate unkowns for noise phase shifts with ddt.
+* Do not generate unknowns for noise phase shifts with ddt.
 * Provide errors instead of crashing for unsupported Verilog-A builtins.
 * Provide errors instead of crashing for illegal nature access.
 * Rare miss-compilations/crashes caused by treating a branch instruction as a jump instruction during CFG simplification.
@@ -77,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* Refactor the algorithm that determines whether `ddt` needs an unkown, so that OpenVAF doesn't create one when not required.
+* Refactor the algorithm that determines whether `ddt` needs an unknown, so that OpenVAF doesn't create one when not required.
 * Automatically add whitespace between auto generated format characters for `$strope etc.`
 * Check that fmt literals used in $display are correct and match the format arguments to avoid crashes/undefined behavior.
 

@@ -216,7 +216,7 @@ fn gen_opcodes() {
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s{
                     #(#opcode_print2 => Ok(Opcode::#opcode_idents2),)*
-                    _ => Err("Unkown opcode")
+                    _ => Err("Unknown opcode")
                 }
             }
         }

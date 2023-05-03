@@ -88,7 +88,7 @@ pub struct TargetOptions {
     /// libraries that should be always be linked to, usually go here.
     pub post_link_args: LinkArgs,
 
-    /// On windows a manually genrated importlib containing inline stdio definitions is required
+    /// On windows a manually generated importlib containing inline stdio definitions is required
     pub import_lib: &'static [u8],
 
     /// Whether the target toolchain is like Windows
