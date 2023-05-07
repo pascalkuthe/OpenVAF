@@ -69,7 +69,7 @@ extern "C" {
     //pub fn LLVMIsLiteralStruct(struct_ty: &Type) -> Bool;
 
     //// Core->Types->Sequential
-    pub fn LLVMGetElementType<'a>(ty: &'a Type) -> &'a Type;
+    // pub fn LLVMGetElementType<'a>(ty: &'a Type) -> &'a Type;
     ///// Get the subtypes of the given type.
     //pub fn LLVMGetSubtypes<'a>(ty: &'a Type, arr: *mut &'a Type);
     ///// Return the number of types in the derived type.

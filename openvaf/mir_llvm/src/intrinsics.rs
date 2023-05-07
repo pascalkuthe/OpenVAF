@@ -24,9 +24,9 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         // let void = self.ty_void();
         let t_bool = self.ty_bool();
         let t_i32 = self.ty_int();
-        let t_isize = self.ty_isize();
-        let t_f64 = self.ty_real();
-        let t_str = self.ty_str();
+        let t_isize = self.ty_size();
+        let t_f64 = self.ty_double();
+        let t_str = self.ty_ptr();
 
         ifn!("llvm.pow.f64", fn(t_f64, t_f64) -> t_f64);
         ifn!("llvm.sqrt.f64", fn(t_f64) -> t_f64);

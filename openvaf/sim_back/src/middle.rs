@@ -561,7 +561,7 @@ impl EvalMir {
         } else {
             BoundStepKind::None
         };
-
+        
         EvalMir {
             init_inst_func,
             init_inst_cfg,

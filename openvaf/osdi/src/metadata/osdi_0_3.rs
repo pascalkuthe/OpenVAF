@@ -92,21 +92,16 @@ impl<'ll> OsdiLimFunction<'ll> {
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_lim_function(&mut self) {
         let ctx = self.ctx;
-        let fields = [ctx.ty_str(), ctx.ty_int(), ctx.ty_void_ptr()];
-        let ty = ctx.struct_ty("OsdiLimFunction", &fields);
+        let fields = [ctx.ty_ptr(), ctx.ty_int(), ctx.ty_ptr()];
+        let ty = ctx.ty_struct("OsdiLimFunction", &fields);
         self.osdi_lim_function = Some(ty);
     }
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_sim_paras(&mut self) {
         let ctx = self.ctx;
-        let fields = [
-            ctx.ptr_ty(ctx.ty_str()),
-            ctx.ptr_ty(ctx.ty_real()),
-            ctx.ptr_ty(ctx.ty_str()),
-            ctx.ptr_ty(ctx.ty_str()),
-        ];
-        let ty = ctx.struct_ty("OsdiSimParas", &fields);
+        let fields = [ctx.ty_ptr(), ctx.ty_ptr(), ctx.ty_ptr(), ctx.ty_ptr()];
+        let ty = ctx.ty_struct("OsdiSimParas", &fields);
         self.osdi_sim_paras = Some(ty);
     }
 }
@@ -115,13 +110,13 @@ impl OsdiTyBuilder<'_, '_, '_> {
         let ctx = self.ctx;
         let fields = [
             self.osdi_sim_paras.unwrap(),
-            ctx.ty_real(),
-            ctx.ptr_ty(ctx.ty_real()),
-            ctx.ptr_ty(ctx.ty_real()),
-            ctx.ptr_ty(ctx.ty_real()),
+            ctx.ty_double(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
             ctx.ty_int(),
         ];
-        let ty = ctx.struct_ty("OsdiSimInfo", &fields);
+        let ty = ctx.ty_struct("OsdiSimInfo", &fields);
         self.osdi_sim_info = Some(ty);
     }
 }
@@ -148,15 +143,15 @@ impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_init_error(&mut self) {
         let ctx = self.ctx;
         let fields = [ctx.ty_int(), self.osdi_init_error_payload.unwrap()];
-        let ty = ctx.struct_ty("OsdiInitError", &fields);
+        let ty = ctx.ty_struct("OsdiInitError", &fields);
         self.osdi_init_error = Some(ty);
     }
 }
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_init_info(&mut self) {
         let ctx = self.ctx;
-        let fields = [ctx.ty_int(), ctx.ty_int(), ctx.ptr_ty(self.osdi_init_error.unwrap())];
-        let ty = ctx.struct_ty("OsdiInitInfo", &fields);
+        let fields = [ctx.ty_int(), ctx.ty_int(), ctx.ty_ptr()];
+        let ty = ctx.ty_struct("OsdiInitInfo", &fields);
         self.osdi_init_info = Some(ty);
     }
 }
@@ -175,7 +170,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_node_pair(&mut self) {
         let ctx = self.ctx;
         let fields = [ctx.ty_int(), ctx.ty_int()];
-        let ty = ctx.struct_ty("OsdiNodePair", &fields);
+        let ty = ctx.ty_struct("OsdiNodePair", &fields);
         self.osdi_node_pair = Some(ty);
     }
 }
@@ -199,7 +194,7 @@ impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_jacobian_entry(&mut self) {
         let ctx = self.ctx;
         let fields = [self.osdi_node_pair.unwrap(), ctx.ty_int(), ctx.ty_int()];
-        let ty = ctx.struct_ty("OsdiJacobianEntry", &fields);
+        let ty = ctx.ty_struct("OsdiJacobianEntry", &fields);
         self.osdi_jacobian_entry = Some(ty);
     }
 }
@@ -233,16 +228,16 @@ impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_node(&mut self) {
         let ctx = self.ctx;
         let fields = [
-            ctx.ty_str(),
-            ctx.ty_str(),
-            ctx.ty_str(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_c_bool(),
         ];
-        let ty = ctx.struct_ty("OsdiNode", &fields);
+        let ty = ctx.ty_struct("OsdiNode", &fields);
         self.osdi_node = Some(ty);
     }
 }
@@ -258,7 +253,7 @@ impl OsdiParamOpvar {
     pub fn to_ll_val<'ll>(&self, ctx: &CodegenCx<'_, 'll>, tys: &'ll OsdiTys) -> &'ll llvm::Value {
         let arr_0: Vec<_> = self.name.iter().map(|it| ctx.const_str_uninterned(it)).collect();
         let fields = [
-            ctx.const_arr_ptr(ctx.ty_str(), &arr_0),
+            ctx.const_arr_ptr(ctx.ty_ptr(), &arr_0),
             ctx.const_unsigned_int(self.num_alias),
             ctx.const_str_uninterned(&self.description),
             ctx.const_str_uninterned(&self.units),
@@ -272,15 +267,9 @@ impl OsdiParamOpvar {
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_param_opvar(&mut self) {
         let ctx = self.ctx;
-        let fields = [
-            ctx.ptr_ty(ctx.ty_str()),
-            ctx.ty_int(),
-            ctx.ty_str(),
-            ctx.ty_str(),
-            ctx.ty_int(),
-            ctx.ty_int(),
-        ];
-        let ty = ctx.struct_ty("OsdiParamOpvar", &fields);
+        let fields =
+            [ctx.ty_ptr(), ctx.ty_int(), ctx.ty_ptr(), ctx.ty_ptr(), ctx.ty_int(), ctx.ty_int()];
+        let ty = ctx.ty_struct("OsdiParamOpvar", &fields);
         self.osdi_param_opvar = Some(ty);
     }
 }
@@ -298,8 +287,8 @@ impl OsdiNoiseSource {
 impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_noise_source(&mut self) {
         let ctx = self.ctx;
-        let fields = [ctx.ty_str(), self.osdi_node_pair.unwrap()];
-        let ty = ctx.struct_ty("OsdiNoiseSource", &fields);
+        let fields = [ctx.ty_ptr(), self.osdi_node_pair.unwrap()];
+        let ty = ctx.ty_struct("OsdiNoiseSource", &fields);
         self.osdi_noise_source = Some(ty);
     }
 }
@@ -394,116 +383,44 @@ impl OsdiTyBuilder<'_, '_, '_> {
     fn osdi_descriptor(&mut self) {
         let ctx = self.ctx;
         let fields = [
-            ctx.ty_str(),
+            ctx.ty_ptr(),
             ctx.ty_int(),
             ctx.ty_int(),
-            ctx.ptr_ty(self.osdi_node.unwrap()),
+            ctx.ty_ptr(),
             ctx.ty_int(),
-            ctx.ptr_ty(self.osdi_jacobian_entry.unwrap()),
+            ctx.ty_ptr(),
             ctx.ty_int(),
-            ctx.ptr_ty(self.osdi_node_pair.unwrap()),
+            ctx.ty_ptr(),
             ctx.ty_int(),
-            ctx.ptr_ty(self.osdi_noise_source.unwrap()),
-            ctx.ty_int(),
-            ctx.ty_int(),
-            ctx.ty_int(),
-            ctx.ty_int(),
-            ctx.ptr_ty(self.osdi_param_opvar.unwrap()),
+            ctx.ty_ptr(),
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
+            ctx.ty_ptr(),
             ctx.ty_int(),
             ctx.ty_int(),
             ctx.ty_int(),
-            ctx.ptr_ty(ctx.ty_func(
-                &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ty_int(), ctx.ty_int()],
-                ctx.ty_void_ptr(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ptr_ty(self.osdi_sim_paras.unwrap()),
-                    ctx.ptr_ty(self.osdi_init_info.unwrap()),
-                ],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ty_real(),
-                    ctx.ty_int(),
-                    ctx.ptr_ty(self.osdi_sim_paras.unwrap()),
-                    ctx.ptr_ty(self.osdi_init_info.unwrap()),
-                ],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ptr_ty(self.osdi_sim_info.unwrap()),
-                ],
-                ctx.ty_int(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ty_real(),
-                    ctx.ptr_ty(ctx.ty_real()),
-                    ctx.ptr_ty(ctx.ty_real()),
-                ],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ptr_ty(ctx.ty_real())],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ptr_ty(ctx.ty_real())],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ptr_ty(ctx.ty_real())],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ptr_ty(ctx.ty_real())],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ptr_ty(ctx.ty_real()),
-                    ctx.ptr_ty(ctx.ty_real()),
-                ],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(
-                &[
-                    ctx.ty_void_ptr(),
-                    ctx.ty_void_ptr(),
-                    ctx.ptr_ty(ctx.ty_real()),
-                    ctx.ptr_ty(ctx.ty_real()),
-                    ctx.ty_real(),
-                ],
-                ctx.ty_void(),
-            )),
-            ctx.ptr_ty(ctx.ty_func(&[ctx.ty_void_ptr(), ctx.ty_void_ptr()], ctx.ty_void())),
-            ctx.ptr_ty(
-                ctx.ty_func(&[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ty_real()], ctx.ty_void()),
-            ),
-            ctx.ptr_ty(
-                ctx.ty_func(&[ctx.ty_void_ptr(), ctx.ty_void_ptr(), ctx.ty_real()], ctx.ty_void()),
-            ),
+            ctx.ty_int(),
+            ctx.ty_int(),
+            ctx.ty_int(),
+            ctx.ty_int(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
+            ctx.ty_ptr(),
         ];
-        let ty = ctx.struct_ty("OsdiDescriptor", &fields);
+        let ty = ctx.ty_struct("OsdiDescriptor", &fields);
         self.osdi_descriptor = Some(ty);
     }
 }

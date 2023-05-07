@@ -176,8 +176,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             llvm::LLVMSetGlobalConstant(global, llvm::True);
             llvm::LLVMSetLinkage(global, llvm::Linkage::Internal);
         }
-
-        self.ptrcast(global, self.ptr_ty(elem_ty))
+        global
     }
 
     pub fn export_array(
@@ -197,7 +196,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
         if add_cnt {
             let name = format!("{}.cnt", name);
-            self.export_val(&name, self.ty_isize(), self.const_usize(vals.len()), true);
+            self.export_val(&name, self.ty_size(), self.const_usize(vals.len()), true);
         }
 
         arr
@@ -224,7 +223,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         if add_cnt {
             let name = format!("{}.cnt", name);
             let arr_len = self
-                .define_global(&name, self.ty_isize())
+                .define_global(&name, self.ty_size())
                 .unwrap_or_else(|| unreachable!("symbol '{}' already defined", name));
 
             unsafe {

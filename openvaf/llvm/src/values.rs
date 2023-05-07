@@ -156,7 +156,8 @@ extern "C" {
     // pub fn LLVMConstShl(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
     // pub fn LLVMConstLShr(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
     // pub fn LLVMConstAShr(LHSConstant: &'a Value, RHSConstant: &'a Value) -> &'a Value;
-    pub fn LLVMConstGEP<'a>(
+    pub fn LLVMConstInBoundsGEP2<'a>(
+        elem_ty: &'a Type,
         ConstantVal: &'a Value,
         ConstantIndices: *const &'a Value,
         NumIndices: c_uint,
@@ -194,7 +195,7 @@ extern "C" {
     // pub fn LLVMConstZExtOrBitCast(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
     // pub fn LLVMConstSExtOrBitCast(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
     // pub fn LLVMConstTruncOrBitCast(ConstantVal: &'a Value, ToType: TypeRef) -> &'a Value;
-    pub fn LLVMConstPointerCast<'a>(const_val: &'a Value, ty: &'a Type) -> &'a Value;
+    // pub fn LLVMConstPointerCast<'a>(const_val: &'a Value, ty: &'a Type) -> &'a Value;
     // pub fn LLVMConstIntCast<'a>(
     //     ConstantVal: &'a Value,
     //     ToType: &'a Type,
