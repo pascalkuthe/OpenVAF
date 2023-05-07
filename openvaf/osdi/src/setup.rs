@@ -16,8 +16,7 @@ use crate::inst_data::OsdiInstanceParam;
 impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     fn mark_collapsed(&self) -> (&'ll llvm::Value, &'ll llvm::Type) {
         let OsdiCompilationUnit { inst_data, cx, .. } = self;
-        let inst_data_ptr = cx.ptr_ty(inst_data.ty);
-        let fn_type = cx.ty_func(&[inst_data_ptr, cx.ty_int()], cx.ty_void());
+        let fn_type = cx.ty_func(&[cx.ty_ptr(), cx.ty_int()], cx.ty_void());
         let name = &format!("collapse_{}", &self.module.sym);
         let llfunc = cx.declare_int_c_fn(name, fn_type);
 
@@ -44,15 +43,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             .get_func_by_name("push_invalid_param_err")
             .expect("stdlib function push_invalid_param_err is missing");
 
-        let ty = cx.ty_func(
-            &[
-                cx.ptr_ty(cx.ty_void_ptr()),
-                cx.ptr_ty(cx.ty_int()),
-                cx.ptr_ty(cx.ty_int()),
-                cx.ty_int(),
-            ],
-            cx.ty_void(),
-        );
+        let ty = cx.ty_func(&[cx.ty_ptr(), cx.ty_ptr(), cx.ty_ptr(), cx.ty_int()], cx.ty_void());
 
         (ty, val)
     }
@@ -60,17 +51,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     pub fn setup_model_prototype(&self) -> &'ll llvm::Value {
         let cx = &self.cx;
         let name = &format!("setup_model_{}", &self.module.sym);
-        let simparam_ptr_ty = cx.ptr_ty(self.tys.osdi_sim_paras);
 
-        let fun_ty = cx.ty_func(
-            &[
-                cx.ty_void_ptr(),
-                cx.ty_void_ptr(),
-                simparam_ptr_ty,
-                cx.ptr_ty(self.tys.osdi_init_info),
-            ],
-            cx.ty_void(),
-        );
+        let fun_ty =
+            cx.ty_func(&[cx.ty_ptr(), cx.ty_ptr(), cx.ty_ptr(), cx.ty_ptr()], cx.ty_void());
         cx.declare_ext_fn(name, fun_ty)
     }
 
@@ -87,10 +70,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
         let handle = unsafe { llvm::LLVMGetParam(llfunc, 0) };
-        let model = unsafe {
-            let raw = llvm::LLVMGetParam(llfunc, 1);
-            llvm::LLVMBuildPointerCast(builder.llbuilder, raw, cx.ptr_ty(model_data.ty), UNNAMED)
-        };
+        let model = unsafe { llvm::LLVMGetParam(llfunc, 1) };
         let simparam = unsafe { llvm::LLVMGetParam(llfunc, 2) };
 
         builder.params = vec![BuilderVal::Undef; intern.params.len()].into();
@@ -140,12 +120,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         let err_cap = unsafe { builder.alloca(cx.ty_int()) };
 
-        let flags = unsafe { builder.struct_gep(res, 0) };
-        let err_len = unsafe { builder.struct_gep(res, 1) };
-        let err_ptr = unsafe { builder.struct_gep(res, 2) };
+        let flags = unsafe { builder.struct_gep(tys.osdi_init_info, res, 0) };
+        let err_len = unsafe { builder.struct_gep(tys.osdi_init_info, res, 1) };
+        let err_ptr = unsafe { builder.struct_gep(tys.osdi_init_info, res, 2) };
 
-        let err_ptr_ty = cx.ptr_ty(tys.osdi_init_error);
-        let nullptr = cx.const_null_ptr(err_ptr_ty);
+        let nullptr = cx.const_null_ptr();
         let zero = cx.const_unsigned_int(0);
 
         unsafe {
@@ -154,9 +133,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             builder.store(err_cap, zero);
             builder.store(flags, zero);
         }
-
-        let void_ptr_ptr = cx.ptr_ty(cx.ty_void_ptr());
-        let err_ptr_void = unsafe { builder.ptrcast(err_ptr, void_ptr_ptr) };
 
         let invalid_param_err = Self::invalid_param_err(cx);
 
@@ -173,7 +149,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     let cb = CallbackFun {
                         fun_ty: invalid_param_err.0,
                         fun: invalid_param_err.1,
-                        state: vec![err_ptr_void, err_len, err_cap, err_param].into_boxed_slice(),
+                        state: vec![err_ptr, err_len, err_cap, err_param].into_boxed_slice(),
                         num_state: 0,
                     };
 
@@ -218,18 +194,18 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let name = &format!("setup_instance_{}", &self.module.sym);
         let cx = &self.cx;
 
-        let ty_void_ptr = cx.ty_void_ptr();
+        let ty_void_ptr = cx.ty_ptr();
 
-        let simparam_ptr_ty = cx.ptr_ty(self.tys.osdi_sim_paras);
+        let simparam_ptr_ty = cx.ty_ptr();
         let fun_ty = cx.ty_func(
             &[
                 ty_void_ptr,
                 ty_void_ptr,
                 ty_void_ptr,
-                cx.ty_real(),
+                cx.ty_double(),
                 cx.ty_int(),
                 simparam_ptr_ty,
-                cx.ptr_ty(self.tys.osdi_init_info),
+                cx.ty_ptr(),
             ],
             cx.ty_void(),
         );
@@ -249,14 +225,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
         let handle = unsafe { llvm::LLVMGetParam(llfunc, 0) };
-        let instance = unsafe {
-            let raw = llvm::LLVMGetParam(llfunc, 1);
-            llvm::LLVMBuildPointerCast(builder.llbuilder, raw, cx.ptr_ty(inst_data.ty), UNNAMED)
-        };
-        let model = unsafe {
-            let raw = llvm::LLVMGetParam(llfunc, 2);
-            llvm::LLVMBuildPointerCast(builder.llbuilder, raw, cx.ptr_ty(model_data.ty), UNNAMED)
-        };
+        let instance = unsafe { llvm::LLVMGetParam(llfunc, 1) };
+        let model = unsafe { llvm::LLVMGetParam(llfunc, 2) };
         let temperature = unsafe { llvm::LLVMGetParam(llfunc, 3) };
         let connected_terminals = unsafe { llvm::LLVMGetParam(llfunc, 4) };
         let simparam = unsafe { llvm::LLVMGetParam(llfunc, 5) };
@@ -349,14 +319,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         let err_cap = unsafe { builder.alloca(cx.ty_int()) };
 
-        let flags = unsafe { builder.struct_gep(res, 0) };
-        let err_len = unsafe { builder.struct_gep(res, 1) };
-        let err_ptr = unsafe { builder.struct_gep(res, 2) };
-        let void_ptr_ptr = cx.ptr_ty(cx.ty_void_ptr());
-        let err_ptr_void = unsafe { builder.ptrcast(err_ptr, void_ptr_ptr) };
+        let flags = unsafe { builder.struct_gep(tys.osdi_init_info, res, 0) };
+        let err_len = unsafe { builder.struct_gep(tys.osdi_init_info, res, 1) };
+        let err_ptr = unsafe { builder.struct_gep(tys.osdi_init_info, res, 2) };
 
-        let err_ptr_ty = cx.ptr_ty(tys.osdi_init_error);
-        let nullptr = cx.const_null_ptr(err_ptr_ty);
+        let nullptr = cx.const_null_ptr();
         let zero = cx.const_unsigned_int(0);
 
         unsafe {
@@ -378,8 +345,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         CallbackFun {
                             fun_ty: invalid_param_err.0,
                             fun: invalid_param_err.1,
-                            state: vec![err_ptr_void, err_len, err_cap, err_param]
-                                .into_boxed_slice(),
+                            state: vec![err_ptr, err_len, err_cap, err_param].into_boxed_slice(),
                             num_state: 0,
                         }
                     } else {
@@ -477,12 +443,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             unsafe { builder.store(bound_step_ptr, cx.const_real(f64::INFINITY)) };
 
             let func_ref = intern.callbacks.unwrap_index(&CallBackKind::BoundStep);
-            let ty_real_ptr = cx.ptr_ty(cx.ty_real());
             let fun = builder
                 .cx
                 .get_func_by_name("bound_step")
                 .expect("stdlib function bound_step is missing");
-            let fun_ty = cx.ty_func(&[ty_real_ptr, cx.ty_real()], cx.ty_void());
+            let fun_ty = cx.ty_func(&[cx.ty_ptr(), cx.ty_double()], cx.ty_void());
             let cb = CallbackFun { fun_ty, fun, state: Box::new([bound_step_ptr]), num_state: 0 };
             builder.callbacks[func_ref] = Some(cb);
         }

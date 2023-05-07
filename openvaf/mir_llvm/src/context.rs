@@ -11,16 +11,19 @@ use llvm::{
 };
 use target::spec::Target;
 
+use crate::types::Types;
+
 pub struct CodegenCx<'a, 'll> {
     pub llmod: &'ll llvm::Module,
     pub llcx: &'ll llvm::Context,
 
     pub target: &'a Target,
-    pub target_cpu: &'a str,
+    // pub target_cpu: &'a str,
     pub literals: &'a Rodeo,
     str_lit_cache: RefCell<AHashMap<Spur, &'ll Value>>,
     pub(crate) intrinsics: RefCell<AHashMap<&'static str, (&'ll Type, &'ll Value)>>,
     pub(crate) local_gen_sym_counter: Cell<u32>,
+    pub(crate) tys: Types<'ll>,
 }
 
 impl<'a, 'll> CodegenCx<'a, 'll> {
@@ -28,7 +31,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         literals: &'a Rodeo,
         llvm_module: &'ll crate::ModuleLlvm,
         target: &'a Target,
-        target_cpu: &'a str,
+        // target_cpu: &'a str,
     ) -> CodegenCx<'a, 'll> {
         // let ty_isize =
         //     unsafe { llvm::LLVMIntTypeInContext(llvm_module.llcx, target.pointer_width) };
@@ -39,9 +42,9 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             literals,
             intrinsics: RefCell::new(AHashMap::new()),
             local_gen_sym_counter: Cell::new(0),
-            target_cpu,
-            // ty_isize,
+            // target_cpu,
             target,
+            tys: Types::new(llvm_module.llcx, target.pointer_width),
         }
     }
 
@@ -109,13 +112,8 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             llvm::LLVMSetGlobalConstant(global, llvm::True);
             llvm::LLVMSetLinkage(global, llvm::Linkage::Internal);
         }
-        let res = self.ptrcast(global, self.ty_str());
-        self.str_lit_cache.borrow_mut().insert(lit, res);
-        res
-    }
-
-    pub fn ptrcast(&self, val: &'ll Value, ty: &'ll Type) -> &'ll Value {
-        unsafe { llvm::LLVMConstPointerCast(val, ty) }
+        self.str_lit_cache.borrow_mut().insert(lit, global);
+        global
     }
 }
 

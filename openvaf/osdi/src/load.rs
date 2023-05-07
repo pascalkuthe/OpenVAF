@@ -1,7 +1,7 @@
 use llvm::{
-    LLVMAppendBasicBlockInContext, LLVMBuildFAdd, LLVMBuildFMul, LLVMBuildFSub,
-    LLVMBuildPointerCast, LLVMBuildRetVoid, LLVMCreateBuilderInContext, LLVMDisposeBuilder,
-    LLVMGetParam, LLVMPositionBuilderAtEnd, LLVMSetFastMath, UNNAMED,
+    LLVMAppendBasicBlockInContext, LLVMBuildFAdd, LLVMBuildFMul, LLVMBuildFSub, LLVMBuildRetVoid,
+    LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd,
+    LLVMSetFastMath, UNNAMED,
 };
 use sim_back::matrix::MatrixEntry;
 
@@ -39,11 +39,10 @@ impl JacobianLoadType {
 impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     pub fn load_noise(&self) -> &'ll llvm::Value {
         let OsdiCompilationUnit { cx, module, .. } = self;
-        let void_ptr = cx.ty_void_ptr();
-        let f64_ty = cx.ty_real();
-        let f64_ptr_ty = cx.ptr_ty(f64_ty);
+        let void_ptr = cx.ty_ptr();
+        let f64_ptr_ty = cx.ty_ptr();
         let fun_ty =
-            cx.ty_func(&[void_ptr, void_ptr, cx.ty_real(), f64_ptr_ty, f64_ptr_ty], cx.ty_void());
+            cx.ty_func(&[void_ptr, void_ptr, cx.ty_double(), f64_ptr_ty, f64_ptr_ty], cx.ty_void());
         let name = &format!("load_noise_{}", module.sym);
         let llfunc = cx.declare_int_c_fn(name, fun_ty);
 
@@ -62,10 +61,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
     pub fn load_residual(&self, reactive: bool) -> &'ll llvm::Value {
         let OsdiCompilationUnit { inst_data, cx, module, .. } = self;
-        let void_ptr = cx.ty_void_ptr();
-        let f64_ty = cx.ty_real();
-        let f64_ptr_ty = cx.ptr_ty(f64_ty);
-        let fun_ty = cx.ty_func(&[void_ptr, void_ptr, f64_ptr_ty], cx.ty_void());
+        let ptr_ty = cx.ty_ptr();
+        let fun_ty = cx.ty_func(&[ptr_ty, ptr_ty, ptr_ty], cx.ty_void());
         let name =
             &format!("load_residual_{}_{}", if reactive { "react" } else { "resist" }, module.sym);
         let llfunc = cx.declare_int_c_fn(name, fun_ty);
@@ -78,7 +75,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             // get params
             let inst = LLVMGetParam(llfunc, 0);
-            let inst = LLVMBuildPointerCast(llbuilder, inst, cx.ptr_ty(inst_data.ty), UNNAMED);
             let dst = LLVMGetParam(llfunc, 2);
 
             let nodes = if reactive {
@@ -102,9 +98,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
     pub fn load_lim_rhs(&self, reactive: bool) -> &'ll llvm::Value {
         let OsdiCompilationUnit { inst_data, cx, module, .. } = self;
-        let void_ptr = cx.ty_void_ptr();
-        let f64_ty = cx.ty_real();
-        let f64_ptr_ty = cx.ptr_ty(f64_ty);
+        let void_ptr = cx.ty_ptr();
+        let f64_ptr_ty = cx.ty_ptr();
         let fun_ty = cx.ty_func(&[void_ptr, void_ptr, f64_ptr_ty], cx.ty_void());
         let name =
             &format!("load_lim_rhs_{}_{}", if reactive { "react" } else { "resist" }, module.sym);
@@ -118,7 +113,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             // get params
             let inst = LLVMGetParam(llfunc, 0);
-            let inst = LLVMBuildPointerCast(llbuilder, inst, cx.ptr_ty(inst_data.ty), UNNAMED);
             let dst = LLVMGetParam(llfunc, 2);
 
             let nodes = if reactive {
@@ -228,10 +222,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
     pub fn load_spice_rhs(&self, tran: bool) -> &'ll llvm::Value {
         let OsdiCompilationUnit { cx, module, .. } = self;
-        let void_ptr = cx.ty_void_ptr();
-        let f64_ty = cx.ty_real();
-        let f64_ptr_ty = cx.ptr_ty(f64_ty);
-        let mut args = vec![void_ptr, void_ptr, f64_ptr_ty, f64_ptr_ty];
+        let f64_ty = cx.ty_double();
+        let ptr_ty = cx.ty_ptr();
+        let mut args = vec![ptr_ty, ptr_ty, ptr_ty, ptr_ty];
         if tran {
             args.push(f64_ty);
         }
@@ -246,10 +239,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             // get params
             let inst = LLVMGetParam(llfunc, 0);
-            let inst = LLVMBuildPointerCast(llbuilder, inst, cx.ptr_ty(self.inst_data.ty), UNNAMED);
             let model = LLVMGetParam(llfunc, 1);
-            let model =
-                LLVMBuildPointerCast(llbuilder, model, cx.ptr_ty(self.model_data.ty), UNNAMED);
             let dst = LLVMGetParam(llfunc, 2);
             let prev_solve = LLVMGetParam(llfunc, 3);
             let alpha = if tran { LLVMGetParam(llfunc, 4) } else { prev_solve };
@@ -267,8 +257,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     }
 
     pub fn load_jacobian(&self, kind: JacobianLoadType) -> &'ll llvm::Value {
-        let OsdiCompilationUnit { ref inst_data, ref model_data, cx, module, .. } = *self;
-        let args_ = [cx.ty_void_ptr(), cx.ty_void_ptr(), cx.ty_real()];
+        let OsdiCompilationUnit { cx, module, .. } = *self;
+        let args_ = [cx.ty_ptr(), cx.ty_ptr(), cx.ty_double()];
         let args = if kind.read_reactive() { &args_ } else { &args_[0..2] };
         let fun_ty = cx.ty_func(args, cx.ty_void());
         let name = &format!("load_jacobian_{}_{}", kind.name(), &module.sym,);
@@ -281,9 +271,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             LLVMPositionBuilderAtEnd(llbuilder, entry);
             // get params
             let inst = LLVMGetParam(llfunc, 0);
-            let inst = LLVMBuildPointerCast(llbuilder, inst, cx.ptr_ty(inst_data.ty), UNNAMED);
             let model = LLVMGetParam(llfunc, 1);
-            let model = LLVMBuildPointerCast(llbuilder, model, cx.ptr_ty(model_data.ty), UNNAMED);
             let alpha = if kind.read_reactive() { LLVMGetParam(llfunc, 2) } else { inst };
 
             for (id, entry) in module.matrix_ids.iter_enumerated() {

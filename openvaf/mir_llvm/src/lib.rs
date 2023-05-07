@@ -119,7 +119,7 @@ impl<'t> LLVMBackend<'t> {
         literals: &'a Rodeo,
         module: &'ll ModuleLlvm,
     ) -> CodegenCx<'a, 'll> {
-        CodegenCx::new(literals, module, self.target, &self.target_cpu)
+        CodegenCx::new(literals, module, self.target)
     }
     pub fn target(&self) -> &'t Target {
         self.target

@@ -92,15 +92,14 @@ impl<'a, 'b, 'll> OsdiCompilationUnit<'a, 'b, 'll> {
             if eval && !module.lim_table.is_empty() && !module.mir.eval_intern.lim_state.is_empty()
             {
                 let ty = cx.ty_array(tys.osdi_lim_function, module.lim_table.len() as u32);
-                let res = cx
+                let ptr = cx
                     .define_global("OSDI_LIM_TABLE", ty)
                     .unwrap_or_else(|| unreachable!("symbol OSDI_LIM_TABLE already defined"));
                 unsafe {
-                    llvm::LLVMSetLinkage(res, llvm::Linkage::ExternalLinkage);
-                    llvm::LLVMSetUnnamedAddress(res, llvm::UnnamedAddr::No);
-                    llvm::LLVMSetDLLStorageClass(res, llvm::DLLStorageClass::Export);
+                    llvm::LLVMSetLinkage(ptr, llvm::Linkage::ExternalLinkage);
+                    llvm::LLVMSetUnnamedAddress(ptr, llvm::UnnamedAddr::No);
+                    llvm::LLVMSetDLLStorageClass(ptr, llvm::DLLStorageClass::Export);
                 }
-                let ptr = cx.ptrcast(res, cx.ptr_ty(tys.osdi_lim_function));
                 Some(ptr)
             } else {
                 None
@@ -185,9 +184,7 @@ pub fn general_callbacks<'ll>(
     handle: &'ll llvm::Value,
     simparam: &'ll llvm::Value,
 ) -> TiVec<FuncRef, Option<CallbackFun<'ll>>> {
-    let simparam = unsafe { builder.ptrcast(simparam, builder.cx.ty_void_ptr()) };
-    let ty_void_ptr = builder.cx.ty_void_ptr();
-    let int_ptr_ty = builder.cx.ptr_ty(builder.cx.ty_int());
+    let ptr_ty = builder.cx.ty_ptr();
     intern
         .callbacks
         .raw
@@ -200,8 +197,8 @@ pub fn general_callbacks<'ll>(
                         .get_func_by_name("simparam")
                         .expect("stdlib function simparam is missing");
                     let fun_ty = builder.cx.ty_func(
-                        &[ty_void_ptr, ty_void_ptr, int_ptr_ty, builder.cx.ty_str()],
-                        builder.cx.ty_real(),
+                        &[ptr_ty, ptr_ty, ptr_ty, builder.cx.ty_ptr()],
+                        builder.cx.ty_double(),
                     );
                     CallbackFun {
                         fun_ty,
@@ -216,8 +213,8 @@ pub fn general_callbacks<'ll>(
                         .get_func_by_name("simparam_opt")
                         .expect("stdlib function simparam_opt is missing");
                     let fun_ty = builder.cx.ty_func(
-                        &[ty_void_ptr, builder.cx.ty_str(), builder.cx.ty_real()],
-                        builder.cx.ty_real(),
+                        &[ptr_ty, builder.cx.ty_ptr(), builder.cx.ty_double()],
+                        builder.cx.ty_double(),
                     );
                     CallbackFun {
                         fun_ty,
@@ -232,8 +229,8 @@ pub fn general_callbacks<'ll>(
                         .get_func_by_name("simparam_str")
                         .expect("stdlib function simparam_str is missing");
                     let fun_ty = builder.cx.ty_func(
-                        &[ty_void_ptr, ty_void_ptr, int_ptr_ty, builder.cx.ty_str()],
-                        builder.cx.ty_str(),
+                        &[ptr_ty, ptr_ty, ptr_ty, builder.cx.ty_ptr()],
+                        builder.cx.ty_ptr(),
                     );
                     CallbackFun {
                         fun_ty,
@@ -245,7 +242,7 @@ pub fn general_callbacks<'ll>(
                 // If these derivative were non zero they would have been removed
                 CallBackKind::Derivative(_) | CallBackKind::NodeDerivative(_) => {
                     let zero = builder.cx.const_real(0.0);
-                    builder.cx.const_callback(&[builder.cx.ty_real()], zero)
+                    builder.cx.const_callback(&[builder.cx.ty_double()], zero)
                 }
                 CallBackKind::ParamInfo(_, _)
                 | CallBackKind::CollapseHint(_, _)
@@ -271,7 +268,7 @@ fn print_callback<'ll>(
     kind: DisplayKind,
     arg_tys: &[FmtArg],
 ) -> (&'ll llvm::Value, &'ll llvm::Type) {
-    let mut args = vec![cx.ty_void_ptr(), cx.ty_str()];
+    let mut args = vec![cx.ty_ptr(), cx.ty_ptr()];
     args.extend(arg_tys.iter().map(|arg| lltype(&arg.ty, cx)));
     let fun_ty = cx.ty_func(&args, cx.ty_void());
     let name = cx.local_callback_name();
@@ -287,19 +284,18 @@ fn print_callback<'ll>(
         LLVMPositionBuilderAtEnd(llbuilder, entry_bb);
         let handle = LLVMGetParam(fun, 0);
         let fmt_lit = LLVMGetParam(fun, 1);
-        let mut args =
-            vec![cx.const_null_ptr(cx.ty_str()), cx.const_usize(0), LLVMGetParam(fun, 1)];
+        let mut args = vec![cx.const_null_ptr(), cx.const_usize(0), LLVMGetParam(fun, 1)];
 
         let exp_table = cx.get_declared_value("EXP").expect("constant EXP missing from stdlib");
-        let exp_table_ty = cx.ty_array(cx.ty_real(), 11);
+        let exp_table_ty = cx.ty_array(cx.ty_double(), 11);
         let char_table =
             cx.get_declared_value("FMT_CHARS").expect("constant FMT_CHARS missing from stdlib");
-        let char_table_ty = cx.ty_array(cx.ty_i8(), 11);
+        let char_table_ty = cx.ty_array(cx.ty_char(), 11);
         let fmt_char_idx =
             cx.get_func_by_name("fmt_char_idx").expect("fmt_char_idx missing from stdlib");
-        let fmt_char_idx_ty = cx.ty_func(&[cx.ty_real()], cx.ty_int());
+        let fmt_char_idx_ty = cx.ty_func(&[cx.ty_double()], cx.ty_int());
         let fmt_binary = cx.get_func_by_name("fmt_binary").expect("fmt_binary missing from stdlib");
-        let fmt_binary_ty = cx.ty_func(&[cx.ty_int()], cx.ty_str());
+        let fmt_binary_ty = cx.ty_func(&[cx.ty_int()], cx.ty_ptr());
         let mut free = Vec::new();
 
         for (i, arg) in arg_tys.iter().enumerate() {
@@ -333,7 +329,7 @@ fn print_callback<'ll>(
                         2,
                         UNNAMED,
                     );
-                    let exp = LLVMBuildLoad2(llbuilder, cx.ty_real(), exp, UNNAMED);
+                    let exp = LLVMBuildLoad2(llbuilder, cx.ty_double(), exp, UNNAMED);
                     let num = LLVMBuildFMul(llbuilder, val, exp, UNNAMED);
                     args.push(num);
                     let scale_char = LLVMBuildInBoundsGEP2(
@@ -357,8 +353,8 @@ fn print_callback<'ll>(
 
         LLVMPositionBuilderAtEnd(llbuilder, alloc_bb);
         let data_len = LLVMBuildAdd(llbuilder, len, cx.const_int(1), UNNAMED);
-        let ptr = LLVMBuildArrayMalloc(llbuilder, cx.ty_i8(), data_len, UNNAMED);
-        let null_ptr = cx.const_null_ptr(cx.ty_str());
+        let ptr = LLVMBuildArrayMalloc(llbuilder, cx.ty_char(), data_len, UNNAMED);
+        let null_ptr = cx.const_null_ptr();
         let is_err = LLVMBuildICmp(llbuilder, llvm::IntPredicate::IntEQ, null_ptr, ptr, UNNAMED);
         LLVMBuildCondBr(llbuilder, is_err, err_bb, write_bb);
 
@@ -390,11 +386,11 @@ fn print_callback<'ll>(
         let lvl = cx.const_unsigned_int(lvl);
         let lvl_and_err = cx.const_unsigned_int(lvl_and_err);
         LLVMAddIncoming(flags, [lvl, lvl_and_err].as_ptr(), [write_bb, err_bb].as_ptr(), 2);
-        let msg = LLVMBuildPhi(llbuilder, cx.ty_str(), UNNAMED);
+        let msg = LLVMBuildPhi(llbuilder, cx.ty_ptr(), UNNAMED);
         LLVMAddIncoming(msg, [ptr, fmt_lit].as_ptr(), [write_bb, err_bb].as_ptr(), 2);
         let fun_ptr = cx.get_declared_value("osdi_log").expect("symbol osdi_log is missing");
-        let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str(), cx.ty_int()], cx.ty_void());
-        let fun = LLVMBuildLoad2(llbuilder, cx.ptr_ty(fun_ty), fun_ptr, UNNAMED);
+        let fun_ty = cx.ty_func(&[cx.ty_ptr(), cx.ty_ptr(), cx.ty_int()], cx.ty_void());
+        let fun = LLVMBuildLoad2(llbuilder, cx.ty_ptr(), fun_ptr, UNNAMED);
         LLVMBuildCall2(llbuilder, fun_ty, fun, [handle, msg, flags].as_ptr(), 3, UNNAMED);
         llvm::LLVMBuildRetVoid(llbuilder);
         llvm::LLVMDisposeBuilder(llbuilder);

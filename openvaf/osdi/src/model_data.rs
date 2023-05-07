@@ -44,7 +44,7 @@ impl<'ll> OsdiModelData<'ll> {
 
         let name = &cgunit.sym;
         let name = format!("osdi_model_data_{name}");
-        let ty = cx.struct_ty(&name, &fields);
+        let ty = cx.ty_struct(&name, &fields);
 
         OsdiModelData { param_given, params, ty }
     }

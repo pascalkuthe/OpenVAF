@@ -205,8 +205,7 @@ pub fn compile(
 
         let osdi_log =
             cx.get_declared_value("osdi_log").expect("symbol osdi_log mising from std lib");
-        let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str(), cx.ty_int()], cx.ty_void());
-        let val = cx.const_null_ptr(cx.ptr_ty(fun_ty));
+        let val = cx.const_null_ptr();
         unsafe {
             llvm::LLVMSetInitializer(osdi_log, val);
             llvm::LLVMSetLinkage(osdi_log, llvm::Linkage::ExternalLinkage);
@@ -293,9 +292,9 @@ fn ty_len(ty: &Type) -> Option<u32> {
 
 fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
     let llty = match ty.base_type() {
-        Type::Real => cx.ty_real(),
+        Type::Real => cx.ty_double(),
         Type::Integer => cx.ty_int(),
-        Type::String => cx.ty_str(),
+        Type::String => cx.ty_ptr(),
         Type::EmptyArray => cx.ty_array(cx.ty_int(), 0),
         Type::Bool => cx.ty_c_bool(),
         Type::Void => cx.ty_void(),
