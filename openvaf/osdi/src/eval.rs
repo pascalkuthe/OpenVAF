@@ -135,7 +135,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             return loc.into();
                         }
 
-                        ParamKind::Current(kind) => prev_solve[&SimUnknown::Current(kind)],
+                        ParamKind::Current(kind) => prev_solve
+                            .get(&SimUnknown::Current(kind))
+                            .copied()
+                            .unwrap_or_else(|| cx.const_real(0.0)),
                         ParamKind::ImplicitUnknown(equation) => prev_solve
                             .get(&SimUnknown::Implicit(equation))
                             .copied()
