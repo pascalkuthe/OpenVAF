@@ -23,6 +23,13 @@ pub fn main() {
     let matches = main_command().get_matches();
     let input: Utf8PathBuf = matches.get_one(INPUT).cloned().unwrap_or_else(Utf8PathBuf::new);
 
+    let env = env_logger::Env::default().filter("OPENVAF_LOG").write_style("OPENVAF_LOG_STYLE");
+    env_logger::Builder::new()
+        .format_timestamp(None)
+        .filter(Some("salsa"), log::LevelFilter::Off)
+        .filter_level(log::LevelFilter::Off)
+        .parse_env(env)
+        .init();
     match wrapped_main(matches) {
         Ok(err_code) => exit(err_code),
         Err(err) => {

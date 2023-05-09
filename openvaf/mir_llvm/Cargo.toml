@@ -20,3 +20,4 @@ arrayvec = "0.7"
 ahash = "0.8"
 lasso = { version = "0.6", features = ["ahash"] }
 libc = "0.2"
+log = "0.4.17"

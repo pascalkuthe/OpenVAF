@@ -7,6 +7,7 @@ use llvm::{
     LLVMBuildOr, LLVMBuildRet, LLVMBuildStore, LLVMCreateBuilderInContext, LLVMDisposeBuilder,
     LLVMGetParam, LLVMPositionBuilderAtEnd, UNNAMED,
 };
+use log::info;
 use mir_llvm::{Builder, BuilderVal, CallbackFun, MemLoc};
 use sim_back::{BoundStepKind, SimUnknown};
 use typed_index_collections::TiVec;
@@ -138,11 +139,17 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         ParamKind::Current(kind) => prev_solve
                             .get(&SimUnknown::Current(kind))
                             .copied()
-                            .unwrap_or_else(|| cx.const_real(0.0)),
+                            .unwrap_or_else(|| {
+                                info!("current probe {kind:?} always returns zero");
+                                cx.const_real(0.0)
+                            }),
                         ParamKind::ImplicitUnknown(equation) => prev_solve
                             .get(&SimUnknown::Implicit(equation))
                             .copied()
-                            .unwrap_or_else(|| cx.const_real(0.0)),
+                            .unwrap_or_else(|| {
+                                info!("implict equation {equation} collapsed to zero");
+                                cx.const_real(0.0)
+                            }),
                         ParamKind::Temperature => {
                             return inst_data.temperature_loc(cx, instance).into()
                         }

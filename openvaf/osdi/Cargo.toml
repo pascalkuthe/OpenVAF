@@ -37,7 +37,7 @@ base_n = {version = "1", path="../../lib/base_n"}
 rayon-core = "1"
 
 camino = "1.1.2"
-
+log = "0.4.17"
 
 [build-dependencies]
 
