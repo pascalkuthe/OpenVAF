@@ -1,5 +1,5 @@
 use basedb::diagnostics::{Diagnostic, Label, LabelStyle, Report};
-use basedb::lints::builtin::{const_simparam, variant_const_simparam};
+use basedb::lints::builtin::{const_simparam, trivial_probe, variant_const_simparam};
 use basedb::lints::{self, Lint, LintSrc};
 use basedb::{AstIdMap, BaseDB, FileId};
 pub use body::BodyValidationDiagnostic;
@@ -14,6 +14,7 @@ use syntax::{Parse, SourceFile, TextRange};
 pub use types::TypeValidationDiagnostic;
 
 use crate::db::HirTyDB;
+use crate::inference::BranchWrite;
 use crate::validation::body::{BodyCtx, IllegalCtxAccess, IllegalCtxAccessKind};
 use crate::validation::types::DuplicateItem;
 
@@ -124,6 +125,10 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
             BodyValidationDiagnostic::ConstSimparam { known: true, stmt, .. } => {
                 let src = self.body_sm.lint_src(stmt, const_simparam);
                 Some((const_simparam, src))
+            }
+            BodyValidationDiagnostic::TrivialBranchAccess { stmt, .. } => {
+                let src = self.body_sm.lint_src(stmt, trivial_probe);
+                Some((trivial_probe, src))
             }
             _ => None,
         }
@@ -460,6 +465,42 @@ impl Diagnostic for BodyValidationDiagnosticWrapped<'_> {
                     node2,
                 }
                 .into_report(self.db, self.parse, self.map, self.sm)
+            }
+            BodyValidationDiagnostic::TrivialBranchAccess { branch, expr, .. } => {
+                let FileSpan { range, file } = self.expr_src(expr);
+                let db = self.db.upcast();
+                let branch_name = match branch {
+                    BranchWrite::Named(branch) => {
+                        let branch = branch.lookup(db).name(db);
+                        branch.to_string()
+                    }
+                    BranchWrite::Unnamed { hi, lo: Some(lo) } => {
+                        format!("({}, {})", db.node_data(hi).name, db.node_data(lo).name)
+                    }
+                    BranchWrite::Unnamed { hi, lo: None } => {
+                        format!("({})", db.node_data(hi).name)
+                    }
+                };
+                let branch_probe = match branch {
+                    BranchWrite::Named(_) => &branch_name,
+                    BranchWrite::Unnamed { .. } => &branch_name[1..branch_name.len() - 1],
+                };
+
+                let mut res = Report::error()
+                    .with_message("Current probe always returns zero".to_owned())
+                    .with_labels(vec![Label {
+                        style: LabelStyle::Primary,
+                        file_id: file,
+                        range: range.into(),
+                        message: "always returns zero".to_owned(),
+                    }]);
+
+                res = res.with_notes(vec![
+                    format!("help: there are no contributions to branch {branch_name}",),
+                    format!("info: branches are open circuted by default: I({branch_probe}) <+ 0"),
+                ]);
+
+                res
             }
         }
     }

@@ -1,7 +1,7 @@
 warning[L011]: unkown supplied to the ddx operator is not standard compilant
-   ┌─ /ddx.va:15:21
+   ┌─ /ddx.va:16:21
    │
-15 │         x = ddx(1.0,V(a,c));
+16 │         x = ddx(1.0,V(a,c));
    │                     ^^^^^^ unkown is not standard compliant
    │
    = note: this functionality is fully suported by openvaf
@@ -13,22 +13,10 @@ warning[L011]: unkown supplied to the ddx operator is not standard compilant
      use a CLI argument or an attribute to overwrite
 
 error: invalid unkown was supplied to the ddx operator
-   ┌─ /ddx.va:19:21
-   │
-19 │         x = ddx(1.0,V(br_ac));
-   │                     ^^^^^^^^ invalid ddx unkown
-   │
-   = help: expected one of the following
-     branch current acces: I(branch), I(a,b)
-     node voltage: V(x)
-     explicit voltage: V(x,y)
-     temperature: $temperature
-
-error: invalid unkown was supplied to the ddx operator
    ┌─ /ddx.va:20:21
    │
-20 │         x = ddx(1.0,I(a,c));
-   │                     ^^^^^^ invalid ddx unkown
+20 │         x = ddx(1.0,V(br_ac));
+   │                     ^^^^^^^^ invalid ddx unkown
    │
    = help: expected one of the following
      branch current acces: I(branch), I(a,b)
@@ -39,8 +27,8 @@ error: invalid unkown was supplied to the ddx operator
 error: invalid unkown was supplied to the ddx operator
    ┌─ /ddx.va:21:21
    │
-21 │         x = ddx(1.0,I(a));
-   │                     ^^^^ invalid ddx unkown
+21 │         x = ddx(1.0,I(a,c));
+   │                     ^^^^^^ invalid ddx unkown
    │
    = help: expected one of the following
      branch current acces: I(branch), I(a,b)
@@ -51,8 +39,8 @@ error: invalid unkown was supplied to the ddx operator
 error: invalid unkown was supplied to the ddx operator
    ┌─ /ddx.va:22:21
    │
-22 │         x = ddx(1.0,I(<a>));
-   │                     ^^^^^^ invalid ddx unkown
+22 │         x = ddx(1.0,I(a));
+   │                     ^^^^ invalid ddx unkown
    │
    = help: expected one of the following
      branch current acces: I(branch), I(a,b)
@@ -63,7 +51,19 @@ error: invalid unkown was supplied to the ddx operator
 error: invalid unkown was supplied to the ddx operator
    ┌─ /ddx.va:23:21
    │
-23 │         x = ddx(1.0,V(<a>));
+23 │         x = ddx(1.0,I(<a>));
+   │                     ^^^^^^ invalid ddx unkown
+   │
+   = help: expected one of the following
+     branch current acces: I(branch), I(a,b)
+     node voltage: V(x)
+     explicit voltage: V(x,y)
+     temperature: $temperature
+
+error: invalid unkown was supplied to the ddx operator
+   ┌─ /ddx.va:24:21
+   │
+24 │         x = ddx(1.0,V(<a>));
    │                     ^^^^^^ invalid ddx unkown
    │
    = help: expected one of the following
@@ -73,9 +73,9 @@ error: invalid unkown was supplied to the ddx operator
      temperature: $temperature
 
 error: access of port-branch potential
-   ┌─ /ddx.va:23:21
+   ┌─ /ddx.va:24:21
    │
-23 │         x = ddx(1.0,V(<a>));
+24 │         x = ddx(1.0,V(<a>));
    │                     ^^^^^^ invalid potential access
    │
    = help: only the flow of port branches like <foo> can be accessed
