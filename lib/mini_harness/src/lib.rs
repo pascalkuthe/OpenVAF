@@ -100,10 +100,6 @@ impl<M: fmt::Display> From<M> for Failed {
 impl Arguments {
     pub fn parse_cli() -> Arguments {
         match Arguments::from_env() {
-            Ok(res) if res.help => {
-                println!("{}", Arguments::HELP);
-                exit(0)
-            }
             Ok(res) => res,
             Err(err) => {
                 eprintln!("{err}");

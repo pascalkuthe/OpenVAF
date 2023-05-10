@@ -27,16 +27,16 @@ target = { version = "0.0.0", path = "../target"}
 
 typed-index-collections = "3.1"
 ahash = "0.8"
-lasso = {version = "0.6", features = ["ahash"]}
+lasso = {version = "0.7", features = ["ahash"]}
 
 salsa = "0.17.0-pre.2"
 indexmap = "1.9"
-smol_str = {version = "0.1.23", default_features=false}
+smol_str = {version = "0.2", default_features=false}
 
 base_n = {version = "1", path="../../lib/base_n"}
 rayon-core = "1"
 
-camino = "1.1.2"
+camino = "1.1.4"
 log = "0.4.17"
 
 [build-dependencies]

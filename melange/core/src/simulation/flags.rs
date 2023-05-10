@@ -2,6 +2,7 @@ use crate::veriloga::*;
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub struct EvalFlags: u32 {
         const CALC_RESIST_JACOBIAN = CALC_RESIST_JACOBIAN;
         const CALC_REACT_JACOBIAN = CALC_REACT_JACOBIAN;
@@ -18,10 +19,14 @@ bitflags! {
 }
 
 macro_rules! private_flags {
-    ($($vis: vis const $name: ident = $val: expr;)*) => {
+    ($($vis: vis const $name: ident = $($val:ident)|*;)*) => {
 
         $(impl EvalFlags{
-            $vis const $name: Self = Self{ bits: $val };
+            $vis const $name: Self = {
+                let val = Self::empty();
+                $(let val = val.union(Self::$val);)*
+                val
+            };
             }
         )*
     };
@@ -30,10 +35,10 @@ macro_rules! private_flags {
 private_flags! {
     pub(super) const OP =
         CALC_RESIST_JACOBIAN | CALC_RESIST_RESIDUAL | ANALYSIS_STATIC;
-    pub(super) const DC_OP = Self::OP.bits | ANALYSIS_DC;
-    pub(super) const AC_OP = Self::OP.bits | ANALYSIS_AC;
-    // pub(super) const NOISE_OP = Self::OP.bits | ANALYSIS_NOISE;
-    // pub(super) const LARGE_SIGNAL_IC_OP = Self::OP.bits | ANALYSIS_TRAN | ANALYSIS_IC;
+    pub(super) const DC_OP = OP | ANALYSIS_DC;
+    pub(super) const AC_OP = OP | ANALYSIS_AC;
+    // pub(super) const NOISE_OP = Self::OP.0.bits | ANALYSIS_NOISE;
+    // pub(super) const LARGE_SIGNAL_IC_OP = Self::OP.0.bits | ANALYSIS_TRAN | ANALYSIS_IC;
 
     pub(super) const AC = CALC_RESIST_JACOBIAN | CALC_REACT_JACOBIAN | ANALYSIS_AC;
     // pub(super) const NOISE = CALC_RESIST_JACOBIAN | CALC_REACT_JACOBIAN | CALC_NOISE | ANALYSIS_NOISE;
@@ -91,13 +96,14 @@ impl OperatingPointAnalysis {
 }
 
 bitflags! {
+    #[derive(Debug, Copy, Clone)]
     pub(super) struct SimulationState: u32 {
         const AT_DC_OP = 0b00000001;
         const AT_AC_OP = 0b00000010;
         // const AT_NOISE_OP = 0b00000100;
         const HAS_AC_EVAL = 0b00001000;
         const AT_AC = 0b00010000;
-        const AT_OP = Self::AT_DC_OP.bits | Self::AT_AC_OP.bits;// | Self::AT_NOISE_OP.bits;
+        const AT_OP = Self::AT_DC_OP.0.bits | Self::AT_AC_OP.0.bits;// | Self::AT_NOISE_OP.0.bits;
     }
 }
 

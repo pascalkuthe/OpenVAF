@@ -5,11 +5,9 @@ xflags::xflags! {
 
     /// Run custom build command.
     cmd test
-    /// Filter string. Only tests which contain this string are run.
-    optional filter: String
     {
-        //print this help message
-        optional -h, --help
+        /// Filter string. Only tests which contain this string are run.
+        optional filter: String
         /// Run ignored and non-ignored tests.
         optional --include_ignored
         /// Run only ignored tests.
@@ -39,7 +37,6 @@ xflags::xflags! {
 pub struct Test {
     pub filter: Option<String>,
 
-    pub help: bool,
     pub include_ignored: bool,
     pub ignored: bool,
     pub list: bool,
@@ -50,7 +47,10 @@ pub struct Test {
 }
 
 impl Test {
-    pub const HELP: &'static str = Self::HELP_;
+    #[allow(dead_code)]
+    pub fn from_env_or_exit() -> Self {
+        Self::from_env_or_exit_()
+    }
 
     #[allow(dead_code)]
     pub fn from_env() -> xflags::Result<Self> {

@@ -11,4 +11,4 @@ repository = "https://github.com/pascalkuthe/OpenVAF/tree/master/libs/dirtest"
 doctest = false
 
 [dependencies]
-xflags = "0.2"
+xflags = "0.3"

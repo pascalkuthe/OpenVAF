@@ -18,6 +18,6 @@ base_n = {version = "1", path="../../lib/base_n"}
 typed-index-collections = "3.1"
 arrayvec = "0.7"
 ahash = "0.8"
-lasso = { version = "0.6", features = ["ahash"] }
+lasso = { version = "0.7", features = ["ahash"] }
 libc = "0.2"
 log = "0.4.17"
