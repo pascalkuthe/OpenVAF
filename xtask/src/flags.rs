@@ -3,25 +3,6 @@ xflags::xflags! {
 
     /// Run custom build command.
     cmd xtask {
-        default cmd help {
-            /// Print help information.
-            optional -h, --help
-        }
-
-        // cmd vendor{
-        //     optional --force
-        //     optional --no_upload
-        //     optional --check
-        // }
-
-        // cmd cache {
-        //     cmd prepare{}
-        //     cmd create{}
-        //     cmd upload{}
-        //     cmd fetch{}
-        //     cmd update{}
-        // }
-
         cmd verilogae{
             cmd build{
                 optional --force
@@ -51,14 +32,8 @@ pub struct Xtask {
 
 #[derive(Debug)]
 pub enum XtaskCmd {
-    Help(Help),
     Verilogae(Verilogae),
     GenMsvcrt(GenMsvcrt),
-}
-
-#[derive(Debug)]
-pub struct Help {
-    pub help: bool,
 }
 
 #[derive(Debug)]
@@ -90,7 +65,10 @@ pub struct Publish;
 pub struct GenMsvcrt;
 
 impl Xtask {
-    pub const HELP: &'static str = Self::HELP_;
+    #[allow(dead_code)]
+    pub fn from_env_or_exit() -> Self {
+        Self::from_env_or_exit_()
+    }
 
     #[allow(dead_code)]
     pub fn from_env() -> xflags::Result<Self> {

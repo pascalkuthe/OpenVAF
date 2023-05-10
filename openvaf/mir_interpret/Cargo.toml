@@ -13,4 +13,4 @@ doctest = false
 mir = {version = "0.0.0", path = "../mir" }
 
 typed-index-collections = "3.1"
-lasso = {version = "0.6", features = ["ahash"]}
+lasso = {version = "0.7", features = ["ahash"]}

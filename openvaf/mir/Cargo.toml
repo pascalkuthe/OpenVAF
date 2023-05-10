@@ -14,7 +14,7 @@ stdx = {version = "0.0.0", path = "../../lib/stdx" }
 bforest = {version = "0.0.0" , path = "../../lib/bforest"}
 list_pool = {version = "0.0.0" , path = "../../lib/list_pool"}
 typed-index-collections = "3.1"
-lasso = {version = "0.6", features = ["ahash"]}
+lasso = {version = "0.7", features = ["ahash"]}
 ahash = "0.8"
 bitset = {version = "0.0.0", path = "../../lib/bitset" }
 typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }

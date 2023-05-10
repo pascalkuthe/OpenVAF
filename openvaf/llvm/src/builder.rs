@@ -350,12 +350,6 @@ extern "C" {
     //     Destty: &'a Type,
     //     Name: *const c_char,
     // ) -> &'a Value;
-    pub fn LLVMBuildPointerCast<'a>(
-        builder: &Builder<'a>,
-        Val: &'a Value,
-        Destty: &'a Type,
-        Name: *const c_char,
-    ) -> &'a Value;
     pub fn LLVMBuildIntCast2<'a>(
         builder: &Builder<'a>,
         Val: &'a Value,
@@ -407,8 +401,10 @@ extern "C" {
         Val: &'a Value,
         Name: *const c_char,
     ) -> &'a Value;
-    pub fn LLVMBuildPtrDiff<'a>(
+
+    pub fn LLVMBuildPtrDiff2<'a>(
         builder: &Builder<'a>,
+        elem_ty: &'a Type,
         LHS: &'a Value,
         RHS: &'a Value,
         Name: *const c_char,

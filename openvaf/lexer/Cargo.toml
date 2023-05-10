@@ -13,6 +13,6 @@ text-size = "1.1"
 tokens = {version="0.0.0", path="../tokens"}
 
 [dev-dependencies]
-expect-test = "1.4.0"
+expect-test = "1.4.1"
 
 

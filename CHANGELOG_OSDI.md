@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Crash on windows when calling $display (missing osdi_log symbol)
 * `idt` operator not working (reactive dimension was undefined)
 * incorrect `param_given` results after setting instance paramters on the model struct.
+* Panic when accessing current probe that always returns 0
 
 ## 23.2.0 - 2023-02-01
 

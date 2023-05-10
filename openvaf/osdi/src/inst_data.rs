@@ -117,7 +117,7 @@ pub struct OsdiInstanceData<'ll> {
 
 impl<'ll> OsdiInstanceData<'ll> {
     pub fn new(cgunit: &OsdiModule<'_>, cx: &CodegenCx<'_, 'll>) -> Self {
-        let ty_f64 = cx.ty_real();
+        let ty_f64 = cx.ty_double();
         let ty_u32 = cx.ty_int();
 
         let mir = &cgunit.mir;
@@ -157,7 +157,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             })
             .collect();
 
-        let ty_real = cx.ty_real();
+        let ty_real = cx.ty_double();
 
         let matrix_resist: TiVec<_, _> = cgunit
             .matrix_ids
@@ -228,7 +228,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             .collect();
 
         let param_given = bitfield::arr_ty(params.len() as u32, cx);
-        let jacobian_ptr = cx.ty_array(cx.ptr_ty(ty_f64), cgunit.matrix_ids.len() as u32);
+        let jacobian_ptr = cx.ty_array(cx.ty_ptr(), cgunit.matrix_ids.len() as u32);
         let mut num_react = 0;
         let jacobian_ptr_react_off = cgunit
             .matrix_ids
@@ -244,17 +244,17 @@ impl<'ll> OsdiInstanceData<'ll> {
                 }
             })
             .collect();
-        let jacobian_ptr_react = cx.ty_array(cx.ptr_ty(ty_f64), num_react);
+        let jacobian_ptr_react = cx.ty_array(cx.ty_ptr(), num_react);
         let node_mapping = cx.ty_array(ty_u32, cgunit.node_ids.len() as u32);
         let collapsed = cx.ty_array(cx.ty_c_bool(), cgunit.mir.collapse.len() as u32);
-        let temperature = cx.ty_real();
+        let temperature = cx.ty_double();
         let connected_ports = cx.ty_int();
 
         let mut cache_slots: TiVec<_, _> =
             cgunit.mir.cache_slots.raw.values().map(|ty| lltype(ty, cx)).collect();
 
         let bound_step = if cgunit.mir.bound_step != BoundStepKind::None {
-            Some(cache_slots.push_and_get_key(cx.ty_real()))
+            Some(cache_slots.push_and_get_key(cx.ty_double()))
         } else {
             None
         };
@@ -280,7 +280,7 @@ impl<'ll> OsdiInstanceData<'ll> {
 
         let name = &cgunit.sym;
         let name = format!("osdi_inst_data_{name}");
-        let ty = cx.struct_ty(&name, &fields);
+        let ty = cx.ty_struct(&name, &fields);
 
         OsdiInstanceData {
             param_given,
@@ -606,8 +606,8 @@ impl<'ll> OsdiInstanceData<'ll> {
         llbuilder: &llvm::Builder<'ll>,
     ) -> &'ll llvm::Value {
         let off = self.read_node_off(cx, node, ptr, llbuilder);
-        let ptr = LLVMBuildGEP2(llbuilder, cx.ty_real(), prev_result, [off].as_ptr(), 1, UNNAMED);
-        LLVMBuildLoad2(llbuilder, cx.ty_real(), ptr, UNNAMED)
+        let ptr = LLVMBuildGEP2(llbuilder, cx.ty_double(), prev_result, [off].as_ptr(), 1, UNNAMED);
+        LLVMBuildLoad2(llbuilder, cx.ty_double(), ptr, UNNAMED)
     }
 
     pub unsafe fn read_residual(
@@ -678,8 +678,8 @@ impl<'ll> OsdiInstanceData<'ll> {
         llbuilder: &llvm::Builder<'ll>,
     ) {
         let off = self.read_node_off(cx, node, ptr, llbuilder);
-        let dst = LLVMBuildGEP2(llbuilder, cx.ty_real(), dst, [off].as_ptr(), 1, UNNAMED);
-        let old = LLVMBuildLoad2(llbuilder, cx.ty_real(), dst, UNNAMED);
+        let dst = LLVMBuildGEP2(llbuilder, cx.ty_double(), dst, [off].as_ptr(), 1, UNNAMED);
+        let old = LLVMBuildLoad2(llbuilder, cx.ty_double(), dst, UNNAMED);
         let val = LLVMBuildFAdd(llbuilder, contrib, old, UNNAMED);
         LLVMSetFastMath(val);
         LLVMBuildStore(llbuilder, val, dst);
@@ -717,8 +717,8 @@ impl<'ll> OsdiInstanceData<'ll> {
         let entry = cx.const_unsigned_int(entry);
         let ty = if reactive { self.jacobian_ptr_react } else { self.jacobian_ptr };
         let ptr = LLVMBuildGEP2(llbuilder, ty, ptr, [zero, entry].as_ptr(), 2, UNNAMED);
-        let dst = LLVMBuildLoad2(llbuilder, cx.ptr_ty(cx.ty_real()), ptr, UNNAMED);
-        let old = LLVMBuildLoad2(llbuilder, cx.ty_real(), dst, UNNAMED);
+        let dst = LLVMBuildLoad2(llbuilder, cx.ty_ptr(), ptr, UNNAMED);
+        let old = LLVMBuildLoad2(llbuilder, cx.ty_double(), dst, UNNAMED);
         let val = LLVMBuildFAdd(llbuilder, old, val, UNNAMED);
         LLVMSetFastMath(val);
         LLVMBuildStore(llbuilder, val, dst);
@@ -802,7 +802,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         cx: &CodegenCx<'_, 'll>,
         ptr: &'ll llvm::Value,
     ) -> MemLoc<'ll> {
-        MemLoc::struct_gep(ptr, self.ty, cx.ty_real(), TEMPERATURE, cx)
+        MemLoc::struct_gep(ptr, self.ty, cx.ty_double(), TEMPERATURE, cx)
     }
 
     pub unsafe fn store_temperature(
@@ -811,7 +811,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         ptr: &'ll llvm::Value,
         val: &'ll llvm::Value,
     ) {
-        let ptr = builder.typed_struct_gep(self.ty, ptr, TEMPERATURE);
+        let ptr = builder.struct_gep(self.ty, ptr, TEMPERATURE);
         builder.store(ptr, val)
     }
 
@@ -820,7 +820,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         builder: &mir_llvm::Builder<'_, '_, 'll>,
         ptr: &'ll llvm::Value,
     ) -> &'ll llvm::Value {
-        let ptr = builder.typed_struct_gep(self.ty, ptr, CONNECTED);
+        let ptr = builder.struct_gep(self.ty, ptr, CONNECTED);
         builder.load(builder.cx.ty_int(), ptr)
     }
 
@@ -830,7 +830,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         ptr: &'ll llvm::Value,
         val: &'ll llvm::Value,
     ) {
-        let ptr = builder.typed_struct_gep(self.ty, ptr, CONNECTED);
+        let ptr = builder.struct_gep(self.ty, ptr, CONNECTED);
         builder.store(ptr, val)
     }
 }
@@ -863,12 +863,12 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         ParamKind::Temperature => (
                             LLVMBuildStructGEP2(
                                 llbuilder,
-                                cx.ty_real(),
+                                cx.ty_double(),
                                 inst_ptr,
                                 TEMPERATURE,
                                 UNNAMED,
                             ),
-                            cx.ty_real(),
+                            cx.ty_double(),
                         ),
                         ParamKind::ParamSysFun(func) => inst_data
                             .param_ptr(OsdiInstanceParam::Builtin(func), inst_ptr, llbuilder)
@@ -941,12 +941,12 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         ParamKind::Temperature => (
                             LLVMBuildStructGEP2(
                                 llbuilder,
-                                cx.ty_real(),
+                                cx.ty_double(),
                                 inst_ptr,
                                 TEMPERATURE,
                                 UNNAMED,
                             ),
-                            cx.ty_real(),
+                            cx.ty_double(),
                         ),
                         ParamKind::ParamSysFun(func) => inst_data
                             .param_ptr(OsdiInstanceParam::Builtin(func), inst_ptr, llbuilder)

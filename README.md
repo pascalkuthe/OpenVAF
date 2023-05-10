@@ -58,10 +58,9 @@ Melange is currently in early development and most features are not complete.
 Some mockups of planned usage can be found in `melange/examples`.
 Some working minimal examples (in rust) can be found in `melange/core/test.rs`.
 
-## Building OpenVAF using docker
+## Building OpenVAF with docker
 
-Building OpenVAF requires a specific version of LLVM-14 which can be difficult to install. We are working on simplifying the process.
-In the meantime it's recommended to use the official docker image for compiling OpenVAF. Simply run the following commands
+The official docker image contains everything required for compiling OpenVAF. To build OpenVAF using the official docker containers, simply run the following commands:
 
 ``` shell
 git clone https://github.com/pascalkuthe/OpenVAF.git && cd openvaf
@@ -79,28 +78,58 @@ cargo build --release
 # inside the repository 
 ```
 
-## General Build Instructions 
+## Build Instructions 
 
-OpenVAF **requires rust/cargo 1.64 or newer** (best installed with [rustup](https://rustup.rs/)).
-Furthermore, the **LLVM-14** development libraries are required.
-Older or newever versions of LLVM are not supported.
+OpenVAF **requires rust/cargo 1.64 or newer** (best installed with [rustup](https://rustup.rs/)). Furthermore, the **LLVM-15** development libraries and **clang-15** are required. Newer version also work but older versions of LLVM/clang are not supported. Note that its imperative that **you clang version matches your LLVM version**. If you want to compile VerilogAE python 3.8+ is also required.
 
 
-On debian based distros the [llvm provided packages](https://apt.llvm.org/) can be used.
-Windows developers must compile LLVM themselves.
-
-Once all dependencies are satisfied you can build the entire project by running:
+On Debian and Ubuntu the [LLVM Project provided packages](https://apt.llvm.org/) can be used:
 
 ``` shell
-cargo build
+sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+```
+
+On fedora (37+) you can simply install LLVM from the default repositories:
+
+``` shell
+sudo dnf install clang llvm-devel
+```
+
+On Linux distributions where packages for LLVM-15 are not available (like centos-7) and windows you can download the prebuild LLVM packages that are also used
+in our docker images. These binaries are build on centos-7 and will therefore
+work on any linux distribution (that is supported by rustc):
+
+* [clang and LLVM for windows](https://openva.fra1.cdn.digitaloceanspaces.com/llvm-15.0.7-x86_64-pc-windows-msvc.tar.zst)
+* [clang and LLVM for linux](https://openva.fra1.cdn.digitaloceanspaces.com/llvm-15.0.7-x86_64-unknown-linux-gnu.tar.zst)
+
+Simply download and extract these tar archives and set the `LLLVM_CONFIG` (see below) environment variable to point at the downloaded files: `LLVM_CONFIG=<extracted directory>/bin/llvm-config`.
+
+> Note: To decompress this archive you need to use the following command:
+> ``` shell
+> zstd -d -c --long=31 <path/to/archive.tar.zst> | tar -xf -
+> ```
+> afterwards the decompressed files can be found in `./LLVM`
+
+
+Once all dependencies have been installed you can build the entire project by running:
+
+``` shell
+cargo build --release
+```
+
+To only build OpenVAF (and ignore melange/VerilogAE) you can run:
+
+``` shell
+cargo build --release --bin openvaf
 ```
 
 By default, OpenVAF will link against the static LLVM libraries, to avoid runtime dependencies. This is great for creating portable binaries but sometimes building with shared libraries is preferable. Simply set the `LLVM_LINK_SHARED` environment variable during linking to use the shared system libraries. If multiple LLVM versions are installed (often the case on debian) the `LLVM_CONFIG` environment variable can be used to specify the path of the correct `llvm-config` binary.
 An example build invocation using shared libraries on debian is shown below:
 
 ``` shell
-LLVM_LINK_SHARED=1 LLVM_CONFIG="llvm-config-14" cargo build
+LLVM_LINK_SHARED=1 LLVM_CONFIG="llvm-config-15" cargo build --release
 ```
+
 OpenVAF includes many integration and unit tests inside its source code.
 For development [cargo-nexttest](https://nexte.st/) is recommended to run these tests as it significantly reduces the test runtime.
 However, the built-in cargo test runner (requires no extra installation) can also be used.
@@ -108,14 +137,22 @@ To run the testsuite simply call:
 
 ``` shell
 cargo test # default test runner, requires no aditional installation
-cargo nextest # using cargo-nextest, much faster but must be installed first
+cargo nextest run # using cargo-nextest, much faster but must be installed first
 ```
 
-By default, the testsuite will skip slow integration tests that compile entire compact models.
+By default, the test suite will skip slow integration tests that compile entire compact models.
 These can be enabled by setting the `RUN_SLOW_TESTS` environment variable:
 
 ``` shell
-RUN_SLOW_TESTS=1 cargo test 
+RUN_SLOW_TESTS=1 cargo nextest run 
+```
+
+During development, you likely don't want to run full release builds as these
+can take a while to build. Debug builds are much faster:
+``` shell
+cargo build # debug build
+cargo run --bin opnevaf test.va # create a debug build and run it
+cargo clippy # check the sourcecode for errors/warnings without building (even faster)
 ```
 
 ## Acknowledgement

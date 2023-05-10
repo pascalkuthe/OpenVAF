@@ -4,9 +4,10 @@ use llvm::IntPredicate::{IntNE, IntULT};
 use llvm::{
     LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCall2,
     LLVMBuildCondBr, LLVMBuildICmp, LLVMBuildInBoundsGEP2, LLVMBuildIntCast2, LLVMBuildLoad2,
-    LLVMBuildOr, LLVMBuildPointerCast, LLVMBuildRet, LLVMBuildStore, LLVMCreateBuilderInContext,
-    LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd, UNNAMED,
+    LLVMBuildOr, LLVMBuildRet, LLVMBuildStore, LLVMCreateBuilderInContext, LLVMDisposeBuilder,
+    LLVMGetParam, LLVMPositionBuilderAtEnd, UNNAMED,
 };
+use log::info;
 use mir_llvm::{Builder, BuilderVal, CallbackFun, MemLoc};
 use sim_back::{BoundStepKind, SimUnknown};
 use typed_index_collections::TiVec;
@@ -27,11 +28,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let name = &format!("eval_{}", &self.module.sym);
         let cx = &self.cx;
 
-        let ty_void_ptr = cx.ty_void_ptr();
-        let siminfo_ptr_ty = cx.ptr_ty(self.tys.osdi_sim_info);
+        let ty_ptr = cx.ty_ptr();
 
-        let fun_ty =
-            cx.ty_func(&[ty_void_ptr, ty_void_ptr, ty_void_ptr, siminfo_ptr_ty], cx.ty_int());
+        let fun_ty = cx.ty_func(&[ty_ptr, ty_ptr, ty_ptr, ty_ptr], cx.ty_int());
         cx.declare_ext_fn(name, fun_ty)
     }
 
@@ -47,36 +46,29 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let postorder: Vec<_> = cfg.postorder(func).collect();
 
         let handle = unsafe { llvm::LLVMGetParam(llfunc, 0) };
-        let instance = unsafe {
-            let raw = llvm::LLVMGetParam(llfunc, 1);
-            builder.ptrcast(raw, cx.ptr_ty(inst_data.ty))
-        };
-        let model = unsafe {
-            let raw = llvm::LLVMGetParam(llfunc, 2);
-            builder.ptrcast(raw, cx.ptr_ty(model_data.ty))
-        };
+        let instance = unsafe { llvm::LLVMGetParam(llfunc, 1) };
+        let model = unsafe { llvm::LLVMGetParam(llfunc, 2) };
         let sim_info = unsafe { llvm::LLVMGetParam(llfunc, 3) };
-        let sim_info_void = unsafe { builder.ptrcast(sim_info, cx.ty_void_ptr()) };
         let sim_info_ty = self.tys.osdi_sim_info;
 
         // let simparam_ty = self.tys.osdi_sim_paras;
-        let simparam = unsafe { builder.typed_struct_gep(sim_info_ty, sim_info, 0) };
+        let simparam = unsafe { builder.struct_gep(sim_info_ty, sim_info, 0) };
 
         const ABSTIME_OFFSET: u32 = 1;
 
         let prev_result = unsafe {
-            let ptr = builder.typed_struct_gep(sim_info_ty, sim_info, 2);
-            builder.load(cx.ptr_ty(cx.ty_real()), ptr)
+            let ptr = builder.struct_gep(sim_info_ty, sim_info, 2);
+            builder.load(cx.ty_ptr(), ptr)
         };
 
         let prev_state = unsafe {
-            let ptr = builder.typed_struct_gep(sim_info_ty, sim_info, 3);
-            builder.load(cx.ptr_ty(cx.ty_real()), ptr)
+            let ptr = builder.struct_gep(sim_info_ty, sim_info, 3);
+            builder.load(cx.ty_ptr(), ptr)
         };
 
         let next_state = unsafe {
-            let ptr = builder.typed_struct_gep(sim_info_ty, sim_info, 3);
-            builder.load(cx.ptr_ty(cx.ty_real()), ptr)
+            let ptr = builder.struct_gep(sim_info_ty, sim_info, 3);
+            builder.load(cx.ty_ptr(), ptr)
         };
 
         let flags = MemLoc::struct_gep(sim_info, sim_info_ty, cx.ty_int(), 5, cx);
@@ -137,18 +129,27 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             let loc = MemLoc::struct_gep(
                                 sim_info,
                                 sim_info_ty,
-                                cx.ty_real(),
+                                cx.ty_double(),
                                 ABSTIME_OFFSET,
                                 cx,
                             );
                             return loc.into();
                         }
 
-                        ParamKind::Current(kind) => prev_solve[&SimUnknown::Current(kind)],
+                        ParamKind::Current(kind) => prev_solve
+                            .get(&SimUnknown::Current(kind))
+                            .copied()
+                            .unwrap_or_else(|| {
+                                info!("current probe {kind:?} always returns zero");
+                                cx.const_real(0.0)
+                            }),
                         ParamKind::ImplicitUnknown(equation) => prev_solve
                             .get(&SimUnknown::Implicit(equation))
                             .copied()
-                            .unwrap_or_else(|| cx.const_real(0.0)),
+                            .unwrap_or_else(|| {
+                                info!("implict equation {equation} collapsed to zero");
+                                cx.const_real(0.0)
+                            }),
                         ParamKind::Temperature => {
                             return inst_data.temperature_loc(cx, instance).into()
                         }
@@ -202,8 +203,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 inst_data.read_state_idx(cx, state, instance, builder.llbuilder);
                             return MemLoc {
                                 ptr: prev_state,
-                                ptr_ty: cx.ty_real(),
-                                ty: cx.ty_real(),
+                                ptr_ty: cx.ty_double(),
+                                ty: cx.ty_double(),
                                 indicies: vec![idx].into_boxed_slice(),
                             }
                             .into();
@@ -214,8 +215,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
                             return MemLoc {
                                 ptr: next_state,
-                                ptr_ty: cx.ty_real(),
-                                ty: cx.ty_real(),
+                                ptr_ty: cx.ty_double(),
+                                ty: cx.ty_double(),
                                 indicies: vec![idx].into_boxed_slice(),
                             }
                             .into();
@@ -240,7 +241,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
 
-        let ty_real_ptr = cx.ptr_ty(cx.ty_real());
+        let ty_real_ptr = cx.ty_ptr();
         if module.mir.bound_step == BoundStepKind::Eval {
             let bound_step_ptr = unsafe { inst_data.bound_step_ptr(&builder, instance) };
             unsafe { builder.store(bound_step_ptr, cx.const_real(f64::INFINITY)) };
@@ -250,7 +251,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 .cx
                 .get_func_by_name("bound_step")
                 .expect("stdlib function bound_step is missing");
-            let fun_ty = cx.ty_func(&[ty_real_ptr, cx.ty_real()], cx.ty_void());
+            let fun_ty = cx.ty_func(&[ty_real_ptr, cx.ty_double()], cx.ty_void());
             let cb = CallbackFun { fun_ty, fun, state: Box::new([bound_step_ptr]), num_state: 0 };
             builder.callbacks[func_ref] = Some(cb);
         }
@@ -259,8 +260,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             .cx
             .get_func_by_name("store_delay")
             .expect("stdlib function store_delay is missing");
-        let store_delay_ty =
-            cx.ty_func(&[cx.ty_void_ptr(), ty_real_ptr, cx.ty_real()], cx.ty_void());
+        let store_delay_ty = cx.ty_func(&[cx.ty_ptr(), ty_real_ptr, cx.ty_double()], cx.ty_void());
 
         for (func, kind) in intern.callbacks.iter_enumerated() {
             let cb = match *kind {
@@ -276,11 +276,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         .get_func_by_name("store_lim")
                         .expect("stdlib function store_lim is missing");
                     let fun_ty =
-                        cx.ty_func(&[cx.ty_void_ptr(), cx.ty_int(), cx.ty_real()], cx.ty_real());
+                        cx.ty_func(&[cx.ty_ptr(), cx.ty_int(), cx.ty_double()], cx.ty_double());
                     CallbackFun {
                         fun_ty,
                         fun,
-                        state: Box::new([sim_info_void, state_idx[state]]),
+                        state: Box::new([sim_info, state_idx[state]]),
                         num_state: 0,
                     }
                 }
@@ -289,7 +289,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         .cx
                         .get_func_by_name("lim_discontinuity")
                         .expect("stdlib function lim_discontinuity is missing");
-                    let fun_ty = cx.ty_func(&[cx.ptr_ty(cx.ty_int())], cx.ty_void());
+                    let fun_ty = cx.ty_func(&[cx.ty_ptr()], cx.ty_void());
                     CallbackFun { fun_ty, fun, state: Box::new([ret_flags]), num_state: 0 }
                 }
                 CallBackKind::Analysis => {
@@ -297,8 +297,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         .cx
                         .get_func_by_name("analysis")
                         .expect("stdlib function analysis is missing");
-                    let fun_ty = cx.ty_func(&[cx.ty_void_ptr(), cx.ty_str()], cx.ty_int());
-                    CallbackFun { fun_ty, fun, state: Box::new([sim_info_void]), num_state: 0 }
+                    let fun_ty = cx.ty_func(&[cx.ty_ptr(), cx.ty_ptr()], cx.ty_int());
+                    CallbackFun { fun_ty, fun, state: Box::new([sim_info]), num_state: 0 }
                 }
                 CallBackKind::StoreDelayTime(eq) => {
                     let slot = if let Some(&slot) = self.module.mir.eval_cache_vals.get(&eq) {
@@ -310,7 +310,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     CallbackFun {
                         fun_ty: store_delay_ty,
                         fun: store_delay_fun,
-                        state: Box::new([sim_info_void, slot]),
+                        state: Box::new([sim_info, slot]),
                         num_state: 0,
                     }
                 }
@@ -449,11 +449,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let OsdiCompilationUnit { cx, tys, .. } = self;
         let table = self.lim_dispatch_table();
 
-        let double = cx.ty_real();
+        let double = cx.ty_double();
         let c_bool = cx.ty_c_bool();
         let int = cx.ty_int();
 
-        let mut args = vec![cx.ptr_ty(flags_loc.ptr_ty), cx.ptr_ty(int), double, double];
+        let mut args = vec![cx.ty_ptr(), cx.ty_ptr(), double, double];
         args.resize(num_args as usize + 4, double);
         let fun_ty = cx.ty_func(&args, double);
         let name = &format!("lim_{}_{id}", &self.module.sym);
@@ -483,12 +483,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 UNNAMED,
             );
 
-            let mut func_ptr = LLVMBuildLoad2(llbuilder, cx.ty_void_ptr(), func_ptr_ptr, UNNAMED);
-            let mut lim_fn_args = vec![c_bool, cx.ptr_ty(c_bool), double, double];
+            let func_ptr = LLVMBuildLoad2(llbuilder, cx.ty_ptr(), func_ptr_ptr, UNNAMED);
+            let mut lim_fn_args = vec![c_bool, cx.ty_ptr(), double, double];
             lim_fn_args.extend((0..num_args).map(|_| double));
             let lim_fn_ty = cx.ty_func(&lim_fn_args, double);
-            func_ptr = LLVMBuildPointerCast(llbuilder, func_ptr, cx.ptr_ty(lim_fn_ty), UNNAMED);
-
             let mut args = vec![init, val_changed];
             args.extend((2..4 + num_args).map(|i| LLVMGetParam(llfunc, i)));
             let res = LLVMBuildCall2(

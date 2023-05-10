@@ -1,5 +1,6 @@
 use std::mem::replace;
 
+use ahash::{HashMap, HashSet};
 use hir_def::body::Body;
 use hir_def::{
     BranchId, BuiltIn, DefWithBodyId, DisciplineId, Expr, ExprId, FunctionArgLoc, Literal, Lookup,
@@ -14,7 +15,7 @@ use crate::builtin::{
     NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, TRANSITION_DELAY_RISET_FALLT_TOL,
 };
 use crate::db::HirTyDB;
-use crate::inference::{InferenceResult, ResolvedFun};
+use crate::inference::{BranchWrite, InferenceResult, ResolvedFun};
 use crate::lower::BranchKind;
 use crate::types::{Signature, Ty};
 
@@ -38,6 +39,11 @@ pub enum BodyValidationDiagnostic {
     ExpectedPort {
         expr: ExprId,
         node: NodeId,
+    },
+    TrivialBranchAccess {
+        branch: BranchWrite,
+        expr: ExprId,
+        stmt: StmtId,
     },
     PotentialOfPortFlow {
         expr: ExprId,
@@ -110,11 +116,23 @@ impl BodyValidationDiagnostic {
             infer: &infere,
             diagnostics: Vec::new(),
             ctx,
-            non_const_dominator: vec![].into_boxed_slice(),
+            non_const_dominator: Box::default(),
+            non_trivial_branches: HashSet::default(),
+            trivial_probes: HashMap::default(),
         };
 
         for stmt in &*body.entry_stmts {
             validator.validate_stmt(*stmt)
+        }
+
+        for (branch, exprs) in validator.trivial_probes {
+            for (stmt, expr) in exprs {
+                validator.diagnostics.push(BodyValidationDiagnostic::TrivialBranchAccess {
+                    branch,
+                    expr,
+                    stmt,
+                })
+            }
         }
 
         validator.diagnostics
@@ -174,6 +192,8 @@ struct BodyValidator<'a> {
     diagnostics: Vec<BodyValidationDiagnostic>,
     ctx: BodyCtx,
     non_const_dominator: Box<[ExprId]>,
+    non_trivial_branches: HashSet<BranchWrite>,
+    trivial_probes: HashMap<BranchWrite, Vec<(StmtId, ExprId)>>,
 }
 
 impl BodyValidator<'_> {
@@ -344,6 +364,16 @@ impl ExprValidator<'_, '_> {
         }
 
         None
+    }
+
+    fn lint_trival_branch(&mut self, branch: BranchWrite, call: BuiltIn, expr: ExprId) {
+        let is_flow = call == BuiltIn::flow;
+        if self.write {
+            self.parent.non_trivial_branches.insert(branch);
+            self.parent.trivial_probes.remove(&branch);
+        } else if is_flow && !self.parent.non_trivial_branches.contains(&branch) {
+            self.parent.trivial_probes.entry(branch).or_default().push((self.stmt, expr))
+        }
     }
 
     fn validate_flow_or_pot(&mut self, expr: ExprId, call: BuiltIn, discipline: DisciplineId) {
@@ -561,6 +591,12 @@ impl ExprValidator<'_, '_> {
             (BuiltIn::potential | BuiltIn::flow, Some(NATURE_ACCESS_NODES)) => {
                 let hi = self.parent.infer.expr_types[args[0]].unwrap_node();
                 let lo = self.parent.infer.expr_types[args[1]].unwrap_node();
+                let branch = if hi >= lo {
+                    BranchWrite::Unnamed { hi, lo: Some(lo) }
+                } else {
+                    BranchWrite::Unnamed { hi: lo, lo: Some(hi) }
+                };
+                self.lint_trival_branch(branch, call, expr);
                 if let Some(discipline) = self.validate_implicit_branch(expr, hi, lo) {
                     self.validate_flow_or_pot(expr, call, discipline)
                 }
@@ -569,6 +605,11 @@ impl ExprValidator<'_, '_> {
             (BuiltIn::potential | BuiltIn::flow, Some(NATURE_ACCESS_NODE_GND)) => {
                 let node = self.parent.infer.expr_types[args[0]].unwrap_node();
                 if let Some(discipline) = self.parent.db.node_discipline(node) {
+                    self.lint_trival_branch(
+                        BranchWrite::Unnamed { hi: node, lo: None },
+                        call,
+                        expr,
+                    );
                     self.validate_flow_or_pot(expr, call, discipline)
                 }
             }
@@ -608,7 +649,21 @@ impl ExprValidator<'_, '_> {
                                 )
                             }
                         }
-                        BranchKind::NodeGnd(_) | BranchKind::Nodes(_, _) => {
+                        BranchKind::NodeGnd(node) => {
+                            self.lint_trival_branch(
+                                BranchWrite::Unnamed { hi: node, lo: None },
+                                call,
+                                expr,
+                            );
+                            self.validate_flow_or_pot(expr, call, branch_info.discipline)
+                        }
+                        BranchKind::Nodes(hi, lo) => {
+                            let branch = if hi >= lo {
+                                BranchWrite::Unnamed { hi, lo: Some(lo) }
+                            } else {
+                                BranchWrite::Unnamed { hi: lo, lo: Some(hi) }
+                            };
+                            self.lint_trival_branch(branch, call, expr);
                             self.validate_flow_or_pot(expr, call, branch_info.discipline)
                         }
                     }

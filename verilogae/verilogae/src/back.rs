@@ -16,25 +16,25 @@ use typed_indexmap::TiSet;
 use crate::compiler_db::{CompilationDB, FuncSpec, InternedModel, ModelInfo};
 
 pub fn sim_param_stub<'ll>(cx: &CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
-    cx.const_callback(&[cx.ty_str()], cx.const_real(0.0))
+    cx.const_callback(&[cx.ty_ptr()], cx.const_real(0.0))
 }
 
 pub fn sim_param_opt_stub<'ll>(cx: &CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
-    cx.const_return(&[cx.ty_str(), cx.ty_real()], 1)
+    cx.const_return(&[cx.ty_ptr(), cx.ty_double()], 1)
 }
 
 pub fn sim_param_str_stub<'ll>(cx: &CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
     let empty_str = cx.literals.get("").unwrap();
     let empty_str = cx.const_str(empty_str);
-    let ty_str = cx.ty_str();
+    let ty_str = cx.ty_ptr();
     cx.const_callback(&[ty_str], empty_str)
 }
 
 pub fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
     match ty {
-        Type::Real => cx.ty_real(),
+        Type::Real => cx.ty_double(),
         Type::Integer => cx.ty_int(),
-        Type::String => cx.ty_str(),
+        Type::String => cx.ty_ptr(),
         Type::Array { ty, len } => cx.ty_array(lltype(ty, cx), *len),
         Type::EmptyArray => cx.ty_array(cx.ty_int(), 0),
         Type::Bool => cx.ty_bool(),
@@ -56,7 +56,7 @@ pub fn stub_callbacks<'ll>(
                 CallBackKind::SimParamOpt => sim_param_opt_stub(cx),
                 CallBackKind::SimParamStr => sim_param_str_stub(cx),
                 CallBackKind::Derivative(_) | CallBackKind::NodeDerivative(_) => {
-                    cx.const_callback(&[cx.ty_real()], cx.const_real(0.0))
+                    cx.const_callback(&[cx.ty_double()], cx.const_real(0.0))
                 }
                 CallBackKind::Print { .. }
                 | CallBackKind::BoundStep
@@ -66,7 +66,7 @@ pub fn stub_callbacks<'ll>(
                 | CallBackKind::LimDiscontinuity
                 | CallBackKind::StoreDelayTime(_)
                 | CallBackKind::CollapseHint(_, _) => return None,
-                CallBackKind::Analysis => cx.const_callback(&[cx.ty_str()], cx.const_int(1)),
+                CallBackKind::Analysis => cx.const_callback(&[cx.ty_ptr()], cx.const_int(1)),
             };
 
             Some(res)
@@ -98,10 +98,10 @@ impl<'ll> Codegen<'_, '_, 'll> {
             .iter()
             .copied()
             .filter(|var| self.db.var_data(*var).ty == ty);
-
+        let llty = lltype(&ty, self.builder.cx);
         for (i, var) in vars.clone().enumerate() {
             if let Some(id) = self.intern.params.index(&ParamKind::HiddenState(var)) {
-                self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
+                self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr, llty).into();
             }
         }
 
@@ -120,8 +120,12 @@ impl<'ll> Codegen<'_, '_, 'll> {
         });
 
         for (i, (id, _)) in params.clone().enumerate() {
-            let ptr = self.builder.cx.const_gep(ptr, &[self.builder.cx.const_usize(i)]);
-            self.builder.params[id] = self.builder.load(self.builder.cx.ty_str(), ptr).into();
+            let ptr = self.builder.cx.const_gep(
+                self.builder.cx.ty_ptr(),
+                ptr,
+                &[self.builder.cx.const_usize(i)],
+            );
+            self.builder.params[id] = self.builder.load(self.builder.cx.ty_ptr(), ptr).into();
         }
 
         let global_name = format!("{}.params.{}", self.spec.prefix, Type::String);
@@ -138,8 +142,9 @@ impl<'ll> Codegen<'_, '_, 'll> {
             }
         });
 
+        let llty = lltype(&ty, self.builder.cx);
         for (i, (id, _)) in params.clone().enumerate() {
-            self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
+            self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr, llty).into();
         }
 
         let global_name = format!("{}.params.{}", self.spec.prefix, ty);
@@ -172,13 +177,14 @@ impl<'ll> Codegen<'_, '_, 'll> {
         let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
 
         for (i, (id, _)) in voltages.clone().enumerate() {
-            self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
+            self.builder.params[id] =
+                self.read_fat_ptr_at(i, offset, ptr, self.builder.cx.ty_double()).into();
         }
 
         let global_name = format!("{}.voltages.default", self.spec.prefix);
         self.builder.cx.export_array(
             &global_name,
-            self.builder.cx.ty_real(),
+            self.builder.cx.ty_double(),
             &default_vals,
             true,
             true,
@@ -216,13 +222,14 @@ impl<'ll> Codegen<'_, '_, 'll> {
         let voltages = optional_voltages.into_iter().chain(non_optional_voltages);
 
         for (i, (id, _)) in voltages.clone().enumerate() {
-            self.builder.params[id] = self.read_fat_ptr_at(i, offset, ptr).into();
+            self.builder.params[id] =
+                self.read_fat_ptr_at(i, offset, ptr, self.builder.cx.ty_double()).into();
         }
 
         let global_name = format!("{}.currents.default", self.spec.prefix);
         self.builder.cx.export_array(
             &global_name,
-            self.builder.cx.ty_real(),
+            self.builder.cx.ty_double(),
             &default_vals,
             true,
             true,
@@ -242,7 +249,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
                 cx.const_str(name)
             })
             .collect();
-        cx.export_array(global_name, cx.ty_str(), &names, true, true);
+        cx.export_array(global_name, cx.ty_ptr(), &names, true, true);
     }
 
     unsafe fn read_fat_ptr_at(
@@ -250,33 +257,31 @@ impl<'ll> Codegen<'_, '_, 'll> {
         pos: usize,
         offset: &'ll llvm::Value,
         ptr: &'ll llvm::Value,
+        ptr_ty: &'ll llvm::Type,
     ) -> &'ll llvm::Value {
         let builder = &mut self.builder;
 
         // get correct ptrs from array
-        let fat_ptr = builder.gep(ptr, &[builder.cx.const_usize(pos)]);
+        let fat_ptr = builder.gep(builder.cx.ty_fat_ptr(), ptr, &[builder.cx.const_usize(pos)]);
 
         let (ptr, meta) = builder.fat_ptr_to_parts(fat_ptr);
-        let ptr_ty = builder.cx.elem_ty(builder.cx.val_ty(ptr));
 
         // get stride or scalar ptr by bitcasting
-        let stride_ptr = builder.ptrcast(meta, builder.cx.ptr_ty(builder.cx.ty_isize()));
-        let stride = builder.load(builder.cx.ty_isize(), stride_ptr);
-        let scalar_ptr = builder.ptrcast(meta, ptr_ty);
+        let stride = builder.load(builder.cx.ty_size(), meta);
 
         // load the array ptr and check if its a null ptr
-        let arr_ptr = builder.load(ptr_ty, ptr);
+        let arr_ptr = builder.load(builder.cx.ty_ptr(), ptr);
         let is_arr_null = builder.is_null_ptr(arr_ptr);
 
         // offset the array _ptr
         let offset = builder.imul(stride, offset);
-        let arr_ptr = builder.gep(arr_ptr, &[offset]);
+        let arr_ptr = builder.gep(ptr_ty, arr_ptr, &[offset]);
 
         // if the array_ptr is null select the scalar_ptr otherwise select the arr_ptr
-        let ptr = builder.select(is_arr_null, scalar_ptr, arr_ptr);
+        let ptr = builder.select(is_arr_null, meta, arr_ptr);
 
         //final load
-        builder.load(builder.cx.elem_ty(ptr_ty), ptr)
+        builder.load(ptr_ty, ptr)
     }
 }
 
@@ -299,16 +304,16 @@ impl CodegenCtx<'_, '_> {
 
         let fun_ty = cx.ty_func(
             &[
-                cx.ty_isize(),                             // offset
-                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // voltages
-                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // curents
-                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // real paras
-                cx.ptr_ty(cx.fat_ptr(cx.ty_int(), true)),  // int paras
-                cx.ptr_ty(cx.fat_ptr(cx.ty_str(), true)),  // str paras
-                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // real dependency_breaking
-                cx.ptr_ty(cx.fat_ptr(cx.ty_int(), true)),  // int dependency_breaking
-                cx.ptr_ty(cx.fat_ptr(cx.ty_real(), true)), // temperature
-                cx.ptr_ty(ret_ty),                         // ret
+                cx.ty_size(), // offset
+                cx.ty_ptr(),  // voltages
+                cx.ty_ptr(),  // curents
+                cx.ty_ptr(),  // real paras
+                cx.ty_ptr(),  // int paras
+                cx.ty_ptr(),  // str paras
+                cx.ty_ptr(),  // real dependency_breaking
+                cx.ty_ptr(),  // int dependency_breaking
+                cx.ty_ptr(),  // temperature
+                cx.ty_ptr(),  // ret
             ],
             cx.ty_void(),
         );
@@ -341,7 +346,7 @@ impl CodegenCtx<'_, '_> {
                     | ParamKind::HiddenState(_) => return BuilderVal::Undef,
                     ParamKind::Temperature => unsafe {
                         let temperature = llvm::LLVMGetParam(llfun, 8);
-                        codegen.read_fat_ptr_at(0, offset, temperature)
+                        codegen.read_fat_ptr_at(0, offset, temperature, cx.ty_double())
                     },
                     ParamKind::ParamGiven { .. } | ParamKind::PortConnected { .. } => true_val,
                     ParamKind::ParamSysFun(param) => {
@@ -404,7 +409,7 @@ impl CodegenCtx<'_, '_> {
             builder.select_bb(exit_bb);
 
             let out = llvm::LLVMGetParam(llfun, 9);
-            let out = builder.gep(out, &[offset]);
+            let out = builder.gep(ret_ty, out, &[offset]);
 
             let ret_val = intern.outputs[&PlaceKind::Var(spec.var)].unwrap();
             let ret_val = builder.values[ret_val].get(&builder);
@@ -461,7 +466,7 @@ impl CodegenCtx<'_, '_> {
             let given_id = intern.params.unwrap_index(&ParamKind::ParamGiven { param: *param });
             let given = unsafe {
                 let off = builder.cx.const_usize(param_given_offset + offset);
-                let ptr = builder.gep(param_given_ptr, &[off]);
+                let ptr = builder.gep(builder.cx.ty_c_bool(), param_given_ptr, &[off]);
                 let cbool = builder.load(builder.cx.ty_c_bool(), ptr);
                 builder.int_cmp(cbool, builder.cx.const_c_bool(false), llvm::IntPredicate::IntNE)
             };
@@ -469,7 +474,7 @@ impl CodegenCtx<'_, '_> {
             let val_id = intern.params.unwrap_index(&ParamKind::Param(*param));
             let val = unsafe {
                 let off = builder.cx.const_usize(offset);
-                let ptr = builder.gep(val_ptr, &[off]);
+                let ptr = builder.gep(llty, val_ptr, &[off]);
                 builder.load(llty, ptr)
             };
 
@@ -488,6 +493,7 @@ impl CodegenCtx<'_, '_> {
         val_ptr: &'ll llvm::Value,
         bounds_ptrs: Option<(&'ll llvm::Value, &'ll llvm::Value)>,
     ) {
+        let llty = lltype(&ty, builder.cx);
         for (i, (param, _)) in
             self.model_info.params.iter().filter(|(_, info)| info.ty == ty).enumerate()
         {
@@ -496,7 +502,7 @@ impl CodegenCtx<'_, '_> {
 
             unsafe {
                 let off = builder.cx.const_usize(i);
-                let ptr = builder.gep(val_ptr, &[off]);
+                let ptr = builder.gep(llty, val_ptr, &[off]);
                 builder.store(ptr, param_val)
             };
 
@@ -505,7 +511,7 @@ impl CodegenCtx<'_, '_> {
                     let param_min = intern.outputs[&PlaceKind::ParamMin(*param)].unwrap();
                     let param_min = builder.values[param_min].get(builder);
                     let off = builder.cx.const_usize(i);
-                    let ptr = builder.gep(min_ptr, &[off]);
+                    let ptr = builder.gep(llty, min_ptr, &[off]);
                     builder.store(ptr, param_min)
                 }
 
@@ -513,7 +519,7 @@ impl CodegenCtx<'_, '_> {
                     let param_max = intern.outputs[&PlaceKind::ParamMax(*param)].unwrap();
                     let param_max = builder.values[param_max].get(builder);
                     let off = builder.cx.const_usize(i);
-                    let ptr = builder.gep(max_ptr, &[off]);
+                    let ptr = builder.gep(llty, max_ptr, &[off]);
                     builder.store(ptr, param_max)
                 }
             }
@@ -526,7 +532,7 @@ impl CodegenCtx<'_, '_> {
         set: bool,
     ) -> (&'ll llvm::Value, &'ll llvm::Type) {
         let name = cx.local_callback_name();
-        let fun_ty = cx.ty_func(&[cx.ptr_ty(cx.ty_c_bool()), cx.ty_c_bool()], cx.ty_void());
+        let fun_ty = cx.ty_func(&[cx.ty_ptr(), cx.ty_c_bool()], cx.ty_void());
         let fun = cx.declare_int_fn(&name, fun_ty);
         unsafe {
             let bb = llvm::LLVMAppendBasicBlockInContext(cx.llcx, fun, UNNAMED);
@@ -572,7 +578,7 @@ impl CodegenCtx<'_, '_> {
 
             let dst = unsafe {
                 let off = builder.cx.const_usize(*off);
-                builder.gep(param_flags, &[off])
+                builder.gep(builder.cx.ty_c_bool(), param_flags, &[off])
             };
 
             *off += 1;
@@ -618,17 +624,17 @@ impl CodegenCtx<'_, '_> {
         let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let (fun_names, fun_symbols) = interned_model.functions(&cx);
-        cx.export_array("functions", cx.ty_str(), &fun_names, true, true);
-        cx.export_array("functions.sym", cx.ty_str(), &fun_symbols, true, false);
+        cx.export_array("functions", cx.ty_ptr(), &fun_names, true, true);
+        cx.export_array("functions.sym", cx.ty_ptr(), &fun_symbols, true, false);
 
         let op_vars = interned_model.opvars(&cx);
-        cx.export_array("opvars", cx.ty_str(), &op_vars, true, true);
+        cx.export_array("opvars", cx.ty_ptr(), &op_vars, true, true);
 
         let nodes = interned_model.nodes(&cx);
-        cx.export_array("nodes", cx.ty_str(), &nodes, true, true);
+        cx.export_array("nodes", cx.ty_ptr(), &nodes, true, true);
 
         let module_name = cx.const_str(interned_model.module_name);
-        cx.export_val("module_name", cx.ty_str(), module_name, true);
+        cx.export_val("module_name", cx.ty_ptr(), module_name, true);
 
         interned_model.export_param_info(&cx, Type::Real);
         interned_model.export_param_info(&cx, Type::Integer);
@@ -636,14 +642,14 @@ impl CodegenCtx<'_, '_> {
 
         let fun_ty = cx.ty_func(
             &[
-                cx.ptr_ty(cx.ty_real()),   // real param values
-                cx.ptr_ty(cx.ty_int()),    // int param values
-                cx.ptr_ty(cx.ty_str()),    // str param values
-                cx.ptr_ty(cx.ty_real()),   // real param min
-                cx.ptr_ty(cx.ty_int()),    // int param min
-                cx.ptr_ty(cx.ty_real()),   // real param max
-                cx.ptr_ty(cx.ty_int()),    // int param max
-                cx.ptr_ty(cx.ty_c_bool()), // param_given/error
+                cx.ty_ptr(), // real param values
+                cx.ty_ptr(), // int param values
+                cx.ty_ptr(), // str param values
+                cx.ty_ptr(), // real param min
+                cx.ty_ptr(), // int param min
+                cx.ty_ptr(), // real param max
+                cx.ty_ptr(), // int param max
+                cx.ty_ptr(), // param_given/error
             ],
             cx.ty_void(),
         );
@@ -815,16 +821,16 @@ impl InternedModel<'_> {
         let params = self.param_info(cx, &ty);
 
         let sym = format!("params.{}", ty);
-        cx.export_array(&sym, cx.ty_str(), &params.names, true, true);
+        cx.export_array(&sym, cx.ty_ptr(), &params.names, true, true);
 
         let sym = format!("params.unit.{}", ty);
-        cx.export_array(&sym, cx.ty_str(), &params.units, true, false);
+        cx.export_array(&sym, cx.ty_ptr(), &params.units, true, false);
 
         let sym = format!("params.desc.{}", ty);
-        cx.export_array(&sym, cx.ty_str(), &params.descriptions, true, false);
+        cx.export_array(&sym, cx.ty_ptr(), &params.descriptions, true, false);
 
         let sym = format!("params.group.{}", ty);
-        cx.export_array(&sym, cx.ty_str(), &params.groups, true, false);
+        cx.export_array(&sym, cx.ty_ptr(), &params.groups, true, false);
     }
 }
 

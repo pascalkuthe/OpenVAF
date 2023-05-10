@@ -6,62 +6,94 @@ use mir::Const;
 
 use crate::CodegenCx;
 
+pub struct Types<'ll> {
+    pub double: &'ll Type,
+    pub char: &'ll Type,
+    pub int: &'ll Type,
+    pub size: &'ll Type,
+    pub ptr: &'ll Type,
+    pub fat_ptr: &'ll Type,
+    pub bool: &'ll Type,
+    pub void: &'ll Type,
+    pub null_ptr_val: &'ll llvm::Value,
+}
+
+impl<'ll> Types<'ll> {
+    pub fn new(llcx: &'ll llvm::Context, pointer_width: u32) -> Types<'ll> {
+        unsafe {
+            let char = LLVMInt8TypeInContext(llcx);
+            // we are using opaque pointers, with old llvm version that plain
+            // means always using char pointers, with newer llvm version the
+            // type is ignored anyway
+            let ptr = llvm::LLVMPointerType(char, llvm::AddressSpace::DATA);
+            let size = llvm::LLVMIntTypeInContext(llcx, pointer_width);
+            Types {
+                double: llvm::LLVMDoubleTypeInContext(llcx),
+                char,
+                int: llvm::LLVMInt32TypeInContext(llcx),
+                size,
+                ptr,
+                fat_ptr: ty_struct(llcx, "fat_ptr", &[ptr, llvm::LLVMInt64TypeInContext(llcx)]),
+                bool: llvm::LLVMInt1TypeInContext(llcx),
+                void: llvm::LLVMVoidTypeInContext(llcx),
+                null_ptr_val: llvm::LLVMConstPointerNull(ptr),
+            }
+        }
+    }
+}
+
+fn ty_struct<'ll>(llcx: &'ll llvm::Context, name: &str, elements: &[&'ll Type]) -> &'ll Type {
+    let name = CString::new(name).unwrap();
+    unsafe {
+        let ty = llvm::LLVMStructCreateNamed(llcx, name.as_ptr());
+        llvm::LLVMStructSetBody(ty, elements.as_ptr(), elements.len() as u32, False);
+        ty
+    }
+}
+
 impl<'a, 'll> CodegenCx<'a, 'll> {
-    pub fn ty_real(&self) -> &'ll Type {
-        unsafe { llvm::LLVMDoubleTypeInContext(self.llcx) }
+    #[inline(always)]
+    pub fn ty_double(&self) -> &'ll Type {
+        self.tys.double
     }
-
-    pub fn ty_cmplx(&self) -> &'ll Type {
-        unsafe { llvm::LLVMArrayType(self.ty_real(), 2) }
+    #[inline(always)]
+    pub fn ty_int(&self) -> &'ll Type {
+        self.tys.int
     }
-
+    #[inline(always)]
+    pub fn ty_char(&self) -> &'ll Type {
+        self.tys.char
+    }
+    #[inline(always)]
+    pub fn ty_size(&self) -> &'ll Type {
+        self.tys.size
+    }
+    #[inline(always)]
+    pub fn ty_bool(&self) -> &'ll Type {
+        self.tys.bool
+    }
+    #[inline(always)]
+    pub fn ty_c_bool(&self) -> &'ll Type {
+        self.tys.char
+    }
+    #[inline(always)]
+    pub fn ty_ptr(&self) -> &'ll Type {
+        self.tys.ptr
+    }
+    #[inline(always)]
+    pub fn ty_void(&self) -> &'ll Type {
+        self.tys.void
+    }
+    #[inline(always)]
+    pub fn ty_fat_ptr(&self) -> &'ll Type {
+        self.tys.fat_ptr
+    }
     pub fn ty_aint(&self, bits: u32) -> &'ll Type {
         unsafe { llvm::LLVMIntTypeInContext(self.llcx, bits) }
     }
 
-    pub fn ty_i8(&self) -> &'ll Type {
-        unsafe { LLVMInt8TypeInContext(self.llcx) }
-    }
-
-    pub fn ty_int(&self) -> &'ll Type {
-        unsafe { llvm::LLVMInt32TypeInContext(self.llcx) }
-    }
-
-    pub fn ty_int64(&self) -> &'ll Type {
-        unsafe { llvm::LLVMInt64TypeInContext(self.llcx) }
-    }
-
-    pub fn ty_long(&self) -> &'ll Type {
-        unsafe { llvm::LLVMInt64TypeInContext(self.llcx) }
-    }
-
-    pub fn ty_isize(&self) -> &'ll Type {
-        unsafe { llvm::LLVMIntTypeInContext(self.llcx, self.target.pointer_width) }
-    }
-
-    pub fn ty_bool(&self) -> &'ll Type {
-        unsafe { llvm::LLVMInt1TypeInContext(self.llcx) }
-    }
-
-    pub fn ty_c_bool(&self) -> &'ll Type {
-        unsafe { llvm::LLVMInt8TypeInContext(self.llcx) }
-    }
-
-    pub fn ty_str(&self) -> &'ll Type {
-        unsafe {
-            let char_ty = llvm::LLVMInt8TypeInContext(self.llcx);
-            llvm::LLVMPointerType(char_ty, llvm::AddressSpace::DATA)
-        }
-    }
-
-    pub fn ty_void(&self) -> &'ll Type {
-        unsafe { llvm::LLVMVoidTypeInContext(self.llcx) }
-    }
-
-    pub fn ty_void_ptr(&self) -> &'ll Type {
-        // its really an opaque pointer so who cares...
-        // TOOD move to opaque pointers
-        self.ptr_ty(self.ty_c_bool())
+    pub fn ty_struct(&self, name: &str, elements: &[&'ll Type]) -> &'ll Type {
+        ty_struct(self.llcx, name, elements)
     }
 
     pub fn ty_func(&self, args: &[&'ll Type], ret: &'ll Type) -> &'ll Type {
@@ -74,17 +106,6 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
 
     pub fn ty_array(&self, ty: &'ll Type, len: u32) -> &'ll Type {
         unsafe { llvm::LLVMArrayType(ty, len) }
-    }
-
-    pub fn ptr_ty(&self, elem: &'ll Type) -> &'ll Type {
-        unsafe { llvm::LLVMPointerType(elem, llvm::AddressSpace::DATA) }
-    }
-
-    pub fn fat_ptr(&self, elem: &'ll Type, always_use_long: bool) -> &'ll Type {
-        let ptr = self.ptr_ty(elem);
-
-        let len = if always_use_long { self.ty_long() } else { self.ty_isize() };
-        self.struct_ty("fat_ptr", &[ptr, len])
     }
 
     pub fn const_val(&self, val: &Const) -> &'ll Value {
@@ -102,10 +123,11 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
     /// The pointer must be a constant address
     pub unsafe fn const_gep(
         &self,
+        elem_ty: &'ll llvm::Type,
         ptr: &'ll llvm::Value,
         indicies: &[&'ll llvm::Value],
     ) -> &'ll llvm::Value {
-        llvm::LLVMConstGEP(ptr, indicies.as_ptr(), indicies.len() as u32)
+        llvm::LLVMConstInBoundsGEP2(elem_ty, ptr, indicies.as_ptr(), indicies.len() as u32)
     }
 
     pub fn const_int(&self, val: i32) -> &'ll Value {
@@ -117,11 +139,11 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
     }
 
     pub fn const_isize(&self, val: isize) -> &'ll Value {
-        unsafe { llvm::LLVMConstInt(self.ty_isize(), val as u64, True) }
+        unsafe { llvm::LLVMConstInt(self.ty_size(), val as u64, True) }
     }
 
     pub fn const_usize(&self, val: usize) -> &'ll Value {
-        unsafe { llvm::LLVMConstInt(self.ty_isize(), val as u64, False) }
+        unsafe { llvm::LLVMConstInt(self.ty_size(), val as u64, False) }
     }
 
     pub fn const_bool(&self, val: bool) -> &'ll Value {
@@ -137,17 +159,11 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
     }
 
     pub fn const_real(&self, val: f64) -> &'ll Value {
-        unsafe { llvm::LLVMConstReal(self.ty_real(), val) }
+        unsafe { llvm::LLVMConstReal(self.ty_double(), val) }
     }
 
     pub fn const_arr(&self, elem_ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
         unsafe { llvm::LLVMConstArray(elem_ty, vals.as_ptr(), vals.len() as u32) }
-    }
-
-    pub fn const_anon_struct(&self, vals: &[&'ll Value]) -> &'ll Value {
-        unsafe {
-            llvm::LLVMConstStructInContext(self.llcx, vals.as_ptr(), vals.len() as u32, False)
-        }
     }
 
     pub fn const_struct(&self, ty: &'ll Type, vals: &[&'ll Value]) -> &'ll Value {
@@ -158,28 +174,15 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         unsafe { llvm::LLVMConstNull(t) }
     }
 
-    pub fn const_null_ptr(&self, t: &'ll Type) -> &'ll Value {
-        unsafe { llvm::LLVMConstPointerNull(t) }
+    pub fn const_null_ptr(&self) -> &'ll Value {
+        self.tys.null_ptr_val
     }
 
     pub fn const_undef(&self, t: &'ll Type) -> &'ll Value {
         unsafe { llvm::LLVMGetUndef(t) }
     }
 
-    pub fn elem_ty(&self, v: &'ll Type) -> &'ll Type {
-        unsafe { llvm::LLVMGetElementType(v) }
-    }
-
     pub fn val_ty(&self, v: &'ll Value) -> &'ll Type {
         unsafe { llvm::LLVMTypeOf(v) }
-    }
-
-    pub fn struct_ty(&self, name: &str, elements: &[&'ll Type]) -> &'ll Type {
-        let name = CString::new(name).unwrap();
-        unsafe {
-            let ty = llvm::LLVMStructCreateNamed(self.llcx, name.as_ptr());
-            llvm::LLVMStructSetBody(ty, elements.as_ptr(), elements.len() as u32, False);
-            ty
-        }
     }
 }

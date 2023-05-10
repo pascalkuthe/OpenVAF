@@ -284,7 +284,7 @@ pub struct NodeLoc {
 
 pub type LocalNodeId = Idx<Node>;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 pub struct NodeId(salsa::InternId);
 
 impl_debug_display!(match NodeId{ NodeId(id) => "node{:?}", id;});

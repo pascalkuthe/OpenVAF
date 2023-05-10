@@ -264,36 +264,35 @@ impl<'ll> Builder<'_, '_, 'll> {
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn gep(
         &self,
+        elem_ty: &'ll llvm::Type,
         ptr: &'ll llvm::Value,
         indicies: &[&'ll llvm::Value],
     ) -> &'ll llvm::Value {
-        let arr_ty = llvm::LLVMGetElementType(llvm::LLVMTypeOf(ptr));
-        self.typed_gep(arr_ty, ptr, indicies)
+        self.typed_gep(elem_ty, ptr, indicies)
     }
 
     /// # Safety
-    /// Must not be called when a block that already contains a terminator is selected
-    pub unsafe fn ptrcast(&self, ptr: &'ll llvm::Value, ty: &'ll llvm::Type) -> &'ll llvm::Value {
-        llvm::LLVMBuildPointerCast(self.llbuilder, ptr, ty, UNNAMED)
-    }
-
-    /// # Safety
-    /// Must not be called when a block that already contains a terminator is selected
-    pub unsafe fn struct_gep(&self, ptr: &'ll llvm::Value, idx: u32) -> &'ll llvm::Value {
-        let struct_ty = llvm::LLVMGetElementType(llvm::LLVMTypeOf(ptr));
-        self.typed_struct_gep(struct_ty, ptr, idx)
+    /// * Must not be called when a block that already contains a terminator is selected
+    /// * struct_ty must be a valid struct type for this pointer and idx must be in bounds
+    pub unsafe fn struct_gep(
+        &self,
+        struct_ty: &'ll llvm::Type,
+        ptr: &'ll llvm::Value,
+        idx: u32,
+    ) -> &'ll llvm::Value {
+        llvm::LLVMBuildStructGEP2(self.llbuilder, struct_ty, ptr, idx, UNNAMED)
     }
 
     /// # Safety
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn fat_ptr_get_ptr(&self, ptr: &'ll llvm::Value) -> &'ll llvm::Value {
-        self.struct_gep(ptr, 0)
+        self.struct_gep(self.cx.ty_fat_ptr(), ptr, 0)
     }
 
     /// # Safety
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn fat_ptr_get_meta(&self, ptr: &'ll llvm::Value) -> &'ll llvm::Value {
-        self.struct_gep(ptr, 1)
+        self.struct_gep(self.cx.ty_fat_ptr(), ptr, 1)
     }
 
     /// # Safety
@@ -303,18 +302,6 @@ impl<'ll> Builder<'_, '_, 'll> {
         ptr: &'ll llvm::Value,
     ) -> (&'ll llvm::Value, &'ll llvm::Value) {
         (self.fat_ptr_get_ptr(ptr), self.fat_ptr_get_meta(ptr))
-    }
-
-    /// # Safety
-    /// * Must not be called when a block that already contains a terminator is selected
-    /// * struct_ty must be a valid struct type for this pointer and idx must be in bounds
-    pub unsafe fn typed_struct_gep(
-        &self,
-        struct_ty: &'ll llvm::Type,
-        ptr: &'ll llvm::Value,
-        idx: u32,
-    ) -> &'ll llvm::Value {
-        llvm::LLVMBuildStructGEP2(self.llbuilder, struct_ty, ptr, idx, UNNAMED)
     }
 
     /// # Safety
@@ -520,11 +507,11 @@ impl<'ll> Builder<'_, '_, 'll> {
             }
             Opcode::IFcast => {
                 let arg = self.values[args[0]].get(self);
-                llvm::LLVMBuildSIToFP(self.llbuilder, arg, self.cx.ty_real(), UNNAMED)
+                llvm::LLVMBuildSIToFP(self.llbuilder, arg, self.cx.ty_double(), UNNAMED)
             }
             Opcode::BFcast => {
                 let arg = self.values[args[0]].get(self);
-                llvm::LLVMBuildUIToFP(self.llbuilder, arg, self.cx.ty_real(), UNNAMED)
+                llvm::LLVMBuildUIToFP(self.llbuilder, arg, self.cx.ty_double(), UNNAMED)
             }
             Opcode::BIcast => {
                 let arg = self.values[args[0]].get(self);
@@ -736,19 +723,18 @@ impl<'ll> Builder<'_, '_, 'll> {
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn ptr_diff(
         &self,
+        ty: &'ll llvm::Type,
         ptr1: &'ll llvm::Value,
         ptr2: &'ll llvm::Value,
     ) -> &'ll llvm::Value {
-        llvm::LLVMBuildPtrDiff(self.llbuilder, ptr1, ptr2, UNNAMED)
+        llvm::LLVMBuildPtrDiff2(self.llbuilder, ty, ptr1, ptr2, UNNAMED)
     }
 
     /// # Safety
     ///
     /// Must not be called when a block that already contains a terminator is selected
     pub unsafe fn is_null_ptr(&self, ptr: &'ll llvm::Value) -> &'ll llvm::Value {
-        let ty = llvm::LLVMTypeOf(ptr);
-        let null_ptr = self.cx.const_null_ptr(ty);
-
+        let null_ptr = self.cx.const_null_ptr();
         LLVMBuildICmp(self.llbuilder, llvm::IntPredicate::IntEQ, null_ptr, ptr, UNNAMED)
     }
 

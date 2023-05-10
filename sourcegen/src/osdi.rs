@@ -186,7 +186,7 @@ impl<'a> HeaderParser<'a> {
             "int" | "int32_t" => BaseTy::I32,
             "uint32_t" => BaseTy::U32,
             "size_t" => BaseTy::Usize,
-            "char" => BaseTy::Str,
+            "char" => BaseTy::Char,
             "void" => BaseTy::Void,
             "bool" => BaseTy::Bool,
             name => BaseTy::Struct(name),
@@ -241,13 +241,13 @@ fn is_ident_char(c: char) -> bool {
     matches!(c, '_'| 'a'..='z' | 'A' ..='Z' | '0' ..='9')
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 enum BaseTy<'a> {
     F64,
     I32,
     U32,
     Usize,
-    Str,
+    Char,
     Bool,
     Void,
     Struct(&'a str),
@@ -261,7 +261,7 @@ impl ToTokens for BaseTy<'_> {
             BaseTy::U32 => "u32",
             BaseTy::Usize => "usize",
             BaseTy::Bool => "bool",
-            BaseTy::Str => {
+            BaseTy::Char => {
                 quote!(String).to_tokens(tokens);
                 return;
             }
@@ -287,7 +287,7 @@ struct BaseTyInterpolater<'b, 'a> {
 
 impl ToTokens for BaseTyInterpolater<'_, '_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        if self.indirection == 0 {
+        if self.indirection == 0 || self.indirection == 1 && self.base == BaseTy::Char {
             self.base.to_tokens(tokens);
             if let BaseTy::Struct(ty) = self.base {
                 let ty = &self.lut[ty];
@@ -314,12 +314,13 @@ impl ToTokens for TyInterpolater<'_, '_> {
             return;
         }
 
-        let mut indirection = self.ty.indirection;
-        if self.ty.base == BaseTy::Str {
-            indirection -= 1;
-        }
+        // let mut indirection = self.ty.indirection;
+        // if self.ty.base == BaseTy::Char {
+        //     indirection -= 1;
+        // }
 
-        BaseTyInterpolater { indirection, base: self.ty.base, lut: self.lut }.to_tokens(tokens);
+        BaseTyInterpolater { indirection: self.ty.indirection, base: self.ty.base, lut: self.lut }
+            .to_tokens(tokens);
     }
 }
 
@@ -342,37 +343,35 @@ struct LLVMTyInterp<'a, 'b> {
 
 impl ToTokens for LLVMTyInterp<'_, '_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let mut indirection = self.ty.indirection;
-        let mut ty = match self.ty.base {
-            BaseTy::F64 => quote!(ctx.ty_real()),
-            BaseTy::I32 | BaseTy::U32 => quote!(ctx.ty_int()),
-            BaseTy::Usize => quote!(ctx.ty_isize()),
-            BaseTy::Str => {
-                indirection -= 1;
-                quote!(ctx.ty_str())
+        let indirection = self.ty.indirection;
+        let ty = if indirection == 0 && self.ty.func_args.is_none() {
+            match self.ty.base {
+                BaseTy::F64 => quote!(ctx.ty_double()),
+                BaseTy::I32 | BaseTy::U32 => quote!(ctx.ty_int()),
+                BaseTy::Usize => quote!(ctx.ty_size()),
+                BaseTy::Char => {
+                    quote!(ctx.ty_char())
+                }
+                BaseTy::Bool => quote!(ctx.ty_c_bool()),
+                BaseTy::Void => quote!(ctx.ty_void()),
+                BaseTy::Struct(ty) => {
+                    let ty = &self.lut[ty].llvm_ty_ident;
+                    let ty = Ident::new(ty, Span::call_site());
+                    quote!(self.#ty.unwrap())
+                }
             }
-            BaseTy::Bool => quote!(ctx.ty_c_bool()),
-            BaseTy::Void if indirection == 0 => quote!(ctx.ty_void()),
-            BaseTy::Void => {
-                indirection -= 1;
-                quote!(ctx.ty_void_ptr())
-            }
-            BaseTy::Struct(ty) => {
-                let ty = &self.lut[ty].llvm_ty_ident;
-                let ty = Ident::new(ty, Span::call_site());
-                quote!(self.#ty.unwrap())
-            }
-        };
-        for _ in 0..indirection {
-            ty = quote!(ctx.ptr_ty(#ty));
-        }
-
-        if let Some(args) = &self.ty.func_args {
-            let args = args.iter().map(|(_, ty)| LLVMTyInterp { ty, lut: self.lut });
-            quote!(ctx.ptr_ty(ctx.ty_func(&[#(#args),*], #ty))).to_tokens(tokens)
         } else {
-            ty.to_tokens(tokens)
-        }
+            quote!(ctx.ty_ptr())
+        };
+
+        ty.to_tokens(tokens)
+
+        // if let Some(_args) = &self.ty.func_args {
+        // let args = args.iter().map(|(_, ty)| LLVMTyInterp { ty, lut: self.lut });
+        // quote!(ctx.ty_ptr()).to_tokens(tokens)
+        // } else {
+        //     ty.to_tokens(tokens)
+        // }
     }
 }
 
@@ -392,25 +391,28 @@ impl ToTokens for LLVMValInterp<'_, '_> {
             return;
         }
         let mut indirection = self.ty.indirection;
-        if self.ty.base == BaseTy::Str {
+        if self.ty.base == BaseTy::Char {
             indirection -= 1;
         }
-
         if indirection != 0 {
-            let base_ty = match self.ty.base {
-                BaseTy::F64 => quote!(ctx.ty_real()),
-                BaseTy::I32 | BaseTy::U32 => quote!(ctx.ty_int()),
-                BaseTy::Usize => quote!(ctx.ty_isize()),
-                BaseTy::Str => {
-                    quote!(ctx.ty_str())
+            let base_ty = if indirection == 1 {
+                match self.ty.base {
+                    BaseTy::F64 => quote!(ctx.ty_double()),
+                    BaseTy::I32 | BaseTy::U32 => quote!(ctx.ty_int()),
+                    BaseTy::Usize => quote!(ctx.ty_size()),
+                    BaseTy::Char => {
+                        quote!(ctx.ty_ptr())
+                    }
+                    BaseTy::Bool => quote!(ctx.ty_c_bool()),
+                    BaseTy::Void => unreachable!(),
+                    BaseTy::Struct(ty) => {
+                        let ty = &self.lut[ty].llvm_ty_ident;
+                        let ty = Ident::new(ty, Span::call_site());
+                        quote!(tys.#ty)
+                    }
                 }
-                BaseTy::Bool => quote!(ctx.ty_c_bool()),
-                BaseTy::Void => unreachable!(),
-                BaseTy::Struct(ty) => {
-                    let ty = &self.lut[ty].llvm_ty_ident;
-                    let ty = Ident::new(ty, Span::call_site());
-                    quote!(tys.#ty)
-                }
+            } else {
+                quote!(ctx.ty_ptr())
             };
             let pos = self.pos;
             let ident = format_ident!("arr_{pos}");
@@ -423,7 +425,7 @@ impl ToTokens for LLVMValInterp<'_, '_> {
             BaseTy::I32 => quote!(ctx.const_int(#src)),
             BaseTy::U32 => quote!(ctx.const_unsigned_int(#src)),
             BaseTy::Usize => quote!(ctx.const_usize(#src)),
-            BaseTy::Str => {
+            BaseTy::Char => {
                 quote!(ctx.const_str_uninterned(&#src))
             }
             BaseTy::Bool => quote!(ctx.const_c_bool(#src)),
@@ -448,7 +450,7 @@ impl ToTokens for LLVMValPreInterp<'_, '_> {
         let ident = Ident::new(self.name, Span::call_site());
         let src = quote!(self.#ident);
         let mut indirection = self.ty.indirection;
-        if self.ty.base == BaseTy::Str {
+        if self.ty.base == BaseTy::Char {
             indirection -= 1;
         }
 
@@ -463,7 +465,7 @@ impl ToTokens for LLVMValPreInterp<'_, '_> {
             BaseTy::I32 => quote!(ctx.const_int(*#calc_src)),
             BaseTy::U32 => quote!(ctx.const_unsigned_int(*#calc_src)),
             BaseTy::Usize => quote!(ctx.const_usize(*#calc_src)),
-            BaseTy::Str => {
+            BaseTy::Char => {
                 quote!(ctx.const_str_uninterned(#calc_src))
             }
             BaseTy::Bool => quote!(ctx.const_c_bool(*#calc_src)),
@@ -566,7 +568,7 @@ impl ToTokens for OsdiStructInterp<'_, '_> {
                     fn #llvm_ty_ident(&mut self){
                         let ctx = self.ctx;
                         let fields = [#(#field_ll_tys),*];
-                        let ty = ctx.struct_ty(#ident, &fields);
+                        let ty = ctx.ty_struct(#ident, &fields);
                         self.#llvm_ty_ident = Some(ty);
                     }
                 }
@@ -633,7 +635,7 @@ impl ToTokens for RustBasicTy<'_> {
             BaseTy::U32 => "u32",
             BaseTy::Usize => "usize",
             BaseTy::Bool => "bool",
-            BaseTy::Str => "c_char",
+            BaseTy::Char => "c_char",
             BaseTy::Void => "c_void",
             BaseTy::Struct(name) => name,
         };

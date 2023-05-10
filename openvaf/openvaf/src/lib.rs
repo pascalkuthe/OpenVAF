@@ -21,6 +21,7 @@ pub use target::spec::{get_target_names, Target};
 
 mod cache;
 
+#[derive(Debug, Clone)]
 pub enum CompilationDestination {
     Path { lib_file: Utf8PathBuf },
     Cache { cache_dir: Utf8PathBuf },
@@ -31,6 +32,7 @@ pub enum CompilationTermination {
     FatalDiagnostic,
 }
 
+#[derive(Debug, Clone)]
 pub struct Opts {
     pub defines: Vec<String>,
     pub codegen_opts: Vec<String>,

@@ -119,7 +119,7 @@ impl<'t> LLVMBackend<'t> {
         literals: &'a Rodeo,
         module: &'ll ModuleLlvm,
     ) -> CodegenCx<'a, 'll> {
-        CodegenCx::new(literals, module, self.target, &self.target_cpu)
+        CodegenCx::new(literals, module, self.target)
     }
     pub fn target(&self) -> &'t Target {
         self.target
@@ -132,11 +132,13 @@ impl Drop for LLVMBackend<'_> {
 
 extern "C" fn diagnostic_handler(info: &llvm::DiagnosticInfo, _: *mut c_void) {
     let severity = unsafe { LLVMGetDiagInfoSeverity(info) };
-    if !cfg!(debug_assertions) && severity != llvm::DiagnosticSeverity::Error {
-        return;
-    }
     let msg = unsafe { LLVMString::new(LLVMGetDiagInfoDescription(info)) };
-    println!("LLVM({severity:?}): {msg}")
+    match severity {
+        llvm::DiagnosticSeverity::Error => log::error!("{msg}"),
+        llvm::DiagnosticSeverity::Warning => log::warn!("{msg}"),
+        llvm::DiagnosticSeverity::Remark => log::debug!("{msg}"),
+        llvm::DiagnosticSeverity::Note => log::trace!("{msg}"),
+    }
 }
 
 pub struct ModuleLlvm {

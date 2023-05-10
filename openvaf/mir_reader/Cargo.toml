@@ -12,7 +12,7 @@ doctest = false
 [dependencies]
 mir = {version = "0.0.0", path = "../mir" }
 bforest = {version = "0.0.0" , path = "../../lib/bforest"}
-lasso = {version = "0.6", features = ["ahash"]}
+lasso = {version = "0.7", features = ["ahash"]}
 
 [dev-dependencies]
 expect-test = "1.4"

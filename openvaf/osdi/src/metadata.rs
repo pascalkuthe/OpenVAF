@@ -38,7 +38,7 @@ impl OsdiLimFunction {
         osdi_0_3::OsdiLimFunction {
             name: ctx.literals.resolve(&self.name).to_owned(),
             num_args: self.num_args,
-            func_ptr: ctx.const_null_ptr(ctx.ty_void_ptr()),
+            func_ptr: ctx.const_null_ptr(),
         }
         .to_ll_val(ctx, tys)
     }
