@@ -1,6 +1,6 @@
 [package]
 name = "openvaf-driver"
-version = "23.2.0"
+version = "23.5.0"
 authors = ["DSPOM"]
 edition = "2021"
 license = "GPL-3.0"
@@ -21,5 +21,7 @@ termcolor = "1.2"
 camino = "1.1.2"
 env_logger = "0.10.0"
 log = "0.4.17"
+backtrace-ext = "0.2.1"
+backtrace = "0.3.67"
 
 mimalloc = { version = "*", default-features = false}

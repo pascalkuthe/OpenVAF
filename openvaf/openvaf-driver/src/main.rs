@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::process::exit;
+use std::sync::Mutex;
 
 use anyhow::Result;
 use camino::Utf8PathBuf;
@@ -15,14 +16,16 @@ use crate::cli_process::matches_to_opts;
 
 mod cli_def;
 mod cli_process;
+mod crash_report;
 
+static ARGS: Mutex<Option<Opts>> = Mutex::new(None);
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 pub fn main() {
     let matches = main_command().get_matches();
+    crash_report::install_panic_handler();
     let input: Utf8PathBuf = matches.get_one(INPUT).cloned().unwrap_or_else(Utf8PathBuf::new);
-
     let env = env_logger::Env::default().filter("OPENVAF_LOG").write_style("OPENVAF_LOG_STYLE");
     env_logger::Builder::new()
         .format_timestamp(None)
@@ -67,6 +70,7 @@ fn wrapped_main(matches: ArgMatches) -> Result<i32> {
         return Ok(res);
     }
 
+    *ARGS.lock().unwrap() = Some(opts.clone());
     let res = match compile(&opts)? {
         CompilationTermination::Compiled { lib_file } => {
             if matches!(opts.output, CompilationDestination::Cache { .. }) {
