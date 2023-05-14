@@ -320,8 +320,6 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
         self.simplify_assoc_binop(A::ADD, lhs, rhs)
     }
 
-    /// Given operands for an `A::SUB` instruction, see if we can fold the result.
-    /// If not, this returns None.
     fn simplify_sub_inst<A: Arithmetic>(
         &mut self,
         mut lhs: Value,
@@ -338,13 +336,12 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
         if lhs == rhs {
             return Some(A::ZERO);
         }
+        self.recurse(|sel| sel.simplify_sub_inst_inner::<A>(lhs, rhs))
+    }
 
-        if self.max_recurse == 0 {
-            return None;
-        }
-
-        self.max_recurse -= 1;
-
+    /// Given operands for an `A::SUB` instruction, see if we can fold the result.
+    /// If not, this returns None.
+    fn simplify_sub_inst_inner<A: Arithmetic>(&mut self, lhs: Value, rhs: Value) -> Option<Value> {
         // (X + Y) - Z -> X + (Y - Z) or Y + (X - Z) if everything simplifies.
         // For example, (X + Y) - Y -> X; (Y + X) - Y -> X
         let z = rhs;
@@ -475,21 +472,18 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
 
         // Mul distributes over Add. Try some generic simplifications based on this.
         // Recursion is always used, so bail out at once if we already hit the limit.
-        if self.max_recurse == 0 {
-            return None;
-        }
 
-        self.max_recurse -= 1;
+        self.recurse(|sel| {
+            if let Some(val) = sel.expand_add_over_mul::<A>(lhs, rhs) {
+                return Some(val);
+            }
 
-        if let Some(val) = self.expand_add_over_mul::<A>(lhs, rhs) {
-            return Some(val);
-        }
+            if let Some(val) = sel.expand_add_over_mul::<A>(rhs, lhs) {
+                return Some(val);
+            }
 
-        if let Some(val) = self.expand_add_over_mul::<A>(rhs, lhs) {
-            return Some(val);
-        }
-
-        None
+            None
+        })
     }
 
     /// Given operands for an `A::DIV` instruction, see if we can fold the result.
@@ -560,12 +554,7 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
         None
     }
 
-    fn simplify_assoc_binop(&mut self, op: Opcode, lhs: Value, rhs: Value) -> Option<Value> {
-        if self.max_recurse == 0 {
-            return None;
-        }
-        self.max_recurse -= 1;
-
+    fn simplify_assoc_binop_inner(&mut self, op: Opcode, lhs: Value, rhs: Value) -> Option<Value> {
         let is_communative = op.is_commutative();
 
         // Transform: "(A op B) op C" ==> "A op (B op C)" or "(C op A) op B" if it simplifies completely.
@@ -626,5 +615,19 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
         }
 
         None
+    }
+
+    fn simplify_assoc_binop(&mut self, op: Opcode, lhs: Value, rhs: Value) -> Option<Value> {
+        self.recurse(move |sel| sel.simplify_assoc_binop_inner(op, lhs, rhs))
+    }
+
+    fn recurse<T>(&mut self, f: impl FnOnce(&mut Self) -> Option<T>) -> Option<T> {
+        if self.max_recurse == 0 {
+            return None;
+        }
+        self.max_recurse -= 1;
+        let res = f(self);
+        self.max_recurse += 1;
+        res
     }
 }

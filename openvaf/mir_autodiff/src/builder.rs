@@ -659,7 +659,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                 } else if dlhs == lhs {
                     res
                 } else {
-                    sel.ins().fmul(dlhs, rhs)
+                    sel.simplified_mul(lhs, dlhs, rhs, res)
                 };
                 let sum2 = if drhs == F_ZERO {
                     return sum1;
@@ -668,7 +668,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                 } else if drhs == rhs {
                     res
                 } else {
-                    sel.ins().fmul(drhs, lhs)
+                    sel.simplified_mul(rhs, drhs, lhs, res)
                 };
 
                 if dlhs == F_ZERO {
@@ -863,6 +863,25 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
         };
 
         self.insert_derivative(res, unknown, val)
+    }
+
+    fn simplified_mul(&mut self, lhs: Value, dlhs: Value, rhs: Value, res: Value) -> Value {
+        // make sure that x = A * exp(C) is derived as
+        // A' * exp(C) + x*C' instead of A'*B + A*(exp(C)*C')
+        // which is hard to optimize correctly
+        if let Some(inst) = self.func.dfg.value_def(dlhs).inst() {
+            if let InstructionData::Binary { opcode: Opcode::Fmul, args } =
+                self.func.dfg.insts[inst]
+            {
+                if args[0] == lhs {
+                    return self.ins().fmul(res, args[1]);
+                }
+                if args[1] == lhs {
+                    return self.ins().fmul(res, args[0]);
+                }
+            }
+        }
+        self.ins().fmul(dlhs, rhs)
     }
 }
 
