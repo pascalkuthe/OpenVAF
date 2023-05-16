@@ -99,8 +99,8 @@ On Linux distributions where packages for LLVM-15 are not available (like centos
 in our docker images. These binaries are build on centos-7 and will therefore
 work on any linux distribution (that is supported by rustc):
 
-* [clang and LLVM for windows](https://openva.fra1.cdn.digitaloceanspaces.com/llvm-15.0.7-x86_64-pc-windows-msvc.tar.zst)
-* [clang and LLVM for linux](https://openva.fra1.cdn.digitaloceanspaces.com/llvm-15.0.7-x86_64-unknown-linux-gnu.tar.zst)
+* [clang and LLVM for windows](https://openva.fra1.cdn.digitaloceanspaces.com/llvm-15.0.7-x86_64-pc-windows-msvc-FULL.tar.zst)
+* [clang and LLVM for linux](https://openva.fra1.cdn.digitaloceanspaces.com/llvm-15.0.7-x86_64-unknown-linux-gnu-FULL.tar.zst)
 
 Simply download and extract these tar archives and set the `LLLVM_CONFIG` (see below) environment variable to point at the downloaded files: `LLVM_CONFIG=<extracted directory>/bin/llvm-config`.
 
