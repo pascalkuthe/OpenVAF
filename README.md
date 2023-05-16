@@ -63,7 +63,7 @@ Some working minimal examples (in rust) can be found in `melange/core/test.rs`.
 The official docker image contains everything required for compiling OpenVAF. To build OpenVAF using the official docker containers, simply run the following commands:
 
 ``` shell
-git clone https://github.com/pascalkuthe/OpenVAF.git && cd openvaf
+git clone https://github.com/pascalkuthe/OpenVAF.git && cd OpenVAF
 # On REHL distros and fedora replace docker with podman
 # on all commands below. 
 docker pull ghcr.io/pascalkuthe/ferris_ci_build_x86_64-unknown-linux-gnu:latest

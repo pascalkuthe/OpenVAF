@@ -4,12 +4,15 @@ All notable changes to OpenVAF relevant to OSDI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## 23.5.0 - 2023-5-16
 
 ## Added
 
-* support for `analog initial` blocks
+* Support for `analog initial` blocks
 * Allow ignoring errors when a port is declared without direction
+* User friendly Crash Handler
+* Warning when adding trivially open branches
+* Allow `aliasparam` sto refer to system functions (like `$mfactor`)
 
 ## Fixed
 
@@ -19,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `idt` operator not working (reactive dimension was undefined)
 * incorrect `param_given` results after setting instance paramters on the model struct.
 * Panic when accessing current probe that always returns 0
+
+## Internal Improvements
+
+* Update to LLVM 15+ (opaque pointers)
 
 ## 23.2.0 - 2023-02-01
 
