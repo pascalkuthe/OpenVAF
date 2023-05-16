@@ -18,16 +18,28 @@ impl Verilogae {
 impl crate::flags::Build {
     fn run(self, sh: &mut Shell) -> Result<()> {
         let _env = sh.push_env("RUSTFLAGS", "-C strip=symbols");
-        cmd!(sh, "cargo build --release -p verilogae").run()?;
+        let target =
+            if self.windows { "x86_64-pc-windows-msvc" } else { "x86_64-unknown-linux-gnu" };
+        cmd!(sh, "cargo build --release -p verilogae --target {target}").run()?;
         if self.force {
             sh.remove_path("wheels")?;
         } else if sh.read_dir("wheels").map_or(false, |dir| !dir.is_empty()) {
             bail!("wheels folder must be empty")
         }
 
-        let pythons = find_py();
-        for (py, _tag) in &pythons {
-            cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps").env("PYO3_PYTHON", &py).run()?;
+        let pythons = find_py(self.windows);
+        for (version, py, _tag) in &pythons {
+            if self.windows {
+                cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
+                    .env("PYO3_CROSS_PYTHON_VERSION", &version)
+                    .env("CARGO_BUILD_TARGET", "x86_64-pc-windows-msvc")
+                    .run()?;
+            } else {
+                cmd!(sh, "{py} -m pip install setuptools_rust").run()?;
+                cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
+                    .env("PYO3_PYTHON", &py)
+                    .run()?;
+            }
             // cmd!("auditwheel repair "$whl" -w /io/dist/")
         }
 
@@ -36,7 +48,7 @@ impl crate::flags::Build {
                 cmd!(sh, "auditwheel repair {file}  -w wheels").run()?;
                 std::fs::remove_file(file)?;
             }
-        } else {
+        } else if !self.windows {
             for file in sh.read_dir("wheels")? {
                 cmd!(sh, "auditwheel repair {file}  -w wheels --plat linux_x86_64").run()?;
             }
@@ -45,7 +57,7 @@ impl crate::flags::Build {
         if self.install {
             for file in sh.read_dir("wheels")? {
                 println!("{file:?}");
-                for (py, tag) in &pythons {
+                for (_, py, tag) in &pythons {
                     if file.to_str().unwrap().contains(tag) {
                         cmd!(sh, "{py} -m pip install --force-reinstall {file}").run()?;
                         break;
@@ -60,7 +72,8 @@ impl crate::flags::Build {
 
 impl crate::flags::Test {
     pub fn run(self, sh: &mut Shell) -> Result<()> {
-        for (py, _tag) in find_py() {
+        for (_, py, _tag) in find_py(false) {
+            cmd!(sh, "{py} -m pip install numpy").run()?;
             let _dir1 = sh.push_dir("verilogae");
             let _dir2 = sh.push_dir("tests");
             cmd!(sh, "{py} test_hicum.py").run()?;
@@ -72,24 +85,26 @@ impl crate::flags::Test {
 
 impl crate::flags::Publish {
     pub fn run(self, sh: &mut Shell) -> Result<()> {
-        crate::flags::Build { force: true, manylinux: true, install: true }.run(sh)?;
+        crate::flags::Build { force: true, manylinux: true, install: true, windows: self.windows }
+            .run(sh)?;
+        if !self.windows {
+            crate::flags::Test.run(sh)?;
+        }
         let files = sh.read_dir("wheels")?;
         cmd!(sh, "twine upload {files...}").run()?;
         Ok(())
     }
 }
 
-const MIN_PYTHON_MINOR: u32 = 7;
-const MAX_PYTHON_MINOR: u32 = 10;
+const MIN_PYTHON_MINOR: u32 = 8;
+const MAX_PYTHON_MINOR: u32 = 11;
 // const MAX_PYPY_MINOR: u32 = 8;
 
-fn find_py() -> Vec<(String, String)> {
+fn find_py(windows: bool) -> Vec<(String, String, String)> {
     (MIN_PYTHON_MINOR..=MAX_PYTHON_MINOR)
-        .map(|minor| (format!("python3.{}", minor), format!("cp3{}", minor)))
-        // .chain( TODO pypy  support
-        //     (MIN_PYTHON_MINOR..=MAX_PYPY_MINOR)
-        //         .map(|minor| (format!("pypy3.{}", minor), format!("pp3{}", minor))),
-        // )
-        .filter(|(exe, _tag)| Command::new(exe).output().is_ok())
+        .map(|minor| {
+            (format!("3.{}", minor), format!("python3.{}", minor), format!("cp3{}", minor))
+        })
+        .filter(|(_version, exe, _tag)| windows || Command::new(exe).output().is_ok())
         .collect()
 }

@@ -7,6 +7,7 @@ xflags::xflags! {
             cmd build{
                 optional --force
                 optional --manylinux
+                optional --windows
                 optional --install
             }
 
@@ -14,6 +15,7 @@ xflags::xflags! {
             }
 
             cmd publish {
+                optional --windows
             }
 
         }
@@ -52,6 +54,7 @@ pub enum VerilogaeCmd {
 pub struct Build {
     pub force: bool,
     pub manylinux: bool,
+    pub windows: bool,
     pub install: bool,
 }
 
@@ -59,7 +62,9 @@ pub struct Build {
 pub struct Test;
 
 #[derive(Debug)]
-pub struct Publish;
+pub struct Publish {
+    pub windows: bool,
+}
 
 #[derive(Debug)]
 pub struct GenMsvcrt;

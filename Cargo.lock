@@ -1482,7 +1482,7 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "verilogae"
-version = "0.9.0-beta8"
+version = "1.0.0"
 dependencies = [
  "ahash 0.8.3",
  "anyhow",
@@ -1519,14 +1519,14 @@ dependencies = [
 
 [[package]]
 name = "verilogae_ffi"
-version = "0.9.0-beta8"
+version = "1.0.0"
 dependencies = [
  "verilogae",
 ]
 
 [[package]]
 name = "verilogae_py"
-version = "0.9.0-beta8"
+version = "1.0.0"
 dependencies = [
  "libc",
  "pyo3-build-config",
