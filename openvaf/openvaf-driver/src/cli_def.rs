@@ -13,7 +13,7 @@ const ABOUT: &str = r"For further information visit https://openvaf.semimod.de."
 pub fn main_command() -> Command {
     Command::new("openvaf")
         .version(env!("CARGO_PKG_VERSION"))
-        .author("Pascal Kuthe - Semimod GmbH")
+        .author("Pascal Kuthe")
         .after_long_help(ABOUT)
         .after_help(ABOUT)
         .args([

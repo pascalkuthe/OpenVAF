@@ -104,13 +104,6 @@ pub fn compile(opts: &Opts) -> Result<CompilationTermination> {
     let input = AbsPathBuf::assert(input);
     let db = CompilationDB::new(input, &opts.include, &opts.defines, &opts.lints)?;
 
-    let preprocess = db.preprocess(db.root_file);
-
-    if !preprocess.diagnostics.is_empty() {
-        db.collect_modules();
-        return Ok(CompilationTermination::FatalDiagnostic);
-    }
-
     let lib_file = match &opts.output {
         CompilationDestination::Cache { cache_dir } => {
             let file_name = cache::file_name(&db, opts);
