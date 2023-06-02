@@ -7,6 +7,8 @@ use anyhow::Result;
 use basedb::diagnostics::{Chars, ConsoleSink, DiagnosticSink};
 use basedb::{diagnostics, BaseDB};
 use camino::Utf8PathBuf;
+use hir_def::db::HirDefDB;
+use hir_lower::{ParamKind, PlaceKind};
 use linker::link;
 use mir_llvm::LLVMBackend;
 use sim_back::CompilationDB;
@@ -43,6 +45,72 @@ pub struct Opts {
     pub opt_lvl: OptLevel,
     pub target: Target,
     pub target_cpu: String,
+}
+pub fn dump_json(opts: &Opts) -> Result<CompilationTermination> {
+    let input =
+        opts.input.canonicalize().with_context(|| format!("failed to resolve {}", opts.input))?;
+    let input = AbsPathBuf::assert(input);
+    let db = CompilationDB::new(input, &opts.include, &opts.defines, &opts.lints)?;
+    let modules = if let Some(modules) = db.collect_modules(true) {
+        modules
+    } else {
+        return Ok(CompilationTermination::FatalDiagnostic);
+    };
+    for module in modules {
+        let (func, intern, strings, cfg) = db.build_opvar_mir(&module);
+        let json = func.to_json(
+            &cfg,
+            &strings,
+            |param| match *intern.params.get_index(param).unwrap().0 {
+                ParamKind::Param(param) => ("parameters", db.param_data(param).name.to_string()),
+                ParamKind::Abstime => ("sim_state", "$abstime".to_owned()),
+                ParamKind::EnableIntegration => todo!(),
+                ParamKind::Voltage { hi, lo: Some(lo) } => (
+                    "voltages",
+                    format!("({}, {})", &db.node_data(hi).name, &db.node_data(lo).name),
+                ),
+                ParamKind::Voltage { hi, lo: None } => {
+                    ("voltages", format!("({})", &db.node_data(hi).name))
+                }
+                ParamKind::Current(hir_lower::CurrentKind::Unnamed { hi, lo: Some(lo) }) => (
+                    "currents",
+                    format!("({}, {})", &db.node_data(hi).name, &db.node_data(lo).name),
+                ),
+
+                ParamKind::Current(hir_lower::CurrentKind::Unnamed { hi, lo: None }) => {
+                    ("currents", format!("({})", &db.node_data(hi).name))
+                }
+
+                ParamKind::Current(hir_lower::CurrentKind::Branch(br)) => {
+                    ("currents", db.branch_data(br).name.to_string())
+                }
+
+                ParamKind::Temperature => ("sim_state", "$temperature".to_owned()),
+                ParamKind::ParamGiven { param } => {
+                    ("param_given", db.param_data(param).name.to_string())
+                }
+                ParamKind::PortConnected { port } => {
+                    ("port_connected", db.node_data(port).name.to_string())
+                }
+                ParamKind::ParamSysFun(param) => ("params", format!("${param:?}")),
+                _ => unreachable!(),
+            },
+            intern.outputs.iter().filter_map(|(kind, val)| {
+                let name = match *kind {
+                    PlaceKind::Var(var) => db.var_data(var).name.to_string(),
+                    _ => return None,
+                };
+                Some((name, val.expand()?))
+            }),
+        );
+        let path = opts.input.with_file_name(format!(
+            "{}_{}.json",
+            opts.input.file_stem().unwrap(),
+            &db.module_data(module.id).name
+        ));
+        std::fs::write(path, json)?;
+    }
+    Ok(CompilationTermination::Compiled { lib_file: Utf8PathBuf::default() })
 }
 
 pub fn expand(opts: &Opts) -> Result<CompilationTermination> {
@@ -117,7 +185,7 @@ pub fn compile(opts: &Opts) -> Result<CompilationTermination> {
         CompilationDestination::Path { lib_file } => lib_file.clone(),
     };
 
-    let modules = if let Some(modules) = db.collect_modules() {
+    let modules = if let Some(modules) = db.collect_modules(false) {
         modules
     } else {
         return Ok(CompilationTermination::FatalDiagnostic);

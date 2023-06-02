@@ -36,7 +36,7 @@ impl EvalMir {
 fn compile_to_mir(path: &Path) -> (CompilationDB, ModuleInfo, EvalMir, Rodeo) {
     let path = AbsPathBuf::assert(path.canonicalize().unwrap());
     let db = CompilationDB::new(path, &[], &[], &[]).unwrap();
-    let mut modules = db.collect_modules().unwrap();
+    let mut modules = db.collect_modules(false).unwrap();
     let module = modules.pop().unwrap();
     let mut literals = Rodeo::new();
     let mir = EvalMir::new(&db, &module, &mut literals);

@@ -126,7 +126,7 @@ impl CompilationDB {
         Ok(res)
     }
 
-    pub fn collect_modules(&self) -> Option<Vec<ModuleInfo>> {
+    pub fn collect_modules(&self, all_vars_opvars: bool) -> Option<Vec<ModuleInfo>> {
         let root_file = self.root_file;
         let file_name =
             self.vfs.read().file_path(root_file).name().unwrap_or_else(|| String::from("~.va"));
@@ -171,8 +171,10 @@ impl CompilationDB {
                 .copied()
                 .collect();
 
-        let res =
-            modules.iter().map(|module| ModuleInfo::collect(self, *module, &mut sink)).collect();
+        let res = modules
+            .iter()
+            .map(|module| ModuleInfo::collect(self, *module, &mut sink, all_vars_opvars))
+            .collect();
 
         if sink.summary(&file_name) {
             return None;
@@ -275,7 +277,12 @@ pub struct ModuleInfo {
 }
 
 impl ModuleInfo {
-    fn collect(db: &CompilationDB, module: ModuleId, sink: &mut ConsoleSink) -> ModuleInfo {
+    fn collect(
+        db: &CompilationDB,
+        module: ModuleId,
+        sink: &mut ConsoleSink,
+        all_vars_opvars: bool,
+    ) -> ModuleInfo {
         let root_file = db.root_file;
 
         let mut params: IndexMap<ParamId, ParamInfo, ahash::RandomState> = IndexMap::default();
@@ -338,7 +345,7 @@ impl ModuleInfo {
                     let units = resolve_str_attr(sink, &ast, "units");
                     let description = resolve_str_attr(sink, &ast, "desc");
 
-                    if units.is_none() & description.is_none() {
+                    if units.is_none() && description.is_none() && !all_vars_opvars {
                         return None;
                     }
 
