@@ -584,3 +584,76 @@ impl EvalMir {
         }
     }
 }
+
+impl CompilationDB {
+    pub fn build_opvar_mir(
+        &self,
+        info: &ModuleInfo,
+    ) -> (Function, HirInterner, Rodeo, ControlFlowGraph) {
+        let outputs: AHashSet<_> = info.op_vars.keys().copied().collect();
+        let mut literals = Rodeo::new();
+        let (mut func, mut intern) = MirBuilder::new(
+            self,
+            info.id,
+            &|kind| {
+                matches!(
+                    kind,
+                    PlaceKind::Var(var) if outputs.contains(&var)
+                )
+            },
+            &mut outputs.iter().copied(),
+        )
+        .build(&mut literals);
+
+        // remove unused sideeffects
+        for (id, _) in intern.callbacks.iter_enumerated() {
+            func.dfg.signatures[id].has_sideeffects = false;
+        }
+
+        let mut output_values = BitSet::new_empty(func.dfg.num_values());
+        output_values.extend(intern.outputs.values().filter_map(|it| it.expand()));
+
+        intern.insert_var_init(self, &mut func, &mut literals);
+
+        let mut cfg = ControlFlowGraph::new();
+        cfg.compute(&func);
+
+        simplify_cfg(&mut func, &mut cfg);
+
+        for (param, (kind, _)) in intern.params.iter_enumerated() {
+            if matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
+                let changed = intern.callbacks.ensure(CallBackKind::Derivative(param)).1;
+                if changed {
+                    let signature = CallBackKind::Derivative(param).signature();
+                    func.import_function(signature);
+                }
+            }
+        }
+
+        dead_code_elimination(&mut func, &output_values);
+
+        let mut dom_tree = DominatorTree::default();
+        dom_tree.compute(&func, &cfg, true, false, true);
+        let unkowns = intern.unkowns(&mut func, false);
+        auto_diff(&mut func, &dom_tree, &unkowns, &[]);
+        cfg.clear();
+        cfg.compute(&func);
+        sparse_conditional_constant_propagation(&mut func, &cfg);
+        inst_combine(&mut func);
+        simplify_cfg(&mut func, &mut cfg);
+
+        dom_tree.compute(&func, &cfg, false, true, false);
+        let mut control_dep = SparseBitMatrix::new(0, 0);
+        dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
+        output_values.ensure(func.dfg.num_values());
+        agressive_dead_code_elimination(
+            &mut func,
+            &mut cfg,
+            &|val, _| output_values.contains(val),
+            &control_dep,
+        );
+        simplify_cfg(&mut func, &mut cfg);
+        (func, intern, literals, cfg)
+        // (func, intern, literals, Vec::new(), cfg)
+    }
+}

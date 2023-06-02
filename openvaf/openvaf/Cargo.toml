@@ -16,6 +16,8 @@ osdi = { version = "0.0.0", path = "../osdi" }
 
 llvm = { version = "0.0.0", path = "../llvm" }
 mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
+hir_lower = { version = "0.0.0", path = "../hir_lower" }
+hir_def = { version = "0.0.0", path = "../hir_def" }
 target = { version = "0.0.0", path = "../target" }
 linker = { version = "0.0.0", path = "../linker" }
 

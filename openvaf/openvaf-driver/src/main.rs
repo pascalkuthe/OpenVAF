@@ -9,9 +9,9 @@ use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use cli_def::{main_command, INPUT};
-use openvaf::{compile, expand, CompilationDestination, CompilationTermination, Opts};
+use openvaf::{compile, dump_json, expand, CompilationDestination, CompilationTermination, Opts};
 
-use crate::cli_def::PRINT_EXPANSION;
+use crate::cli_def::{DUMP_JSON, PRINT_EXPANSION};
 use crate::cli_process::matches_to_opts;
 
 mod cli_def;
@@ -61,7 +61,9 @@ pub const DATA_ERROR: i32 = 65;
 
 fn wrapped_main(matches: ArgMatches) -> Result<i32> {
     let print_expansion = matches.get_flag(PRINT_EXPANSION);
+    let dump_json_ = matches.get_flag(DUMP_JSON);
     let opts = matches_to_opts(matches)?;
+    *ARGS.lock().unwrap() = Some(opts.clone());
     if print_expansion {
         let res = match expand(&opts)? {
             CompilationTermination::Compiled { .. } => 0,
@@ -69,8 +71,14 @@ fn wrapped_main(matches: ArgMatches) -> Result<i32> {
         };
         return Ok(res);
     }
+    if dump_json_ {
+        let res = match dump_json(&opts)? {
+            CompilationTermination::Compiled { .. } => 0,
+            CompilationTermination::FatalDiagnostic => DATA_ERROR,
+        };
+        return Ok(res);
+    }
 
-    *ARGS.lock().unwrap() = Some(opts.clone());
     let res = match compile(&opts)? {
         CompilationTermination::Compiled { lib_file } => {
             if matches!(opts.output, CompilationDestination::Cache { .. }) {

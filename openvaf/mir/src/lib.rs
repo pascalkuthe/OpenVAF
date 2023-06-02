@@ -27,6 +27,7 @@ mod entities;
 mod immediates;
 mod instructions;
 mod layout;
+mod serialize;
 
 pub mod builder;
 pub mod cursor;

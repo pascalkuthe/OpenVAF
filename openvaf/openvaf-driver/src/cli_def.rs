@@ -13,7 +13,7 @@ const ABOUT: &str = r"For further information visit https://openvaf.semimod.de."
 pub fn main_command() -> Command {
     Command::new("openvaf")
         .version(env!("CARGO_PKG_VERSION"))
-        .author("Pascal Kuthe - Semimod GmbH")
+        .author("Pascal Kuthe")
         .after_long_help(ABOUT)
         .after_help(ABOUT)
         .args([
@@ -33,6 +33,7 @@ pub fn main_command() -> Command {
             codegen_opts(),
             interface(),
             expand(),
+            dump_json(),
             input(),
         ])
         .subcommand_required(false)
@@ -53,6 +54,7 @@ pub const CACHE_DIR: &str = "cache-dir";
 pub const OPT_LVL: &str = "opt_lvl";
 pub const DEFINE: &str = "define";
 pub const PRINT_EXPANSION: &str = "print-expansion";
+pub const DUMP_JSON: &str = "dump-json";
 pub const ALLOW: &str = "allow";
 pub const WARN: &str = "warn";
 pub const DENY: &str = "deny";
@@ -255,6 +257,10 @@ fn expand() -> Arg {
 The sourcecode with all macros (`define) expanded and preprocessor
 directives (`inlude) resolved is emitted to stdout.",
         )
+}
+
+fn dump_json() -> Arg {
+    flag(DUMP_JSON, "dump-json").help("Abort after lowering and serialize MIR as json.")
 }
 
 fn def_arg() -> Arg {

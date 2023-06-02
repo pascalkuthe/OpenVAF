@@ -12,7 +12,7 @@ use target::spec::Target;
 fn test_compile(root_file: &Path) {
     let root_file = AbsPathBuf::assert(root_file.canonicalize().unwrap());
     let db = CompilationDB::new(root_file, &[], &[], &[]).unwrap();
-    let modules = db.collect_modules().unwrap();
+    let modules = db.collect_modules(false).unwrap();
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, "native".to_owned(), &[]);
     let emit = !stdx::IS_CI;
