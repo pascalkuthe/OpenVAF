@@ -151,27 +151,31 @@ impl Serializer<'_> {
         val: Value,
         mut param_name: impl FnMut(Param) -> (&'static str, String),
     ) {
-        match self.func.dfg.value_def(val) {
-            ValueDef::Result(inst, idx) => {
-                self.serialize_dict(|sel| {
-                    w!(sel, "\"instruction\": {},", sel.inst_map.get_index_of(&inst).unwrap());
-                    w!(sel, "\"idx\": {idx}")
-                });
+        self.serialize_dict(|sel| {
+            match sel.func.dfg.value_def(val) {
+                ValueDef::Result(inst, idx) => {
+                    wln!(sel, "\"instruction\": {},", sel.inst_map.get_index_of(&inst).unwrap());
+                    wln!(sel, "\"idx\": {idx},")
+                }
+                ValueDef::Param(param) => {
+                    let (kind, name) = param_name(param);
+                    wln!(sel, "\"{kind}\": \"{name}\",")
+                }
+                ValueDef::Const(Const::Float(val)) => {
+                    wln!(sel, "\"fconst\": {},", f64::from(val))
+                }
+                ValueDef::Const(Const::Int(val)) => wln!(sel, "\"iconst\": {val},"),
+                ValueDef::Const(Const::Str(val)) => {
+                    wln!(sel, "\"sconst\": \"{}\",", &sel.intern[val])
+                }
+                ValueDef::Const(Const::Bool(val)) => wln!(sel, "\"bconst\": {val},"),
+                ValueDef::Invalid => unreachable!(),
             }
-            ValueDef::Param(param) => {
-                let (kind, name) = param_name(param);
-                w!(self, "{{ \"{kind}\": \"{name}\"}}")
-            }
-            ValueDef::Const(Const::Float(val)) => {
-                w!(self, "{{ \"fconst\": {}}}", f64::from(val))
-            }
-            ValueDef::Const(Const::Int(val)) => w!(self, "{{ \"iconst\": {val}}}"),
-            ValueDef::Const(Const::Str(val)) => {
-                w!(self, "{{ \"sconst\": \"{}\"}}", &self.intern[val])
-            }
-            ValueDef::Const(Const::Bool(val)) => w!(self, "{{ \"bconst\": {val}}}"),
-            ValueDef::Invalid => unreachable!(),
-        }
+            sel.serialize_key("uses");
+            sel.serialize_list_entries(sel.func.dfg.uses(val).map(|use_| {
+                sel.inst_map.get_index_of(&sel.func.dfg.use_to_operand(use_).0).unwrap()
+            }));
+        });
     }
 
     fn serialize_inst(&mut self, inst: Inst) {
@@ -205,11 +209,6 @@ impl Serializer<'_> {
                     .iter()
                     .map(|val| sel.val_map.get_index_of(val).unwrap()),
             );
-            wln!(sel, ",");
-            sel.serialize_key("uses");
-            sel.serialize_list_entries(sel.func.dfg.inst_uses(inst).map(|use_| {
-                sel.inst_map.get_index_of(&sel.func.dfg.use_to_operand(use_).0).unwrap()
-            }));
         })
     }
 
