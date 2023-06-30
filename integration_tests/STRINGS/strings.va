@@ -1,0 +1,25 @@
+
+`include "constants.vams"
+`include "disciplines.vams"
+
+
+
+module strings_va(A,C);
+    inout A, C;
+    electrical A,C;
+    (*desc= "Dummy", type="instance", units = "none"*) parameter string dummy1 = "abc";
+    (*desc= "Dummy", units = "none"*) parameter string dummy2 = "abc";
+
+    analog begin
+		$display(dummy1, dummy2);
+		if (dummy1 == "foo"|| dummy2 == "foo" || dummy1 == dummy2) begin
+			I(A,C) <+ 2;
+		end
+		if (dummy1 == "foo"|| dummy2 == "foo" || dummy1 == dummy2) begin
+			I(A,C) <+ 3;
+		end else begin
+			I(A,C) <+ 3;
+		end
+		I(A,C) <+ 4;
+    end
+endmodule
