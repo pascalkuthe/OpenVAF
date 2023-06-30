@@ -4,17 +4,23 @@ All notable changes to OpenVAF relevant to OSDI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [UNRELEASED]
+
+### Fixed
+
+* fix misscompliation of string parameters
+
 ## 23.5.0 - 2023-5-16
 
-## Added
+### Added
 
 * Support for `analog initial` blocks
 * Allow ignoring errors when a port is declared without direction
 * User friendly Crash Handler
 * Warning when adding trivially open branches
-* Allow `aliasparam` sto refer to system functions (like `$mfactor`)
+* Allow `aliasparam` to refer to system functions (like `$mfactor`)
 
-## Fixed
+### Fixed
 
 * Allow parameter declaration without explicit types
 * Crash when using engineering real format specifier `%r`
@@ -23,13 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * incorrect `param_given` results after setting instance paramters on the model struct.
 * Panic when accessing current probe that always returns 0
 
-## Internal Improvements
+### Internal Improvements
 
 * Update to LLVM 15+ (opaque pointers)
 
 ## 23.2.0 - 2023-02-01
 
-## Breaking Changes
+### Breaking Changes
 
 * Removed LLD integration which made packaging exceptionally difficult and caused crashes on Windows.
   That mean that OpenVAF now requires that the system linker (and `ucrt.lib` when targeting windows) are available.
