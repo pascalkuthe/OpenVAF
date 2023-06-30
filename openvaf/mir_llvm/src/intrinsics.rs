@@ -59,7 +59,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
             return Some(self.insert_intrinsic(name, &[t_f64], t_f64, false));
         }
 
-        ifn!("strcmp", fn(t_str, t_str) -> t_bool);
+        ifn!("strcmp", fn(t_str, t_str) -> t_i32);
         ifn!("llvm.llround.i32.f64", fn(t_f64) -> t_i32);
 
         if name == "snprintf" {

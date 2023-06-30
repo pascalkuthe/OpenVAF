@@ -59,6 +59,9 @@ pub fn eval_binary(func: &mut Function, op: Opcode, lhs: Const, rhs: Const) -> V
 }
 
 pub fn eval_unary(func: &mut Function, op: Opcode, val: Const) -> Option<Value> {
+    if op == Opcode::OptBarrier {
+        return None;
+    }
     let val = match val {
         mir::Const::Float(val) => {
             let val: f64 = val.into();
@@ -84,7 +87,6 @@ pub fn eval_unary(func: &mut Function, op: Opcode, val: Const) -> Option<Value> 
                 Opcode::FIcast => func.dfg.iconst(val.round() as i32),
                 Opcode::FBcast => (val.abs() != 0.0).into(),
                 Opcode::Fneg => func.dfg.f64const(-val),
-                Opcode::OptBarrier => return None,
                 _ => unreachable!("invalid real operation {}", op),
             }
         }
@@ -93,7 +95,6 @@ pub fn eval_unary(func: &mut Function, op: Opcode, val: Const) -> Option<Value> 
             Opcode::Ineg => func.dfg.iconst(-val),
             Opcode::IFcast => func.dfg.f64const(val as f64),
             Opcode::IBcast => (val != 0).into(),
-            Opcode::OptBarrier => return None,
             Opcode::Clog2 => {
                 let val = 8 * size_of_val(&val) as i32 - val.leading_zeros() as i32;
                 func.dfg.iconst(val)
@@ -105,14 +106,12 @@ pub fn eval_unary(func: &mut Function, op: Opcode, val: Const) -> Option<Value> 
             Opcode::Bnot => FALSE,
             Opcode::BIcast => ONE,
             Opcode::BFcast => F_ONE,
-            Opcode::OptBarrier => return None,
             _ => unreachable!(),
         },
         mir::Const::Bool(false) => match op {
             Opcode::Bnot => TRUE,
             Opcode::BIcast => ZERO,
             Opcode::BFcast => F_ZERO,
-            Opcode::OptBarrier => return None,
             _ => unreachable!(),
         },
     };
