@@ -117,4 +117,4 @@ const BUILTIN_INFO: [BuiltinInfo; 111usize] = [
     SLEW,
     TRANSITION,
 ];
-pub(crate) fn bultin_info(builtin: BuiltIn) -> BuiltinInfo { BUILTIN_INFO[builtin as u8 as usize] }
+pub(crate) fn builtin_info(builtin: BuiltIn) -> BuiltinInfo { BUILTIN_INFO[builtin as u8 as usize] }

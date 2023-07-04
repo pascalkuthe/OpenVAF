@@ -81,7 +81,7 @@ fn main() {
 
     // let target = env::var("TARGET").expect("TARGET was not set");
     let llvm_config = tracked_env_var_os("LLVM_CONFIG").map(PathBuf::from);
-    // TODO provide mechanism to build llvm youself
+    // TODO provide mechanism to build llvm yourself
     // .unwrap_or_else(|| {
     //     if let Some(dir) = tracked_env_var_os("CARGO_TARGET_DIR").map(PathBuf::from) {
     //         let to_test = dir
@@ -181,7 +181,7 @@ fn main() {
     cmd.arg("--cxxflags");
     let cxxflags = output(&mut cmd);
 
-    // Obtain version and pass as env varible
+    // Obtain version and pass as env variable
     let mut cmd = Command::new(&llvm_config);
     cmd.arg("--version");
     let version = output(&mut cmd).trim().to_owned();
@@ -196,7 +196,7 @@ fn main() {
             println!("cargo:rustc-env=LLVM_VERSION_PATCH={}", patch);
         } else {
             fail(&format!(
-                "Invalid LLVM version {:?}!\nExpected 3 numbers seperated by '.' foound {:?}",
+                "Invalid LLVM version {:?}!\nExpected 3 numbers separated by '.' foound {:?}",
                 version, components
             ))
         }

@@ -36,7 +36,7 @@ impl<'a> Test<'a> {
     where
         'a: 'r,
     {
-        Self::from_dir_filtered(name, runner, ignore, &|_| true, dir)
+        Self::from_dir_filtered(name, runner, &|_| true, ignore, dir)
     }
 
     pub fn from_list<'r, T: Debug + Clone>(
@@ -287,7 +287,7 @@ impl FromStr for Format {
         match text {
             "pretty" => Ok(Format::Pretty),
             "terse" => Ok(Format::Terse),
-            _ => Err("Unkown format"),
+            _ => Err("Unknown format"),
         }
     }
 }
@@ -348,7 +348,7 @@ impl Display for TestSummary {
 /// ];
 /// ```
 ///
-/// These expressions are not constant and can arbitrary code so tests can be generated programatically.
+/// These expressions are not constant and can run arbitrary code so tests can be generated programmatically.
 /// Furthermore these expressions can return a iterator of tests instead of just a single test.
 /// For example, datatests are supported with the `Test::from_dir` function this way:
 ///

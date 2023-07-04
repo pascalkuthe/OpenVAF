@@ -147,7 +147,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             .get(&SimUnknown::Implicit(equation))
                             .copied()
                             .unwrap_or_else(|| {
-                                info!("implict equation {equation} collapsed to zero");
+                                info!("implicit equation {equation} collapsed to zero");
                                 cx.const_real(0.0)
                             }),
                         ParamKind::Temperature => {
@@ -205,7 +205,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 ptr: prev_state,
                                 ptr_ty: cx.ty_double(),
                                 ty: cx.ty_double(),
-                                indicies: vec![idx].into_boxed_slice(),
+                                indices: vec![idx].into_boxed_slice(),
                             }
                             .into();
                         }
@@ -217,7 +217,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 ptr: next_state,
                                 ptr_ty: cx.ty_double(),
                                 ty: cx.ty_double(),
-                                indicies: vec![idx].into_boxed_slice(),
+                                indices: vec![idx].into_boxed_slice(),
                             }
                             .into();
                         }

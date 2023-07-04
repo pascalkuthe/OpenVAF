@@ -37,7 +37,7 @@ impl<T: Container> ScopedArea<T> {
         unsafe {
             // This is save because the ARC/RC will remain alive as long as self is alive
             // Therefore for the lifetime of self the backing storage can not be deallocated
-            // Furthremore no mutable pointers are handed out (the unsafe cell is just used for interior mutability here)
+            // Furthermore no mutable pointers are handed out (the unsafe cell is just used for interior mutability here)
             // So the UnsacfeCell is also save here
             let sources = &mut *self.0.get();
             // check if the same data is already guarded by the arena

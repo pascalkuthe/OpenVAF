@@ -13,9 +13,9 @@ use crate::lints::builtin::vams_keyword_compat;
 use crate::lints::{Lint, LintSrc};
 use crate::{BaseDB, FileId};
 
-fn syntax_err_report(missing_delimeter: bool) -> Report {
-    if missing_delimeter {
-        Report::error().with_notes(vec!["you might be missing a 'begin' delimeter".to_owned()])
+fn syntax_err_report(missing_delimiter: bool) -> Report {
+    if missing_delimiter {
+        Report::error().with_notes(vec!["you might be missing a 'begin' delimiter".to_owned()])
     } else {
         Report::error()
     }
@@ -43,13 +43,13 @@ impl Diagnostic for SyntaxError {
                 ref expected,
                 span,
                 expected_at: Some(expected_at),
-                missing_delimeter,
+                missing_delimiter,
                 panic_end: None,
                 ..
             } => {
                 let (file_id, [expected_at, range]) =
                     text_ranges_to_unified_spans(&sm, &parse, [expected_at, span]);
-                syntax_err_report(missing_delimeter).with_labels(vec![
+                syntax_err_report(missing_delimiter).with_labels(vec![
                     Label {
                         style: LabelStyle::Secondary,
                         file_id,
@@ -67,7 +67,7 @@ impl Diagnostic for SyntaxError {
             SyntaxError::UnexpectedToken {
                 ref expected,
                 span,
-                missing_delimeter,
+                missing_delimiter,
                 panic_end: Some(panic_end),
                 ..
             } => {
@@ -82,7 +82,7 @@ impl Diagnostic for SyntaxError {
                     &parse,
                     [span, TextRange::new(span.start(), panic_end)],
                 );
-                syntax_err_report(missing_delimeter).with_labels(vec![
+                syntax_err_report(missing_delimiter).with_labels(vec![
                     Label { style: LabelStyle::Primary, file_id, range: range.into(), message },
                     Label {
                         style: LabelStyle::Secondary,
@@ -93,7 +93,7 @@ impl Diagnostic for SyntaxError {
                 ])
             }
 
-            SyntaxError::UnexpectedToken { ref expected, span, missing_delimeter, .. } => {
+            SyntaxError::UnexpectedToken { ref expected, span, missing_delimiter, .. } => {
                 let message = if expected.data.len() < 4 {
                     format!("expected {}", expected)
                 } else {
@@ -101,7 +101,7 @@ impl Diagnostic for SyntaxError {
                 };
                 let FileSpan { file: file_id, range } = parse.to_file_span(span, &sm);
 
-                syntax_err_report(missing_delimeter).with_labels(vec![Label {
+                syntax_err_report(missing_delimiter).with_labels(vec![Label {
                     style: LabelStyle::Primary,
                     file_id,
                     range: range.into(),
@@ -436,7 +436,7 @@ impl Diagnostic for SyntaxError {
             SyntaxError::DuplicatePort { ref pos, ref name } => {
                 let spans: Vec<_> =
                     pos.iter().map(|range| parse.to_file_span(*range, &sm)).collect();
-                let inital = spans[0];
+                let initial = spans[0];
                 let spans = &spans[1..];
 
                 let mut labels: Vec<_> = spans
@@ -451,8 +451,8 @@ impl Diagnostic for SyntaxError {
 
                 labels.push(Label {
                     style: LabelStyle::Secondary,
-                    file_id: inital.file,
-                    range: inital.range.into(),
+                    file_id: initial.file,
+                    range: initial.range.into(),
                     message: format!("{} first declared here", name),
                 });
 
@@ -517,7 +517,7 @@ impl Diagnostic for SyntaxError {
 
                 Report::error().with_labels(labels).with_notes(vec![
                     "help: either place all port declaration in the header".to_owned(),
-                    "or palce all port declarations in the body ".to_owned(),
+                    "or place all port declarations in the body ".to_owned(),
                 ])
             }
             SyntaxError::IllegalNetType { range, .. } => {

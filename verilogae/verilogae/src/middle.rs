@@ -5,7 +5,7 @@ use lasso::Rodeo;
 use mir::{ControlFlowGraph, DominatorTree, Function, ValueDef};
 use mir_autodiff::auto_diff;
 use mir_opt::{
-    agressive_dead_code_elimination, dead_code_elimination, inst_combine, simplify_cfg,
+    aggressive_dead_code_elimination, dead_code_elimination, inst_combine, simplify_cfg,
     sparse_conditional_constant_propagation,
 };
 
@@ -48,7 +48,7 @@ impl FuncSpec {
         let mut control_dep = SparseBitMatrix::new(0, 0);
         dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
 
-        agressive_dead_code_elimination(
+        aggressive_dead_code_elimination(
             &mut func,
             &mut cfg,
             &|val, _| val == ret_val,
@@ -117,8 +117,8 @@ impl CompilationDB {
 
         let mut dom_tree = DominatorTree::default();
         dom_tree.compute(&func, &cfg, true, false, true);
-        let unkowns = intern.unkowns(&mut func, false);
-        auto_diff(&mut func, &dom_tree, &unkowns, &[]);
+        let unknowns = intern.unknowns(&mut func, false);
+        auto_diff(&mut func, &dom_tree, &unknowns, &[]);
         cfg.clear();
         cfg.compute(&func);
         sparse_conditional_constant_propagation(&mut func, &cfg);

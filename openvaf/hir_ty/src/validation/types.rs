@@ -123,7 +123,7 @@ impl TypeValidationCtx<'_> {
                         self.report(TypeValidationDiagnostic::PathError {
                             err: PathResolveError::ExpectedItemKind {
                                 name: path.segments.last().unwrap().clone(),
-                                expected: "paramter",
+                                expected: "parameter",
                                 found,
                             },
                             src,

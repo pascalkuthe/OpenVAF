@@ -12,7 +12,7 @@ use crate::{DataFlowGraph, Inst, Use, Value};
 pub struct UseData {
     pub(super) parent: Inst,
     pub(super) parent_idx: u16,
-    attachted: bool,
+    attached: bool,
     next: PackedOption<Use>,
     prev: PackedOption<Use>,
 }
@@ -170,7 +170,7 @@ impl DfgValues {
         let use_ = self.uses.push_and_get_key(UseData {
             parent,
             parent_idx,
-            attachted: true,
+            attached: true,
             next: def.uses_head,
             prev: None.into(),
         });
@@ -194,7 +194,7 @@ impl DfgValues {
         let prev = take(&mut self.uses[use_].prev);
         let next = take(&mut self.uses[use_].next);
 
-        if !mem::take(&mut self.uses[use_].attachted) {
+        if !mem::take(&mut self.uses[use_].attached) {
             return; // already detachted
         }
 
@@ -228,7 +228,7 @@ impl DfgValues {
             "use_ must be detached from old value before being added back"
         );
         let data = &mut self.uses[use_];
-        data.attachted = true;
+        data.attached = true;
         if let Some(old_head) = self.defs[val].uses_head.expand() {
             data.next = old_head.into();
             self.uses[old_head].prev = use_.into();
@@ -240,7 +240,7 @@ impl DfgValues {
     }
 
     pub fn is_use_detachted(&self, use_: Use) -> bool {
-        !self.uses[use_].attachted
+        !self.uses[use_].attached
     }
 
     pub fn uses(&self, value: Value) -> UseIter {

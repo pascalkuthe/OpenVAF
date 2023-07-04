@@ -68,7 +68,7 @@ impl Printer<'_> {
                 wln!(self, "@({:?})", event);
                 self.pretty_print_stmt(body)
             }
-            Stmt::Assigment { dst, val, assignment_kind } => {
+            Stmt::Assignment { dst, val, assignment_kind } => {
                 self.pretty_print_expr(dst);
                 w!(self, "{:?}", assignment_kind);
                 self.pretty_print_expr(val);

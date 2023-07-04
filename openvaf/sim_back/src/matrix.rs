@@ -69,8 +69,8 @@ impl JacobianMatrix {
                     _ => continue,
                 };
 
-                let unkown = derivative_info.unknowns.unwrap_index(val);
-                if let Some(ddx) = derivatives.get(&(*residual, unkown)).copied() {
+                let unknown = derivative_info.unknowns.unwrap_index(val);
+                if let Some(ddx) = derivatives.get(&(*residual, unknown)).copied() {
                     if ddx != F_ZERO {
                         self.ensure_entry(func, *row, col_hi, ddx, false, react);
                         if let Some(col_lo) = col_lo {
@@ -81,8 +81,8 @@ impl JacobianMatrix {
 
                 if let Some(lim_vals) = intern.lim_state.raw.get(val) {
                     for (val, neg) in lim_vals {
-                        let unkown = derivative_info.unknowns.unwrap_index(val);
-                        if let Some(ddx) = derivatives.get(&(*residual, unkown)).copied() {
+                        let unknown = derivative_info.unknowns.unwrap_index(val);
+                        if let Some(ddx) = derivatives.get(&(*residual, unknown)).copied() {
                             if ddx != F_ZERO {
                                 self.ensure_entry(func, *row, col_hi, ddx, *neg, react);
 
@@ -155,7 +155,7 @@ impl JacobianMatrix {
         reactive: bool,
     ) {
         let dst = if reactive { &mut self.reactive } else { &mut self.resistive };
-        // no entrys for gnd nodes
+        // no entries for gnd nodes
 
         match dst.raw.entry(MatrixEntry { row, col }) {
             Entry::Occupied(dst) => {

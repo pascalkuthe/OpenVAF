@@ -59,7 +59,7 @@ impl ModelImpl for ResistorModel {
     fn set_real_param(&self, param: ParamId, val: f64) {
         match param {
             R => self.res.set(Some(val)),
-            _ => unreachable!("vsource: unkown numeric parameter {param:?}"),
+            _ => unreachable!("vsource: unknown numeric parameter {param:?}"),
         };
     }
 
@@ -149,7 +149,7 @@ impl InstanceImpl for ResistorInstance {
     fn set_real_param(&mut self, param: ParamId, val: f64) {
         match param {
             R => self.res = Some(val),
-            _ => unreachable!("vsource: unkown numeric parameter {param:?}"),
+            _ => unreachable!("vsource: unknown numeric parameter {param:?}"),
         };
     }
 }

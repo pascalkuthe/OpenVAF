@@ -624,7 +624,7 @@ impl Arena {
         let dst = &mut self.params[ctx];
         let param = CircuitParam { param: dst.next_index(), ctx };
         if dst.contains_key(&name) {
-            bail!("parameter {name} was definied multiple times")
+            bail!("parameter {name} was defined multiple times")
         }
         let read_expr = Expr::param(self, param);
         let info = ParamInfo { read_expr, name: name.clone() };
@@ -665,7 +665,7 @@ impl Arena {
         Some((&info.name, info.read_expr))
     }
 
-    /// Iterate all parameters in a specific contex
+    /// Iterate all parameters in a specific context
     ///
     /// # Returns
     ///

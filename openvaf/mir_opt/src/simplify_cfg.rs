@@ -258,7 +258,7 @@ impl<'a> SimplifyCfg<'a> {
             }
         }
 
-        // update phis in sucessors
+        // update phis in successors
         for succ in self.cfg.succ_iter(bb) {
             self.vals_changed.insert(succ);
             self.func.update_phi_edges(succ, bb, pred);
@@ -345,7 +345,7 @@ impl<'a> SimplifyCfg<'a> {
     //                let mut dst = None;
     //                let mut changed = false;
 
-    //                // in the future we may create phis for missmatched operands however this becomes a cost
+    //                // in the future we may create phis for mismatched operands however this becomes a cost
     //                // tradeoff that could actually impead some optimizations (aka const prop)
     //                while let Some(inst) = first_uncoditional.1.next_back(&self.func.layout) {
     //                    let inst_data = self.func.dfg.insts[inst];
@@ -455,7 +455,7 @@ impl<'a> SimplifyCfg<'a> {
             }
         }
 
-        // check that the sucessors phis can be merged
+        // check that the successors phis can be merged
         for inst in self.func.layout.block_insts(dst) {
             if let InstructionData::PhiNode(phi) = self.func.dfg.insts[inst].clone() {
                 // prepare for update
@@ -614,7 +614,7 @@ impl<'a> SimplifyCfg<'a> {
         // pred, and if there is only one distinct successor of the predecessor, and
         // if there are no PHI nodes.
         if self.merge_block_into_predecessor(bb) {
-            // nothign to do for this blog anymore its removed
+            // nothing to do for this blog anymore its removed
             return;
         }
 

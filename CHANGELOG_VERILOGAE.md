@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* Fix max_exlusive was always set to min_inclusive.
+* Fix max_exclusive was always set to min_inclusive.
 
 ## 0.9.0-beta6 - 2022-06-01
 

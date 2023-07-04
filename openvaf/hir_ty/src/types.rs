@@ -44,7 +44,7 @@ enum TyEquivalence {
 impl TyEquivalence {
     fn compare_ty(self, ty1: &Type, ty2: &Type) -> bool {
         match self {
-            TyEquivalence::Conversion => ty1.is_convertable_to(ty2),
+            TyEquivalence::Conversion => ty1.is_convertible_to(ty2),
             TyEquivalence::Semantic => ty1.is_semantically_equivalent(ty2),
             TyEquivalence::Exact => ty1 == ty2,
         }
@@ -79,7 +79,7 @@ pub enum Ty {
     Discipline(DisciplineId),
     Var(Type, VarId),
     NatureAttr(Type, NatureAttrId),
-    FuntionVar { ty: Type, fun: FunctionId, arg: Option<LocalFunctionArgId> },
+    FunctionVar { ty: Type, fun: FunctionId, arg: Option<LocalFunctionArgId> },
     Param(Type, ParamId),
     Literal(Type),
     InfLiteral,
@@ -100,7 +100,7 @@ impl_display! {
         Ty::Discipline(_) => "discipline reference";
         Ty::Var(ty,_) => "{} variable reference", ty;
         Ty::NatureAttr(ty,_) => "{} nature attriubte reference", ty;
-        Ty::FuntionVar{ty,..} => "{} variable reference", ty;
+        Ty::FunctionVar{ty,..} => "{} variable reference", ty;
         Ty::Param(ty,_) => "{} parameter ref", ty;
         Ty::Literal(ty) => "{} literal", ty;
         Ty::Branch(_) => "branch reference";
@@ -164,7 +164,7 @@ impl Ty {
                 | Ty::Param(_, _)
                 | Ty::InfLiteral
                 | Ty::Literal(_)
-                | Ty::FuntionVar { .. },
+                | Ty::FunctionVar { .. },
                 TyRequirement::AnyVal,
             )
             | (Ty::InfLiteral, TyRequirement::Val(Type::Real))
@@ -186,7 +186,7 @@ impl Ty {
                 | Ty::Var(ty1, _)
                 | Ty::NatureAttr(ty1, _)
                 | Ty::Param(ty1, _)
-                | Ty::FuntionVar { ty: ty1, .. },
+                | Ty::FunctionVar { ty: ty1, .. },
                 TyRequirement::Val(ty2),
             )
             | (Ty::Literal(ty1), TyRequirement::Literal(ty2)) => equiv.compare_ty(ty1, ty2),
@@ -197,7 +197,7 @@ impl Ty {
                 | Ty::NatureAttr(ty, _)
                 | Ty::Param(ty, _)
                 | Ty::Literal(ty)
-                | Ty::FuntionVar { ty, .. },
+                | Ty::FunctionVar { ty, .. },
                 TyRequirement::Condition,
             ) => ty.is_assignable_to(&Type::Bool),
 
@@ -209,7 +209,7 @@ impl Ty {
 
             // No conversion for explicit references
             (
-                Ty::Var(ty1, _) | Ty::NatureAttr(ty1, _) | Ty::FuntionVar { ty: ty1, .. },
+                Ty::Var(ty1, _) | Ty::NatureAttr(ty1, _) | Ty::FunctionVar { ty: ty1, .. },
                 TyRequirement::Var(ty2),
             )
             | (Ty::Param(ty1, _), TyRequirement::Param(ty2)) => ty1 == ty2,
@@ -233,7 +233,7 @@ impl Ty {
             | Ty::NatureAttr(ty, _)
             | Ty::Param(ty, _)
             | Ty::Literal(ty)
-            | Ty::FuntionVar { ty, .. } => Some(ty.clone()),
+            | Ty::FunctionVar { ty, .. } => Some(ty.clone()),
             Ty::InfLiteral => Some(Type::Real),
             _ => None,
         }
@@ -248,7 +248,7 @@ pub struct SignatureData {
 
 impl_display! {
     match SignatureData{
-        SignatureData{ args, return_ty } => "({}) -> {}", pretty::List::new(args.deref()).with_final_seperator(", "), return_ty;
+        SignatureData{ args, return_ty } => "({}) -> {}", pretty::List::new(args.deref()).with_final_separator(", "), return_ty;
     }
 }
 

@@ -507,14 +507,14 @@ impl Layout {
                 self.insts[pred_end].next = succ_start.into();
                 self.insts[succ_start].prev = pred_end.into();
             } else {
-                // precessor only contained jmp
+                // predecessor only contained jmp
                 // just update the block
                 self.blocks[pred].first_inst = self.blocks[succ].first_inst;
             }
 
             self.blocks[pred].last_inst = self.blocks[succ].last_inst;
         } else {
-            // sucessor is empty... Kind of odd but probably valid (collapse empty jump the
+            // successor is empty... Kind of odd but probably valid (collapse empty jump the
             // terminator). Just remove the branch
             self.remove_inst(self.last_inst(pred).unwrap())
         }

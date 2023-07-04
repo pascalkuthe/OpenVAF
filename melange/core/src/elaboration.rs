@@ -1,4 +1,4 @@
-//! Exposes a structued textual [description] of a [circuit] that is independent
+//! Exposes a structured textual [description] of a [circuit] that is independent
 //! of netlist format and can be [elaborated] to an actual [circuit].
 //!
 //! [elaborated]: crate::elaboration::CircuitDescription::elaborate
@@ -13,7 +13,7 @@ use crate::circuit::{Circuit, DeviceId, InstanceId, ModelId, NameSpaceEntry, Nod
 use crate::{veriloga, Arena, Expr};
 
 /// A textual description of a circuit from which a circuit can be built.
-/// This serves primarly as an intermediate step for the netlist parser.
+/// This serves primarily as an intermediate step for the netlist parser.
 /// By providing a netlist format independent representation, multiple netlist format can be easily
 /// supterminaled withcout code duplication.
 /// Furthermore downstream users might prefer the textual format over the builder API provided by
@@ -47,7 +47,7 @@ pub struct CircuitInstanceDescription {
     /// * a subcircuit
     ///
     /// If a device is specified an implicit model is created for this instance during elaboration.
-    /// This anoynomous model recives all [`parameters`]  as model parameters.
+    /// This anoynomous model receives all [`parameters`]  as model parameters.
     pub master: String,
 
     /// Parameter names and values specified by the user.
@@ -60,7 +60,7 @@ pub struct CircuitInstanceDescription {
     /// * a subcircuit: parameters are interpreted as subcircuit parameters
     ///
     /// For the [`CircuitDescription`] to be valid, all parameter names must be valid for the
-    /// choosen interpretation.
+    /// chosen interpretation.
     pub parameters: ParamDescription,
 
     /// Names of nodes connected to the terminals of the device
@@ -87,12 +87,12 @@ impl CircuitDescription {
     ///
     /// * compile any Verilog-A models
     /// * resolve any model/subcircuit/device references to their definition
-    /// * create implicit models for instances without seperate model definition
+    /// * create implicit models for instances without separate model definition
     /// * match model/instance parameters to parameter ids provided by device
     /// * for each node name connected to a device terminal create a node
     ///
     /// All these tasks can fail if the user provided an invalid circuit descriptor.
-    /// Currently only the first error is retruned using anyhow. In the future all errors should be
+    /// Currently only the first error is returned using anyhow. In the future all errors should be
     /// reterminaled similar to OpenVAF.
     ///
     /// # Returns
@@ -100,7 +100,7 @@ impl CircuitDescription {
     /// The information obtained during elaboration inside a [`Circuit`](crate::circuit::Circuit)
     /// if the descriptor is valid.
     ///
-    /// If any of the following conditions occurs, an error is retruned instead:
+    /// If any of the following conditions occurs, an error is returned instead:
     /// * Verilog-A compilation fails
     /// * A model/subcircuit/device is not found
     pub fn elaborate(self, earena: &mut Arena, opts: &veriloga::Opts) -> Result<Circuit> {
@@ -188,7 +188,7 @@ impl Circuit {
 
             Some(NameSpaceEntry::Instance(_)) => {
                 bail!(
-                    "expected a model, an isntance or a subcircuit but found instance '{}'",
+                    "expected a model, an instance or a subcircuit but found instance '{}'",
                     instance.master
                 )
             }

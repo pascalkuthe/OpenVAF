@@ -138,7 +138,7 @@ impl DefCollector<'_> {
         debug_assert_eq!(self.map.root(), root);
 
         // Copy the modules and their parameters since these are the only declarations outside
-        // of the function itself that are accessible insdie an analog funciton
+        // of the function itself that are accessible insdie an analog function
         let main_root_scope = &root_def_map.scopes[root_def_map.root()];
 
         let mut parent_module_ = None;
@@ -357,7 +357,7 @@ impl DefCollector<'_> {
     fn insert_decl(&mut self, dst: LocalScopeId, name: Name, decl: impl Into<ScopeDefItem>) {
         let decl = decl.into();
         if let Some(old_decl) = self.map.scopes[dst].declarations.insert(name.clone(), decl) {
-            self.map.diagnostics.push(DefDiagnostic::AlreadyDeclard {
+            self.map.diagnostics.push(DefDiagnostic::AlreadyDeclared {
                 new: decl,
                 old: old_decl,
                 name,

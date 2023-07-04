@@ -38,7 +38,7 @@ impl flags::Update {
         if std::env::var("CI").is_ok() {
             let home = std::env::var("HOME")?;
             if !Path::new(&format!("{}/.s3cfg", home)).exists() {
-                eprintln!("\x1b[33;1mwarning\x1b[0m: can't update caches without acccess token\n\tAfter auditing you patch a maintainer should do this");
+                eprintln!("\x1b[33;1mwarning\x1b[0m: can't update caches without access token\n\tAfter auditing you patch a maintainer should do this");
                 return Ok(());
             }
         }
@@ -60,7 +60,7 @@ impl flags::Fetch {
     pub(crate) fn run(self) -> Result<()> {
         let name = cache_name()?;
         if let Err(err) = cmd!("s3cmd get s3://openva/{name} {name}").run() {
-            eprintln!("\x1b[33;1mwarning\x1b[0m: failed to retrive cache: {}", err);
+            eprintln!("\x1b[33;1mwarning\x1b[0m: failed to retrieve cache: {}", err);
             // target dir will be generated on build
         } else {
             cmd!("tar --zstd -xf {name}").run()?;

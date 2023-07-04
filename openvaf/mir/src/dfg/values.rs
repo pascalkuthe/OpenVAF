@@ -133,7 +133,7 @@ pub(super) enum ValueDataType {
         num: u16,
         inst: Inst,
     },
-    /// A function paramter
+    /// A function parameter
     Param {
         param: Param,
     },

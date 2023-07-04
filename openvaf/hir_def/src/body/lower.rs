@@ -111,7 +111,7 @@ impl LowerCtx<'_> {
         let s = match &stmt {
             ast::Stmt::EmptyStmt(_) => Stmt::Empty,
             ast::Stmt::AssignStmt(stmt) => match stmt.assign() {
-                Some(a) => Stmt::Assigment {
+                Some(a) => Stmt::Assignment {
                     dst: self.collect_opt_expr(a.lval()),
                     val: self.collect_opt_expr(a.rval()),
                     assignment_kind: a.op().unwrap(),
@@ -153,7 +153,7 @@ impl LowerCtx<'_> {
 
     fn collect_event_stmt(&mut self, event_stmt: &ast::EventStmt) -> StmtId {
         let kind = if event_stmt.initial_step_token().is_some() {
-            GlobalEvent::InitalStep
+            GlobalEvent::InitialStep
         } else if event_stmt.final_step_token().is_some() {
             GlobalEvent::FinalStep
         } else {

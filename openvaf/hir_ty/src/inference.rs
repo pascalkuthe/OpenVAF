@@ -24,7 +24,7 @@ use crate::builtin::{
     NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW,
 };
 use crate::db::{Alias, HirTyDB};
-use crate::diagnostics::{ArrayTypeMissmatch, SignatureMissmatch, TypeMissmatch};
+use crate::diagnostics::{ArrayTypeMismatch, SignatureMismatch, TypeMismatch};
 use crate::inference::fmt_parser::parse_real_fmt_spec;
 use crate::lower::{BranchKind, BranchTy, DisciplineAccess};
 use crate::types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement};
@@ -83,7 +83,7 @@ pub struct InferenceResult {
     pub expr_types: ArenaMap<Expr, Ty>,
     pub resolved_calls: AHashMap<ExprId, ResolvedFun>,
     pub resolved_signatures: AHashMap<ExprId, Signature>,
-    pub assigment_destination: AHashMap<StmtId, AssignDst>,
+    pub assignment_destination: AHashMap<StmtId, AssignDst>,
     pub casts: AHashMap<ExprId, Type>,
     pub diagnostics: Vec<InferenceDiagnostic>,
 }
@@ -100,7 +100,7 @@ impl InferenceResult {
         ctx.expr_stmt_ty = match id {
             DefWithBodyId::ParamId(param) => match &db.param_data(param).ty {
                 Some(ty) => Some(ty.clone()),
-                // paramter type is inferred if omitted
+                // parameter type is inferred if omitted
                 None => ctx
                     .infere_expr(body.entry_stmts[0], db.param_exprs(param).default)
                     .and_then(|ty| ty.to_value()),
@@ -133,11 +133,11 @@ impl Ctx<'_> {
         match self.body.stmts[stmt] {
             Stmt::Expr(expr) => {
                 // TODO lint for side effect free expressions
-                self.infere_assigment(stmt, expr, self.expr_stmt_ty.clone());
+                self.infere_assignment(stmt, expr, self.expr_stmt_ty.clone());
             }
-            Stmt::Assigment { dst, val, assignment_kind } => {
-                let dst_ty = self.infere_assigment_dst(stmt, dst, assignment_kind);
-                self.infere_assigment(stmt, val, dst_ty);
+            Stmt::Assignment { dst, val, assignment_kind } => {
+                let dst_ty = self.infere_assignment_dst(stmt, dst, assignment_kind);
+                self.infere_assignment(stmt, val, dst_ty);
             }
             Stmt::ForLoop { cond, .. } | Stmt::If { cond, .. } | Stmt::WhileLoop { cond, .. } => {
                 self.infere_cond(stmt, cond)
@@ -168,7 +168,7 @@ impl Ctx<'_> {
         self.body.stmts[stmt].walk_child_stmts(|stmt| self.infere_stmt(stmt));
     }
 
-    fn infere_assigment(&mut self, stmt: StmtId, val: ExprId, dst_ty: Option<Type>) {
+    fn infere_assignment(&mut self, stmt: StmtId, val: ExprId, dst_ty: Option<Type>) {
         if let Some(val_ty) = self.infere_expr(stmt, val) {
             if let Some(value_ty) = val_ty.to_value() {
                 if let Some(dst_ty) = dst_ty {
@@ -178,7 +178,7 @@ impl Ctx<'_> {
                         }
                     } else {
                         self.result.diagnostics.push(
-                            TypeMissmatch {
+                            TypeMismatch {
                                 expected: Cow::Owned(vec![TyRequirement::Val(dst_ty)]),
                                 found_ty: val_ty,
                                 expr: val,
@@ -190,7 +190,7 @@ impl Ctx<'_> {
             } else {
                 let expected = dst_ty.map_or(TyRequirement::AnyVal, TyRequirement::Val);
                 self.result.diagnostics.push(
-                    TypeMissmatch {
+                    TypeMismatch {
                         expected: Cow::Owned(vec![expected]),
                         found_ty: val_ty,
                         expr: val,
@@ -201,17 +201,17 @@ impl Ctx<'_> {
         }
     }
 
-    pub fn infere_assigment_dst(
+    pub fn infere_assignment_dst(
         &mut self,
         stmt: StmtId,
         expr: ExprId,
-        assigment_kind: ast::AssignOp,
+        assignment_kind: ast::AssignOp,
     ) -> Option<Type> {
         let e = self.infere_expr(stmt, expr);
 
         let (dst, ty) = match e? {
             Ty::Var(ty, var) => (AssignDst::Var(var), ty),
-            Ty::FuntionVar { fun, ty, arg } => (AssignDst::FunVar { fun, arg }, ty),
+            Ty::FunctionVar { fun, ty, arg } => (AssignDst::FunVar { fun, arg }, ty),
             Ty::Val(Type::Real)
                 if matches!(
                     self.result.resolved_calls.get(&expr),
@@ -235,7 +235,7 @@ impl Ctx<'_> {
                         self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                             e: expr,
                             maybe_different_operand: None,
-                            assigment_kind,
+                            assignment_kind,
                         });
                         return None;
                     }
@@ -253,30 +253,30 @@ impl Ctx<'_> {
                 self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                     e: expr,
                     maybe_different_operand: None,
-                    assigment_kind,
+                    assignment_kind,
                 });
                 return None;
             }
         };
 
         // check that the correct operator is used
-        match (&dst, assigment_kind) {
+        match (&dst, assignment_kind) {
             (AssignDst::Var(_) | AssignDst::FunVar { .. }, ast::AssignOp::Contribute) => {
                 self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                     e: expr,
                     maybe_different_operand: Some(ast::AssignOp::Assign),
-                    assigment_kind,
+                    assignment_kind,
                 });
             }
             (AssignDst::Flow(_) | AssignDst::Potential(_), ast::AssignOp::Assign) => {
                 self.result.diagnostics.push(InferenceDiagnostic::InvalidAssignDst {
                     e: expr,
                     maybe_different_operand: Some(ast::AssignOp::Contribute),
-                    assigment_kind,
+                    assignment_kind,
                 });
             }
             _ => {
-                self.result.assigment_destination.insert(stmt, dst);
+                self.result.assignment_destination.insert(stmt, dst);
             }
         }
         Some(ty)
@@ -315,14 +315,14 @@ impl Ctx<'_> {
                 ScopeDefItem::BuiltIn(_) | ScopeDefItem::NatureAccess(_) => Ty::BuiltInFunction,
 
                 ScopeDefItem::FunctionId(fun) => Ty::UserFunction(fun),
-                ScopeDefItem::FunctionReturn(fun) => Ty::FuntionVar {
+                ScopeDefItem::FunctionReturn(fun) => Ty::FunctionVar {
                     fun,
                     ty: self.db.function_data(fun).return_ty.clone(),
                     arg: None,
                 },
                 ScopeDefItem::FunctionArgId(arg) => {
                     let FunctionArgLoc { fun, id } = arg.lookup(self.db.upcast());
-                    Ty::FuntionVar {
+                    Ty::FunctionVar {
                         fun,
                         ty: self.db.function_data(fun).args[id].ty.clone(),
                         arg: Some(id),
@@ -432,7 +432,7 @@ impl Ctx<'_> {
         let def = self.resolve_path(stmt, expr, fun)?;
         match def {
             ScopeDefItem::NatureAccess(access) => {
-                self.infere_nature_acces(stmt, expr, access, args);
+                self.infere_nature_access(stmt, expr, access, args);
                 Some(Ty::Val(Type::Real))
             }
             ScopeDefItem::FunctionId(fun) => self.infere_user_fun_call(stmt, expr, fun, args),
@@ -443,7 +443,7 @@ impl Ctx<'_> {
             ScopeDefItem::ParamSysFun(param) => {
                 self.result.resolved_calls.insert(expr, ResolvedFun::Param(param));
                 if !args.is_empty() {
-                    let err = InferenceDiagnostic::ArgCntMissmatch {
+                    let err = InferenceDiagnostic::ArgCntMismatch {
                         expected: 0,
                         found: args.len(),
                         expr,
@@ -477,7 +477,7 @@ impl Ctx<'_> {
         self.result.resolved_calls.insert(expr, ResolvedFun::User { func, limit: false });
         let fun_info = self.db.function_data(func);
         if fun_info.args.len() != args.len() {
-            self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
+            self.result.diagnostics.push(InferenceDiagnostic::ArgCntMismatch {
                 expected: fun_info.args.len(),
                 found: args.len(),
                 expr,
@@ -512,26 +512,26 @@ impl Ctx<'_> {
         .0
     }
 
-    fn infere_nature_acces(
+    fn infere_nature_access(
         &mut self,
         stmt: StmtId,
         expr: ExprId,
-        acccess: NatureAccess,
+        access: NatureAccess,
         args: &[ExprId],
     ) {
         // resolve as flow first because we don't yet know if this is a flow or pot access
-        // This choise is arbitrary (but must be consistent with the code below
+        // This choice is arbitrary (but must be consistent with the code below
         if !self.infere_builtin(stmt, expr, BuiltIn::flow, args).1 {
             return;
         }
 
-        let nature = acccess.0.lookup(self.db.upcast()).nature;
+        let nature = access.0.lookup(self.db.upcast()).nature;
         // Now that we know that the arguments are valid actually resolve whether this is flow or
         // pot access
-        let acccess = self.infere_access_kind(nature, expr, args[0]);
+        let access = self.infere_access_kind(nature, expr, args[0]);
 
         // update resolved_calls in case this is actually a pot and not a flow access
-        match acccess {
+        match access {
             Some(DisciplineAccess::Potential) => {
                 self.result.resolved_calls.insert(expr, ResolvedFun::BuiltIn(BuiltIn::potential));
             }
@@ -583,7 +583,7 @@ impl Ctx<'_> {
 
         let exact = Some(info.min_args) == info.max_args;
         if args.len() < info.min_args {
-            let err = InferenceDiagnostic::ArgCntMissmatch {
+            let err = InferenceDiagnostic::ArgCntMismatch {
                 expected: info.min_args,
                 found: args.len(),
                 expr,
@@ -594,7 +594,7 @@ impl Ctx<'_> {
         }
 
         if info.max_args.map_or(false, |max_args| max_args < args.len()) {
-            self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
+            self.result.diagnostics.push(InferenceDiagnostic::ArgCntMismatch {
                 expected: info.min_args,
                 found: args.len(),
                 expr,
@@ -667,11 +667,11 @@ impl Ctx<'_> {
         match self.result.expr_types[arg].to_value() {
             Some(Type::Integer) => (),
 
-            Some(ty) if ty.is_convertable_to(&Type::Integer) => {
+            Some(ty) if ty.is_convertible_to(&Type::Integer) => {
                 self.result.casts.insert(arg, Type::Integer);
             }
-            _ => self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMissmatch {
-                err: TypeMissmatch {
+            _ => self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMismatch {
+                err: TypeMismatch {
                     expected: Cow::Borrowed(&[TyRequirement::Val(Type::Integer)]),
                     found_ty: self.result.expr_types[arg].clone(),
                     expr: arg,
@@ -703,14 +703,14 @@ impl Ctx<'_> {
         match self.result.expr_types[arg].to_value() {
             Some(ty_) if ty_ == ty => (),
 
-            Some(ty_) if ty_.is_convertable_to(&ty) => {
+            Some(ty_) if ty_.is_convertible_to(&ty) => {
                 self.result.casts.insert(arg, ty);
             }
 
             Some(ty_) if ty_.is_assignable_to(&ty) => {
                 self.result.casts.insert(arg, ty.clone());
-                self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMissmatch {
-                    err: TypeMissmatch {
+                self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMismatch {
+                    err: TypeMismatch {
                         expected: Cow::Owned(vec![TyRequirement::Val(ty)]),
                         found_ty: self.result.expr_types[arg].clone(),
                         expr: arg,
@@ -720,8 +720,8 @@ impl Ctx<'_> {
                     lint_ctx: Some(stmt),
                 })
             }
-            _ => self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMissmatch {
-                err: TypeMissmatch {
+            _ => self.result.diagnostics.push(InferenceDiagnostic::DisplayTypeMismatch {
+                err: TypeMismatch {
                     expected: Cow::Owned(vec![TyRequirement::Val(ty)]),
                     found_ty: self.result.expr_types[arg].clone(),
                     expr: arg,
@@ -807,7 +807,7 @@ impl Ctx<'_> {
             // user-function needs two extra arguments but $limit also accepts two accepts that are
             // not passed directly to the function so these must just be equal
             if fun_info.args.len() != args.len() {
-                self.result.diagnostics.push(InferenceDiagnostic::ArgCntMissmatch {
+                self.result.diagnostics.push(InferenceDiagnostic::ArgCntMismatch {
                     expected: fun_info.args.len(),
                     found: args.len(),
                     expr,
@@ -868,21 +868,21 @@ impl Ctx<'_> {
         }
     }
 
-    fn infere_ddx(&mut self, stmt: StmtId, expr: ExprId, val: ExprId, unkown: ExprId) {
+    fn infere_ddx(&mut self, stmt: StmtId, expr: ExprId, val: ExprId, unknown: ExprId) {
         if let Some(ty) = self.infere_expr(stmt, val) {
             self.expect::<false>(expr, None, ty, Cow::Borrowed(&[TyRequirement::Val(Type::Real)]));
         }
 
-        let ty = self.infere_expr(stmt, unkown);
+        let ty = self.infere_expr(stmt, unknown);
         if ty.is_some() {
             let (call, signature) = if let (Some(ResolvedFun::BuiltIn(fun)), Some(signature)) = (
-                self.result.resolved_calls.get(&unkown),
-                self.result.resolved_signatures.get(&unkown),
+                self.result.resolved_calls.get(&unknown),
+                self.result.resolved_signatures.get(&unknown),
             ) {
                 (*fun, *signature)
             } else {
                 if !matches!(&self.body.exprs[expr], Expr::Call { .. }) {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnknown { e: unknown });
                 }
                 return;
             };
@@ -891,7 +891,7 @@ impl Ctx<'_> {
                 (BuiltIn::potential, NATURE_ACCESS_NODES) => {
                     self.result
                         .diagnostics
-                        .push(InferenceDiagnostic::NonStandardUnkown { e: unkown, stmt });
+                        .push(InferenceDiagnostic::NonStandardUnknown { e: unknown, stmt });
                     DDX_POT_DIFF
                 }
                 (BuiltIn::potential, NATURE_ACCESS_NODE_GND) => DDX_POT,
@@ -899,11 +899,11 @@ impl Ctx<'_> {
                 (BuiltIn::temperature, _) => {
                     self.result
                         .diagnostics
-                        .push(InferenceDiagnostic::NonStandardUnkown { e: unkown, stmt });
+                        .push(InferenceDiagnostic::NonStandardUnknown { e: unknown, stmt });
                     DDX_TEMP
                 }
                 _ => {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnkown { e: unkown });
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidUnknown { e: unknown });
                     return;
                 }
             };
@@ -918,7 +918,7 @@ impl Ctx<'_> {
                 let res = ty.to_value();
                 if res.is_none() {
                     sel.result.diagnostics.push(
-                        TypeMissmatch {
+                        TypeMismatch {
                             expected: Cow::Borrowed(&[TyRequirement::AnyVal]),
                             found_ty: ty,
                             expr: arg,
@@ -951,7 +951,7 @@ impl Ctx<'_> {
                 Some(ty) => ty,
                 None => {
                     self.result.diagnostics.push(
-                        ArrayTypeMissmatch {
+                        ArrayTypeMismatch {
                             expected: ty.clone(),
                             found_ty: arg_ty,
                             found_expr: *arg,
@@ -1026,12 +1026,12 @@ impl Ctx<'_> {
         let arg_types: Vec<_> = args.iter().map(|arg| self.infere_expr(stmt, *arg)).collect();
         let mut valid_args = true;
 
-        let mut canditates: Vec<_> = signatures.keys().collect();
+        let mut candidates: Vec<_> = signatures.keys().collect();
         let mut new_candidates = Vec::new();
         let mut errors = Vec::new();
         for (i, (arg, ty)) in zip(args, &arg_types).enumerate() {
             if let Some(ty) = ty {
-                new_candidates.clone_from(&canditates);
+                new_candidates.clone_from(&candidates);
                 new_candidates.retain(|candidate| {
                     signatures[*candidate]
                         .args
@@ -1039,30 +1039,30 @@ impl Ctx<'_> {
                         .map_or(false, |req| ty.satisfies_with_conversion(req))
                 });
                 if new_candidates.is_empty() {
-                    let candidate_types: Vec<TyRequirement> = canditates
+                    let candidate_types: Vec<TyRequirement> = candidates
                         .iter()
                         .filter_map(|candidate| signatures[*candidate].args.get(i).cloned())
                         .collect();
                     debug_assert_ne!(&candidate_types, &[]);
-                    errors.push(TypeMissmatch {
+                    errors.push(TypeMismatch {
                         expected: Cow::from(candidate_types),
                         found_ty: ty.clone(),
                         expr: *arg,
                     });
                 } else {
-                    mem::swap(&mut new_candidates, &mut canditates)
+                    mem::swap(&mut new_candidates, &mut candidates)
                 }
             } else {
                 valid_args = false;
             }
         }
 
-        canditates.retain(|sig| signatures[*sig].args.len() == args.len());
+        candidates.retain(|sig| signatures[*sig].args.len() == args.len());
 
-        if !errors.is_empty() || canditates.is_empty() {
+        if !errors.is_empty() || candidates.is_empty() {
             self.result.diagnostics.push(
-                SignatureMissmatch {
-                    type_missmatches: errors.into_boxed_slice(),
+                SignatureMismatch {
+                    type_mismatches: errors.into_boxed_slice(),
                     signatures: signatures.clone(),
                     src,
                     found: arg_types
@@ -1075,7 +1075,7 @@ impl Ctx<'_> {
             return (default_return_ty(&signatures.raw), false);
         }
 
-        let res = match canditates.as_slice() {
+        let res = match candidates.as_slice() {
             [] => {
                 unreachable!()
             }
@@ -1084,25 +1084,25 @@ impl Ctx<'_> {
                 return (default_return_ty(&signatures.raw), false)
             }
             _ => {
-                new_candidates.clone_from(&canditates);
-                canditates.retain(|candidate| {
+                new_candidates.clone_from(&candidates);
+                candidates.retain(|candidate| {
                     zip(&arg_types, signatures[*candidate].args.as_ref())
                         .all(|(ty, req)| ty.as_ref().map_or(false, |ty| ty.satisfies_semantic(req)))
                 });
 
-                if canditates.len() > 1 {
-                    new_candidates.clone_from(&canditates);
-                    canditates.retain(|candidate| {
+                if candidates.len() > 1 {
+                    new_candidates.clone_from(&candidates);
+                    candidates.retain(|candidate| {
                         zip(&arg_types, signatures[*candidate].args.as_ref()).all(|(ty, req)| {
                             ty.as_ref().map_or(false, |ty| ty.satisfies_exact(req))
                         })
                     });
-                    if canditates.is_empty() {
-                        canditates = new_candidates;
+                    if candidates.is_empty() {
+                        candidates = new_candidates;
                     }
                 }
 
-                canditates[0]
+                candidates[0]
             }
         };
 
@@ -1149,7 +1149,7 @@ impl Ctx<'_> {
             None => self
                 .result
                 .diagnostics
-                .push(TypeMissmatch { expected: req, found_ty: ty, expr }.into()),
+                .push(TypeMismatch { expected: req, found_ty: ty, expr }.into()),
         }
 
         res
@@ -1210,13 +1210,13 @@ pub enum InferenceDiagnostic {
     InvalidAssignDst {
         e: ExprId,
         maybe_different_operand: Option<ast::AssignOp>,
-        assigment_kind: ast::AssignOp,
+        assignment_kind: ast::AssignOp,
     },
     PathResolveError {
         err: PathResolveError,
         expr: ExprId,
     },
-    ArgCntMissmatch {
+    ArgCntMismatch {
         expected: usize,
         found: usize,
         expr: ExprId,
@@ -1236,8 +1236,8 @@ pub enum InferenceDiagnostic {
         output_args: Vec<LocalFunctionArgId>,
     },
 
-    DisplayTypeMissmatch {
-        err: TypeMissmatch,
+    DisplayTypeMismatch {
+        err: TypeMismatch,
         fmt_lit: ExprId,
         lit_range: TextRange,
         lint_ctx: Option<StmtId>,
@@ -1260,16 +1260,16 @@ pub enum InferenceDiagnostic {
         lit_range: TextRange,
     },
 
-    TypeMissmatch(TypeMissmatch),
-    SignatureMissmatch(SignatureMissmatch),
-    ArrayTypeMissmatch(ArrayTypeMissmatch),
-    InvalidUnkown {
+    TypeMismatch(TypeMismatch),
+    SignatureMismatch(SignatureMismatch),
+    ArrayTypeMismatch(ArrayTypeMismatch),
+    InvalidUnknown {
         e: ExprId,
     },
-    NonStandardUnkown {
+    NonStandardUnknown {
         e: ExprId,
         stmt: StmtId,
     },
 }
 
-impl_from!(TypeMissmatch,SignatureMissmatch, ArrayTypeMissmatch for InferenceDiagnostic);
+impl_from!(TypeMismatch,SignatureMismatch, ArrayTypeMismatch for InferenceDiagnostic);

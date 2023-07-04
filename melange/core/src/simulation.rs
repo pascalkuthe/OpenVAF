@@ -63,13 +63,13 @@ impl<'a> SimBuilder<'a> {
     }
 
     pub fn new_internal_branch(&mut self, name: &'static str) -> Node {
-        self.new_internal_unkown(name, self.config.voltage_atol, "V", "A")
+        self.new_internal_unknown(name, self.config.voltage_atol, "V", "A")
     }
 
     pub fn new_internal_node(&mut self, name: &'static str) -> Node {
-        self.new_internal_unkown(name, self.config.current_atol, "A", "V")
+        self.new_internal_unknown(name, self.config.current_atol, "A", "V")
     }
-    pub fn new_internal_unkown(
+    pub fn new_internal_unknown(
         &mut self,
         name: &'static str,
         atol: f64,
@@ -211,7 +211,7 @@ impl Simulation<'_> {
             if eval_ctx[param] == Value::UNDEF {
                 let (name, _) =
                     arena.lookup_param_info(param).expect("parameter belongs to the same arena");
-                bail!("required parameter {name} was not provied")
+                bail!("required parameter {name} was not provided")
             }
         }
 
@@ -357,7 +357,7 @@ impl Simulation<'_> {
     //     self.stat = SimulationState::AT_NOISE_OP;
     // }
 
-    pub fn set_inital_guess(&mut self, guess: &TiSlice<Node, f64>) {
+    pub fn set_initial_guess(&mut self, guess: &TiSlice<Node, f64>) {
         self.solution.copy_from_slice(guess);
         self.state.clear();
     }

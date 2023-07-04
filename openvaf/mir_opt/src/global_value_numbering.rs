@@ -79,7 +79,7 @@ enum ExprResult {
 }
 
 impl ExprResult {
-    fn into_clas(self, inst: Inst, gvn: &mut GVN, func: &mut Function) -> ClassId {
+    fn into_class(self, inst: Inst, gvn: &mut GVN, func: &mut Function) -> ClassId {
         match self {
             ExprResult::Expr(expr) => gvn.class_map.insert_expr(inst, expr, func),
             ExprResult::Simplified(class) => class,
@@ -555,7 +555,7 @@ impl GVN {
 
     fn process_inst(&mut self, func: &mut Function, inst: Inst) {
         if let Some(res) = GVNExpression::new(self, func, inst) {
-            let eclass = res.into_clas(inst, self, func);
+            let eclass = res.into_class(inst, self, func);
             self.update_congurence_class(func, inst, eclass)
         }
     }

@@ -1,5 +1,5 @@
 //! During pruning the equivalent circuit is simplied to improve performance of both the compiler
-//! and the runtime. This process will remove unkowns
+//! and the runtime. This process will remove unknowns
 
 use std::mem::take;
 
@@ -20,16 +20,16 @@ use mir_opt::propagate_taint;
 use workqueue::WorkStack;
 
 use crate::util::{
-    get_contrib, get_contrib_with_barrier, is_op_depenent, strip_optbarrier, SwitchBranchInfo,
+    get_contrib, get_contrib_with_barrier, is_op_dependent, strip_optbarrier, SwitchBranchInfo,
 };
 use crate::CompilationDB;
 
-/// Algorithm that iterativly prunes an equivalent-circuit of unneded unkowns.
-/// Initally all ddt and noise functions create an implicit unkown.
+/// Algorithm that iterativly prunes an equivalent-circuit of unneeded unknowns.
+/// Initially all ddt and noise functions create an implicit unknown.
 /// This algorithm transforms these to just dimensional contributes whenever possible.
 /// Furthermore the algorithm finds any nodes that are always zero (or only have non-zero values
 /// during noise analysis) and removes them/allows ddt to be dimensional
-pub fn prune_unkowns(
+pub fn prune_unknowns(
     db: &CompilationDB,
     func: &mut Function,
     intern: &mut HirInterner,
@@ -44,7 +44,7 @@ pub fn prune_unkowns(
     let num_insts = func.dfg.num_insts();
 
     let num_vals = func.dfg.num_values();
-    let mut pruner = UnkownPruner {
+    let mut pruner = UnknownPruner {
         db,
         func,
         intern,
@@ -62,7 +62,7 @@ pub fn prune_unkowns(
     (op_dependent_insts, is_noise, pruned)
 }
 
-struct UnkownPruner<'a> {
+struct UnknownPruner<'a> {
     db: &'a CompilationDB,
     func: &'a mut Function,
     intern: &'a mut HirInterner,
@@ -78,10 +78,10 @@ struct UnkownPruner<'a> {
     queue: WorkStack<Value>,
 }
 
-impl<'a> UnkownPruner<'a> {
-    fn is_op_depenent<const NO_NOISE: bool>(&self, val: Value) -> bool {
+impl<'a> UnknownPruner<'a> {
+    fn is_op_dependent<const NO_NOISE: bool>(&self, val: Value) -> bool {
         if !NO_NOISE {
-            return is_op_depenent(self.func, val, self.op_dependent_insts, self.intern);
+            return is_op_dependent(self.func, val, self.op_dependent_insts, self.intern);
         }
         match self.func.dfg.value_def(val) {
             ValueDef::Result(inst, _) => self.op_dependent_insts_no_noise.contains(inst),
@@ -94,18 +94,18 @@ impl<'a> UnkownPruner<'a> {
         let mut candidates = self.collect_candidates();
 
         if candidates.is_empty() {
-            self.remove_linear_ddt_unkowns(true, true);
+            self.remove_linear_ddt_unknowns(true, true);
             return;
         }
 
-        self.remove_linear_ddt_unkowns(true, false);
+        self.remove_linear_ddt_unknowns(true, false);
         self.op_dependent_vals_no_noise = self.op_dependent_vals.clone();
         self.op_dependent_insts_no_noise.copy_from(self.op_dependent_insts);
 
         let mut buf = BitSet::new_empty(self.func.dfg.num_insts());
         while !candidates.is_empty() {
             let mut changed = false;
-            while self.prune_noise_and_trival(&mut candidates, &mut buf) {
+            while self.prune_noise_and_trivial(&mut candidates, &mut buf) {
                 changed = true;
             }
 
@@ -133,14 +133,14 @@ impl<'a> UnkownPruner<'a> {
                 );
             }
 
-            let changed = self.remove_linear_ddt_unkowns(false, false);
+            let changed = self.remove_linear_ddt_unknowns(false, false);
 
             if !changed {
                 break;
             }
         }
 
-        self.remove_linear_ddt_unkowns(false, true);
+        self.remove_linear_ddt_unknowns(false, true);
     }
 
     fn has_noise(&self, branch: BranchWrite, voltage_src: bool) -> bool {
@@ -318,7 +318,7 @@ impl<'a> UnkownPruner<'a> {
         res
     }
 
-    fn prune_noise_and_trival(
+    fn prune_noise_and_trivial(
         &mut self,
         candidates: &mut PruneCandidates,
         buf: &mut BitSet<Inst>,
@@ -465,13 +465,13 @@ impl<'a> UnkownPruner<'a> {
                     | InstructionData::PhiNode(_) => false,
                     InstructionData::Binary { opcode: Opcode::Fmul, args } => {
                         let factor = args[(arg == 0) as usize];
-                        allow_op || self.is_op_depenent::<false>(factor)
+                        allow_op || self.is_op_dependent::<false>(factor)
                     }
 
                     InstructionData::Binary { opcode: Opcode::Fdiv, args: [_, factor] }
                         if arg == 0 =>
                     {
-                        allow_op || self.is_op_depenent::<false>(factor)
+                        allow_op || self.is_op_dependent::<false>(factor)
                     }
 
                     _ => true,
@@ -492,23 +492,23 @@ impl<'a> UnkownPruner<'a> {
         is_linear
     }
 
-    fn remove_linear_ddt_unkowns(&mut self, first: bool, permanent: bool) -> bool {
+    fn remove_linear_ddt_unknowns(&mut self, first: bool, permanent: bool) -> bool {
         let mut changed = false;
 
         for equation in self.intern.implicit_equations.keys() {
             if let ImplicitEquationKind::UnresolvedDdt(arg) =
                 self.intern.implicit_equations[equation]
             {
-                let (param, &unkown) =
+                let (param, &unknown) =
                     self.intern.params.unwrap_index_and_val(&ParamKind::ImplicitUnknown(equation));
 
-                if self.func.dfg.value_dead(unkown) {
+                if self.func.dfg.value_dead(unknown) {
                     continue;
                 }
 
                 // we have a constant..
-                if !self.is_op_depenent::<false>(arg) {
-                    self.func.dfg.replace_uses(unkown, F_ZERO);
+                if !self.is_op_dependent::<false>(arg) {
+                    self.func.dfg.replace_uses(unknown, F_ZERO);
                     self.func.dfg.replace_uses(arg, F_ZERO);
                     let arg = strip_optbarrier(self.func, arg);
                     if self.func.dfg.value_def(arg).inst().is_some() {
@@ -519,13 +519,13 @@ impl<'a> UnkownPruner<'a> {
                     continue;
                 }
 
-                let is_small_signal = !first && !self.is_op_depenent::<true>(arg);
-                let requires_unkown = !self.is_linear_contrib(arg, is_small_signal);
+                let is_small_signal = !first && !self.is_op_dependent::<true>(arg);
+                let requires_unknown = !self.is_linear_contrib(arg, is_small_signal);
 
-                let new_arg = if requires_unkown {
+                let new_arg = if requires_unknown {
                     if !permanent {
                         if is_small_signal {
-                            self.op_dependent_vals_no_noise.remove(&unkown);
+                            self.op_dependent_vals_no_noise.remove(&unknown);
                             self.is_noise.insert(param, self.intern.params.len());
                         }
                         continue;
@@ -534,7 +534,7 @@ impl<'a> UnkownPruner<'a> {
                     self.intern.implicit_equations[equation] = ImplicitEquationKind::Ddt;
                     F_ZERO
                 } else {
-                    self.func.dfg.replace_uses(unkown, F_ZERO);
+                    self.func.dfg.replace_uses(unknown, F_ZERO);
                     self.intern.implicit_equations[equation] = ImplicitEquationKind::LinearDdt;
                     strip_optbarrier(self.func, arg)
                 };

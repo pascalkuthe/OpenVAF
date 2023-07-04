@@ -40,7 +40,7 @@ static mut FUNCTIONS: [PyMethodDef; 4] = unsafe {
             #[cfg(not(Py_3_8))]
             ml_meth: PyMethodDefPointer{PyCFunctionWithKeywords: load_info_py},
             ml_flags: FUN_FLAG | METH_KEYWORDS,
-            ml_doc: "loads information about Verilog-A model by either loading it from the object cache or compiling it\nThis funciton does not compile retrieved funcitons.\nThis allows for much faster compile times.\nModelsCompiled with this function lack the `functions` attribute.\0".as_ptr() as *const c_char,
+            ml_doc: "loads information about Verilog-A model by either loading it from the object cache or compiling it\nThis function does not compile retrieved functions.\nThis allows for much faster compile times.\nModelsCompiled with this function lack the `functions` attribute.\0".as_ptr() as *const c_char,
     },
     PyMethodDef {
             ml_name: "export_vfs\0".as_ptr() as *const c_char,

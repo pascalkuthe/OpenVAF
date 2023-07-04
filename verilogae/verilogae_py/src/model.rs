@@ -193,7 +193,7 @@ static mut VAE_PARAM_MEMBERS: [PyMemberDef; 10] = [
         type_code: T_OBJECT_EX,
         offset: VaeParam::offset_to.max as isize,
         flags: READONLY,
-        doc: "The higest bound of the parameter\0".as_ptr() as *mut c_char,
+        doc: "The highest bound of the parameter\0".as_ptr() as *mut c_char,
     },
     PyMemberDef {
         name: "min_inclusive\0".as_ptr() as *mut c_char,
@@ -207,7 +207,7 @@ static mut VAE_PARAM_MEMBERS: [PyMemberDef; 10] = [
         type_code: T_OBJECT_EX,
         offset: VaeParam::offset_to.max_inclusive as isize,
         flags: READONLY,
-        doc: "Whether the higest bound is inclusive\0".as_ptr() as *mut c_char,
+        doc: "Whether the highest bound is inclusive\0".as_ptr() as *mut c_char,
     },
     PyMemberDef {
         name: "description\0".as_ptr() as *mut c_char,
@@ -1116,17 +1116,17 @@ fn raise_eval_illegal_array_exception(
         }
 
         Err(PyArrayError::Malformed) => {
-            format!("eval() recived mallformed numpy array for '{}'", name)
+            format!("eval() received mallformed numpy array for '{}'", name)
         }
 
         // Err(PyArrayError::NotContiguous) => {
         //     return raise_eval_exception(&format!(
-        //         "eval() recived non contigous numpy array for '{}'",
+        //         "eval() received non contiguous numpy array for '{}'",
         //         $name,
         //     ))
         // }
         Err(PyArrayError::UnsupportedDataType) => {
-            format!("eval() recived numpy array with unsupprted data type for '{}'", name,)
+            format!("eval() received numpy array with unsupprted data type for '{}'", name,)
         }
     };
 
@@ -1136,7 +1136,7 @@ fn raise_eval_illegal_array_exception(
 #[cold]
 #[inline(never)]
 fn raise_eval_illegal_data_type_exception(name: &str) -> *mut PyObject {
-    raise_eval_exception(&format!("eval() recived unsupprted data type for '{}'", name,))
+    raise_eval_exception(&format!("eval() received unsupprted data type for '{}'", name,))
 }
 
 #[cold]

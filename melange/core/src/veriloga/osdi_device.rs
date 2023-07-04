@@ -36,7 +36,7 @@ impl OsdiDescriptor {
         unsafe { slice::from_raw_parts(self.param_opvar, self.num_params as usize) }
     }
 
-    fn collapsable(&self) -> &[OsdiNodePair] {
+    fn collapsible(&self) -> &[OsdiNodePair] {
         // SAFETY: self.data is a valid allocation and the descriptor is assumed valid
         unsafe { slice::from_raw_parts(self.collapsible, self.num_collapsible as usize) }
     }
@@ -65,7 +65,7 @@ impl OsdiDescriptor {
                         format_to!(msg, "vale supplied for parameter '{param}' is out of bounds\n")
                     }
 
-                    code => format_to!(msg, "unkown error: {code}\n"),
+                    code => format_to!(msg, "unknown error: {code}\n"),
                 }
             }
 
@@ -78,7 +78,7 @@ impl OsdiDescriptor {
 
 impl Drop for OsdiInitInfo {
     fn drop(&mut self) {
-        // # SAFETY: this is save becaus OSDI api promises malloc allocated data and the struct can
+        // # SAFETY: this is save because OSDI api promises malloc allocated data and the struct can
         // only be constructed by FFI
         if self.num_errors != 0 && !self.errors.is_null() {
             unsafe {
@@ -97,7 +97,7 @@ fn osdi_param_ty(flags: u32) -> Type {
         PARA_TY_REAL => Type::Real,
         PARA_TY_INT => Type::Int,
         PARA_TY_STR => Type::String,
-        _ => unreachable!("unkown osdi type {}", flags & PARA_TY_MASK),
+        _ => unreachable!("unknown osdi type {}", flags & PARA_TY_MASK),
     }
 }
 
@@ -295,7 +295,7 @@ impl OsdiInstance {
     fn collapse_nodes(&self, connected_terminals: u32) -> Vec<u32> {
         let collapsed = self.collapsed();
         let node_mapping = self.node_mapping();
-        let collapsible = self.descriptor.collapsable();
+        let collapsible = self.descriptor.collapsible();
 
         let mut back_map: Vec<u32> = (connected_terminals..self.descriptor.num_nodes).collect();
 
@@ -391,7 +391,7 @@ impl InstanceImpl for OsdiInstance {
             let name = unsafe { osdi_str(node_info.name) };
             let units = unsafe { osdi_str(node_info.units) };
             let residual_units = unsafe { osdi_str(node_info.residual_units) };
-            *node = sim_builder.new_internal_unkown(name, tol, units, residual_units).into();
+            *node = sim_builder.new_internal_unknown(name, tol, units, residual_units).into();
         }
 
         let node_mapping = self.node_mapping();

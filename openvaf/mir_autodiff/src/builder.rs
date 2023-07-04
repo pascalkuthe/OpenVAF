@@ -273,7 +273,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                     let is_base_zero = self.ins().feq(base, F_ZERO);
 
                     let old_block =
-                        self.func.layout.inst_block(inst).expect("instruction is attachted");
+                        self.func.layout.inst_block(inst).expect("instruction is attached");
                     let new_block = self.func.layout.make_block();
 
                     if let Some(next_inst) = self.func.layout.next_inst(self.dst.0) {

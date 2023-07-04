@@ -70,7 +70,7 @@ impl ModelImpl for VoltageSrcModel {
             DC => &self.dc,
             MAG => &self.mag,
             PHASE => &self.phase,
-            _ => unreachable!("vsource: unkown num param {param:?}"),
+            _ => unreachable!("vsource: unknown num param {param:?}"),
         };
         dst.set(val);
     }
@@ -114,7 +114,7 @@ impl InstanceImpl for VoltageSrcInstance {
         self.cathode = cathode;
         self.branch = branch;
 
-        // IMPORTANT: keep the order here in syn with the MATRIX_ indicies
+        // IMPORTANT: keep the order here in syn with the MATRIX_ indices
         builder.ensure_matrix_entry(anode, branch);
         builder.ensure_matrix_entry(branch, anode);
         builder.ensure_matrix_entry(cathode, branch);
@@ -128,7 +128,7 @@ impl InstanceImpl for VoltageSrcInstance {
             DC => self.dc = val,
             MAG => self.ac = Complex64::from_polar(val, self.ac.arg()),
             PHASE => self.ac = Complex64::from_polar(self.ac.norm_sqr(), val),
-            _ => unreachable!("vsource: unkown num param {param:?}"),
+            _ => unreachable!("vsource: unknown num param {param:?}"),
         };
     }
 

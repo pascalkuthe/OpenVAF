@@ -224,7 +224,7 @@ fn generate_builtins() {
     let constants =
         unique_variants.iter().map(|variant| format_ident!("{}", to_upper_snake_case(variant)));
     let unique_variants = unique_variants.iter().map(|variant| format_ident!("{}", variant));
-    let indicies = (0..unique_variants.len()).map(|i| i as u8);
+    let indices = (0..unique_variants.len()).map(|i| i as u8);
 
     let analysis_funs = ANALYSIS_FUNS.into_iter().map(|op| format_ident!("{}", op));
     let analog_operators = ANALOG_OPERATORS.into_iter().map(|op| format_ident!("{}", op));
@@ -240,7 +240,7 @@ fn generate_builtins() {
         #[allow(nonstandard_style,unreachable_pub)]
         #[repr(u8)]
         pub enum BuiltIn{
-            #(#unique_variants = #indicies),*
+            #(#unique_variants = #indices),*
         }
 
 
@@ -311,7 +311,7 @@ fn generate_builtins() {
     let hir_ty = quote! {
         const BUILTIN_INFO: [BuiltinInfo; #const_cnt] = [#(#constants),*];
 
-        pub(crate) fn bultin_info(builtin: BuiltIn) -> BuiltinInfo{
+        pub(crate) fn builtin_info(builtin: BuiltIn) -> BuiltinInfo{
             BUILTIN_INFO[builtin as u8 as usize]
         }
     };

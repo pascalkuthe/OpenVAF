@@ -235,7 +235,7 @@ where
     }
 
     #[inline]
-    /// Return the value associtated with `key` or insert the value retruned by `value` if not present
+    /// Return the value associated with `key` or insert the value returned by `value` if not present
     pub fn get_or_insert_with<C: Comparator<K>>(
         &mut self,
         key: K,
@@ -247,7 +247,7 @@ where
     }
 
     #[inline]
-    /// Call update for the value associtated with `key` or insert the value retruned by `value` if not present
+    /// Call update for the value associated with `key` or insert the value returned by `value` if not present
     pub fn update_or_insert_with<C: Comparator<K>>(
         &mut self,
         key: K,

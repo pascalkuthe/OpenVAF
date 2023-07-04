@@ -15,7 +15,7 @@ extern "C" {
 // Enable some fast-math flags for an operation
 // These flags are used for derivatives by default because they only change
 // the rounding behaviour which is not relevant for automatically generated code
-// (derivatives in OpneVAF)
+// (derivatives in OpenVAF)
 //
 // https://llvm.org/docs/LangRef.html#fast-math-flags
 void LLVMSetPartialFastMath(LLVMValueRef V) {

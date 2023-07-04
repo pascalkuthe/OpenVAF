@@ -424,7 +424,7 @@ impl CodegenCtx<'_, '_> {
         debug_assert!(module.verify_and_print(), "Invalid code generated");
         module.optimize();
 
-        module.emit_obect(dst.as_ref()).expect("code generation failed!")
+        module.emit_object(dst.as_ref()).expect("code generation failed!")
     }
 
     pub(crate) fn ensure_names(&mut self, db: &CompilationDB, intern: &HirInterner) {
@@ -777,7 +777,7 @@ impl CodegenCtx<'_, '_> {
         module.optimize();
         // println!("{}", module.to_str());
 
-        module.emit_obect(dst.as_ref()).expect("code generation failed!");
+        module.emit_object(dst.as_ref()).expect("code generation failed!");
     }
 }
 

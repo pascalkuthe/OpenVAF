@@ -15,7 +15,7 @@ Furthermore, the project aims to bring modern compiler construction algorithms/d
 Some highlights of OpenVAF include:
 
 * **fast compile** times (usually below 1 second for most compact models)
-* high-quality **user iterface**
+* high-quality **user interface**
 * **easy setup** (no runtime dependencies even for cross compilation)
 * **fast simulations** surpassing existing solutions by 30%-60%, often matching handwritten models
 * IDE aware design
@@ -136,7 +136,7 @@ However, the built-in cargo test runner (requires no extra installation) can als
 To run the testsuite simply call:
 
 ``` shell
-cargo test # default test runner, requires no aditional installation
+cargo test # default test runner, requires no additional installation
 cargo nextest run # using cargo-nextest, much faster but must be installed first
 ```
 

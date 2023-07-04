@@ -65,7 +65,7 @@ where
     /// Returns `Ok(idx)` if `k` was found in the slice or `Err(idx)` with the position where it
     /// should be inserted to preserve the ordering.
     fn search(&self, k: K, s: &[K]) -> Result<usize, usize> {
-        // TODO BENCHMARK branchless bianry search
+        // TODO BENCHMARK branchless binary search
         s.binary_search_by(|x| self.cmp(*x, k))
     }
 }

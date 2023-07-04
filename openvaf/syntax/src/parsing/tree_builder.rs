@@ -44,7 +44,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
             State::PendingFinish => self.inner.finish_node(),
             State::Normal => (),
         }
-        self.eat_trivias();
+        self.eat_trivia();
         let span = self.tokens[self.token_pos].span;
         self.panic &= !matches!(
             kind,
@@ -57,7 +57,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
         match mem::replace(&mut self.state, State::Normal) {
             State::PendingStart => {
                 self.inner.start_node(VerilogALanguage::kind_to_raw(kind));
-                // No need to attach trivias to previous node: there is no
+                // No need to attach trivia to previous node: there is no
                 // previous node.
                 return;
             }
@@ -70,7 +70,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
         } else if kind == SyntaxKind::ERROR {
             self.err_depth = 0
         } else {
-            self.eat_trivias();
+            self.eat_trivia();
         }
         self.inner.start_node(VerilogALanguage::kind_to_raw(kind));
     }
@@ -98,14 +98,14 @@ impl<'a> SyntaxTreeBuilder<'a> {
     }
 
     pub(super) fn error(&mut self, error: parser::SyntaxError) {
-        let n_trivias =
+        let n_trivia =
             self.tokens[self.token_pos..].iter().take_while(|it| it.kind.is_trivia()).count();
-        let leading_trivias = &self.tokens[self.token_pos..self.token_pos + n_trivias];
+        let leading_trivia = &self.tokens[self.token_pos..self.token_pos + n_trivia];
         let pos =
-            self.text_pos + leading_trivias.iter().map(|it| it.span.range.len()).sum::<TextSize>();
+            self.text_pos + leading_trivia.iter().map(|it| it.span.range.len()).sum::<TextSize>();
         let parser::SyntaxError::UnexpectedToken { expected, found }: parser::SyntaxError = error;
-        let missing_delimeter = found == T![end];
-        if self.token_pos + n_trivias == self.tokens.len() {
+        let missing_delimiter = found == T![end];
+        if self.token_pos + n_trivia == self.tokens.len() {
             let expected_at = expected
                 .data
                 .iter()
@@ -119,16 +119,16 @@ impl<'a> SyntaxTreeBuilder<'a> {
                     self.tokens.last().map_or_else(|| TextSize::from(0), |t| t.span.range.len()),
                 ),
                 expected_at,
-                missing_delimeter,
+                missing_delimiter,
                 panic_end: None,
             };
             self.errors.push(error);
             return;
         }
-        let len = self.tokens[self.token_pos + n_trivias].span.range.len();
+        let len = self.tokens[self.token_pos + n_trivia].span.range.len();
 
         let panic = mem::replace(&mut self.panic, true);
-        if panic && !missing_delimeter || self.last_error.is_some() {
+        if panic && !missing_delimiter || self.last_error.is_some() {
             return;
         }
 
@@ -142,7 +142,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
             found,
             span: TextRange::at(pos, len),
             expected_at,
-            missing_delimeter,
+            missing_delimiter,
             panic_end: None,
         };
         self.last_error = Some(error)
@@ -181,7 +181,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
     ) -> (GreenNode, Vec<SyntaxError>, Vec<(TextRange, SourceContext, TextSize)>) {
         match mem::replace(&mut self.state, State::Normal) {
             State::PendingFinish => {
-                self.eat_trivias();
+                self.eat_trivia();
                 self.inner.finish_node()
             }
             State::PendingStart | State::Normal => unreachable!(),
@@ -192,7 +192,7 @@ impl<'a> SyntaxTreeBuilder<'a> {
         (self.inner.finish(), self.errors, self.ranges)
     }
 
-    fn eat_trivias(&mut self) {
+    fn eat_trivia(&mut self) {
         while let Some(&token) = self.tokens.get(self.token_pos) {
             if !token.kind.is_trivia() {
                 break;
@@ -203,8 +203,8 @@ impl<'a> SyntaxTreeBuilder<'a> {
 
     fn do_token(&mut self, kind: SyntaxKind, span: CtxSpan) {
         let same_ctx = span.ctx == self.current_range.ctx;
-        let is_continous = same_ctx && span.range.start() == self.current_range.range.end();
-        if is_continous {
+        let is_continuous = same_ctx && span.range.start() == self.current_range.range.end();
+        if is_continuous {
             self.current_range.range = self.current_range.range.cover(span.range);
         } else {
             let start = self.ranges.last().map_or(0.into(), |(range, _, _)| range.end());

@@ -32,22 +32,22 @@ fn src_residual(
     let resist_val = get_contrib(cursor.func, intern, dst, RESISTIVE_DIM, voltage_src);
     let react_val = get_contrib(cursor.func, intern, dst, REACTIVE_DIM, voltage_src);
 
-    let unkown = if voltage_src {
+    let unknown = if voltage_src {
         let (hi, lo) = dst.nodes(db);
         ParamKind::Voltage { hi, lo }
     } else {
         ParamKind::Current(dst.into())
     };
-    let unkown = intern.ensure_param(cursor.func, unkown);
+    let unknown = intern.ensure_param(cursor.func, unknown);
 
     let resit_residual = if resist_val == F_ZERO {
         if react_val == F_ZERO {
-            unkown
+            unknown
         } else {
-            cursor.ins().fneg(unkown)
+            cursor.ins().fneg(unknown)
         }
     } else {
-        cursor.ins().fsub(resist_val, unkown)
+        cursor.ins().fsub(resist_val, unknown)
     };
 
     [resit_residual, react_val]
@@ -60,8 +60,8 @@ pub struct Residual {
 }
 
 impl Residual {
-    pub fn contains(&self, unkown: SimUnknown) -> bool {
-        self.resistive.contains_key(&unkown) || self.reactive.contains_key(&unkown)
+    pub fn contains(&self, unknown: SimUnknown) -> bool {
+        self.resistive.contains_key(&unknown) || self.reactive.contains_key(&unknown)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -80,12 +80,12 @@ impl Residual {
 
         let residual = match is_voltage_src {
             FALSE => {
-                let requires_unkown =
+                let requires_unknown =
                     intern.is_param_live(cursor.func, &ParamKind::Current(current));
-                if requires_unkown {
+                if requires_unknown {
                     src_residual(cursor, intern, branch, false, db)
                 } else {
-                    // no extra unkowns required
+                    // no extra unknowns required
 
                     let resist_val = get_contrib(cursor.func, intern, branch, RESISTIVE_DIM, false);
                     let react_val = get_contrib(cursor.func, intern, branch, REACTIVE_DIM, false);
@@ -102,11 +102,11 @@ impl Residual {
             TRUE => {
                 // voltage src
 
-                let requires_unkown =
+                let requires_unknown =
                     intern.is_param_live(cursor.func, &ParamKind::Current(current));
 
                 let static_collapse =
-                    !requires_unkown && !has_any_contrib(cursor.func, intern, branch, true);
+                    !requires_unknown && !has_any_contrib(cursor.func, intern, branch, true);
 
                 if static_collapse {
                     // just node collapsing
@@ -129,7 +129,7 @@ impl Residual {
                 let react_current = get_contrib(cursor.func, intern, branch, REACTIVE_DIM, false);
 
                 if br_info.just_current_src() {
-                    // no extra unkowns required so just node collapsing + current source is
+                    // no extra unknowns required so just node collapsing + current source is
                     // enough
                     if resist_current != F_ZERO {
                         self.add_kirchoff_laws(cursor, resist_current, branch, false, db);
@@ -158,7 +158,7 @@ impl Residual {
 
                 cursor.goto_bottom(current_src_bb);
 
-                let current_residual = if br_info.introduce_unkown {
+                let current_residual = if br_info.introduce_unknown {
                     src_residual(cursor, intern, branch, false, db)
                 } else {
                     let val = if br_info.op_dependent {
@@ -180,7 +180,7 @@ impl Residual {
                     (voltage_src_bb, voltage_residual[1]),
                 ]);
 
-                if !br_info.introduce_unkown {
+                if !br_info.introduce_unknown {
                     if resist_current != F_ZERO {
                         let residual_resist = cursor
                             .ins()
@@ -216,7 +216,7 @@ impl Residual {
         op_dependent_insts: &BitSet<Inst>,
         pruned: &AHashSet<NodeId>,
     ) {
-        // self.remove_linear_ddt_unkowns(cursor, intern, op_dependent_insts);
+        // self.remove_linear_ddt_unknowns(cursor, intern, op_dependent_insts);
         for i in 0..intern.outputs.len() {
             let (kind, val) = intern.outputs.get_index(i).unwrap();
 
@@ -299,11 +299,11 @@ impl Residual {
         });
         params.extend(lim_derivatives);
 
-        let num_unkowns = params.len() * (self.resistive.len() + self.reactive.len());
-        let mut res = Vec::with_capacity(num_unkowns);
+        let num_unknowns = params.len() * (self.resistive.len() + self.reactive.len());
+        let mut res = Vec::with_capacity(num_unknowns);
         for dim in [&self.resistive, &self.reactive] {
             for residual in dim.raw.values() {
-                res.extend(params.iter().map(|unkown| (*residual, *unkown)))
+                res.extend(params.iter().map(|unknown| (*residual, *unknown)))
             }
         }
 
@@ -382,7 +382,7 @@ impl Residual {
         reactive: bool,
     ) {
         let dst = if reactive { &mut self.reactive } else { &mut self.resistive };
-        // no entrys for gnd nodes
+        // no entries for gnd nodes
 
         match dst.raw.entry(node) {
             Entry::Occupied(dst) => {
@@ -407,8 +407,8 @@ impl Residual {
         self.resistive
             .raw
             .iter()
-            .filter_map(|(unkown, val)| {
-                if let SimUnknown::KirchoffLaw(node) = unkown {
+            .filter_map(|(unknown, val)| {
+                if let SimUnknown::KirchoffLaw(node) = unknown {
                     let name = db.node_data(*node).name.to_string();
                     Some((name, *val))
                 } else {
@@ -422,8 +422,8 @@ impl Residual {
         self.reactive
             .raw
             .iter()
-            .filter_map(|(unkown, val)| {
-                if let SimUnknown::KirchoffLaw(node) = unkown {
+            .filter_map(|(unknown, val)| {
+                if let SimUnknown::KirchoffLaw(node) = unknown {
                     let name = db.node_data(*node).name.to_string();
                     Some((name, *val))
                 } else {

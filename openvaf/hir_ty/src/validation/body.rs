@@ -175,7 +175,7 @@ impl BodyCtx {
 impl_display! {
     match BodyCtx{
        BodyCtx::AnalogBlock => "analog block";
-       BodyCtx::AnalogInitialBlock => "analog inital block";
+       BodyCtx::AnalogInitialBlock => "analog initial block";
        BodyCtx::Conditional => "conditions";
        BodyCtx::EventControl => "events";
        BodyCtx::Function => "analog functions";
@@ -199,7 +199,7 @@ struct BodyValidator<'a> {
 impl BodyValidator<'_> {
     fn validate_stmt(&mut self, stmt: StmtId) {
         let cond = match self.body.stmts[stmt] {
-            Stmt::Assigment { dst, val, assignment_kind } => {
+            Stmt::Assignment { dst, val, assignment_kind } => {
                 self.validate_expr(val, stmt);
 
                 if assignment_kind == AssignOp::Contribute && !self.ctx.allow_contribute() {
@@ -207,8 +207,8 @@ impl BodyValidator<'_> {
                         .push(BodyValidationDiagnostic::IllegalContribute { stmt, ctx: self.ctx })
                 }
                 // avoid duplicate errors
-                else if self.infer.assigment_destination.contains_key(&stmt) {
-                    self.validate_assigment_dst(dst, stmt);
+                else if self.infer.assignment_destination.contains_key(&stmt) {
+                    self.validate_assignment_dst(dst, stmt);
                 }
 
                 return;
@@ -279,7 +279,7 @@ impl BodyValidator<'_> {
             .validate_expr(expr)
     }
 
-    fn validate_assigment_dst(&mut self, expr: ExprId, stmt: StmtId) {
+    fn validate_assignment_dst(&mut self, expr: ExprId, stmt: StmtId) {
         ExprValidator { parent: self, cond_diagnostic_sink: None, write: true, stmt }
             .validate_expr(expr)
     }
@@ -366,7 +366,7 @@ impl ExprValidator<'_, '_> {
         None
     }
 
-    fn lint_trival_branch(&mut self, branch: BranchWrite, call: BuiltIn, expr: ExprId) {
+    fn lint_trivial_branch(&mut self, branch: BranchWrite, call: BuiltIn, expr: ExprId) {
         let is_flow = call == BuiltIn::flow;
         if self.write {
             self.parent.non_trivial_branches.insert(branch);
@@ -497,7 +497,7 @@ impl ExprValidator<'_, '_> {
 
             Expr::Path { port: false, .. } => {
                 match self.parent.infer.expr_types[expr] {
-                    Ty::FuntionVar { arg: Some(arg), fun, .. } => {
+                    Ty::FunctionVar { arg: Some(arg), fun, .. } => {
                         let is_output = self.parent.db.function_data(fun).args[arg].is_output;
                         if self.write && !is_output {
                             self.report(BodyValidationDiagnostic::WriteToInputArg {
@@ -596,7 +596,7 @@ impl ExprValidator<'_, '_> {
                 } else {
                     BranchWrite::Unnamed { hi: lo, lo: Some(hi) }
                 };
-                self.lint_trival_branch(branch, call, expr);
+                self.lint_trivial_branch(branch, call, expr);
                 if let Some(discipline) = self.validate_implicit_branch(expr, hi, lo) {
                     self.validate_flow_or_pot(expr, call, discipline)
                 }
@@ -605,7 +605,7 @@ impl ExprValidator<'_, '_> {
             (BuiltIn::potential | BuiltIn::flow, Some(NATURE_ACCESS_NODE_GND)) => {
                 let node = self.parent.infer.expr_types[args[0]].unwrap_node();
                 if let Some(discipline) = self.parent.db.node_discipline(node) {
-                    self.lint_trival_branch(
+                    self.lint_trivial_branch(
                         BranchWrite::Unnamed { hi: node, lo: None },
                         call,
                         expr,
@@ -650,7 +650,7 @@ impl ExprValidator<'_, '_> {
                             }
                         }
                         BranchKind::NodeGnd(node) => {
-                            self.lint_trival_branch(
+                            self.lint_trivial_branch(
                                 BranchWrite::Unnamed { hi: node, lo: None },
                                 call,
                                 expr,
@@ -663,7 +663,7 @@ impl ExprValidator<'_, '_> {
                             } else {
                                 BranchWrite::Unnamed { hi: lo, lo: Some(hi) }
                             };
-                            self.lint_trival_branch(branch, call, expr);
+                            self.lint_trivial_branch(branch, call, expr);
                             self.validate_flow_or_pot(expr, call, branch_info.discipline)
                         }
                     }

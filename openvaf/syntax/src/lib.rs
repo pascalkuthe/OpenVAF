@@ -75,7 +75,7 @@ impl<T> Parse<T> {
             })
             .ok()
             .map(|i| self.ctx_map[i])
-            .expect("No range in the sourcemap convers the requested position")
+            .expect("No range in the sourcemap covers the requested position")
     }
     pub fn ctx(&self, global_pos: TextSize) -> (SourceContext, TextSize) {
         let (range, ctx, _offset) = self.find_ctx_range(global_pos);

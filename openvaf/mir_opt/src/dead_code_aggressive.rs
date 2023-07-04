@@ -3,7 +3,7 @@ use mir::{Block, ControlFlowGraph, Function, Inst, InstructionData, Value, Value
 
 pub type PostDominanceFrontiers = SparseBitMatrix<Block, Block>;
 
-pub fn agressive_dead_code_elimination(
+pub fn aggressive_dead_code_elimination(
     func: &mut Function,
     cfg: &mut ControlFlowGraph,
     is_live: &dyn Fn(Value, &Function) -> bool,
@@ -11,7 +11,7 @@ pub fn agressive_dead_code_elimination(
 ) {
     let mut live_blocks = BitSet::new_empty(func.layout.num_blocks());
     live_blocks.insert(func.layout.entry_block().unwrap());
-    let mut adce = AgressiveDeadCode {
+    let mut adce = AggressiveDeadCode {
         pdom_frontiers,
         live_insts: BitSet::new_empty(func.dfg.num_insts()),
         live_blocks,
@@ -61,7 +61,7 @@ pub fn agressive_dead_code_elimination(
     }
 }
 
-struct AgressiveDeadCode<'a> {
+struct AggressiveDeadCode<'a> {
     pdom_frontiers: &'a PostDominanceFrontiers,
     live_insts: BitSet<Inst>,
     live_blocks: BitSet<Block>,
@@ -73,7 +73,7 @@ struct AgressiveDeadCode<'a> {
     cfg: &'a ControlFlowGraph,
 }
 
-impl AgressiveDeadCode<'_> {
+impl AggressiveDeadCode<'_> {
     pub fn solve(&mut self) {
         loop {
             while let Some(inst) = self.inst_work_list.pop() {

@@ -17,7 +17,7 @@ pub struct MemLoc<'ll> {
     pub ptr: &'ll llvm::Value,
     pub ptr_ty: &'ll llvm::Type,
     pub ty: &'ll llvm::Type,
-    pub indicies: Box<[&'ll llvm::Value]>,
+    pub indices: Box<[&'ll llvm::Value]>,
 }
 
 impl<'ll> MemLoc<'ll> {
@@ -32,19 +32,19 @@ impl<'ll> MemLoc<'ll> {
             ptr,
             ptr_ty,
             ty,
-            indicies: vec![cx.const_unsigned_int(0), cx.const_unsigned_int(idx)].into_boxed_slice(),
+            indices: vec![cx.const_unsigned_int(0), cx.const_unsigned_int(idx)].into_boxed_slice(),
         }
     }
     /// # Safety
     ///
-    /// ptr_ty, ty and indicies must be valid for ptr
+    /// ptr_ty, ty and indices must be valid for ptr
     pub unsafe fn read(&self, llbuilder: &llvm::Builder<'ll>) -> &'ll llvm::Value {
         self.read_with_ptr(llbuilder, self.ptr)
     }
 
     /// # Safety
     ///
-    /// ptr_ty, ty and indicies must be valid for ptr
+    /// ptr_ty, ty and indices must be valid for ptr
     pub unsafe fn read_with_ptr(
         &self,
         llbuilder: &llvm::Builder<'ll>,
@@ -56,26 +56,26 @@ impl<'ll> MemLoc<'ll> {
 
     /// # Safety
     ///
-    /// ptr_ty and indicies must be valid for ptr
+    /// ptr_ty and indices must be valid for ptr
     pub unsafe fn to_ptr(&self, llbuilder: &llvm::Builder<'ll>) -> &'ll llvm::Value {
         self.to_ptr_from(llbuilder, self.ptr)
     }
 
     /// # Safety
     ///
-    /// ptr_ty and indicies must be valid for ptr
+    /// ptr_ty and indices must be valid for ptr
     pub unsafe fn to_ptr_from(
         &self,
         llbuilder: &llvm::Builder<'ll>,
         mut ptr: &'ll llvm::Value,
     ) -> &'ll llvm::Value {
-        if !self.indicies.is_empty() {
+        if !self.indices.is_empty() {
             ptr = llvm::LLVMBuildGEP2(
                 llbuilder,
                 self.ptr_ty,
                 ptr,
-                self.indicies.as_ptr(),
-                self.indicies.len() as u32,
+                self.indices.as_ptr(),
+                self.indices.len() as u32,
                 UNNAMED,
             );
         }
@@ -248,14 +248,14 @@ impl<'ll> Builder<'_, '_, 'll> {
         &self,
         arr_ty: &'ll llvm::Type,
         ptr: &'ll llvm::Value,
-        indicies: &[&'ll llvm::Value],
+        indices: &[&'ll llvm::Value],
     ) -> &'ll llvm::Value {
         llvm::LLVMBuildGEP2(
             self.llbuilder,
             arr_ty,
             ptr,
-            indicies.as_ptr(),
-            indicies.len() as u32,
+            indices.as_ptr(),
+            indices.len() as u32,
             UNNAMED,
         )
     }
@@ -266,9 +266,9 @@ impl<'ll> Builder<'_, '_, 'll> {
         &self,
         elem_ty: &'ll llvm::Type,
         ptr: &'ll llvm::Value,
-        indicies: &[&'ll llvm::Value],
+        indices: &[&'ll llvm::Value],
     ) -> &'ll llvm::Value {
-        self.typed_gep(elem_ty, ptr, indicies)
+        self.typed_gep(elem_ty, ptr, indices)
     }
 
     /// # Safety

@@ -1,7 +1,7 @@
 #[rustfmt::skip]
 mod generated;
 
-use generated::bultin_info;
+use generated::builtin_info;
 use hir_def::{BuiltIn, Type};
 
 use crate::types::{BuiltinInfo, Signature, SignatureData, TyRequirement};
@@ -43,7 +43,7 @@ impl BuiltinInfo {
         BuiltinInfo::new(signatures, false)
     }
 
-    const fn specical_cased_pure(min_args: usize, max_args: Option<usize>) -> BuiltinInfo {
+    const fn special_cased_pure(min_args: usize, max_args: Option<usize>) -> BuiltinInfo {
         BuiltinInfo { signatures: &[], min_args, max_args, has_side_effects: false }
     }
 
@@ -74,7 +74,7 @@ impl BuiltinInfo {
 
 impl From<BuiltIn> for BuiltinInfo {
     fn from(builtin: BuiltIn) -> Self {
-        bultin_info(builtin)
+        builtin_info(builtin)
     }
 }
 
@@ -174,7 +174,7 @@ bultins! {
     }
 
     ANALYSIS = const {
-        fn ANAYLSIS_SIG(Val(String)) -> Integer;
+        fn ANALYSIS_SIG(Val(String)) -> Integer;
     }
 
     AC_STIM = const {
@@ -236,7 +236,7 @@ bultins! {
         fn IDTMOD_IC_MODULUS_OFFSET_NATURE(Val(Real),Val(Real),Val(Real),Val(Real), Val(Real)) -> Real;
     }
 
-    // all laplace fitlers have the same signature
+    // all laplace filters have the same signature
     LAPLACE_FILTER = const {
         fn LAPLACE_NO_TOL(Val(Real),ArrayAnyLength{ty: Real},ArrayAnyLength{ty: Real}) -> Real;
         fn LAPALCE_TOL(Val(Real),ArrayAnyLength{ty: Real},ArrayAnyLength{ty: Real}, Val(Real)) -> Real;
@@ -372,7 +372,7 @@ bultins! {
 
 // TODO TABLE_MODEL
 
-const DDX: BuiltinInfo = BuiltinInfo::specical_cased_pure(2, Some(2));
+const DDX: BuiltinInfo = BuiltinInfo::special_cased_pure(2, Some(2));
 pub const DDX_TEMP: Signature = Signature(0);
 pub const DDX_POT_DIFF: Signature = Signature(1);
 pub const DDX_POT: Signature = Signature(2);

@@ -14,7 +14,7 @@ use crate::expr::{Arena, CircuitParam, CircuitParamCtx};
 use crate::veriloga::{self, compile_va};
 use crate::Expr;
 
-/// A circuit is the core data structure of melange, it contains a complete discription of a
+/// A circuit is the core data structure of melange, it contains a complete description of a
 /// circuit with (almost) all information required for simulations.
 /// The Circuit structure is always valid and does not need additional processing/validation before
 /// the simulation.
@@ -69,9 +69,9 @@ impl Circuit {
         self.nodes.len() as u32
     }
 
-    /// returns the number of external circuit nodes whose potential is unkown (so excluding ground).
+    /// returns the number of external circuit nodes whose potential is unknown (so excluding ground).
     /// This does not include internal nodes created by the various devices
-    pub fn num_unkowns(&self) -> u32 {
+    pub fn num_unknowns(&self) -> u32 {
         assert!(
             self.nodes.len() < i32::MAX as usize,
             "at most {} nodes are supterminaled",
@@ -121,7 +121,7 @@ impl Circuit {
         if let Some(device) = self.lookup_device(device) {
             self.new_model(name, device)
         } else {
-            bail!("unkown device '{device}'")
+            bail!("unknown device '{device}'")
         }
     }
 
@@ -163,7 +163,7 @@ impl Circuit {
         if let Some(device) = self.lookup_device(device) {
             self.new_device_instance(name, device, terminal_connections)
         } else {
-            bail!("unkown device '{device}'")
+            bail!("unknown device '{device}'")
         }
     }
 
@@ -265,9 +265,9 @@ impl Circuit {
     ///
     /// A [`DeviceId`] that uniquely identifies this device within the circuit.
     ///
-    /// If a **builtin** device with the same name is already registered an error is retruned instead.
+    /// If a **builtin** device with the same name is already registered an error is returned instead.
     /// If a device with the same name is found that was loaded from a Verilog-A file the device is overwritten.
-    /// In that case a warning is emitted but no error is retruned.
+    /// In that case a warning is emitted but no error is returned.
     ///
     /// If another item is already declared with the same name in this namespace an error is
     /// returned.
@@ -294,7 +294,7 @@ impl Circuit {
         Ok(dev)
     }
 
-    /// Compiles a Verilog-A file and registeres all Verilog-A (top-level) modules as devices
+    /// Compiles a Verilog-A file and registers all Verilog-A (top-level) modules as devices
     /// within the circuit.
     ///
     /// **Note:** If a device with the same name as a loaded module is already registered, the
@@ -415,7 +415,7 @@ impl Circuit {
         let dev = &self.devices[self.models[inst.model].device];
         let (id, info) = match dev.parameters.lookup_param(param_name) {
             Some((id, info)) => (id, info),
-            None => bail!("unkown parameter '{param_name}' for {}", dev.name),
+            None => bail!("unknown parameter '{param_name}' for {}", dev.name),
         };
 
         if !info.is_instance_param {
@@ -443,7 +443,7 @@ impl Circuit {
         let dev = &self.devices[model.device];
         let id = match dev.parameters.lookup_param_id(param_name) {
             Some(id) => id,
-            None => bail!("unkown parameter '{param_name}' for {}", dev.name),
+            None => bail!("unknown parameter '{param_name}' for {}", dev.name),
         };
 
         model.parameters.push((id, val));
@@ -612,7 +612,7 @@ pub enum CircuitModelSrc {
 }
 
 /// Information about a (device) instance in a [`Circuit`](create::circuit::Circuit).
-/// An instance corresponds to a single simulation entity that has its own unkowns, matrix entries
+/// An instance corresponds to a single simulation entity that has its own unknowns, matrix entries
 /// etc.
 #[derive(PartialEq, Clone, Debug)]
 #[non_exhaustive]

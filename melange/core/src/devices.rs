@@ -29,11 +29,11 @@ pub trait ModelImpl {
     fn process_params(&self) -> Result<()>;
     fn set_real_param(&self, param: ParamId, val: f64);
     fn set_int_param(&self, param: ParamId, _val: i32) {
-        unreachable!("unkown int param {param:?}")
+        unreachable!("unknown int param {param:?}")
     }
 
     fn set_str_param(&self, param: ParamId, _val: &str) {
-        unreachable!("unkown str param {param:?}")
+        unreachable!("unknown str param {param:?}")
     }
     fn new_instance(self: Rc<Self>) -> Box<dyn InstanceImpl>;
 }
@@ -80,11 +80,11 @@ pub trait InstanceImpl {
     fn set_real_param(&mut self, param: ParamId, val: f64);
 
     fn set_int_param(&mut self, param: ParamId, _val: i32) {
-        unreachable!("unkown int param {param:?}")
+        unreachable!("unknown int param {param:?}")
     }
 
     fn set_str_param(&mut self, param: ParamId, _val: &str) {
-        unreachable!("unkown str param {param:?}")
+        unreachable!("unknown str param {param:?}")
     }
 
     fn populate_matrix_ptrs(&mut self, matrix_entries: MatrixEntryIter);

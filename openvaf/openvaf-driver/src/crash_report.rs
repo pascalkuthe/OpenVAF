@@ -1,5 +1,5 @@
 //! This module prints backtraces in case of panics
-//! Adapated from https://github.com/rust-cli/human-panic/blob/0ebcb91b29e3f23b3559ea49d931a493ed7c8139
+//! Adapted from https://github.com/rust-cli/human-panic/blob/0ebcb91b29e3f23b3559ea49d931a493ed7c8139
 //! under MIT license
 
 use std::error::Error;

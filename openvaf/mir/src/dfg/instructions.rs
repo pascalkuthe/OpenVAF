@@ -175,7 +175,7 @@ impl DfgInsructions {
     // }
 }
 
-/// Operations that require mutable access to `values` and `insts` (buit logically still belong to
+/// Operations that require mutable access to `values` and `insts` (but logically still belong to
 /// instructions)
 impl DataFlowGraph {
     /// Append a new instruction result value to `inst`.

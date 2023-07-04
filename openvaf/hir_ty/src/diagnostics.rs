@@ -23,20 +23,20 @@ use crate::inference::InferenceDiagnostic;
 use crate::types::{Signature, SignatureData, Ty, TyRequirement};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TypeMissmatch {
+pub struct TypeMismatch {
     pub expected: Cow<'static, [TyRequirement]>,
     pub found_ty: Ty,
     pub expr: ExprId,
 }
 
 impl_display! {
-    match TypeMissmatch{
-        TypeMissmatch{expected, ..} => "expected {}" , pretty::List::new(expected.deref());
+    match TypeMismatch{
+        TypeMismatch{expected, ..} => "expected {}" , pretty::List::new(expected.deref());
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArrayTypeMissmatch {
+pub struct ArrayTypeMismatch {
     pub expected: Type,
     pub found_ty: Type,
     pub found_expr: ExprId,
@@ -44,8 +44,8 @@ pub struct ArrayTypeMissmatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SignatureMissmatch {
-    pub type_missmatches: Box<[TypeMissmatch]>,
+pub struct SignatureMismatch {
+    pub type_mismatches: Box<[TypeMismatch]>,
     pub signatures: Cow<'static, TiSlice<Signature, SignatureData>>,
     pub src: Option<FunctionId>,
     pub found: Box<[Ty]>,
@@ -65,7 +65,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
             InferenceDiagnostic::InvalidAssignDst {
                 e,
                 maybe_different_operand,
-                assigment_kind,
+                assignment_kind,
             } => {
                 let src = self
                     .parse
@@ -78,14 +78,14 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     message: "invalid destination".to_owned(),
                 }]);
 
-                let res = match assigment_kind {
+                let res = match assignment_kind {
                     AssignOp::Contribute => res
                         .with_message("invalid destination for branch contribution")
                         .with_notes(vec![
                             "help: expected nature access such as V(foo) or I(foo)".to_owned()
                         ]),
                     AssignOp::Assign => res
-                        .with_message("invalid destination for assginment")
+                        .with_message("invalid destination for assignment")
                         .with_notes(vec!["help: expected a variable".to_owned()]),
                 };
 
@@ -116,7 +116,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     }])
                     .with_message(err.to_string())
             }
-            InferenceDiagnostic::ArgCntMissmatch { expected, found, expr, exact } => {
+            InferenceDiagnostic::ArgCntMismatch { expected, found, expr, exact } => {
                 let src = self.parse.to_file_span(
                     self.body_sm.expr_map_back[expr].as_ref().unwrap().range(),
                     self.sm,
@@ -140,7 +140,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         message,
                     }])
             }
-            InferenceDiagnostic::TypeMissmatch(ref err) => {
+            InferenceDiagnostic::TypeMismatch(ref err) => {
                 let src = self.parse.to_file_span(
                     self.body_sm.expr_map_back[err.expr].as_ref().unwrap().range(),
                     self.sm,
@@ -153,10 +153,10 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         range: src.range.into(),
                         message: err.to_string(),
                     }])
-                    .with_message(format!("type missmatch: {} but found {}", &err, err.found_ty))
+                    .with_message(format!("type mismatch: {} but found {}", &err, err.found_ty))
             }
-            InferenceDiagnostic::SignatureMissmatch(ref err) => {
-                let mut res = if let [ref ty_err] = *err.type_missmatches {
+            InferenceDiagnostic::SignatureMismatch(ref err) => {
+                let mut res = if let [ref ty_err] = *err.type_mismatches {
                     let FileSpan { file, range } = self.parse.to_file_span(
                         self.body_sm.expr_map_back[ty_err.expr].as_ref().unwrap().range(),
                         self.sm,
@@ -165,7 +165,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     Report::error()
                         .with_labels(vec![])
                         .with_message(format!(
-                            "type missmatch: {} but found {}",
+                            "type mismatch: {} but found {}",
                             &ty_err, ty_err.found_ty
                         ))
                         .with_labels(vec![Label {
@@ -176,7 +176,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         }])
                 } else {
                     let mut spans: Vec<_> = err
-                        .type_missmatches
+                        .type_mismatches
                         .iter()
                         .map(|it| {
                             self.parse.to_ctx_span(
@@ -187,7 +187,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         .collect();
 
                     let (file, ranges) = to_unified_span_list(self.sm, &mut spans);
-                    let labels = zip(ranges, &*err.type_missmatches)
+                    let labels = zip(ranges, &*err.type_mismatches)
                         .map(|(range, ty_err)| Label {
                             style: LabelStyle::Primary,
                             file_id: file,
@@ -198,13 +198,13 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
 
                     let mut notes = vec![format!(
                         "help: found ({})",
-                        pretty::List::new(&*err.found).with_final_seperator(", ")
+                        pretty::List::new(&*err.found).with_final_separator(", ")
                     )];
 
                     notes.extend(err.signatures.iter().map(|sig| format!("expected {}", sig)));
 
                     Report::error()
-                        .with_message("typed missmatch invalid function arguments".to_owned())
+                        .with_message("typed mismatch invalid function arguments".to_owned())
                         .with_labels(labels)
                         .with_notes(notes)
                 };
@@ -224,7 +224,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
 
                 res
             }
-            InferenceDiagnostic::ArrayTypeMissmatch(ArrayTypeMissmatch {
+            InferenceDiagnostic::ArrayTypeMismatch(ArrayTypeMismatch {
                 ref expected,
                 ref found_ty,
                 found_expr,
@@ -255,10 +255,10 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                             message: format!("expected because this is {}", found_ty),
                         },
                     ])
-                    .with_message(format!("type missmatch: {} but found {}", expected, found_ty))
+                    .with_message(format!("type mismatch: {} but found {}", expected, found_ty))
                     .with_notes(vec!["help: all array elements must have the same type".to_owned()])
             }
-            InferenceDiagnostic::InvalidUnkown { e } => {
+            InferenceDiagnostic::InvalidUnknown { e } => {
                 let src = self
                     .parse
                     .to_file_span(self.body_sm.expr_map_back[e].as_ref().unwrap().range(), self.sm);
@@ -268,14 +268,14 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         style: LabelStyle::Primary,
                         file_id: src.file,
                         range: src.range.into(),
-                        message: "invalid ddx unkown".to_owned(),
+                        message: "invalid ddx unknown".to_owned(),
                     }])
-                    .with_message("invalid unkown was supplied to the ddx operator")
+                    .with_message("invalid unknown was supplied to the ddx operator")
                     .with_notes(vec![
-                        "help: expected one of the following\nbranch current acces: I(branch), I(a,b)\nnode voltage: V(x)\nexplicit voltage: V(x,y)\ntemperature: $temperature".to_owned(),
+                        "help: expected one of the following\nbranch current access: I(branch), I(a,b)\nnode voltage: V(x)\nexplicit voltage: V(x,y)\ntemperature: $temperature".to_owned(),
                     ])
             }
-            InferenceDiagnostic::NonStandardUnkown { e, .. } => {
+            InferenceDiagnostic::NonStandardUnknown { e, .. } => {
                 let src = self
                     .parse
                     .to_file_span(self.body_sm.expr_map_back[e].as_ref().unwrap().range(), self.sm);
@@ -285,12 +285,12 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                         style: LabelStyle::Primary,
                         file_id: src.file,
                         range: src.range.into(),
-                        message: "unkown is not standard compliant".to_owned(),
+                        message: "unknown is not standard compliant".to_owned(),
                     }])
-                    .with_message("unkown supplied to the ddx operator is not standard compilant")
+                    .with_message("unknown supplied to the ddx operator is not standard compliant")
                     .with_notes(vec![
-                        "note: this functionality is fully suported by openvaf\nbut other Verilog-A compilers might not support it".to_owned(),
-                        "help: expected one of the following\nbranch current acces: I(branch), I(a,b)\nnode voltage: V(x)".to_owned(),
+                        "note: this functionality is fully supported by openvaf\nbut other Verilog-A compilers might not support it".to_owned(),
+                        "help: expected one of the following\nbranch current access: I(branch), I(a,b)\nnode voltage: V(x)".to_owned(),
                     ])
             }
             InferenceDiagnostic::ExpectedProbe { e } => {
@@ -393,7 +393,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                     .with_message(format!("{name} is not a valid function for use with $limit"))
                     .with_notes(notes)
             }
-            InferenceDiagnostic::DisplayTypeMissmatch { ref err, fmt_lit, lit_range, .. } => {
+            InferenceDiagnostic::DisplayTypeMismatch { ref err, fmt_lit, lit_range, .. } => {
                 let fmt_lit = self.body_sm.expr_map_back[fmt_lit].as_ref().unwrap().range();
                 let lit_src = self
                     .parse
@@ -419,7 +419,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                             message: "help: expected because of this fmt specifier".to_owned(),
                         },
                     ])
-                    .with_message(format!("type missmatch: {} but found {}", &err, err.found_ty))
+                    .with_message(format!("type mismatch: {} but found {}", &err, err.found_ty))
             }
             InferenceDiagnostic::MissingFmtArg { fmt_lit, lit_range } => {
                 let fmt_lit = self.body_sm.expr_map_back[fmt_lit].as_ref().unwrap().range();
@@ -486,7 +486,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
     }
 
     fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
-        if let InferenceDiagnostic::NonStandardUnkown { stmt, .. } = *self.diag {
+        if let InferenceDiagnostic::NonStandardUnknown { stmt, .. } = *self.diag {
             Some((non_standard_code, self.body_sm.lint_src(stmt, non_standard_code)))
         } else {
             None

@@ -12,7 +12,7 @@ use mir::cursor::{Cursor, FuncCursor};
 use mir::{ControlFlowGraph, DominatorTree, Function, Inst, InstructionData, Value, FALSE};
 use mir_autodiff::auto_diff;
 use mir_opt::{
-    agressive_dead_code_elimination, dead_code_elimination, inst_combine, propagate_taint,
+    aggressive_dead_code_elimination, dead_code_elimination, inst_combine, propagate_taint,
     simplify_cfg, simplify_cfg_no_phi_merge, sparse_conditional_constant_propagation, ClassId, GVN,
 };
 use stdx::packed_option::PackedOption;
@@ -22,7 +22,7 @@ use typed_indexmap::TiMap;
 use crate::compilation_db::{CompilationDB, ModuleInfo};
 use crate::lim_rhs::LimRhs;
 use crate::matrix::JacobianMatrix;
-use crate::prune::prune_unkowns;
+use crate::prune::prune_unknowns;
 use crate::residual::Residual;
 use crate::util::strip_optbarrier;
 use crate::SimUnknown;
@@ -147,7 +147,7 @@ impl EvalMir {
             .collect();
 
         let (mut op_dependent_insts, _is_noise, pruned) =
-            prune_unkowns(db, &mut func, &mut intern, &dom_tree, &op_dependent);
+            prune_unknowns(db, &mut func, &mut intern, &dom_tree, &op_dependent);
 
         let mut pruned_nodes = AHashSet::default();
         for pruned_param in pruned.iter() {
@@ -182,7 +182,7 @@ impl EvalMir {
         output_block = new_output_bb;
 
         dom_tree.compute(&func, &cfg, true, true, false);
-        let derivatives = intern.unkowns(&mut func, true);
+        let derivatives = intern.unknowns(&mut func, true);
         let extra_derivatives = residual.jacobian_derivatives(&func, &intern, &derivatives);
         let ad = auto_diff(&mut func, &dom_tree, &derivatives, &extra_derivatives);
         cfg.clear();
@@ -221,7 +221,7 @@ impl EvalMir {
         let mut control_dep = SparseBitMatrix::new(0, 0);
         dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
 
-        agressive_dead_code_elimination(
+        aggressive_dead_code_elimination(
             &mut func,
             &mut cfg,
             &|val, _| output_values.contains(val),
@@ -434,7 +434,7 @@ impl EvalMir {
         dom_tree.compute(&func, &cfg, false, true, false);
         dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
 
-        agressive_dead_code_elimination(
+        aggressive_dead_code_elimination(
             &mut func,
             &mut cfg,
             &|val, _| output_values.contains(val),
@@ -503,8 +503,8 @@ impl EvalMir {
         dom_tree.compute(&init_inst_func, &init_inst_cfg, false, true, false);
         dom_tree.compute_postdom_frontiers(&init_inst_cfg, &mut control_dep);
 
-        // TODO seperate model dependent code
-        agressive_dead_code_elimination(
+        // TODO separate model dependent code
+        aggressive_dead_code_elimination(
             &mut init_inst_func,
             &mut init_inst_cfg,
             &|val, _| init_inst_cache_vals.contains_key(&val) || init_output_values.contains(val),
@@ -634,8 +634,8 @@ impl CompilationDB {
 
         let mut dom_tree = DominatorTree::default();
         dom_tree.compute(&func, &cfg, true, false, true);
-        let unkowns = intern.unkowns(&mut func, false);
-        auto_diff(&mut func, &dom_tree, &unkowns, &[]);
+        let unknowns = intern.unknowns(&mut func, false);
+        auto_diff(&mut func, &dom_tree, &unknowns, &[]);
         cfg.clear();
         cfg.compute(&func);
         sparse_conditional_constant_propagation(&mut func, &cfg);
@@ -646,7 +646,7 @@ impl CompilationDB {
         let mut control_dep = SparseBitMatrix::new(0, 0);
         dom_tree.compute_postdom_frontiers(&cfg, &mut control_dep);
         output_values.ensure(func.dfg.num_values());
-        agressive_dead_code_elimination(
+        aggressive_dead_code_elimination(
             &mut func,
             &mut cfg,
             &|val, _| output_values.contains(val),

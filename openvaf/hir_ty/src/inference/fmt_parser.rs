@@ -10,18 +10,18 @@ enum ParserState {
     Flags,
     FixedFmtLit,
     DynamicFmtLit,
-    AnyPrecison,
-    FixedPrecison,
+    AnyPrecision,
+    FixedPrecision,
     DynamicPrecsion,
 }
 
 impl ParserState {
     fn start_precision(self) -> bool {
-        self < Self::AnyPrecison
+        self < Self::AnyPrecision
     }
 
     fn eat_number(self) -> bool {
-        matches!(self, Self::FixedPrecison | Self::FixedFmtLit)
+        matches!(self, Self::FixedPrecision | Self::FixedFmtLit)
     }
     fn candidates(self) -> &'static [char] {
         match self {
@@ -35,8 +35,8 @@ impl ParserState {
                 'G', 'r', 'R',
             ],
             ParserState::DynamicFmtLit => &['.', 'e', 'E', 'f', 'F', 'g', 'G', 'r', 'R'],
-            ParserState::AnyPrecison => &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*'],
-            ParserState::FixedPrecison => &[
+            ParserState::AnyPrecision => &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*'],
+            ParserState::FixedPrecision => &[
                 '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'e', 'E', 'f', 'F', 'g', 'G',
                 'r', 'R',
             ],
@@ -75,18 +75,18 @@ pub fn parse_real_fmt_spec(
                     state = ParserState::DynamicFmtLit;
                 }
                 '.' if state.start_precision() => {
-                    state = ParserState::AnyPrecison;
+                    state = ParserState::AnyPrecision;
                 }
 
-                '*' if state == ParserState::AnyPrecison => {
+                '*' if state == ParserState::AnyPrecision => {
                     dynamic_args.push(off.try_into().unwrap());
                     state = ParserState::DynamicPrecsion
                 }
-                '0'..='9' if state == ParserState::AnyPrecison => {
-                    state = ParserState::FixedPrecison
+                '0'..='9' if state == ParserState::AnyPrecision => {
+                    state = ParserState::FixedPrecision
                 }
                 '0'..='9' if state.eat_number() => (),
-                'e'..='g' | 'E'..='G' | 'r' | 'R' if state != ParserState::AnyPrecison => {
+                'e'..='g' | 'E'..='G' | 'r' | 'R' if state != ParserState::AnyPrecision => {
                     break;
                 }
                 _ => {

@@ -12,7 +12,7 @@ pub enum SyntaxError {
     // #[error("Unexpected Token!")]
     // MissingOrUnexpectedToken { expected: Token, expected_at: Span, span: Span },
     //
-    // #[error("Reached 'endmodule' while stil expecting an 'end' delimiter!")]
+    // #[error("Reached 'endmodule' while still expecting an 'end' delimiter!")]
     // MismatchedDecimeters { start: Span, end: Span },
     //
     // #[error("Unexpected EOF! Expected {expected}")]

@@ -70,7 +70,7 @@ impl CompilationDB {
             let root_file_id = vfs.file_id(&VfsPath::new_virtual_path(root_file.to_owned()));
             match root_file_id {
                 Some(id) => id,
-                None => bail!("paht '{}' is not present in the VFS!", root_file),
+                None => bail!("path '{}' is not present in the VFS!", root_file),
             }
         } else {
             let root_file = abs_path(root_file)?;

@@ -17,7 +17,7 @@ temp = 300
 circ = Circuit("test_circuit")
 circ.load_veriloga_file("bsimbulk.va")
 fet = CircuitInstance(circ, "test_fet", "bsimbulk", ports=["drain", "gate" ,"gnd", "gnd"])
-fet.set_param("RSH", 1e-3) # real model has many more paramter
+fet.set_param("RSH", 1e-3) # real model has many more parameter
 vdd = CircuitInstance(circ, "vdd", "vsource", ports=["drain", "gnd"])
 vdd.set_param("dc", 2)
 vdd.set_param("ac", 0)

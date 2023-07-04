@@ -21,7 +21,7 @@ impl Diagnostic for PreprocessorDiagnostic {
     fn build_report(&self, root_file: FileId, db: &dyn BaseDB) -> Report {
         let sm = db.sourcemap(root_file);
         let report = match *self {
-            PreprocessorDiagnostic::MacroArgumentCountMissmatch { expected, span, .. } => {
+            PreprocessorDiagnostic::MacroArgumentCountMismatch { expected, span, .. } => {
                 let span = span.to_file_span(&sm);
 
                 Report::error().with_labels(vec![Label {
@@ -118,7 +118,7 @@ impl Diagnostic for PreprocessorDiagnostic {
                 let mut has_unicode = false;
 
                 dst.extend(src.chars().map(|c| {
-                    let asscii = match c {
+                    let ascii = match c {
                         '\u{02BA}' | '\u{02DD}' | '\u{02EE}' | '\u{02F6}' | '\u{05F2}'
                         | '\u{05F4}' | '\u{1CD3}' | '\u{201C}' | '\u{201D}' | '\u{201F}'
                         | '\u{2033}' | '\u{2036}' | '\u{3003}' | '\u{FF02}' => '"',
@@ -188,8 +188,8 @@ impl Diagnostic for PreprocessorDiagnostic {
                         }
                     };
                     has_unicode = true;
-                    lookalike.insert((c, asscii));
-                    asscii
+                    lookalike.insert((c, ascii));
+                    ascii
                 }));
 
                 let mut notes = Vec::new();

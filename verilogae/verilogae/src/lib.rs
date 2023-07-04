@@ -43,7 +43,7 @@ pub fn export_vfs(path: &Utf8Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
     };
 
     if !unresolved_files.is_empty() {
-        bail!("Failed to openvaf vfs for {:?}\nThe following files are not contained within the same directoy {:?}", path, pretty::List::new(unresolved_files).with_final_seperator(", "));
+        bail!("Failed to openvaf vfs for {:?}\nThe following files are not contained within the same directory {:?}", path, pretty::List::new(unresolved_files).with_final_separator(", "));
     }
 
     let res = vfs_export

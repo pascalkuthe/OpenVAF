@@ -36,7 +36,7 @@ impl Type {
         matches!(self, Type::Real | Type::Integer | Type::Bool)
     }
 
-    pub fn is_convertable_to(&self, dst: &Type) -> bool {
+    pub fn is_convertible_to(&self, dst: &Type) -> bool {
         match (dst, self) {
             (Type::Real, Type::Integer | Type::Bool)
             | (Type::Integer, Type::Bool)
@@ -47,7 +47,7 @@ impl Type {
             | (Type::Array { len: 0, .. }, Type::EmptyArray) => true,
 
             (Type::Array { .. }, Type::Array { .. }) => {
-                self.dim() == dst.dim() && self.base_type().is_convertable_to(dst.base_type())
+                self.dim() == dst.dim() && self.base_type().is_convertible_to(dst.base_type())
             }
             _ => dst == self,
         }
@@ -129,7 +129,7 @@ impl Type {
     }
 
     pub fn is_assignable_to(&self, dst: &Type) -> bool {
-        self.is_convertable_to(dst)
+        self.is_convertible_to(dst)
             || (self.base_type().is_numeric()
                 && dst.base_type().is_numeric()
                 && self.dim() == dst.dim())

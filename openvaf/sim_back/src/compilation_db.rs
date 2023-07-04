@@ -111,7 +111,7 @@ impl CompilationDB {
                     if let Some(lint) = registry.lint_from_name(lint) {
                         overwrites[lint] = Some(*lvl)
                     } else {
-                        bail!("unkown lint {lint}")
+                        bail!("unknown lint {lint}")
                     }
                 }
             }
@@ -229,23 +229,23 @@ impl Diagnostic for IllegalExpr {
     }
 }
 
-struct UnkownType<'a> {
+struct UnknownType<'a> {
     range: TextRange,
     allowed: &'static str,
     found: &'a str,
 }
 
-impl Diagnostic for UnkownType<'_> {
+impl Diagnostic for UnknownType<'_> {
     fn build_report(&self, root_file: FileId, db: &dyn BaseDB) -> Report {
         let FileSpan { range, file } =
             db.parse(root_file).to_file_span(self.range, &db.sourcemap(root_file));
         Report::warning()
-            .with_message(format!("unkown type \"{}\" {}", self.found, self.allowed))
+            .with_message(format!("unknown type \"{}\" {}", self.found, self.allowed))
             .with_labels(vec![Label {
                 style: LabelStyle::Primary,
                 file_id: file,
                 range: range.into(),
-                message: "unkown type".to_owned(),
+                message: "unknown type".to_owned(),
             }])
     }
 }
@@ -331,7 +331,7 @@ impl ModuleInfo {
 
                 // 3.2.1 Output variables
                 //
-                // operating point variables must fullfill two properties
+                // operating point variables must fulfill two properties
                 // * belong to a module (not a block/function) -> no path
                 // * have a description or units attribute
 
@@ -386,7 +386,7 @@ impl ModuleInfo {
                         Some("instance") => true,
                         Some("model") | None => false,
                         Some(found) => {
-                            let diag = UnkownType {
+                            let diag = UnknownType {
                                 range,
                                 allowed: "expected \"model\" or \"instance\"",
                                 found,

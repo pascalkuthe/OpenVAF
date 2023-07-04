@@ -43,8 +43,8 @@ impl LimRhs {
         for (residual, residual_val) in residual.iter() {
             for (state, (unchanged, lim_vals)) in intern.lim_state.iter_enumerated() {
                 for (val, neg) in lim_vals {
-                    let unkown = derivative_info.unknowns.unwrap_index(val);
-                    if let Some(ddx) = derivatives.get(&(*residual_val, unkown)).copied() {
+                    let unknown = derivative_info.unknowns.unwrap_index(val);
+                    if let Some(ddx) = derivatives.get(&(*residual_val, unknown)).copied() {
                         if ddx != F_ZERO {
                             let changed = HirInterner::ensure_param_(
                                 &mut intern.params,
@@ -124,7 +124,7 @@ impl LimRhs {
         reactive: bool,
     ) {
         let dst = if reactive { &mut self.reactive } else { &mut self.resistive };
-        // no entrys for gnd nodes
+        // no entries for gnd nodes
 
         match dst.entry(residual) {
             Entry::Occupied(dst) => {

@@ -295,8 +295,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             builder.params[dst] = BuilderVal::Eager(temperature)
         }
 
-        for (node_id, unkown) in module.node_ids.iter_enumerated() {
-            if let SimUnknown::KirchoffLaw(node) = unkown {
+        for (node_id, unknown) in module.node_ids.iter_enumerated() {
+            if let SimUnknown::KirchoffLaw(node) = unknown {
                 if let Some((dst, val)) =
                     intern.params.index_and_val(&ParamKind::PortConnected { port: *node })
                 {
@@ -356,14 +356,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     let node1 = SimUnknown::KirchoffLaw(*node1);
                     let node2 = node2.map(SimUnknown::KirchoffLaw);
                     let info = module.mir.collapse.index_and_val(&(node1, node2));
-                    let (idx, extra_indecies) = if let Some(info) = info {
+                    let (idx, extra_indices) = if let Some(info) = info {
                         info
                     } else {
                         continue;
                     };
                     let idx = cx.const_unsigned_int(idx.into());
                     let mut state = vec![instance, idx];
-                    for &idx in extra_indecies.iter() {
+                    for &idx in extra_indices.iter() {
                         state.push(instance);
                         let idx = cx.const_unsigned_int(idx.into());
                         state.push(idx)

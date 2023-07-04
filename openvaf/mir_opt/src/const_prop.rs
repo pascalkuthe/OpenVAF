@@ -104,7 +104,7 @@ impl ConstSolver<'_> {
             || !self.inst_work_list.is_empty()
             || !self.overdef_work_list.is_empty()
         {
-            // seperate overdef worklist to drive the solver to termination faster
+            // separate overdef worklist to drive the solver to termination faster
             while let Some(inst) = self.overdef_work_list.pop() {
                 if let Some(bb) = self.func.layout.inst_block(inst) {
                     if self.executable_blocks.contains(bb) {

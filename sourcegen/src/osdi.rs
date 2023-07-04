@@ -46,7 +46,7 @@ fn gen_osdi_structs() {
             pub fn stdlib_bitcode(target: &target::spec::Target) -> &'static [u8]{
                 match &*target.llvm_target {
                     #(#targets => #stdlib_idents,)*
-                    triple => unreachable!("unkown target triple {triple}")
+                    triple => unreachable!("unknown target triple {triple}")
                 }
             }
         };

@@ -40,7 +40,7 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         ifn!("llvm.ctlz", fn(t_i32, t_bool) -> t_i32);
 
         // not technically intrinsics but part of the C standard library
-        // TODO link custom mathmatical functions
+        // TODO link custom mathematical functions
         ifn!("tan", fn(t_f64) -> t_f64);
         ifn!("acos", fn(t_f64) -> t_f64);
         ifn!("asin", fn(t_f64) -> t_f64);
@@ -73,7 +73,6 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
         // ifn!("llvm.eh.typeid.for", fn(i8p) -> t_i32);
         // ifn!("llvm.localescape", fn(...) -> void);
         // ifn!("llvm.localrecover", fn(i8p, i8p, t_i32) -> i8p);
-        // ifn!("llvm.x86.seh.recoverfp", fn(i8p, i8p) -> i8p);
 
         // ifn!("llvm.assume", fn(i1) -> void);
         // ifn!("llvm.prefetch", fn(i8p, t_i32, t_i32, t_i32) -> void);

@@ -1,7 +1,7 @@
 //! OpenVAF MIR
 //!
 //! The OpenVAF MIR represents the bodys of Verilog-A items as [SSA].
-//! This allows very efficent implementations of the various algorithms in the backend.
+//! This allows very efficient implementations of the various algorithms in the backend.
 //! The implementation in this crate is heavly inspired by the IR in [`cranelift`] and [`llvm`].
 //! However the focus of the MIR is on traditional algorithms pefromed at middle instead of the
 //! codegeneration. As a result the implementation is simplified:
@@ -11,7 +11,7 @@
 //! * The MIR is untyped. All opcodes have fixed argument/return types. Instructions must be
 //! constructed with correct types.
 //!
-//! Compared to the HIR the MIR is completly decoupled from the AST (and HIR) which allows for much
+//! Compared to the HIR the MIR is completely decoupled from the AST (and HIR) which allows for much
 //! faster compile times. This break comes quite naturally as the various algorithms that operate on the
 //! MIR are not concerned with language-level concepts.
 //! Translation from HIR to MIR and mappings from MIR objects to the language-level HIR objects are
@@ -259,4 +259,4 @@ pub struct KnownDerivatives {
 pub struct Unknown(pub u32);
 impl_idx_from!(Unknown(u32));
 
-impl_debug!(match Unknown{Unknown(raw) => "unkown{}",raw;});
+impl_debug!(match Unknown{Unknown(raw) => "unknown{}",raw;});

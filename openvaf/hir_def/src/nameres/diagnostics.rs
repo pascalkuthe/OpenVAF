@@ -47,7 +47,7 @@ impl PathResolveError {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum DefDiagnostic {
-    AlreadyDeclard { old: ScopeDefItem, new: ScopeDefItem, name: Name },
+    AlreadyDeclared { old: ScopeDefItem, new: ScopeDefItem, name: Name },
 }
 
 pub struct DefDiagnosticWrapped<'a> {
@@ -61,7 +61,7 @@ pub struct DefDiagnosticWrapped<'a> {
 impl Diagnostic for DefDiagnosticWrapped<'_> {
     fn build_report(&self, _root_file: FileId, _db: &dyn BaseDB) -> Report {
         match self.diag {
-            DefDiagnostic::AlreadyDeclard { old, new, name } => {
+            DefDiagnostic::AlreadyDeclared { old, new, name } => {
                 let FileSpan { range, file } = self.parse.to_file_span(
                     new.text_range(self.db, self.ast_id_map, self.parse).unwrap(),
                     self.sm,

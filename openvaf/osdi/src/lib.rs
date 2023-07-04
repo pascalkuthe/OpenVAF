@@ -101,7 +101,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
 
@@ -118,7 +118,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 1];
                     // llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
 
@@ -135,7 +135,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 2];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
 
@@ -154,7 +154,7 @@ pub fn compile(
                 if emit {
                     let path = &paths[i * 4 + 3];
                     llmod.optimize();
-                    assert_eq!(llmod.emit_obect(path.as_ref()), Ok(()))
+                    assert_eq!(llmod.emit_object(path.as_ref()), Ok(()))
                 }
             });
         }
@@ -204,7 +204,7 @@ pub fn compile(
         }
 
         let osdi_log =
-            cx.get_declared_value("osdi_log").expect("symbol osdi_log mising from std lib");
+            cx.get_declared_value("osdi_log").expect("symbol osdi_log missing from std lib");
         let val = cx.const_null_ptr();
         unsafe {
             llvm::LLVMSetInitializer(osdi_log, val);
@@ -219,7 +219,7 @@ pub fn compile(
             // println!("{}", llmod.to_str());
             llmod.optimize();
             // println!("{}", llmod.to_str());
-            assert_eq!(llmod.emit_obect(main_file.as_ref()), Ok(()))
+            assert_eq!(llmod.emit_object(main_file.as_ref()), Ok(()))
         }
     });
 

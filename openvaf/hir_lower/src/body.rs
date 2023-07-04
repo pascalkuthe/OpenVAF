@@ -70,8 +70,8 @@ impl<'a> MirBuilder<'a> {
         self.tagged_reads.insert(var)
     }
 
-    pub fn with_tagged_reads(mut self, taged_vars: AHashSet<VarId>) -> Self {
-        self.tagged_reads = taged_vars;
+    pub fn with_tagged_reads(mut self, tagged_vars: AHashSet<VarId>) -> Self {
+        self.tagged_reads = tagged_vars;
         self
     }
 
@@ -118,9 +118,9 @@ impl<'a> MirBuilder<'a> {
         let mut builder = FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
         let path = self.db.module_data(self.module).name.to_string();
 
-        let analog_inital = DefWithBodyId::ModuleId { initial: true, module: self.module };
-        let analog_inital_body = self.db.body(analog_inital);
-        let analog_inital_infere = self.db.inference_result(analog_inital);
+        let analog_initial = DefWithBodyId::ModuleId { initial: true, module: self.module };
+        let analog_initial_body = self.db.body(analog_initial);
+        let analog_initial_infere = self.db.inference_result(analog_initial);
 
         let analog = DefWithBodyId::ModuleId { initial: false, module: self.module };
         let analog_body = self.db.body(analog);
@@ -139,8 +139,8 @@ impl<'a> MirBuilder<'a> {
             db: self.db,
             func: &mut builder,
             data: &mut interner,
-            body: &analog_inital_body,
-            infere: &analog_inital_infere,
+            body: &analog_initial_body,
+            infere: &analog_initial_infere,
             tagged_vars: &self.tagged_reads,
             places: &mut places,
             extra_dims: self.split_contribute.then_some(&mut extra_dims),
@@ -149,7 +149,7 @@ impl<'a> MirBuilder<'a> {
             inside_lim: false,
         };
 
-        // lower analog inital blocks first
+        // lower analog initial blocks first
         ctx.lower_entry_stmts();
 
         // ... and normal analog blocks afterwards
@@ -391,7 +391,7 @@ impl HirInterner {
 
             let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
 
-            let precomuted_vals = if build_min_max {
+            let precomputed_vals = if build_min_max {
                 let min_inclusive =
                     ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
 
@@ -529,7 +529,7 @@ impl HirInterner {
             ctx.check_param(
                 param_val,
                 &info.bounds,
-                &precomuted_vals,
+                &precomputed_vals,
                 ConstraintKind::From,
                 ops,
                 invalid,
@@ -539,7 +539,7 @@ impl HirInterner {
             ctx.check_param(
                 param_val,
                 &info.bounds,
-                &precomuted_vals,
+                &precomputed_vals,
                 ConstraintKind::Exclude,
                 ops,
                 invalid,
@@ -681,7 +681,7 @@ impl LoweringCtx<'_, '_> {
         match kind {
             ConstraintKind::From => {
                 if let Some(exit) = exit {
-                    // error on falltrough
+                    // error on fallthrough
                     self.func.ins().call(invalid, &[]);
                     self.func.ins().jump(global_exit);
 
@@ -693,7 +693,7 @@ impl LoweringCtx<'_, '_> {
                 self.func.ins().jump(global_exit);
 
                 if let Some(exit) = exit {
-                    // error on falltrough
+                    // error on fallthrough
                     self.func.switch_to_block(exit);
                     self.func.ins().call(invalid, &[]);
                     self.func.ins().jump(global_exit);
@@ -718,8 +718,8 @@ impl LoweringCtx<'_, '_> {
                 // TODO handle porperly
                 self.lower_stmt(body);
             }
-            Stmt::Assigment { val, .. } => {
-                let place = match self.infere.assigment_destination[&stmt] {
+            Stmt::Assignment { val, .. } => {
+                let place = match self.infere.assignment_destination[&stmt] {
                     AssignDst::Var(var) => PlaceKind::Var(var),
                     AssignDst::FunVar { fun, arg: None } => PlaceKind::FunctionReturn(fun),
                     AssignDst::FunVar { arg: Some(arg), fun } => {
@@ -937,14 +937,14 @@ impl LoweringCtx<'_, '_> {
                     let entry = func.func.layout.entry_block().unwrap();
                     func.def_var_at(place, hidden_state, entry);
                 }
-                // always initalized
+                // always initialized
                 PlaceKind::FunctionReturn { .. }
                 | PlaceKind::FunctionArg { .. }
                 | PlaceKind::Param(_)
                 | PlaceKind::ParamMin(_)
                 | PlaceKind::ParamMax(_) => (),
 
-                // always zero initalized
+                // always zero initialized
                 PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => {
                     let entry = func.func.layout.entry_block().unwrap();
                     func.def_var_at(place, F_ZERO, entry);
@@ -977,10 +977,10 @@ impl LoweringCtx<'_, '_> {
         match self.body.exprs[expr] {
             hir_def::Expr::Path { port: false, .. } => match self.infere.expr_types[expr] {
                 HirTy::Var(_, var) => self.place(PlaceKind::Var(var)),
-                HirTy::FuntionVar { fun, arg: None, .. } => {
+                HirTy::FunctionVar { fun, arg: None, .. } => {
                     self.place(PlaceKind::FunctionReturn(fun))
                 }
-                HirTy::FuntionVar { arg: Some(arg), fun, .. } => {
+                HirTy::FunctionVar { arg: Some(arg), fun, .. } => {
                     self.place(PlaceKind::FunctionArg { fun, arg })
                 }
                 _ => unreachable!(),
@@ -1025,11 +1025,11 @@ impl LoweringCtx<'_, '_> {
                     }
                     val
                 }
-                HirTy::FuntionVar { fun, arg: None, .. } => {
+                HirTy::FunctionVar { fun, arg: None, .. } => {
                     let place = self.place(PlaceKind::FunctionReturn(fun));
                     self.func.use_var(place)
                 }
-                HirTy::FuntionVar { arg: Some(arg), fun, .. } => {
+                HirTy::FunctionVar { arg: Some(arg), fun, .. } => {
                     let place = self.place(PlaceKind::FunctionArg { fun, arg });
                     self.func.use_var(place)
                 }
@@ -1106,7 +1106,7 @@ impl LoweringCtx<'_, '_> {
                 }
             },
             ref expr => unreachable!(
-                "encounted invalid expr {:?}: this should have been caught in the frontend",
+                "encountered invalid expr {:?}: this should have been caught in the frontend",
                 expr
             ),
         };
@@ -1132,7 +1132,7 @@ impl LoweringCtx<'_, '_> {
             (Type::Array { .. }, Type::EmptyArray) | (Type::EmptyArray, Type::Array { .. }) => {
                 return val
             }
-            _ => unreachable!("unkown cast found  {:?} -> {:?}", src, dst),
+            _ => unreachable!("unknown cast found  {:?} -> {:?}", src, dst),
         };
         let inst = self.func.ins().unary(op, val).0;
         self.func.func.dfg.first_result(inst)
@@ -1644,14 +1644,14 @@ impl LoweringCtx<'_, '_> {
 
     fn limit_state(&mut self, probe: ExprId) -> (Value, LimitState) {
         let new_val = self.lower_expr(probe);
-        let mut unkown = new_val;
-        if let Some(inst) = self.func.func.dfg.value_def(unkown).inst() {
+        let mut unknown = new_val;
+        if let Some(inst) = self.func.func.dfg.value_def(unknown).inst() {
             debug_assert_eq!(self.func.func.dfg.insts[inst].opcode(), Opcode::Fneg);
-            unkown = self.func.func.dfg.instr_args(inst)[0];
+            unknown = self.func.func.dfg.instr_args(inst)[0];
         }
-        let dst = self.data.lim_state.raw.entry(unkown);
+        let dst = self.data.lim_state.raw.entry(unknown);
         let state = LimitState::from(dst.index());
-        dst.or_default().push((new_val, new_val != unkown));
+        dst.or_default().push((new_val, new_val != unknown));
 
         (new_val, state)
     }

@@ -23,7 +23,7 @@ pub fn tokenize(input: &str) -> Vec<Token> {
 /// for definitions of these classes.
 ///
 /// Technically the the VAMS standard only considers ASCII.
-/// For better compatability unicode is also allowed here (same whitespace definition as rust is
+/// For better compatibility unicode is also allowed here (same whitespace definition as rust is
 /// used)
 pub fn is_whitespace(c: char) -> bool {
     // This is Pattern_White_Space.

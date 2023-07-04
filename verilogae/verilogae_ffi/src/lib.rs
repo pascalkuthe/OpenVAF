@@ -66,7 +66,7 @@ impl Opts {
     ///
     /// # Note
     /// The slices themselves are deallocated on drop (owned by this struct)
-    /// Their contents (strings) are owned by the calle. Its his responsability to deallocate them
+    /// Their contents (strings) are owned by the caller. Its his responsibility to deallocate them
     pub unsafe fn write(&mut self) -> &mut ffi::Opts {
         match &mut self.0 {
             Some(res) => res,

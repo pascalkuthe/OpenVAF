@@ -132,8 +132,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         module
             .node_ids
             .iter_enumerated()
-            .map(|(id, unkown)| {
-                let (name, units, is_flow) = sim_unkown_info(*unkown, db);
+            .map(|(id, unknown)| {
+                let (name, units, is_flow) = sim_unknown_info(*unknown, db);
                 let resist_residual_off =
                     inst_data.residual_off(id, false, target_data).unwrap_or(u32::MAX);
                 let react_residual_off =
@@ -295,20 +295,20 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
 impl OsdiModule<'_> {
     pub fn intern_node_strs(&self, intern: &mut Rodeo, db: &CompilationDB) {
-        for unkown in self.node_ids.iter() {
-            let (name, units, _) = sim_unkown_info(*unkown, db);
+        for unknown in self.node_ids.iter() {
+            let (name, units, _) = sim_unknown_info(*unknown, db);
             intern.get_or_intern(&name);
             intern.get_or_intern(&units);
         }
     }
 }
 
-fn sim_unkown_info(unkown: SimUnknown, db: &CompilationDB) -> (String, String, bool) {
+fn sim_unknown_info(unknown: SimUnknown, db: &CompilationDB) -> (String, String, bool) {
     let name;
     let discipline;
     let is_flow;
 
-    match unkown {
+    match unknown {
         SimUnknown::KirchoffLaw(node) => {
             name = db.node_data(node).name.to_string();
             discipline = db.node_discipline(node);

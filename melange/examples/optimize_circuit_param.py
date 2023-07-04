@@ -41,4 +41,4 @@ def amplifier_gain(length, width):
     gain = pout-pin
     return gain
 
-# use standard mathmatical package like scipy (or machine learning) to opimzie the amplifier_gain function
+# use standard mathematical package like scipy (or machine learning) to opimzie the amplifier_gain function

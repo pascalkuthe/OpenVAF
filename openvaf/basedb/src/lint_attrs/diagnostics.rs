@@ -3,7 +3,7 @@ use syntax::sourcemap::FileSpan;
 use syntax::TextRange;
 
 use crate::diagnostics::{text_ranges_to_unified_spans, Diagnostic, Label, LabelStyle, Report};
-use crate::lints::builtin::{lint_level_owerwrite, lint_not_found};
+use crate::lints::builtin::{lint_level_overwrite, lint_not_found};
 use crate::lints::{Lint, LintSrc};
 use crate::{BaseDB, FileId};
 
@@ -22,7 +22,7 @@ use crate::ErasedAstId;
 impl_display! {
     match AttrDiagnostic{
         ExpectedArrayOrLiteral{attr,..} => "'{}' attribute exptects a string literal or and array of literals",attr;
-        ExpectedLiteral{attr,..} => "'{}' attribute expepects a string literal here", attr;
+        ExpectedLiteral{attr,..} => "'{}' attribute expects a string literal here", attr;
         UnknownLint{lint,..} => "unknown lint '{}'",lint;
         LintOverwrite{name,..} => "lint level for '{}' was set multiple times",name;
     }
@@ -32,7 +32,7 @@ impl Diagnostic for AttrDiagnostic {
     fn lint(&self, _root_file: FileId, _db: &dyn BaseDB) -> Option<(Lint, LintSrc)> {
         match *self {
             UnknownLint { src, .. } => Some((lint_not_found, src.into())),
-            LintOverwrite { src, .. } => Some((lint_level_owerwrite, src.into())),
+            LintOverwrite { src, .. } => Some((lint_level_overwrite, src.into())),
             _ => None,
         }
     }

@@ -413,7 +413,7 @@ extern "C" {
     ) -> *const f64;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `params.real.cnt` global"]
+    #[doc = "This function returns a pointer to the `params.real.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -425,7 +425,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `params.integer.cnt` global"]
+    #[doc = "This function returns a pointer to the `params.integer.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -437,7 +437,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `params.string.cnt` global"]
+    #[doc = "This function returns a pointer to the `params.string.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -449,7 +449,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `depbreak.real.cnt` global"]
+    #[doc = "This function returns a pointer to the `depbreak.real.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -461,7 +461,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `depbreak.integer.cnt` global"]
+    #[doc = "This function returns a pointer to the `depbreak.integer.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -473,7 +473,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `voltages.cnt` global"]
+    #[doc = "This function returns a pointer to the `voltages.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -485,7 +485,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `currents.cnt` global"]
+    #[doc = "This function returns a pointer to the `currents.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -497,7 +497,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `voltages.default.cnt` global"]
+    #[doc = "This function returns a pointer to the `voltages.default.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]
@@ -509,7 +509,7 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    #[doc = "This funtion returns a pointer to the `currents.default.cnt` global"]
+    #[doc = "This function returns a pointer to the `currents.default.cnt` global"]
     #[doc = " of a VerilogAE model loaded with `load`."]
     #[doc = ""]
     #[doc = " # Safety"]

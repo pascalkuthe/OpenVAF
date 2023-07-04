@@ -1,7 +1,7 @@
 //! A simplified AST that only contains items.
 //!
 //! This is the primary IR used throughout `hir_def`. It is the input to the name resolution
-//! algorith
+//! algorithm
 //!
 //! One important purpose of this layer is to provide an "invalidation barrier" for incremental
 //! computations: when typing inside an item body, the `ItemTree` of the modified file is typically
@@ -350,7 +350,7 @@ pub struct DisciplineAttr {
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum Domain {
     Discrete,
-    Continous,
+    Continuous,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -505,7 +505,7 @@ impl Node {
             Some(direction) => direction,
             // default to inout to avoid confusing error messages
             // and to allow omitting direction specification
-            // for backwards compatability with cadence, see #40
+            // for backwards compatibility with cadence, see #40
             None if self.is_port => (true, true),
             None => (false, false),
         }

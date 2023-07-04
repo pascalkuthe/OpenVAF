@@ -55,7 +55,7 @@ macro_rules! expose_ptrs {
         pub unsafe extern "C" fn $name(lib: *const c_void) -> *$mut $ty {
             catch_unwind(||{
                 let lib = Library::from_raw(lib as _);
-                let res = acces_ptr::<$ty>(&lib, $sym.as_bytes()) as _;
+                let res = access_ptr::<$ty>(&lib, $sym.as_bytes()) as _;
                 // forget library so it doesn't get closed
                 std::mem::forget(lib);
                 res
@@ -97,7 +97,7 @@ macro_rules! expose_consts{
         pub unsafe extern "C" fn $name(lib: *const c_void) -> $ty {
             catch_unwind(||{
                 let lib = Library::from_raw(lib as _);
-                let res = acces_val(&lib, $sym.as_bytes());
+                let res = access_val(&lib, $sym.as_bytes());
                 // forget library so it doesn't get closed
                 std::mem::forget(lib);
                 res
@@ -149,7 +149,7 @@ macro_rules! expose_named_ptrs {
                 sym_name.extend_from_slice($sym.as_bytes());
                 sym_name.push(b'\0');
                 let lib = Library::from_raw(lib as _);
-                let res = acces_ptr::<$ty>(&lib, &sym_name) as _;
+                let res = access_ptr::<$ty>(&lib, &sym_name) as _;
                 // forget library so it doesn't get closed
                 std::mem::forget(lib);
                 res
@@ -178,7 +178,7 @@ expose_named_ptrs! {
 macro_rules! expose_named_consts {
     ($($name: ident: $ty:ty = $sym: literal;)*) => {
         $(
-        #[doc = concat!("This funtion returns a pointer to the `", $sym, "` global")]
+        #[doc = concat!("This function returns a pointer to the `", $sym, "` global")]
         /// of a VerilogAE model loaded with `load`.
         ///
         /// # Safety
@@ -193,7 +193,7 @@ macro_rules! expose_named_consts {
                 sym_name.extend_from_slice($sym.as_bytes());
                 sym_name.push(b'\0');
                 let lib = Library::from_raw(lib as _);
-                let res = acces_val(&lib, &sym_name);
+                let res = access_val(&lib, &sym_name);
                 // forget library so it doesn't get closed
                 std::mem::forget(lib);
                 res
@@ -407,8 +407,8 @@ pub unsafe extern "C" fn verilogae_call_fun_parallel(
     0
 }
 
-unsafe fn acces_ptr<T>(lib: &Library, sym_name: &[u8]) -> *const T {
-    match acces_global(lib, sym_name) {
+unsafe fn access_ptr<T>(lib: &Library, sym_name: &[u8]) -> *const T {
+    match access_global(lib, sym_name) {
         Ok(val) => val,
         Err(err) => {
             eprintln!("error: failed to access {}\n\n{}", String::from_utf8_lossy(sym_name), err);
@@ -417,8 +417,8 @@ unsafe fn acces_ptr<T>(lib: &Library, sym_name: &[u8]) -> *const T {
     }
 }
 
-unsafe fn acces_val<T: Copy + Default>(lib: &Library, sym_name: &[u8]) -> T {
-    match acces_global(lib, sym_name) {
+unsafe fn access_val<T: Copy + Default>(lib: &Library, sym_name: &[u8]) -> T {
+    match access_global(lib, sym_name) {
         Ok(val) => *val,
         Err(err) => {
             eprintln!("error: failed to access {}\n\n{}", String::from_utf8_lossy(sym_name), err);
@@ -427,7 +427,7 @@ unsafe fn acces_val<T: Copy + Default>(lib: &Library, sym_name: &[u8]) -> T {
     }
 }
 
-unsafe fn acces_global<'a, T>(
+unsafe fn access_global<'a, T>(
     lib: &'a Library,
     sym_name: &[u8],
 ) -> Result<&'a T, libloading::Error> {

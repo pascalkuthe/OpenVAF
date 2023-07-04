@@ -1,0 +1,32 @@
+default.extend-ignore-re = ["\\\\u\\{[0-9A-Z]*\\}"]
+[files]
+extend-exclude = ["integration_tests", "verilogae/tests", "*.mir", "openvaf/lexer/src/tests.rs"]
+[default.extend-identifiers]
+"inout" = "inout"
+"laplace-and" = "laplace-and"
+"zi-and" = "zi-and"
+"laplace_nd" = "laplace_nd"
+"zi_nd" = "zi_nd"
+"LAPLACE_ND" = "LAPLACE_ND"
+"ZI_ND" = "ZI_ND"
+"RealOLT" = "RealOLT"
+"ddt" = "ddt"
+"ddx" = "ddx"
+"inot" = "inot"
+"Inot" = "Inot"
+"fle" = "fle"
+"Fle" = "Fle"
+"bicast" = "bicast"
+"Bicast" = "Bicast"
+"coul" = "coul"
+"nd" = "nd"
+
+[default.extend-words]
+"inout" = "inout"
+"laplace-and" = "laplace-and"
+"zi-and" = "zi-and"
+"laplace_nd" = "laplace_nd"
+"zi_nd" = "zi_nd"
+"ddt" = "ddt"
+"ddx" = "ddx"
+"Coul" = "Coul"

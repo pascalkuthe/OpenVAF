@@ -9,7 +9,7 @@ use vfs::{FileId, VfsPath};
 
 use crate::SourceProvider;
 
-/// Representents a continous range of Text inside a particular file.
+/// Representents a continuous range of Text inside a particular file.
 /// This representation is the only representation that can be used to actually obtain the src code
 /// of a particular TextRange
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -56,7 +56,7 @@ impl FileSpan {
     #[must_use]
     pub fn file_text(&self, db: &dyn SourceProvider) -> Arc<str> {
         db.file_text(self.file).expect("FileSpan was created with invalid FileId")
-        // Spans are only created after a file was read succesfully
+        // Spans are only created after a file was read successfully
     }
 
     pub fn extend_to_line_end(&mut self, db: &dyn SourceProvider) -> TextRange {
@@ -76,7 +76,7 @@ impl FileSpan {
 }
 
 /// A CtxSpan refers a contious range of Text a SourceContext (macro expansion or file).
-/// The range is relative to the start of the particular context so thgat ranges can be changed
+/// The range is relative to the start of the particular context so that ranges can be changed
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub struct CtxSpan {
     pub range: TextRange,
@@ -177,7 +177,7 @@ impl SourceMap {
     /// This is a fairly efficient algorithm but still requires a building a HashMap
     /// so avoid calling this if not necessary.
     ///
-    /// Furthremore this algorithm does not special case self==other
+    /// Furthermore this algorithm does not special case self==other
     /// This is a special case that tends to be of interest to the caller and and as such
     /// is checked there. Even if this is not of interest to you this is a fairly common case
     /// so you should special case it for better performance

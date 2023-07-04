@@ -416,7 +416,7 @@ const double *verilogae_fun_voltage_defaults(const void *lib, const char *fun);
 const double *verilogae_fun_current_defaults(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `params.real.cnt` global
+ *This function returns a pointer to the `params.real.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -426,7 +426,7 @@ const double *verilogae_fun_current_defaults(const void *lib, const char *fun);
 uintptr_t verilogae_real_fun_param_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `params.integer.cnt` global
+ *This function returns a pointer to the `params.integer.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -436,7 +436,7 @@ uintptr_t verilogae_real_fun_param_cnt(const void *lib, const char *fun);
 uintptr_t verilogae_int_fun_param_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `params.string.cnt` global
+ *This function returns a pointer to the `params.string.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -446,7 +446,7 @@ uintptr_t verilogae_int_fun_param_cnt(const void *lib, const char *fun);
 uintptr_t verilogae_str_fun_param_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `depbreak.real.cnt` global
+ *This function returns a pointer to the `depbreak.real.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -456,7 +456,7 @@ uintptr_t verilogae_str_fun_param_cnt(const void *lib, const char *fun);
 uintptr_t verilogae_real_fun_depbreak_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `depbreak.integer.cnt` global
+ *This function returns a pointer to the `depbreak.integer.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -466,7 +466,7 @@ uintptr_t verilogae_real_fun_depbreak_cnt(const void *lib, const char *fun);
 uintptr_t verilogae_int_fun_depbreak_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `voltages.cnt` global
+ *This function returns a pointer to the `voltages.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -476,7 +476,7 @@ uintptr_t verilogae_int_fun_depbreak_cnt(const void *lib, const char *fun);
 uintptr_t verilogae_fun_voltage_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `currents.cnt` global
+ *This function returns a pointer to the `currents.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -486,7 +486,7 @@ uintptr_t verilogae_fun_voltage_cnt(const void *lib, const char *fun);
 uintptr_t verilogae_fun_current_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `voltages.default.cnt` global
+ *This function returns a pointer to the `voltages.default.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety
@@ -496,7 +496,7 @@ uintptr_t verilogae_fun_current_cnt(const void *lib, const char *fun);
 uintptr_t verilogae_fun_voltage_default_cnt(const void *lib, const char *fun);
 
 /**
- *This funtion returns a pointer to the `currents.default.cnt` global
+ *This function returns a pointer to the `currents.default.cnt` global
  * of a VerilogAE model loaded with `load`.
  *
  * # Safety

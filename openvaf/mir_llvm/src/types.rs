@@ -119,15 +119,15 @@ impl<'a, 'll> CodegenCx<'a, 'll> {
     }
 
     /// # Safety
-    /// indicies must be valid and inbounds for the provided ptr
+    /// indices must be valid and inbounds for the provided ptr
     /// The pointer must be a constant address
     pub unsafe fn const_gep(
         &self,
         elem_ty: &'ll llvm::Type,
         ptr: &'ll llvm::Value,
-        indicies: &[&'ll llvm::Value],
+        indices: &[&'ll llvm::Value],
     ) -> &'ll llvm::Value {
-        llvm::LLVMConstInBoundsGEP2(elem_ty, ptr, indicies.as_ptr(), indicies.len() as u32)
+        llvm::LLVMConstInBoundsGEP2(elem_ty, ptr, indices.as_ptr(), indices.len() as u32)
     }
 
     pub fn const_int(&self, val: i32) -> &'ll Value {

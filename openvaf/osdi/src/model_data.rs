@@ -57,9 +57,9 @@ impl<'ll> OsdiModelData<'ll> {
     ) -> MemLoc<'ll> {
         let ty = self.params.get_index(pos as usize).unwrap().1;
         let elem = NUM_CONST_FIELDS + pos as u32;
-        let indicies =
+        let indices =
             vec![cx.const_unsigned_int(0), cx.const_unsigned_int(elem)].into_boxed_slice();
-        MemLoc { ptr, ptr_ty: self.ty, ty, indicies }
+        MemLoc { ptr, ptr_ty: self.ty, ty, indices }
     }
 
     pub fn param_loc(

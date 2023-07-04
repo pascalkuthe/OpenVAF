@@ -39,13 +39,13 @@ fn gen_msvcrt_importlib(sh: &Shell, arch: &str, target: &str, check: bool) {
         "clang-cl /c /Zl /GS- /clang:--target={target}-pc-windows-msvc /clang:-o{ucrt_obj} {ucrt_src}"
     )
     .run()
-    .expect("ucrt compilation succedes");
+    .expect("ucrt compilation succeeds");
     libs.push(ucrt_obj);
 
     let libs_ref = &libs;
     cmd!(sh, "llvm-lib /machine:{arch} {libs_ref...} /OUT:{out_file}")
         .run()
-        .expect("successfull linking");
+        .expect("successful linking");
 
     for lib in &libs {
         let _ = sh.remove_path(lib);

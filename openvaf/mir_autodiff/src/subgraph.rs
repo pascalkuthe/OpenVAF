@@ -18,7 +18,7 @@ struct SubGraphExplorer<'a, 'b> {
     curr_subgraph: BitSet<Inst>,
     curr_subgraph_dominator: Block,
 
-    curr_subgraph_unkowns: HybridBitSet<Unknown>,
+    curr_subgraph_unknowns: HybridBitSet<Unknown>,
     off: u32,
 
     saved_insts: i32,
@@ -44,7 +44,7 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
             outputs,
             workqueue: Vec::new(),
             curr_subgraph: BitSet::new_empty(func.dfg.num_insts()),
-            curr_subgraph_unkowns: HybridBitSet::new_empty(),
+            curr_subgraph_unknowns: HybridBitSet::new_empty(),
             off,
             saved_insts: 0,
             curr_subgraph_dominator: 0u32.into(),
@@ -69,18 +69,18 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
             return None;
         }
 
-        self.curr_subgraph_unkowns = HybridBitSet::new_empty();
+        self.curr_subgraph_unknowns = HybridBitSet::new_empty();
 
         for derivative in derivatives.iter().copied() {
             let idx: u32 = self.intern.get_unknown(derivative).into();
             if idx >= self.off {
-                self.curr_subgraph_unkowns.union(
+                self.curr_subgraph_unknowns.union(
                     &self.completed_subgraphs[(idx - self.off) as usize],
                     self.intern.num_unknowns(),
                 );
             } else {
-                let unkown = self.intern.get_unknown(derivative);
-                self.curr_subgraph_unkowns.insert(unkown, self.intern.num_unknowns());
+                let unknown = self.intern.get_unknown(derivative);
+                self.curr_subgraph_unknowns.insert(unknown, self.intern.num_unknowns());
             }
         }
 
@@ -116,9 +116,9 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
 
             if let Some(row) = self.derivatives.mat.row(inst) {
                 if self
-                    .curr_subgraph_unkowns
+                    .curr_subgraph_unknowns
                     .iter()
-                    .all(|unkown| !row.contains(self.intern.to_derivative(unkown)))
+                    .all(|unknown| !row.contains(self.intern.to_derivative(unknown)))
                 {
                     continue;
                 }
@@ -160,18 +160,18 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
             }
         }
 
-        let num_unkowns = entry.0.len() as u32;
-        let saved_insts = num_insts * (num_unkowns - 1);
-        let extra_inst_approx = edges.len() as u32 * num_unkowns;
+        let num_unknowns = entry.0.len() as u32;
+        let saved_insts = num_insts * (num_unknowns - 1);
+        let extra_inst_approx = edges.len() as u32 * num_unknowns;
 
         if saved_insts > extra_inst_approx + 4
             && (saved_insts - extra_inst_approx) * 100 / num_insts > 15
         {
             // this is actually worth it
-            let new_unkown = self.intern.ensure_unknown(entry.1);
-            let new_derivative = self.intern.to_derivative(new_unkown);
-            let unkowns = replace(&mut self.curr_subgraph_unkowns, HybridBitSet::new_empty());
-            self.completed_subgraphs.push(unkowns);
+            let new_unknown = self.intern.ensure_unknown(entry.1);
+            let new_derivative = self.intern.to_derivative(new_unknown);
+            let unknowns = replace(&mut self.curr_subgraph_unknowns, HybridBitSet::new_empty());
+            self.completed_subgraphs.push(unknowns);
 
             let mut extra_inst = 0;
             let mut i = 0;
@@ -246,7 +246,7 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
 
         let dst = self.derivatives.conversions.entry(inst).or_default();
 
-        // chain rules are interated in rev order to ensure that they cancel
+        // chain rules are iterated in rev order to ensure that they cancel
         // however derivatives must be iterated in forward order to ensure they work correctly
         // therefore reverse again here so the reversals cancel
         for (&old_deriv, &(new_deriv, inner_deriv)) in self.derivative_map.iter().rev() {
@@ -267,15 +267,15 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
                     match self.derivatives.mat.row(inst) {
                         Some(HybridBitSet::Sparse(row))
                             if row.iter().any(|&derivative| {
-                                let unkown = self.intern.get_unknown(derivative);
-                                if u32::from(unkown) >= self.off {
+                                let unknown = self.intern.get_unknown(derivative);
+                                if u32::from(unknown) >= self.off {
                                     let set = &self.completed_subgraphs
-                                        [usize::from(unkown) - self.off as usize];
-                                    self.curr_subgraph_unkowns
+                                        [usize::from(unknown) - self.off as usize];
+                                    self.curr_subgraph_unknowns
                                         .iter()
-                                        .any(|unkown| set.contains(unkown))
+                                        .any(|unknown| set.contains(unknown))
                                 } else {
-                                    self.curr_subgraph_unkowns.contains(unkown)
+                                    self.curr_subgraph_unknowns.contains(unknown)
                                 }
                             }) =>
                         {
@@ -287,8 +287,8 @@ impl<'a, 'b> SubGraphExplorer<'a, 'b> {
                     }
                 }
                 ValueDef::Param(_) => {
-                    if let Some(unkown) = self.intern.unknowns.index(arg) {
-                        return !self.curr_subgraph_unkowns.contains(unkown);
+                    if let Some(unknown) = self.intern.unknowns.index(arg) {
+                        return !self.curr_subgraph_unknowns.contains(unknown);
                     }
                 }
                 _ => (),

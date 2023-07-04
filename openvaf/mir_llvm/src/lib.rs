@@ -215,7 +215,7 @@ impl ModuleLlvm {
     /// Verifies this module and prints out  any errors
     ///
     /// # Returns
-    /// Whether this module is valid (ture if valid)
+    /// Whether this module is valid (true if valid)
     pub fn verify_and_print(&self) -> bool {
         unsafe {
             llvm::LLVMVerifyModule(self.llmod(), llvm::VerifierFailureAction::PrintMessage, None)
@@ -243,7 +243,7 @@ impl ModuleLlvm {
         }
     }
 
-    pub fn emit_obect(&self, dst: &Path) -> Result<(), LLVMString> {
+    pub fn emit_object(&self, dst: &Path) -> Result<(), LLVMString> {
         let path = CString::new(dst.to_str().unwrap()).unwrap();
 
         let mut err_string = MaybeUninit::uninit();

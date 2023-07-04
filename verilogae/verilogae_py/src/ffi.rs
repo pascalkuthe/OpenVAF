@@ -32,7 +32,7 @@ macro_rules! zero {
     }};
 }
 
-// manual implemtation of PyVarObject_HEAD_INIT macro
+// manual implementation of PyVarObject_HEAD_INIT macro
 pub const fn new_type<T>() -> PyTypeObject {
     let mut res = unsafe { zero!(PyTypeObject) };
     res.ob_base.ob_base.ob_refcnt = 1;

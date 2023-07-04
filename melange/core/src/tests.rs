@@ -16,12 +16,12 @@ fn approx_eq(val: f64, ref_val: f64) -> bool {
 macro_rules! assert_approx_eq {
     ($val: expr, $ref: expr, $($fmt: tt)+) => {{
         if !approx_eq($val, $ref) {
-            panic!("assertion failled (left == right): {}\n left: {}\n right: {}", format_args!($($fmt)*),$val.pretty_str(), $refl.pretty_str())
+            panic!("assertion failed (left == right): {}\n left: {}\n right: {}", format_args!($($fmt)*),$val.pretty_str(), $refl.pretty_str())
         }
     }};
     ($val: expr, $ref: expr) => {{
         if !approx_eq($val, $ref) {
-            panic!("assertion failled (left == right)\n left: {}\n right: {}", $val.pretty_str(), $ref.pretty_str())
+            panic!("assertion failed (left == right)\n left: {}\n right: {}", $val.pretty_str(), $ref.pretty_str())
         }
     }};
 }
@@ -29,25 +29,25 @@ macro_rules! assert_approx_eq {
 macro_rules! assert_approx_eq_cmplx {
     ($val: expr, $ref_real: literal + j $ref_imag: literal, $($fmt: tt)+) => {{
         if !approx_eq($val.re, $ref_real) || !approx_eq($val.im, $ref_imag) ||  {
-            panic!("assertion failled (left == right): {}\n left: {}\n right: {}", format_args!($($fmt)*),$vall.pretty_str(), Complex64::new($ref_real, $ref_imag).pretty_str())
+            panic!("assertion failed (left == right): {}\n left: {}\n right: {}", format_args!($($fmt)*),$vall.pretty_str(), Complex64::new($ref_real, $ref_imag).pretty_str())
         }
     }};
 
         ($val: expr, $ref_real: literal + j $ref_imag: literal) => {{
         if !approx_eq($val.re, $ref_real) || !approx_eq($val.im, $ref_imag) {
-            panic!("assertion failled (left == right)\n left: {}\n right: {}", $val.pretty_str(), num_complex::Complex64::new($ref_real, $ref_imag).pretty_str())
+            panic!("assertion failed (left == right)\n left: {}\n right: {}", $val.pretty_str(), num_complex::Complex64::new($ref_real, $ref_imag).pretty_str())
         }
     }};
 
     ($val: expr, $ref_real: literal - j $ref_imag: literal, $($fmt: tt)+) => {{
         if !approx_eq($val.re, $ref_real) || !approx_eq($val.im, -$ref_imag) {
-            panic!("assertion failled (left == right): {}\n left: {}\n right: {}", format_args!($($fmt)*),$vall.pretty_str(), Complex64::new($ref_real, - $ref_imag).pretty_str())
+            panic!("assertion failed (left == right): {}\n left: {}\n right: {}", format_args!($($fmt)*),$vall.pretty_str(), Complex64::new($ref_real, - $ref_imag).pretty_str())
         }
     }};
 
         ($val: expr, $ref_real: literal - j $ref_imag: literal) => {{
         if !approx_eq($val.re, $ref_real) || !approx_eq($val.im, -$ref_imag) {
-            panic!("assertion failled (left == right)\n left: {}\n right: {}", $val.pretty_str(), num_complex::Complex64::new($ref_real, - $ref_imag).pretty_str())
+            panic!("assertion failed (left == right)\n left: {}\n right: {}", $val.pretty_str(), num_complex::Complex64::new($ref_real, - $ref_imag).pretty_str())
         }
     }};
 

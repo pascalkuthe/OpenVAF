@@ -44,7 +44,7 @@ organization and externally, subject to the following restrictions.
             Replaced calculation of Vciei by Vbiei and Vbici to avoid the
             dependence on the ci-ei branch.
 03/17 (AP): Increased ranges for the parameters ahc and ibets.
-            Added Gmin to all operating point conductances. Futher added a
+            Added Gmin to all operating point conductances. Further added a
             conditional statement for BETAAC to prevent division by zero
             Added new model for avalanche breakdown for high-voltages
             Changed conditional statement for avalanche breakdown calculation

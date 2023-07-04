@@ -541,7 +541,7 @@ impl<'f> FuncCursor<'f> {
     /// is not a phi instruction.
     ///
     /// This is intended for situtions where an instruction will be inserted after the definition
-    /// of an unkown value.
+    /// of an unknown value.
     pub fn after_inst_no_phi(self, mut inst: Inst) -> Self
     where
         Self: Sized,

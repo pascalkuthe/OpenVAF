@@ -145,11 +145,11 @@ impl<'a> OsdiModule<'a> {
 
             terminals.raw.extend(internal_nodes);
 
-            // add all other implicit unkowns
-            let other_unkowns =
+            // add all other implicit unknowns
+            let other_unknowns =
                 mir.residual.resistive.raw.keys().chain(mir.residual.reactive.raw.keys()).copied();
 
-            terminals.raw.extend(other_unkowns);
+            terminals.raw.extend(other_unknowns);
 
             terminals
         };

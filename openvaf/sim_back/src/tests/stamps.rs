@@ -8,7 +8,7 @@ fn resistor() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
     // the optimized MIR that represents the actual compiled code (including matrix entries)
-    // the interned string literals (unintersting)
+    // the interned string literals (uninteresting)
     let root_file = project_root().join("integration_tests").join("RESISTOR").join("resistor.va");
     let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
 
@@ -73,7 +73,7 @@ fn current_source() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
     // the optimized MIR that represents the actual compiled code (including matrix entries)
-    // the interned string literals (unintersting)
+    // the interned string literals (uninteresting)
     let root_file =
         project_root().join("integration_tests").join("CURRENT_SOURCE").join("current_source.va");
     let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
@@ -125,7 +125,7 @@ fn cccs() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
     // the optimized MIR that represents the actual compiled code (including matrix entries)
-    // the interned string literals (unintersting)
+    // the interned string literals (uninteresting)
     let root_file = project_root().join("integration_tests").join("CCCS").join("cccs.va");
     let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
 
@@ -196,7 +196,7 @@ fn vccs() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
     // the optimized MIR that represents the actual compiled code (including matrix entries)
-    // the interned string literals (unintersting)
+    // the interned string literals (uninteresting)
     let root_file = project_root().join("integration_tests").join("VCCS").join("vccs.va");
     let (db, _module, mir, mut literals) = super::compile_to_mir(&root_file);
 
@@ -285,7 +285,7 @@ fn diode() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
     // the optimized MIR that represents the actual compiled code (including matrix entries)
-    // the interned string literals (unintersting)
+    // the interned string literals (uninteresting)
     let root_file = project_root().join("integration_tests").join("DIODE").join("diode.va");
     let (db, module, mir, mut literals) = super::compile_to_mir(&root_file);
 
@@ -478,7 +478,7 @@ fn hicum() {
     // compile model and obtain:
     // a data base that contains all info about the model available to the compiler
     // the optimized MIR that represents the actual compiled code (including matrix entries)
-    // the interned string literals (unintersting)
+    // the interned string literals (uninteresting)
     let root_file = project_root().join("integration_tests").join("HICUML2").join("hicuml2.va");
     let (db, _, mir, _) = super::compile_to_mir(&root_file);
 

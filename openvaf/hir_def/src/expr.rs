@@ -172,21 +172,21 @@ pub enum Stmt {
     Empty,
     Expr(ExprId),
     EventControl { event: Event, body: StmtId },
-    Assigment { dst: ExprId, val: ExprId, assignment_kind: ast::AssignOp },
+    Assignment { dst: ExprId, val: ExprId, assignment_kind: ast::AssignOp },
     Block { /*scope: Option<BlockId>,*/ body: Vec<StmtId> },
     If { cond: ExprId, then_branch: StmtId, else_branch: StmtId },
     ForLoop { init: StmtId, cond: ExprId, incr: StmtId, body: StmtId },
     WhileLoop { cond: ExprId, body: StmtId },
-    Case { discr: ExprId, case_arms: Vec<Case> }, // TODO lint on unrechable
+    Case { discr: ExprId, case_arms: Vec<Case> }, // TODO lint on unreachable
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum GlobalEvent {
-    InitalStep,
+    InitialStep,
     FinalStep,
 }
 
-// non_exhaustive because currently the full standard is not implementd
+// non_exhaustive because currently the full standard is not implemented
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 #[non_exhaustive]
 pub enum Event {
@@ -214,7 +214,7 @@ impl Stmt {
             | Stmt::ForLoop { cond: expr, .. }
             | Stmt::WhileLoop { cond: expr, .. }
             | Stmt::Expr(expr) => f(expr),
-            Stmt::Assigment { dst, val, .. } => {
+            Stmt::Assignment { dst, val, .. } => {
                 f(dst);
                 f(val)
             }
@@ -234,7 +234,7 @@ impl Stmt {
     #[inline]
     pub fn walk_child_stmts(&self, mut f: impl FnMut(StmtId)) {
         match *self {
-            Stmt::Expr(_) | Stmt::Assigment { .. } | Stmt::Missing | Stmt::Empty => (),
+            Stmt::Expr(_) | Stmt::Assignment { .. } | Stmt::Missing | Stmt::Empty => (),
             Stmt::WhileLoop { body, .. } | Stmt::EventControl { body, .. } => f(body),
             Stmt::If { then_branch: true_stmt, else_branch: false_stmt, .. } => {
                 f(true_stmt);

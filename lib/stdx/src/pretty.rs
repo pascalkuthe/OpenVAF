@@ -4,8 +4,8 @@ use std::ops::Deref;
 #[derive(Clone, PartialEq, Hash, Eq)]
 pub struct List<C> {
     pub data: C,
-    pub seperator: &'static str,
-    pub final_seperator: &'static str,
+    pub separator: &'static str,
+    pub final_separator: &'static str,
     pub prefix: &'static str,
     pub postfix: &'static str,
     pub break_after: u32,
@@ -16,8 +16,8 @@ impl<C> List<C> {
     pub fn new(contents: C) -> Self {
         Self {
             data: contents,
-            seperator: ", ",
-            final_seperator: " or ",
+            separator: ", ",
+            final_separator: " or ",
             prefix: "",
             postfix: "",
             break_after: 10,
@@ -31,8 +31,8 @@ impl<C> List<C> {
         self
     }
 
-    pub fn with_seperator(mut self, seperator: &'static str) -> Self {
-        self.seperator = seperator;
+    pub fn with_separator(mut self, separator: &'static str) -> Self {
+        self.separator = separator;
         self
     }
 
@@ -46,13 +46,13 @@ impl<C> List<C> {
         self
     }
 
-    pub fn with_final_seperator(mut self, final_seperator: &'static str) -> Self {
-        self.final_seperator = final_seperator;
+    pub fn with_final_separator(mut self, final_separator: &'static str) -> Self {
+        self.final_separator = final_separator;
         self
     }
 
     pub fn path(contents: C) -> Self {
-        Self::new(contents).with_seperator(".").with_final_seperator(".")
+        Self::new(contents).with_separator(".").with_final_separator(".")
     }
 }
 
@@ -79,7 +79,7 @@ impl<X: Display, T: Deref<Target = [X]>> Display for List<T> {
                     } else {
                         i += 1;
                     }
-                    write!(f, "{}{}{}{}", self.prefix, x, self.postfix, self.seperator)?;
+                    write!(f, "{}{}{}{}", self.prefix, x, self.postfix, self.separator)?;
                 }
                 write!(
                     f,
@@ -87,7 +87,7 @@ impl<X: Display, T: Deref<Target = [X]>> Display for List<T> {
                     self.prefix,
                     second_last,
                     self.postfix,
-                    self.final_seperator,
+                    self.final_separator,
                     self.prefix,
                     last,
                     self.postfix

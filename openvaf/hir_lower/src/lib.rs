@@ -385,7 +385,7 @@ impl HirInterner {
         }
     }
 
-    pub fn unkowns<'a>(
+    pub fn unknowns<'a>(
         &'a mut self,
         func: &'a mut Function,
         sim_derivatives: bool,

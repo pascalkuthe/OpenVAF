@@ -7,7 +7,7 @@ use crate::sourcemap::CtxSpan;
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum PreprocessorDiagnostic {
-    MacroArgumentCountMissmatch { expected: usize, found: usize, span: CtxSpan },
+    MacroArgumentCountMismatch { expected: usize, found: usize, span: CtxSpan },
     MacroNotFound { name: String, span: CtxSpan },
     MacroRecursion { name: String, span: CtxSpan },
     FileNotFound { file: String, error: io::ErrorKind, span: Option<CtxSpan> },
@@ -21,7 +21,7 @@ pub enum PreprocessorDiagnostic {
 use PreprocessorDiagnostic::*;
 impl_display! {
     match PreprocessorDiagnostic{
-        MacroArgumentCountMissmatch { expected, found, ..} => "argument mismatch expected {} but found {}!", expected, found;
+        MacroArgumentCountMismatch { expected, found, ..} => "argument mismatch expected {} but found {}!", expected, found;
         MacroNotFound{name,..} =>  "macro '`{}' has not been declared", name;
         MacroRecursion { name,..} => "macro '`{}' was called recursively",name;
         FileNotFound { file, error, .. } => "failed to read '{}': {}", file, std::io::Error::from(*error);

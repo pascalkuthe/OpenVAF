@@ -268,7 +268,7 @@ where
         match other {
             HybridBitSet::Sparse(sparse) => {
                 let mut changed = false;
-                // todo smarter algorithem for sparse case? -- Probably not worth it due to all the extra branches require to make this actually work
+                // todo smarter algorithm for sparse case? -- Probably not worth it due to all the extra branches require to make this actually work
                 sparse.elems.retain(|&mut x| {
                     if self.contains(x) {
                         changed = true;
@@ -293,7 +293,7 @@ where
         match other {
             Self::Sparse(sparse) => {
                 let mut changed = false;
-                // todo smarter algorithem for sparse case? -- Probably not worth it due to all the extra branches require to make this actually work
+                // todo smarter algorithm for sparse case? -- Probably not worth it due to all the extra branches require to make this actually work
                 sparse.elems.retain(|&mut x| {
                     if self.contains(x) {
                         changed = true;

@@ -183,7 +183,7 @@ impl DataFlowGraph {
     }
 }
 
-/// Rountines that interact with uses. These are just wrappers around functions defined for
+/// Routines that interact with uses. These are just wrappers around functions defined for
 /// `DfgValues` for convenience
 impl DataFlowGraph {
     pub fn make_use(&mut self, val: Value, parent: Inst, parent_idx: u16) -> Use {

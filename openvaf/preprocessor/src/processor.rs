@@ -11,7 +11,7 @@ use typed_index_collections::{TiSlice, TiVec};
 use vfs::{FileId, VfsPath};
 
 use crate::diagnostics::PreprocessorDiagnostic::{
-    self, MacroArgumentCountMissmatch, MacroNotFound, UnexpectedToken,
+    self, MacroArgumentCountMismatch, MacroNotFound, UnexpectedToken,
 };
 use crate::grammar::{parse_condition, parse_define, parse_include, parse_macro_call};
 use crate::parser::{CompilerDirective, Parser, PreprocessorToken};
@@ -173,7 +173,7 @@ impl<'a> Processor<'a> {
                     self.process_macro_token(kind, span, &new_args, dst, errors)
                 }
             } else {
-                errors.push(MacroArgumentCountMissmatch {
+                errors.push(MacroArgumentCountMismatch {
                     expected: def.arg_cnt,
                     found: new_args.len(),
                     span,
