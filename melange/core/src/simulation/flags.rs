@@ -103,7 +103,7 @@ bitflags! {
         // const AT_NOISE_OP = 0b00000100;
         const HAS_AC_EVAL = 0b00001000;
         const AT_AC = 0b00010000;
-        const AT_OP = Self::AT_DC_OP.0.bits | Self::AT_AC_OP.0.bits;// | Self::AT_NOISE_OP.0.bits;
+        const AT_OP = Self::AT_DC_OP.0.bits() | Self::AT_AC_OP.0.bits();// | Self::AT_NOISE_OP.0.bits;
     }
 }
 

@@ -15,16 +15,16 @@ test = false
 
 openvaf = { version = "0.1.2", path = "../openvaf" }
 
-clap = "4.2"
+clap = "4.3"
 directories-next = "2"
 path-absolutize = "3.1.0"
 anyhow = "1"
 termcolor = "1.2"
 camino = "1.1.4"
 env_logger = "0.10.0"
-log = "0.4.17"
+log = "0.4.19"
 backtrace-ext = "0.2.1"
-backtrace = "0.3.67"
+backtrace = "0.3.68"
 
 mimalloc = { version = "*", default-features = false}
 

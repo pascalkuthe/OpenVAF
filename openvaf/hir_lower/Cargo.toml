@@ -22,7 +22,7 @@ mir_build = {version = "0.0.0", path = "../mir_build" }
 
 ahash = "0.8"
 typed-index-collections = "3.1"
-indexmap = "1.9"
+indexmap = "2.0"
 lasso = {version = "0.7", features = ["ahash"]}
 
 [dev-dependencies]

@@ -19,7 +19,7 @@ ahash = "0.8"
 bitset = {version = "0.0.0", path = "../../lib/bitset" }
 typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
 dot = "0.1.4"
-indexmap = "1.9"
+indexmap = "2.0"
 
 [dev-dependencies]
 expect-test = "1.4"

@@ -34,7 +34,7 @@ base_n = { version = "1", path = "../../lib/base_n" }
 paths = { version = "0.0", path = "../../lib/paths" }
 
 lasso = { version = "0.7", features = ["ahash"] }
-indexmap = "1.9"
+indexmap = "2.0"
 md5 = "0.7"
 directories-next = "2"
 libloading = "0.8"

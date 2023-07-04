@@ -16,7 +16,7 @@ stdx = { version = "0.0.0", path = "../../lib/stdx" }
 typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
 typed-index-collections = "3.1"
 camino = "1.1.4"
-indexmap = "1.9"
+indexmap = "2.0"
 lasso = { version = "0.7", features = ["ahash"] }
 klu-rs = "0.4.0"
 num-complex = "0.4.3"
@@ -25,7 +25,7 @@ openvaf = { version = "0.1.2", path = "../../openvaf/openvaf" }
 directories-next = "2"
 libc = "0.2"
 libloading = "0.8"
-log = "0.4.17"
+log = "0.4.19"
 cli-table = { version = "0.4.7", default-features = false }
 pretty_dtoa = "0.3.0"
-bitflags = "2.2.1"
+bitflags = "2.3.3"
