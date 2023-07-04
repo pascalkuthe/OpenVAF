@@ -5,7 +5,7 @@ use codespan_reporting::diagnostic::Severity;
 use codespan_reporting::files::Files;
 pub use codespan_reporting::term::termcolor::{Ansi, Buffer, ColorChoice, NoColor};
 use codespan_reporting::term::termcolor::{StandardStream, WriteColor};
-use codespan_reporting::term::{emit, Config};
+use codespan_reporting::term::{emit, Chars, Config};
 use vfs::VfsPath;
 
 use crate::diagnostics::{Diagnostic, Report};
@@ -89,12 +89,12 @@ pub struct ConsoleSink<'a> {
 }
 
 impl<'a> ConsoleSink<'a> {
-    pub fn new(config: Config, db: &'a dyn BaseDB) -> ConsoleSink<'a> {
-        ConsoleSink::new_with(config, db, Box::new(StandardStream::stderr(ColorChoice::Auto)))
+    pub fn new(db: &'a dyn BaseDB) -> ConsoleSink<'a> {
+        ConsoleSink::new_with(db, Box::new(StandardStream::stderr(ColorChoice::Auto)))
     }
 
-    pub fn buffer(config: Config, db: &'a dyn BaseDB, buffer: &'a mut Buffer) -> ConsoleSink<'a> {
-        ConsoleSink::new_with(config, db, Box::new(buffer))
+    pub fn buffer(db: &'a dyn BaseDB, buffer: &'a mut Buffer) -> ConsoleSink<'a> {
+        ConsoleSink::new_with(db, Box::new(buffer))
     }
 
     pub fn summary(&mut self, target_name: &impl Display) -> bool {
@@ -132,11 +132,24 @@ impl<'a> ConsoleSink<'a> {
         .expect("Span emitting should never fail");
     }
 
-    pub fn new_with(
-        config: Config,
-        db: &'a dyn BaseDB,
-        dst: Box<dyn WriteColor + 'a>,
-    ) -> ConsoleSink<'a> {
+    pub fn new_with(db: &'a dyn BaseDB, dst: Box<dyn WriteColor + 'a>) -> ConsoleSink<'a> {
+        let mut config = Config { chars: Chars::ascii(), ..Config::default() };
+        config.styles.header_error.set_intense(false);
+        config.styles.header_warning.set_intense(false);
+        config.styles.header_help.set_intense(false);
+        config.styles.header_bug.set_intense(false);
+        config.styles.header_note.set_intense(false);
+
+        config.styles.note_bullet.set_bold(true).set_intense(true);
+        config.styles.line_number.set_bold(true).set_intense(true);
+        config.styles.source_border.set_bold(true).set_intense(true);
+        config.styles.primary_label_bug.set_bold(true);
+        config.styles.primary_label_note.set_bold(true);
+        config.styles.primary_label_help.set_bold(true);
+        config.styles.primary_label_error.set_bold(true);
+        config.styles.primary_label_warning.set_bold(true);
+        config.styles.secondary_label.set_bold(true);
+
         ConsoleSink { warning_cnt: 0, error_cnt: 0, config, db, dst, anon_paths: false }
     }
 
@@ -182,7 +195,6 @@ pub fn print_all<'a>(
     diagnostics: impl IntoIterator<Item = &'a (impl Diagnostic + 'a)>,
     db: &dyn BaseDB,
     root_file: FileId,
-    config: Config,
 ) {
-    ConsoleSink::new(config, db).add_diagnostics(diagnostics, root_file, db)
+    ConsoleSink::new(db).add_diagnostics(diagnostics, root_file, db)
 }

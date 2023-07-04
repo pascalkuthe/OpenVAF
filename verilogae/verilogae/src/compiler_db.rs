@@ -7,7 +7,7 @@ use std::sync::Arc;
 use ahash::AHashMap;
 use anyhow::{bail, Result};
 use basedb::diagnostics::{
-    Config, ConsoleSink, Diagnostic, DiagnosticSink, Label, LabelStyle, Report, Severity,
+    ConsoleSink, Diagnostic, DiagnosticSink, Label, LabelStyle, Report, Severity,
 };
 use basedb::lints::{Lint, LintLevel};
 use basedb::{BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsPath, VfsStorage, STANDARD_FLAGS};
@@ -100,7 +100,7 @@ impl CompilationDB {
         let warn_lints = zip(opts.warn_lints(), repeat(LintLevel::Warn));
         let deny_lints = zip(opts.deny_lints(), repeat(LintLevel::Deny));
 
-        let mut sink = ConsoleSink::new(Config::default(), &res);
+        let mut sink = ConsoleSink::new(&res);
         for (lint, lvl) in allow_lints.chain(warn_lints).chain(deny_lints) {
             if let Some(lint) = registry.lint_from_name(lint) {
                 overwrites[lint] = Some(lvl)
@@ -242,7 +242,7 @@ impl ModelInfo {
     pub(crate) fn collect(db: &CompilationDB, file_name: &str, name: Option<&str>) -> Result<Self> {
         let root_file = db.root_file;
 
-        let mut sink = ConsoleSink::new(Config::default(), db.upcast());
+        let mut sink = ConsoleSink::new(db.upcast());
         sink.add_diagnostics(&*db.preprocess(root_file).diagnostics, root_file, db);
         sink.add_diagnostics(db.parse(root_file).errors(), root_file, db);
         collect_diagnostics(db, root_file, &mut sink);

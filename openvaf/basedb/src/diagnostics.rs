@@ -11,7 +11,6 @@ pub type Report = codespan_reporting::diagnostic::Diagnostic<FileId>;
 pub type Label = codespan_reporting::diagnostic::Label<FileId>;
 
 pub use codespan_reporting::diagnostic::{LabelStyle, Severity};
-pub use codespan_reporting::term::{Chars, Config};
 use syntax::sourcemap::{CtxSpan, FileSpan, SourceMap};
 use syntax::{Parse, SourceFile, TextRange};
 
@@ -91,15 +90,4 @@ pub fn text_range_list_to_unified_spans(
 ) -> (FileId, Vec<TextRange>) {
     let mut spans: Vec<_> = ranges.iter().map(|range| parse.to_ctx_span(*range, sm)).collect();
     to_unified_span_list(sm, &mut spans)
-}
-
-pub fn assert_empty_diagnostics(
-    db: &dyn BaseDB,
-    root_file: FileId,
-    diagnostics: &[impl Diagnostic],
-) {
-    if !diagnostics.is_empty() {
-        print_all(diagnostics, db, root_file, Config::default());
-        panic!("found {} unexpected diagnostics", diagnostics.len())
-    }
 }

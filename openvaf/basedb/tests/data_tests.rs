@@ -1,7 +1,6 @@
 use basedb::diagnostics::{ConsoleSink, DiagnosticSink};
 use basedb::{BaseDB, BaseDatabase, VfsPath, VfsStorage};
 use codespan_reporting::term::termcolor::Buffer;
-use codespan_reporting::term::Config;
 use expect_test::expect_file;
 use mini_harness::{harness, Result};
 use parking_lot::RwLock;
@@ -49,7 +48,7 @@ impl TestDataBase {
 
         let mut buf = Buffer::no_color();
         {
-            let mut sink = ConsoleSink::buffer(Config::default(), self, &mut buf);
+            let mut sink = ConsoleSink::buffer(self, &mut buf);
             sink.annonymize_paths();
             sink.add_diagnostics(&*preprocessor_diagnostics, root_file, self);
             sink.add_diagnostics(parse.errors(), root_file, self);

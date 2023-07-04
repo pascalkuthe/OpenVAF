@@ -4,8 +4,8 @@ use std::time::Instant;
 
 use anyhow::Context;
 use anyhow::Result;
-use basedb::diagnostics::{Chars, ConsoleSink, DiagnosticSink};
-use basedb::{diagnostics, BaseDB};
+use basedb::diagnostics::{ConsoleSink, DiagnosticSink};
+use basedb::BaseDB;
 use camino::Utf8PathBuf;
 use hir_def::db::HirDefDB;
 use hir_lower::{ParamKind, PlaceKind};
@@ -133,24 +133,7 @@ pub fn expand(opts: &Opts) -> Result<CompilationTermination> {
     }
     println!();
 
-    let mut config =
-        diagnostics::Config { chars: Chars::ascii(), ..diagnostics::Config::default() };
-    config.styles.header_error.set_intense(false);
-    config.styles.header_warning.set_intense(false);
-    config.styles.header_help.set_intense(false);
-    config.styles.header_bug.set_intense(false);
-    config.styles.header_note.set_intense(false);
-
-    config.styles.note_bullet.set_bold(true).set_intense(true);
-    config.styles.line_number.set_bold(true).set_intense(true);
-    config.styles.source_border.set_bold(true).set_intense(true);
-    config.styles.primary_label_bug.set_bold(true);
-    config.styles.primary_label_note.set_bold(true);
-    config.styles.primary_label_help.set_bold(true);
-    config.styles.primary_label_error.set_bold(true);
-    config.styles.primary_label_warning.set_bold(true);
-    config.styles.secondary_label.set_bold(true);
-    let mut sink = ConsoleSink::new(config, &db);
+    let mut sink = ConsoleSink::new(&db);
     sink.add_diagnostics(&*preprocess.diagnostics, db.root_file, &db);
 
     if sink.summary(&opts.input.file_name().unwrap()) {

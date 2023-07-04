@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use basedb::diagnostics::sink::Buffer;
-use basedb::diagnostics::{Config, ConsoleSink, DiagnosticSink};
+use basedb::diagnostics::{ConsoleSink, DiagnosticSink};
 use basedb::{
     AbsPathBuf, BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsEntry, VfsPath, VfsStorage,
 };
@@ -49,7 +49,7 @@ impl TestDataBase {
         let def_map = self.def_map(root_file);
         let mut buf = Buffer::no_color();
         {
-            let mut sink = ConsoleSink::buffer(Config::default(), self, &mut buf);
+            let mut sink = ConsoleSink::buffer(self, &mut buf);
             sink.annonymize_paths();
             let root_scope = def_map.entry();
             self.lower_and_check_rec(root_scope, &def_map, &mut sink);

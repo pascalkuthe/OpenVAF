@@ -19,13 +19,13 @@ use stdx::packed_option::PackedOption;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
-use crate::compilation_db::{CompilationDB, ModuleInfo};
+use crate::compilation_db::CompilationDB;
 use crate::lim_rhs::LimRhs;
 use crate::matrix::JacobianMatrix;
 use crate::prune::prune_unknowns;
 use crate::residual::Residual;
 use crate::util::strip_optbarrier;
-use crate::SimUnknown;
+use crate::{ModuleInfo, SimUnknown};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct CacheSlot(u32);

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use basedb::diagnostics::sink::Buffer;
-use basedb::diagnostics::{Config, ConsoleSink};
+use basedb::diagnostics::ConsoleSink;
 use basedb::{
     AbsPathBuf, BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsEntry, VfsPath, VfsStorage,
 };
@@ -49,7 +49,7 @@ impl TestDataBase {
 
         let mut buf = Buffer::no_color();
         {
-            let mut sink = ConsoleSink::buffer(Config::default(), self, &mut buf);
+            let mut sink = ConsoleSink::buffer(self, &mut buf);
             sink.annonymize_paths();
             collect_diagnostics(self, root_file, &mut sink);
         }
