@@ -689,6 +689,9 @@ impl ExprValidator<'_, '_> {
                                 BuiltIn::simparam,
                                 "minr"
                                     | "imelt"
+                                    | "shrink"
+                                    | "imax"
+                                    | "rthresh"
                                     | "scale"
                                     | "simulatorSubversion"
                                     | "simulatorVersion"

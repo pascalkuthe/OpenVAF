@@ -73,6 +73,7 @@ pub fn compile_va(path: &Utf8Path, opts: &Opts) -> Result<Vec<Box<dyn DeviceImpl
         target: Target::host_target()
             .context("openvaf does currently not support this hardware/os")?,
         target_cpu: "native".to_owned(),
+        dry_run: false,
     };
 
     let res = openvaf::compile(&openvaf_opts);
