@@ -11,7 +11,7 @@ use hir_ty::collect_diagnostics;
 use hir_ty::db::HirTyDatabase;
 use mini_harness::{harness, Result};
 use parking_lot::RwLock;
-use stdx::{is_va_file, openvaf_test_data, project_root, run_dev_tests};
+use stdx::{ignore_dev_tests, ignore_never, is_va_file, openvaf_test_data, project_root};
 
 #[salsa::database(BaseDatabase, InternDatabase, HirDefDatabase, HirTyDatabase)]
 pub struct TestDataBase {
@@ -96,6 +96,6 @@ fn ui_test(file: &Path) -> Result {
 }
 
 harness! {
-    Test::from_dir_filtered("integration", &integration_test, &run_dev_tests, &project_root().join("integration_tests")),
-    Test::from_dir_filtered("ui", &ui_test, &is_va_file, &openvaf_test_data("ui"))
+    Test::from_dir_filtered("integration", &integration_test, &Path::is_dir, &ignore_dev_tests, &project_root().join("integration_tests")),
+    Test::from_dir_filtered("ui", &ui_test, &is_va_file, &ignore_never, &openvaf_test_data("ui"))
 }

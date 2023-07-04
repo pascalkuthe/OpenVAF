@@ -25,6 +25,7 @@ pub fn main_command() -> Command {
             lints(),
             output(),
             batchmode(),
+            dry_run(),
             cache_dir(),
             opt_lvl(),
             target(),
@@ -42,6 +43,7 @@ pub fn main_command() -> Command {
 
 pub const INTERFACE: &str = "interface";
 pub const BATCHMODE: &str = "batchmode";
+pub const DRYRUN: &str = "dry-run";
 pub const TARGET: &str = "target";
 pub const SUPPORTED_TARGETS: &str = "supported-targets";
 pub const LINTS: &str = "lints";
@@ -75,6 +77,12 @@ fn interface() -> Arg {
 fn batchmode() -> Arg {
     flag(BATCHMODE, "batch").short('b').help("Enable batchmode compilation.").
         long_help("Enable batchmode compilation. In this mode files are only recompiled when required and the results are stored")
+}
+
+fn dry_run() -> Arg {
+    flag(DRYRUN, "dry-run")
+        .help("Run compilation without producing any output.")
+        .long_help("Run compilation without producing any output.\nUsed for testing.")
 }
 
 fn target() -> Arg {

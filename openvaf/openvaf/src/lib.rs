@@ -36,6 +36,7 @@ pub enum CompilationTermination {
 
 #[derive(Debug, Clone)]
 pub struct Opts {
+    pub dry_run: bool,
     pub defines: Vec<String>,
     pub codegen_opts: Vec<String>,
     pub lints: Vec<(String, LintLevel)>,
@@ -108,7 +109,9 @@ pub fn dump_json(opts: &Opts) -> Result<CompilationTermination> {
             opts.input.file_stem().unwrap(),
             &db.module_data(module.id).name
         ));
-        std::fs::write(path, json)?;
+        if !opts.dry_run {
+            std::fs::write(path, json)?;
+        }
     }
     Ok(CompilationTermination::Compiled { lib_file: Utf8PathBuf::default() })
 }
@@ -192,6 +195,9 @@ pub fn compile(opts: &Opts) -> Result<CompilationTermination> {
     };
 
     let back = LLVMBackend::new(&opts.codegen_opts, &opts.target, opts.target_cpu.clone(), &[]);
+    if opts.dry_run {
+        return Ok(CompilationTermination::Compiled { lib_file });
+    }
     let paths = osdi::compile(&db, &modules, &lib_file, &opts.target, &back, true, opts.opt_lvl);
     // TODO configure linker
     link(None, &opts.target, lib_file.as_ref(), |linker| {

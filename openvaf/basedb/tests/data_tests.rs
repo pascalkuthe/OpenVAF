@@ -5,7 +5,7 @@ use codespan_reporting::term::Config;
 use expect_test::expect_file;
 use mini_harness::{harness, Result};
 use parking_lot::RwLock;
-use stdx::{is_va_file, openvaf_test_data, project_root, run_dev_tests};
+use stdx::{ignore_dev_tests, ignore_never, is_va_file, openvaf_test_data, project_root};
 use syntax::{Parse, SourceFile};
 use vfs::{AbsPathBuf, FileId, Vfs, VfsEntry};
 
@@ -100,7 +100,7 @@ fn ast_test(file: &Path) -> Result {
 }
 
 harness! {
-    Test::from_dir_filtered("integration", &integration_test, &run_dev_tests, &project_root().join("integration_tests")),
-    Test::from_dir_filtered("ui", &ui_test, &is_va_file, &openvaf_test_data("syn_ui")),
-    Test::from_dir_filtered("ast", &ast_test, &is_va_file, &openvaf_test_data("ast"))
+    Test::from_dir_filtered("integration", &integration_test, &Path::is_dir, &ignore_dev_tests, &project_root().join("integration_tests")),
+    Test::from_dir_filtered("ui", &ui_test, &is_va_file, &ignore_never, &openvaf_test_data("syn_ui")),
+    Test::from_dir_filtered("ast", &ast_test, &is_va_file, &ignore_never, &openvaf_test_data("ast"))
 }

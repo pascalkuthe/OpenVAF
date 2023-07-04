@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * fix misscompliation of string parameters
+* fix crash when using `target_cpu` flag
 
 ## 23.5.0 - 2023-5-16
 

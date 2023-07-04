@@ -6,7 +6,7 @@ use mini_harness::{harness, Result};
 use mir_llvm::LLVMBackend;
 use paths::AbsPathBuf;
 use sim_back::CompilationDB;
-use stdx::{project_root, skip_slow_tests};
+use stdx::{ignore_slow_tests, project_root};
 use target::spec::Target;
 
 fn test_compile(root_file: &Path) {
@@ -20,9 +20,6 @@ fn test_compile(root_file: &Path) {
 }
 
 fn integration_test(dir: &Path) -> Result {
-    if skip_slow_tests() {
-        return Ok(());
-    }
     let name = dir.file_name().unwrap().to_str().unwrap().to_lowercase();
     let main_file = dir.join(format!("{name}.va"));
     test_compile(&main_file);
@@ -31,5 +28,5 @@ fn integration_test(dir: &Path) -> Result {
 }
 
 harness! {
-    Test::from_dir("integration", &integration_test, &project_root().join("integration_tests"))
+    Test::from_dir("integration", &integration_test, &ignore_slow_tests, &project_root().join("integration_tests"))
 }

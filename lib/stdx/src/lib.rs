@@ -33,8 +33,16 @@ pub fn skip_slow_tests() -> bool {
     should_skip
 }
 
-pub fn run_dev_tests(_: &Path) -> bool {
-    env::var("RUN_DEV_TESTS").is_ok()
+pub fn ignore_dev_tests<T: ?Sized>(_: &T) -> bool {
+    env::var("RUN_DEV_TESTS").is_err()
+}
+
+pub fn ignore_slow_tests<T: ?Sized>(_: &T) -> bool {
+    skip_slow_tests()
+}
+
+pub fn ignore_never<T: ?Sized>(_: &T) -> bool {
+    false
 }
 
 pub fn openvaf_test_data(test: &str) -> PathBuf {
@@ -43,9 +51,4 @@ pub fn openvaf_test_data(test: &str) -> PathBuf {
 
 pub fn is_va_file(path: &Path) -> bool {
     path.extension().and_then(|ext| ext.to_str()).map_or(false, |ext| ext == "va")
-}
-
-pub fn is_va_file_and_run_dev_tests(path: &Path) -> bool {
-    run_dev_tests(path)
-        && path.extension().and_then(|ext| ext.to_str()).map_or(false, |ext| ext == "va")
 }

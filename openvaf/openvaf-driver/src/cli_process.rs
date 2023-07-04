@@ -8,8 +8,8 @@ use openvaf::{builtin_lints, get_target_names, host_triple, AbsPathBuf, LintLeve
 use termcolor::{Color, ColorChoice, ColorSpec, WriteColor};
 
 use crate::cli_def::{
-    ALLOW, BATCHMODE, CACHE_DIR, CODEGEN, DEFINE, DENY, INCLUDE, INPUT, LINTS, OPT_LVL, OUTPUT,
-    SUPPORTED_TARGETS, TARGET, TARGET_CPU, WARN,
+    ALLOW, BATCHMODE, CACHE_DIR, CODEGEN, DEFINE, DENY, DRYRUN, INCLUDE, INPUT, LINTS, OPT_LVL,
+    OUTPUT, SUPPORTED_TARGETS, TARGET, TARGET_CPU, WARN,
 };
 use crate::{CompilationDestination, Opts};
 
@@ -99,7 +99,8 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
         bail!("The target {target} is not supported by  this binary")
     };
 
-    let target_cpu = *matches.get_one(TARGET_CPU).unwrap_or(&default_cpu);
+    let target_cpu: String =
+        matches.get_one(TARGET_CPU).cloned().unwrap_or_else(|| default_cpu.to_owned());
 
     Ok(Opts {
         input,
@@ -110,7 +111,8 @@ pub fn matches_to_opts(matches: ArgMatches) -> Result<Opts> {
         output,
         opt_lvl,
         target,
-        target_cpu: String::from(target_cpu),
+        target_cpu,
+        dry_run: matches.get_flag(DRYRUN),
     })
 }
 

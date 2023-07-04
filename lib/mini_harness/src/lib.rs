@@ -1,4 +1,4 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::read_dir;
 use std::path::Path;
 use std::process::{self, exit};
@@ -30,18 +30,39 @@ impl<'a> Test<'a> {
     pub fn from_dir<'r>(
         name: &'r str,
         runner: &'a dyn Fn(&Path) -> Result,
+        ignore: &'r dyn Fn(&Path) -> bool,
         dir: &Path,
     ) -> impl IntoIterator<Item = Test<'a>> + 'r
     where
         'a: 'r,
     {
-        Self::from_dir_filtered(name, runner, &|_| true, dir)
+        Self::from_dir_filtered(name, runner, ignore, &|_| true, dir)
+    }
+
+    pub fn from_list<'r, T: Debug + Clone>(
+        name: &'r str,
+        runner: &'a dyn Fn(T) -> Result,
+        ignore: &'r dyn Fn(T) -> bool,
+        args: &'r [T],
+    ) -> impl IntoIterator<Item = Test<'a>> + 'r
+    where
+        'a: 'r,
+    {
+        args.iter().map(move |arg| {
+            let arg_ = arg.clone();
+            Test {
+                name: format!("{name} {arg:?}"),
+                runner: Box::new(move || runner(arg_)),
+                ignored: ignore(arg.clone()),
+            }
+        })
     }
 
     pub fn from_dir_filtered<'r>(
         name: &'r str,
         runner: &'a dyn Fn(&Path) -> Result,
         filter: &'r dyn Fn(&Path) -> bool,
+        ignore: &'r dyn Fn(&Path) -> bool,
         dir: &Path,
     ) -> impl IntoIterator<Item = Test<'a>> + 'r
     where
@@ -54,8 +75,8 @@ impl<'a> Test<'a> {
             }
             let test = Test {
                 name: format!("{name}::{}", path.file_name().unwrap().to_string_lossy()),
+                ignored: ignore(&path),
                 runner: Box::new(move || runner(&path)),
-                ignored: false,
             };
             Some(test)
         })

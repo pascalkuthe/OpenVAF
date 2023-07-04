@@ -11,7 +11,7 @@ use hir_def::nameres::{DefMap, LocalScopeId, ScopeDefItem, ScopeOrigin};
 use hir_def::DefWithBodyId;
 use mini_harness::{harness, Result};
 use parking_lot::RwLock;
-use stdx::{is_va_file, openvaf_test_data, project_root, run_dev_tests};
+use stdx::{ignore_dev_tests, ignore_never, is_va_file, openvaf_test_data, project_root};
 
 #[salsa::database(BaseDatabase, InternDatabase, HirDefDatabase)]
 pub struct TestDataBase {
@@ -139,8 +139,8 @@ fn def_map_test(file: &Path) -> Result {
 }
 
 harness! {
-    Test::from_dir_filtered("integration", &integration_test, &run_dev_tests, &project_root().join("integration_tests")),
-    Test::from_dir_filtered("body", &body_test, &is_va_file, &openvaf_test_data("body")),
-    Test::from_dir_filtered("item_tree", &item_tree_test, &is_va_file, &openvaf_test_data("item_tree")),
-    Test::from_dir_filtered("def_map", &def_map_test, &is_va_file, &openvaf_test_data("item_tree"))
+    Test::from_dir_filtered("integration", &integration_test, &Path::is_dir, &ignore_dev_tests, &project_root().join("integration_tests")),
+    Test::from_dir_filtered("body", &body_test, &is_va_file, &ignore_never, &openvaf_test_data("body")),
+    Test::from_dir_filtered("item_tree", &item_tree_test, &is_va_file, &ignore_never, &openvaf_test_data("item_tree")),
+    Test::from_dir_filtered("def_map", &def_map_test, &is_va_file, &ignore_never, &openvaf_test_data("item_tree"))
 }
