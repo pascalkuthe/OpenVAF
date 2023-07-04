@@ -19,7 +19,7 @@ fn word_index_and_mask(pos: u32) -> (u32, u32) {
 }
 
 fn word_cnt(len: u32) -> u32 {
-    (len as u32 + WORD_BITS - 1) / WORD_BITS
+    (len + WORD_BITS - 1) / WORD_BITS
 }
 
 pub fn arr_ty<'ll>(len: u32, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {

@@ -34,7 +34,7 @@ fn gen_osdi_structs() {
         let stdlib_idents_: Vec<_> = targets
             .clone()
             .map(|target| {
-                format_ident!("STDLIB_BITCODE_{}", target.to_uppercase().replace(&['-', '.'], "_"))
+                format_ident!("STDLIB_BITCODE_{}", target.to_uppercase().replace(['-', '.'], "_"))
             })
             .collect();
         let stdlib_idents = &stdlib_idents_;
@@ -90,7 +90,7 @@ impl Header {
         let version_minor = version_minor.parse().unwrap();
 
         let path = entry.path();
-        let src = read_to_string(&path).unwrap();
+        let src = read_to_string(path).unwrap();
         Some(Header { version_minor, version_major, src })
     }
 }

@@ -297,7 +297,7 @@ impl CodegenCtx<'_, '_> {
     ) {
         let ret_info = db.var_data(spec.var);
 
-        let module = unsafe { self.llbackend.new_module(&*ret_info.name, self.opt_lvl).unwrap() };
+        let module = unsafe { self.llbackend.new_module(&ret_info.name, self.opt_lvl).unwrap() };
         let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
         let ret_ty = lltype(&ret_info.ty, &cx);
@@ -817,7 +817,7 @@ impl InternedModel<'_> {
         ParamInfo { units, groups, names, descriptions }
     }
 
-    fn export_param_info<'ll>(&self, cx: &CodegenCx<'_, 'll>, ty: Type) {
+    fn export_param_info(&self, cx: &CodegenCx<'_, '_>, ty: Type) {
         let params = self.param_info(cx, &ty);
 
         let sym = format!("params.{}", ty);

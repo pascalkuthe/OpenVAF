@@ -306,7 +306,7 @@ impl Simulation<'_> {
             instance_data.process_params(temp, &mut builder, &self.circ[inst].connections)?;
         }
 
-        let num_nodes = self.nodes.len() as usize;
+        let num_nodes = self.nodes.len();
         self.solution.resize(num_nodes, 0f64);
         self.residual_resist.resize(num_nodes, 0f64);
         self.residual_react.resize(num_nodes, 0f64);

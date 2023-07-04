@@ -750,7 +750,7 @@ impl ExprValidator<'_, '_> {
 
     fn validate_const_expr(&mut self, expr: ExprId) {
         let old = replace(&mut self.parent.ctx, BodyCtx::Const);
-        let sink = replace(&mut self.cond_diagnostic_sink, None);
+        let sink = self.cond_diagnostic_sink.take();
         self.validate_expr(expr);
         self.cond_diagnostic_sink = sink;
         self.parent.ctx = old;

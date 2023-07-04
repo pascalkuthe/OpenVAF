@@ -27,7 +27,7 @@ fn gen_msvcrt_importlib(sh: &Shell, arch: &str, target: &str, check: bool) {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let out_file = out_dir.join(format!("ucrt_{arch}.lib"));
     if check {
-        sh.write_file(out_file, &[]).expect("failed to write dummy file");
+        sh.write_file(out_file, []).expect("failed to write dummy file");
         return;
     }
     let mut libs = Vec::new();

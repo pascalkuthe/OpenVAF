@@ -129,7 +129,7 @@ impl Diagnostic for InferenceDiagnosticWrapped<'_> {
                 };
 
                 Report::error()
-                    .with_message(&format!(
+                    .with_message(format!(
                         "invalid argument count: {} but found {}",
                         &message, found
                     ))

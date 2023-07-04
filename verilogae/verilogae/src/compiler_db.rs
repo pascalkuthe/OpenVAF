@@ -125,7 +125,7 @@ impl CompilationDB {
     pub fn voltage_name(&self, hi: NodeId, lo: Option<NodeId>) -> String {
         let mut name = format!("br_{}", &self.node_data(hi).name);
         if let Some(lo) = lo {
-            name.push_str(&*self.node_data(lo).name)
+            name.push_str(&self.node_data(lo).name)
         }
         name
     }
@@ -136,7 +136,7 @@ impl CompilationDB {
             CurrentKind::Unnamed { hi, lo } => {
                 let mut name = format!(" {} ", &self.node_data(hi).name);
                 if let Some(lo) = lo {
-                    name.push_str(&*self.node_data(lo).name);
+                    name.push_str(&self.node_data(lo).name);
                     name.push(' ');
                 }
                 name
@@ -489,8 +489,8 @@ impl ModelInfo {
                     let val = match attr.val() {
                         Some(ref expr @ Expr::Literal(ref lit)) => match lit.kind() {
                             LiteralKind::IntNumber(val) => val.value() as f64,
-                            LiteralKind::SiRealNumber(val) => val.value() as f64,
-                            LiteralKind::StdRealNumber(val) => val.value() as f64,
+                            LiteralKind::SiRealNumber(val) => val.value(),
+                            LiteralKind::StdRealNumber(val) => val.value(),
                             _ => {
                                 let diag = IllegalExpr {
                                     expr: expr.clone(),

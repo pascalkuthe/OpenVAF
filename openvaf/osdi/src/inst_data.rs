@@ -332,7 +332,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         llbuilder: &llvm::Builder<'ll>,
     ) -> (&'ll llvm::Value, &'ll llvm::Type) {
         let ty = self.params.get_index(pos as usize).unwrap().1;
-        let elem = NUM_CONST_FIELDS + pos as u32;
+        let elem = NUM_CONST_FIELDS + pos;
         let ptr = LLVMBuildStructGEP2(llbuilder, self.ty, ptr, elem, UNNAMED);
         (ptr, ty)
     }
@@ -344,7 +344,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         ptr: &'ll llvm::Value,
     ) -> MemLoc<'ll> {
         let ty = self.params.get_index(pos as usize).unwrap().1;
-        let elem = NUM_CONST_FIELDS + pos as u32;
+        let elem = NUM_CONST_FIELDS + pos;
         MemLoc::struct_gep(ptr, self.ty, ty, elem, cx)
     }
 

@@ -31,13 +31,13 @@ impl crate::flags::Build {
         for (version, py, _tag) in &pythons {
             if self.windows {
                 cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
-                    .env("PYO3_CROSS_PYTHON_VERSION", &version)
+                    .env("PYO3_CROSS_PYTHON_VERSION", version)
                     .env("CARGO_BUILD_TARGET", "x86_64-pc-windows-msvc")
                     .run()?;
             } else {
                 cmd!(sh, "{py} -m pip install setuptools_rust").run()?;
                 cmd!(sh, "{py} -m pip wheel . -w ./wheels --no-deps")
-                    .env("PYO3_PYTHON", &py)
+                    .env("PYO3_PYTHON", py)
                     .run()?;
             }
             // cmd!("auditwheel repair "$whl" -w /io/dist/")

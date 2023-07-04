@@ -258,7 +258,7 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
     /// Returns `true` if the list is valid
     pub fn is_valid(self, pool: &ListPool<T>) -> bool {
         // We consider an empty list to be valid
-        self.is_empty() || pool.len_of(self) != None
+        self.is_empty() || pool.len_of(self).is_some()
     }
 
     /// Get the list as a slice.

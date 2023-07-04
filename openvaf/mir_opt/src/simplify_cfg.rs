@@ -441,7 +441,7 @@ impl<'a> SimplifyCfg<'a> {
                 let inst = self.func.dfg.use_to_operand(use_).0;
                 // check that all uses are phi nodes (otherwise we produce invalid code in loops
                 // where we dominate a block with multiple predecessor
-                if self.func.layout.inst_block(inst) == None {
+                if self.func.layout.inst_block(inst).is_none() {
                     unreachable!(
                         "found use in detachted inst {}",
                         self.func.dfg.display_inst(inst)

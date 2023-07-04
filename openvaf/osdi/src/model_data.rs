@@ -56,7 +56,7 @@ impl<'ll> OsdiModelData<'ll> {
         ptr: &'ll llvm::Value,
     ) -> MemLoc<'ll> {
         let ty = self.params.get_index(pos as usize).unwrap().1;
-        let elem = NUM_CONST_FIELDS + pos as u32;
+        let elem = NUM_CONST_FIELDS + pos;
         let indices =
             vec![cx.const_unsigned_int(0), cx.const_unsigned_int(elem)].into_boxed_slice();
         MemLoc { ptr, ptr_ty: self.ty, ty, indices }
@@ -92,7 +92,7 @@ impl<'ll> OsdiModelData<'ll> {
         llbuilder: &llvm::Builder<'ll>,
     ) -> (&'ll llvm::Value, &'ll llvm::Type) {
         let ty = self.params.get_index(pos as usize).unwrap().1;
-        let elem = NUM_CONST_FIELDS + pos as u32;
+        let elem = NUM_CONST_FIELDS + pos;
         let ptr = LLVMBuildStructGEP2(llbuilder, self.ty, ptr, elem, UNNAMED);
         (ptr, ty)
     }
@@ -105,7 +105,7 @@ impl<'ll> OsdiModelData<'ll> {
         llbuilder: &llvm::Builder<'ll>,
     ) -> (&'ll llvm::Value, &'ll llvm::Type) {
         let ty = inst_data.params.get_index(pos as usize).unwrap().1;
-        let elem = NUM_CONST_FIELDS + self.params.len() as u32 + pos as u32;
+        let elem = NUM_CONST_FIELDS + self.params.len() as u32 + pos;
         let ptr = LLVMBuildStructGEP2(llbuilder, self.ty, ptr, elem, UNNAMED);
         (ptr, ty)
     }

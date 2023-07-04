@@ -748,7 +748,7 @@ impl<'a> ExprEvalCtx<'a> {
             })
             .collect();
         ExprEvalCtx {
-            arena: &*arena.exprs,
+            arena: &arena.exprs,
             intern: &arena.intern,
             params: vec![Value::UNDEF; num_params].into_boxed_slice(),
             ctx_offsets,
@@ -760,8 +760,8 @@ impl<'a> ExprEvalCtx<'a> {
         ExprEvalCtxRef {
             arena: self.arena,
             intern: self.intern,
-            params: &mut *self.params,
-            ctx_offsets: &*self.ctx_offsets,
+            params: &mut self.params,
+            ctx_offsets: &self.ctx_offsets,
         }
     }
 

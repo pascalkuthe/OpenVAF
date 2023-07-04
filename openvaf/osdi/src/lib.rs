@@ -167,7 +167,7 @@ pub fn compile(
             .iter()
             .map(|module| {
                 let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
-                let descriptor = cguint.descriptor(target_data, &*db);
+                let descriptor = cguint.descriptor(target_data, &db);
                 descriptor.to_ll_val(&cx, &tys)
             })
             .collect();

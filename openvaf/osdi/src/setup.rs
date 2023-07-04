@@ -94,9 +94,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let is_given =
                 unsafe { model_data.is_nth_inst_param_given(cx, i, model, builder.llbuilder) };
 
-            let val = unsafe {
-                model_data.read_nth_inst_param(inst_data, i as u32, model, builder.llbuilder)
-            };
+            let val =
+                unsafe { model_data.read_nth_inst_param(inst_data, i, model, builder.llbuilder) };
 
             match *param {
                 OsdiInstanceParam::Builtin(builtin) => {
@@ -250,8 +249,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 builder.select(is_inst_given, true_, is_given_model)
             };
 
-            let inst_val =
-                unsafe { inst_data.read_nth_param(i as u32, instance, builder.llbuilder) };
+            let inst_val = unsafe { inst_data.read_nth_param(i, instance, builder.llbuilder) };
             let model_val =
                 unsafe { model_data.read_nth_inst_param(inst_data, i, model, builder.llbuilder) };
             let val = unsafe { builder.select(is_inst_given, inst_val, model_val) };
@@ -263,7 +261,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     let default_val = cx.const_real(default_val);
                     let val = unsafe { builder.select(is_given, val, default_val) };
                     unsafe {
-                        inst_data.store_nth_param(i as u32, instance, val, builder.llbuilder);
+                        inst_data.store_nth_param(i, instance, val, builder.llbuilder);
                     }
                     builder.params[dst] = BuilderVal::Eager(val);
                 }

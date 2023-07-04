@@ -28,18 +28,13 @@ pub struct Opts {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum OptLevel {
     None = 0,
     Less = 1,
     Default = 2,
+    #[default]
     Aggressive = 3,
-}
-
-impl Default for OptLevel {
-    fn default() -> Self {
-        OptLevel::Aggressive
-    }
 }
 
 macro_rules! expose_ptrs {
@@ -439,7 +434,7 @@ unsafe fn access_global<'a, T>(
 
 #[no_mangle]
 pub extern "C" fn verilogae_new_opts() -> *mut Opts {
-    Box::into_raw(Box::new(Opts::default()))
+    Box::into_raw(Box::default())
 }
 
 /// # Safety

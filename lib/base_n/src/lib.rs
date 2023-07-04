@@ -9,7 +9,7 @@ pub const CASE_INSENSITIVE: usize = 36;
 #[cfg(test)]
 mod tests;
 
-const BASE_64: &[u8; MAX_BASE as usize] =
+const BASE_64: &[u8; MAX_BASE] =
     b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@$";
 
 #[inline]

@@ -216,7 +216,7 @@ fn output_file_path_arg(name: &'static str) -> Arg {
                 None => bail!("is not a file"),
             };
 
-            match fs::metadata(&parent) {
+            match fs::metadata(parent) {
                 Err(err) => bail!("{} {err}", parent.display()),
                 Ok(info) if !info.is_dir() => bail!("{} is not a directory", parent.display()),
                 _ => Ok(path),

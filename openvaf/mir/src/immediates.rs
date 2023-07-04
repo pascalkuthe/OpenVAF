@@ -154,7 +154,7 @@ fn parse_float(s: &str, w: u8, t: u8) -> Result<u64, &'static str> {
         match ch {
             '.' => {
                 // This is the radix point. There can only be one.
-                if digits_before_period != None {
+                if digits_before_period.is_some() {
                     return Err("Multiple radix points");
                 } else {
                     digits_before_period = Some(digits);

@@ -11,7 +11,7 @@ use typed_index_collections::TiVec;
 
 use crate::ssa::SSABuilder;
 
-///! An opaque reference to a variable.
+/// An opaque reference to a variable.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Place(u32);
 

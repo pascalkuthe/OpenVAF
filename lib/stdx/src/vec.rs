@@ -50,7 +50,7 @@ impl<T> SliceExntesions<T> for [T] {
             for idx2 in &indices[..idx1] {
                 assert_ne!(idx1, *idx2);
             }
-            for idx2 in &indices[(idx1 + 1..)] {
+            for idx2 in &indices[idx1 + 1..] {
                 assert_ne!(idx1, *idx2);
             }
         }

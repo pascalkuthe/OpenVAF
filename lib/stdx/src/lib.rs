@@ -28,7 +28,7 @@ pub fn skip_slow_tests() -> bool {
         std::eprintln!("ignoring slow test");
     } else {
         let path = project_root().join("./target/.slow_tests_cookie");
-        fs::write(&path, ".").unwrap();
+        fs::write(path, ".").unwrap();
     }
     should_skip
 }

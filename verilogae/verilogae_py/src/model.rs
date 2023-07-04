@@ -684,8 +684,8 @@ impl VaeFun {
         let fun_names = verilogae_functions(handle);
         let fun_symbols = verilogae_function_symbols(handle);
 
-        let fun_handles = slice::from_raw_parts(fun_symbols, fun_cnt as usize);
-        let fun_names = slice::from_raw_parts(fun_names, fun_cnt as usize);
+        let fun_handles = slice::from_raw_parts(fun_symbols, fun_cnt);
+        let fun_names = slice::from_raw_parts(fun_names, fun_cnt);
 
         for (name, sym) in fun_names.iter().copied().zip(fun_handles.iter().copied()) {
             // intern for faster lookups with constants (so all the time)

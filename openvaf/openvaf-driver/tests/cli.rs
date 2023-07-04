@@ -22,7 +22,7 @@ pub fn target_dir() -> PathBuf {
 /// Returns the path of a binary build by cargo
 pub fn cargo_bin(name: &str) -> PathBuf {
     let env_var = format!("CARGO_BIN_EXE_{}", name);
-    std::env::var_os(&env_var)
+    std::env::var_os(env_var)
         .map(|p| p.into())
         .unwrap_or_else(|| target_dir().join(format!("{}{}", name, env::consts::EXE_SUFFIX)))
 }
