@@ -1,80 +1,80 @@
 error: type mismatch: expected real value but found string literal
-  ┌─ /formatting.va:3:45
-  │
-3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
-  │                         --                  ^^^^^ expected real value
-  │                         │                    
-  │                         help: expected because of this fmt specifier
+  --> /formatting.va:3:45
+  |
+3 |         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+  |                         --                  ^^^^^ expected real value
+  |                         |                    
+  |                         help: expected because of this fmt specifier
 
 error: type mismatch: expected integer value but found real literal
-  ┌─ /formatting.va:3:52
-  │
-3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
-  │                                 -                  ^^^ expected integer value
-  │                                 │                   
-  │                                 help: expected because of this fmt specifier
+  --> /formatting.va:3:52
+  |
+3 |         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+  |                                 -                  ^^^ expected integer value
+  |                                 |                   
+  |                                 help: expected because of this fmt specifier
 
 error: type mismatch: expected real value but found string literal
-  ┌─ /formatting.va:3:57
-  │
-3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
-  │                            -------                      ^^^^^ expected real value
-  │                            │                             
-  │                            help: expected because of this fmt specifier
+  --> /formatting.va:3:57
+  |
+3 |         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+  |                            -------                      ^^^^^ expected real value
+  |                            |                             
+  |                            help: expected because of this fmt specifier
 
 error: type mismatch: expected integer value but found real literal
-  ┌─ /formatting.va:3:64
-  │
-3 │         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
-  │                                    --                          ^^^ expected integer value
-  │                                    │                            
-  │                                    help: expected because of this fmt specifier
+  --> /formatting.va:3:64
+  |
+3 |         $display("hello %r %+09.*g %d, %d", "foo", 2.4, "bar", 7.5, 7);
+  |                                    --                          ^^^ expected integer value
+  |                                    |                            
+  |                                    help: expected because of this fmt specifier
 
 error: type mismatch: expected integer value but found real literal
-  ┌─ /formatting.va:4:47
-  │
-4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
-  │                          -                    ^^^ expected integer value
-  │                          │                     
-  │                          help: expected because of this fmt specifier
+  --> /formatting.va:4:47
+  |
+4 |         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+  |                          -                    ^^^ expected integer value
+  |                          |                     
+  |                          help: expected because of this fmt specifier
 
 error: type mismatch: expected real value but found string literal
-  ┌─ /formatting.va:4:52
-  │
-4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
-  │                         -----                      ^^^ expected real value
-  │                         │                           
-  │                         help: expected because of this fmt specifier
+  --> /formatting.va:4:52
+  |
+4 |         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+  |                         -----                      ^^^ expected real value
+  |                         |                           
+  |                         help: expected because of this fmt specifier
 
 error: failed to parse format specifier; unexpected character .
-  ┌─ /formatting.va:4:33
-  │
-4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
-  │                                 ^ unexpected character in fmt specifier
-  │
+  --> /formatting.va:4:33
+  |
+4 |         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+  |                                 ^ unexpected character in fmt specifier
+  |
   = help: expected '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' or '*'
 
 error: type mismatch: expected string value but found real literal
-  ┌─ /formatting.va:4:64
-  │
-4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
-  │                                    --                          ^^^^^ expected string value
-  │                                    │                            
-  │                                    help: expected because of this fmt specifier
+  --> /formatting.va:4:64
+  |
+4 |         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+  |                                    --                          ^^^^^ expected string value
+  |                                    |                            
+  |                                    help: expected because of this fmt specifier
 
 error: failed to parse format specifier; unexpected character J
-  ┌─ /formatting.va:4:40
-  │
-4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
-  │                                        ^ unexpected character in fmt specifier
-  │
+  --> /formatting.va:4:40
+  |
+4 |         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+  |                                        ^ unexpected character in fmt specifier
+  |
   = help: expected '-', '+', ' ', '#', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*', 
     '.', 'e', 'E', 'f', 'F', 'g', 'G', 'r', 'R', '%', 'm', 'M', 'l', 'L', 'd', 'D', 'h', 'H', 
     'o', 'O', 'b', 'B', 'c', 'C', 's' or 'S'
 
 error: $display system task is missing an argument
-  ┌─ /formatting.va:4:42
-  │
-4 │         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
-  │                                          ^^ value for this fmt specifier is missing
+  --> /formatting.va:4:42
+  |
+4 |         $display("hello %*.9e %..f %s %J %s", 3.1, "G", "foo", 3.141);
+  |                                          ^^ value for this fmt specifier is missing
 

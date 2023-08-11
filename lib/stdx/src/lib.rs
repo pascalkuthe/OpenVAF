@@ -52,3 +52,7 @@ pub fn openvaf_test_data(test: &str) -> PathBuf {
 pub fn is_va_file(path: &Path) -> bool {
     path.extension().and_then(|ext| ext.to_str()).map_or(false, |ext| ext == "va")
 }
+
+pub trait Upcast<T: ?Sized> {
+    fn upcast(&self) -> &T;
+}

@@ -2,15 +2,14 @@ use std::path::Path;
 
 use basedb::diagnostics::sink::Buffer;
 use basedb::diagnostics::{ConsoleSink, DiagnosticSink};
-use basedb::{
-    AbsPathBuf, BaseDB, BaseDatabase, FileId, Upcast, Vfs, VfsEntry, VfsPath, VfsStorage,
-};
+use basedb::{AbsPathBuf, BaseDB, BaseDatabase, FileId, Vfs, VfsEntry, VfsPath, VfsStorage};
 use expect_test::expect_file;
 use hir_def::db::{HirDefDB, HirDefDatabase, InternDatabase};
 use hir_def::nameres::{DefMap, LocalScopeId, ScopeDefItem, ScopeOrigin};
 use hir_def::DefWithBodyId;
 use mini_harness::{harness, Result};
 use parking_lot::RwLock;
+use stdx::Upcast;
 use stdx::{ignore_dev_tests, ignore_never, is_va_file, openvaf_test_data, project_root};
 
 #[salsa::database(BaseDatabase, InternDatabase, HirDefDatabase)]

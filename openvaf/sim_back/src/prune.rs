@@ -4,12 +4,10 @@
 use std::mem::take;
 
 use bitset::{BitSet, HybridBitSet};
-use hir_def::db::HirDefDB;
-use hir_def::NodeId;
+use hir::{BranchWrite, CompilationDB, Node};
 use hir_lower::{
     HirInterner, ImplicitEquationKind, ParamKind, PlaceKind, REACTIVE_DIM, RESISTIVE_DIM,
 };
-use hir_ty::inference::BranchWrite;
 use indexmap::map::Entry;
 use indexmap::{IndexMap, IndexSet};
 use mir::{
@@ -22,7 +20,6 @@ use workqueue::WorkStack;
 use crate::util::{
     get_contrib, get_contrib_with_barrier, is_op_dependent, strip_optbarrier, SwitchBranchInfo,
 };
-use crate::CompilationDB;
 
 /// Algorithm that iterativly prunes an equivalent-circuit of unneeded unknowns.
 /// Initially all ddt and noise functions create an implicit unknown.
@@ -170,7 +167,7 @@ impl<'a> UnknownPruner<'a> {
                 continue;
             };
 
-            if self.db.node_data(node).is_port() {
+            if node.is_port(self.db) {
                 continue;
             }
 
@@ -693,7 +690,7 @@ struct PruneCandidate {
     has_noise: bool,
 }
 
-type PruneCandidates = IndexMap<NodeId, PruneCandidate, ahash::RandomState>;
+type PruneCandidates = IndexMap<Node, PruneCandidate, ahash::RandomState>;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Dependency {

@@ -1,10 +1,8 @@
 use std::borrow::Borrow;
 
 use camino::Utf8Path;
-use hir_def::db::HirDefDB;
-use hir_def::Type;
+use hir::Type;
 use hir_lower::{CallBackKind, CurrentKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
-use hir_ty::db::HirTyDB;
 use lasso::Rodeo;
 use llvm::{OptLevel, UNNAMED};
 use mir::{ControlFlowGraph, FuncRef, Function};
@@ -13,7 +11,9 @@ use stdx::iter::multiunzip;
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
-use crate::compiler_db::{CompilationDB, FuncSpec, InternedModel, ModelInfo};
+use crate::compiler_db::{
+    current_name, voltage_name, CompilationDB, FuncSpec, InternedModel, ModelInfo,
+};
 
 pub fn sim_param_stub<'ll>(cx: &CodegenCx<'_, 'll>) -> CallbackFun<'ll> {
     cx.const_callback(&[cx.ty_ptr()], cx.const_real(0.0))
@@ -92,12 +92,8 @@ struct Codegen<'a, 'b, 'll> {
 
 impl<'ll> Codegen<'_, '_, 'll> {
     unsafe fn read_depbreak(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value, ty: Type) {
-        let vars = self
-            .spec
-            .dependency_breaking
-            .iter()
-            .copied()
-            .filter(|var| self.db.var_data(*var).ty == ty);
+        let vars =
+            self.spec.dependency_breaking.iter().copied().filter(|var| var.ty(self.db) == ty);
         let llty = lltype(&ty, self.builder.cx);
         for (i, var) in vars.clone().enumerate() {
             if let Some(id) = self.intern.params.index(&ParamKind::HiddenState(var)) {
@@ -113,7 +109,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
     unsafe fn read_str_params(&mut self, ptr: &'ll llvm::Value) {
         let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
             if let ParamKind::Param(param) = *kind {
-                (self.db.param_ty(param) == Type::String).then_some((id, param))
+                (param.ty(self.db) == Type::String).then_some((id, param))
             } else {
                 None
             }
@@ -136,7 +132,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
     unsafe fn read_params(&mut self, offset: &'ll llvm::Value, ptr: &'ll llvm::Value, ty: Type) {
         let params = self.intern.live_params(&self.func.dfg).filter_map(|(id, kind, _)| {
             if let ParamKind::Param(param) = kind {
-                (self.db.param_ty(*param) == ty).then_some((id, *param))
+                (param.ty(self.db) == ty).then_some((id, *param))
             } else {
                 None
             }
@@ -191,7 +187,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
         );
 
         let global_name = format!("{}.voltages", self.spec.prefix);
-        let names = voltages.map(|(_, (hi, lo))| self.db.voltage_name(hi, lo));
+        let names = voltages.map(|(_, (hi, lo))| voltage_name(self.db, hi, lo));
         self.export_names(names, &global_name);
     }
 
@@ -236,7 +232,7 @@ impl<'ll> Codegen<'_, '_, 'll> {
         );
 
         let global_name = format!("{}.currents", self.spec.prefix);
-        let names = voltages.map(|(_, kind)| self.db.current_name(kind));
+        let names = voltages.map(|(_, kind)| current_name(self.db, kind));
         self.export_names(names, &global_name);
     }
 
@@ -295,12 +291,11 @@ impl CodegenCtx<'_, '_> {
         intern: &HirInterner,
         dst: &Utf8Path,
     ) {
-        let ret_info = db.var_data(spec.var);
-
-        let module = unsafe { self.llbackend.new_module(&ret_info.name, self.opt_lvl).unwrap() };
+        let module =
+            unsafe { self.llbackend.new_module(&spec.var.name(db), self.opt_lvl).unwrap() };
         let cx = unsafe { self.llbackend.new_ctx(self.literals, &module) };
 
-        let ret_ty = lltype(&ret_info.ty, &cx);
+        let ret_ty = lltype(&spec.var.ty(db), &cx);
 
         let fun_ty = cx.ty_func(
             &[
@@ -429,12 +424,12 @@ impl CodegenCtx<'_, '_> {
 
     pub(crate) fn ensure_names(&mut self, db: &CompilationDB, intern: &HirInterner) {
         for param in &intern.params.raw {
-            match param.0 {
+            match *param.0 {
                 ParamKind::Voltage { hi, lo } => {
-                    self.literals.get_or_intern(&db.voltage_name(*hi, *lo));
+                    self.literals.get_or_intern(&voltage_name(db, hi, lo));
                 }
                 ParamKind::Current(kind) => {
-                    self.literals.get_or_intern(&db.current_name(*kind));
+                    self.literals.get_or_intern(&current_name(db, kind));
                 }
                 _ => (),
             }

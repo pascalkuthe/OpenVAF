@@ -239,20 +239,6 @@ impl BranchKind {
             }
         }
     }
-
-    pub fn unwrap_hi_node(self) -> NodeId {
-        match self {
-            BranchKind::NodeGnd(hi) | BranchKind::Nodes(hi, _) => hi,
-            BranchKind::PortFlow(_) => unreachable!(),
-        }
-    }
-
-    pub fn lo_node(self) -> Option<NodeId> {
-        match self {
-            BranchKind::Nodes(_, lo) => Some(lo),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

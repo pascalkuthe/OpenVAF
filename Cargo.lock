@@ -533,6 +533,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "443144c8cdadd93ebf52ddb4056d257f5b52c04d3c804e657d19eb73fc33668b"
 
 [[package]]
+name = "hir"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "basedb",
+ "expect-test",
+ "hir_def",
+ "hir_ty",
+ "indexmap 2.0.0",
+ "mini_harness",
+ "parking_lot",
+ "salsa",
+ "smol_str",
+ "stdx",
+ "syntax",
+ "typed-index-collections",
+]
+
+[[package]]
 name = "hir_def"
 version = "0.0.0"
 dependencies = [
@@ -558,8 +577,7 @@ dependencies = [
  "basedb",
  "bitset",
  "expect-test",
- "hir_def",
- "hir_ty",
+ "hir",
  "indexmap 2.0.0",
  "lasso",
  "mini_harness",
@@ -580,12 +598,8 @@ dependencies = [
  "ahash 0.8.3",
  "arena",
  "basedb",
- "expect-test",
  "hir_def",
- "mini_harness",
- "parking_lot",
  "salsa",
- "smol_str",
  "stdx",
  "syntax",
  "typed-index-collections",
@@ -616,6 +630,12 @@ dependencies = [
  "equivalent",
  "hashbrown 0.14.0",
 ]
+
+[[package]]
+name = "indoc"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c785eefb63ebd0e33416dfcb8d6da0bf27ce752843a45632a67bf10d4d4b5c4"
 
 [[package]]
 name = "is-terminal"
@@ -979,7 +999,7 @@ dependencies = [
  "base_n",
  "basedb",
  "camino",
- "hir_def",
+ "hir",
  "hir_lower",
  "linker",
  "llvm",
@@ -1022,9 +1042,8 @@ dependencies = [
  "camino",
  "expect-test",
  "float-cmp",
- "hir_def",
+ "hir",
  "hir_lower",
- "hir_ty",
  "indexmap 2.0.0",
  "lasso",
  "llvm",
@@ -1313,23 +1332,19 @@ name = "sim_back"
 version = "0.0.0"
 dependencies = [
  "ahash 0.8.3",
- "anyhow",
- "basedb",
  "bitset",
  "expect-test",
  "float-cmp",
- "hir_def",
+ "hir",
  "hir_lower",
- "hir_ty",
  "indexmap 2.0.0",
+ "indoc",
  "lasso",
  "mir",
  "mir_autodiff",
  "mir_interpret",
  "mir_opt",
- "parking_lot",
  "paths",
- "salsa",
  "smol_str",
  "stdx",
  "syntax",
@@ -1521,9 +1536,8 @@ dependencies = [
  "bitset",
  "camino",
  "directories-next",
- "hir_def",
+ "hir",
  "hir_lower",
- "hir_ty",
  "indexmap 2.0.0",
  "lasso",
  "libloading",
@@ -1534,7 +1548,6 @@ dependencies = [
  "mir_autodiff",
  "mir_llvm",
  "mir_opt",
- "parking_lot",
  "paths",
  "rayon-core",
  "salsa",

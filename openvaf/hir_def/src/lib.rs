@@ -141,6 +141,10 @@ impl<N: ItemTreeNode> ItemLoc<N> {
         N::lookup(&self.item_tree(db), self.id).name().clone()
     }
 
+    pub fn def_map(&self, db: &dyn HirDefDB) -> Arc<DefMap> {
+        self.scope.def_map(db)
+    }
+
     pub fn source(&self, db: &dyn HirDefDB) -> N::Source {
         self.ast_ptr(db).to_node(db.parse(self.scope.root_file).tree().syntax())
     }
@@ -196,6 +200,16 @@ macro_rules! impl_intern {
 pub struct BlockLoc {
     ast: AstId<BlockStmt>,
     parent: ScopeId,
+}
+
+impl BlockLoc {
+    pub fn name(self, db: &dyn HirDefDB) -> Name {
+        let tree = db.item_tree(self.parent.root_file);
+        tree.block_scope(self.ast)
+            .name
+            .clone()
+            .expect("BlockLocs are only cerated for named Blocks")
+    }
 }
 
 impl_intern!(BlockId, BlockLoc, intern_block, lookup_intern_block);

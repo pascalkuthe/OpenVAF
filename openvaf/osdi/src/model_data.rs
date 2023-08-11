@@ -1,5 +1,5 @@
 use ahash::RandomState;
-use hir_def::ParamId;
+use hir::{CompilationDB, Parameter};
 use indexmap::IndexMap;
 use llvm::{LLVMBuildLoad2, LLVMBuildStore, LLVMBuildStructGEP2, Value, UNNAMED};
 use mir_llvm::{CodegenCx, MemLoc};
@@ -12,12 +12,13 @@ const NUM_CONST_FIELDS: u32 = 1;
 
 pub struct OsdiModelData<'ll> {
     pub param_given: &'ll llvm::Type,
-    pub params: IndexMap<ParamId, &'ll llvm::Type, RandomState>,
+    pub params: IndexMap<Parameter, &'ll llvm::Type, RandomState>,
     pub ty: &'ll llvm::Type,
 }
 
 impl<'ll> OsdiModelData<'ll> {
     pub fn new(
+        db: &CompilationDB,
         cgunit: &OsdiModule<'_>,
         cx: &CodegenCx<'_, 'll>,
         inst_data: &OsdiInstanceData<'ll>,
@@ -26,12 +27,12 @@ impl<'ll> OsdiModelData<'ll> {
         let params: IndexMap<_, _, _> = cgunit
             .base
             .params
-            .iter()
-            .filter_map(|(param, info)| {
+            .keys()
+            .filter_map(|param| {
                 if inst_params.contains_key(&OsdiInstanceParam::User(*param)) {
                     None
                 } else {
-                    Some((*param, lltype(&info.ty, cx)))
+                    Some((*param, lltype(&param.ty(db), cx)))
                 }
             })
             .collect();
@@ -65,7 +66,7 @@ impl<'ll> OsdiModelData<'ll> {
     pub fn param_loc(
         &self,
         cx: &CodegenCx<'_, 'll>,
-        param: ParamId,
+        param: Parameter,
         ptr: &'ll llvm::Value,
     ) -> Option<MemLoc<'ll>> {
         let pos = self.params.get_index_of(&param)? as u32;
@@ -75,7 +76,7 @@ impl<'ll> OsdiModelData<'ll> {
 
     pub unsafe fn param_ptr(
         &self,
-        param: ParamId,
+        param: Parameter,
         ptr: &'ll llvm::Value,
         llbuilder: &llvm::Builder<'ll>,
     ) -> Option<(&'ll llvm::Value, &'ll llvm::Type)> {
@@ -189,7 +190,7 @@ impl<'ll> OsdiModelData<'ll> {
     pub unsafe fn is_param_given(
         &self,
         cx: &CodegenCx<'_, 'll>,
-        param: ParamId,
+        param: Parameter,
         ptr: &'ll llvm::Value,
         llbuilder: &llvm::Builder<'ll>,
     ) -> Option<&'ll llvm::Value> {

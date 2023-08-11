@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use basedb::Upcast;
 use hir_def::db::HirDefDB;
 use hir_def::nameres::{ResolvedPath, ScopeDefItem};
 use hir_def::{
     AliasParamId, BranchId, DefWithBodyId, DisciplineId, Lookup, NatureAttrId, NatureId, NodeId,
     ParamId, ParamSysFun, Type,
 };
+use stdx::Upcast;
 
 use crate::inference::InferenceResult;
 use crate::lower::{BranchTy, DisciplineTy, NatureTy};

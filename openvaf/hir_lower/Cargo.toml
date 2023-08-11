@@ -15,8 +15,9 @@ bitset = {version = "0.0.0", path = "../../lib/bitset"}
 typed_indexmap = {version = "0.0.0", path = "../../lib/typed_indexmap"}
 
 syntax = {version = "0.0.0", path = "../syntax"}
-hir_def = { version = "0.0.0", path = "../hir_def" }
-hir_ty = { version = "0.0.0", path = "../hir_ty" }
+# hir_def = { version = "0.0.0", path = "../hir_def" }
+# hir_ty = { version = "0.0.0", path = "../hir_ty" }
+hir = {version = "0.0.0", path = "../hir" }
 mir = {version = "0.0.0", path = "../mir" }
 mir_build = {version = "0.0.0", path = "../mir_build" }
 

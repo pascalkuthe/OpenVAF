@@ -1,4 +1,4 @@
-use hir_def::db::HirDefDB;
+use hir::CompilationDB;
 use hir_lower::{CallBackKind, DisplayKind, FmtArg, FmtArgKind, HirInterner};
 use lasso::Rodeo;
 use llvm::Linkage;
@@ -11,9 +11,8 @@ use llvm::{
 };
 use mir::FuncRef;
 use mir_llvm::{CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
-use salsa::InternKey;
 use sim_back::matrix::MatrixEntry;
-use sim_back::{CompilationDB, EvalMir, ModuleInfo, SimUnknown};
+use sim_back::{EvalMir, ModuleInfo, SimUnknown};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
@@ -71,6 +70,7 @@ pub fn new_codegen<'a, 'll>(
 }
 
 pub struct OsdiCompilationUnit<'a, 'b, 'll> {
+    pub db: &'a CompilationDB,
     pub inst_data: OsdiInstanceData<'ll>,
     pub model_data: OsdiModelData<'ll>,
     pub tys: &'a OsdiTys<'ll>,
@@ -81,13 +81,14 @@ pub struct OsdiCompilationUnit<'a, 'b, 'll> {
 
 impl<'a, 'b, 'll> OsdiCompilationUnit<'a, 'b, 'll> {
     pub fn new(
+        db: &'a CompilationDB,
         module: &'a OsdiModule<'b>,
         cx: &'a CodegenCx<'b, 'll>,
         tys: &'a OsdiTys<'ll>,
         eval: bool,
     ) -> OsdiCompilationUnit<'a, 'b, 'll> {
-        let inst_data = OsdiInstanceData::new(module, cx);
-        let model_data = OsdiModelData::new(module, cx, &inst_data);
+        let inst_data = OsdiInstanceData::new(db, module, cx);
+        let model_data = OsdiModelData::new(db, module, cx, &inst_data);
         let lim_dispatch_table =
             if eval && !module.lim_table.is_empty() && !module.mir.eval_intern.lim_state.is_empty()
             {
@@ -104,7 +105,7 @@ impl<'a, 'b, 'll> OsdiCompilationUnit<'a, 'b, 'll> {
             } else {
                 None
             };
-        OsdiCompilationUnit { inst_data, model_data, tys, cx, module, lim_dispatch_table }
+        OsdiCompilationUnit { db, inst_data, model_data, tys, cx, module, lim_dispatch_table }
     }
 
     pub fn lim_dispatch_table(&self) -> &'ll llvm::Value {
@@ -126,22 +127,27 @@ impl<'a> OsdiModule<'a> {
     pub fn new(
         db: &'a CompilationDB,
         mir: &'a EvalMir,
-        module: &'a ModuleInfo,
+        module_info: &'a ModuleInfo,
         lim_table: &'a TiSet<OsdiLimId, OsdiLimFunction>,
     ) -> Self {
-        let module_data = db.module_data(module.id);
-        let mut terminals: TiSet<_, _> =
-            module_data.ports.iter().map(|port| SimUnknown::KirchoffLaw(*port)).collect();
+        let module_data = module_info;
+        let mut terminals: TiSet<_, _> = module_data
+            .module
+            .ports(db)
+            .iter()
+            .map(|port| SimUnknown::KirchoffLaw(*port))
+            .collect();
         let num_terminals = terminals.len() as u32;
 
         let node_ids = {
             // add all internal nodes
-            let internal_nodes = module_data.internal_nodes.iter().filter_map(|node| {
-                if mir.pruned_nodes.contains(node) {
-                    return None;
-                }
-                Some(SimUnknown::KirchoffLaw(*node))
-            });
+            let internal_nodes =
+                module_info.module.internal_nodes(db).into_iter().filter_map(|node| {
+                    if mir.pruned_nodes.contains(&node) {
+                        return None;
+                    }
+                    Some(SimUnknown::KirchoffLaw(node))
+                });
 
             terminals.raw.extend(internal_nodes);
 
@@ -170,10 +176,9 @@ impl<'a> OsdiModule<'a> {
             })
             .collect();
 
-        let sym =
-            base_n::encode(u32::from(module.id.as_intern_id()) as u128, base_n::CASE_INSENSITIVE);
+        let sym = base_n::encode(module_info.module.uuid(db) as u128, base_n::CASE_INSENSITIVE);
 
-        OsdiModule { mir, node_ids, num_terminals, matrix_ids, base: module, sym, lim_table }
+        OsdiModule { mir, node_ids, num_terminals, matrix_ids, base: module_info, sym, lim_table }
     }
 }
 

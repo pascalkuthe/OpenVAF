@@ -2,11 +2,7 @@ use std::iter::FilterMap;
 
 use ahash::AHashMap;
 use bitset::HybridBitSet;
-use hir_def::{
-    BranchId, FunctionId, LocalFunctionArgId, NodeId, ParamId, ParamSysFun, Type, VarId,
-};
-use hir_ty::db::HirTyDB;
-use hir_ty::inference::BranchWrite;
+use hir::{Branch, BranchWrite, CompilationDB, Node, ParamSysFun, Parameter, Type, Variable};
 use indexmap::IndexMap;
 use lasso::Spur;
 use mir::{
@@ -33,9 +29,9 @@ pub enum ImplicitEquationKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CurrentKind {
-    Branch(BranchId),
-    Unnamed { hi: NodeId, lo: Option<NodeId> },
-    Port(NodeId),
+    Branch(Branch),
+    Unnamed { hi: Node, lo: Option<Node> },
+    Port(Node),
 }
 
 impl From<BranchWrite> for CurrentKind {
@@ -49,24 +45,24 @@ impl From<BranchWrite> for CurrentKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParamKind {
-    Param(ParamId),
+    Param(Parameter),
     Abstime,
     EnableIntegration,
     EnableLim,
     PrevState(LimitState),
     NewState(LimitState),
-    Voltage { hi: NodeId, lo: Option<NodeId> },
+    Voltage { hi: Node, lo: Option<Node> },
     Current(CurrentKind),
     Temperature,
-    ParamGiven { param: ParamId },
-    PortConnected { port: NodeId },
+    ParamGiven { param: Parameter },
+    PortConnected { port: Node },
     ParamSysFun(ParamSysFun),
-    HiddenState(VarId),
+    HiddenState(Variable),
     ImplicitUnknown(ImplicitEquation),
 }
 
 impl ParamKind {
-    fn unwrap_pot_node(&self) -> NodeId {
+    fn unwrap_pot_node(&self) -> Node {
         match self {
             ParamKind::Voltage { hi, lo: None } => *hi,
             _ => unreachable!("called unwrap_pot_node on {:?}", self),
@@ -126,12 +122,9 @@ impl IdtKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlaceKind {
-    Var(VarId),
-    FunctionReturn(FunctionId),
-    FunctionArg {
-        fun: FunctionId,
-        arg: LocalFunctionArgId,
-    },
+    Var(Variable),
+    FunctionReturn(hir::Function),
+    FunctionArg(hir::FunctionArg),
     Contribute {
         dst: BranchWrite,
         dim: Dim,
@@ -144,23 +137,33 @@ pub enum PlaceKind {
     CollapseImplicitEquation(ImplicitEquation),
     IsVoltageSrc(BranchWrite),
     /// A parameter during param initiliztion is mutable (write default in case its not given)
-    Param(ParamId),
-    ParamMin(ParamId),
-    ParamMax(ParamId),
+    Param(Parameter),
+    ParamMin(Parameter),
+    ParamMax(Parameter),
 }
 
 impl PlaceKind {
-    pub fn ty(&self, db: &dyn HirTyDB) -> Type {
+    pub fn ty(&self, db: &CompilationDB) -> Type {
         match *self {
-            PlaceKind::Var(var) => db.var_data(var).ty.clone(),
-            PlaceKind::FunctionReturn(fun) => db.function_data(fun).return_ty.clone(),
-            PlaceKind::FunctionArg { fun, arg } => db.function_data(fun).args[arg].ty.clone(),
+            PlaceKind::Var(var) => var.ty(db),
+            PlaceKind::FunctionReturn(fun) => fun.return_ty(db),
+            PlaceKind::FunctionArg(arg) => arg.ty(db),
 
             PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => Type::Real,
             PlaceKind::ParamMin(param) | PlaceKind::ParamMax(param) | PlaceKind::Param(param) => {
-                db.param_ty(param)
+                param.ty(db)
             }
             PlaceKind::IsVoltageSrc(_) | PlaceKind::CollapseImplicitEquation(_) => Type::Bool,
+        }
+    }
+}
+
+impl From<hir::AssignmentLhs> for PlaceKind {
+    fn from(hir: hir::AssignmentLhs) -> Self {
+        match hir {
+            hir::AssignmentLhs::Variable(var) => PlaceKind::Var(var),
+            hir::AssignmentLhs::FunctionReturn(fun) => PlaceKind::FunctionReturn(fun),
+            hir::AssignmentLhs::FunctionArg(arg) => PlaceKind::FunctionArg(arg),
         }
     }
 }
@@ -211,9 +214,9 @@ pub enum CallBackKind {
     SimParamOpt,
     SimParamStr,
     Derivative(Param),
-    NodeDerivative(NodeId),
-    ParamInfo(ParamInfoKind, ParamId),
-    CollapseHint(NodeId, Option<NodeId>),
+    NodeDerivative(Node),
+    ParamInfo(ParamInfoKind, Parameter),
+    CollapseHint(Node, Option<Node>),
     BuiltinLimit { name: Spur, num_args: u32 },
     StoreLimit(LimitState),
     LimDiscontinuity,
@@ -349,7 +352,7 @@ pub enum DimKind {
 /// information from the HIR. This allows the MIR to remain independent of the frontend/HIR
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct HirInterner {
-    pub tagged_reads: IndexMap<Value, VarId, ahash::RandomState>,
+    pub tagged_reads: IndexMap<Value, Variable, ahash::RandomState>,
     pub outputs: IndexMap<PlaceKind, PackedOption<Value>, ahash::RandomState>,
     pub params: TiMap<Param, ParamKind, Value>,
     pub callbacks: TiSet<FuncRef, CallBackKind>,

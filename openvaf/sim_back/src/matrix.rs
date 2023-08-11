@@ -1,6 +1,6 @@
 use ahash::AHashMap;
 use bitset::BitSet;
-use hir_def::db::HirDefDB;
+use hir::CompilationDB;
 use hir_lower::{HirInterner, ParamKind};
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
@@ -178,17 +178,17 @@ impl JacobianMatrix {
 }
 
 impl JacobianMatrix {
-    pub fn print_resistive_stamps(&self, db: &dyn HirDefDB) -> String {
+    pub fn print_resistive_stamps(&self, db: &CompilationDB) -> String {
         let mut res = String::new();
         for (entry, val) in &self.resistive.raw {
             if let SimUnknown::KirchoffLaw(node) = entry.row {
-                format_to!(res, "({}, ", db.node_data(node).name);
+                format_to!(res, "({}, ", node.name(db));
             } else {
                 format_to!(res, "({:?}, ", entry.row);
             }
 
             if let SimUnknown::KirchoffLaw(node) = entry.col {
-                format_to!(res, "{}", db.node_data(node).name);
+                format_to!(res, "{}", node.name(db));
             } else {
                 format_to!(res, "{:?}", entry.col);
             }
@@ -198,17 +198,17 @@ impl JacobianMatrix {
         res
     }
 
-    pub fn print_reactive_stamps(&self, db: &dyn HirDefDB) -> String {
+    pub fn print_reactive_stamps(&self, db: &CompilationDB) -> String {
         let mut res = String::new();
         for (entry, val) in &self.reactive.raw {
             if let SimUnknown::KirchoffLaw(node) = entry.row {
-                format_to!(res, "({}, ", db.node_data(node).name);
+                format_to!(res, "({}, ", node.name(db));
             } else {
                 format_to!(res, "({:?}, ", entry.row);
             }
 
             if let SimUnknown::KirchoffLaw(node) = entry.col {
-                format_to!(res, "{}", db.node_data(node).name);
+                format_to!(res, "{}", node.name(db));
             } else {
                 format_to!(res, "{:?}", entry.col);
             }

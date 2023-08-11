@@ -1,18 +1,20 @@
 use std::path::Path;
 
 use camino::Utf8Path;
+use hir::diagnostics::ConsoleSink;
+use hir::CompilationDB;
 use llvm::OptLevel;
 use mini_harness::{harness, Result};
 use mir_llvm::LLVMBackend;
 use paths::AbsPathBuf;
-use sim_back::CompilationDB;
+use sim_back::collect_modules;
 use stdx::{ignore_slow_tests, project_root};
 use target::spec::Target;
 
 fn test_compile(root_file: &Path) {
     let root_file = AbsPathBuf::assert(root_file.canonicalize().unwrap());
-    let db = CompilationDB::new(root_file, &[], &[], &[]).unwrap();
-    let modules = db.collect_modules(false).unwrap();
+    let db = CompilationDB::new_fs(root_file, &[], &[], &[]).unwrap();
+    let modules = collect_modules(&db, false, &mut ConsoleSink::new(&db)).unwrap();
     let target = Target::host_target().unwrap();
     let back = LLVMBackend::new(&[], &target, "native".to_owned(), &[]);
     let emit = !stdx::IS_CI;

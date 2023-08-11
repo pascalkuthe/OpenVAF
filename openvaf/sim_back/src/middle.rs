@@ -1,10 +1,9 @@
 use ahash::AHashSet;
 use bitset::{BitSet, SparseBitMatrix};
-use hir_def::{NodeId, Type};
+use hir::{BranchWrite, CompilationDB, Node, Type};
 use hir_lower::{
     CallBackKind, CurrentKind, HirInterner, ImplicitEquation, MirBuilder, ParamKind, PlaceKind,
 };
-use hir_ty::inference::BranchWrite;
 use indexmap::{IndexMap, IndexSet};
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
@@ -19,7 +18,6 @@ use stdx::packed_option::PackedOption;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
-use crate::compilation_db::CompilationDB;
 use crate::lim_rhs::LimRhs;
 use crate::matrix::JacobianMatrix;
 use crate::prune::prune_unknowns;
@@ -49,7 +47,7 @@ pub struct EvalMir {
     pub init_inst_cfg: ControlFlowGraph,
     pub init_inst_cache_vals: IndexMap<Value, CacheSlot, ahash::RandomState>,
     pub eval_cache_vals: IndexMap<ImplicitEquation, CacheSlot, ahash::RandomState>,
-    pub cache_slots: TiMap<CacheSlot, (PackedOption<ClassId>, u32), Type>,
+    pub cache_slots: TiMap<CacheSlot, (PackedOption<ClassId>, u32), hir::Type>,
     pub init_inst_intern: HirInterner,
 
     pub eval_intern: HirInterner,
@@ -65,14 +63,14 @@ pub struct EvalMir {
 
     pub collapse: TiMap<CollapsePair, (SimUnknown, Option<SimUnknown>), Vec<CollapsePair>>,
     pub lim_rhs: LimRhs,
-    pub pruned_nodes: AHashSet<NodeId>,
+    pub pruned_nodes: AHashSet<Node>,
 }
 
 impl EvalMir {
     pub fn new(db: &CompilationDB, module: &ModuleInfo, literals: &mut Rodeo) -> EvalMir {
         let (mut func, mut intern) = MirBuilder::new(
             db,
-            module.id,
+            module.module,
             &|kind| match kind {
                 PlaceKind::Contribute { .. }
                 | PlaceKind::ImplicitResidual { .. }
@@ -86,6 +84,7 @@ impl EvalMir {
         .with_split_contributions()
         .with_tagged_writes()
         .build(literals);
+
 
         let mut output_values = BitSet::new_empty(func.dfg.num_values());
         output_values.extend(intern.outputs.values().copied().filter_map(PackedOption::expand));
@@ -585,16 +584,16 @@ impl EvalMir {
     }
 }
 
-impl CompilationDB {
+impl ModuleInfo {
     pub fn build_opvar_mir(
         &self,
-        info: &ModuleInfo,
+        db: &CompilationDB,
     ) -> (Function, HirInterner, Rodeo, ControlFlowGraph) {
-        let outputs: AHashSet<_> = info.op_vars.keys().copied().collect();
+        let outputs: AHashSet<_> = self.op_vars.keys().copied().collect();
         let mut literals = Rodeo::new();
         let (mut func, mut intern) = MirBuilder::new(
-            self,
-            info.id,
+            db,
+            self.module,
             &|kind| {
                 matches!(
                     kind,
@@ -613,7 +612,7 @@ impl CompilationDB {
         let mut output_values = BitSet::new_empty(func.dfg.num_values());
         output_values.extend(intern.outputs.values().filter_map(|it| it.expand()));
 
-        intern.insert_var_init(self, &mut func, &mut literals);
+        intern.insert_var_init(db, &mut func, &mut literals);
 
         let mut cfg = ControlFlowGraph::new();
         cfg.compute(&func);

@@ -12,6 +12,7 @@ use std::iter::repeat;
 use std::marker::PhantomData;
 
 use arena::{Arena, ArenaMap, Idx, RawIdx};
+use syntax::name::{AsName, Name};
 use syntax::{ast, AstNode, AstPtr, SyntaxKind, SyntaxNode, SyntaxNodePtr};
 use vfs::FileId;
 
@@ -21,6 +22,12 @@ use crate::BaseDB;
 pub struct AstId<N: AstNode> {
     raw: ErasedAstId,
     _ty: PhantomData<fn() -> N>,
+}
+
+impl<N: AstNode> AstId<N> {
+    pub fn erased(&self) -> ErasedAstId {
+        self.raw
+    }
 }
 
 impl<N: AstNode> From<AstId<N>> for ErasedAstId {
@@ -64,13 +71,19 @@ impl<N: AstNode> AstId<N> {
     }
 }
 
-pub type ErasedAstId = Idx<SyntaxNodePtr>;
+#[derive(Debug, PartialEq, Eq)]
+pub struct MapEntry {
+    pub(crate) syntax: SyntaxNodePtr,
+    pub(crate) attrs: Box<[Name]>,
+}
+
+pub type ErasedAstId = Idx<MapEntry>;
 
 /// Maps items' `SyntaxNode`s to `ErasedAstId`s and back.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct AstIdMap {
-    arena: Arena<SyntaxNodePtr>,
-    parents: ArenaMap<SyntaxNodePtr, Option<ErasedAstId>>,
+    arena: Arena<MapEntry>,
+    parents: ArenaMap<MapEntry, Option<ErasedAstId>>,
 }
 
 pub(crate) fn has_id_map_entry(kind: SyntaxKind) -> bool {
@@ -120,7 +133,7 @@ impl AstIdMap {
     }
 
     pub(crate) fn erased_ast_id_of_ptr(&self, ptr: SyntaxNodePtr) -> ErasedAstId {
-        match self.arena.iter_enumerated().find(|(_id, i)| **i == ptr) {
+        match self.arena.iter_enumerated().find(|(_id, i)| i.syntax == ptr) {
             Some((it, _)) => it,
             None => panic!(
                 "Can't find {:?} in AstIdMap",
@@ -152,14 +165,23 @@ impl AstIdMap {
     }
 
     pub fn get<N: AstNode>(&self, id: AstId<N>) -> AstPtr<N> {
-        self.arena[id.raw].cast::<N>().unwrap()
+        self.arena[id.raw].syntax.cast::<N>().unwrap()
     }
 
-    pub(crate) fn entries(&self) -> impl Iterator<Item = (ErasedAstId, &SyntaxNodePtr)> {
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (ErasedAstId, &MapEntry)> {
         self.arena.iter_enumerated()
     }
+
     pub fn get_syntax(&self, id: ErasedAstId) -> SyntaxNodePtr {
-        self.arena[id]
+        self.arena[id].syntax
+    }
+
+    pub fn get_attrs(&self, id: ErasedAstId) -> &[Name] {
+        &self.arena[id].attrs
+    }
+
+    pub fn get_attr(&self, id: ErasedAstId, name: &str) -> Option<usize> {
+        self.arena[id].attrs.iter().position(|attr| &**attr == name)
     }
 
     pub(crate) fn get_parent(&self, id: ErasedAstId) -> Option<ErasedAstId> {
@@ -168,7 +190,16 @@ impl AstIdMap {
 
     fn alloc(&mut self, item: &SyntaxNode, parent: Option<ErasedAstId>) -> ErasedAstId {
         let id1 = self.parents.push_and_get_key(parent);
-        let id2 = self.arena.push_and_get_key(SyntaxNodePtr::new(item));
+        let attrs = if ast::Param::can_cast(item.kind()) || ast::Var::can_cast(item.kind()) {
+            ast::attrs(&item.parent().unwrap())
+        } else {
+            ast::attrs(item)
+        };
+        let attrs = attrs.filter_map(|attr| Some(attr.name()?.as_name()));
+        let id2 = self.arena.push_and_get_key(MapEntry {
+            syntax: SyntaxNodePtr::new(item),
+            attrs: attrs.collect(),
+        });
         debug_assert_eq!(id1, id2);
         id2
     }

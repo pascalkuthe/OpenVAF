@@ -1,8 +1,8 @@
 warning[L008]: unknown lint 'foo'
-  ┌─ /module_overwrite_unknown_lint.va:6:25
-  │
-6 │         (*openvaf_allow="foo"*) parameter real bar=0.0;
-  │                         ^^^^^ unknown lint
-  │
+  --> /module_overwrite_unknown_lint.va:6:25
+  |
+6 |         (*openvaf_allow="foo"*) parameter real bar=0.0;
+  |                         ^^^^^ unknown lint
+  |
   = help: this attribute has no effect
 

@@ -60,86 +60,81 @@ impl FuncSpec {
     }
 }
 
-impl CompilationDB {
-    pub fn build_module_mir(
-        &self,
-        info: &ModelInfo,
-    ) -> (Function, HirInterner, Rodeo, ControlFlowGraph) {
-        let dep_break: AHashSet<_> = info
-            .functions
-            .iter()
-            .flat_map(|func| func.dependency_breaking.iter().copied())
-            .collect();
+pub fn build_module_mir(
+    db: &CompilationDB,
+    info: &ModelInfo,
+) -> (Function, HirInterner, Rodeo, ControlFlowGraph) {
+    let dep_break: AHashSet<_> =
+        info.functions.iter().flat_map(|func| func.dependency_breaking.iter().copied()).collect();
 
-        let outputs: AHashSet<_> = info.functions.iter().map(|func| func.var).collect();
-        let mut literals = Rodeo::new();
-        let (mut func, mut intern) = MirBuilder::new(
-            self,
-            info.module,
-            &|kind| {
-                let is_output = matches!(
-                    kind,
-                    PlaceKind::Var(var) if outputs.contains(&var)
-                );
-                is_output
-            },
-            &mut outputs.iter().copied(),
-        )
-        .with_tagged_reads(dep_break)
-        .build(&mut literals);
+    let outputs: AHashSet<_> = info.functions.iter().map(|func| func.var).collect();
+    let mut literals = Rodeo::new();
+    let (mut func, mut intern) = MirBuilder::new(
+        db,
+        info.module,
+        &|kind| {
+            let is_output = matches!(
+                kind,
+                PlaceKind::Var(var) if outputs.contains(&var)
+            );
+            is_output
+        },
+        &mut outputs.iter().copied(),
+    )
+    .with_tagged_reads(dep_break)
+    .build(&mut literals);
 
-        // remove unused sideeffects
-        for (id, _) in intern.callbacks.iter_enumerated() {
-            func.dfg.signatures[id].has_sideeffects = false;
-        }
+    // remove unused sideeffects
+    for (id, _) in intern.callbacks.iter_enumerated() {
+        func.dfg.signatures[id].has_sideeffects = false;
+    }
 
-        let mut output_values = BitSet::new_empty(func.dfg.num_values());
-        output_values.extend(intern.outputs.values().filter_map(|it| it.expand()));
+    let mut output_values = BitSet::new_empty(func.dfg.num_values());
+    output_values.extend(intern.outputs.values().filter_map(|it| it.expand()));
 
-        intern.insert_var_init(self, &mut func, &mut literals);
+    intern.insert_var_init(db, &mut func, &mut literals);
 
-        let mut cfg = ControlFlowGraph::new();
-        cfg.compute(&func);
+    let mut cfg = ControlFlowGraph::new();
+    cfg.compute(&func);
 
-        simplify_cfg(&mut func, &mut cfg);
+    simplify_cfg(&mut func, &mut cfg);
 
-        for (param, (kind, _)) in intern.params.iter_enumerated() {
-            if matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
-                let changed = intern.callbacks.ensure(CallBackKind::Derivative(param)).1;
-                if changed {
-                    let signature = CallBackKind::Derivative(param).signature();
-                    func.import_function(signature);
-                }
+    for (param, (kind, _)) in intern.params.iter_enumerated() {
+        if matches!(kind, ParamKind::Voltage { .. } | ParamKind::Current(_)) {
+            let changed = intern.callbacks.ensure(CallBackKind::Derivative(param)).1;
+            if changed {
+                let signature = CallBackKind::Derivative(param).signature();
+                func.import_function(signature);
             }
         }
-
-        dead_code_elimination(&mut func, &output_values);
-
-        let mut dom_tree = DominatorTree::default();
-        dom_tree.compute(&func, &cfg, true, false, true);
-        let unknowns = intern.unknowns(&mut func, false);
-        auto_diff(&mut func, &dom_tree, &unknowns, &[]);
-        cfg.clear();
-        cfg.compute(&func);
-        sparse_conditional_constant_propagation(&mut func, &cfg);
-        inst_combine(&mut func);
-        simplify_cfg(&mut func, &mut cfg);
-
-        (func, intern, literals, cfg)
-        // (func, intern, literals, Vec::new(), cfg)
     }
 
-    pub fn build_param_init_mir(
-        &self,
-        info: &ModelInfo,
-        literals: &mut Rodeo,
-    ) -> (Function, HirInterner) {
-        let mut func = Function::default();
-        let mut intern = HirInterner::default();
+    dead_code_elimination(&mut func, &output_values);
 
-        let params: Vec<_> = info.params.keys().copied().collect();
-        intern.insert_param_init(self, &mut func, literals, true, false, &params);
+    let mut dom_tree = DominatorTree::default();
+    dom_tree.compute(&func, &cfg, true, false, true);
+    let unknowns = intern.unknowns(&mut func, false);
+    auto_diff(&mut func, &dom_tree, &unknowns, &[]);
+    cfg.clear();
+    cfg.compute(&func);
+    sparse_conditional_constant_propagation(&mut func, &cfg);
+    inst_combine(&mut func);
+    simplify_cfg(&mut func, &mut cfg);
 
-        (func, intern)
-    }
+    (func, intern, literals, cfg)
+    // (func, intern, literals, Vec::new(), cfg)
+}
+
+pub fn build_param_init_mir(
+    db: &CompilationDB,
+    info: &ModelInfo,
+    literals: &mut Rodeo,
+) -> (Function, HirInterner) {
+    let mut func = Function::default();
+    let mut intern = HirInterner::default();
+
+    let params: Vec<_> = info.params.keys().copied().collect();
+    intern.insert_param_init(db, &mut func, literals, true, false, &params);
+
+    (func, intern)
 }

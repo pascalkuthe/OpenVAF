@@ -1,14 +1,12 @@
 use std::iter::once;
 
-use hir_def::db::HirDefDB;
-use hir_def::{Lookup, ParamSysFun, Type};
+use hir::{CompilationDB, ParamSysFun, Type};
 use hir_lower::CurrentKind;
-use hir_ty::db::HirTyDB;
 use lasso::{Rodeo, Spur};
 use llvm::{LLVMABISizeOfType, LLVMOffsetOfElement, TargetData};
 use mir_llvm::CodegenCx;
 use sim_back::matrix::MatrixEntry;
-use sim_back::{CompilationDB, SimUnknown};
+use sim_back::SimUnknown;
 use smol_str::SmolStr;
 
 use crate::compilation_unit::{OsdiCompilationUnit, OsdiModule};
@@ -79,48 +77,57 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 }
             }
             OsdiInstanceParam::User(param) => {
-                let param = &module.base.params[param];
+                let param_info = &module.base.params[param];
+                let ty = param.ty(self.db);
 
-                let flags = para_ty_flags(&param.ty) | PARA_KIND_INST;
+                let flags = para_ty_flags(&ty) | PARA_KIND_INST;
                 OsdiParamOpvar {
-                    name: once(&param.name).chain(&*param.alias).map(SmolStr::to_string).collect(),
-                    num_alias: param.alias.len() as u32,
-                    description: param.description.clone(),
-                    units: param.unit.clone(),
+                    name: once(&param_info.name)
+                        .chain(&*param_info.alias)
+                        .map(SmolStr::to_string)
+                        .collect(),
+                    num_alias: param_info.alias.len() as u32,
+                    description: param_info.description.clone(),
+                    units: param_info.unit.clone(),
                     flags,
-                    len: ty_len(&param.ty).unwrap_or(0),
+                    len: ty_len(&ty).unwrap_or(0),
                 }
             }
         });
 
         let model_params = model_data.params.keys().filter_map(|param| {
-            let param = &module.base.params[param];
-            if param.is_instance {
+            let param_info = &module.base.params[param];
+            if param_info.is_instance {
                 return None;
             }
-            let flags = para_ty_flags(&param.ty) | PARA_KIND_MODEL;
+            let ty = param.ty(self.db);
+            let flags = para_ty_flags(&ty) | PARA_KIND_MODEL;
             let param_opvar = OsdiParamOpvar {
-                name: once(&param.name).chain(&*param.alias).map(SmolStr::to_string).collect(),
-                num_alias: param.alias.len() as u32,
-                description: param.description.clone(),
-                units: param.unit.clone(),
+                name: once(&param_info.name)
+                    .chain(&*param_info.alias)
+                    .map(SmolStr::to_string)
+                    .collect(),
+                num_alias: param_info.alias.len() as u32,
+                description: param_info.description.clone(),
+                units: param_info.unit.clone(),
                 flags,
-                len: ty_len(&param.ty).unwrap_or(0),
+                len: ty_len(&ty).unwrap_or(0),
             };
             Some(param_opvar)
         });
 
         let opvars = inst_data.opvars.keys().map(|opvar| {
-            let opvar = &module.base.op_vars[opvar];
+            let opvar_info = &module.base.op_vars[opvar];
             // TODO inst params
-            let flags = para_ty_flags(&opvar.ty) | PARA_KIND_OPVAR;
+            let ty = opvar.ty(self.db);
+            let flags = para_ty_flags(&ty) | PARA_KIND_OPVAR;
             OsdiParamOpvar {
-                name: vec![opvar.name.to_string()],
+                name: vec![opvar.name(self.db).to_string()],
                 num_alias: 0,
-                description: opvar.description.clone(),
-                units: opvar.unit.clone(),
+                description: opvar_info.description.clone(),
+                units: opvar_info.unit.clone(),
                 flags,
-                len: ty_len(&opvar.ty).unwrap_or(0),
+                len: ty_len(&ty).unwrap_or(0),
             }
         });
 
@@ -248,7 +255,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let model_size = LLVMABISizeOfType(target_data, model_data.ty) as u32;
 
             OsdiDescriptor {
-                name: module.base.id.lookup(db).name(db).to_string(),
+                name: module.base.module.name(db),
                 num_nodes: module.node_ids.len() as u32,
                 num_terminals: module.num_terminals,
                 nodes: self.nodes(target_data, db),
@@ -310,32 +317,28 @@ fn sim_unknown_info(unknown: SimUnknown, db: &CompilationDB) -> (String, String,
 
     match unknown {
         SimUnknown::KirchoffLaw(node) => {
-            name = db.node_data(node).name.to_string();
-            discipline = db.node_discipline(node);
+            name = node.name(db).to_string();
+            discipline = Some(node.discipline(db));
             is_flow = false;
         }
 
         SimUnknown::Current(CurrentKind::Unnamed { hi, lo }) => {
-            let hi_ = db.node_data(hi);
             name = if let Some(lo) = lo {
-                let lo = db.node_data(lo);
-                format!("flow({},{})", &hi_.name, &lo.name)
+                format!("flow({},{})", &hi.name(db), &lo.name(db))
             } else {
-                format!("flow({})", &hi_.name)
+                format!("flow({})", &hi.name(db))
             };
-            discipline = Some(db.node_discipline(hi).unwrap());
+            discipline = Some(hi.discipline(db));
             is_flow = true;
         }
         SimUnknown::Current(CurrentKind::Branch(br)) => {
-            let br_ = db.branch_data(br);
-            name = format!("flow({})", &br_.name);
-            discipline = Some(db.branch_info(br).unwrap().discipline);
+            name = format!("flow({})", &br.name(db));
+            discipline = Some(br.discipline(db));
             is_flow = true;
         }
         SimUnknown::Current(CurrentKind::Port(node)) => {
-            let node_ = db.node_data(node);
-            name = format!("flow(<{}>)", &node_.name);
-            discipline = db.node_discipline(node);
+            name = format!("flow(<{}>)", &node.name(db));
+            discipline = Some(node.discipline(db));
             is_flow = true;
         }
         SimUnknown::Implicit(equ) => {
@@ -345,14 +348,18 @@ fn sim_unknown_info(unknown: SimUnknown, db: &CompilationDB) -> (String, String,
         }
     };
 
-    let units = if let Some(discipline) = discipline {
-        let discipline = db.discipline_info(discipline);
-        let nature = if is_flow { discipline.flow } else { discipline.potential };
-
-        db.nature_info(nature.unwrap()).units.as_ref().map_or_else(String::new, String::clone)
-    } else {
-        String::new()
-    };
+    // its valid to have disciplines without pot/flow nature but then we can't
+    // have branches for those so its ok to unwrap here
+    let units = discipline
+        .map(|discipline| {
+            let nature = if is_flow {
+                discipline.flow(db).unwrap()
+            } else {
+                discipline.potential(db).unwrap()
+            };
+            nature.units(db)
+        })
+        .unwrap_or_default();
 
     (name, units, is_flow)
 }

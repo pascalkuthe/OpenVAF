@@ -14,9 +14,8 @@ name = "verilogae"
 
 syntax = { version = "0.0.0", path = "../../openvaf/syntax" }
 basedb = { version = "0.0.0", path = "../../openvaf/basedb" }
-hir_def = { version = "0.0.0", path = "../../openvaf/hir_def" }
 hir_lower = { version = "0.0.0", path = "../../openvaf/hir_lower" }
-hir_ty = { version = "0.0.0", path = "../../openvaf/hir_ty" }
+hir = { version = "0.0.0", path = "../../openvaf/hir" }
 
 mir = { version = "0.0.0", path = "../../openvaf/mir" }
 mir_llvm = { version = "0.0.0", path = "../../openvaf/mir_llvm" }
@@ -42,7 +41,6 @@ libloading = "0.8"
 rayon-core = "1"
 
 smol_str = { version = "0.2", default_features = false }
-parking_lot = "0.12"
 typed-index-collections = "3"
 ahash = "0.8"
 

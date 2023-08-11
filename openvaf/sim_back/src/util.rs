@@ -1,8 +1,8 @@
 //! various utilities used in this crate
 
 use bitset::BitSet;
+use hir::BranchWrite;
 use hir_lower::{Dim, HirInterner, ParamKind, PlaceKind};
-use hir_ty::inference::BranchWrite;
 use mir::{Function, Inst, InstructionData, Opcode, Value, ValueDef, F_ZERO};
 
 pub fn strip_optbarrier(func: &Function, mut val: Value) -> Value {

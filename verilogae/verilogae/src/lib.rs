@@ -3,7 +3,7 @@ use std::io::Write;
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
-use basedb::{BaseDB, VfsStorage};
+use basedb::VfsStorage;
 use camino::{Utf8Path, Utf8PathBuf};
 use lasso::Rodeo;
 use linker::link;
@@ -16,6 +16,7 @@ use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 
 use crate::api::{Opts, VfsEntry};
 use crate::compiler_db::{CompilationDB, ModelInfo};
+use crate::middle::{build_module_mir, build_param_init_mir};
 use crate::opts::abs_path;
 pub use llvm::OptLevel;
 
@@ -33,8 +34,9 @@ mod middle;
 mod opts;
 
 pub fn export_vfs(path: &Utf8Path, opts: &Opts) -> Result<Box<[VfsEntry]>> {
-    let db = CompilationDB::new(path, opts)?;
-    db.preprocess(db.root_file);
+    let db = compiler_db::new(path, opts)?;
+    let cu = db.compilation_unit();
+    cu.preprocess(&db);
     let vfs = db.vfs().read();
     let path = abs_path(path)?;
     let (vfs_export, unresolved_files) = match vfs.export_native_paths_to_virt(&path) {
@@ -61,120 +63,118 @@ pub fn load(path: &Utf8Path, full_compile: bool, opts: &Opts) -> Result<Library>
 }
 
 fn build_local_model(path: &Utf8Path, full_compile: bool, opts: &Opts) -> Result<Utf8PathBuf> {
-    let db = CompilationDB::new(path, opts)?;
+    let db = compiler_db::new(path, opts)?;
     let (file, found) = cache::lookup(&db, full_compile, opts)?;
     if found {
         return Ok(file);
     }
 
-    db.build_model(path, full_compile, true, opts, &file).map(|_| file)
+    build_model(db, path, full_compile, true, opts, &file).map(|_| file)
 }
 
-impl CompilationDB {
-    fn build_model(
-        self,
-        path: &Utf8Path,
-        full_compile: bool,
-        local: bool,
-        opts: &Opts,
-        dst: &Utf8Path,
-    ) -> Result<()> {
-        let start = Instant::now();
-        let db = self;
+fn build_model(
+    db: CompilationDB,
+    path: &Utf8Path,
+    full_compile: bool,
+    local: bool,
+    opts: &Opts,
+    dst: &Utf8Path,
+) -> Result<()> {
+    let start = Instant::now();
+    let db = db;
 
-        let file = path.file_name().to_owned().unwrap();
+    let file = path.file_name().to_owned().unwrap();
 
-        let info = ModelInfo::collect(&db, file, opts.module_name()?)?;
+    let info = ModelInfo::collect(&db, file, opts.module_name()?)?;
 
-        let target_cpu = match opts.target_cpu()? {
-            Some(cpu) => cpu,
-            None if local => "native",
-            None => "generic",
+    let target_cpu = match opts.target_cpu()? {
+        Some(cpu) => cpu,
+        None if local => "native",
+        None => "generic",
+    };
+    let cg_opts: Vec<_> = opts.cg_flags().map(str::to_owned).collect();
+    let target = opts.target()?;
+    let backend = LLVMBackend::new(&cg_opts, &target, target_cpu.to_owned(), &[]);
+    let cache_dir = opts.cache_dir()?;
+
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+
+    let mut object_files = vec![cache_dir.join(format!("{}_modelinfo.o", file))];
+
+    if full_compile {
+        let (func, intern, mut literals, cfg) = build_module_mir(&db, &info);
+        let interned_model = info.intern_model(&db, &mut literals);
+        let param_init = build_param_init_mir(&db, &info, &mut literals);
+
+        let mut cx = back::CodegenCtx {
+            model_info: &info,
+            llbackend: &backend,
+            literals: &mut literals,
+            opt_lvl: opts.opt_lvl.into(),
         };
-        let cg_opts: Vec<_> = opts.cg_flags().map(str::to_owned).collect();
-        let target = opts.target()?;
-        let backend = LLVMBackend::new(&cg_opts, &target, target_cpu.to_owned(), &[]);
-        let cache_dir = opts.cache_dir()?;
 
-        std::fs::create_dir_all(&cache_dir).unwrap();
-        if let Some(parent) = dst.parent() {
-            std::fs::create_dir_all(parent).unwrap();
-        }
+        cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
 
-        let mut object_files = vec![cache_dir.join(format!("{}_modelinfo.o", file))];
+        let dst_name = dst.file_name().to_owned().unwrap();
+        object_files.extend(
+            info.functions
+                .iter()
+                .map(|fun| cache_dir.join(format!("{}{}.o", dst_name, fun.prefix))),
+        );
 
-        if full_compile {
-            let (func, intern, mut literals, cfg) = db.build_module_mir(&info);
-            let interned_model = info.intern_model(&db, &mut literals);
-            let param_init = db.build_param_init_mir(&info, &mut literals);
+        // ensure all voltage/current names are in the interner so that the interner can be
+        // shared (readonly) betwenn threads
+        cx.ensure_names(&db, &intern);
 
-            let mut cx = back::CodegenCtx {
-                model_info: &info,
-                llbackend: &backend,
-                literals: &mut literals,
-                opt_lvl: opts.opt_lvl.into(),
-            };
-
-            cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
-
-            let dst_name = dst.file_name().to_owned().unwrap();
-            object_files.extend(
-                info.functions
-                    .iter()
-                    .map(|fun| cache_dir.join(format!("{}{}.o", dst_name, fun.prefix))),
-            );
-
-            // ensure all voltage/current names are in the interner so that the interner can be
-            // shared (readonly) betwenn threads
-            cx.ensure_names(&db, &intern);
-
-            rayon_core::scope(|s| {
-                let db = db;
-                for (spec, file) in zip(&info.functions, &object_files[1..]) {
-                    let db_snap = db.snapshot();
-                    s.spawn(|_| {
-                        let db_snap = db_snap;
-                        let (func, cfg) = spec.slice_mir(&func, &cfg, &intern);
-                        cx.gen_func_obj(&db_snap, spec, &func, &cfg, &intern, file)
-                    })
-                }
-            })
-        } else {
-            let mut literals = Rodeo::default();
-
-            let interned_model = info.intern_model(&db, &mut literals);
-            let param_init = db.build_param_init_mir(&info, &mut literals);
-
-            let cx = back::CodegenCtx {
-                model_info: &info,
-                llbackend: &backend,
-                literals: &mut literals,
-                opt_lvl: opts.opt_lvl.into(),
-            };
-
-            cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
-        }
-
-        // TODO configure linker
-        link(None, &target, dst, |linker| {
-            for obj in &object_files {
-                linker.add_object(obj)
+        rayon_core::scope(|s| {
+            let db = db;
+            for (spec, file) in zip(&info.functions, &object_files[1..]) {
+                let db_snap = db.snapshot();
+                s.spawn(|_| {
+                    let db_snap = db_snap;
+                    let (func, cfg) = spec.slice_mir(&func, &cfg, &intern);
+                    cx.gen_func_obj(&db_snap, spec, &func, &cfg, &intern, file)
+                })
             }
         })
-        .context("linking failed!")?;
+    } else {
+        let mut literals = Rodeo::default();
 
-        #[allow(unused_must_use)]
-        for file in object_files {
-            fs::remove_file(file);
-        }
+        let interned_model = info.intern_model(&db, &mut literals);
+        let param_init = build_param_init_mir(&db, &info, &mut literals);
 
-        let seconds = Instant::elapsed(&start).as_secs_f64();
-        let mut stderr = StandardStream::stderr(Auto);
-        stderr.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
-        write!(&mut stderr, "Finished")?;
-        stderr.set_color(&ColorSpec::new())?;
-        writeln!(&mut stderr, " building {} in {:.2}s", file, seconds)?;
+        let cx = back::CodegenCtx {
+            model_info: &info,
+            llbackend: &backend,
+            literals: &mut literals,
+            opt_lvl: opts.opt_lvl.into(),
+        };
 
-        Ok(())
+        cx.compile_model_info(&object_files[0], interned_model, param_init.0, param_init.1);
     }
+
+    // TODO configure linker
+    link(None, &target, dst, |linker| {
+        for obj in &object_files {
+            linker.add_object(obj)
+        }
+    })
+    .context("linking failed!")?;
+
+    #[allow(unused_must_use)]
+    for file in object_files {
+        fs::remove_file(file);
+    }
+
+    let seconds = Instant::elapsed(&start).as_secs_f64();
+    let mut stderr = StandardStream::stderr(Auto);
+    stderr.set_color(ColorSpec::new().set_fg(Some(Color::Green)).set_bold(true))?;
+    write!(&mut stderr, "Finished")?;
+    stderr.set_color(&ColorSpec::new())?;
+    writeln!(&mut stderr, " building {} in {:.2}s", file, seconds)?;
+
+    Ok(())
 }

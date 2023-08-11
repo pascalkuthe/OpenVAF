@@ -7,11 +7,11 @@ use anyhow::Result;
 use basedb::diagnostics::{ConsoleSink, DiagnosticSink};
 use basedb::BaseDB;
 use camino::Utf8PathBuf;
-use hir_def::db::HirDefDB;
+use hir::CompilationDB;
 use hir_lower::{ParamKind, PlaceKind};
 use linker::link;
 use mir_llvm::LLVMBackend;
-use sim_back::CompilationDB;
+use sim_back::collect_modules;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 pub use basedb::lints::builtin as builtin_lints;
@@ -51,54 +51,43 @@ pub fn dump_json(opts: &Opts) -> Result<CompilationTermination> {
     let input =
         opts.input.canonicalize().with_context(|| format!("failed to resolve {}", opts.input))?;
     let input = AbsPathBuf::assert(input);
-    let db = CompilationDB::new(input, &opts.include, &opts.defines, &opts.lints)?;
-    let modules = if let Some(modules) = db.collect_modules(true) {
+    let db = CompilationDB::new_fs(input, &opts.include, &opts.defines, &opts.lints)?;
+    let modules = if let Some(modules) = collect_modules(&db, true, &mut ConsoleSink::new(&db)) {
         modules
     } else {
         return Ok(CompilationTermination::FatalDiagnostic);
     };
     for module in modules {
-        let (func, intern, strings, cfg) = db.build_opvar_mir(&module);
+        let (func, intern, strings, cfg) = module.build_opvar_mir(&db);
         let json = func.to_json(
             &cfg,
             &strings,
             |param| match *intern.params.get_index(param).unwrap().0 {
-                ParamKind::Param(param) => ("parameters", db.param_data(param).name.to_string()),
+                ParamKind::Param(param) => ("parameters", param.name(&db)),
                 ParamKind::Abstime => ("sim_state", "$abstime".to_owned()),
                 ParamKind::EnableIntegration => todo!(),
-                ParamKind::Voltage { hi, lo: Some(lo) } => (
-                    "voltages",
-                    format!("({}, {})", &db.node_data(hi).name, &db.node_data(lo).name),
-                ),
-                ParamKind::Voltage { hi, lo: None } => {
-                    ("voltages", format!("({})", &db.node_data(hi).name))
+                ParamKind::Voltage { hi, lo: Some(lo) } => {
+                    ("voltages", format!("({}, {})", &hi.name(&db), &lo.name(&db)))
                 }
-                ParamKind::Current(hir_lower::CurrentKind::Unnamed { hi, lo: Some(lo) }) => (
-                    "currents",
-                    format!("({}, {})", &db.node_data(hi).name, &db.node_data(lo).name),
-                ),
-
+                ParamKind::Voltage { hi, lo: None } => ("voltages", format!("({})", &hi.name(&db))),
+                ParamKind::Current(hir_lower::CurrentKind::Unnamed { hi, lo: Some(lo) }) => {
+                    ("currents", format!("({}, {})", &hi.name(&db), &lo.name(&db)))
+                }
                 ParamKind::Current(hir_lower::CurrentKind::Unnamed { hi, lo: None }) => {
-                    ("currents", format!("({})", &db.node_data(hi).name))
+                    ("currents", format!("({})", hi.name(&db)))
                 }
-
                 ParamKind::Current(hir_lower::CurrentKind::Branch(br)) => {
-                    ("currents", db.branch_data(br).name.to_string())
+                    ("currents", br.name(&db))
                 }
-
                 ParamKind::Temperature => ("sim_state", "$temperature".to_owned()),
-                ParamKind::ParamGiven { param } => {
-                    ("param_given", db.param_data(param).name.to_string())
-                }
-                ParamKind::PortConnected { port } => {
-                    ("port_connected", db.node_data(port).name.to_string())
-                }
+                ParamKind::ParamGiven { param } => ("param_given", param.name(&db)),
+                ParamKind::PortConnected { port } => ("port_connected", port.name(&db).to_string()),
                 ParamKind::ParamSysFun(param) => ("params", format!("${param:?}")),
                 _ => unreachable!(),
             },
             intern.outputs.iter().filter_map(|(kind, val)| {
                 let name = match *kind {
-                    PlaceKind::Var(var) => db.var_data(var).name.to_string(),
+                    PlaceKind::Var(var) => var.name(&db).to_string(),
                     _ => return None,
                 };
                 Some((name, val.expand()?))
@@ -107,7 +96,7 @@ pub fn dump_json(opts: &Opts) -> Result<CompilationTermination> {
         let path = opts.input.with_file_name(format!(
             "{}_{}.json",
             opts.input.file_stem().unwrap(),
-            &db.module_data(module.id).name
+            module.module.name(&db)
         ));
         if !opts.dry_run {
             std::fs::write(path, json)?;
@@ -122,10 +111,10 @@ pub fn expand(opts: &Opts) -> Result<CompilationTermination> {
     let input =
         opts.input.canonicalize().with_context(|| format!("failed to resolve {}", opts.input))?;
     let input = AbsPathBuf::assert(input);
-    let db = CompilationDB::new(input, &opts.include, &opts.defines, &opts.lints)?;
+    let db = CompilationDB::new_fs(input, &opts.include, &opts.defines, &opts.lints)?;
+    let cu = db.compilation_unit();
 
-    let preprocess = db.preprocess(db.root_file);
-
+    let preprocess = cu.preprocess(&db);
     for token in preprocess.ts.iter() {
         let span = token.span.to_file_span(&preprocess.sm);
         let text = db.file_text(span.file).unwrap();
@@ -134,7 +123,7 @@ pub fn expand(opts: &Opts) -> Result<CompilationTermination> {
     println!();
 
     let mut sink = ConsoleSink::new(&db);
-    sink.add_diagnostics(&*preprocess.diagnostics, db.root_file, &db);
+    sink.add_diagnostics(&*preprocess.diagnostics, cu.root_file(), &db);
 
     if sink.summary(&opts.input.file_name().unwrap()) {
         return Ok(CompilationTermination::FatalDiagnostic);
@@ -156,7 +145,7 @@ pub fn compile(opts: &Opts) -> Result<CompilationTermination> {
     let input =
         opts.input.canonicalize().with_context(|| format!("failed to resolve {}", opts.input))?;
     let input = AbsPathBuf::assert(input);
-    let db = CompilationDB::new(input, &opts.include, &opts.defines, &opts.lints)?;
+    let db = CompilationDB::new_fs(input, &opts.include, &opts.defines, &opts.lints)?;
 
     let lib_file = match &opts.output {
         CompilationDestination::Cache { cache_dir } => {
@@ -171,7 +160,7 @@ pub fn compile(opts: &Opts) -> Result<CompilationTermination> {
         CompilationDestination::Path { lib_file } => lib_file.clone(),
     };
 
-    let modules = if let Some(modules) = db.collect_modules(false) {
+    let modules = if let Some(modules) = collect_modules(&db, false, &mut ConsoleSink::new(&db)) {
         modules
     } else {
         return Ok(CompilationTermination::FatalDiagnostic);

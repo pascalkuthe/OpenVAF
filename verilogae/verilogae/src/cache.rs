@@ -3,7 +3,7 @@ use std::mem::{size_of, size_of_val};
 
 use anyhow::Result;
 use basedb::lints::LintLevel;
-use basedb::BaseDB;
+use basedb::{BaseDB, VfsStorage};
 use camino::Utf8PathBuf;
 
 use crate::compiler_db::CompilationDB;
@@ -11,15 +11,16 @@ use crate::Opts;
 
 fn hash(db: &CompilationDB, module: Option<&str>) -> md5::Digest {
     let mut hash_builder = md5::Context::new();
+    let cu = db.compilation_unit();
 
     // hash settings
-    hash_builder.consume(db.root_file.0.to_ne_bytes());
+    hash_builder.consume(cu.root_file().0.to_ne_bytes());
     if let Some(module) = module {
         hash_builder.consume(module);
     }
 
     hash_builder.consume(env!("CARGO_PKG_VERSION"));
-    let lints = db.global_lint_overwrites(db.root_file);
+    let lints = db.global_lint_overwrites(cu.root_file());
     if cfg!(debug_assertions) && !lints.is_empty() {
         assert_eq!(size_of::<Option<LintLevel>>(), size_of_val(&lints.raw[0]));
     }
@@ -32,8 +33,8 @@ fn hash(db: &CompilationDB, module: Option<&str>) -> md5::Digest {
     hash_builder.consume(lints);
 
     // Hash the full preprocessor result
-    let preprocess = db.preprocess(db.root_file);
-    let vfs = db.vfs.read();
+    let preprocess = cu.preprocess(db);
+    let vfs = db.vfs().read();
     for token in &*preprocess.ts {
         if !token.kind.is_trivia() {
             let filespan = token.span.to_file_span(&preprocess.sm);

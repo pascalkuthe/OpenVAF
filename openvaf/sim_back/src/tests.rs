@@ -3,7 +3,8 @@ use std::ops::Index;
 use std::path::Path;
 
 use ahash::AHashMap;
-use hir_def::db::HirDefDB;
+use hir::diagnostics::ConsoleSink;
+use hir::CompilationDB;
 use hir_lower::{CallBackKind, ParamKind, PlaceKind};
 use lasso::{Rodeo, Spur};
 use mir::{FuncRef, Function, Param, Value};
@@ -12,20 +13,24 @@ use paths::AbsPathBuf;
 use typed_index_collections::{TiSlice, TiVec};
 use typed_indexmap::TiMap;
 
-use crate::compilation_db::CompilationDB;
 use crate::matrix::{JacobianMatrix, MatrixEntry, MatrixEntryId};
 use crate::middle::EvalMir;
-use crate::{ModuleInfo, SimUnknown};
+use crate::{collect_modules, ModuleInfo, SimUnknown};
 
 mod stamps;
 
 impl EvalMir {
-    fn opvars(&self, module: &ModuleInfo, state: &InterpreterState) -> AHashMap<String, f64> {
+    fn opvars(
+        &self,
+        db: &CompilationDB,
+        module: &ModuleInfo,
+        state: &InterpreterState,
+    ) -> AHashMap<String, f64> {
         module
             .op_vars
-            .iter()
-            .map(|(var, data)| {
-                let name = data.name.to_string();
+            .keys()
+            .map(|var| {
+                let name = var.name(db).to_string();
                 let val = self.eval_intern.outputs[&PlaceKind::Var(*var)].unwrap();
                 (name, state.read(val))
             })
@@ -35,28 +40,13 @@ impl EvalMir {
 
 fn compile_to_mir(path: &Path) -> (CompilationDB, ModuleInfo, EvalMir, Rodeo) {
     let path = AbsPathBuf::assert(path.canonicalize().unwrap());
-    let db = CompilationDB::new(path, &[], &[], &[]).unwrap();
-    let mut modules = db.collect_modules(false).unwrap();
+    let db = CompilationDB::new_fs(path, &[], &[], &[]).unwrap();
+    let mut modules = collect_modules(&db, false, &mut ConsoleSink::new(&db)).unwrap();
     let module = modules.pop().unwrap();
     let mut literals = Rodeo::new();
     let mir = EvalMir::new(&db, &module, &mut literals);
     (db, module, mir, literals)
 }
-
-// fn compile_str_to_mir(file: &str) -> (CompilationDB, EvalMir, Rodeo) {
-//     let db = CompilationDB::new_(
-//         VfsPath::new_virtual_path("/root.va".to_owned()),
-//         Ok(file.as_bytes().to_vec()),
-//         &[],
-//         &[],
-//         &[],
-//     )
-//     .unwrap();
-//     let modules = db.collect_modules().unwrap();
-//     let mut literals = Rodeo::new();
-//     let mir = EvalMir::new(&db, &modules[0], &mut literals);
-//     (db, mir, literals)
-// }
 
 #[derive(Default)]
 struct MatrixEntries(AHashMap<String, AHashMap<String, f64>>);
@@ -72,8 +62,8 @@ impl MatrixEntries {
             if let (SimUnknown::KirchoffLaw(row), SimUnknown::KirchoffLaw(col)) =
                 (entry.row, entry.col)
             {
-                let row = db.node_data(row).name.to_string();
-                let col = db.node_data(col).name.to_string();
+                let row = row.name(db).to_string();
+                let col = col.name(db).to_string();
                 res.0.entry(row).or_default().insert(col, vals.read(*val));
             }
         }
@@ -106,13 +96,7 @@ impl JacobianMatrix {
             if let (SimUnknown::KirchoffLaw(row), SimUnknown::KirchoffLaw(col)) =
                 (entry.row, entry.col)
             {
-                println!(
-                    "({}, {}) = {} = {}",
-                    db.node_data(row).name,
-                    db.node_data(col).name,
-                    val,
-                    num
-                )
+                println!("({}, {}) = {} = {}", row.name(db), col.name(db), val, num)
             }
         }
     }
@@ -214,9 +198,9 @@ impl EvalMir {
             .raw
             .iter()
             .map(|(kind, _)| match kind {
-                ParamKind::Param(param) => params[&*db.param_data(*param).name],
-                ParamKind::Voltage { hi, lo } => (node_voltages[&*db.node_data(*hi).name]
-                    - lo.map_or(0f64, |lo| node_voltages[&*db.node_data(lo).name]))
+                ParamKind::Param(param) => params[&*param.name(db)],
+                ParamKind::Voltage { hi, lo } => (node_voltages[&*hi.name(db)]
+                    - lo.map_or(0f64, |lo| node_voltages[&*lo.name(db)]))
                 .into(),
                 ParamKind::Temperature => temp.into(),
                 ParamKind::ParamGiven { .. } | ParamKind::PortConnected { .. } => true.into(),

@@ -2,22 +2,22 @@ use std::f64::{INFINITY, NEG_INFINITY};
 use std::mem::replace;
 
 use ahash::{AHashMap, AHashSet};
-use hir_def::body::{Body, ConstraintKind, ConstraintValue, ParamConstraint};
-use hir_def::expr::{CaseCond, NZERO, PZERO};
-use hir_def::{
-    BuiltIn, Case, DefWithBodyId, Expr, ExprId, FunctionId, Literal, ModuleId, NodeId, ParamId,
-    ParamSysFun, Stmt, StmtId, Type, VarId,
-};
-use hir_ty::builtin::{
-    ABSDELAY_MAX, ABS_INT, ABS_REAL, DDX_POT, IDTMOD_IC, IDTMOD_IC_MODULUS,
+use hir::signatures::{
+    ABSDELAY_MAX, ABS_INT, ABS_REAL, BOOL_EQ, DDX_POT, IDTMOD_IC, IDTMOD_IC_MODULUS,
     IDTMOD_IC_MODULUS_OFFSET, IDTMOD_IC_MODULUS_OFFSET_NATURE, IDTMOD_IC_MODULUS_OFFSET_TOL,
     IDTMOD_NO_IC, IDT_IC, IDT_IC_ASSERT, IDT_IC_ASSERT_NATURE, IDT_IC_ASSERT_TOL, IDT_NO_IC,
-    LIMIT_BUILTIN_FUNCTION, MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
-    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, SIMPARAM_DEFAULT, SIMPARAM_NO_DEFAULT,
+    INT_EQ, INT_OP, LIMIT_BUILTIN_FUNCTION, MAX_INT, MAX_REAL, NATURE_ACCESS_BRANCH,
+    NATURE_ACCESS_NODES, NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, REAL_EQ, REAL_OP,
+    SIMPARAM_DEFAULT, SIMPARAM_NO_DEFAULT, STR_EQ,
 };
-use hir_ty::db::HirTyDB;
-use hir_ty::inference::{AssignDst, BranchWrite, InferenceResult, ResolvedFun};
-use hir_ty::types::{Ty as HirTy, BOOL_EQ, INT_EQ, INT_OP, REAL_EQ, REAL_OP, STR_EQ};
+use hir::{
+    Body, BranchWrite, CompilationDB, ConstraintValue, Module, Node, ParamConstraint, ParamSysFun,
+    Parameter, Type, Variable,
+};
+use hir::{
+    BodyRef, BuiltIn, Case, CaseCond, ContributeKind, Expr, ExprId, Literal, Ref, ResolvedFun,
+    Stmt, StmtId,
+};
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
 use mir::{
@@ -34,14 +34,14 @@ use crate::{
     ImplicitEquation, ImplicitEquationKind, LimitState, ParamInfoKind, ParamKind, PlaceKind,
     REACTIVE_DIM, RESISTIVE_DIM,
 };
-use syntax::ast::{BinaryOp, UnaryOp};
+use syntax::ast::{BinaryOp, ConstraintKind, UnaryOp};
 
 pub struct MirBuilder<'a> {
-    db: &'a dyn HirTyDB,
-    module: ModuleId,
+    db: &'a CompilationDB,
+    module: Module,
     is_output: &'a dyn Fn(PlaceKind) -> bool,
-    required_vars: &'a mut dyn Iterator<Item = VarId>,
-    tagged_reads: AHashSet<VarId>,
+    required_vars: &'a mut dyn Iterator<Item = Variable>,
+    tagged_reads: AHashSet<Variable>,
     tag_writes: bool,
     ctx: Option<&'a mut FunctionBuilderContext>,
     split_contribute: bool,
@@ -49,10 +49,10 @@ pub struct MirBuilder<'a> {
 
 impl<'a> MirBuilder<'a> {
     pub fn new(
-        db: &'a dyn HirTyDB,
-        module: ModuleId,
+        db: &'a CompilationDB,
+        module: Module,
         is_output: &'a dyn Fn(PlaceKind) -> bool,
-        required_vars: &'a mut dyn Iterator<Item = VarId>,
+        required_vars: &'a mut dyn Iterator<Item = Variable>,
     ) -> MirBuilder<'a> {
         MirBuilder {
             db,
@@ -66,11 +66,11 @@ impl<'a> MirBuilder<'a> {
         }
     }
 
-    pub fn tag_reads(&mut self, var: VarId) -> bool {
+    pub fn tag_reads(&mut self, var: Variable) -> bool {
         self.tagged_reads.insert(var)
     }
 
-    pub fn with_tagged_reads(mut self, tagged_vars: AHashSet<VarId>) -> Self {
+    pub fn with_tagged_reads(mut self, tagged_vars: AHashSet<Variable>) -> Self {
         self.tagged_reads = tagged_vars;
         self
     }
@@ -116,15 +116,11 @@ impl<'a> MirBuilder<'a> {
         };
 
         let mut builder = FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
-        let path = self.db.module_data(self.module).name.to_string();
+        let path = self.module.name(self.db);
 
-        let analog_initial = DefWithBodyId::ModuleId { initial: true, module: self.module };
-        let analog_initial_body = self.db.body(analog_initial);
-        let analog_initial_infere = self.db.inference_result(analog_initial);
+        let analog_initial_body = self.module.analog_initial_block(self.db);
 
-        let analog = DefWithBodyId::ModuleId { initial: false, module: self.module };
-        let analog_body = self.db.body(analog);
-        let analog_infere = self.db.inference_result(analog);
+        let analog_body = self.module.analog_block(self.db);
 
         let mut places = TiSet::default();
         let mut extra_dims = TiVec::new();
@@ -139,8 +135,7 @@ impl<'a> MirBuilder<'a> {
             db: self.db,
             func: &mut builder,
             data: &mut interner,
-            body: &analog_initial_body,
-            infere: &analog_initial_infere,
+            body: analog_initial_body.borrow(),
             tagged_vars: &self.tagged_reads,
             places: &mut places,
             extra_dims: self.split_contribute.then_some(&mut extra_dims),
@@ -151,18 +146,14 @@ impl<'a> MirBuilder<'a> {
 
         // lower analog initial blocks first
         ctx.lower_entry_stmts();
-
         // ... and normal analog blocks afterwards
-        ctx.body = &analog_body;
-        ctx.infere = &analog_infere;
+        ctx.body = analog_body.borrow();
         ctx.lower_entry_stmts();
 
         for var in self.required_vars {
             ctx.place(PlaceKind::Var(var));
         }
-
         let is_output = self.is_output;
-
         interner.outputs = places
             .iter_enumerated()
             .map(|(place, kind)| {
@@ -177,11 +168,8 @@ impl<'a> MirBuilder<'a> {
                 }
             })
             .collect();
-
         builder.ins().ret();
-
         builder.finalize();
-
         (func, interner)
     }
 }
@@ -217,7 +205,12 @@ impl CmpOps {
 }
 
 impl HirInterner {
-    pub fn insert_var_init(&mut self, db: &dyn HirTyDB, func: &mut Function, literals: &mut Rodeo) {
+    pub fn insert_var_init(
+        &mut self,
+        db: &CompilationDB,
+        func: &mut Function,
+        literals: &mut Rodeo,
+    ) {
         let mut ctx = FunctionBuilderContext::default();
         let (mut builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
         for (kind, param) in self.params.clone().iter() {
@@ -225,7 +218,7 @@ impl HirInterner {
                 if builder.func.dfg.value_dead(*param) {
                     continue;
                 }
-                let val = self.lower_expr_body(db, var.into(), 0, &mut builder);
+                let val = self.lower_expr_body(db, var.init(db), 0, &mut builder);
                 builder.func.dfg.replace_uses(*param, val);
             }
         }
@@ -236,12 +229,12 @@ impl HirInterner {
 
     pub fn insert_param_init(
         &mut self,
-        db: &dyn HirTyDB,
+        db: &CompilationDB,
         func: &mut Function,
         literals: &mut Rodeo,
         build_min_max: bool,
         build_stores: bool,
-        params: &[ParamId],
+        params: &[Parameter],
     ) {
         let mut default_vals = if build_stores { vec![GRAVESTONE; params.len()] } else { vec![] };
 
@@ -257,10 +250,9 @@ impl HirInterner {
             let mut param_val = self.ensure_param(builder.func, ParamKind::Param(param));
             let param_given = self.ensure_param(builder.func, ParamKind::ParamGiven { param });
 
-            let body = db.body(param.into());
-            let infere = db.inference_result(param.into());
-            let info = db.param_exprs(param);
-            let ty = db.param_ty(param);
+            let body = param.init(db);
+            let ty = param.ty(db);
+            let bounds = param.bounds(db);
 
             // create a temporary to hold onto the uses
             let new_val = builder.make_param(0u32.into());
@@ -276,8 +268,7 @@ impl HirInterner {
                             data: self,
                             func: builder,
                             places: &mut TiSet::default(),
-                            body: &body,
-                            infere: &infere,
+                            body: body.borrow(),
                             tagged_vars: &AHashSet::default(),
                             extra_dims: None,
                             path: "",
@@ -291,7 +282,7 @@ impl HirInterner {
 
                         ctx.check_param(
                             param_val,
-                            &info.bounds,
+                            &bounds,
                             &[],
                             ConstraintKind::From,
                             ops,
@@ -301,7 +292,7 @@ impl HirInterner {
 
                         ctx.check_param(
                             param_val,
-                            &info.bounds,
+                            &bounds,
                             &[],
                             ConstraintKind::Exclude,
                             ops,
@@ -313,15 +304,14 @@ impl HirInterner {
                     }
                     param_val
                 } else {
-                    let default_val = self.lower_expr_body(db, param.into(), 0, builder);
+                    let default_val = self.lower_expr_body(db, body.clone(), 0, builder);
                     if build_stores {
                         let mut ctx = LoweringCtx {
                             db,
                             data: self,
                             func: builder,
                             places: &mut TiSet::default(),
-                            body: &body,
-                            infere: &infere,
+                            body: body.borrow(),
                             tagged_vars: &AHashSet::default(),
                             extra_dims: None,
                             path: "",
@@ -335,7 +325,7 @@ impl HirInterner {
 
                         ctx.check_param(
                             default_val,
-                            &info.bounds,
+                            &bounds,
                             &[],
                             ConstraintKind::From,
                             ops,
@@ -345,7 +335,7 @@ impl HirInterner {
 
                         ctx.check_param(
                             default_val,
-                            &info.bounds,
+                            &bounds,
                             &[],
                             ConstraintKind::Exclude,
                             ops,
@@ -380,9 +370,8 @@ impl HirInterner {
                 data: self,
                 func: &mut builder,
                 places: &mut TiSet::default(),
-                body: &body,
+                body: body.borrow(),
                 path: "",
-                infere: &infere,
                 tagged_vars: &AHashSet::default(),
                 extra_dims: None,
                 contribute_rhs: false,
@@ -394,20 +383,15 @@ impl HirInterner {
             let precomputed_vals = if build_min_max {
                 let min_inclusive =
                     ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
-
                 let max_inclusive =
                     ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param));
-
                 let min_exclusive =
                     ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param));
-
                 let max_exclusive =
                     ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param));
 
-                let mut bounds = None;
-
-                let precomputed_vals = info
-                    .bounds
+                let mut lowered_bounds = None;
+                let precomputed_vals = bounds
                     .iter()
                     .filter_map(|bound| {
                         if matches!(bound.kind, ConstraintKind::Exclude) {
@@ -417,7 +401,7 @@ impl HirInterner {
                             ConstraintValue::Value(val) => {
                                 let val = ctx.lower_expr(val);
 
-                                if let Some((min, max)) = bounds {
+                                if let Some((min, max)) = lowered_bounds {
                                     let is_min = ctx.func.ins().binary1(ops.le.unwrap(), val, min);
                                     let min = ctx.func.make_select(is_min, |builder, is_min| {
                                         if is_min {
@@ -438,9 +422,9 @@ impl HirInterner {
                                         }
                                     });
 
-                                    bounds = Some((min, max));
+                                    lowered_bounds = Some((min, max));
                                 } else if ops.le.is_some() {
-                                    bounds = Some((val, val));
+                                    lowered_bounds = Some((val, val));
                                     ctx.func.ins().call(min_inclusive, &[]);
                                     ctx.func.ins().call(max_inclusive, &[]);
                                 }
@@ -450,7 +434,7 @@ impl HirInterner {
                                 let start = ctx.lower_expr(range.start);
                                 let end = ctx.lower_expr(range.end);
 
-                                if let Some((min, max)) = bounds {
+                                if let Some((min, max)) = lowered_bounds {
                                     let (op, call) = if range.start_inclusive {
                                         (ops.le.unwrap(), min_inclusive)
                                     } else {
@@ -483,7 +467,7 @@ impl HirInterner {
                                         }
                                     });
 
-                                    bounds = Some((min, max));
+                                    lowered_bounds = Some((min, max));
                                 } else {
                                     if range.start_inclusive {
                                         ctx.func.ins().call(min_inclusive, &[]);
@@ -497,7 +481,7 @@ impl HirInterner {
                                         ctx.func.ins().call(max_exclusive, &[]);
                                     }
 
-                                    bounds = Some((start, end));
+                                    lowered_bounds = Some((start, end));
                                 }
 
                                 (start, end)
@@ -508,7 +492,7 @@ impl HirInterner {
                     })
                     .collect();
 
-                let (min, max) = bounds.unwrap_or_else(|| match ty {
+                let (min, max) = lowered_bounds.unwrap_or_else(|| match ty {
                     Type::Real => (f_neg_inf, f_inf),
                     Type::Integer => (i_neg_inf, i_inf),
                     _ => unreachable!(),
@@ -528,7 +512,7 @@ impl HirInterner {
 
             ctx.check_param(
                 param_val,
-                &info.bounds,
+                &bounds,
                 &precomputed_vals,
                 ConstraintKind::From,
                 ops,
@@ -538,7 +522,7 @@ impl HirInterner {
 
             ctx.check_param(
                 param_val,
-                &info.bounds,
+                &bounds,
                 &precomputed_vals,
                 ConstraintKind::Exclude,
                 ops,
@@ -563,36 +547,31 @@ impl HirInterner {
     /// Lowers a body
     fn lower_expr_body(
         &mut self,
-        db: &dyn HirTyDB,
-        def: DefWithBodyId,
+        db: &CompilationDB,
+        body: Body,
         i: usize,
         func: &mut FunctionBuilder,
     ) -> Value {
-        let body = db.body(def);
-        let infere = db.inference_result(def);
-
-        let mut ctx = LoweringCtx {
+        let expr = body.borrow().get_entry_expr(i);
+        LoweringCtx {
             db,
             data: self,
             func,
             path: "",
-            body: &body,
-            infere: &infere,
+            body: body.borrow(),
             tagged_vars: &AHashSet::new(),
             places: &mut TiSet::default(),
             extra_dims: None,
             contribute_rhs: false,
             inside_lim: false,
-        };
-
-        let expr = body.stmts[body.entry_stmts[i]].unwrap_expr();
-        ctx.lower_expr(expr)
+        }
+        .lower_expr(expr)
     }
 }
 
 macro_rules! match_signature {
     ($signature:ident: $($case:ident $(| $extra_case:ident)* => $res:expr),*) => {
-        match *$signature.unwrap(){
+        match $signature {
             $($case $(|$extra_case)* => $res,)*
             signature => unreachable!("invalid signature {:?}",signature)
         }
@@ -601,14 +580,13 @@ macro_rules! match_signature {
 }
 
 pub struct LoweringCtx<'a, 'c> {
-    pub db: &'a dyn HirTyDB,
+    pub db: &'a CompilationDB,
     pub data: &'a mut HirInterner,
     pub places: &'a mut TiSet<Place, PlaceKind>,
     pub func: &'a mut FunctionBuilder<'c>,
-    pub body: &'a Body,
+    pub body: BodyRef<'a>,
     pub path: &'a str,
-    pub infere: &'a InferenceResult,
-    pub tagged_vars: &'a AHashSet<VarId>,
+    pub tagged_vars: &'a AHashSet<Variable>,
     pub extra_dims: Option<&'a mut TiVec<Dim, AHashMap<ExprId, Value>>>,
     pub contribute_rhs: bool,
     pub inside_lim: bool,
@@ -703,14 +681,19 @@ impl LoweringCtx<'_, '_> {
     }
 
     pub fn lower_entry_stmts(&mut self) {
-        for stmt in &*self.body.entry_stmts {
-            self.lower_stmt(*stmt)
+        for &stmnt in self.body.entry() {
+            self.lower_stmt(stmnt)
         }
     }
 
-    pub fn lower_stmt(&mut self, stmt: StmtId) {
-        match self.body.stmts[stmt] {
-            Stmt::Empty | Stmt::Missing => (),
+    pub fn lower_stmt(&mut self, stmnt: StmtId) {
+        // TODO(mrsv): let .. else
+        let stmnt = if let Some(stmnt) = self.body.get_stmt(stmnt) {
+            stmnt
+        } else {
+            return;
+        };
+        match stmnt {
             Stmt::Expr(expr) => {
                 self.lower_expr(expr);
             }
@@ -718,24 +701,16 @@ impl LoweringCtx<'_, '_> {
                 // TODO handle porperly
                 self.lower_stmt(body);
             }
-            Stmt::Assignment { val, .. } => {
-                let place = match self.infere.assignment_destination[&stmt] {
-                    AssignDst::Var(var) => PlaceKind::Var(var),
-                    AssignDst::FunVar { fun, arg: None } => PlaceKind::FunctionReturn(fun),
-                    AssignDst::FunVar { arg: Some(arg), fun } => {
-                        PlaceKind::FunctionArg { fun, arg }
-                    }
-                    // TODO verify no contributes between GND nodes
-                    AssignDst::Flow(kind) => return self.contribute(false, kind, val),
-                    AssignDst::Potential(kind) => return self.contribute(true, kind, val),
-                };
-
-                let val_ = self.lower_expr(val);
-                let place = self.place(place);
+            Stmt::Assignment { lhs, rhs } => {
+                let val_ = self.lower_expr(rhs);
+                let place = self.place(lhs.into());
                 self.func.def_var(place, val_)
             }
+            Stmt::Contribute { kind, branch, rhs } => {
+                self.contribute(kind == ContributeKind::Potential, branch, rhs)
+            }
 
-            Stmt::Block { ref body } => {
+            Stmt::Block { body } => {
                 for stmt in body {
                     self.lower_stmt(*stmt)
                 }
@@ -749,8 +724,7 @@ impl LoweringCtx<'_, '_> {
                         db: self.db,
                         data: self.data,
                         func,
-                        body: self.body,
-                        infere: self.infere,
+                        body: self.body.clone(),
                         tagged_vars: self.tagged_vars,
                         places: self.places,
                         extra_dims: self.extra_dims.as_deref_mut(),
@@ -769,12 +743,12 @@ impl LoweringCtx<'_, '_> {
                 });
             }
             Stmt::WhileLoop { cond, body } => self.lower_loop(cond, |s| s.lower_stmt(body)),
-            Stmt::Case { discr, ref case_arms } => self.lower_case(discr, case_arms),
+            Stmt::Case { discr, case_arms } => self.lower_case(discr, case_arms),
         }
     }
 
     fn lower_case(&mut self, discr: ExprId, case_arms: &[Case]) {
-        let discr_op = match self.infere.expr_types[discr].to_value().unwrap() {
+        let discr_op = match self.body.expr_type(discr) {
             Type::Real => Opcode::Feq,
             Type::Integer => Opcode::Ieq,
             Type::Bool => Opcode::Beq,
@@ -864,26 +838,23 @@ impl LoweringCtx<'_, '_> {
         Self::place_(self.func, self.data, self.places, kind)
     }
 
-    fn contribute(&mut self, voltage_src: bool, mut kind: BranchWrite, val: ExprId) {
+    fn contribute(&mut self, voltage_src: bool, mut write: BranchWrite, rhs: ExprId) {
         let mut negate = false;
-        if let BranchWrite::Unnamed { hi, lo } = &mut kind {
+        if let BranchWrite::Unnamed { hi, lo } = &mut write {
             self.lower_contribute_unnamed_branch(&mut negate, hi, lo, voltage_src)
         }
-        let place = self.place(PlaceKind::IsVoltageSrc(kind));
+        let place = self.place(PlaceKind::IsVoltageSrc(write));
         self.func.def_var(place, voltage_src.into());
 
-        let (hi, lo) = kind.nodes(self.db);
-        let is_zero = matches!(
-            self.body.exprs[val],
-            Expr::Literal(Literal::Int(0) | Literal::Float(PZERO | NZERO)),
-        );
+        let (hi, lo) = write.nodes(self.db);
+        let is_zero = self.body.get_expr(rhs).is_zero();
         if voltage_src && is_zero {
             let collapsed = self.callback(CallBackKind::CollapseHint(hi, lo));
             self.func.ins().call(collapsed, &[]);
         }
 
         self.contribute_rhs = self.extra_dims.is_some();
-        let val_ = self.lower_expr_(val);
+        let val_ = self.lower_expr_(rhs);
         self.contribute_rhs = false;
 
         let mut add_contribute = |mut val, dim| {
@@ -891,7 +862,7 @@ impl LoweringCtx<'_, '_> {
                 return;
             }
 
-            let compl_place = PlaceKind::Contribute { dst: kind, dim, voltage_src: !voltage_src };
+            let compl_place = PlaceKind::Contribute { dst: write, dim, voltage_src: !voltage_src };
             if let Some(place) = self.places.index(&compl_place) {
                 self.func.def_var(place, F_ZERO);
             }
@@ -900,7 +871,7 @@ impl LoweringCtx<'_, '_> {
                 return;
             }
 
-            let place = PlaceKind::Contribute { dst: kind, dim, voltage_src };
+            let place = PlaceKind::Contribute { dst: write, dim, voltage_src };
             let place = Self::place_(self.func, self.data, self.places, place);
             let old = self.func.use_var(place);
             val = if negate {
@@ -916,7 +887,7 @@ impl LoweringCtx<'_, '_> {
         add_contribute(val_, RESISTIVE_DIM);
         if let Some(extra_dims) = self.extra_dims.as_deref_mut() {
             for (dim, vals) in extra_dims.iter_enumerated() {
-                if let Some(val) = vals.get(&val) {
+                if let Some(val) = vals.get(&rhs) {
                     add_contribute(*val, dim);
                 }
             }
@@ -973,22 +944,6 @@ impl LoweringCtx<'_, '_> {
         callback_(self.data, self.func, kind)
     }
 
-    fn lower_expr_as_lhs(&mut self, expr: ExprId) -> Place {
-        match self.body.exprs[expr] {
-            hir_def::Expr::Path { port: false, .. } => match self.infere.expr_types[expr] {
-                HirTy::Var(_, var) => self.place(PlaceKind::Var(var)),
-                HirTy::FunctionVar { fun, arg: None, .. } => {
-                    self.place(PlaceKind::FunctionReturn(fun))
-                }
-                HirTy::FunctionVar { arg: Some(arg), fun, .. } => {
-                    self.place(PlaceKind::FunctionArg { fun, arg })
-                }
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
-    }
-
     pub fn lower_expr_as_contrib(&mut self, expr: ExprId) -> Value {
         let old = replace(&mut self.contribute_rhs, true);
         let val = self.lower_expr_(expr);
@@ -1014,50 +969,39 @@ impl LoweringCtx<'_, '_> {
         let old_loc = self.func.get_srcloc();
         self.func.set_srcloc(mir::SourceLoc::new(u32::from(expr) as i32 + 1));
 
-        let mut res = match self.body.exprs[expr] {
-            hir_def::Expr::Path { port: false, .. } => match self.infere.expr_types[expr] {
-                HirTy::Var(_, var) => {
-                    let place = self.place(PlaceKind::Var(var));
-                    let mut val = self.func.use_var(place);
-                    if self.tagged_vars.contains(&var) {
-                        val = self.func.ins().optbarrier(val);
-                        self.data.tagged_reads.insert(val, u32::from(var).into());
-                    }
-                    val
+        let mut res = match self.body.get_expr(expr) {
+            Expr::Read(Ref::Variable(var)) => {
+                let place = self.place(PlaceKind::Var(var));
+                let mut val = self.func.use_var(place);
+                if self.tagged_vars.contains(&var) {
+                    val = self.func.ins().optbarrier(val);
+                    self.data.tagged_reads.insert(val, var);
                 }
-                HirTy::FunctionVar { fun, arg: None, .. } => {
-                    let place = self.place(PlaceKind::FunctionReturn(fun));
-                    self.func.use_var(place)
-                }
-                HirTy::FunctionVar { arg: Some(arg), fun, .. } => {
-                    let place = self.place(PlaceKind::FunctionArg { fun, arg });
-                    self.func.use_var(place)
-                }
-                HirTy::Param(_, param) => self.param(ParamKind::Param(param)),
-                HirTy::NatureAttr(_, attr) => {
-                    self.data.lower_expr_body(self.db, attr.into(), 0, self.func)
-                }
-                ref ty => {
-                    if let ResolvedFun::Param(param) = self.infere.resolved_calls[&expr] {
-                        self.param(ParamKind::ParamSysFun(param))
-                    } else {
-                        unreachable!("{ty:?}")
-                    }
-                }
-            },
-            hir_def::Expr::BinaryOp { lhs, rhs, op: Some(op) } => {
-                self.lower_bin_op(expr, lhs, rhs, op)
+                val
             }
-            hir_def::Expr::UnaryOp { expr: arg, op } => self.lower_unary_op(expr, arg, op),
-            hir_def::Expr::Select { cond, then_val, else_val } => {
+            Expr::Read(Ref::ParamSysFun(param)) => self.param(ParamKind::ParamSysFun(param)),
+            Expr::Read(Ref::Parameter(param)) => self.param(ParamKind::Param(param)),
+            Expr::Read(Ref::FunctionReturn(fun)) => {
+                let place = self.place(PlaceKind::FunctionReturn(fun));
+                self.func.use_var(place)
+            }
+            Expr::Read(Ref::FunctionArg(fun)) => {
+                let place = self.place(PlaceKind::FunctionArg(fun));
+                self.func.use_var(place)
+            }
+            Expr::Read(Ref::NatureAttr(attr)) => {
+                self.data.lower_expr_body(self.db, attr.value(self.db), 0, self.func)
+            }
+            Expr::BinaryOp { lhs, rhs, op } => self.lower_bin_op(expr, lhs, rhs, op),
+            Expr::UnaryOp { expr: arg, op } => self.lower_unary_op(expr, arg, op),
+            Expr::Select { cond, then_val, else_val } => {
                 let cond = self.lower_expr(cond);
                 let (mut then_src, mut else_src) = self.func.make_cond(cond, |func, then| {
                     let mut ctx = LoweringCtx {
                         db: self.db,
                         data: self.data,
                         func,
-                        body: self.body,
-                        infere: self.infere,
+                        body: self.body.clone(),
                         tagged_vars: self.tagged_vars,
                         places: self.places,
                         extra_dims: self.extra_dims.as_deref_mut(),
@@ -1085,39 +1029,30 @@ impl LoweringCtx<'_, '_> {
                 }
                 self.func.ins().phi(&[then_src, else_src])
             }
-            hir_def::Expr::Call { ref args, .. } => match self.infere.resolved_calls[&expr] {
+            Expr::Call { args, fun } => match fun {
                 ResolvedFun::User { func, limit } => self.lower_user_fun(func, limit, args),
                 ResolvedFun::BuiltIn(builtin) => self.lower_builtin(expr, builtin, args),
-                ResolvedFun::Param(param) => self.param(ParamKind::ParamSysFun(param)),
-                ResolvedFun::InvalidNatureAccess(_) => unreachable!(),
             },
-            hir_def::Expr::Array(ref vals) => self.lower_array(expr, vals),
-            hir_def::Expr::Literal(ref lit) => match *lit {
-                hir_def::Literal::String(ref str) => self.func.sconst(str),
-                hir_def::Literal::Int(val) => self.func.iconst(val),
-                hir_def::Literal::Float(val) => self.func.fconst(val.into()),
-                hir_def::Literal::Inf => {
+            Expr::Array(vals) => self.lower_array(expr, vals),
+            Expr::Literal(lit) => match *lit {
+                Literal::String(ref str) => self.func.sconst(str),
+                Literal::Int(val) => self.func.iconst(val),
+                Literal::Float(val) => self.func.fconst(val.into()),
+                Literal::Inf => {
                     self.func.set_srcloc(old_loc);
-                    match self.infere.expr_types[expr].to_value().unwrap() {
+                    match self.body.expr_type(expr) {
                         Type::Real => return self.func.fconst(f64::INFINITY),
                         Type::Integer => return self.func.iconst(i32::MAX),
                         _ => unreachable!(),
                     }
                 }
             },
-            ref expr => unreachable!(
-                "encountered invalid expr {:?}: this should have been caught in the frontend",
-                expr
-            ),
         };
 
-        if let Some(dst) = self.infere.casts.get(&expr) {
-            let src = self.infere.expr_types[expr].to_value().unwrap();
+        if let Some((src, dst)) = self.body.needs_cast(expr) {
             res = self.insert_cast(res, &src, dst)
         };
-
         self.func.set_srcloc(old_loc);
-
         res
     }
 
@@ -1139,24 +1074,24 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn lower_unary_op(&mut self, expr: ExprId, arg: ExprId, op: UnaryOp) -> Value {
-        let is_linear = (op == UnaryOp::Neg
-            && Expr::Literal(Literal::Inf) != self.body.exprs[arg]
-            && self.infere.resolved_signatures[&expr] == REAL_OP)
-            || op == UnaryOp::Identity;
+        let is_inf = self.body.as_literal(arg) == Some(&Literal::Inf);
+        let is_linear =
+            (op == UnaryOp::Neg && !is_inf && self.body.get_call_signature(expr) == REAL_OP)
+                || op == UnaryOp::Identity;
         let arg_ = self.lower_expr_maybe_linear(arg, is_linear);
         match op {
             UnaryOp::BitNegate => self.func.ins().ineg(arg_),
             UnaryOp::Not => self.func.ins().bnot(arg_),
             UnaryOp::Neg => {
                 // Special case INFINITY
-                if Expr::Literal(Literal::Inf) == self.body.exprs[arg] {
-                    match self.infere.expr_types[arg].to_value().unwrap() {
+                if is_inf {
+                    match self.body.expr_type(arg) {
                         Type::Real => return self.func.fconst(f64::NEG_INFINITY),
                         Type::Integer => return self.func.iconst(i32::MIN),
-                        _ => unreachable!(),
+                        ty => unreachable!("{ty:?}"),
                     }
                 }
-                match self.infere.resolved_signatures[&expr] {
+                match self.body.get_call_signature(expr) {
                     REAL_OP => {
                         if self.contribute_rhs {
                             if let Some(extra_dims) = self.extra_dims.as_deref_mut() {
@@ -1193,8 +1128,8 @@ impl LoweringCtx<'_, '_> {
         todo!("arrays")
     }
 
-    fn node(&self, node: NodeId) -> Option<NodeId> {
-        if self.db.node_data(node).is_gnd {
+    fn node(&self, node: Node) -> Option<Node> {
+        if node.is_gnd(self.db) {
             None
         } else {
             Some(node)
@@ -1204,18 +1139,18 @@ impl LoweringCtx<'_, '_> {
     fn nodes_from_args(
         &mut self,
         args: &[ExprId],
-        kind: impl Fn(NodeId, Option<NodeId>) -> ParamKind,
+        kind: impl Fn(Node, Option<Node>) -> ParamKind,
     ) -> Value {
-        let hi = self.infere.expr_types[args[0]].unwrap_node();
-        let lo = args.get(1).map(|arg| self.infere.expr_types[*arg].unwrap_node());
+        let hi = self.body.into_node(args[0]);
+        let lo = args.get(1).map(|&arg| self.body.into_node(arg));
         self.nodes(hi, lo, kind)
     }
 
     fn nodes(
         &mut self,
-        hi: NodeId,
-        lo: Option<NodeId>,
-        kind: impl Fn(NodeId, Option<NodeId>) -> ParamKind,
+        hi: Node,
+        lo: Option<Node>,
+        kind: impl Fn(Node, Option<Node>) -> ParamKind,
     ) -> Value {
         let hi = self.node(hi);
         let lo = lo.and_then(|lo| self.node(lo));
@@ -1240,8 +1175,8 @@ impl LoweringCtx<'_, '_> {
     fn lower_contribute_unnamed_branch(
         &mut self,
         negate: &mut bool,
-        hi: &mut NodeId,
-        lo: &mut Option<NodeId>,
+        hi: &mut Node,
+        lo: &mut Option<Node>,
         voltage_src: bool,
     ) {
         let hi_ = self.node(*hi);
@@ -1286,7 +1221,7 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn lower_bin_op(&mut self, expr: ExprId, lhs: ExprId, rhs: ExprId, op: BinaryOp) -> Value {
-        let signature = self.infere.resolved_signatures.get(&expr);
+        let signature = self.body.get_call_signature(expr);
         let op = match op {
             BinaryOp::BooleanOr => {
                 // lhs || rhs if lhs { true } else { rhs }
@@ -1468,8 +1403,7 @@ impl LoweringCtx<'_, '_> {
                 db: self.db,
                 data: self.data,
                 func,
-                body: self.body,
-                infere: self.infere,
+                body: self.body.clone(),
                 tagged_vars: self.tagged_vars,
                 places: self.places,
                 extra_dims: self.extra_dims.as_deref_mut(),
@@ -1495,8 +1429,7 @@ impl LoweringCtx<'_, '_> {
                 db: self.db,
                 data: self.data,
                 func,
-                body: self.body,
-                infere: self.infere,
+                body: self.body.clone(),
                 tagged_vars: self.tagged_vars,
                 places: self.places,
                 extra_dims: self.extra_dims.as_deref_mut(),
@@ -1521,15 +1454,15 @@ impl LoweringCtx<'_, '_> {
         then_vals
     }
 
-    fn lower_user_fun(&mut self, fun: FunctionId, lim: bool, args: &[ExprId]) -> Value {
+    fn lower_user_fun(&mut self, fun: hir::Function, lim: bool, args: &[ExprId]) -> Value {
         if lim {
             if self.extra_dims.is_none() {
                 return self.lower_expr(args[0]);
             }
             let (new_val, state) = self.limit_state(args[0]);
-            let new_val_place = self.place(PlaceKind::FunctionArg { fun, arg: 0u32.into() });
+            let new_val_place = self.place(PlaceKind::FunctionArg(fun.arg(0, self.db)));
             let old_val = self.param(ParamKind::PrevState(state));
-            let old_val_place = self.place(PlaceKind::FunctionArg { fun, arg: 1u32.into() });
+            let old_val_place = self.place(PlaceKind::FunctionArg(fun.arg(1, self.db)));
 
             let enable_lim = self.param(ParamKind::EnableLim);
             let res = self.lower_select_with(
@@ -1547,27 +1480,29 @@ impl LoweringCtx<'_, '_> {
             self.lower_user_fun_impl(fun, args, false)
         }
     }
-    fn lower_user_fun_impl(&mut self, fun: FunctionId, args: &[ExprId], inside_lim: bool) -> Value {
-        let info = self.db.function_data(fun);
 
+    fn lower_user_fun_impl(
+        &mut self,
+        fun: hir::Function,
+        args: &[ExprId],
+        inside_lim: bool,
+    ) -> Value {
         // FIXME proper path for functions
         let mut path = self.path.to_owned();
-        path.push_str(&info.name);
+        path.push_str(&fun.name(self.db));
 
-        let body = self.db.body(fun.into());
-        let infere = self.db.inference_result(fun.into());
-        let mut args = zip(info.args.iter_enumerated(), args);
+        let mut args = zip(fun.args(self.db), args);
         // skip the first two arguments
         if inside_lim {
             args.next();
             args.next();
         }
-        for ((arg, info), expr) in args.clone() {
-            let place = self.place(PlaceKind::FunctionArg { fun, arg });
-            let init = if info.is_input {
+        for (arg, expr) in args.clone() {
+            let place = self.place(PlaceKind::FunctionArg(arg));
+            let init = if arg.is_input(self.db) {
                 self.lower_expr(*expr)
             } else {
-                match &info.ty {
+                match &arg.ty(self.db) {
                     Type::Real => F_ZERO,
                     Type::Integer => ZERO,
                     ty => unreachable!("invalid function arg type {:?}", ty),
@@ -1577,21 +1512,21 @@ impl LoweringCtx<'_, '_> {
             self.func.def_var(place, init);
         }
 
-        let init = match &info.return_ty {
+        let init = match &fun.return_ty(self.db) {
             Type::Real => F_ZERO,
             Type::Integer => ZERO,
             ty => unreachable!("invalid function return type {:?}", ty),
         };
         let ret_place = self.place(PlaceKind::FunctionReturn(fun));
         self.func.def_var(ret_place, init);
+        let body = fun.body(self.db);
 
         let mut ctx = LoweringCtx {
             db: self.db,
             data: self.data,
             func: self.func,
-            body: &body,
+            body: body.borrow(),
             path: self.path,
-            infere: &infere,
             tagged_vars: self.tagged_vars,
             places: self.places,
             extra_dims: None,
@@ -1603,18 +1538,16 @@ impl LoweringCtx<'_, '_> {
         ctx.lower_entry_stmts();
 
         // write outputs back to original (including possibly required cast)
-        for ((arg, info), expr) in args {
-            if info.is_output {
-                let src_place = self.place(PlaceKind::FunctionArg { fun, arg });
-                let dst_place = self.lower_expr_as_lhs(*expr);
-
+        for (arg, &expr) in args {
+            if arg.is_output(self.db) {
+                let src_place = self.place(PlaceKind::FunctionArg(arg));
                 let mut val = self.func.use_var(src_place);
-
-                if let Some(src) = self.infere.casts.get(expr) {
-                    let dst = self.infere.expr_types[*expr].to_value().unwrap();
+                // casting in reverse here since we write back
+                if let Some((dst, src)) = self.body.needs_cast(expr) {
                     val = self.insert_cast(val, src, &dst)
                 }
-
+                let dst = self.body.get_expr(expr).as_assignment_lhs();
+                let dst_place = self.place(dst.into());
                 self.func.def_var(dst_place, val);
             }
         }
@@ -1726,8 +1659,7 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn lower_builtin(&mut self, expr: ExprId, builtin: BuiltIn, args: &[ExprId]) -> Value {
-        // let arg = |sel, i| sel.lower_expr(args[i]);
-        let signature = self.infere.resolved_signatures.get(&expr);
+        let signature = self.body.get_call_signature(expr);
         match builtin {
             BuiltIn::abs => {
                 let (negate, comparison, zero) = match_signature!(signature:
@@ -1944,7 +1876,7 @@ impl LoweringCtx<'_, '_> {
             }
 
             BuiltIn::idt | BuiltIn::idtmod if self.extra_dims.is_none() => {
-                match *signature.unwrap() {
+                match signature {
                     IDT_NO_IC => F_ZERO, // fair enough approximation
                     _ => self.lower_expr_(args[1]),
                 }
@@ -1985,10 +1917,10 @@ impl LoweringCtx<'_, '_> {
                             |hi, lo| ParamKind::Current(CurrentKind::Unnamed{hi,lo})
                         ),
                         NATURE_ACCESS_BRANCH => self.param(ParamKind::Current(
-                        CurrentKind::Branch(self.infere.expr_types[args[0]].unwrap_branch())
+                        CurrentKind::Branch(self.body.into_branch(args[0]))
                     )),
                         NATURE_ACCESS_PORT_FLOW => self.param(ParamKind::Current(
-                            CurrentKind::Port(self.infere.expr_types[args[0]].unwrap_port_flow())
+                            CurrentKind::Port(self.body.into_port_flow(args[0]))
                         ))
                 };
                 let mfactor = self.param(ParamKind::ParamSysFun(ParamSysFun::mfactor));
@@ -1999,9 +1931,8 @@ impl LoweringCtx<'_, '_> {
                     signature:
                         NATURE_ACCESS_NODES|NATURE_ACCESS_NODE_GND => self.nodes_from_args( args, |hi,lo|ParamKind::Voltage{hi,lo}),
                         NATURE_ACCESS_BRANCH => {
-                            let branch = self.infere.expr_types[args[0]].unwrap_branch();
-                            let info =self.db.branch_info(branch).unwrap().kind;
-                            self.nodes( info.unwrap_hi_node(), info.lo_node(), |hi,lo|ParamKind::Voltage{hi,lo})
+                            let branch = self.body.into_branch(args[0]).kind(self.db);
+                            self.nodes(branch.unwrap_hi_node(), branch.lo_node(), |hi, lo| ParamKind::Voltage{ hi, lo })
                         }
                 }
             }
@@ -2023,7 +1954,7 @@ impl LoweringCtx<'_, '_> {
                 let val = self.lower_expr(args[0]);
                 let param = self.lower_expr(args[1]);
                 let param = self.func.func.dfg.value_def(param).unwrap_param();
-                let call = if *signature.unwrap() == DDX_POT {
+                let call = if signature == DDX_POT {
                     // TODO how to handle gnd nodes?
                     let node = self.data.params.get_index(param).unwrap().0.unwrap_pot_node();
                     CallBackKind::NodeDerivative(node)
@@ -2052,12 +1983,12 @@ impl LoweringCtx<'_, '_> {
                 let arg0 = self.lower_expr(args[0]);
                 self.func.ins().call1(func_ref, &[arg0])
             }
-            BuiltIn::param_given => self.param(ParamKind::ParamGiven {
-                param: self.infere.expr_types[args[0]].unwrap_param(),
-            }),
-            BuiltIn::port_connected => self.param(ParamKind::PortConnected {
-                port: self.infere.expr_types[args[0]].unwrap_node(),
-            }),
+            BuiltIn::param_given => {
+                self.param(ParamKind::ParamGiven { param: self.body.into_parameter(args[0]) })
+            }
+            BuiltIn::port_connected => {
+                self.param(ParamKind::PortConnected { port: self.body.into_node(args[0]) })
+            }
             BuiltIn::bound_step => {
                 let cb = self.callback(CallBackKind::BoundStep);
                 let step_size = self.lower_expr(args[0]);
@@ -2065,13 +1996,11 @@ impl LoweringCtx<'_, '_> {
                 GRAVESTONE
             }
 
-            BuiltIn::limit
-                if *signature.unwrap() == LIMIT_BUILTIN_FUNCTION && self.extra_dims.is_some() =>
-            {
+            BuiltIn::limit if signature == LIMIT_BUILTIN_FUNCTION && self.extra_dims.is_some() => {
                 let (new_val, state) = self.limit_state(args[0]);
 
                 let prev_val = self.param(ParamKind::PrevState(state));
-                let name = self.body.exprs[args[1]].unwrap_literal().unwrap_str();
+                let name = self.body.as_literal(args[1]).unwrap().unwrap_str();
                 let name = self.func.interner.get_or_intern(name);
                 let func_ref =
                     self.callback(CallBackKind::BuiltinLimit { name, num_args: args.len() as u32 });
@@ -2090,7 +2019,7 @@ impl LoweringCtx<'_, '_> {
                 self.insert_limit(state, res)
             }
             BuiltIn::discontinuity => {
-                if self.inside_lim && Expr::Literal(Literal::Int(-1)) == self.body.exprs[args[0]] {
+                if self.inside_lim && Some(&Literal::Int(-1)) == self.body.as_literal(args[0]) {
                     self.callback(CallBackKind::LimDiscontinuity);
                 } else {
                     // TODO implement support for discontinuity?
@@ -2104,7 +2033,7 @@ impl LoweringCtx<'_, '_> {
                 let mut delay = self.lower_expr(args[1]);
                 let (eq1, res) = self.implicit_eqation(ImplicitEquationKind::Absdelay);
                 let (eq2, intermediate) = self.implicit_eqation(ImplicitEquationKind::Absdelay);
-                if *signature.unwrap() == ABSDELAY_MAX {
+                if signature == ABSDELAY_MAX {
                     let max_delay = self.lower_expr(args[2]);
                     let use_delay = self.func.ins().fle(delay, max_delay);
                     delay = self.lower_select_with(use_delay, |_| delay, |_| max_delay);
@@ -2136,11 +2065,10 @@ impl LoweringCtx<'_, '_> {
     }
 
     fn resolved_ty(&self, expr: ExprId) -> Type {
-        self.infere
-            .casts
-            .get(&expr)
-            .cloned()
-            .unwrap_or_else(|| self.infere.expr_types[expr].to_value().unwrap())
+        self.body
+            .needs_cast(expr)
+            .map(|(_, dst)| dst.to_owned())
+            .unwrap_or_else(|| self.body.expr_type(expr))
     }
 
     fn ins_display(&mut self, kind: DisplayKind, newline: bool, args: &[ExprId]) {
@@ -2150,9 +2078,9 @@ impl LoweringCtx<'_, '_> {
 
         let mut i = 0;
 
-        while let Some(expr) = args.get(i) {
+        while let Some(&expr) = args.get(i) {
             i += 1;
-            if let Expr::Literal(Literal::String(ref lit)) = self.body.exprs[*expr] {
+            if let Some(Literal::String(ref lit)) = self.body.as_literal(expr) {
                 fmt_lit.reserve(lit.len());
                 let mut chars = lit.chars();
                 while let Some(mut c) = chars.next() {
@@ -2233,7 +2161,7 @@ impl LoweringCtx<'_, '_> {
                     }
                 }
             } else {
-                let ty = self.resolved_ty(*expr);
+                let ty = self.resolved_ty(expr);
                 let has_whitespace = fmt_lit.chars().last().map_or(false, |c| c.is_whitespace());
                 if !has_whitespace {
                     fmt_lit.push(' ')
@@ -2250,7 +2178,7 @@ impl LoweringCtx<'_, '_> {
                 }
 
                 arg_tys.push(ty.into());
-                call_args.push(self.lower_expr(*expr));
+                call_args.push(self.lower_expr(expr));
             }
         }
         if newline {

@@ -1,12 +1,12 @@
 use base_n::CASE_INSENSITIVE;
 use camino::{Utf8Path, Utf8PathBuf};
-use hir_def::{Lookup, Type};
+use hir::{CompilationDB, Type};
 use hir_lower::{CallBackKind, ParamKind};
 use lasso::Rodeo;
 use llvm::{LLVMDisposeTargetData, OptLevel};
 use mir_llvm::{CodegenCx, LLVMBackend};
 use salsa::ParallelDatabase;
-use sim_back::{CompilationDB, EvalMir, ModuleInfo};
+use sim_back::{EvalMir, ModuleInfo};
 use stdx::iter::zip;
 use stdx::{impl_debug_display, impl_idx_from};
 use target::spec::Target;
@@ -88,12 +88,13 @@ pub fn compile(
         let paths = &paths;
 
         for (i, module) in modules.iter().enumerate() {
+            let _db = db.snapshot();
             scope.spawn(move |_| {
                 let access = format!("access_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&access, opt_lvl).unwrap() };
                 let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
+                let cguint = OsdiCompilationUnit::new(&_db, module, &cx, &tys, false);
 
                 cguint.access_function();
                 debug_assert!(llmod.verify_and_print());
@@ -105,12 +106,13 @@ pub fn compile(
                 }
             });
 
+            let _db = db.snapshot();
             scope.spawn(move |_| {
                 let name = format!("setup_model_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&name, opt_lvl).unwrap() };
                 let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
+                let cguint = OsdiCompilationUnit::new(&_db, module, &cx, &tys, false);
 
                 cguint.setup_model();
                 debug_assert!(llmod.verify_and_print());
@@ -122,12 +124,13 @@ pub fn compile(
                 }
             });
 
+            let _db = db.snapshot();
             scope.spawn(move |_| {
                 let name = format!("setup_instance_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&name, opt_lvl).unwrap() };
                 let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let mut cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
+                let mut cguint = OsdiCompilationUnit::new(&_db, module, &cx, &tys, false);
 
                 cguint.setup_instance();
                 debug_assert!(llmod.verify_and_print());
@@ -139,12 +142,13 @@ pub fn compile(
                 }
             });
 
+            let _db = db.snapshot();
             scope.spawn(move |_| {
                 let access = format!("eval_{}", &module.sym);
                 let llmod = unsafe { back.new_module(&access, opt_lvl).unwrap() };
                 let cx = new_codegen(back, &llmod, literals_);
                 let tys = OsdiTys::new(&cx, target_data_);
-                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, true);
+                let cguint = OsdiCompilationUnit::new(&_db, module, &cx, &tys, true);
 
                 // println!("{:?}", module.mir.eval_func);
                 cguint.eval();
@@ -166,7 +170,7 @@ pub fn compile(
         let descriptors: Vec<_> = modules
             .iter()
             .map(|module| {
-                let cguint = OsdiCompilationUnit::new(module, &cx, &tys, false);
+                let cguint = OsdiCompilationUnit::new(&db, module, &cx, &tys, false);
                 let descriptor = cguint.descriptor(target_data, &db);
                 descriptor.to_ll_val(&cx, &tys)
             })
@@ -230,7 +234,7 @@ pub fn compile(
 
 impl OsdiModule<'_> {
     fn intern_names(&self, literals: &mut Rodeo, db: &CompilationDB) {
-        literals.get_or_intern(&*self.base.id.lookup(db).name(db));
+        literals.get_or_intern(&*self.base.module.name(db));
         self.intern_node_strs(literals, db);
         literals.get_or_intern_static("Multiplier (Verilog-A $mfactor)");
         literals.get_or_intern_static("deg");
@@ -247,10 +251,10 @@ impl OsdiModule<'_> {
             literals.get_or_intern(&param.group);
         }
 
-        for opvar in self.base.op_vars.values() {
-            literals.get_or_intern(&*opvar.name);
-            literals.get_or_intern(&opvar.unit);
-            literals.get_or_intern(&opvar.description);
+        for (var, opvar_info) in self.base.op_vars.iter() {
+            literals.get_or_intern(&*var.name(db));
+            literals.get_or_intern(&opvar_info.unit);
+            literals.get_or_intern(&opvar_info.description);
         }
 
         for alias_list in self.base.sys_fun_alias.values() {

@@ -38,6 +38,9 @@ impl Literal {
             unreachable!("called unwrap str on {self:?}")
         }
     }
+    pub fn is_zero(&self) -> bool {
+        matches!(self, Literal::Int(0) | Literal::Float(PZERO | NZERO),)
+    }
 }
 
 impl_debug! {

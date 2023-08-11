@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ahash::AHashMap;
 pub use diagnostics::AttrDiagnostic;
-use syntax::ast::{self, attrs, AstToken, AttrIter, LiteralKind};
+use syntax::ast::{self, AstToken, AttrIter, LiteralKind};
 use syntax::{AstNode, TextRange};
 use vfs::FileId;
 
@@ -29,10 +29,21 @@ impl LintAttrTree {
 
         let mut res = LintAttrTree { overwrites: AHashMap::new(), diagnostics: Vec::new() };
 
-        for (id, ast_ptr) in map.entries() {
-            let cst = ast_ptr.to_node(cst);
-            let overwrites = resolve_overwrites(&registry, attrs(&cst), &mut res.diagnostics, id);
-            res.overwrites.extend(overwrites.map(|(lint, lvl)| ((id, lint), lvl)));
+        for (id, entry) in map.entries() {
+            // quick reject to avoid looking at the ast when not necessary
+            let has_attr = entry
+                .attrs
+                .iter()
+                .any(|attr| matches!(&**attr, "openvaf_allow" | "openvaf_warn" | "openvaf_deny"));
+            if has_attr {
+                let cst = entry.syntax.to_node(cst);
+                if ast::Var::can_cast(cst.kind()) || ast::Param::can_cast(cst.kind()) {
+                    continue;
+                }
+                let overwrites =
+                    resolve_overwrites(&registry, ast::attrs(&cst), &mut res.diagnostics, id);
+                res.overwrites.extend(overwrites.map(|(lint, lvl)| ((id, lint), lvl)));
+            }
         }
 
         Arc::new(res)

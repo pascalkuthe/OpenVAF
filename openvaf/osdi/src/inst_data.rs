@@ -1,5 +1,5 @@
 use ahash::RandomState;
-use hir_def::{ParamId, ParamSysFun, Type, VarId};
+use hir::{CompilationDB, ParamSysFun, Parameter, Variable};
 use hir_lower::{LimitState, ParamKind, PlaceKind};
 use indexmap::IndexMap;
 use llvm::{
@@ -20,7 +20,7 @@ use crate::{bitfield, lltype, OsdiMatrixId, OsdiNodeId};
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum OsdiInstanceParam {
     Builtin(ParamSysFun),
-    User(ParamId),
+    User(Parameter),
 }
 
 pub const NUM_CONST_FIELDS: u32 = 8;
@@ -107,7 +107,7 @@ pub struct OsdiInstanceData<'ll> {
     pub lim_rhs_resist: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
     pub lim_rhs_react: TiVec<OsdiNodeId, Option<EvalOutputSlot>>,
 
-    pub opvars: IndexMap<VarId, EvalOutput, RandomState>,
+    pub opvars: IndexMap<Variable, EvalOutput, RandomState>,
     pub matrix_resist: TiVec<OsdiMatrixId, Option<EvalOutput>>,
     pub matrix_react: TiVec<OsdiMatrixId, Option<EvalOutput>>,
     pub ty: &'ll llvm::Type,
@@ -116,7 +116,7 @@ pub struct OsdiInstanceData<'ll> {
 }
 
 impl<'ll> OsdiInstanceData<'ll> {
-    pub fn new(cgunit: &OsdiModule<'_>, cx: &CodegenCx<'_, 'll>) -> Self {
+    pub fn new(db: &CompilationDB, cgunit: &OsdiModule<'_>, cx: &CodegenCx<'_, 'll>) -> Self {
         let ty_f64 = cx.ty_double();
         let ty_u32 = cx.ty_int();
 
@@ -137,7 +137,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             .map(|param| (OsdiInstanceParam::Builtin(*param), ty_f64));
 
         let user_inst_params = cgunit.base.params.iter().filter_map(|(param, info)| {
-            info.is_instance.then(|| (OsdiInstanceParam::User(*param), lltype(&info.ty, cx)))
+            info.is_instance.then(|| (OsdiInstanceParam::User(*param), lltype(&param.ty(db), cx)))
         });
 
         let params: IndexMap<_, _, _> =
@@ -148,10 +148,10 @@ impl<'ll> OsdiInstanceData<'ll> {
         let opvars = cgunit
             .base
             .op_vars
-            .iter()
-            .map(|(var, info)| {
+            .keys()
+            .map(|var| {
                 let val = cgunit.mir.eval_intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
-                let ty = lltype(&info.ty, cx);
+                let ty = lltype(&var.ty(db), cx);
                 let pos = EvalOutput::new(cgunit, val, &mut eval_outputs, true, ty);
                 (*var, pos)
             })
@@ -750,7 +750,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let (ptr, ty) = self.cache_slot_ptr(llbuilder, slot, ptr);
         let mut val = LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED);
 
-        if module.mir.cache_slots[slot] == Type::Bool {
+        if module.mir.cache_slots[slot] == hir::Type::Bool {
             val = LLVMBuildICmp(
                 llbuilder,
                 IntPredicate::IntNE,
@@ -772,7 +772,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         mut val: &'ll llvm::Value,
     ) {
         let (ptr, ty) = self.cache_slot_ptr(llbuilder, slot, ptr);
-        if module.mir.cache_slots[slot] == Type::Bool {
+        if module.mir.cache_slots[slot] == hir::Type::Bool {
             val = LLVMBuildIntCast2(llbuilder, val, ty, llvm::False, UNNAMED);
         }
         LLVMBuildStore(llbuilder, val, ptr);

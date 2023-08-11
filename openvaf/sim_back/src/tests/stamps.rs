@@ -469,7 +469,7 @@ fn diode() {
     assert_approx_eq!(f64, itj_vc, it_vc_expect, epsilon = epsilon);
     assert_approx_eq!(f64, itj_vci, it_vci_expect, epsilon = epsilon);
 
-    let opvars = mir.opvars(&module, &result);
+    let opvars = mir.opvars(&db, &module, &result);
     assert_approx_eq!(f64, opvars["gd"], gd, epsilon = epsilon);
 }
 

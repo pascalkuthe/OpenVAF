@@ -1,11 +1,9 @@
 use ahash::{AHashMap, AHashSet};
 use bitset::BitSet;
-use hir_def::db::HirDefDB;
-use hir_def::{NodeId, ParamSysFun};
+use hir::{BranchWrite, CompilationDB, Node, ParamSysFun};
 use hir_lower::{
     HirInterner, ImplicitEquationKind, ParamKind, PlaceKind, REACTIVE_DIM, RESISTIVE_DIM,
 };
-use hir_ty::inference::BranchWrite;
 use indexmap::map::Entry;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
@@ -13,7 +11,6 @@ use mir::{ControlFlowGraph, Function, Inst, KnownDerivatives, Value, FALSE, F_ZE
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
-use crate::compilation_db::CompilationDB;
 use crate::util::{get_contrib, has_any_contrib, strip_optbarrier, SwitchBranchInfo};
 use crate::SimUnknown;
 
@@ -214,7 +211,7 @@ impl Residual {
         intern: &mut HirInterner,
         cfg: &mut ControlFlowGraph,
         op_dependent_insts: &BitSet<Inst>,
-        pruned: &AHashSet<NodeId>,
+        pruned: &AHashSet<Node>,
     ) {
         // self.remove_linear_ddt_unknowns(cursor, intern, op_dependent_insts);
         for i in 0..intern.outputs.len() {
@@ -409,8 +406,7 @@ impl Residual {
             .iter()
             .filter_map(|(unknown, val)| {
                 if let SimUnknown::KirchoffLaw(node) = unknown {
-                    let name = db.node_data(*node).name.to_string();
-                    Some((name, *val))
+                    Some((node.name(db).to_string(), *val))
                 } else {
                     None
                 }
@@ -424,8 +420,7 @@ impl Residual {
             .iter()
             .filter_map(|(unknown, val)| {
                 if let SimUnknown::KirchoffLaw(node) = unknown {
-                    let name = db.node_data(*node).name.to_string();
-                    Some((name, *val))
+                    Some((node.name(db).to_string(), *val))
                 } else {
                     None
                 }

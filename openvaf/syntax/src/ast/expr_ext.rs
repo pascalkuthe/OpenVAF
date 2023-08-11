@@ -14,6 +14,13 @@ impl ast::Expr {
             None
         }
     }
+    pub fn as_str_literal(&self) -> Option<String> {
+        if let Some(LiteralKind::String(lit)) = self.as_literal() {
+            Some(lit.unescaped_value())
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use basedb::{BaseDB, FileId, Upcast};
+use basedb::{BaseDB, FileId};
+use stdx::Upcast;
 
 use crate::body::{Body, BodySourceMap, ParamExprs};
 use crate::data::{

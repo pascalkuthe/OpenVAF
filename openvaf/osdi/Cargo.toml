@@ -14,9 +14,8 @@ stdx = { version = "0.0.0", path = "../../lib/stdx" }
 typed_indexmap = {version = "0.0.0", path = "../../lib/typed_indexmap"}
 paths = {version = "0.0", path = "../../lib/paths"}
 
-hir_def = { version = "0.0.0", path = "../hir_def" }
 hir_lower = {version ="0.0.0", path ="../hir_lower"}
-hir_ty = { version = "0.0.0", path = "../hir_ty" }
+hir = { version = "0.0.0", path = "../hir" }
 sim_back = { version = "0.0.0", path = "../sim_back" }
 
 mir = { version = "0.0.0", path = "../mir" }

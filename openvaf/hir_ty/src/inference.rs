@@ -26,7 +26,7 @@ use crate::builtin::{
 use crate::db::{Alias, HirTyDB};
 use crate::diagnostics::{ArrayTypeMismatch, SignatureMismatch, TypeMismatch};
 use crate::inference::fmt_parser::parse_real_fmt_spec;
-use crate::lower::{BranchKind, BranchTy, DisciplineAccess};
+use crate::lower::{BranchTy, DisciplineAccess};
 use crate::types::{default_return_ty, BuiltinInfo, Signature, SignatureData, Ty, TyRequirement};
 
 mod fmt_parser;
@@ -51,19 +51,6 @@ pub enum AssignDst {
 pub enum BranchWrite {
     Named(BranchId),
     Unnamed { hi: NodeId, lo: Option<NodeId> },
-}
-
-impl BranchWrite {
-    pub fn nodes(self, db: &dyn HirTyDB) -> (NodeId, Option<NodeId>) {
-        match self {
-            BranchWrite::Named(branch) => match db.branch_info(branch).unwrap().kind {
-                BranchKind::Nodes(hi, lo) => (hi, Some(lo)),
-                BranchKind::NodeGnd(hi) => (hi, None),
-                BranchKind::PortFlow(_) => unreachable!(),
-            },
-            BranchWrite::Unnamed { hi, lo } => (hi, lo),
-        }
-    }
 }
 
 impl AssignDst {

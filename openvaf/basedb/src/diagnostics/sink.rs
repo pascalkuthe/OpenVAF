@@ -13,7 +13,7 @@ use crate::{BaseDB, FileId};
 
 pub trait DiagnosticSink {
     fn add_report(&mut self, report: Report);
-    fn add_diagnostic(&mut self, diagnostic: &impl Diagnostic, root_file: FileId, db: &dyn BaseDB) {
+    fn add_diagnostic(&mut self, diagnostic: &dyn Diagnostic, root_file: FileId, db: &dyn BaseDB) {
         if let Some(report) = diagnostic.to_report(root_file, db) {
             self.add_report(report)
         }
