@@ -302,7 +302,7 @@ impl<'a, 'd> Parser<'a, 'd> {
             "`ifdef" => CompilerDirective::IfDef,
             "`ifndef" => CompilerDirective::IfNotDef,
             "`else" => CompilerDirective::Else,
-            "`elif" => CompilerDirective::ElseIf,
+            "`elsif" => CompilerDirective::ElseIf,
             "`endif" => CompilerDirective::EndIf,
             _ => CompilerDirective::Macro,
         }
