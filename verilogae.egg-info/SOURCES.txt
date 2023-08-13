@@ -1,0 +1,9 @@
+LICENSE
+README.md
+setup.py
+verilogae/__init__.py
+verilogae.egg-info/PKG-INFO
+verilogae.egg-info/SOURCES.txt
+verilogae.egg-info/dependency_links.txt
+verilogae.egg-info/not-zip-safe
+verilogae.egg-info/top_level.txt

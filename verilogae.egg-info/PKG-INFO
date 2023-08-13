@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Name: verilogae
+Version: 1.0.0
+Summary: Compile Verilog-A files to obtain equations of compact models
+Home-page: https://openvaf.semimod.de/docs/verilogae
+Author: DSPOM
+Author-email: dspom@protonmail.com
+License: GPL-3
+Requires-Python: >=3.8
+License-File: LICENSE

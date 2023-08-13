@@ -85,7 +85,6 @@ impl EvalMir {
         .with_tagged_writes()
         .build(literals);
 
-
         let mut output_values = BitSet::new_empty(func.dfg.num_values());
         output_values.extend(intern.outputs.values().copied().filter_map(PackedOption::expand));
 

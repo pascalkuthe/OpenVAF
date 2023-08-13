@@ -1,21 +1,27 @@
 use std::iter::FilterMap;
 
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use bitset::HybridBitSet;
-use hir::{Branch, BranchWrite, CompilationDB, Node, ParamSysFun, Parameter, Type, Variable};
+use hir::{
+    Branch, BranchWrite, CompilationDB, Module, Node, ParamSysFun, Parameter, Type, Variable,
+};
 use indexmap::IndexMap;
-use lasso::Spur;
+use lasso::{Rodeo, Spur};
+use mir::builder::InstBuilder;
 use mir::{
     DataFlowGraph, FuncRef, Function, FunctionSignature, KnownDerivatives, Param, Unknown, Value,
 };
+use mir_build::{FunctionBuilder, FunctionBuilderContext, RetBuilder};
 use stdx::packed_option::PackedOption;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::{map, TiMap, TiSet};
 
-pub use crate::body::MirBuilder;
+use crate::body::LoweringCtx;
 
 mod body;
+mod parameters;
+mod state;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImplicitEquationKind {
@@ -527,5 +533,143 @@ impl HirInterner {
                 Some((param, kind, *val))
             }
         })
+    }
+}
+
+pub struct MirBuilder<'a> {
+    db: &'a CompilationDB,
+    module: Module,
+    is_output: &'a dyn Fn(PlaceKind) -> bool,
+    required_vars: &'a mut dyn Iterator<Item = Variable>,
+    tagged_reads: AHashSet<Variable>,
+    tag_writes: bool,
+    ctx: Option<&'a mut FunctionBuilderContext>,
+    split_contribute: bool,
+}
+
+impl<'a> MirBuilder<'a> {
+    pub fn new(
+        db: &'a CompilationDB,
+        module: Module,
+        is_output: &'a dyn Fn(PlaceKind) -> bool,
+        required_vars: &'a mut dyn Iterator<Item = Variable>,
+    ) -> MirBuilder<'a> {
+        MirBuilder {
+            db,
+            module,
+            tagged_reads: AHashSet::new(),
+            is_output,
+            required_vars,
+            ctx: None,
+            split_contribute: false,
+            tag_writes: false,
+        }
+    }
+
+    pub fn tag_reads(&mut self, var: Variable) -> bool {
+        self.tagged_reads.insert(var)
+    }
+
+    pub fn with_tagged_reads(mut self, tagged_vars: AHashSet<Variable>) -> Self {
+        self.tagged_reads = tagged_vars;
+        self
+    }
+
+    pub fn tag_writes(&mut self) {
+        self.tag_writes = true;
+    }
+
+    pub fn with_tagged_writes(mut self) -> Self {
+        self.tag_writes = true;
+        self
+    }
+
+    pub fn split_contributions(&mut self) {
+        self.split_contribute = true;
+    }
+
+    pub fn with_split_contributions(mut self) -> Self {
+        self.split_contribute = true;
+        self
+    }
+
+    pub fn with_ctx(mut self, ctx: &'a mut FunctionBuilderContext) -> Self {
+        self.ctx = Some(ctx);
+        self
+    }
+
+    pub fn with_builder_ctx(mut self, ctx: &'a mut FunctionBuilderContext) -> Self {
+        self.ctx = Some(ctx);
+        self
+    }
+
+    pub fn build(self, literals: &mut Rodeo) -> (Function, HirInterner) {
+        let mut func = Function::default();
+        let mut interner = HirInterner::default();
+
+        let mut ctx_;
+        let ctx = if let Some(ctx) = self.ctx {
+            ctx
+        } else {
+            ctx_ = FunctionBuilderContext::new();
+            &mut ctx_
+        };
+
+        let mut builder = FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
+        let path = self.module.name(self.db);
+
+        let analog_initial_body = self.module.analog_initial_block(self.db);
+
+        let analog_body = self.module.analog_block(self.db);
+
+        let mut places = TiSet::default();
+        let mut extra_dims = TiVec::new();
+        if self.split_contribute {
+            interner.dims.push(DimKind::Resistive);
+            interner.dims.push(DimKind::Reactive);
+            extra_dims.push(AHashMap::default());
+            extra_dims.push(AHashMap::default());
+        }
+
+        let mut ctx = LoweringCtx {
+            db: self.db,
+            func: &mut builder,
+            data: &mut interner,
+            body: analog_initial_body.borrow(),
+            tagged_vars: &self.tagged_reads,
+            places: &mut places,
+            extra_dims: self.split_contribute.then_some(&mut extra_dims),
+            path: &path,
+            contribute_rhs: false,
+            inside_lim: false,
+        };
+
+        // lower analog initial blocks first
+        ctx.lower_entry_stmts();
+        // ... and normal analog blocks afterwards
+        ctx.body = analog_body.borrow();
+        ctx.lower_entry_stmts();
+
+        for var in self.required_vars {
+            ctx.place(PlaceKind::Var(var));
+        }
+        let is_output = self.is_output;
+        interner.outputs = places
+            .iter_enumerated()
+            .map(|(place, kind)| {
+                if is_output(*kind) {
+                    let mut val = builder.use_var(place);
+                    // if builder.func.dfg.values.def_allow_alias(val).inst().is_some() {
+                    val = builder.ins().optbarrier(val);
+                    // }
+                    (*kind, val.into())
+                } else {
+                    (*kind, None.into())
+                }
+            })
+            .collect();
+        builder.ins().ret();
+        builder.finalize();
+        (func, interner)
     }
 }
