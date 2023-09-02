@@ -162,4 +162,6 @@ The architectures of the [rust-analyzer](https://github.com/rust-analyzer/rust-a
 ## Copyright
 
 This work is free software and licensed under the GPL-3.0 license.
-It contains code that is derived from [rustc](https://github.com/rust-lang/rust/) and [rust-analyzer](https://github.com/rust-analyzer/rust-analyzer). These projects are both licensed und the MIT license. As required a copy of the license and disclaimer can be found in `copyright/LICENSE_MIT`
+It contains code that is derived from [rustc](https://github.com/rust-lang/rust/) and [rust-analyzer](https://github.com/rust-analyzer/rust-analyzer). These projects are both licensed under the MIT license. As required a copy of the license and disclaimer can be found in `copyright/LICENSE_MIT`.
+
+Many models int integration tests folder are not licensed under a GPL compatible license. All of those models contain explicit license information. They do not endup in the openvaf binary in any way and therefore do not affect the license of the entire project. Integration tests without explicit model information (either in the model files or in a dedicated LICENSE file) fall under GPLv3.0 like the rest of the repo.
