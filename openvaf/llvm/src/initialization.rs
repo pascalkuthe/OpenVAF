@@ -125,7 +125,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
     LLVMParseCommandLineOptions(
         llvm_args.len() as c_int,
         llvm_args.as_ptr(),
-        b"".as_ptr() as *const i8,
+        b"".as_ptr() as *const libc::c_char,
     );
 }
 

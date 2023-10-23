@@ -607,7 +607,7 @@ impl<'ll> Builder<'_, '_, 'll> {
             Opcode::Feq => self.build_real_cmp(args, llvm::RealPredicate::RealOEQ),
             Opcode::Fne => self.build_real_cmp(args, llvm::RealPredicate::RealONE),
             Opcode::Bne | Opcode::Ine => self.build_int_cmp(args, llvm::IntPredicate::IntNE),
-            Opcode::FIcast => self.intrinsic(args, "llvm.llround.i32.f64"),
+            Opcode::FIcast => self.intrinsic(args, "llvm.lround.i32.f64"),
             Opcode::Seq => self.strcmp(args, false),
             Opcode::Sne => self.strcmp(args, true),
             Opcode::Sqrt => self.intrinsic(args, "llvm.sqrt.f64"),
