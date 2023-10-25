@@ -4,8 +4,9 @@ use hir::{CompilationDB, ParamSysFun, Type};
 use hir_lower::CurrentKind;
 use lasso::{Rodeo, Spur};
 use llvm::{LLVMABISizeOfType, LLVMOffsetOfElement, TargetData};
+use mir::{ValueDef, F_ZERO};
 use mir_llvm::CodegenCx;
-use sim_back::matrix::MatrixEntry;
+use sim_back::dae::MatrixEntry;
 use sim_back::SimUnknownKind;
 use smol_str::SmolStr;
 
@@ -57,7 +58,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let inst_params = inst_data.params.keys().map(|param| match param {
             OsdiInstanceParam::Builtin(builtin) => {
                 let mut name = vec![format!("${builtin:?}")];
-                if let Some(alias) = self.module.base.sys_fun_alias.get(builtin) {
+                if let Some(alias) = self.module.info.sys_fun_alias.get(builtin) {
                     name.extend(alias.iter().map(SmolStr::to_string))
                 }
                 OsdiParamOpvar {
@@ -77,7 +78,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 }
             }
             OsdiInstanceParam::User(param) => {
-                let param_info = &module.base.params[param];
+                let param_info = &module.info.params[param];
                 let ty = param.ty(self.db);
 
                 let flags = para_ty_flags(&ty) | PARA_KIND_INST;
@@ -96,7 +97,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         });
 
         let model_params = model_data.params.keys().filter_map(|param| {
-            let param_info = &module.base.params[param];
+            let param_info = &module.info.params[param];
             if param_info.is_instance {
                 return None;
             }
@@ -117,7 +118,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         });
 
         let opvars = inst_data.opvars.keys().map(|opvar| {
-            let opvar_info = &module.base.op_vars[opvar];
+            let opvar_info = &module.info.op_vars[opvar];
             // TODO inst params
             let ty = opvar.ty(self.db);
             let flags = para_ty_flags(&ty) | PARA_KIND_OPVAR;
@@ -137,7 +138,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
     pub fn nodes(&self, target_data: &TargetData, db: &CompilationDB) -> Vec<OsdiNode> {
         let OsdiCompilationUnit { inst_data, module, .. } = self;
         module
-            .node_ids
+            .dae_system
+            .unknowns
             .iter_enumerated()
             .map(|(id, unknown)| {
                 let (name, units, is_flow) = sim_unknown_info(*unknown, db);
@@ -164,14 +166,18 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             .collect()
     }
 
-    fn is_const(&self, entry: MatrixEntry, reactive: bool) -> bool {
-        let matrix = &self.module.mir.matrix;
-        let func = &self.module.mir.eval_func;
-        let matrix = if reactive { &matrix.reactive } else { &matrix.resistive };
-        if let Some(val) = matrix.raw.get(&entry) {
-            func.dfg.value_def(*val).inst().is_none()
-        } else {
-            false
+    fn is_const(&self, entry: &MatrixEntry, reactive: bool) -> bool {
+        let entry = if reactive { entry.react } else { entry.resist };
+        match self.module.eval.dfg.value_def(entry) {
+            ValueDef::Result(_, _) => false,
+            ValueDef::Param(param) => self
+                .module
+                .intern
+                .params
+                .get_index(param)
+                .map_or(true, |(kind, _)| !kind.op_dependent()),
+            ValueDef::Const(_) => true,
+            ValueDef::Invalid => unreachable!(),
         }
     }
 
@@ -181,33 +187,32 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             unsafe { LLVMOffsetOfElement(target_data, inst_data.ty, JACOBIAN_PTR_REACT) } as u32;
 
         module
-            .matrix_ids
-            .raw
+            .dae_system
+            .jacobian
             .iter()
             .map(|entry| {
                 let mut flags = 0;
                 let mut react_ptr_off = u32::MAX;
 
-                let entry_ = entry.to_middle(&module.node_ids);
-                if self.is_const(entry_, false) {
+                if self.is_const(entry, false) {
                     flags |= JACOBIAN_ENTRY_RESIST_CONST
                 }
 
-                if self.is_const(entry_, true) {
+                if self.is_const(entry, true) {
                     flags |= JACOBIAN_ENTRY_REACT_CONST
                 }
 
-                if module.mir.matrix.resistive.contains_key(&entry_) {
+                if entry.resist != F_ZERO {
                     flags |= JACOBIAN_ENTRY_RESIST;
                 }
 
-                if module.mir.matrix.reactive.contains_key(&entry_) {
+                if entry.react != F_ZERO {
                     flags |= JACOBIAN_ENTRY_REACT;
                     react_ptr_off = jacobian_ptr_react_offset;
                     jacobian_ptr_react_offset += 8;
                 }
                 OsdiJacobianEntry {
-                    nodes: OsdiNodePair { node_1: entry.row.0, node_2: entry.col.0 },
+                    nodes: OsdiNodePair { node_1: entry.row.into(), node_2: entry.col.into() },
                     react_ptr_off,
                     flags,
                 }
@@ -217,14 +222,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
     pub fn collapsible(&self) -> Vec<OsdiNodePair> {
         self.module
-            .mir
-            .collapse
-            .raw
-            .keys()
-            .map(|(hi, lo)| {
-                let node_1 = self.module.node_ids.unwrap_index(hi).0;
-                let node_2 = lo.map_or(u32::MAX, |lo| self.module.node_ids.unwrap_index(&lo).0);
-                OsdiNodePair { node_1, node_2 }
+            .node_collapse
+            .pairs()
+            .map(|(_, node1, node2)| OsdiNodePair {
+                node_1: node1.into(),
+                node_2: node2.map_or(u32::MAX, u32::from),
             })
             .collect()
     }
@@ -244,8 +246,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 LLVMOffsetOfElement(target_data, inst_data.ty, JACOBIAN_PTR_RESIST) as u32;
 
             let collapsed_offset = LLVMOffsetOfElement(target_data, inst_data.ty, COLLAPSED) as u32;
-            let bound_step_offset = inst_data.bound_step.map_or(u32::MAX, |slot| {
-                let elem = inst_data.cache_slot_elem(slot);
+            let bound_step_offset = inst_data.bound_step_elem().map_or(u32::MAX, |elem| {
                 LLVMOffsetOfElement(target_data, inst_data.ty, elem) as u32
             });
 
@@ -255,11 +256,11 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let model_size = LLVMABISizeOfType(target_data, model_data.ty) as u32;
 
             OsdiDescriptor {
-                name: module.base.module.name(db),
-                num_nodes: module.node_ids.len() as u32,
-                num_terminals: module.num_terminals,
+                name: module.info.module.name(db),
+                num_nodes: module.dae_system.unknowns.len() as u32,
+                num_terminals: module.info.module.ports(db).len() as u32,
                 nodes: self.nodes(target_data, db),
-                num_jacobian_entries: module.matrix_ids.len() as u32,
+                num_jacobian_entries: module.dae_system.jacobian.len() as u32,
                 jacobian_entries: self.jacobian_entries(target_data),
                 num_collapsible: collapsible.len() as u32,
                 collapsible,
@@ -292,7 +293,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 load_jacobian_resist: self.load_jacobian(JacobianLoadType::Resist),
                 load_jacobian_react: self.load_jacobian(JacobianLoadType::React),
                 load_jacobian_tran: self.load_jacobian(JacobianLoadType::Tran),
-                num_states: self.module.mir.eval_intern.lim_state.len() as u32,
+                num_states: self.module.intern.lim_state.len() as u32,
                 load_limit_rhs_resist: self.load_lim_rhs(false),
                 load_limit_rhs_react: self.load_lim_rhs(true),
             }
@@ -302,8 +303,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
 impl OsdiModule<'_> {
     pub fn intern_node_strs(&self, intern: &mut Rodeo, db: &CompilationDB) {
-        for unknown in self.node_ids.iter() {
-            let (name, units, _) = sim_unknown_info(*unknown, db);
+        for &unknown in self.dae_system.unknowns.iter() {
+            let (name, units, _) = sim_unknown_info(unknown, db);
             intern.get_or_intern(&name);
             intern.get_or_intern(&units);
         }

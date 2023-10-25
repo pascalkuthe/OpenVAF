@@ -250,6 +250,12 @@ fn generate_builtins() {
             #(#params),*
         }
 
+        impl ParamSysFun{
+            pub fn iter() -> impl Iterator<Item=Self> {
+                [#(Self::#params),*].into_iter()
+            }
+        }
+
         impl BuiltIn{
             #[allow(clippy::match_like_matches_macro)]
             pub fn is_analog_operator(self)->bool{

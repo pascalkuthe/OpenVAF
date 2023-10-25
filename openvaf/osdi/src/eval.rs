@@ -1,5 +1,4 @@
-use ahash::AHashMap;
-use hir_lower::{CallBackKind, CurrentKind, LimitState, ParamKind, PlaceKind};
+use hir_lower::{CallBackKind, CurrentKind, LimitState, ParamKind};
 use llvm::IntPredicate::{IntNE, IntULT};
 use llvm::{
     LLVMAppendBasicBlockInContext, LLVMBuildAlloca, LLVMBuildAnd, LLVMBuildBr, LLVMBuildCall2,
@@ -9,12 +8,12 @@ use llvm::{
 };
 use log::info;
 use mir_llvm::{Builder, BuilderVal, CallbackFun, MemLoc};
-use sim_back::{BoundStepKind, SimUnknownKind};
+use sim_back::SimUnknownKind;
 use typed_index_collections::TiVec;
 
 use crate::bitfield::{is_flag_set, is_flag_set_mem, is_flag_unset};
 use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
-use crate::inst_data::OsdiInstanceParam;
+use crate::inst_data::{EvalOutput, OsdiInstanceParam};
 use crate::metadata::osdi_0_3::{
     ANALYSIS_IC, CALC_OP, CALC_REACT_JACOBIAN, CALC_REACT_LIM_RHS, CALC_REACT_RESIDUAL,
     CALC_RESIST_JACOBIAN, CALC_RESIST_LIM_RHS, CALC_RESIST_RESIDUAL, ENABLE_LIM, EVAL_RET_FLAG_LIM,
@@ -38,12 +37,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let llfunc = self.eval_prototype();
         let OsdiCompilationUnit { inst_data, model_data, cx, module, .. } = self;
 
-        let func = &module.mir.eval_func;
-        let cfg = &module.mir.eval_cfg;
-        let intern = &module.mir.eval_intern;
+        let func = module.eval;
+        let intern = module.intern;
 
         let mut builder = Builder::new(cx, func, llfunc);
-        let postorder: Vec<_> = cfg.postorder(func).collect();
 
         let handle = unsafe { llvm::LLVMGetParam(llfunc, 0) };
         let instance = unsafe { llvm::LLVMGetParam(llfunc, 1) };
@@ -77,20 +74,25 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         unsafe { builder.store(ret_flags, cx.const_int(0)) };
 
         let connected_ports = unsafe { inst_data.load_connected_ports(&builder, instance) };
-        let prev_solve: AHashMap<_, _> = module
-            .node_ids
-            .iter_enumerated()
-            .map(|(node_id, node)| unsafe {
-                let val = inst_data.read_node_voltage(
-                    cx,
-                    node_id,
-                    instance,
-                    prev_result,
-                    builder.llbuilder,
-                );
-                (node, val)
+        let prev_solve: TiVec<_, _> = module
+            .dae_system
+            .unknowns
+            .indices()
+            .map(|node| unsafe {
+                let val =
+                    inst_data.read_node_voltage(cx, node, instance, prev_result, builder.llbuilder);
+                val
             })
             .collect();
+
+        let get_prev_solve = |node| {
+            if let Some(node) = module.dae_system.unknowns.index(&node) {
+                prev_solve[node]
+            } else {
+                info!("node {node:?} is always zero");
+                cx.const_real(0.0)
+            }
+        };
 
         let state_idx: TiVec<LimitState, _> = (0..intern.lim_state.len())
             .map(|i| unsafe { inst_data.read_state_idx(cx, i.into(), instance, builder.llbuilder) })
@@ -115,9 +117,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 .into()
                         }
                         ParamKind::Voltage { hi, lo } => {
-                            let hi = prev_solve[&SimUnknownKind::KirchoffLaw(hi)];
+                            let hi = get_prev_solve(SimUnknownKind::KirchoffLaw(hi));
                             if let Some(lo) = lo {
-                                let lo = prev_solve[&SimUnknownKind::KirchoffLaw(lo)];
+                                let lo = get_prev_solve(SimUnknownKind::KirchoffLaw(lo));
                                 llvm::LLVMBuildFSub(builder.llbuilder, hi, lo, UNNAMED)
                             } else {
                                 hi
@@ -136,20 +138,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             return loc.into();
                         }
 
-                        ParamKind::Current(kind) => prev_solve
-                            .get(&SimUnknownKind::Current(kind))
-                            .copied()
-                            .unwrap_or_else(|| {
-                                info!("current probe {kind:?} always returns zero");
-                                cx.const_real(0.0)
-                            }),
-                        ParamKind::ImplicitUnknown(equation) => prev_solve
-                            .get(&SimUnknownKind::Implicit(equation))
-                            .copied()
-                            .unwrap_or_else(|| {
-                                info!("implicit equation {equation} collapsed to zero");
-                                cx.const_real(0.0)
-                            }),
+                        ParamKind::Current(kind) => get_prev_solve(SimUnknownKind::Current(kind)),
+                        ParamKind::ImplicitUnknown(equation) => {
+                            get_prev_solve(SimUnknownKind::Implicit(equation))
+                        }
                         ParamKind::Temperature => {
                             return inst_data.temperature_loc(cx, instance).into()
                         }
@@ -178,8 +170,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             }
                         }
                         ParamKind::PortConnected { port } => {
-                            let id =
-                                module.node_ids.unwrap_index(&SimUnknownKind::KirchoffLaw(port));
+                            let id = module
+                                .dae_system
+                                .unknowns
+                                .unwrap_index(&SimUnknownKind::KirchoffLaw(port));
                             let id = cx.const_unsigned_int(id.into());
                             builder.int_cmp(id, connected_ports, IntULT)
                         }
@@ -231,7 +225,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             })
             .collect();
 
-        let cache_vals = (0..module.mir.cache_slots.len()).map(|i| unsafe {
+        let cache_vals = (0..module.init.cache_slots.len()).map(|i| unsafe {
             let slot = i.into();
             let val = inst_data.load_cache_slot(module, builder.llbuilder, slot, instance);
             BuilderVal::Eager(val)
@@ -241,27 +235,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         builder.params = params;
 
         builder.callbacks = general_callbacks(intern, &mut builder, ret_flags, handle, simparam);
-
-        let ty_real_ptr = cx.ty_ptr();
-        if module.mir.bound_step == BoundStepKind::Eval {
-            let bound_step_ptr = unsafe { inst_data.bound_step_ptr(&builder, instance) };
-            unsafe { builder.store(bound_step_ptr, cx.const_real(f64::INFINITY)) };
-
-            let func_ref = intern.callbacks.unwrap_index(&CallBackKind::BoundStep);
-            let fun = builder
-                .cx
-                .get_func_by_name("bound_step")
-                .expect("stdlib function bound_step is missing");
-            let fun_ty = cx.ty_func(&[ty_real_ptr, cx.ty_double()], cx.ty_void());
-            let cb = CallbackFun { fun_ty, fun, state: Box::new([bound_step_ptr]), num_state: 0 };
-            builder.callbacks[func_ref] = Some(cb);
-        }
-
-        let store_delay_fun = builder
-            .cx
-            .get_func_by_name("store_delay")
-            .expect("stdlib function store_delay is missing");
-        let store_delay_ty = cx.ty_func(&[cx.ty_ptr(), ty_real_ptr, cx.ty_double()], cx.ty_void());
 
         for (func, kind) in intern.callbacks.iter_enumerated() {
             let cb = match *kind {
@@ -301,20 +274,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     let fun_ty = cx.ty_func(&[cx.ty_ptr(), cx.ty_ptr()], cx.ty_int());
                     CallbackFun { fun_ty, fun, state: Box::new([sim_info]), num_state: 0 }
                 }
-                CallBackKind::StoreDelayTime(eq) => {
-                    let slot = if let Some(&slot) = self.module.mir.eval_cache_vals.get(&eq) {
-                        inst_data.cache_slot_ptr(builder.llbuilder, slot, instance).0
-                    } else {
-                        continue;
-                    };
-
-                    CallbackFun {
-                        fun_ty: store_delay_ty,
-                        fun: store_delay_fun,
-                        state: Box::new([sim_info, slot]),
-                        num_state: 0,
-                    }
-                }
                 _ => continue,
             };
             builder.callbacks[func] = Some(cb);
@@ -322,95 +281,53 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
         unsafe {
             builder.build_consts();
-            builder.build_cfg(&postorder);
+            builder.build_func();
         }
-
-        let exit_bb = *postorder
-            .iter()
-            .find(|bb| {
-                func.layout
-                    .last_inst(**bb)
-                    .map_or(true, |term| !func.dfg.insts[term].is_terminator())
-            })
-            .unwrap();
+        let exit_bb = func.layout.last_block().unwrap();
 
         // store parameters
         builder.select_bb(exit_bb);
 
         unsafe {
             for reactive in [false, true] {
-                let matrix = &module.mir.matrix;
-                let residual = &module.mir.residual;
-                let lim_rhs = &module.mir.lim_rhs;
-                let (matrix, matrix_flag, residual, residual_flag, lim_rhs, lim_rhs_flag) =
-                    if reactive {
-                        (
-                            &matrix.reactive,
-                            CALC_REACT_JACOBIAN,
-                            &residual.reactive,
-                            CALC_REACT_RESIDUAL,
-                            &lim_rhs.reactive,
-                            CALC_REACT_LIM_RHS,
-                        )
-                    } else {
-                        (
-                            &matrix.resistive,
-                            CALC_RESIST_JACOBIAN,
-                            &residual.resistive,
-                            CALC_RESIST_RESIDUAL,
-                            &lim_rhs.resistive,
-                            CALC_RESIST_LIM_RHS,
-                        )
-                    };
+                let (jacobian_flag, residual_flag, lim_rhs_flag) = if reactive {
+                    (CALC_REACT_JACOBIAN, CALC_REACT_RESIDUAL, CALC_REACT_LIM_RHS)
+                } else {
+                    (CALC_RESIST_JACOBIAN, CALC_RESIST_RESIDUAL, CALC_RESIST_LIM_RHS)
+                };
 
                 let store_matrix = |builder: &Builder<'_, '_, 'll>| {
-                    for (id, entry) in module.matrix_ids.iter_enumerated() {
-                        let entry = entry.to_middle(&module.node_ids);
-                        if let Some(val) = matrix.raw.get(&entry) {
-                            inst_data.store_jacobian(id, instance, *val, builder, reactive)
-                        }
+                    for entry in module.dae_system.jacobian.keys() {
+                        inst_data.store_jacobian(entry, instance, builder, reactive)
                     }
                 };
-
-                Self::build_store_results(&builder, llfunc, &flags, matrix_flag, &store_matrix);
+                Self::build_store_results(&builder, llfunc, &flags, jacobian_flag, &store_matrix);
 
                 let store_residual = |builder: &Builder<'_, '_, 'll>| {
-                    for (id, node) in module.node_ids.iter_enumerated() {
-                        if let Some(val) = residual.raw.get(node) {
-                            let val = builder.values[*val].get(builder);
-                            inst_data.store_residual(
-                                id,
-                                instance,
-                                val,
-                                builder.llbuilder,
-                                reactive,
-                            );
-                        }
+                    for unknown in module.dae_system.unknowns.indices() {
+                        inst_data.store_residual(unknown, instance, builder, reactive);
                     }
                 };
-
                 Self::build_store_results(&builder, llfunc, &flags, residual_flag, &store_residual);
 
                 let store_lim_rhs = |builder: &Builder<'_, '_, 'll>| {
-                    for (id, node) in module.node_ids.iter_enumerated() {
-                        if let Some(val) = lim_rhs.get(node) {
-                            let val = builder.values[*val].get(builder);
-                            inst_data.store_lim_rhs(id, instance, val, builder.llbuilder, reactive);
-                        }
+                    for unknown in module.dae_system.unknowns.indices() {
+                        inst_data.store_lim_rhs(unknown, instance, builder, reactive);
                     }
                 };
-
                 Self::build_store_results(&builder, llfunc, &flags, lim_rhs_flag, &store_lim_rhs);
             }
 
             let store_opvars = |builder: &Builder<'_, '_, 'll>| {
-                for (i, var) in inst_data.opvars.keys().enumerate() {
-                    let val = intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
-                    inst_data.store_nth_opvar(i as u32, instance, val, builder);
+                for (_, &eval_output) in &inst_data.opvars {
+                    if let EvalOutput::Calculated(slot) = eval_output {
+                        inst_data.store_eval_output(slot, instance, builder)
+                    }
                 }
             };
-
             Self::build_store_results(&builder, llfunc, &flags, CALC_OP, &store_opvars);
+
+            inst_data.store_bound_step(instance, &builder);
 
             let ret_flags = builder.load(cx.ty_int(), ret_flags);
             builder.ret(ret_flags);

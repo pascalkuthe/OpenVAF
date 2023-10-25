@@ -3,9 +3,9 @@ use llvm::{
     LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd,
     LLVMSetFastMath, UNNAMED,
 };
-use sim_back::matrix::MatrixEntry;
+use typed_index_collections::TiVec;
 
-use crate::compilation_unit::{OsdiCompilationUnit, OsdiMatrixEntry};
+use crate::compilation_unit::OsdiCompilationUnit;
 
 #[derive(Debug, Clone, Copy)]
 pub enum JacobianLoadType {
@@ -77,13 +77,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let inst = LLVMGetParam(llfunc, 0);
             let dst = LLVMGetParam(llfunc, 2);
 
-            let nodes = if reactive {
-                module.mir.residual.reactive.raw.keys()
-            } else {
-                module.mir.residual.resistive.raw.keys()
-            };
-            for node in nodes {
-                let node = module.node_ids.unwrap_index(node);
+            for node in module.dae_system.unknowns.indices() {
                 if let Some(contrib) = inst_data.read_residual(node, inst, llbuilder, reactive) {
                     inst_data.store_contrib(cx, node, inst, dst, contrib, llbuilder);
                 }
@@ -115,13 +109,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let inst = LLVMGetParam(llfunc, 0);
             let dst = LLVMGetParam(llfunc, 2);
 
-            let nodes = if reactive {
-                module.mir.lim_rhs.reactive.keys()
-            } else {
-                module.mir.lim_rhs.resistive.keys()
-            };
-            for node in nodes {
-                let node = module.node_ids.unwrap_index(node);
+            for node in module.dae_system.unknowns.indices() {
                 if let Some(contrib) = inst_data.read_lim_rhs(node, inst, llbuilder, reactive) {
                     inst_data.store_contrib(cx, node, inst, dst, contrib, llbuilder);
                 }
@@ -145,41 +133,29 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         prev_solve: &'ll llvm::Value,
         alpha: &'ll llvm::Value,
     ) {
-        let module = self.module;
-        let residual = &module.mir.residual;
-        let matrix = &module.mir.matrix;
-
-        let (nodes, matrix) = if tran {
-            (residual.reactive.raw.keys(), &matrix.reactive)
-        } else {
-            (residual.resistive.raw.keys(), &matrix.resistive)
-        };
+        let dae_system = &self.module.dae_system;
+        let mut node_derivatives = TiVec::from(vec![Vec::new(); dae_system.unknowns.len()]);
+        for (id, entry) in dae_system.jacobian.iter_enumerated() {
+            node_derivatives[entry.row].push(id)
+        }
 
         unsafe {
-            for node in nodes {
-                let node_id = module.node_ids.unwrap_index(node);
+            for node in dae_system.unknowns.indices() {
                 let mut res = None;
-
-                for (node_deriv_id, node_deriv) in module.node_ids.iter_enumerated() {
-                    if !matrix.contains_key(&MatrixEntry { row: *node, col: *node_deriv }) {
+                for &entry in &node_derivatives[node] {
+                    let node_deriv = dae_system.jacobian[entry].col;
+                    let ddx = if let Some(ddx) =
+                        self.load_jacobian_entry(entry, inst, model, llbuilder, tran)
+                    {
+                        ddx
+                    } else {
                         continue;
-                    }
-                    let matrix_entry = module
-                        .matrix_ids
-                        .unwrap_index(&OsdiMatrixEntry { row: node_id, col: node_deriv_id });
+                    };
 
-                    let matrix_entry = self
-                        .load_jacobian_inst(matrix_entry, inst, model, llbuilder, tran)
-                        .unwrap();
-
-                    let voltage = self.inst_data.read_node_voltage(
-                        self.cx,
-                        node_deriv_id,
-                        inst,
-                        prev_solve,
-                        llbuilder,
-                    );
-                    let val = LLVMBuildFMul(llbuilder, matrix_entry, voltage, UNNAMED);
+                    let voltage = self
+                        .inst_data
+                        .read_node_voltage(self.cx, node_deriv, inst, prev_solve, llbuilder);
+                    let val = LLVMBuildFMul(llbuilder, ddx, voltage, UNNAMED);
                     LLVMSetFastMath(val);
                     res = match res {
                         Some(old) => {
@@ -192,10 +168,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 }
 
                 let OsdiCompilationUnit { inst_data, cx, .. } = self;
-
                 if !tran {
-                    if let Some(contrib) = inst_data.read_residual(node_id, inst, llbuilder, false)
-                    {
+                    if let Some(contrib) = inst_data.read_residual(node, inst, llbuilder, false) {
                         let val = LLVMBuildFSub(
                             llbuilder,
                             res.unwrap_or_else(|| cx.const_real(0.0)),
@@ -207,14 +181,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     }
                 }
                 if let Some(mut res) = res {
-                    if let Some(lim_rhs) = inst_data.read_lim_rhs(node_id, inst, llbuilder, tran) {
+                    if let Some(lim_rhs) = inst_data.read_lim_rhs(node, inst, llbuilder, tran) {
                         res = LLVMBuildFAdd(llbuilder, res, lim_rhs, UNNAMED);
                     }
                     if tran {
                         res = LLVMBuildFMul(llbuilder, res, alpha, UNNAMED);
                         LLVMSetFastMath(res);
                     }
-                    inst_data.store_contrib(cx, node_id, inst, dst, res, llbuilder);
+                    inst_data.store_contrib(cx, node, inst, dst, res, llbuilder);
                 }
             }
         }
@@ -274,33 +248,34 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let model = LLVMGetParam(llfunc, 1);
             let alpha = if kind.read_reactive() { LLVMGetParam(llfunc, 2) } else { inst };
 
-            for (id, entry) in module.matrix_ids.iter_enumerated() {
-                let entry = entry.to_middle(&module.node_ids);
+            for entry in module.dae_system.jacobian.keys() {
                 let mut res = None;
-                if kind.read_resistive() && module.mir.matrix.resistive.contains_key(&entry) {
-                    res = self.load_jacobian_inst(id, inst, model, llbuilder, false);
+                if kind.read_resistive() {
+                    res = self.load_jacobian_entry(entry, inst, model, llbuilder, false);
                 }
 
-                if kind.read_reactive() && module.mir.matrix.reactive.contains_key(&entry) {
-                    let mut val =
-                        self.load_jacobian_inst(id, inst, model, llbuilder, true).unwrap();
-                    val = LLVMBuildFMul(llbuilder, val, alpha, UNNAMED);
-                    LLVMSetFastMath(val);
-                    val = match res {
-                        Some(resist) => {
-                            let val = LLVMBuildFAdd(llbuilder, resist, val, UNNAMED);
-                            LLVMSetFastMath(val);
-                            val
-                        }
-                        None => val,
-                    };
-                    res = Some(val)
+                if kind.read_reactive() {
+                    if let Some(mut val) =
+                        self.load_jacobian_entry(entry, inst, model, llbuilder, true)
+                    {
+                        val = LLVMBuildFMul(llbuilder, val, alpha, UNNAMED);
+                        LLVMSetFastMath(val);
+                        val = match res {
+                            Some(resist) => {
+                                let val = LLVMBuildFAdd(llbuilder, resist, val, UNNAMED);
+                                LLVMSetFastMath(val);
+                                val
+                            }
+                            None => val,
+                        };
+                        res = Some(val)
+                    }
                 }
 
                 if let Some(res) = res {
                     self.inst_data.store_jacobian_contrib(
                         self.cx,
-                        id,
+                        entry,
                         inst,
                         llbuilder,
                         kind.dst_reactive(),

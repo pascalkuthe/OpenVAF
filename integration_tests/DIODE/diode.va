@@ -74,10 +74,10 @@ module diode_va(A,C,dT);
         vd_smooth   = vf-vt*(x + y)/(2);
         qd   = cj0*vj * (1-pow(1-vd_smooth/vj, 1-m))/(1-m);
         
-        I(br_a_ci) <+ id + ddt(qd) + $simparam("gmin", 1e-12) * vd;
+        I(br_a_ci) <+ id + ddt(qd) + $simparam("gmin", 1e-12) * vd + flicker_noise(abs(id), 1.0);
 
         if (rs > minr) begin
-            I(br_ci_c) <+ vr / rs_t;
+            I(br_ci_c) <+ vr / rs_t + white_noise(sqrt(4*`P_K*tdev/rs_t));
         end else begin
             V(br_ci_c) <+ 0.0;
         end

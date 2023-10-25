@@ -25,7 +25,7 @@ impl<'ll> OsdiModelData<'ll> {
     ) -> Self {
         let inst_params = &inst_data.params;
         let params: IndexMap<_, _, _> = cgunit
-            .base
+            .info
             .params
             .keys()
             .filter_map(|param| {
