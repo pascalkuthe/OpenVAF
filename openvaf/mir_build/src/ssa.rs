@@ -7,6 +7,8 @@
 //!
 //! <https://link.springer.com/content/pdf/10.1007/978-3-642-37051-9_6.pdf>
 
+use std::{iter, slice};
+
 use bforest::Map;
 use bitset::HybridBitSet;
 use mir::builder::InstBuilderBase;
@@ -17,8 +19,47 @@ use stdx::iter::zip;
 use stdx::packed_option::PackedOption;
 use typed_index_collections::TiVec;
 
+pub(crate) use mir::ControlFlowGraph as CompleteCfg;
+
 use crate::Place;
 
+pub(crate) trait ControlFlowGraph {
+    type Predecessors<'a>: Iterator<Item = Block> + 'a
+    where
+        Self: 'a;
+    type PredecessorsRev<'a>: Iterator<Item = Block> + 'a
+    where
+        Self: 'a;
+    fn predecessors(&self, bb: Block) -> Self::Predecessors<'_>;
+    fn has_single_predecessor(&self, bb: Block) -> bool;
+    fn predecessors_rev(&self, bb: Block) -> Self::PredecessorsRev<'_>;
+    fn sealed(&self, bb: Block) -> bool;
+    fn push_undef_phis(&mut self, bb: Block, var: Place, val: Value);
+}
+
+impl<'c> ControlFlowGraph for &'c CompleteCfg {
+    type Predecessors<'a> = mir::flowgraph::PredecessorIter<'a> where 'c: 'a;
+    type PredecessorsRev<'a> = mir::flowgraph::PredecessorRevIter<'a> where 'c: 'a;
+
+    fn predecessors(&self, bb: Block) -> Self::Predecessors<'_> {
+        self.pred_iter(bb)
+    }
+    fn predecessors_rev(&self, bb: Block) -> Self::PredecessorsRev<'_> {
+        self.pred_rev_iter(bb)
+    }
+
+    fn sealed(&self, _bb: Block) -> bool {
+        true
+    }
+
+    fn push_undef_phis(&mut self, _bb: Block, _var: Place, _val: Value) {
+        unreachable!("all blocks are sealed")
+    }
+
+    fn has_single_predecessor(&self, bb: Block) -> bool {
+        self.single_predecessor(bb).is_some()
+    }
+}
 /// Structure containing the data relevant the construction of SSA for a given function.
 ///
 /// The parameter struct `Variable` corresponds to the way variables are represented in the
@@ -32,7 +73,7 @@ use crate::Place;
 /// A basic block is said _filled_ if all the instruction that it contains have been translated,
 /// and it is said _sealed_ if all of its predecessors have been declared. Only filled predecessors
 /// can be declared.
-pub struct SSABuilder {
+pub(crate) struct SSABuilder<Blocks> {
     // TODO: Consider a sparse representation rather than SecondaryMap-of-SecondaryMap.
     /// Records for every variable and for every relevant block, the last definition of
     /// the variable in the block.
@@ -40,7 +81,7 @@ pub struct SSABuilder {
 
     /// Records the position of the basic blocks and the list of values used but not defined in the
     /// block.
-    ssa_blocks: TiVec<Block, SSABlockData>,
+    cfg: Blocks,
     // visited: BitSet<Block>,
     /// Call stack for use in the `use_var`/`predecessors_lookup` state machine.
     calls: Vec<Call>,
@@ -48,45 +89,31 @@ pub struct SSABuilder {
     results: Vec<Value>,
 }
 
-#[derive(Clone, Default)]
-struct SSABlockData {
-    // The predecessors of the Block with the block and branch instruction.
-    // The elements of this array MUST be kept in order.
-    // Ideally only `add_predecessor` is used to modify it
-    predecessors: SmallVec<[Block; 4]>,
-    // A block is sealed if all of its predecessors have been declared.
-    sealed: bool,
-    // List of current phis for which an earlier def has not been found yet.
-    undef_phis: Vec<(Place, Value)>,
-}
-
-impl SSABlockData {
-    fn add_predecessor(&mut self, new_pred: Block) {
-        debug_assert!(!self.sealed, "sealed blocks cannot accept new predecessors");
-        if let Some(i) = self.predecessors.iter().position(|&e| e >= new_pred) {
-            debug_assert_ne!(self.predecessors[i], new_pred);
-            self.predecessors.insert(i, new_pred);
-        } else {
-            // `elem` is larger than all existing elements.
-            self.predecessors.push(new_pred);
-        };
+impl<'a> SSABuilder<&'a CompleteCfg> {
+    /// Allocate a new blank SSA builder struct. Use the API function to interact with the struct.
+    pub fn new(cfg: &'a CompleteCfg) -> Self {
+        Self { variables: TiVec::new(), cfg, calls: Vec::new(), results: Vec::new() }
     }
 
-    // fn remove_predecessor(&mut self, block: Block) {
-    //     let pos = self.predecessors.iter().position(|it| *it == block).unwrap();
-    //     self.predecessors.swap_remove(pos);
-    // }
+    /// Clears a `SSABuilder` from all its data, letting it in a pristine state without
+    /// deallocating memory.
+    pub fn clear(&mut self) {
+        if let Some(defs) = self.variables.raw.get_mut(0) {
+            defs.clear();
+        }
+        debug_assert!(self.calls.is_empty());
+        debug_assert!(self.results.is_empty());
+    }
 }
 
-impl SSABuilder {
+impl SSABuilder<IncompleteCfg> {
     /// Allocate a new blank SSA builder struct. Use the API function to interact with the struct.
     pub fn new() -> Self {
         Self {
             variables: TiVec::new(),
-            ssa_blocks: TiVec::new(),
+            cfg: IncompleteCfg { blocks: TiVec::new() },
             calls: Vec::new(),
             results: Vec::new(),
-            // visited: BitSet::new_empty(0),
         }
     }
 
@@ -94,7 +121,7 @@ impl SSABuilder {
     /// deallocating memory.
     pub fn clear(&mut self) {
         self.variables.clear();
-        self.ssa_blocks.clear();
+        self.cfg.blocks.clear();
         debug_assert!(self.calls.is_empty());
         debug_assert!(self.results.is_empty());
     }
@@ -102,13 +129,106 @@ impl SSABuilder {
     /// Tests whether an `SSABuilder` is in a cleared state.
     pub fn is_empty(&self) -> bool {
         self.variables.is_empty()
-            && self.ssa_blocks.is_empty()
+            && self.cfg.blocks.is_empty()
             && self.calls.is_empty()
             && self.results.is_empty()
     }
+
+    /// Declares a new basic block to construct corresponding data for SSA construction.
+    /// No predecessors are declared here and the block is not sealed.
+    /// Predecessors have to be added with `declare_block_predecessor`.
+    pub fn declare_block(&mut self) {
+        self.cfg.blocks.push(SSABlockData {
+            predecessors: SmallVec::new(),
+            sealed: false,
+            undef_phis: Vec::new(),
+        })
+    }
+
+    /// Declares a new predecessor for a `Block`
+    ///
+    /// The precedent `Block` must be filled before added as predecessor.
+    /// Note that you must provide no jump arguments to the branch
+    /// instruction when you create it since `SSABuilder` will fill them for you.
+    ///
+    /// Callers are expected to avoid adding the same predecessor more than once in the case
+    /// of a jump table.
+    pub fn declare_block_predecessor(&mut self, block: Block, pred: Block) {
+        debug_assert!(!self.is_sealed(block));
+        self.cfg.blocks[block].add_predecessor(pred)
+    }
+
+    ///// Remove a previously declared Block predecessor
+    /////
+    ///// Note: use only when you know what you are doing, this might break the SSA building problem
+    //pub fn remove_block_predecessor(&mut self, block: Block) {
+    //    debug_assert!(!self.is_sealed(block));
+    //    self.ssa_blocks[block].remove_predecessor(block);
+    //}
+
+    /// Completes the global value numbering for a `Block`, all of its predecessors having been
+    /// already sealed.
+    ///
+    /// This method modifies the function's `Layout` by adding arguments to the `Block`s to
+    /// take into account the Phi function placed by the SSA algorithm.
+    pub fn seal_block(&mut self, block: Block, func: &mut Function) {
+        self.seal_one_block(block, func);
+    }
+
+    /// Completes the global value numbering for all unsealed `Block`s in `func`.
+    ///
+    /// It's more efficient to seal `Block`s as soon as possible, during
+    /// translation, but for frontends where this is impractical to do, this
+    /// function can be used at the end of translating all blocks to ensure
+    /// that everything is sealed.
+    pub fn seal_all_blocks(&mut self, func: &mut Function) {
+        // Seal all `Block`s currently in the function. This can entail splitting
+        // and creation of new blocks, however such new blocks are sealed on
+        // the fly, so we don't need to account for them here.
+        for block in self.cfg.blocks.keys() {
+            if !self.is_sealed(block) {
+                self.seal_one_block(block, func);
+            }
+        }
+    }
+
+    /// Helper function for `seal_block` and
+    /// `seal_all_blocks`.
+    fn seal_one_block(&mut self, block: Block, func: &mut Function) {
+        let block_data = &mut self.cfg.blocks[block];
+        debug_assert!(!block_data.sealed, "Attempting to seal {} which is already sealed.", block);
+
+        // Extract the undef_variables data from the block so that we
+        // can iterate over it without borrowing the whole builder.
+        let undef_vars = std::mem::take(&mut block_data.undef_phis);
+
+        // For each undef var we look up values in the predecessors and create a block parameter
+        // only if necessary.
+        for (var, val) in undef_vars {
+            self.predecessors_lookup(func, val, var, block);
+        }
+        self.mark_block_sealed(block);
+    }
+
+    /// Set the `sealed` flag for `block`.
+    fn mark_block_sealed(&mut self, block: Block) {
+        // Then we mark the block as sealed.
+        let block_data = &mut self.cfg.blocks[block];
+        debug_assert!(!block_data.sealed);
+        debug_assert!(block_data.undef_phis.is_empty());
+        block_data.sealed = true;
+
+        // We could call data.predecessors.shrink_to_fit() here, if
+        // important, because no further predecessors will be added
+        // to this block.
+    }
+    /// Returns whether the given Block has any predecessor or not.
+    pub fn has_any_predecessors(&self, block: Block) -> bool {
+        !self.cfg.blocks[block].predecessors.is_empty()
+    }
 }
 
-impl Default for SSABuilder {
+impl Default for SSABuilder<IncompleteCfg> {
     fn default() -> Self {
         Self::new()
     }
@@ -149,7 +269,7 @@ enum Call {
 /// as well as modify the jump instruction and `Block` parameters to account for the SSA
 /// Phi functions.
 ///
-impl SSABuilder {
+impl<Blocks: ControlFlowGraph> SSABuilder<Blocks> {
     /// Declares a new definition of a variable in a given basic block.
     /// The SSA value is passed as an argument because it should be created with
     /// `ir::DataFlowGraph::append_result`.
@@ -202,25 +322,19 @@ impl SSABuilder {
     fn can_optimize_var_lookup(&mut self, block: Block, block_cnt: usize) -> bool {
         // Check that the initial block only has one predecessor. This is only a requirement
         // for the first block.
-        if self.predecessors(block).len() != 1 {
+        if !self.cfg.has_single_predecessor(block) {
             return false;
         }
 
         let mut visited = HybridBitSet::new_empty();
         let mut current = block;
         loop {
-            let predecessors = self.predecessors(current);
-
             // We haven't found the original block and we have either reached the entry
             // block, or we found the end of this line of dead blocks, either way we are
             // safe to optimize this line of lookups.
-            if predecessors.is_empty() {
-                return true;
-            }
-
             // We can stop the search here, the algorithm can handle these cases, even if they are
             // in an undefined island.
-            if predecessors.len() > 1 {
+            if !self.cfg.has_single_predecessor(block) {
                 return true;
             }
 
@@ -228,7 +342,7 @@ impl SSABuilder {
                 return false;
             }
 
-            let next = predecessors[0];
+            let next = self.cfg.predecessors(block).nth(0).unwrap();
             visited.insert(current, block_cnt);
             current = next;
         }
@@ -239,11 +353,10 @@ impl SSABuilder {
     /// This function sets up state for `run_state_machine()` but does not execute it.
     fn use_var_nonlocal(&mut self, func: &mut Function, var: Place, block: Block) {
         let optimize_var_lookup = self.can_optimize_var_lookup(block, func.layout.num_blocks());
-        let data = &mut self.ssa_blocks[block];
-        if data.sealed {
+        if self.cfg.sealed(block) {
             // Optimize the common case of one predecessor: no param needed.
             if optimize_var_lookup {
-                let pred = data.predecessors[0];
+                let pred = self.cfg.predecessors(block).nth(0).unwrap();
                 self.calls.push(Call::FinishSealedOnePredecessor(block));
                 self.calls.push(Call::UseVar(pred));
             } else {
@@ -260,7 +373,7 @@ impl SSABuilder {
         } else {
             let val = func.dfg.make_invalid_value();
             func.dfg.set_tag(val, Some(u32::from(var).into()));
-            data.undef_phis.push((var, val));
+            self.cfg.push_undef_phis(block, var, val);
             // Define the operandless param added above to prevent lookup cycles.
             self.def_var(var, val, block);
 
@@ -274,95 +387,6 @@ impl SSABuilder {
     fn finish_sealed_one_predecessor(&mut self, var: Place, block: Block) {
         let val = *self.results.last().unwrap();
         self.def_var(var, val, block);
-    }
-
-    /// Declares a new basic block to construct corresponding data for SSA construction.
-    /// No predecessors are declared here and the block is not sealed.
-    /// Predecessors have to be added with `declare_block_predecessor`.
-    pub fn declare_block(&mut self) {
-        self.ssa_blocks.push(SSABlockData {
-            predecessors: SmallVec::new(),
-            sealed: false,
-            undef_phis: Vec::new(),
-        })
-    }
-
-    /// Declares a new predecessor for a `Block`
-    ///
-    /// The precedent `Block` must be filled before added as predecessor.
-    /// Note that you must provide no jump arguments to the branch
-    /// instruction when you create it since `SSABuilder` will fill them for you.
-    ///
-    /// Callers are expected to avoid adding the same predecessor more than once in the case
-    /// of a jump table.
-    pub fn declare_block_predecessor(&mut self, block: Block, pred: Block) {
-        debug_assert!(!self.is_sealed(block));
-        self.ssa_blocks[block].add_predecessor(pred)
-    }
-
-    ///// Remove a previously declared Block predecessor
-    /////
-    ///// Note: use only when you know what you are doing, this might break the SSA building problem
-    //pub fn remove_block_predecessor(&mut self, block: Block) {
-    //    debug_assert!(!self.is_sealed(block));
-    //    self.ssa_blocks[block].remove_predecessor(block);
-    //}
-
-    /// Completes the global value numbering for a `Block`, all of its predecessors having been
-    /// already sealed.
-    ///
-    /// This method modifies the function's `Layout` by adding arguments to the `Block`s to
-    /// take into account the Phi function placed by the SSA algorithm.
-    pub fn seal_block(&mut self, block: Block, func: &mut Function) {
-        self.seal_one_block(block, func);
-    }
-
-    /// Completes the global value numbering for all unsealed `Block`s in `func`.
-    ///
-    /// It's more efficient to seal `Block`s as soon as possible, during
-    /// translation, but for frontends where this is impractical to do, this
-    /// function can be used at the end of translating all blocks to ensure
-    /// that everything is sealed.
-    pub fn seal_all_blocks(&mut self, func: &mut Function) {
-        // Seal all `Block`s currently in the function. This can entail splitting
-        // and creation of new blocks, however such new blocks are sealed on
-        // the fly, so we don't need to account for them here.
-        for block in self.ssa_blocks.keys() {
-            if !self.is_sealed(block) {
-                self.seal_one_block(block, func);
-            }
-        }
-    }
-
-    /// Helper function for `seal_block` and
-    /// `seal_all_blocks`.
-    fn seal_one_block(&mut self, block: Block, func: &mut Function) {
-        let block_data = &mut self.ssa_blocks[block];
-        debug_assert!(!block_data.sealed, "Attempting to seal {} which is already sealed.", block);
-
-        // Extract the undef_variables data from the block so that we
-        // can iterate over it without borrowing the whole builder.
-        let undef_vars = std::mem::take(&mut block_data.undef_phis);
-
-        // For each undef var we look up values in the predecessors and create a block parameter
-        // only if necessary.
-        for (var, val) in undef_vars {
-            self.predecessors_lookup(func, val, var, block);
-        }
-        self.mark_block_sealed(block);
-    }
-
-    /// Set the `sealed` flag for `block`.
-    fn mark_block_sealed(&mut self, block: Block) {
-        // Then we mark the block as sealed.
-        let block_data = &mut self.ssa_blocks[block];
-        debug_assert!(!block_data.sealed);
-        debug_assert!(block_data.undef_phis.is_empty());
-        block_data.sealed = true;
-
-        // We could call data.predecessors.shrink_to_fit() here, if
-        // important, because no further predecessors will be added
-        // to this block.
     }
 
     /// Given the local SSA Value of a Variable in a Block, perform a recursive lookup on
@@ -404,7 +428,7 @@ impl SSABuilder {
         self.calls.push(Call::FinishPredecessorsLookup(sentinel, dest_block));
         // Iterate over the predecessors.
         let mut calls = std::mem::take(&mut self.calls);
-        calls.extend(self.predecessors(dest_block).iter().rev().map(|pred| Call::UseVar(*pred)));
+        calls.extend(self.cfg.predecessors_rev(dest_block).map(Call::UseVar));
         self.calls = calls;
     }
 
@@ -419,7 +443,7 @@ impl SSABuilder {
         let mut pred_values: ZeroOneOrMore<Value> = ZeroOneOrMore::Zero;
 
         // Determine how many predecessors are yielding unique, non-temporary Values.
-        let num_predecessors = self.predecessors(dest_block).len();
+        let num_predecessors = self.cfg.predecessors(dest_block).count();
         for &pred_val in self.results.iter().rev().take(num_predecessors) {
             match pred_values {
                 ZeroOneOrMore::Zero => {
@@ -470,13 +494,12 @@ impl SSABuilder {
                 let mut blocks = Map::new();
 
                 let vals = &self.results[self.results.len() - num_predecessors..];
-                let iter = zip(self.ssa_blocks[dest_block].predecessors.iter(), vals).map(
-                    |(pred_block, pred_val)| {
+                let iter =
+                    zip(self.cfg.predecessors(dest_block), vals).map(|(pred_block, pred_val)| {
                         // We already did a full `use_var` above, so we can do just the fast path.
                         let i = args.push(*pred_val, &mut func.dfg.insts.value_lists) as u32;
-                        (*pred_block, i)
-                    },
-                );
+                        (pred_block, i)
+                    });
 
                 blocks.insert_sorted_iter(iter, &mut func.dfg.phi_forest, &(), |old, it| {
                     debug_assert_eq!(old, None);
@@ -497,19 +520,9 @@ impl SSABuilder {
         self.results.push(result_val);
     }
 
-    /// Returns the list of `Block`s that have been declared as predecessors of the argument.
-    fn predecessors(&self, block: Block) -> &[Block] {
-        &self.ssa_blocks[block].predecessors
-    }
-
-    /// Returns whether the given Block has any predecessor or not.
-    pub fn has_any_predecessors(&self, block: Block) -> bool {
-        !self.predecessors(block).is_empty()
-    }
-
     /// Returns `true` if and only if `seal_block` has been called on the argument.
     pub fn is_sealed(&self, block: Block) -> bool {
-        self.ssa_blocks[block].sealed
+        self.cfg.sealed(block)
     }
 
     /// The main algorithm is naturally recursive: when there's a `use_var` in a
@@ -542,5 +555,59 @@ impl SSABuilder {
         }
         debug_assert_eq!(self.results.len(), 1);
         self.results.pop().unwrap()
+    }
+}
+
+pub(crate) struct IncompleteCfg {
+    blocks: TiVec<Block, SSABlockData>,
+}
+
+impl ControlFlowGraph for IncompleteCfg {
+    type Predecessors<'a> = iter::Copied<slice::Iter<'a, Block>>;
+    type PredecessorsRev<'a> = iter::Copied<iter::Rev<slice::Iter<'a, Block>>>;
+
+    fn predecessors(&self, bb: Block) -> Self::Predecessors<'_> {
+        self.blocks[bb].predecessors.iter().copied()
+    }
+
+    fn has_single_predecessor(&self, bb: Block) -> bool {
+        self.blocks[bb].predecessors.len() == 1
+    }
+
+    fn predecessors_rev(&self, bb: Block) -> Self::PredecessorsRev<'_> {
+        self.blocks[bb].predecessors.iter().rev().copied()
+    }
+
+    fn sealed(&self, bb: Block) -> bool {
+        self.blocks[bb].sealed
+    }
+
+    fn push_undef_phis(&mut self, bb: Block, var: Place, val: Value) {
+        self.blocks[bb].undef_phis.push((var, val));
+    }
+}
+
+#[derive(Clone, Default)]
+struct SSABlockData {
+    // The predecessors of the Block with the block and branch instruction.
+    // The elements of this array MUST be kept in order.
+    // Ideally only `add_predecessor` is used to modify it
+    predecessors: SmallVec<[Block; 4]>,
+    // A block is sealed if all of its predecessors have been declared.
+    sealed: bool,
+    // List of current phis for which an earlier def has not been found yet.
+    undef_phis: Vec<(Place, Value)>,
+}
+
+impl SSABlockData {
+    fn add_predecessor(&mut self, new_pred: Block) {
+        debug_assert!(!self.sealed, "sealed blocks cannot accept new predecessors");
+        if let Some(i) = self.predecessors.iter().position(|&e| e >= new_pred) {
+            debug_assert_ne!(self.predecessors[i], new_pred);
+            self.predecessors.insert(i, new_pred);
+        } else {
+            // `elem` is larger than all existing elements.
+            self.predecessors.push(new_pred);
+        };
     }
 }

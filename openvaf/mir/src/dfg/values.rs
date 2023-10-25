@@ -445,8 +445,14 @@ impl DataFlowGraph {
     }
 
     pub fn strip_alias(&mut self) {
+        self.strip_alias_after(0);
+    }
+
+    pub fn strip_alias_after(&mut self, old_num_vals: usize) {
         let mut stack = Vec::with_capacity(64);
-        for mut val in self.values() {
+        let vals = old_num_vals..self.num_values();
+        for val in vals {
+            let mut val: Value = val.into();
             loop {
                 let def = unsafe { self.values.defs.get_unchecked(val) };
                 if let ValueDataType::Alias(alias) = def.ty {

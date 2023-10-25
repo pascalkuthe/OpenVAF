@@ -1,15 +1,16 @@
-mod ssa;
-
 use lasso::Rodeo;
 use mir::builder::{InsertBuilder, InstBuilder, InstInserterBase};
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{
-    Block, DataFlowGraph, FuncRef, Function, FunctionSignature, Inst, InstructionData, Param, Value,
+    Block, ControlFlowGraph, DataFlowGraph, FuncRef, Function, FunctionSignature, Inst,
+    InstructionData, Param, Value, F_ZERO,
 };
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 
 use crate::ssa::SSABuilder;
+
+mod ssa;
 
 /// An opaque reference to a variable.
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -26,7 +27,7 @@ impl_debug_display!(match Place{
 /// `FunctionBuilderContext` holds various data structures which are cleared between
 /// functions, rather than dropped, preserving the underlying allocations.
 pub struct FunctionBuilderContext {
-    ssa: SSABuilder,
+    ssa: SSABuilder<ssa::IncompleteCfg>,
     blocks: TiVec<Block, BlockData>,
 }
 
@@ -64,7 +65,7 @@ impl FunctionBuilderContext {
     /// Creates a FunctionBuilderContext structure. The structure is automatically cleared after
     /// each [`FunctionBuilder`](struct.FunctionBuilder.html) completes translating a function.
     pub fn new() -> Self {
-        Self { ssa: SSABuilder::new(), blocks: TiVec::new() }
+        Self { ssa: SSABuilder::<ssa::IncompleteCfg>::new(), blocks: TiVec::new() }
     }
 
     fn clear(&mut self) {
@@ -521,19 +522,6 @@ impl<'a> FunctionBuilder<'a> {
         self.func.dfg.inst_results(inst)
     }
 
-    ///// Changes the destination of a jump instruction after creation.
-    /////
-    ///// **Note:** You are responsible for maintaining the coherence with the arguments of
-    ///// other jump instructions.
-    //pub fn change_jump_destination(&mut self, inst: Inst, new_dest: Block) {
-    //    let old_dest = self.func.dfg[inst]
-    //        .branch_destination_mut()
-    //        .expect("you want to change the jump destination of a non-jump instruction");
-    //    let pred = self.func_ctx.ssa.remove_block_predecessor(*old_dest, inst);
-    //    *old_dest = new_dest;
-    //    self.func_ctx.ssa.declare_block_predecessor(new_dest, pred, inst);
-    //}
-
     /// Returns `true` if and only if the current `Block` is sealed and has no predecessors declared.
     ///
     /// The entry block of a function is never unreachable.
@@ -573,5 +561,46 @@ impl<'a> FunctionBuilder<'a> {
 
     fn declare_successor(&mut self, dest_block: Block) {
         self.func_ctx.ssa.declare_block_predecessor(dest_block, self.position);
+    }
+}
+
+/// Add (potentially mutable) values to an already finished
+/// MIR function that will be available at the end of the
+/// function just like a place during building
+pub struct SSAVariableBuilder<'a> {
+    ssa: SSABuilder<&'a ssa::CompleteCfg>,
+}
+
+impl<'a> SSAVariableBuilder<'a> {
+    pub fn new(cfg: &'a ControlFlowGraph) -> Self {
+        Self { ssa: SSABuilder::<&'a ssa::CompleteCfg>::new(cfg) }
+    }
+    /// Defines the value of the variable at the start of a basic block
+    pub fn def_var(&mut self, val: Value, bb: Block) {
+        self.ssa.def_var(0u32.into(), val, bb);
+    }
+    /// Makes the variable available at the start of a basic block.
+    /// The claler must ensure that all relevant calls to `def` have
+    /// been performed
+    pub fn use_var(&mut self, func: &mut Function, bb: Block) -> Value {
+        self.ssa.use_var(func, 0u32.into(), bb)
+    }
+
+    pub fn new_var(&mut self) {
+        self.ssa.clear();
+    }
+
+    #[must_use]
+    pub fn define_at_exit(&mut self, func: &mut Function, mut val: Value, inst: Inst) -> Value {
+        let finised_vals = func.dfg.num_values();
+        self.new_var();
+        self.def_var(F_ZERO, func.layout.entry_block().unwrap());
+        let bb = func.layout.inst_block(inst).unwrap();
+        self.def_var(val, bb);
+        let exit = func.layout.last_block().unwrap();
+        val = self.use_var(func, exit);
+        let res = FuncCursor::new(func).at_bottom(exit).ins().optbarrier(val);
+        func.dfg.strip_alias_after(finised_vals);
+        res
     }
 }
