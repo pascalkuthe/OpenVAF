@@ -8,7 +8,10 @@ use bitset::SparseBitMatrix;
 use hir_lower::{CallBackKind, HirInterner, ImplicitEquationKind, ParamKind, PlaceKind};
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{Block, FuncRef, Inst, InstructionData, Opcode, Value, FALSE, F_ONE, F_ZERO, TRUE};
+use mir::{
+    Block, FuncRef, Function, Inst, InstructionData, Opcode, PhiNode, Value, FALSE, F_ONE, F_ZERO,
+    TRUE,
+};
 use typed_indexmap::TiSet;
 
 use crate::topology::{Contribution, Noise};
@@ -202,7 +205,7 @@ impl<'a> super::Builder<'a> {
         postdom_frontiers: &SparseBitMatrix<Block, Block>,
         callbacks: &TiSet<FuncRef, CallBackKind>,
     ) -> Evaluation {
-        let Self { func, cfg, output_values, scratch_buf, postorder, .. } = self;
+        let Self { func, output_values, scratch_buf, postorder, .. } = self;
 
         postorder.clear();
         scratch_buf.clear();
@@ -210,6 +213,7 @@ impl<'a> super::Builder<'a> {
             func.dfg.inst_uses_postorder_with(inst, (take(scratch_buf), Vec::new()), |_| true);
         postorder.extend(&mut transversal);
         *scratch_buf = transversal.visited;
+        let visisted = scratch_buf;
 
         let is_op_dependent = |val| {
             if let Some(inst) = func.dfg.value_def(val).inst() {
@@ -218,6 +222,9 @@ impl<'a> super::Builder<'a> {
                 self.op_dependent_vals.contains(&val)
             }
         };
+
+        let val_visisted =
+            |val| func.dfg.value_def(val).inst().map_or(false, |inst| visisted.contains(inst));
         let mut contributes = Vec::new();
         for &inst in postorder.iter() {
             match func.dfg.insts[inst] {
@@ -229,17 +236,16 @@ impl<'a> super::Builder<'a> {
                 // types but I can't see why it wouldn't (also the language standard
                 // specifically calls these small signal sources).
                 InstructionData::PhiNode(_)
-                    | InstructionData::Branch { .. }
-                    | InstructionData::Binary {
-                        opcode: Opcode::Flt | Opcode::Fle | Opcode::Fgt | Opcode::Fge,
-                        ..
-                    } if noise => (),
+                | InstructionData::Branch { .. }
+                | InstructionData::Binary {
+                    opcode: Opcode::Flt | Opcode::Fle | Opcode::Fgt | Opcode::Fge,
+                    ..
+                } if noise => (),
                 InstructionData::Unary { opcode: Opcode::Fneg, .. } => {}
                 // noise is always zero when these are evaluated
+                // TODO: complex noise power (would allow us to avoid creating an extra node here)
                 InstructionData::Call { func_ref, .. }
-                    // TODO: complex noise power (would allow us to avoid creating an extra node here)
-                    if noise && callbacks[func_ref] != CallBackKind::TimeDerivative => {
-                }
+                    if noise && callbacks[func_ref] != CallBackKind::TimeDerivative => {}
                 InstructionData::Binary { opcode: Opcode::Fmul, args } => {
                     if is_op_dependent(args[0]) && is_op_dependent(args[1]) {
                         return Evaluation::Equation;
@@ -250,18 +256,66 @@ impl<'a> super::Builder<'a> {
                         return Evaluation::Equation;
                     }
                 }
-                InstructionData::PhiNode(_) => {
-                    for pred in cfg.pred_iter(func.layout.inst_block(inst).unwrap()) {
-                        if let Some(control_deps) = postdom_frontiers.row(pred) {
-                            for control_dep in control_deps.iter() {
-                                if let Some((cond,_,_)) = func.layout.block_terminator(control_dep).and_then(|inst| func.dfg.as_branch(inst)) {
-                                    if is_op_dependent(cond){
-                                        cov_mark::hit!(conditional_phi);
-                                        return Evaluation::Equation;
+                InstructionData::PhiNode(ref phi) => {
+                    // phis are pretty complex to figure out. The most correct
+                    // implemenation is to check if a phi is operating point
+                    // dependent. To determine that we check whether any of
+                    // the control dependencies of the edge are operating point
+                    // dependent.
+                    //
+                    // However, to avoid cerating many uneccesary implicit
+                    // equiation a specical optimization for chains of additions
+                    // is necessary. Chains of addition/subtraction where only one
+                    // summand depends on the analog operator don't need an equation.
+                    // This optimizes the following (common) case:
+                    //
+                    // I(x) <+ ddt(foo);
+                    // if (op_denpendent)
+                    //    I(x) <+ bar;
+                    //
+                    // this will create an (op dependent) phi [ddt(foo), ddt(foo) + bar].
+                    // This does not change the ddt state and therefore doens't require
+                    // introduction of state.
+
+                    let mut op_dependent = false;
+                    for (pred, _) in func.dfg.phi_edges(phi) {
+                        // check if this edge is operating point dependent
+                        if !op_dependent {
+                            if let Some(control_deps) = postdom_frontiers.row(pred) {
+                                for control_dep in control_deps.iter() {
+                                    if let Some((cond, _, _)) = func
+                                        .layout
+                                        .block_terminator(control_dep)
+                                        .and_then(|inst| func.dfg.as_branch(inst))
+                                    {
+                                        if is_op_dependent(cond) {
+                                            op_dependent = true;
+                                            break;
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
+
+                    self.val_map.clear();
+                    if op_dependent
+                        && phi_add_chain_start(
+                            func,
+                            phi.clone(),
+                            &val_visisted,
+                            &mut |phi, enter| {
+                                if enter {
+                                    self.val_map.insert(phi, F_ZERO).is_none()
+                                } else {
+                                    self.val_map.remove(&phi).is_some()
+                                }
+                            },
+                        )
+                        .is_none()
+                    {
+                        cov_mark::hit!(conditional_phi);
+                        return Evaluation::Equation;
                     }
                 }
                 InstructionData::Unary { opcode: Opcode::OptBarrier, .. } => {
@@ -277,9 +331,13 @@ impl<'a> super::Builder<'a> {
                     if is_output {
                         // multiple uses of a noise source indicate
                         // correlated noise, for now just create a correlation network
-                        if noise && !contributes.is_empty()  {
+                        if noise && !contributes.is_empty() {
                             return Evaluation::Equation;
-                        } else if self.topology.as_contribution(val).map_or(false,|it| !it.is_reactive()) {
+                        } else if self
+                            .topology
+                            .as_contribution(val)
+                            .map_or(false, |it| !it.is_reactive())
+                        {
                             contributes.push((val, F_ZERO))
                         } else {
                             return Evaluation::Equation;
@@ -304,4 +362,70 @@ impl<'a> super::Builder<'a> {
         }
         Evaluation::Linear { contributes: contributes.into_boxed_slice() }
     }
+}
+
+fn phi_add_chain_start(
+    func: &Function,
+    phi: PhiNode,
+    val_visited: &impl Fn(Value) -> bool,
+    handle_loops: &mut impl FnMut(Value, bool) -> bool,
+) -> Option<Value> {
+    let mut add_chain_start = None;
+    for (_, mut edge) in func.dfg.phi_edges(&phi) {
+        if !val_visited(edge) {
+            return None;
+        }
+        edge = follow_add_chain(func, edge, val_visited, &mut *handle_loops);
+        match add_chain_start {
+            Some(chain_start) => {
+                if chain_start != edge {
+                    return None;
+                }
+            }
+            None => add_chain_start = Some(edge),
+        }
+    }
+    add_chain_start
+}
+
+fn follow_add_chain(
+    func: &Function,
+    mut val: Value,
+    val_visited: &impl Fn(Value) -> bool,
+    handle_loops: &mut impl FnMut(Value, bool) -> bool,
+) -> Value {
+    while let Some(inst) = func.dfg.value_def(val).inst() {
+        match func.dfg.insts[inst] {
+            InstructionData::Binary { opcode: Opcode::Fadd, args: [lhs, rhs] } => {
+                if !val_visited(lhs) {
+                    val = rhs;
+                    continue;
+                }
+                if !val_visited(rhs) {
+                    val = lhs;
+                    continue;
+                }
+            }
+            InstructionData::Binary { opcode: Opcode::Fsub, args: [lhs, rhs] } => {
+                if !val_visited(rhs) {
+                    val = lhs;
+                    continue;
+                }
+            }
+            InstructionData::PhiNode(ref phi) => {
+                if handle_loops(val, true) {
+                    let add_chain_start =
+                        phi_add_chain_start(func, phi.clone(), val_visited, &mut *handle_loops);
+                    handle_loops(val, false);
+                    if let Some(add_chain_start) = add_chain_start {
+                        val = add_chain_start;
+                        continue;
+                    }
+                }
+            }
+            _ => (),
+        }
+        break;
+    }
+    val
 }
