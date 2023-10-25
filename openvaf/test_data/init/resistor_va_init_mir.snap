@@ -1,0 +1,14 @@
+function %_init(v22, v17, v18, v20, v27) {
+    v6 = fconst 0x1.0000000000000p0
+                                block2:
+@0008                               v16 = fdiv v17, v18
+@000a                               v19 = pow v16, v20
+@000b                               v21 = fmul v22, v19
+                                    v33 = optbarrier v21
+@fffffff0                           v24 = fdiv v6, v21
+                                    v25 = fneg v24
+                                    v26 = fmul v27, v24
+                                    v34 = optbarrier v26
+                                    v29 = fmul v27, v25
+                                    v35 = optbarrier v29
+}

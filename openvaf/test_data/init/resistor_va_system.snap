@@ -1,0 +1,28 @@
+{
+    v33: cslot0,
+    v34: cslot1,
+    v35: cslot2,
+}
+{
+    cslot0: (
+        (
+            Some(ClassId(2)),
+            0,
+        ),
+        Real,
+    ),
+    cslot1: (
+        (
+            Some(ClassId(10)),
+            0,
+        ),
+        Real,
+    ),
+    cslot2: (
+        (
+            Some(ClassId(11)),
+            0,
+        ),
+        Real,
+    ),
+}

@@ -410,6 +410,16 @@ impl DfgValues {
         })
     }
 
+    pub fn make_const(&mut self, val: Const) -> Value {
+        match val {
+            Const::Float(val) => self.fconst(val),
+            Const::Int(val) => self.iconst(val),
+            Const::Str(val) => self.sconst(val),
+            Const::Bool(false) => FALSE,
+            Const::Bool(true) => TRUE,
+        }
+    }
+
     pub fn sconst(&mut self, val: Spur) -> Value {
         *self.str_consts.entry(val).or_insert_with(|| {
             let data = ValueDataType::Sconst { val }.into();

@@ -3,6 +3,7 @@ pub use module_info::{collect_modules, ModuleInfo};
 
 mod context;
 pub mod dae;
+pub mod init;
 mod module_info;
 mod noise;
 mod topology;

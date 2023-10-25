@@ -1,0 +1,17 @@
+function %_init(v17, v19) {
+    inst0 = fn %collapse_node2_None(0) -> 0
+    v3 = fconst 0.0
+    v7 = fconst -0x1.0000000000000p0
+
+                                block8:
+@0003                               v16 = feq v17, v3
+                                    br v16, block2, block4
+
+                                block2:
+                                    call inst0()
+                                    jmp block4
+
+                                block4:
+                                    v18 = fmul v19, v7
+                                    v21 = optbarrier v18
+}

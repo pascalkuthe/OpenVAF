@@ -1,0 +1,12 @@
+{
+    v21: cslot0,
+}
+{
+    cslot0: (
+        (
+            Some(ClassId(8)),
+            0,
+        ),
+        Real,
+    ),
+}

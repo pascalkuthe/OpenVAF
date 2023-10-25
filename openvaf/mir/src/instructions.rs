@@ -196,6 +196,27 @@ impl InstructionData {
             InstructionData::PhiNode(node) => node.hash(state, val_pool, forest),
         }
     }
+
+    #[inline]
+    pub fn to_pool<'a>(
+        &self,
+        value_lists: &'a ValueListPool,
+        forest: &'a PhiForest,
+        dst_value_lists: &'a mut ValueListPool,
+        dst_forest: &'a mut PhiForest,
+    ) -> Self {
+        let mut res = self.clone();
+        match &mut res {
+            InstructionData::PhiNode(phi) => {
+                *phi = phi.to_pool(value_lists, forest, dst_value_lists, dst_forest)
+            }
+            InstructionData::Call { args, .. } => {
+                *args = args.to_pool(value_lists, dst_value_lists)
+            }
+            _ => (),
+        }
+        res
+    }
 }
 
 impl Opcode {
@@ -323,6 +344,20 @@ impl PhiNode {
     pub fn edges<'a>(&self, value_lists: &'a ValueListPool, forest: &'a PhiForest) -> PhiEdges<'a> {
         let args = self.args.as_slice(value_lists);
         PhiEdges { iter: self.blocks.iter(forest), args }
+    }
+
+    #[inline]
+    pub fn to_pool<'a>(
+        &self,
+        value_lists: &'a ValueListPool,
+        forest: &'a PhiForest,
+        dst_value_lists: &'a mut ValueListPool,
+        dst_forest: &'a mut PhiForest,
+    ) -> Self {
+        let args = self.args.to_pool(value_lists, dst_value_lists);
+        let mut blocks = PhiMap::new();
+        blocks.insert_sorted_iter(self.blocks.iter(forest), dst_forest, &(), |_, i| i);
+        Self { args, blocks }
     }
 }
 
