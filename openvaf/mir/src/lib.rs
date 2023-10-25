@@ -275,3 +275,15 @@ pub struct Unknown(pub u32);
 impl_idx_from!(Unknown(u32));
 
 impl_debug!(match Unknown{Unknown(raw) => "unknown{}",raw;});
+
+pub fn strip_optbarrier(func: impl AsRef<Function>, mut val: Value) -> Value {
+    let func = func.as_ref();
+    while let Some(inst) = func.dfg.value_def(val).inst() {
+        if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } = func.dfg.insts[inst] {
+            val = arg;
+        } else {
+            break;
+        }
+    }
+    val
+}

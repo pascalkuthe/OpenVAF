@@ -731,5 +731,5 @@ collapsible (nqs_qi, gnd)
 collapsible (nqs_qb, gnd)
 0 states
 has bound_step false
-instance size 3152
+instance size 3024
 model size 2480

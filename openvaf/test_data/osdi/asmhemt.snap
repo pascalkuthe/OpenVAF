@@ -694,5 +694,5 @@ collapsible (fp4, fp3)
 collapsible (g, gi)
 0 states
 has bound_step false
-instance size 6304
+instance size 5976
 model size 1608

@@ -773,5 +773,5 @@ collapsible (flow(d,drc), gnd)
 collapsible (flow(src,s), gnd)
 0 states
 has bound_step false
-instance size 5960
+instance size 5680
 model size 2072

@@ -174,45 +174,37 @@ impl OsdiInstance {
     }
 
     pub fn load_spice(&self, model: &OsdiModel, sim: &mut MockSimulation) {
-        unsafe {
-            self.descriptor.load_spice_rhs_tran(
-                self.data,
-                model.data,
-                sim.residual_resist.as_mut_ptr(),
-                sim.solve.as_mut_ptr(),
-                ALPHA,
-            );
-            self.descriptor.load_jacobian_tran(self.data, self.data, ALPHA);
-        }
+        self.descriptor.load_spice_rhs_tran(
+            self.data,
+            model.data,
+            sim.residual_resist.as_mut_ptr(),
+            sim.solve.as_mut_ptr(),
+            ALPHA,
+        );
+        self.descriptor.load_jacobian_tran(self.data, self.data, ALPHA);
     }
 
     pub fn load_dae(&self, model: &OsdiModel, sim: &mut MockSimulation) {
-        unsafe {
-            self.descriptor.load_residual_resist(
-                self.data,
-                model.data,
-                sim.residual_resist.as_mut_ptr(),
-            );
-            self.descriptor.load_limit_rhs_resist(
-                self.data,
-                model.data,
-                sim.residual_resist.as_mut_ptr(),
-            );
+        self.descriptor.load_residual_resist(
+            self.data,
+            model.data,
+            sim.residual_resist.as_mut_ptr(),
+        );
+        self.descriptor.load_limit_rhs_resist(
+            self.data,
+            model.data,
+            sim.residual_resist.as_mut_ptr(),
+        );
 
-            self.descriptor.load_residual_react(
-                self.data,
-                model.data,
-                sim.residual_react.as_mut_ptr(),
-            );
-            self.descriptor.load_limit_rhs_react(
-                self.data,
-                model.data,
-                sim.residual_react.as_mut_ptr(),
-            );
+        self.descriptor.load_residual_react(self.data, model.data, sim.residual_react.as_mut_ptr());
+        self.descriptor.load_limit_rhs_react(
+            self.data,
+            model.data,
+            sim.residual_react.as_mut_ptr(),
+        );
 
-            self.descriptor.load_jacobian_resist(self.data, model.data);
-            self.descriptor.load_jacobian_react(self.data, model.data, 1.0);
-        }
+        self.descriptor.load_jacobian_resist(self.data, model.data);
+        self.descriptor.load_jacobian_react(self.data, model.data, 1.0);
     }
     pub fn eval(
         &self,
@@ -242,14 +234,12 @@ impl OsdiInstance {
             next_state: sim.state_2.as_mut_ptr(),
             flags: flags.bits(),
         };
-        let flags = unsafe {
-            self.descriptor.eval(
-                b"foo\0".as_ptr() as *mut c_void,
-                self.data,
-                model.data,
-                &mut sim_info,
-            )
-        };
+        let flags = self.descriptor.eval(
+            b"foo\0".as_ptr() as *mut c_void,
+            self.data,
+            model.data,
+            &mut sim_info,
+        );
         EvalRetFlags::from_bits(flags).unwrap()
     }
 }

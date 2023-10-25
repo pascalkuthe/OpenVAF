@@ -1488,5 +1488,5 @@ collapsible (s, si)
 collapsible (d, di)
 0 states
 has bound_step false
-instance size 2280
+instance size 2232
 model size 5824

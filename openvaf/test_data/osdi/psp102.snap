@@ -723,5 +723,5 @@ collapsible (BD, BI)
 collapsible (B, BI)
 0 states
 has bound_step false
-instance size 5968
+instance size 5792
 model size 2584

@@ -1607,5 +1607,5 @@ collapsible (fg, ge)
 collapsible (t, gnd)
 0 states
 has bound_step false
-instance size 3600
+instance size 3560
 model size 6144

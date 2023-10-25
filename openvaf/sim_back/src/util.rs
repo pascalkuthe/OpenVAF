@@ -4,19 +4,7 @@ use bitset::BitSet;
 use hir_lower::HirInterner;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{Function, Inst, InstructionData, Opcode, Value, ValueDef, F_ZERO};
-
-pub fn strip_optbarrier(func: impl AsRef<Function>, mut val: Value) -> Value {
-    let func = func.as_ref();
-    while let Some(inst) = func.dfg.value_def(val).inst() {
-        if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } = func.dfg.insts[inst] {
-            val = arg;
-        } else {
-            break;
-        }
-    }
-    val
-}
+use mir::{strip_optbarrier, Function, Inst, Value, ValueDef, F_ZERO};
 
 pub fn strip_optbarrier_if_const(func: impl AsRef<Function>, val: Value) -> Value {
     let func = func.as_ref();

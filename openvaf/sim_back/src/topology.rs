@@ -22,7 +22,7 @@ use bitset::{BitSet, SparseBitMatrix};
 use hir_lower::{CallBackKind, HirInterner, ImplicitEquation, ParamKind, PlaceKind};
 use indexmap::IndexSet;
 use lasso::Spur;
-use mir::{Function, Inst, Value, F_ZERO, TRUE};
+use mir::{strip_optbarrier, Function, Inst, Value, F_ZERO, TRUE};
 use mir_build::SSAVariableBuilder;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
@@ -31,7 +31,7 @@ use typed_indexmap::TiMap;
 use crate::context::Context;
 use crate::noise::NoiseSourceKind;
 use crate::topology::builder::Builder;
-use crate::util::{strip_optbarrier, strip_optbarrier_if_const};
+use crate::util::strip_optbarrier_if_const;
 use crate::BranchWrite;
 
 mod builder;

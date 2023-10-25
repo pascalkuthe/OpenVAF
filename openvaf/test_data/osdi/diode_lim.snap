@@ -54,5 +54,5 @@ collapsible (CI, C)
 collapsible (dT, gnd)
 1 states
 has bound_step false
-instance size 448
+instance size 400
 model size 120

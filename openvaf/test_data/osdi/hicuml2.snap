@@ -402,5 +402,5 @@ collapsible (si, s)
 collapsible (tnode, gnd)
 0 states
 has bound_step false
-instance size 3456
+instance size 3336
 model size 1112

@@ -37,5 +37,5 @@ jacobian (flow(Outm), Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_
 jacobian (flow(Outm), Outm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 0 states
 has bound_step false
-instance size 344
+instance size 272
 model size 40

@@ -7,7 +7,7 @@ use llvm::{
     LLVMBuildLoad2, LLVMBuildStore, LLVMBuildStructGEP2, LLVMConstInt, LLVMOffsetOfElement,
     LLVMSetFastMath, TargetData, UNNAMED,
 };
-use mir::{Const, Param, ValueDef, F_ZERO};
+use mir::{strip_optbarrier, Const, Function, Param, ValueDef, F_ZERO};
 use mir_llvm::{CodegenCx, MemLoc};
 use sim_back::dae::{self, MatrixEntryId, SimUnknown};
 use sim_back::init::CacheSlot;
@@ -98,8 +98,10 @@ impl Residual {
         residual: &dae::Residual,
         slots: &mut TiMap<EvalOutputSlot, mir::Value, &'ll llvm::Type>,
         ty_real: &'ll llvm::Type,
+        func: &Function,
     ) -> Residual {
-        let mut get_slot = |val| {
+        let mut get_slot = |mut val| {
+            val = strip_optbarrier(func, val);
             if val == F_ZERO {
                 None.into()
             } else {
@@ -130,7 +132,8 @@ impl MatrixEntry {
         ty_real: &'ll llvm::Type,
         num_react: &mut u32,
     ) -> MatrixEntry {
-        let mut get_output = |val| {
+        let mut get_output = |mut val| {
+            val = strip_optbarrier(module.eval, val);
             if val == F_ZERO {
                 None
             } else {
@@ -214,7 +217,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             .dae_system
             .residual
             .iter()
-            .map(|residual| Residual::new(residual, &mut eval_outputs, ty_f64))
+            .map(|residual| Residual::new(residual, &mut eval_outputs, ty_f64, module.eval))
             .collect();
         let mut num_react = 0;
         let jacobian = module
@@ -224,7 +227,8 @@ impl<'ll> OsdiInstanceData<'ll> {
             .map(|entry| MatrixEntry::new(entry, module, &mut eval_outputs, ty_f64, &mut num_react))
             .collect();
         let bound_step = module.intern.outputs.get(&PlaceKind::BoundStep).and_then(|val| {
-            let val = val.expand()?;
+            let mut val = val.expand()?;
+            val = strip_optbarrier(module.eval, val);
             let slot = eval_outputs.insert_full(val, ty_f64).0;
             Some(slot)
         });

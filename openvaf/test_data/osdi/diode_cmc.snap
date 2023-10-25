@@ -246,5 +246,5 @@ collapsible (charge_K, gnd)
 collapsible (depl_A, gnd)
 0 states
 has bound_step false
-instance size 1936
+instance size 1840
 model size 840

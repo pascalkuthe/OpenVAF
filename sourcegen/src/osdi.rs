@@ -21,7 +21,7 @@ fn gen_osdi_structs() {
         .collect();
 
     let osdi_src_dir = project_root().join("openvaf").join("osdi").join("src").join("metadata");
-    let osdi_test_dir = project_root().join("openvaf").join("osdi").join("tests").join("load");
+    let osdi_test_dir = project_root().join("openvaf").join("openvaf").join("tests").join("load");
     let melange_src_dir = project_root().join("melange").join("core").join("src").join("veriloga");
 
     for header in &headers {

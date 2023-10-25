@@ -9,8 +9,8 @@ use indexmap::IndexSet;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{
-    Block, ControlFlowGraph, DominatorTree, Inst, KnownDerivatives, Unknown, Value, FALSE, F_ONE,
-    F_ZERO, TRUE,
+    strip_optbarrier, Block, ControlFlowGraph, DominatorTree, Inst, KnownDerivatives, Unknown,
+    Value, FALSE, F_ONE, F_ZERO, TRUE,
 };
 use mir_autodiff::auto_diff;
 use typed_index_collections::TiVec;
@@ -19,7 +19,7 @@ use crate::context::Context;
 use crate::dae::{DaeSystem, MatrixEntry, Residual, SimUnknown};
 use crate::noise::NoiseSource;
 use crate::topology::{BranchInfo, Contribution};
-use crate::util::{add, is_op_dependent, strip_optbarrier, update_optbarrier};
+use crate::util::{add, is_op_dependent, update_optbarrier};
 use crate::SimUnknownKind;
 
 impl Residual {

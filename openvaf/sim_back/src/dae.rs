@@ -1,5 +1,5 @@
 use indexmap::IndexSet;
-use mir::{Value, F_ZERO};
+use mir::{strip_optbarrier, Value, F_ZERO};
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
@@ -7,7 +7,6 @@ use typed_indexmap::TiSet;
 use crate::context::Context;
 use crate::dae::builder::Builder;
 use crate::noise::{NoiseSource, NoiseSourceKind};
-use crate::util::strip_optbarrier;
 use crate::{topology, SimUnknownKind};
 
 mod builder;

@@ -2273,5 +2273,5 @@ collapsible (n, gnd)
 collapsible (t, gnd)
 0 states
 has bound_step false
-instance size 5848
+instance size 5640
 model size 8584

@@ -153,20 +153,17 @@ impl OsdiModel {
         };
 
         let mut res = OsdiInitInfo { flags: 0, num_errors: 0, errors: ptr::null_mut() };
-        unsafe {
-            self.descriptor.setup_model(
-                b"foo\0".as_ptr() as *mut c_void,
-                self.data,
-                &mut sim_params,
-                &mut res,
-            )
-        };
+        self.descriptor.setup_model(
+            b"foo\0".as_ptr() as *mut c_void,
+            self.data,
+            &mut sim_params,
+            &mut res,
+        );
         self.descriptor.check_init_result(res)
     }
 
     pub fn set_real_param(&self, param: u32, val: f64) {
-        let ptr =
-            unsafe { self.descriptor.access(ptr::null_mut(), self.data, param, ACCESS_FLAG_SET) };
+        let ptr = self.descriptor.access(ptr::null_mut(), self.data, param, ACCESS_FLAG_SET);
         let ptr = ptr as *mut f64;
         if ptr.is_null() {
             unreachable!("invalid parameter access")
@@ -294,17 +291,15 @@ impl OsdiInstance {
         };
 
         let mut res = OsdiInitInfo { flags: 0, num_errors: 0, errors: ptr::null_mut() };
-        unsafe {
-            self.descriptor.setup_instance(
-                b"foo\0".as_ptr() as *mut c_void,
-                self.data,
-                model.data,
-                temp,
-                connected_terminals,
-                &mut sim_params,
-                &mut res,
-            )
-        };
+        self.descriptor.setup_instance(
+            b"foo\0".as_ptr() as *mut c_void,
+            self.data,
+            model.data,
+            temp,
+            connected_terminals,
+            &mut sim_params,
+            &mut res,
+        );
         self.descriptor.check_init_result(res)?;
         let internal_nodes = self.collapse_nodes(connected_terminals);
         Ok(internal_nodes)

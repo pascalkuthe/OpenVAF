@@ -2241,5 +2241,5 @@ collapsible (b, bi)
 collapsible (b, dbulk)
 0 states
 has bound_step false
-instance size 5472
+instance size 5368
 model size 8424

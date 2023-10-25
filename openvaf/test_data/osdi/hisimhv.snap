@@ -1905,5 +1905,5 @@ collapsible (qb, gnd)
 collapsible (qbd, gnd)
 0 states
 has bound_step false
-instance size 7520
+instance size 7304
 model size 6848

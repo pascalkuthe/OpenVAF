@@ -6,8 +6,8 @@ use indexmap::IndexMap;
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{
-    Block, ControlFlowGraph, DominatorTree, FuncRef, Function, Inst, InstructionData, Opcode,
-    Value, FALSE,
+    strip_optbarrier, Block, ControlFlowGraph, DominatorTree, FuncRef, Function, Inst,
+    InstructionData, Opcode, Value, FALSE,
 };
 use mir_opt::{aggressive_dead_code_elimination, simplify_cfg, ClassId, GVN};
 use stdx::packed_option::PackedOption;
@@ -15,7 +15,7 @@ use stdx::{impl_debug_display, impl_idx_from};
 use typed_indexmap::TiMap;
 
 use crate::context::Context;
-use crate::util::{strip_optbarrier, strip_optbarrier_if_const};
+use crate::util::strip_optbarrier_if_const;
 
 #[cfg(test)]
 mod tests;
