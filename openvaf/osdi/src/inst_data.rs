@@ -44,6 +44,8 @@ pub enum EvalOutput {
 }
 
 impl EvalOutput {
+    const NONE: EvalOutput = EvalOutput::Cache(CacheSlot(u32::MAX));
+
     fn new<'ll>(
         module: &OsdiModule<'_>,
         val: mir::Value,
@@ -154,6 +156,37 @@ impl MatrixEntry {
     }
 }
 
+#[derive(Debug)]
+pub struct NoiseSource {
+    pub factor: EvalOutput,
+    /// content of values depend on kind of noise source
+    pub args: [EvalOutput; 2],
+}
+
+impl NoiseSource {
+    pub fn new<'ll>(
+        source: &dae::NoiseSource,
+        module: &OsdiModule<'_>,
+        slots: &mut TiMap<EvalOutputSlot, mir::Value, &'ll llvm::Type>,
+        ty_real: &'ll llvm::Type,
+    ) -> NoiseSource {
+        let mut get_output = |mut val| {
+            val = strip_optbarrier(module.eval, val);
+            EvalOutput::new(module, val, slots, false, ty_real)
+        };
+        let args = match source.kind {
+            dae::NoiseSourceKind::WhiteNoise { pwr } => [get_output(pwr), EvalOutput::NONE],
+            dae::NoiseSourceKind::FlickerNoise { pwr, exp } => [get_output(pwr), get_output(exp)],
+            dae::NoiseSourceKind::NoiseTable { .. } => [EvalOutput::NONE; 2],
+        };
+        NoiseSource { args, factor: get_output(source.factor) }
+    }
+
+    pub fn eval_outputs(&self) -> [EvalOutput; 3] {
+        [self.factor, self.args[0], self.args[1]]
+    }
+}
+
 pub struct OsdiInstanceData<'ll> {
     /// llvm type for the instance data struct
     pub ty: &'ll llvm::Type,
@@ -172,6 +205,7 @@ pub struct OsdiInstanceData<'ll> {
     pub cache_slots: TiVec<CacheSlot, &'ll llvm::Type>,
 
     pub residual: TiVec<SimUnknown, Residual>,
+    pub noise: Vec<NoiseSource>,
     pub opvars: IndexMap<Variable, EvalOutput, RandomState>,
     pub jacobian: TiVec<MatrixEntryId, MatrixEntry>,
     pub bound_step: Option<EvalOutputSlot>,
@@ -226,6 +260,12 @@ impl<'ll> OsdiInstanceData<'ll> {
             .iter()
             .map(|entry| MatrixEntry::new(entry, module, &mut eval_outputs, ty_f64, &mut num_react))
             .collect();
+        let noise = module
+            .dae_system
+            .noise_sources
+            .iter()
+            .map(|source| NoiseSource::new(source, module, &mut eval_outputs, ty_f64))
+            .collect();
         let bound_step = module.intern.outputs.get(&PlaceKind::BoundStep).and_then(|val| {
             let mut val = val.expand()?;
             val = strip_optbarrier(module.eval, val);
@@ -279,6 +319,7 @@ impl<'ll> OsdiInstanceData<'ll> {
             eval_outputs,
             cache_slots,
             residual,
+            noise,
             opvars,
             jacobian,
             bound_step,
@@ -291,7 +332,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         builder: &mir_llvm::Builder<'_, '_, 'll>,
     ) {
         if let Some(slot) = self.bound_step {
-            self.store_eval_output(slot, ptr, builder);
+            self.store_eval_output_slot(slot, ptr, builder);
         }
     }
 
@@ -450,7 +491,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         LLVMBuildLoad2(llbuilder, ty, ptr, UNNAMED)
     }
 
-    pub unsafe fn store_eval_output(
+    pub unsafe fn store_eval_output_slot(
         &self,
         slot: EvalOutputSlot,
         inst_ptr: &'ll llvm::Value,
@@ -460,6 +501,17 @@ impl<'ll> OsdiInstanceData<'ll> {
         let val = builder.values[val].get(builder);
         let (ptr, _) = self.eval_output_slot_ptr(builder.llbuilder, inst_ptr, slot);
         builder.store(ptr, val)
+    }
+
+    pub unsafe fn store_eval_output(
+        &self,
+        output: EvalOutput,
+        inst_ptr: &'ll llvm::Value,
+        builder: &mir_llvm::Builder<'_, '_, 'll>,
+    ) {
+        if let EvalOutput::Calculated(slot) = output {
+            self.store_eval_output_slot(slot, inst_ptr, builder)
+        }
     }
 
     // pub unsafe fn param_given_pointer_and_mask(
@@ -598,7 +650,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let dst = &self.residual[node];
         let slot = if reactive { dst.react_lim_rhs } else { dst.resist_lim_rhs };
         if let Some(slot) = slot.expand() {
-            self.store_eval_output(slot, ptr, builder);
+            self.store_eval_output_slot(slot, ptr, builder);
             true
         } else {
             false
@@ -628,7 +680,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let residual = &self.residual[node];
         let slot = if reactive { residual.react } else { residual.resist };
         if let Some(slot) = slot.expand() {
-            self.store_eval_output(slot, ptr, builder);
+            self.store_eval_output_slot(slot, ptr, builder);
             true
         } else {
             false
@@ -668,7 +720,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let entry = &self.jacobian[entry];
         let dst = if reactive { entry.react } else { entry.resist };
         if let Some(EvalOutput::Calculated(slot)) = dst {
-            self.store_eval_output(slot, inst_ptr, builder)
+            self.store_eval_output_slot(slot, inst_ptr, builder)
         }
     }
 
@@ -811,7 +863,7 @@ impl<'ll> OsdiInstanceData<'ll> {
 }
 
 impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
-    unsafe fn load_eval_output(
+    pub unsafe fn load_eval_output(
         &self,
         output: EvalOutput,
         inst_ptr: &'ll llvm::Value,

@@ -21,7 +21,7 @@ use crate::util::strip_optbarrier_if_const;
 mod tests;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub struct CacheSlot(u32);
+pub struct CacheSlot(pub u32);
 impl_idx_from!(CacheSlot(u32));
 impl_debug_display! {match CacheSlot{CacheSlot(id) => "cslot{id}";}}
 

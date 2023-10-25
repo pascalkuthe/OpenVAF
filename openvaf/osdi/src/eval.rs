@@ -13,9 +13,9 @@ use typed_index_collections::TiVec;
 
 use crate::bitfield::{is_flag_set, is_flag_set_mem, is_flag_unset};
 use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
-use crate::inst_data::{EvalOutput, OsdiInstanceParam};
+use crate::inst_data::OsdiInstanceParam;
 use crate::metadata::osdi_0_3::{
-    ANALYSIS_IC, CALC_OP, CALC_REACT_JACOBIAN, CALC_REACT_LIM_RHS, CALC_REACT_RESIDUAL,
+    ANALYSIS_IC, CALC_NOISE, CALC_OP, CALC_REACT_JACOBIAN, CALC_REACT_LIM_RHS, CALC_REACT_RESIDUAL,
     CALC_RESIST_JACOBIAN, CALC_RESIST_LIM_RHS, CALC_RESIST_RESIDUAL, ENABLE_LIM, EVAL_RET_FLAG_LIM,
     INIT_LIM,
 };
@@ -320,12 +320,18 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             let store_opvars = |builder: &Builder<'_, '_, 'll>| {
                 for (_, &eval_output) in &inst_data.opvars {
-                    if let EvalOutput::Calculated(slot) = eval_output {
-                        inst_data.store_eval_output(slot, instance, builder)
-                    }
+                    inst_data.store_eval_output(eval_output, instance, builder)
                 }
             };
             Self::build_store_results(&builder, llfunc, &flags, CALC_OP, &store_opvars);
+            let store_noise = |builder: &Builder<'_, '_, 'll>| {
+                for source in &inst_data.noise {
+                    for eval_output in source.eval_outputs() {
+                        inst_data.store_eval_output(eval_output, instance, builder)
+                    }
+                }
+            };
+            Self::build_store_results(&builder, llfunc, &flags, CALC_NOISE, &store_noise);
 
             inst_data.store_bound_step(instance, &builder);
 

@@ -26,6 +26,7 @@ mod model_data;
 
 mod eval;
 mod load;
+mod noise;
 mod setup;
 
 const OSDI_VERSION: (u32, u32) = (0, 3);

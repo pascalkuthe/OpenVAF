@@ -1,8 +1,11 @@
 use llvm::{
-    LLVMAppendBasicBlockInContext, LLVMBuildFAdd, LLVMBuildFMul, LLVMBuildFSub, LLVMBuildRetVoid,
-    LLVMCreateBuilderInContext, LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd,
-    LLVMSetFastMath, UNNAMED,
+    LLVMAppendBasicBlockInContext, LLVMBuildCall2, LLVMBuildFAdd, LLVMBuildFDiv, LLVMBuildFMul,
+    LLVMBuildFSub, LLVMBuildGEP2, LLVMBuildRetVoid, LLVMBuildStore, LLVMCreateBuilderInContext,
+    LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd, LLVMSetFastMath,
+    LLVMSetPartialFastMath, UNNAMED,
 };
+use sim_back::dae::{NoiseSource, NoiseSourceKind};
+use stdx::iter::zip;
 use typed_index_collections::TiVec;
 
 use crate::compilation_unit::OsdiCompilationUnit;
@@ -50,6 +53,68 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let entry = LLVMAppendBasicBlockInContext(cx.llcx, llfunc, UNNAMED);
             let llbuilder = LLVMCreateBuilderInContext(cx.llcx);
             LLVMPositionBuilderAtEnd(llbuilder, entry);
+            let inst = LLVMGetParam(llfunc, 0);
+            let model = LLVMGetParam(llfunc, 1);
+            let freq = LLVMGetParam(llfunc, 2);
+            let dst = LLVMGetParam(llfunc, 3);
+            let dst_ln = LLVMGetParam(llfunc, 4);
+
+            for (i, (src, eval_outputs)) in
+                zip(&module.dae_system.noise_sources, &self.inst_data.noise).enumerate()
+            {
+                let fac = self.load_eval_output(eval_outputs.factor, inst, model, llbuilder);
+                let pwr = match src.kind {
+                    NoiseSourceKind::WhiteNoise { .. } => {
+                        let pwr =
+                            self.load_eval_output(eval_outputs.args[0], inst, model, llbuilder);
+                        let pwr = LLVMBuildFMul(llbuilder, pwr, fac, UNNAMED);
+                        LLVMSetFastMath(pwr);
+                        pwr
+                    }
+                    NoiseSourceKind::FlickerNoise { .. } => {
+                        let mut pwr =
+                            self.load_eval_output(eval_outputs.args[0], inst, model, llbuilder);
+                        let exp =
+                            self.load_eval_output(eval_outputs.args[1], inst, model, llbuilder);
+                        let (ty, fun) = self
+                            .cx
+                            .intrinsic("llvm.pow.f64")
+                            .unwrap_or_else(|| unreachable!("intrinsic {} not found", name));
+                        let freq_exp =
+                            LLVMBuildCall2(llbuilder, ty, fun, [freq, exp].as_ptr(), 2, UNNAMED);
+                        LLVMSetPartialFastMath(freq_exp);
+                        pwr = LLVMBuildFDiv(llbuilder, pwr, freq_exp, UNNAMED);
+                        LLVMSetFastMath(pwr);
+                        pwr = LLVMBuildFMul(llbuilder, pwr, fac, UNNAMED);
+                        LLVMSetFastMath(pwr);
+                        pwr
+                    }
+                    NoiseSourceKind::NoiseTable { .. } => unimplemented!("noise tabels"),
+                };
+                let (ty, fun) = self
+                    .cx
+                    .intrinsic("llvm.log.f64")
+                    .unwrap_or_else(|| unreachable!("intrinsic {} not found", name));
+                let ln_pwr = LLVMBuildCall2(llbuilder, ty, fun, [pwr].as_ptr(), 1, UNNAMED);
+                let dst = LLVMBuildGEP2(
+                    llbuilder,
+                    cx.ty_double(),
+                    dst,
+                    [cx.const_unsigned_int(i as u32)].as_ptr(),
+                    1,
+                    UNNAMED,
+                );
+                LLVMBuildStore(llbuilder, pwr, dst);
+                let dst_ln = LLVMBuildGEP2(
+                    llbuilder,
+                    cx.ty_double(),
+                    dst_ln,
+                    [cx.const_unsigned_int(i as u32)].as_ptr(),
+                    1,
+                    UNNAMED,
+                );
+                LLVMBuildStore(llbuilder, ln_pwr, dst_ln);
+            }
 
             // TODO noise
             LLVMBuildRetVoid(llbuilder);

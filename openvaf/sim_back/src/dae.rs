@@ -6,7 +6,7 @@ use typed_indexmap::TiSet;
 
 use crate::context::Context;
 use crate::dae::builder::Builder;
-use crate::noise::{NoiseSource, NoiseSourceKind};
+pub use crate::noise::{NoiseSource, NoiseSourceKind};
 use crate::{topology, SimUnknownKind};
 
 mod builder;

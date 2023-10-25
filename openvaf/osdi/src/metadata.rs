@@ -16,8 +16,8 @@ use crate::inst_data::{
 };
 use crate::load::JacobianLoadType;
 use crate::metadata::osdi_0_3::{
-    OsdiDescriptor, OsdiJacobianEntry, OsdiNode, OsdiNodePair, OsdiParamOpvar, OsdiTys,
-    JACOBIAN_ENTRY_REACT, JACOBIAN_ENTRY_REACT_CONST, JACOBIAN_ENTRY_RESIST,
+    OsdiDescriptor, OsdiJacobianEntry, OsdiNode, OsdiNodePair, OsdiNoiseSource, OsdiParamOpvar,
+    OsdiTys, JACOBIAN_ENTRY_REACT, JACOBIAN_ENTRY_REACT_CONST, JACOBIAN_ENTRY_RESIST,
     JACOBIAN_ENTRY_RESIST_CONST, PARA_KIND_INST, PARA_KIND_MODEL, PARA_KIND_OPVAR, PARA_TY_INT,
     PARA_TY_REAL, PARA_TY_STR,
 };
@@ -255,6 +255,20 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let instance_size = LLVMABISizeOfType(target_data, inst_data.ty) as u32;
             let model_size = LLVMABISizeOfType(target_data, model_data.ty) as u32;
 
+            let noise_sources: Vec<_> = module
+                .dae_system
+                .noise_sources
+                .iter()
+                .map(|source| {
+                    let hi: u32 = source.hi.into();
+                    let lo: u32 = source.lo.map_or(u32::MAX, u32::from);
+                    OsdiNoiseSource {
+                        name: String::new(),
+                        nodes: OsdiNodePair { node_1: hi, node_2: lo },
+                    }
+                })
+                .collect();
+
             OsdiDescriptor {
                 name: module.info.module.name(db),
                 num_nodes: module.dae_system.unknowns.len() as u32,
@@ -268,8 +282,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 bound_step_offset,
 
                 // TODO noise
-                noise_sources: Vec::new(),
-                num_noise_src: 0,
+                num_noise_src: noise_sources.len() as u32,
+                noise_sources,
 
                 num_params: model_data.params.len() as u32 + inst_data.params.len() as u32,
                 num_instance_params: inst_data.params.len() as u32,
