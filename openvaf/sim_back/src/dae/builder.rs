@@ -74,7 +74,11 @@ impl<'a> Builder<'a> {
 
         // ensure ports are the first unknowns and always have an unknown
         for port in ctx.module.module.ports(builder.db) {
-            builder.build_port(port)
+            builder.build_node(port)
+        }
+
+        for node in ctx.module.module.internal_nodes(builder.db) {
+            builder.build_node(node)
         }
 
         builder
@@ -99,7 +103,7 @@ impl<'a> Builder<'a> {
         self.system
     }
 
-    pub(super) fn build_port(&mut self, node: Node) {
+    pub(super) fn build_node(&mut self, node: Node) {
         self.ensure_unknown(SimUnknownKind::KirchoffLaw(node));
     }
 

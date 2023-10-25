@@ -17,8 +17,8 @@ function %(v16, v19, v26, v27, v40, v43, v56) {
                                     v46 = optbarrier v47
                                     v49 = fmul v43, v42
                                     v48 = optbarrier v49
-                                    v50 = optbarrier v41
-                                    v52 = fmul v43, v40
-                                    v51 = optbarrier v52
+                                    v51 = fmul v43, v40
+                                    v50 = optbarrier v51
+                                    v52 = optbarrier v41
                                     v55 = optbarrier v56
 }
