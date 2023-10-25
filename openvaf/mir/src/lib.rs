@@ -42,7 +42,10 @@ use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
 pub use crate::dfg::consts::*;
-pub use crate::dfg::{Const, DataFlowGraph, DfgValues, InstUseIter, UseCursor, UseIter, ValueDef};
+pub use crate::dfg::{
+    Const, DataFlowGraph, DfgValues, InstUseIter, Postorder, PostorderParts, UseCursor, UseIter,
+    ValueDef,
+};
 pub use crate::dominators::DominatorTree;
 pub use crate::entities::{AnyEntity, Block, FuncRef, Inst, Param, Use, Value};
 pub use crate::flowgraph::ControlFlowGraph;
