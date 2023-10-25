@@ -258,7 +258,8 @@ impl HirInterner {
         }
     }
 
-    pub fn unknowns<'a>(&'a self, func: &'a Function, sim_derivatives: bool) -> KnownDerivatives {
+    pub fn unknowns(&self, func: impl AsRef<Function>, sim_derivatives: bool) -> KnownDerivatives {
+        let func = func.as_ref();
         let mut unknowns = TiSet::default();
         let mut ddx_calls = AHashMap::new();
         // let mut nodes: AHashMap<NodeId, HybridBitSet<Value>> = AHashMap::new();
@@ -343,7 +344,8 @@ impl HirInterner {
         KnownDerivatives { unknowns, ddx_calls }
     }
 
-    pub fn is_param_live(&self, func: &Function, kind: &ParamKind) -> bool {
+    pub fn is_param_live(&self, func: impl AsRef<Function>, kind: &ParamKind) -> bool {
+        let func = func.as_ref();
         if let Some(val) = self.params.raw.get(kind) {
             !func.dfg.value_dead(*val)
         } else {
@@ -363,18 +365,18 @@ impl HirInterner {
         }
     }
 
-    pub fn ensure_param(&mut self, func: &mut Function, kind: ParamKind) -> Value {
+    pub fn ensure_param(&mut self, func: impl AsMut<Function>, kind: ParamKind) -> Value {
         Self::ensure_param_(&mut self.params, func, kind)
     }
 
     pub fn ensure_param_(
         params: &mut TiMap<Param, ParamKind, Value>,
-        func: &mut Function,
+        mut func: impl AsMut<Function>,
         kind: ParamKind,
     ) -> Value {
         let len = params.len();
         let entry = params.raw.entry(kind);
-        *entry.or_insert_with(|| func.dfg.make_param(len.into()))
+        *entry.or_insert_with(|| func.as_mut().dfg.make_param(len.into()))
     }
 
     pub fn live_params<'a>(

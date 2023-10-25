@@ -627,3 +627,15 @@ impl<'c, 'f> InstInserterBase<'c> for &'c mut FuncCursor<'f> {
         &mut self.func.dfg
     }
 }
+
+impl AsRef<Function> for FuncCursor<'_> {
+    fn as_ref(&self) -> &Function {
+        self.func
+    }
+}
+
+impl AsMut<Function> for FuncCursor<'_> {
+    fn as_mut(&mut self) -> &mut Function {
+        self.func
+    }
+}

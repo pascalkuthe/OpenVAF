@@ -90,6 +90,18 @@ pub struct Function {
     pub srclocs: SourceLocs,
 }
 
+impl AsRef<Function> for Function {
+    fn as_ref(&self) -> &Function {
+        self
+    }
+}
+
+impl AsMut<Function> for Function {
+    fn as_mut(&mut self) -> &mut Function {
+        self
+    }
+}
+
 impl Function {
     /// Clear all data structures in this function.
     pub fn clear(&mut self) {
