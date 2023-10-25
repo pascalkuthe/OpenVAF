@@ -1,0 +1,58 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "is"
+units = "A", desc = "Saturation current", flags = ParameterFlags(0x0)
+param "rs"
+units = "Ohm", desc = "Ohmic res", flags = ParameterFlags(0x0)
+param "zetars"
+units = "", desc = "Temperature coefficient of ohmic res", flags = ParameterFlags(0x0)
+param "n"
+units = "", desc = "Emission coefficient", flags = ParameterFlags(0x0)
+param "cj0"
+units = "F", desc = "Junction capacitance", flags = ParameterFlags(0x0)
+param "vj"
+units = "V", desc = "Junction potential", flags = ParameterFlags(0x0)
+param "m"
+units = "", desc = "Grading coefficient", flags = ParameterFlags(0x0)
+param "rth"
+units = "K/W", desc = "Thermal resistance", flags = ParameterFlags(0x0)
+param "zetarth"
+units = "", desc = "Temperature coefficient of thermal res", flags = ParameterFlags(0x0)
+param "zetais"
+units = "", desc = "Temperature coefficient of Is", flags = ParameterFlags(0x0)
+param "ea"
+units = "eV", desc = "Acitvation Energy", flags = ParameterFlags(0x0)
+param "tnom"
+units = "Kelvin", desc = "Reference temperature", flags = ParameterFlags(0x0)
+param "minr"
+units = "Ohm", desc = "minr is the value below which the simulator expects elimination of resitance and it will improve simulation efficiency without significantly altering the results.", flags = ParameterFlags(0x0)
+
+3 terminals
+node "A" units = "V", runits = ""
+residual 216 224 232 240
+node "C" units = "V", runits = ""
+residual 248 4294967295 4294967295 4294967295
+node "dT" units = "K", runits = ""
+residual 256 4294967295 264 4294967295
+node "CI" units = "V", runits = ""
+residual 272 280 288 296
+jacobian (A, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 120
+jacobian (A, dT) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (A, CI) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 128
+jacobian (C, C) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (C, dT) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (C, CI) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dT, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dT, C) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dT, dT) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dT, CI) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (CI, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 136
+jacobian (CI, C) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (CI, dT) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (CI, CI) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 144
+collapsible (CI, C)
+collapsible (dT, gnd)
+1 states
+has bound_step false
+instance size 448
+model size 120

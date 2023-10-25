@@ -1,0 +1,41 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "Rin"
+units = "Ohm", desc = "Ohmic input resistance", flags = ParameterFlags(0x0)
+param "Rout"
+units = "Ohm", desc = "Ohmic output resistance", flags = ParameterFlags(0x0)
+param "G"
+units = "", desc = "Voltage amplification factor", flags = ParameterFlags(0x0)
+
+4 terminals
+node "Inp" units = "V", runits = ""
+residual 224 4294967295 4294967295 4294967295
+node "Inm" units = "V", runits = ""
+residual 232 4294967295 4294967295 4294967295
+node "Outp" units = "V", runits = ""
+residual 240 4294967295 4294967295 4294967295
+node "Outm" units = "V", runits = ""
+residual 248 4294967295 4294967295 4294967295
+node(flow) "flow(Outp)" units = "A", runits = ""
+residual 256 4294967295 4294967295 4294967295
+node(flow) "flow(Outm)" units = "A", runits = ""
+residual 264 4294967295 4294967295 4294967295
+jacobian (Inp, Inp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Inp, Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Inm, Inp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Inm, Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outp, Inp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outp, Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outp, flow(Outp)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outm, Inp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outm, Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outm, flow(Outm)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(Outp), Inp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(Outp), Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(Outp), Outp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(Outm), Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(Outm), Outm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+0 states
+has bound_step false
+instance size 344
+model size 40

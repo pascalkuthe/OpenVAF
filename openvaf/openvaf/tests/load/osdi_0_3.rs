@@ -124,7 +124,6 @@ pub struct OsdiNoiseSource {
     pub nodes: OsdiNodePair,
 }
 #[repr(C)]
-#[non_exhaustive]
 pub struct OsdiDescriptor {
     pub name: *mut c_char,
     pub num_nodes: u32,
@@ -163,9 +162,10 @@ pub struct OsdiDescriptor {
     pub load_jacobian_resist: fn(*mut c_void, *mut c_void),
     pub load_jacobian_react: fn(*mut c_void, *mut c_void, f64),
     pub load_jacobian_tran: fn(*mut c_void, *mut c_void, f64),
+    __private: (),
 }
 impl OsdiDescriptor {
-    pub fn access(
+    pub unsafe fn access(
         &self,
         inst: *mut c_void,
         model: *mut c_void,
@@ -174,7 +174,7 @@ impl OsdiDescriptor {
     ) -> *mut c_void {
         (self.access)(inst, model, id, flags)
     }
-    pub fn setup_model(
+    pub unsafe fn setup_model(
         &self,
         handle: *mut c_void,
         model: *mut c_void,
@@ -183,7 +183,7 @@ impl OsdiDescriptor {
     ) {
         (self.setup_model)(handle, model, sim_params, res)
     }
-    pub fn setup_instance(
+    pub unsafe fn setup_instance(
         &self,
         handle: *mut c_void,
         inst: *mut c_void,
@@ -195,7 +195,7 @@ impl OsdiDescriptor {
     ) {
         (self.setup_instance)(handle, inst, model, temperature, num_terminals, sim_params, res)
     }
-    pub fn eval(
+    pub unsafe fn eval(
         &self,
         handle: *mut c_void,
         inst: *mut c_void,
@@ -204,7 +204,7 @@ impl OsdiDescriptor {
     ) -> u32 {
         (self.eval)(handle, inst, model, info)
     }
-    pub fn load_noise(
+    pub unsafe fn load_noise(
         &self,
         inst: *mut c_void,
         model: *mut c_void,
@@ -214,19 +214,34 @@ impl OsdiDescriptor {
     ) {
         (self.load_noise)(inst, model, freq, noise_dens, ln_noise_dens)
     }
-    pub fn load_residual_resist(&self, inst: *mut c_void, model: *mut c_void, dst: *mut f64) {
+    pub unsafe fn load_residual_resist(
+        &self,
+        inst: *mut c_void,
+        model: *mut c_void,
+        dst: *mut f64,
+    ) {
         (self.load_residual_resist)(inst, model, dst)
     }
-    pub fn load_residual_react(&self, inst: *mut c_void, model: *mut c_void, dst: *mut f64) {
+    pub unsafe fn load_residual_react(&self, inst: *mut c_void, model: *mut c_void, dst: *mut f64) {
         (self.load_residual_react)(inst, model, dst)
     }
-    pub fn load_limit_rhs_resist(&self, inst: *mut c_void, model: *mut c_void, dst: *mut f64) {
+    pub unsafe fn load_limit_rhs_resist(
+        &self,
+        inst: *mut c_void,
+        model: *mut c_void,
+        dst: *mut f64,
+    ) {
         (self.load_limit_rhs_resist)(inst, model, dst)
     }
-    pub fn load_limit_rhs_react(&self, inst: *mut c_void, model: *mut c_void, dst: *mut f64) {
+    pub unsafe fn load_limit_rhs_react(
+        &self,
+        inst: *mut c_void,
+        model: *mut c_void,
+        dst: *mut f64,
+    ) {
         (self.load_limit_rhs_react)(inst, model, dst)
     }
-    pub fn load_spice_rhs_dc(
+    pub unsafe fn load_spice_rhs_dc(
         &self,
         inst: *mut c_void,
         model: *mut c_void,
@@ -235,7 +250,7 @@ impl OsdiDescriptor {
     ) {
         (self.load_spice_rhs_dc)(inst, model, dst, prev_solve)
     }
-    pub fn load_spice_rhs_tran(
+    pub unsafe fn load_spice_rhs_tran(
         &self,
         inst: *mut c_void,
         model: *mut c_void,
@@ -245,13 +260,13 @@ impl OsdiDescriptor {
     ) {
         (self.load_spice_rhs_tran)(inst, model, dst, prev_solve, alpha)
     }
-    pub fn load_jacobian_resist(&self, inst: *mut c_void, model: *mut c_void) {
+    pub unsafe fn load_jacobian_resist(&self, inst: *mut c_void, model: *mut c_void) {
         (self.load_jacobian_resist)(inst, model)
     }
-    pub fn load_jacobian_react(&self, inst: *mut c_void, model: *mut c_void, alpha: f64) {
+    pub unsafe fn load_jacobian_react(&self, inst: *mut c_void, model: *mut c_void, alpha: f64) {
         (self.load_jacobian_react)(inst, model, alpha)
     }
-    pub fn load_jacobian_tran(&self, inst: *mut c_void, model: *mut c_void, alpha: f64) {
+    pub unsafe fn load_jacobian_tran(&self, inst: *mut c_void, model: *mut c_void, alpha: f64) {
         (self.load_jacobian_tran)(inst, model, alpha)
     }
 }

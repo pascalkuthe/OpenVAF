@@ -1,0 +1,38 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "L"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "W"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VTO"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "GAMMA"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PHI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "KP"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "THETA"
+units = "", desc = "", flags = ParameterFlags(0x0)
+
+4 terminals
+node "d" units = "V", runits = ""
+residual 112 4294967295 4294967295 4294967295
+node "g" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 120 4294967295 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+0 states
+has bound_step false
+instance size 192
+model size 72

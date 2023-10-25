@@ -1,0 +1,1492 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "verbose"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "l"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "as"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ad"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ps"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nrd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nrs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "version"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "level"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "paramchk"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "_ckt_gmin"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "type"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "vth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vfb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "k1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "k2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "k3"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "k3b"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "w0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nlx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "gamma1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "gamma2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vbx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vbm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dvt0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dvt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dvt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dvt0w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dvt1w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dvt2w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "a0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "b0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "b1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "a1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "a2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ags"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "keta"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nch"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ngate"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lint"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wint"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ll"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lln"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lwn"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lwl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wln"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ww"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wwn"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wwl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tox"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "toxm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rdsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wr"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "binunit"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "mobmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "u0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vsat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ua"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "uc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "drout"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pclm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdiblc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdiblc2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdiblcb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pscbe1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pscbe2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvag"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "delta"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cdsc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cdscb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cdscd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nfactor"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cit"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "voff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "eta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "etab"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alpha0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alpha1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "beta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ijth"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rsh"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wrs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lrs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wrd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lrd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lgcs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lgcd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rsc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rdc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldif"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "hdif"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "minr"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "js"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "jsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "jssw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "is"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "imelt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "jmelt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cgso"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cgdo"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cgbo"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xpart"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "meto"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cgsl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cgdl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ckappa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cbs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cbd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mjsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "php"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjswg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjgate"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mjswg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbswg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fcsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "capmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "nqsmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "dwc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dlc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "clc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cle"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "elm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vfbcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "acde"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "moin"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "noff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "voffcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "llc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lwc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lwlc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wlc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wwc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wwlc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tnom"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "trise"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tlev"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tlevc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "eg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "gap1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "gap2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kt1l"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "at"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ua1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ub1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "uc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "trs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "trd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ute"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xti"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pta"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tpb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ptp"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tpbsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tpbswg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cta"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tcj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ctp"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tcjsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tcjswg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "noimod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "kf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "af"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ef"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "em"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "noia"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "noib"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "noic"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnoi"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "flkmod"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wmax"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wmin"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lmax"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lmin"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "imax"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "jmax"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bvj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vbox"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcdsc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcdscb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcdscd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcit"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnfactor"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lxj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvsat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "la0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lags"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "la1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "la2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lketa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnch"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lngate"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lgamma1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lgamma2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvbx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvbm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lxt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lk1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lkt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lkt1l"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lkt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lk2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lk3"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lk3b"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lw0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnlx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldvt0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldvt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldvt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldvt0w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldvt1w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldvt2w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldrout"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lua"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lua1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lub1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "luc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "luc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lu0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lute"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lelm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldelta"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lrdsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lprwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lprwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lprt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "leta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "letab"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpclm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpdiblc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpdiblc2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpdiblcb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpscbe1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpscbe2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpvag"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lwr"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ldwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lb0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lb1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcgsl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcgdl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lckappa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lclc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcle"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lalpha0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lalpha1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbeta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvfbcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvfb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lacde"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lmoin"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvoffcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcdsc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcdscb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcdscd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcit"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnfactor"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wxj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvsat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wa0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wags"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wa1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wa2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wketa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnch"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wngate"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wgamma1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wgamma2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvbx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvbm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wxt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wk1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wkt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wkt1l"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wkt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wk2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wk3"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wk3b"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ww0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnlx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdvt0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdvt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdvt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdvt0w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdvt1w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdvt2w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdrout"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wua"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wua1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wub1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wuc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wuc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wu0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wute"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "welm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdelta"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wrdsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wprwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wprwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wprt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "weta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wetab"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpclm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpdiblc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpdiblc2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpdiblcb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpscbe1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpscbe2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpvag"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wwr"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wdwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wb0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wb1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcgsl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcgdl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wckappa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wclc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcle"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "walpha0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "walpha1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbeta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvfbcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvfb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wacde"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wmoin"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvoffcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcdsc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcdscb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcdscd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcit"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnfactor"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pxj"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvsat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pa0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pags"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pa1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pa2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pketa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnch"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pngate"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pgamma1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pgamma2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvbx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvbm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pxt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pk1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pkt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pkt1l"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pkt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pk2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pk3"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pk3b"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pw0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnlx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdvt0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdvt1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdvt2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdvt0w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdvt1w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdvt2w"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdrout"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdsub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pua"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pua1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pub1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "puc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "puc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pu0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pute"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pelm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdelta"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prdsw"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pprwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pprwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pprt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "peta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "petab"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppclm"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppdiblc1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppdiblc2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppdiblcb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppscbe1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppscbe2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppvag"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pwr"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdwg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pdwb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pb0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pb1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcgsl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcgdl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pckappa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pclc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcle"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "palpha0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "palpha1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbeta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvfbcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvfb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pacde"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pmoin"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvoffcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnpeak"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnpeak"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnpeak"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "igcmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "gidlmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "igbmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "tempmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "agidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lagidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wagidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pagidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "egidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "legidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wegidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pegidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "aigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "laigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "waigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "paigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcigc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "aigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "laigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "waigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "paigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "aigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "laigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "waigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "paigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "eigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "leigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "weigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "peigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnigbinv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "toxe"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vtm0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "toxref"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ntox"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lntox"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wntox"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pntox"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pigcd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpigcd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpigcd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppigcd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lvfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wvfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pvfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tvfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ltvfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wtvfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ptvfbsdoff"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "poxedge"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lpoxedge"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wpoxedge"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ppoxedge"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dlcig"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "aigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "laigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "waigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "paigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcigsd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lnigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wnigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pnigbacc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "agisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wagisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lagisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pagisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "egisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wegisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "legisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pegisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wrgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lrgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wkgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lkgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pkgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wfgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lfgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pfgisl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wrgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lrgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "prgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wkgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lkgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pkgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wfgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lfgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pfgidl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "aigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "waigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "laigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "paigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcigs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "aigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "waigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "laigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "paigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wbigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lbigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pbigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wcigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lcigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pcigd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "acm"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "calcacm"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "vfbflag"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "breakmod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "bvs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "bvd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ijthsrev"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ijthdrev"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xjbvs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xjbvd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "stimod"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "sa"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "saref"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sbref"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "nf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa3"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa4"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa5"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa6"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa7"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa8"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa9"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sa10"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb3"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb4"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb5"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb6"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb7"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb8"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb9"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sb10"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw3"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw4"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw5"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw6"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw7"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw8"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw9"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "sw10"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wlod"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ku0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kvsat"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kvth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tku0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "llodku0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wlodku0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "llodvth"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wlodvth"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lku0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wku0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pku0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lkvth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wkvth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "pkvth0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "stk2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lodk2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "steta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lodeta0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vgslim"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dtoxcv"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "binflag"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "geo"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "lref"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wref"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xlref"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "xwref"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wmlt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "lmlt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "wd"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ld"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "del"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mulu0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mulua"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mulub"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "deltox"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "delk1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "delnfct"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "delvto"
+units = "", desc = "", flags = ParameterFlags(0x0)
+
+4 terminals
+node "d" units = "V", runits = ""
+residual 1896 4294967295 4294967295 4294967295
+node "g" units = "V", runits = ""
+residual 1904 1912 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 1920 4294967295 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 1928 1936 4294967295 4294967295
+node "si" units = "V", runits = ""
+residual 1944 1952 4294967295 4294967295
+node "di" units = "V", runits = ""
+residual 1960 1968 4294967295 4294967295
+jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (g, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 184
+jacobian (g, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 192
+jacobian (g, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 200
+jacobian (g, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 208
+jacobian (s, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 216
+jacobian (b, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 224
+jacobian (b, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 232
+jacobian (b, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 240
+jacobian (si, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 248
+jacobian (si, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (si, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 256
+jacobian (si, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 264
+jacobian (si, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 272
+jacobian (di, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (di, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 280
+jacobian (di, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 288
+jacobian (di, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 296
+jacobian (di, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 304
+collapsible (s, si)
+collapsible (d, di)
+0 states
+has bound_step false
+instance size 2280
+model size 5824

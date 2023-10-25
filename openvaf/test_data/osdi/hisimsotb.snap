@@ -1,0 +1,735 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "L"
+units = "m", desc = "Gate length (Lgate)", flags = ParameterFlags(PARA_KIND_INST)
+param "W"
+units = "m", desc = "Gate width (Wgate)", flags = ParameterFlags(PARA_KIND_INST)
+param "NGCON"
+units = "", desc = "Number of gate contacts", flags = ParameterFlags(PARA_KIND_INST)
+param "XGW"
+units = "m", desc = "Distance from gate contact to channel edge", flags = ParameterFlags(PARA_KIND_INST)
+param "XGL"
+units = "m", desc = "Offset of gate length", flags = ParameterFlags(PARA_KIND_INST)
+param "NF"
+units = "", desc = "Number of gate fingers", flags = ParameterFlags(PARA_KIND_INST)
+param "SA"
+units = "m", desc = "Length of diffusion between gate and STI", flags = ParameterFlags(PARA_KIND_INST)
+param "SB"
+units = "m", desc = "Length of diffusion between gate and STI", flags = ParameterFlags(PARA_KIND_INST)
+param "SD"
+units = "m", desc = "Length of diffusion between gate and gate", flags = ParameterFlags(PARA_KIND_INST)
+param "TEMP"
+units = "degC", desc = "Device temperature", flags = ParameterFlags(PARA_KIND_INST)
+param "DTEMP"
+units = "degC", desc = "Device temperature change", flags = ParameterFlags(PARA_KIND_INST)
+param "SCA"
+units = "-", desc = "Layout characterization factor", flags = ParameterFlags(PARA_KIND_INST)
+param "SCB"
+units = "-", desc = "Layout characterization factor", flags = ParameterFlags(PARA_KIND_INST)
+param "SCC"
+units = "-", desc = "Layout characterization factor", flags = ParameterFlags(PARA_KIND_INST)
+param "COPPRV"
+units = "", desc = "Previous phi_s flag", flags = ParameterFlags(PARA_TY_INT)
+param "COADOV"
+units = "", desc = "Lateral field induced and overlap capacitances are added to intrinsic", flags = ParameterFlags(PARA_TY_INT)
+param "COISUB"
+units = "", desc = "Substrate current flag", flags = ParameterFlags(PARA_TY_INT)
+param "COFBE"
+units = "", desc = "Floating-Body Effect flag", flags = ParameterFlags(PARA_TY_INT)
+param "COIIGS"
+units = "", desc = "Gate current flag", flags = ParameterFlags(PARA_TY_INT)
+param "COGIDL"
+units = "", desc = "GIDL current flag", flags = ParameterFlags(PARA_TY_INT)
+param "COOVLP"
+units = "", desc = "Overlap capacitance model selector", flags = ParameterFlags(PARA_TY_INT)
+param "COIGN"
+units = "", desc = "Induced gate and cross correlation noise flag", flags = ParameterFlags(PARA_TY_INT)
+param "COFLICK"
+units = "", desc = "1/f noise flag", flags = ParameterFlags(PARA_TY_INT)
+param "COISTI"
+units = "", desc = "Calculate STI ", flags = ParameterFlags(PARA_TY_INT)
+param "COTHRML"
+units = "", desc = "Thermal noise flag", flags = ParameterFlags(PARA_TY_INT)
+param "CONQS"
+units = "", desc = "Non-quasi-static model flag", flags = ParameterFlags(PARA_TY_INT)
+param "CORG"
+units = "", desc = "Gate-contact resistance flag", flags = ParameterFlags(PARA_TY_INT)
+param "COIEVB"
+units = "", desc = "Valence-band-electron-tunneling-current model flag", flags = ParameterFlags(PARA_TY_INT)
+param "COHIST"
+units = "", desc = "History Effect flag", flags = ParameterFlags(PARA_TY_INT)
+param "COSELFHEAT"
+units = "", desc = "Self-Heating flag", flags = ParameterFlags(PARA_TY_INT)
+param "COVBSBIZ"
+units = "", desc = "Symmetry treatment flag", flags = ParameterFlags(PARA_TY_INT)
+param "COQOVSM"
+units = "", desc = "Qover capacitance model selector", flags = ParameterFlags(PARA_TY_INT)
+param "INFO"
+units = "", desc = "print information selector", flags = ParameterFlags(PARA_TY_INT)
+param "COMUUNSZ"
+units = "", desc = "Mobility smoothing flag", flags = ParameterFlags(PARA_TY_INT)
+param "CONEWMUB"
+units = "", desc = "New mobility model flag", flags = ParameterFlags(PARA_TY_INT)
+param "TYPE"
+units = "", desc = "1 for nMOS and -1 for pMOS", flags = ParameterFlags(PARA_TY_INT)
+param "VERSION"
+units = "-", desc = "model version selector", flags = ParameterFlags(0x0)
+param "VMAX"
+units = "cm*s^-1", desc = "maximum saturation velocity", flags = ParameterFlags(0x0)
+param "BGTMP1"
+units = "eV*K^-1", desc = "temperature dependence of bandgap", flags = ParameterFlags(0x0)
+param "BGTMP2"
+units = "eV*K^-2", desc = "temperature dependence of bandgap", flags = ParameterFlags(0x0)
+param "EG0"
+units = "eV", desc = "bandgap", flags = ParameterFlags(0x0)
+param "XLD"
+units = "m", desc = "gate overlap length", flags = ParameterFlags(0x0)
+param "VFBOVER"
+units = "V", desc = "flat-band voltage in overlap region", flags = ParameterFlags(0x0)
+param "NOVER"
+units = "cm^-3", desc = "impurity concentration in overlap region", flags = ParameterFlags(0x0)
+param "XWD"
+units = "m", desc = "gate overlap width", flags = ParameterFlags(0x0)
+param "XWDC"
+units = "m", desc = "different width dependence of cap. from currents", flags = ParameterFlags(0x0)
+param "SAREF"
+units = "m", desc = "ref-dist between OD edge to poly of one side", flags = ParameterFlags(0x0)
+param "SBREF"
+units = "m", desc = "ref-dist between OD edge to poly of the other side", flags = ParameterFlags(0x0)
+param "XQY"
+units = "m", desc = "distance from junction to max field point", flags = ParameterFlags(0x0)
+param "XQY1"
+units = "F*um^XQY2-1", desc = "Ves-dependence of Qy", flags = ParameterFlags(0x0)
+param "XQY2"
+units = "", desc = "Lgate-dependence of Qy", flags = ParameterFlags(0x0)
+param "RSHG"
+units = "Ohm/square", desc = "gate sheet resistance", flags = ParameterFlags(0x0)
+param "VFBC"
+units = "V", desc = "flat-band voltage", flags = ParameterFlags(0x0)
+param "VFBCL1"
+units = "um^VFBCL1P", desc = "channel length dependence of flat-band voltage", flags = ParameterFlags(0x0)
+param "VFBCL1P"
+units = "", desc = "channel length dependence of flat-band voltage", flags = ParameterFlags(0x0)
+param "VFBCL2"
+units = "um^VFBCL2P", desc = "channel length dependence of flat-band voltage", flags = ParameterFlags(0x0)
+param "VFBCL2P"
+units = "", desc = "channel length dependence of flat-band voltage", flags = ParameterFlags(0x0)
+param "VFBHAMP"
+units = "V*cm^-1", desc = "channel length dependence of flat-band voltage", flags = ParameterFlags(0x0)
+param "VBI"
+units = "V", desc = "built-in potential", flags = ParameterFlags(0x0)
+param "PARL1"
+units = "m", desc = "SOI SCE parameter", flags = ParameterFlags(0x0)
+param "PARL2"
+units = "m", desc = "depletion width of channel/contact junction", flags = ParameterFlags(0x0)
+param "LP"
+units = "m", desc = "pocket penetration length", flags = ParameterFlags(0x0)
+param "NSUBP"
+units = "cm^-3", desc = "max pocket concentration", flags = ParameterFlags(0x0)
+param "NSUBP0"
+units = "um^NSUBWP", desc = "mod of pocket concentration for narrow W", flags = ParameterFlags(0x0)
+param "NSUBWP"
+units = "", desc = "mod of pocket concentration for narrow W", flags = ParameterFlags(0x0)
+param "WL1"
+units = "", desc = "Gate width parameter ", flags = ParameterFlags(0x0)
+param "WL1P"
+units = "", desc = "Gate width parameter ", flags = ParameterFlags(0x0)
+param "WL2"
+units = "Vum^WL2P", desc = "threshold voltage shift due to small-size effect", flags = ParameterFlags(0x0)
+param "WL2P"
+units = "", desc = "threshold voltage shift due to small-size effect", flags = ParameterFlags(0x0)
+param "SCP1"
+units = "", desc = "magnitude of short-channel effect due to pocket", flags = ParameterFlags(0x0)
+param "SCP2"
+units = "V^-1", desc = "Vds-dependence of SCE due to pocket", flags = ParameterFlags(0x0)
+param "SCP3"
+units = "m*V^-1", desc = "Vds-dependence of SCE due to pocket", flags = ParameterFlags(0x0)
+param "SC1"
+units = "", desc = "magnitude of short-channel effect", flags = ParameterFlags(0x0)
+param "SC2"
+units = "V^-1", desc = "Vds-dependence of short-channel effect", flags = ParameterFlags(0x0)
+param "SC3"
+units = "m*V^-1", desc = "Ves dependence of short-channel effect", flags = ParameterFlags(0x0)
+param "SCR1"
+units = "", desc = "parameter for SCE via BOX", flags = ParameterFlags(0x0)
+param "SCR2"
+units = "", desc = "parameter for SCE via BOX", flags = ParameterFlags(0x0)
+param "SCR3"
+units = "", desc = "parameter for SCE via BOX", flags = ParameterFlags(0x0)
+param "PGD1"
+units = "V", desc = "strength of poly-depletion effect", flags = ParameterFlags(0x0)
+param "PGD2"
+units = "V", desc = "threshold voltage of poly-depletion effect", flags = ParameterFlags(0x0)
+param "PGD4"
+units = "", desc = "Lgate-dependence of poly-depletion effect", flags = ParameterFlags(0x0)
+param "NDEP"
+units = "", desc = "depletion charge contribution on effective-electric field", flags = ParameterFlags(0x0)
+param "NDEPL"
+units = "", desc = "modify QB contribution for short channel", flags = ParameterFlags(0x0)
+param "NDEPLP"
+units = "", desc = "modify QB contribution for short channel", flags = ParameterFlags(0x0)
+param "NINV"
+units = "", desc = "inversion charge contribution on effective-electric field", flags = ParameterFlags(0x0)
+param "NINVL"
+units = "", desc = "length dependence of NINV", flags = ParameterFlags(0x0)
+param "NINVLP"
+units = "", desc = "length dependence of NINV", flags = ParameterFlags(0x0)
+param "NINVD"
+units = "V^-1", desc = "reduced resistance effect for small Vds", flags = ParameterFlags(0x0)
+param "NINVDP"
+units = "V^-1", desc = "reduced resistance effect for small Vds", flags = ParameterFlags(0x0)
+param "MUECB0"
+units = "cm^2V^-1s^-1", desc = "Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB1"
+units = "cm^2V^-1s^-1", desc = "Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB0LP"
+units = "", desc = "length dependence of Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB1LP"
+units = "", desc = "length dependence of Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB0L2"
+units = "", desc = "length dependence of Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB0L2P"
+units = "", desc = "length dependence of Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB1L2"
+units = "", desc = "length dependence of Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB1L2P"
+units = "", desc = "length dependence of Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUEPH0"
+units = "", desc = "phonon scattering for current", flags = ParameterFlags(0x0)
+param "MUEPHW"
+units = "um^MUEPHP", desc = "phonon-related mobility reduction", flags = ParameterFlags(0x0)
+param "MUEPWP"
+units = "", desc = "phonon-related mobility reduction", flags = ParameterFlags(0x0)
+param "MUEPHL"
+units = "", desc = "length dependence of phonon mobility reduction for current", flags = ParameterFlags(0x0)
+param "MUEPLP"
+units = "", desc = "length dependence of phonon mobility for current", flags = ParameterFlags(0x0)
+param "MUEPHS"
+units = "um^MUEPSP", desc = "mobility change due to small size", flags = ParameterFlags(0x0)
+param "MUEPSP"
+units = "", desc = "mobility change due to small size", flags = ParameterFlags(0x0)
+param "VTMP"
+units = "", desc = "temperature-dependence of saturation velocity", flags = ParameterFlags(0x0)
+param "VTMPL"
+units = "", desc = "temperature-dependence of saturation velocity", flags = ParameterFlags(0x0)
+param "VTMPLP"
+units = "", desc = "temperature-dependence of saturation velocity", flags = ParameterFlags(0x0)
+param "WVTH0"
+units = "Vum^WVTHP", desc = "threshold voltage shift", flags = ParameterFlags(0x0)
+param "WVTHP"
+units = "", desc = "threshold voltage shift", flags = ParameterFlags(0x0)
+param "MUESR1"
+units = "cm^2V^-1s^-1", desc = "surface-roughness scattering for current", flags = ParameterFlags(0x0)
+param "MUESR0"
+units = "", desc = "surface-roughness scattering for current", flags = ParameterFlags(0x0)
+param "MUESRL"
+units = "um^MUESLP", desc = "length dependence of surface roughness mobility reduction for current", flags = ParameterFlags(0x0)
+param "MUESRW"
+units = "um^MUESWP", desc = "surface roughness-related mobility change", flags = ParameterFlags(0x0)
+param "MUESWP"
+units = "", desc = "surface roughness-related mobility change", flags = ParameterFlags(0x0)
+param "MUESLP"
+units = "", desc = "length dependence of surface roughness mobility reduction for current", flags = ParameterFlags(0x0)
+param "MUETMP"
+units = "um^MUEPLP", desc = "temperature-dependence of phonon scattering", flags = ParameterFlags(0x0)
+param "MUETMPL"
+units = "", desc = "temperature-dependence of phonon scattering", flags = ParameterFlags(0x0)
+param "MUETMPLP"
+units = "", desc = "temperature-dependence of phonon scattering", flags = ParameterFlags(0x0)
+param "BB"
+units = "", desc = "high-field-mobility degradation", flags = ParameterFlags(0x0)
+param "DDLTMAX"
+units = "", desc = "smoothing coefficient for Vds", flags = ParameterFlags(0x0)
+param "DDLTSLP"
+units = "um^-1", desc = "Lgate-dependence of smoothing coefficient", flags = ParameterFlags(0x0)
+param "DDLTICT"
+units = "", desc = "Lgate-dependence of smoothing coefficient", flags = ParameterFlags(0x0)
+param "SUB1"
+units = "V^-1", desc = "substrate current coefficient of magnitude", flags = ParameterFlags(0x0)
+param "SUB2"
+units = "V", desc = "substrate current coefficient of exponential term", flags = ParameterFlags(0x0)
+param "SUB1L"
+units = "m", desc = "Lgate-dependence of SUB1", flags = ParameterFlags(0x0)
+param "SUB1LP"
+units = "", desc = "Lgate-dependence SUB1", flags = ParameterFlags(0x0)
+param "SUB2L"
+units = "m", desc = "Lgate-dependence of SUB2", flags = ParameterFlags(0x0)
+param "SVDS"
+units = "", desc = "substrate current dependence on Vds", flags = ParameterFlags(0x0)
+param "SLG"
+units = "m", desc = "substrate current dependence on Lgate", flags = ParameterFlags(0x0)
+param "SVBS"
+units = "", desc = "substrate current dependence on Ves", flags = ParameterFlags(0x0)
+param "SVBSL"
+units = "m^SVBSLP", desc = "Lgate-dependence of SVBS", flags = ParameterFlags(0x0)
+param "SVBSLP"
+units = "", desc = "Lgate-dependence of SVBS", flags = ParameterFlags(0x0)
+param "SVGS"
+units = "", desc = "substrate current dependence on Vgs", flags = ParameterFlags(0x0)
+param "SVGSL"
+units = "m^SVGSLP", desc = "Lgate-dependence of SVGS", flags = ParameterFlags(0x0)
+param "SVGSLP"
+units = "", desc = "Lgate-dependence of SVGS", flags = ParameterFlags(0x0)
+param "SVGSW"
+units = "m^SVGSWP", desc = "Wgate-dependence of SVGS", flags = ParameterFlags(0x0)
+param "SVGSWP"
+units = "", desc = "Wgate-dependence of SVGS", flags = ParameterFlags(0x0)
+param "VFBSUB"
+units = "V", desc = "flatband voltage for Isub calculation", flags = ParameterFlags(0x0)
+param "VFBSUBL"
+units = "um^VFBSUBLP", desc = "Lgate-dependence of VFBSUB", flags = ParameterFlags(0x0)
+param "VFBSUBLP"
+units = "", desc = "Lgate-dependence of VFBSUB", flags = ParameterFlags(0x0)
+param "SUBDLT"
+units = "", desc = "smoothing parameter (hisimsoi\\_fb only)", flags = ParameterFlags(0x0)
+param "HIST1"
+units = "V", desc = "history-effect parameter", flags = ParameterFlags(0x0)
+param "HIST2"
+units = "A", desc = "history-effect parameter", flags = ParameterFlags(0x0)
+param "QHE1"
+units = "", desc = "FBE parameter", flags = ParameterFlags(0x0)
+param "QHE2"
+units = "V", desc = "FBE parameter", flags = ParameterFlags(0x0)
+param "EVB1"
+units = "V^-2s^-1", desc = "electron tunneling from valence band", flags = ParameterFlags(0x0)
+param "EVB2"
+units = "V*m^-1", desc = "electron tunneling from valence band", flags = ParameterFlags(0x0)
+param "EVB3"
+units = "", desc = "electron tunneling from valence band", flags = ParameterFlags(0x0)
+param "FVBS"
+units = "", desc = "Ves dependence of Fowler-Nordheim current", flags = ParameterFlags(0x0)
+param "IBPC1"
+units = "Ohm", desc = "impact-ionization-induced bulk potential change", flags = ParameterFlags(0x0)
+param "IBPC2"
+units = "V^-1", desc = "impact-ionization-induced bulk potential change", flags = ParameterFlags(0x0)
+param "NSTI"
+units = "1/cm^3", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "NSTIL"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "NSTILP"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "NSTIW"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "NSTIWP"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "WSTI"
+units = "m", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "RATWSTI"
+units = "m", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "WSTIL"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "WSTILP"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "WSTIW"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "WSTIWP"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "SCSTI1"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "SCSTI2"
+units = "1/V", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "VTHSTI"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "VDSTI"
+units = "", desc = "Parameter for STI  ", flags = ParameterFlags(0x0)
+param "MUESTI1"
+units = "cm", desc = "mobility change due to diffusion length", flags = ParameterFlags(0x0)
+param "MUESTI2"
+units = "", desc = "mobility change due to diffusion length", flags = ParameterFlags(0x0)
+param "MUESTI3"
+units = "", desc = "mobility change due to diffusion length", flags = ParameterFlags(0x0)
+param "NSUBPSTI1"
+units = "cm", desc = "pocket concentration modifier", flags = ParameterFlags(0x0)
+param "NSUBPSTI2"
+units = "", desc = "pocket concentration modifier", flags = ParameterFlags(0x0)
+param "NSUBPSTI3"
+units = "", desc = "pocket concentration modifier", flags = ParameterFlags(0x0)
+param "NSUBSSTI1"
+units = "cm", desc = "Channel concentration change due to diffusion-region length between gate and STI", flags = ParameterFlags(0x0)
+param "NSUBSSTI2"
+units = "", desc = "Channel concentration change due to diffusion-region length between gate and STI", flags = ParameterFlags(0x0)
+param "NSUBSSTI3"
+units = "", desc = "Channel concentration change due to diffusion-region length between gate and STI", flags = ParameterFlags(0x0)
+param "TPOLY"
+units = "m", desc = "height of poly-Si gate for fringing cap", flags = ParameterFlags(0x0)
+param "CGBO"
+units = "F*m^-1", desc = "gate-to-bulk overlap cap", flags = ParameterFlags(0x0)
+param "CGDO"
+units = "F*m^-1", desc = "gate-to-drain overlap cap", flags = ParameterFlags(0x0)
+param "CGSO"
+units = "F*m^-1", desc = "gate-to-source overlap cap", flags = ParameterFlags(0x0)
+param "LOVER"
+units = "m", desc = "overlap length", flags = ParameterFlags(0x0)
+param "CLM1"
+units = "", desc = "hardness coefficient of channel/contact junction", flags = ParameterFlags(0x0)
+param "CLM2"
+units = "", desc = "coefficient for QB contribution", flags = ParameterFlags(0x0)
+param "CLM3"
+units = "", desc = "coefficient for QI contribution", flags = ParameterFlags(0x0)
+param "CLM5"
+units = "", desc = "CLM parameter", flags = ParameterFlags(0x0)
+param "CLM6"
+units = "um^-CLM5", desc = "CLM parameter", flags = ParameterFlags(0x0)
+param "VOVER"
+units = "um^VOVERP", desc = "velocity overshoot effect", flags = ParameterFlags(0x0)
+param "VOVERP"
+units = "", desc = "Leff dependence of velocity overshoot", flags = ParameterFlags(0x0)
+param "VOVERS"
+units = "", desc = "modification of max velocity due to small size", flags = ParameterFlags(0x0)
+param "VOVERSP"
+units = "", desc = "modification of max velocity due to small size", flags = ParameterFlags(0x0)
+param "VOVERL"
+units = "", desc = "velocity overshoot effect parameter", flags = ParameterFlags(0x0)
+param "VOVERLP"
+units = "", desc = "velocity overshoot effect parameter", flags = ParameterFlags(0x0)
+param "VOVERW"
+units = "", desc = "velocity overshoot effect parameter", flags = ParameterFlags(0x0)
+param "VOVERWP"
+units = "", desc = "velocity overshoot effect parameter", flags = ParameterFlags(0x0)
+param "WFC"
+units = "F*m", desc = "Threshold voltage change due to cap change", flags = ParameterFlags(0x0)
+param "NSUBSW", "NSUBCW"
+units = "um^NSUBSWP", desc = "substrate concentration modifier", flags = ParameterFlags(0x0)
+param "NSUBSWP", "NSUBCWP"
+units = "", desc = "substrate concentration modifier", flags = ParameterFlags(0x0)
+param "NSUBSMAX", "NSUBCMAX"
+units = "cm^-3", desc = "upper limit of substrate concentration", flags = ParameterFlags(0x0)
+param "QME1"
+units = "mV", desc = "Vgs-dependence of quantum mechanical effect", flags = ParameterFlags(0x0)
+param "QME2"
+units = "V", desc = "Vgs-dependence of quantum mechanical effect", flags = ParameterFlags(0x0)
+param "QME3"
+units = "m", desc = "minimum Tfox modification", flags = ParameterFlags(0x0)
+param "GIDL1"
+units = "A*V^-3/2C^-1m^1/2", desc = "magnitude of GIDL", flags = ParameterFlags(0x0)
+param "GIDL2"
+units = "V^-2m^-1F^-3/2", desc = "field-dependence of GIDL", flags = ParameterFlags(0x0)
+param "GIDL3"
+units = "", desc = "Vds-dependence of GIDL", flags = ParameterFlags(0x0)
+param "GIDL4"
+units = "V", desc = "threshold for Vds dependence", flags = ParameterFlags(0x0)
+param "GIDL5"
+units = "", desc = "high-field correction", flags = ParameterFlags(0x0)
+param "GIDLBPL1"
+units = "m", desc = "Length for GIDL/GISL parasitic bipolar effect", flags = ParameterFlags(0x0)
+param "GIDLBPLT"
+units = "", desc = "Temperature effect for GIDLBPL1", flags = ParameterFlags(0x0)
+param "GLEAK1"
+units = "V^-3/2*s^-1", desc = "gate-to-channel current coefficient", flags = ParameterFlags(0x0)
+param "GLEAK2"
+units = "V^-1/2*m^-1", desc = "gate-to-channel current coefficient", flags = ParameterFlags(0x0)
+param "GLEAK3"
+units = "", desc = "gate-to-channel current coefficient", flags = ParameterFlags(0x0)
+param "GLEAK4"
+units = "m^-1", desc = "gate-to-channel current coefficient", flags = ParameterFlags(0x0)
+param "GLEAK5"
+units = "V*m^-1", desc = "G-t-C short channel correction", flags = ParameterFlags(0x0)
+param "GLEAK6"
+units = "V", desc = "G-t-C Vds-dependence correction", flags = ParameterFlags(0x0)
+param "GLEAK7"
+units = "m^2", desc = "G-t-C L and W dependence correction", flags = ParameterFlags(0x0)
+param "GLKSD1"
+units = "A*m*V^-2", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKSD2"
+units = "V^-1*m^-1", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKSD3"
+units = "m^-1", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB1"
+units = "A*V^-2", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB2"
+units = "m*V^-1", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB3"
+units = "V", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "VZADD0"
+units = "V", desc = "symmetry conservation coefficient", flags = ParameterFlags(0x0)
+param "PZADD0"
+units = "V", desc = "symmetry conservation coefficient", flags = ParameterFlags(0x0)
+param "NFTRP"
+units = "V^-1", desc = "ratio of trap density to attenuation coefficient", flags = ParameterFlags(0x0)
+param "NFALP"
+units = "cm*s", desc = "contribution of mobility fluctuation", flags = ParameterFlags(0x0)
+param "CIT"
+units = "F*cm^-2", desc = "cap caused by the interface trapped carriers", flags = ParameterFlags(0x0)
+param "FALPH"
+units = "sm^3", desc = "power of f describing deviation of 1/f", flags = ParameterFlags(0x0)
+param "TNOM"
+units = "degC", desc = "temperature selected as a nominal value", flags = ParameterFlags(0x0)
+param "DLY1"
+units = "s", desc = "coefficient for delay due to diffusion of carriers", flags = ParameterFlags(0x0)
+param "DLY2"
+units = "", desc = "coefficient for delay due to conduction of carriers", flags = ParameterFlags(0x0)
+param "DLY3"
+units = "Ohm", desc = "coefficient for RC delay of bulk carriers", flags = ParameterFlags(0x0)
+param "TFOX"
+units = "m", desc = "front oxide thickness", flags = ParameterFlags(0x0)
+param "TSOI"
+units = "m", desc = "silicon film thickness", flags = ParameterFlags(0x0)
+param "TFOXGIDL"
+units = "m", desc = "TFOX for GIDL", flags = ParameterFlags(0x0)
+param "TBOX"
+units = "m", desc = "buried oxide thickness", flags = ParameterFlags(0x0)
+param "NSUBS"
+units = "cm^-3", desc = "SOI layer impurity concentration", flags = ParameterFlags(0x0)
+param "NSUBB"
+units = "cm^-3", desc = "substrate impurity concentration", flags = ParameterFlags(0x0)
+param "NSUBBL"
+units = "um^NSUBBLP", desc = "channel-length dependence of NSUBB", flags = ParameterFlags(0x0)
+param "NSUBBLP"
+units = "", desc = "channel-length dependence of NSUBB", flags = ParameterFlags(0x0)
+param "NSUBBW"
+units = "um^NSUBBWP", desc = "W dependence of NSUBB", flags = ParameterFlags(0x0)
+param "NSUBBWP"
+units = "", desc = "W dependence of NSUBB", flags = ParameterFlags(0x0)
+param "NSUBBMIN"
+units = "cm^-3", desc = "minimum values of NSUBB", flags = ParameterFlags(0x0)
+param "RTH0"
+units = "K*cm*W^-1", desc = "Thermal resistance", flags = ParameterFlags(0x0)
+param "CTH0"
+units = "W*s*(K*cm)^-1", desc = "thermal capacitance", flags = ParameterFlags(0x0)
+param "PTL"
+units = "V^PTP-1m^PTLP", desc = "strength in front current", flags = ParameterFlags(0x0)
+param "PTP"
+units = "", desc = "strength in front current", flags = ParameterFlags(0x0)
+param "PT2"
+units = "V^-1", desc = "Vds dependence in front current", flags = ParameterFlags(0x0)
+param "PTLP"
+units = "", desc = "Lgate dependence in front current", flags = ParameterFlags(0x0)
+param "PT4"
+units = "", desc = "punchthrough parameter", flags = ParameterFlags(0x0)
+param "PT4P"
+units = "", desc = "Ves dependence in front current", flags = ParameterFlags(0x0)
+param "PTDLT"
+units = "", desc = "punchthrough parameter", flags = ParameterFlags(0x0)
+param "GDL"
+units = "m^GDLP", desc = "strength of high-field effect in back current", flags = ParameterFlags(0x0)
+param "GDLP"
+units = "", desc = "Lgate dependent high-field effect in front current", flags = ParameterFlags(0x0)
+param "GDLD"
+units = "m", desc = "Lgate dependent high-field effect in front current", flags = ParameterFlags(0x0)
+param "MUEPH1"
+units = "cm^2V^-1s^-1", desc = "phonon scattering for current", flags = ParameterFlags(0x0)
+param "SC5"
+units = "", desc = "SCE parameter", flags = ParameterFlags(0x0)
+param "XLDL"
+units = "m", desc = "channel-length dependence of XLD", flags = ParameterFlags(0x0)
+param "XLDLMIN"
+units = "m", desc = "minimum value of XLDL", flags = ParameterFlags(0x0)
+param "MUETMP1"
+units = "um^MUEPLP", desc = "temperature-dependence of phonon scattering", flags = ParameterFlags(0x0)
+param "VOTMP"
+units = "", desc = "temperature-dependence coefficient", flags = ParameterFlags(0x0)
+param "VBSBND"
+units = "V", desc = "Vbs for smoothing", flags = ParameterFlags(0x0)
+param "VBSMAX"
+units = "V", desc = "Maximum Vbs", flags = ParameterFlags(0x0)
+param "GLEAK8"
+units = "m^2", desc = "gate-to-channel current coefficient", flags = ParameterFlags(0x0)
+param "GLEAK9"
+units = "m^2", desc = "gate-to-channel current coefficient", flags = ParameterFlags(0x0)
+param "GLEAK10"
+units = "m^2", desc = "gate-to-channel current coefficient", flags = ParameterFlags(0x0)
+param "GLKSD4"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKSD5"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB4"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB5"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB6"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB7"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB8"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB21"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB22"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB23"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB24"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB25"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB26"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB27"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "GLKB28"
+units = "", desc = "G-t-S/D current coefficient", flags = ParameterFlags(0x0)
+param "PTMUEPH"
+units = "", desc = "front side mobility of punch-through", flags = ParameterFlags(0x0)
+param "VOTMP2"
+units = "", desc = "temperature-dependence coefficient", flags = ParameterFlags(0x0)
+param "MUEPH0B"
+units = "", desc = "phonon scattering for current", flags = ParameterFlags(0x0)
+param "MUEPH1B"
+units = "", desc = "phonon scattering for current", flags = ParameterFlags(0x0)
+param "MUEPHWB"
+units = "um^MUEPHP", desc = "phonon-related mobility reduction", flags = ParameterFlags(0x0)
+param "MUEPWPB"
+units = "", desc = "phonon-related mobility reduction", flags = ParameterFlags(0x0)
+param "MUEPHSB"
+units = "um^MUEPSP", desc = "mobility change due to small size", flags = ParameterFlags(0x0)
+param "MUEPSPB"
+units = "", desc = "mobility change due to small size", flags = ParameterFlags(0x0)
+param "MUEPHLB"
+units = "", desc = "length dependence of phonon mobility for current", flags = ParameterFlags(0x0)
+param "MUEPLPB"
+units = "", desc = "length dependence of phonon mobility for current", flags = ParameterFlags(0x0)
+param "MUESR0B"
+units = "", desc = "surface-roughness scattering for current", flags = ParameterFlags(0x0)
+param "MUESR1B"
+units = "", desc = "surface-roughness scattering for current", flags = ParameterFlags(0x0)
+param "MUESRLB"
+units = "", desc = "length dependence of surface roughness mobility for current", flags = ParameterFlags(0x0)
+param "MUESLPB"
+units = "", desc = "length dependence of surface roughness mobility for current", flags = ParameterFlags(0x0)
+param "MUESRWB"
+units = "um^MUESWP", desc = "surface roughness-related mobility change", flags = ParameterFlags(0x0)
+param "MUESWPB"
+units = "", desc = "surface roughness-related mobility change", flags = ParameterFlags(0x0)
+param "MUECB0B"
+units = "", desc = "Coulomb scattering for current", flags = ParameterFlags(0x0)
+param "MUECB1B"
+units = "", desc = "Coulomb scattering for back current", flags = ParameterFlags(0x0)
+param "MUECB0LPB"
+units = "", desc = "length dependence of Coulomb scattering for back current", flags = ParameterFlags(0x0)
+param "MUECB1LPB"
+units = "", desc = "length dependence of Coulomb scattering for back current", flags = ParameterFlags(0x0)
+param "MUECB0L2B"
+units = "", desc = "length dependence of Coulomb scattering for back current", flags = ParameterFlags(0x0)
+param "MUECB0L2PB"
+units = "", desc = "length dependence of Coulomb scattering for back current", flags = ParameterFlags(0x0)
+param "MUECB1L2B"
+units = "", desc = "length dependence of Coulomb scattering for back current", flags = ParameterFlags(0x0)
+param "MUECB1L2PB"
+units = "", desc = "length dependence of Coulomb scattering for back current", flags = ParameterFlags(0x0)
+param "PTHROU"
+units = "", desc = "Modify subthreshold slope", flags = ParameterFlags(0x0)
+param "VFBSHIFT"
+units = "", desc = "Scaling factor for Vfb shift", flags = ParameterFlags(0x0)
+param "MUEQB"
+units = "", desc = "magnitude of QbL for front side mobility", flags = ParameterFlags(0x0)
+param "MUEQBL"
+units = "", desc = "length dependence of MUEQB and MUEQBB", flags = ParameterFlags(0x0)
+param "MUEQBLP"
+units = "", desc = "length dependence of MUEQB and MUEQBB", flags = ParameterFlags(0x0)
+param "MUEQBB"
+units = "", desc = "magnitude of QbL for back side mobility", flags = ParameterFlags(0x0)
+param "COCINV"
+units = "", desc = "Inversion capacitance flag", flags = ParameterFlags(PARA_TY_INT)
+param "WEB"
+units = "-", desc = "Modification of layout characterization factor", flags = ParameterFlags(0x0)
+param "WEC"
+units = "-", desc = "Modification of layout characterization factor", flags = ParameterFlags(0x0)
+param "NSUBSWPE"
+units = "1/cm^3", desc = "Channel concentration change due to WPE", flags = ParameterFlags(0x0)
+param "NSUBPWPE"
+units = "1/cm^3", desc = "Pocket concentration change due to WPE", flags = ParameterFlags(0x0)
+param "TN"
+units = "", desc = "", flags = ParameterFlags(0x0)
+
+4 terminals
+node "d" units = "V", runits = ""
+residual 2272 2280 4294967295 4294967295
+node "g" units = "V", runits = ""
+residual 2288 4294967295 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 2296 2304 4294967295 4294967295
+node "e" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+node "gp" units = "V", runits = ""
+residual 2312 2320 4294967295 4294967295
+node "bp" units = "V", runits = ""
+residual 2328 2336 4294967295 4294967295
+node "n" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+node "t" units = "K", runits = ""
+residual 2344 2352 4294967295 4294967295
+node "nqs_qhs" units = "V", runits = ""
+residual 2360 2368 4294967295 4294967295
+node "nqs_qi" units = "V", runits = ""
+residual 2376 2384 4294967295 4294967295
+node "nqs_qb" units = "V", runits = ""
+residual 2392 2400 4294967295 4294967295
+node "implicit_equation_0" units = "", runits = ""
+residual 4294967295 2408 4294967295 4294967295
+jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 544
+jacobian (d, g) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 552
+jacobian (d, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 560
+jacobian (d, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 568
+jacobian (d, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 576
+jacobian (d, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 584
+jacobian (d, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 592
+jacobian (d, nqs_qi) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 600
+jacobian (d, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (g, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (g, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 608
+jacobian (s, g) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 616
+jacobian (s, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 624
+jacobian (s, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 632
+jacobian (s, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 640
+jacobian (s, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 648
+jacobian (s, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 656
+jacobian (s, nqs_qi) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 664
+jacobian (s, nqs_qb) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 672
+jacobian (s, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gp, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 680
+jacobian (gp, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 688
+jacobian (gp, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 696
+jacobian (gp, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 704
+jacobian (gp, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 712
+jacobian (gp, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 720
+jacobian (gp, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 728
+jacobian (gp, nqs_qi) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 736
+jacobian (gp, nqs_qb) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 744
+jacobian (gp, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (bp, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 752
+jacobian (bp, g) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 760
+jacobian (bp, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 768
+jacobian (bp, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 776
+jacobian (bp, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 784
+jacobian (bp, t) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 792
+jacobian (bp, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 800
+jacobian (bp, nqs_qb) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 808
+jacobian (n, n) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (t, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (t, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (t, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (t, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (t, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 816
+jacobian (t, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qhs, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qhs, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qhs, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qhs, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qhs, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qhs, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 824
+jacobian (nqs_qi, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qi, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qi, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qi, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qi, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qi, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qi, nqs_qi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 832
+jacobian (nqs_qb, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qb, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qb, gp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qb, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qb, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qb, nqs_qhs) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (nqs_qb, nqs_qb) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 840
+jacobian (implicit_equation_0, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 848
+collapsible (g, gp)
+collapsible (e, bp)
+collapsible (t, gnd)
+collapsible (nqs_qhs, gnd)
+collapsible (nqs_qi, gnd)
+collapsible (nqs_qb, gnd)
+0 states
+has bound_step false
+instance size 3152
+model size 2480

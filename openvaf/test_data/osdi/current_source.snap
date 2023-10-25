@@ -1,0 +1,20 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "Io"
+units = "Ampere", desc = "Current", flags = ParameterFlags(0x0)
+param "R"
+units = "Ohm", desc = "Output Resistance", flags = ParameterFlags(0x0)
+
+2 terminals
+node "Np" units = "V", runits = ""
+residual 88 4294967295 4294967295 4294967295
+node "Nm" units = "V", runits = ""
+residual 96 4294967295 4294967295 4294967295
+jacobian (Np, Np) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Np, Nm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Nm, Np) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Nm, Nm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+0 states
+has bound_step false
+instance size 136
+model size 32

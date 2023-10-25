@@ -1,0 +1,406 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "c10"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "qp0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ich"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "hf0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "hfe"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "hfc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "hjei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ahjei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rhjei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "hjci"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ibeis"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mbei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ireis"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mrei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ibeps"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mbep"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ireps"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mrep"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mcf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tbhrec"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ibcis"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mbci"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ibcxs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "mbcx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ibets"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "abet"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tunode"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "favl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "qavl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kavl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alfav"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alqav"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alkav"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rbi0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rbx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fgeo"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fdqr0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fcrbi"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fqi"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "re"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rcx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "itss"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "msf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "iscs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "msc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tsf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rsu"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "csu"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjei0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vdei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ajei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjep0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vdep"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zep"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ajep"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjci0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vdci"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zci"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vptci"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjcx0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vdcx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zcx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vptcx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fbcpar"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fbepar"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cjs0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vds"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vpts"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cscp0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vdsp"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zsp"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vptsp"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "t0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dt0h"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tbvl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tef0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "gtfe"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "thcs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ahc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "fthc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "rci0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vlim"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vces"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vpt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "aick"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "delck"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tr"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vcbar"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "icbar"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "acbar"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cbepar"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cbcpar"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alqf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alit"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "flnqs"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "kf"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "af"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cfbe"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "flcono"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "kfre"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "afre"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "latb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "latl"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vgb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alt0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "kt0"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetaci"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alvs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alces"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetarbi"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetarbx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetarcx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetare"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetacx"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vge"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vgc"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "vgs"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "f1vg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "f2vg"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetact"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetabet"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alb"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dvgbe"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetahjei"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetavgbe"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "flsh"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+param "rth"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "zetarth"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "alrth"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "cth"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "flcomp"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "tnom"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "dt"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "type"
+units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
+
+5 terminals
+node "c" units = "V", runits = ""
+residual 2272 2280 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 2288 2296 4294967295 4294967295
+node "e" units = "V", runits = ""
+residual 2304 2312 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 2320 2328 4294967295 4294967295
+node "tnode" units = "V", runits = ""
+residual 2336 2344 4294967295 4294967295
+node "bi" units = "V", runits = ""
+residual 2352 2360 4294967295 4294967295
+node "ei" units = "V", runits = ""
+residual 2368 2376 4294967295 4294967295
+node "ci" units = "V", runits = ""
+residual 2384 2392 4294967295 4294967295
+node "bp" units = "V", runits = ""
+residual 2400 2408 4294967295 4294967295
+node "si" units = "V", runits = ""
+residual 2416 2424 4294967295 4294967295
+node "xf1" units = "V", runits = ""
+residual 2432 2440 4294967295 4294967295
+node "xf2" units = "V", runits = ""
+residual 2448 2456 4294967295 4294967295
+node "xf" units = "V", runits = ""
+residual 2464 2472 4294967295 4294967295
+node "n1" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+node "n2" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+node "implicit_equation_0" units = "", runits = ""
+residual 4294967295 2480 4294967295 4294967295
+node "implicit_equation_1" units = "", runits = ""
+residual 4294967295 2488 4294967295 4294967295
+jacobian (c, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 696
+jacobian (c, s) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 704
+jacobian (c, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 712
+jacobian (c, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 720
+jacobian (b, e) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 728
+jacobian (b, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 736
+jacobian (b, ci) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 744
+jacobian (b, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (e, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 752
+jacobian (e, e) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 760
+jacobian (e, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (e, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (e, bp) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 768
+jacobian (s, c) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 776
+jacobian (s, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 784
+jacobian (s, tnode) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 792
+jacobian (s, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 800
+jacobian (tnode, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (tnode, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (tnode, e) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (tnode, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 808
+jacobian (tnode, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (tnode, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (tnode, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (tnode, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (tnode, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (bi, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 816
+jacobian (bi, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 824
+jacobian (bi, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 832
+jacobian (bi, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 840
+jacobian (bi, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 848
+jacobian (bi, xf) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 856
+jacobian (bi, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (bi, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (ei, e) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (ei, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 864
+jacobian (ei, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 872
+jacobian (ei, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 880
+jacobian (ei, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 888
+jacobian (ei, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 896
+jacobian (ei, xf2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (ei, xf) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 904
+jacobian (ei, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (ei, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (ci, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (ci, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 912
+jacobian (ci, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 920
+jacobian (ci, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 928
+jacobian (ci, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 936
+jacobian (ci, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 944
+jacobian (ci, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 952
+jacobian (ci, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 960
+jacobian (ci, xf2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (bp, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (bp, e) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 968
+jacobian (bp, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 976
+jacobian (bp, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 984
+jacobian (bp, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 992
+jacobian (bp, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1000
+jacobian (bp, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1008
+jacobian (bp, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (si, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1016
+jacobian (si, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1024
+jacobian (si, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1032
+jacobian (si, bp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (si, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1040
+jacobian (xf1, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf1, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf1, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf1, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf1, xf1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1048
+jacobian (xf1, xf2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf2, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf2, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf2, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf2, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf2, xf1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf2, xf2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1056
+jacobian (xf, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf, bi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf, ei) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (xf, xf) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1064
+jacobian (implicit_equation_0, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 1072
+jacobian (implicit_equation_1, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 1080
+collapsible (b, bp)
+collapsible (bp, bi)
+collapsible (ci, c)
+collapsible (ei, e)
+collapsible (si, s)
+collapsible (tnode, gnd)
+0 states
+has bound_step false
+instance size 3456
+model size 1112

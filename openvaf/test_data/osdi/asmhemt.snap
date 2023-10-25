@@ -1,0 +1,698 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "l"
+units = "m", desc = " Channel Length", flags = ParameterFlags(PARA_KIND_INST)
+param "w"
+units = "m", desc = " Channel Width", flags = ParameterFlags(PARA_KIND_INST)
+param "nf"
+units = "", desc = " Number of fingers", flags = ParameterFlags(PARA_TY_INT | PARA_KIND_INST)
+param "dfp1"
+units = "m", desc = " Distance of FP1 from 2-DEG Charge", flags = ParameterFlags(PARA_KIND_INST)
+param "lfp1"
+units = "m", desc = " Length of FP1", flags = ParameterFlags(PARA_KIND_INST)
+param "dfp2"
+units = "m", desc = " Distance of FP2 from 2-DEG Charge", flags = ParameterFlags(PARA_KIND_INST)
+param "lfp2"
+units = "m", desc = " Length of FP2", flags = ParameterFlags(PARA_KIND_INST)
+param "dfp3"
+units = "m", desc = " Distance of FP3 from 2-DEG Charge", flags = ParameterFlags(PARA_KIND_INST)
+param "lfp3"
+units = "m", desc = " Length of FP3", flags = ParameterFlags(PARA_KIND_INST)
+param "dfp4"
+units = "m", desc = " Distance of FP4 from 2-DEG Charge", flags = ParameterFlags(PARA_KIND_INST)
+param "lfp4"
+units = "m", desc = " Length of FP4", flags = ParameterFlags(PARA_KIND_INST)
+param "ngcon"
+units = "", desc = " Number of gate contacts", flags = ParameterFlags(PARA_TY_INT | PARA_KIND_INST)
+param "tnom"
+units = "K", desc = " Nominal Temperature in degree Celsius", flags = ParameterFlags(0x0)
+param "tbar"
+units = "m", desc = " Barrier layer thickness", flags = ParameterFlags(0x0)
+param "epsilon"
+units = "F/m", desc = " Dielectric Permittivity of AlGaN layer", flags = ParameterFlags(0x0)
+param "voff"
+units = "V", desc = " Cut-off voltage", flags = ParameterFlags(0x0)
+param "u0"
+units = "m^2/(V * s)", desc = " Low field mobility", flags = ParameterFlags(0x0)
+param "ua"
+units = "V^-1", desc = " Mobility Degradation coefficient first order", flags = ParameterFlags(0x0)
+param "ub"
+units = "V^-2", desc = " Mobility Degradation coefficient second order", flags = ParameterFlags(0x0)
+param "vsat"
+units = "m/s", desc = " Saturation Velocity", flags = ParameterFlags(0x0)
+param "delta"
+units = "", desc = " Exponent for Vdeff", flags = ParameterFlags(0x0)
+param "at"
+units = "", desc = " Temperature Dependence for saturation velocity", flags = ParameterFlags(0x0)
+param "ute"
+units = "", desc = " Temperature dependence of mobility", flags = ParameterFlags(0x0)
+param "lambda"
+units = "V^-1", desc = " Channel Length Modulation Coefficient", flags = ParameterFlags(0x0)
+param "eta0"
+units = "", desc = " DIBL Parameter", flags = ParameterFlags(0x0)
+param "vdscale"
+units = "V", desc = " DIBL Scaling VDS", flags = ParameterFlags(0x0)
+param "kt1"
+units = "", desc = " Temperature Dependence for Voff", flags = ParameterFlags(0x0)
+param "thesat"
+units = "V^-2", desc = " Velocity Saturation Parameter", flags = ParameterFlags(0x0)
+param "nfactor"
+units = "", desc = " Sub-voff Slope parameters", flags = ParameterFlags(0x0)
+param "cdscd"
+units = "", desc = " Sub-voff Slope Change due to Drain Voltage", flags = ParameterFlags(0x0)
+param "gamma0i"
+units = "", desc = " Schrodinger-Poisson solution parameter", flags = ParameterFlags(0x0)
+param "gamma1i"
+units = "", desc = " Schrodinger-Poisson solution parameter", flags = ParameterFlags(0x0)
+param "imin"
+units = "A", desc = " Minimum Drain Current", flags = ParameterFlags(0x0)
+param "shmod"
+units = "", desc = " Switch to turn on and off self-heating model", flags = ParameterFlags(PARA_TY_INT)
+param "rth0"
+units = "K/w", desc = " Thermal Resistance", flags = ParameterFlags(0x0)
+param "cth0"
+units = "s*w/K", desc = " Thermal Capacitance", flags = ParameterFlags(0x0)
+param "rdsmod"
+units = "", desc = " Switch for external source and drain resistances", flags = ParameterFlags(PARA_TY_INT)
+param "vsataccs"
+units = "cm/s", desc = " Saturation Velocity for access region: Source Side", flags = ParameterFlags(0x0)
+param "ns0accs"
+units = "C/m^-2", desc = " 2-DEG Charge Density in per square meter in Source access region", flags = ParameterFlags(0x0)
+param "ns0accd"
+units = "C/m^-2", desc = " 2-DEG Charge Density in per square meter in Drain access region", flags = ParameterFlags(0x0)
+param "k0accs"
+units = "", desc = " Vg dependence parameter of source side access region 2-DEG charge density", flags = ParameterFlags(0x0)
+param "k0accd"
+units = "", desc = " Vg dependence parameter of drain side access region 2-DEG charge density", flags = ParameterFlags(0x0)
+param "u0accs"
+units = "m^2/(V * s)", desc = " Access region mobility source-side", flags = ParameterFlags(0x0)
+param "u0accd"
+units = "m^2/(V * s)", desc = " Access region mobility drain-side", flags = ParameterFlags(0x0)
+param "mexpaccs"
+units = "", desc = " Exponent for access region resistance model", flags = ParameterFlags(0x0)
+param "mexpaccd"
+units = "", desc = " Exponent for access region resistance model", flags = ParameterFlags(0x0)
+param "lsg"
+units = "m", desc = " Length of Source-Gate Access Region", flags = ParameterFlags(0x0)
+param "ldg"
+units = "m", desc = " Length of Drain-Gate Access Region or Length of drain side access region", flags = ParameterFlags(0x0)
+param "rsc"
+units = "ohm*m", desc = " Source Contact Resistance", flags = ParameterFlags(0x0)
+param "rdc"
+units = "ohm*m", desc = " Drain Contact Resistance", flags = ParameterFlags(0x0)
+param "kns0"
+units = "", desc = " Temperature Dependence for 2-DEG charge density at access region", flags = ParameterFlags(0x0)
+param "ats"
+units = "", desc = " Temperature Dependence for saturation velocity at access region", flags = ParameterFlags(0x0)
+param "utes"
+units = "", desc = " Temperature dependence of mobility at access region: Source Side", flags = ParameterFlags(0x0)
+param "uted"
+units = "", desc = " Temperature dependence of mobility at access region: Drain Side", flags = ParameterFlags(0x0)
+param "krsc"
+units = "", desc = " Temperature dependence of Source Contact Resistance", flags = ParameterFlags(0x0)
+param "krdc"
+units = "", desc = " Temperature dependence of Drain Contact Resistance", flags = ParameterFlags(0x0)
+param "gatemod"
+units = "", desc = " Gate current model flag [0: No gate current; 1: Basic model]", flags = ParameterFlags(PARA_TY_INT)
+param "njgs"
+units = "", desc = " Gate-source junction diode current ideality factor", flags = ParameterFlags(0x0)
+param "njgd"
+units = "", desc = " Gate-drain junction diode current ideality factor", flags = ParameterFlags(0x0)
+param "igsdio"
+units = "A/m^2", desc = " Gate-source junction diode saturation current", flags = ParameterFlags(0x0)
+param "igddio"
+units = "A/m^2", desc = " Gate-drain junction diode saturation current", flags = ParameterFlags(0x0)
+param "ktgs"
+units = "", desc = " Temperature co-efficient of gate-source junction diode current", flags = ParameterFlags(0x0)
+param "ktgd"
+units = "", desc = " Temperature coefficient of gate-drain junction diode current", flags = ParameterFlags(0x0)
+param "trapmod"
+units = "", desc = " Model Switch to turn on and off the dynamic trapping effects", flags = ParameterFlags(PARA_TY_INT)
+param "cdlag"
+units = "", desc = " Trap Network capacitance", flags = ParameterFlags(0x0)
+param "rdlag"
+units = "", desc = " Trap Network resistance", flags = ParameterFlags(0x0)
+param "idio"
+units = "A", desc = " Saturation Current parameter for trap model", flags = ParameterFlags(0x0)
+param "atrapvoff"
+units = "", desc = " Voff change due to trapping effects", flags = ParameterFlags(0x0)
+param "btrapvoff"
+units = "", desc = " Voff change with input power due to trapping effects", flags = ParameterFlags(0x0)
+param "atrapeta0"
+units = "", desc = " DIBL change due to trapping effects", flags = ParameterFlags(0x0)
+param "btrapeta0"
+units = "", desc = " DIBL change with input power due to trapping effects", flags = ParameterFlags(0x0)
+param "atraprs"
+units = "", desc = " Rs change due to trapping effects", flags = ParameterFlags(0x0)
+param "btraprs"
+units = "", desc = " Rs change with input power due to trapping effects", flags = ParameterFlags(0x0)
+param "atraprd"
+units = "", desc = " Rd change due to trapping effects", flags = ParameterFlags(0x0)
+param "btraprd"
+units = "", desc = " Rd change with input power due to trapping effects", flags = ParameterFlags(0x0)
+param "rtrap1"
+units = "ohm", desc = " Trap Network1 Resistance", flags = ParameterFlags(0x0)
+param "rtrap2"
+units = "ohm", desc = " Trap Network2 Resistance", flags = ParameterFlags(0x0)
+param "ctrap1"
+units = "F", desc = " Trap Network1 Capacitance", flags = ParameterFlags(0x0)
+param "ctrap2"
+units = "F", desc = " Trap Network2 Capacitance", flags = ParameterFlags(0x0)
+param "a1"
+units = "", desc = " Multiplication factor [1st network]", flags = ParameterFlags(0x0)
+param "vofftr"
+units = "", desc = " Trap contribution to voff [2nd network]", flags = ParameterFlags(0x0)
+param "cdscdtr"
+units = "", desc = " Trap contribution to cdscd [2nd network]", flags = ParameterFlags(0x0)
+param "eta0tr"
+units = "", desc = " Trap contribution to DIBL [2nd network]", flags = ParameterFlags(0x0)
+param "rontr1"
+units = "", desc = " Trap contribution to RON [1st network]", flags = ParameterFlags(0x0)
+param "rontr2"
+units = "", desc = " Trap contribution to RON [2nd network]", flags = ParameterFlags(0x0)
+param "rontr3"
+units = "", desc = " Trap contribution to RON", flags = ParameterFlags(0x0)
+param "rtrap3"
+units = "ohm", desc = " Trap Network Resistance", flags = ParameterFlags(0x0)
+param "ctrap3"
+units = "F", desc = " Trap Network Capacitance", flags = ParameterFlags(0x0)
+param "vatrap"
+units = "", desc = " Division factor for V[trap1]", flags = ParameterFlags(0x0)
+param "wd"
+units = "", desc = " Weak dependence of vdlr1 on Vdg", flags = ParameterFlags(0x0)
+param "vdlr1"
+units = "", desc = " Slope for region one", flags = ParameterFlags(0x0)
+param "vdlr2"
+units = "", desc = " Slope for region two", flags = ParameterFlags(0x0)
+param "talpha"
+units = "", desc = " Temperature dependence Coefficient", flags = ParameterFlags(0x0)
+param "vtb"
+units = "V", desc = " Break Point for Vdg effect on Von", flags = ParameterFlags(0x0)
+param "deltax"
+units = "", desc = " Smoothing parameter", flags = ParameterFlags(0x0)
+param "fp1mod"
+units = "", desc = " Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]", flags = ParameterFlags(PARA_TY_INT)
+param "fp2mod"
+units = "", desc = " Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]", flags = ParameterFlags(PARA_TY_INT)
+param "fp3mod"
+units = "", desc = " Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]", flags = ParameterFlags(PARA_TY_INT)
+param "fp4mod"
+units = "", desc = " Field Plate Model Selector [0:No FP; 1:Gate FP; 2:Source FP;]", flags = ParameterFlags(PARA_TY_INT)
+param "iminfp1"
+units = "A", desc = " Minimum Drain Current FP1 region", flags = ParameterFlags(0x0)
+param "vofffp1"
+units = "V", desc = " voff for FP1", flags = ParameterFlags(0x0)
+param "ktfp1"
+units = "", desc = " Temperature Dependence for vofffp1", flags = ParameterFlags(0x0)
+param "u0fp1"
+units = "m^2/(V * s)", desc = " FP1 region mobility", flags = ParameterFlags(0x0)
+param "vsatfp1"
+units = "m/s", desc = " Saturation Velocity of FP1 region", flags = ParameterFlags(0x0)
+param "nfactorfp1"
+units = "", desc = " Sub-voff Slope parameters for FP1", flags = ParameterFlags(0x0)
+param "cdscdfp1"
+units = "", desc = " Sub-voff Slope Change due to Drain Voltage for FP1", flags = ParameterFlags(0x0)
+param "eta0fp1"
+units = "", desc = " DIBL Parameter for FP1", flags = ParameterFlags(0x0)
+param "vdscalefp1"
+units = "V", desc = " DIBL Scaling VDS for FP1", flags = ParameterFlags(0x0)
+param "gamma0fp1"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP1", flags = ParameterFlags(0x0)
+param "gamma1fp1"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP1", flags = ParameterFlags(0x0)
+param "iminfp2"
+units = "A", desc = " Minimum Drain Current FP2 region", flags = ParameterFlags(0x0)
+param "vofffp2"
+units = "V", desc = " voff for FP2", flags = ParameterFlags(0x0)
+param "ktfp2"
+units = "", desc = " Temperature Dependence for vofffp2", flags = ParameterFlags(0x0)
+param "u0fp2"
+units = "m^2/(V * s)", desc = " Carrier mobility of FP2 region", flags = ParameterFlags(0x0)
+param "vsatfp2"
+units = "m/s", desc = " Saturation velocity of FP2 region", flags = ParameterFlags(0x0)
+param "nfactorfp2"
+units = "", desc = " Sub-voff Slope parameters for FP2", flags = ParameterFlags(0x0)
+param "cdscdfp2"
+units = "", desc = " Sub-voff Slope Change due to Drain Voltage for FP2", flags = ParameterFlags(0x0)
+param "eta0fp2"
+units = "", desc = " DIBL Parameter for FP2", flags = ParameterFlags(0x0)
+param "vdscalefp2"
+units = "V", desc = " DIBL Scaling VDS for FP2", flags = ParameterFlags(0x0)
+param "gamma0fp2"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP2", flags = ParameterFlags(0x0)
+param "gamma1fp2"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP2", flags = ParameterFlags(0x0)
+param "iminfp3"
+units = "A", desc = " Minimum Drain Current FP3 region", flags = ParameterFlags(0x0)
+param "vofffp3"
+units = "V", desc = " voff for FP3", flags = ParameterFlags(0x0)
+param "ktfp3"
+units = "", desc = " Temperature Dependence for vofffp3", flags = ParameterFlags(0x0)
+param "u0fp3"
+units = "m^2/(V * s)", desc = " FP3 region mobility", flags = ParameterFlags(0x0)
+param "vsatfp3"
+units = "m/s", desc = " Saturation Velocity of FP3 region", flags = ParameterFlags(0x0)
+param "nfactorfp3"
+units = "", desc = " Sub-voff Slope parameters for FP3", flags = ParameterFlags(0x0)
+param "cdscdfp3"
+units = "", desc = " Sub-voff Slope Change due to Drain Voltage for FP3", flags = ParameterFlags(0x0)
+param "eta0fp3"
+units = "", desc = " DIBL Parameter for FP3", flags = ParameterFlags(0x0)
+param "vdscalefp3"
+units = "V", desc = " DIBL Scaling VDS for FP3", flags = ParameterFlags(0x0)
+param "gamma0fp3"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP3", flags = ParameterFlags(0x0)
+param "gamma1fp3"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP3", flags = ParameterFlags(0x0)
+param "iminfp4"
+units = "A", desc = " Minimum Drain Current FP4 region", flags = ParameterFlags(0x0)
+param "vofffp4"
+units = "V", desc = " voff for FP4", flags = ParameterFlags(0x0)
+param "ktfp4"
+units = "", desc = " Temperature Dependence for vofffp4", flags = ParameterFlags(0x0)
+param "u0fp4"
+units = "m^2/(V * s)", desc = " FP4 region mobility", flags = ParameterFlags(0x0)
+param "vsatfp4"
+units = "m/s", desc = " Saturation Velocity of FP4 region", flags = ParameterFlags(0x0)
+param "nfactorfp4"
+units = "", desc = " Sub-voff Slope parameters for FP4", flags = ParameterFlags(0x0)
+param "cdscdfp4"
+units = "", desc = " Sub-voff Slope Change due to Drain Voltage for FP4", flags = ParameterFlags(0x0)
+param "eta0fp4"
+units = "", desc = " DIBL Parameter for FP4", flags = ParameterFlags(0x0)
+param "vdscalefp4"
+units = "V", desc = " DIBL Scaling VDS for FP4", flags = ParameterFlags(0x0)
+param "gamma0fp4"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP4", flags = ParameterFlags(0x0)
+param "gamma1fp4"
+units = "", desc = " Schrodinger-Poisson solution parameter for FP4", flags = ParameterFlags(0x0)
+param "cgso"
+units = "F", desc = " Gate-source overlap capacitance", flags = ParameterFlags(0x0)
+param "cgdo"
+units = "F", desc = " Gate-drain overlap capacitance", flags = ParameterFlags(0x0)
+param "cdso"
+units = "F", desc = " Cds capacitance parameter", flags = ParameterFlags(0x0)
+param "cgdl"
+units = "F", desc = " Vds bias dependence of parasitic gate drain overlap capacitance", flags = ParameterFlags(0x0)
+param "vdsatcv"
+units = "V", desc = " Saturation voltage on drain side in CV Model", flags = ParameterFlags(0x0)
+param "cbdo"
+units = "F", desc = " Substrate capacitance parameter", flags = ParameterFlags(0x0)
+param "cbso"
+units = "F", desc = " Substrate capacitance parameter", flags = ParameterFlags(0x0)
+param "cbgo"
+units = "F", desc = " Substrate capacitance parameter", flags = ParameterFlags(0x0)
+param "cfg"
+units = "F", desc = " Fringing capacitance parameter", flags = ParameterFlags(0x0)
+param "cfd"
+units = "F", desc = " Fringing capacitance parameter", flags = ParameterFlags(0x0)
+param "cfgd"
+units = "F", desc = " Fringing capacitance parameter", flags = ParameterFlags(0x0)
+param "cfgdsm"
+units = "F", desc = " Capacitance smoothing parameter", flags = ParameterFlags(0x0)
+param "cfgd0"
+units = "F", desc = " Fringing capacitance parameter", flags = ParameterFlags(0x0)
+param "cj0"
+units = "F", desc = " Zero bias depletion capacitance", flags = ParameterFlags(0x0)
+param "vbi"
+units = "V", desc = " Built in potential", flags = ParameterFlags(0x0)
+param "ktvbi"
+units = "", desc = " Temperature dependence of built in potential", flags = ParameterFlags(0x0)
+param "ktcfg"
+units = "", desc = " Temperature dependence of Fringing capacitance", flags = ParameterFlags(0x0)
+param "ktcfgd"
+units = "", desc = " Temperature dependence of Fringing capacitance", flags = ParameterFlags(0x0)
+param "mz"
+units = "", desc = " Grading factor of depletion capacitance", flags = ParameterFlags(0x0)
+param "aj"
+units = "", desc = " Limiting factor of depletion capacitance in forward bias region", flags = ParameterFlags(0x0)
+param "dj"
+units = "", desc = " Fitting parameter ", flags = ParameterFlags(0x0)
+param "adosi"
+units = "", desc = " Quantum mechanical effect pre-factor cum switch in inversion", flags = ParameterFlags(0x0)
+param "bdosi"
+units = "", desc = " Charge centroid parameter - slope of CV curve under QME in inversion", flags = ParameterFlags(0x0)
+param "qm0i"
+units = "", desc = " Charge centroid parameter - starting point for QME in inversion", flags = ParameterFlags(0x0)
+param "adosfp1"
+units = "", desc = " Quantum mechanical effect pre-factor cum switch in inversion", flags = ParameterFlags(0x0)
+param "bdosfp1"
+units = "", desc = " Charge centroid parameter - slope of CV curve under QME in inversion", flags = ParameterFlags(0x0)
+param "qm0fp1"
+units = "", desc = " Charge centroid parameter - starting point for QME in inversion", flags = ParameterFlags(0x0)
+param "adosfp2"
+units = "", desc = " Quantum mechanical effect pre-factor cum switch in inversion", flags = ParameterFlags(0x0)
+param "bdosfp2"
+units = "", desc = " Charge centroid parameter - slope of CV curve under QME in inversion", flags = ParameterFlags(0x0)
+param "qm0fp2"
+units = "", desc = " Charge centroid parameter - starting point for QME in inversion", flags = ParameterFlags(0x0)
+param "adosfp3"
+units = "", desc = " Quantum mechanical effect pre-factor cum switch in inversion", flags = ParameterFlags(0x0)
+param "bdosfp3"
+units = "", desc = " Charge centroid parameter - slope of CV curve under QME in inversion", flags = ParameterFlags(0x0)
+param "qm0fp3"
+units = "", desc = " Charge centroid parameter - starting point for QME in inversion", flags = ParameterFlags(0x0)
+param "adosfp4"
+units = "", desc = " Quantum mechanical effect pre-factor cum switch in inversion", flags = ParameterFlags(0x0)
+param "bdosfp4"
+units = "", desc = " Charge centroid parameter - slope of CV curve under QME in inversion", flags = ParameterFlags(0x0)
+param "qm0fp4"
+units = "", desc = " Charge centroid parameter - starting point for QME in inversion", flags = ParameterFlags(0x0)
+param "cfp1scale"
+units = "", desc = " Coupling of charge under FP1", flags = ParameterFlags(0x0)
+param "cfp2scale"
+units = "", desc = " Coupling of charge under FP2", flags = ParameterFlags(0x0)
+param "cfp3scale"
+units = "", desc = " Coupling of charge under FP3", flags = ParameterFlags(0x0)
+param "cfp4scale"
+units = "", desc = " Coupling of charge under FP4", flags = ParameterFlags(0x0)
+param "csubscalei"
+units = "", desc = " Sub Capacitance scaling parameter", flags = ParameterFlags(0x0)
+param "csubscale1"
+units = "", desc = " Sub Capacitance scaling parameter", flags = ParameterFlags(0x0)
+param "csubscale2"
+units = "", desc = " Sub Capacitance scaling parameter", flags = ParameterFlags(0x0)
+param "csubscale3"
+units = "", desc = " Sub Capacitance scaling parameter", flags = ParameterFlags(0x0)
+param "csubscale4"
+units = "", desc = " Sub Capacitance scaling parameter", flags = ParameterFlags(0x0)
+param "rgatemod"
+units = "", desc = " Switch to turn on/off gate Resistance", flags = ParameterFlags(PARA_TY_INT)
+param "xgw"
+units = "m", desc = " Distance from gate contact centre to dev edge", flags = ParameterFlags(0x0)
+param "rshg"
+units = "ohm/square", desc = " Gate sheet resistance", flags = ParameterFlags(0x0)
+param "fnmod"
+units = "", desc = " Switch to turn Flicker Noise Model  ON [fnmod=1] or OFF [fnmod=0]", flags = ParameterFlags(PARA_TY_INT)
+param "tnmod"
+units = "", desc = " Switch to turn Thermal Noise Model  ON [tnmod=1] or OFF [tnmod=0]", flags = ParameterFlags(PARA_TY_INT)
+param "noia"
+units = "", desc = " Flicker Noise parameter", flags = ParameterFlags(0x0)
+param "noib"
+units = "", desc = " Flicker Noise parameter", flags = ParameterFlags(0x0)
+param "noic"
+units = "", desc = " Flicker Noise parameter", flags = ParameterFlags(0x0)
+param "ef"
+units = "", desc = " Exponent of frequency---Determines slope in log plot", flags = ParameterFlags(0x0)
+param "tnsc"
+units = "", desc = " Thermal noise scaling parameter", flags = ParameterFlags(0x0)
+param "gdsmin"
+units = "S", desc = " Convergence Parameter", flags = ParameterFlags(0x0)
+
+5 terminals
+node "d" units = "V", runits = ""
+residual 3720 3728 4294967295 4294967295
+node "g" units = "V", runits = ""
+residual 3736 3744 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 3752 3760 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 4294967295 3768 4294967295 4294967295
+node "dt" units = "K", runits = ""
+residual 3776 3784 4294967295 4294967295
+node "trap1" units = "V", runits = ""
+residual 3792 3800 4294967295 4294967295
+node "trap2" units = "V", runits = ""
+residual 3808 3816 4294967295 4294967295
+node(flow) "flow(di,si)" units = "A", runits = ""
+residual 3824 3832 4294967295 4294967295
+node "di" units = "V", runits = ""
+residual 3840 3848 4294967295 4294967295
+node "si" units = "V", runits = ""
+residual 3856 3864 4294967295 4294967295
+node "gi" units = "V", runits = ""
+residual 3872 3880 4294967295 4294967295
+node "fp4" units = "V", runits = ""
+residual 3888 3896 4294967295 4294967295
+node "fp1" units = "V", runits = ""
+residual 3904 3912 4294967295 4294967295
+node "fp2" units = "V", runits = ""
+residual 3920 3928 4294967295 4294967295
+node "fp3" units = "V", runits = ""
+residual 3936 3944 4294967295 4294967295
+node "implicit_equation_0" units = "", runits = ""
+residual 3952 3960 4294967295 4294967295
+node "implicit_equation_1" units = "", runits = ""
+residual 3968 3976 4294967295 4294967295
+node "implicit_equation_2" units = "", runits = ""
+residual 3984 3992 4294967295 4294967295
+node "implicit_equation_3" units = "", runits = ""
+residual 4000 4008 4294967295 4294967295
+node "implicit_equation_4" units = "", runits = ""
+residual 4016 4024 4294967295 4294967295
+node "implicit_equation_5" units = "", runits = ""
+residual 4032 4040 4294967295 4294967295
+node "implicit_equation_6" units = "", runits = ""
+residual 4048 4056 4294967295 4294967295
+node "implicit_equation_7" units = "", runits = ""
+residual 4064 4072 4294967295 4294967295
+node "implicit_equation_8" units = "", runits = ""
+residual 4080 4088 4294967295 4294967295
+jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1880
+jacobian (d, g) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1888
+jacobian (d, s) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1896
+jacobian (d, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1904
+jacobian (d, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1912
+jacobian (d, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (d, fp4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (g, d) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1920
+jacobian (g, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1928
+jacobian (g, s) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1936
+jacobian (g, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1944
+jacobian (g, dt) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1952
+jacobian (g, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, d) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1960
+jacobian (s, g) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1968
+jacobian (s, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1976
+jacobian (s, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1984
+jacobian (s, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1992
+jacobian (s, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2000
+jacobian (s, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, implicit_equation_2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, implicit_equation_3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, implicit_equation_4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, implicit_equation_5) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, implicit_equation_6) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, implicit_equation_7) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, implicit_equation_8) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b, d) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2008
+jacobian (b, g) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2016
+jacobian (b, s) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2024
+jacobian (b, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2032
+jacobian (b, dt) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2040
+jacobian (b, trap1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2048
+jacobian (b, trap2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2056
+jacobian (b, di) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2064
+jacobian (b, si) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2072
+jacobian (b, gi) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2080
+jacobian (b, fp4) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2088
+jacobian (b, fp1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2096
+jacobian (b, fp2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2104
+jacobian (b, fp3) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2112
+jacobian (dt, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2120
+jacobian (dt, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, fp4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap1, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap1, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap1, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap1, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2128
+jacobian (trap1, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap1, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap2, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap2, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap2, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (trap2, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2136
+jacobian (flow(di,si), dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(di,si), trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(di,si), trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(di,si), flow(di,si)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(di,si), di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2144
+jacobian (flow(di,si), si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2152
+jacobian (flow(di,si), gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2160
+jacobian (di, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2168
+jacobian (di, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2176
+jacobian (di, trap2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2184
+jacobian (di, flow(di,si)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (di, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2192
+jacobian (di, si) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2200
+jacobian (di, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2208
+jacobian (di, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2216
+jacobian (di, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (di, implicit_equation_2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (si, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (si, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2224
+jacobian (si, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2232
+jacobian (si, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2240
+jacobian (si, flow(di,si)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (si, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2248
+jacobian (si, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2256
+jacobian (si, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2264
+jacobian (gi, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, s) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2272
+jacobian (gi, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2280
+jacobian (gi, trap1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2288
+jacobian (gi, trap2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2296
+jacobian (gi, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2304
+jacobian (gi, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2312
+jacobian (gi, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2320
+jacobian (gi, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, implicit_equation_2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, implicit_equation_3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, implicit_equation_4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, implicit_equation_5) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, implicit_equation_6) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, implicit_equation_7) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (gi, implicit_equation_8) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp4, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp4, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2328
+jacobian (fp4, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2336
+jacobian (fp4, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp4, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2344
+jacobian (fp4, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2352
+jacobian (fp4, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2360
+jacobian (fp4, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2368
+jacobian (fp4, fp4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2376
+jacobian (fp4, fp1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2384
+jacobian (fp4, fp2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2392
+jacobian (fp4, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2400
+jacobian (fp1, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2408
+jacobian (fp1, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2416
+jacobian (fp1, trap2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2424
+jacobian (fp1, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2432
+jacobian (fp1, si) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2440
+jacobian (fp1, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2448
+jacobian (fp1, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2456
+jacobian (fp1, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2464
+jacobian (fp1, implicit_equation_3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp1, implicit_equation_4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp2, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2472
+jacobian (fp2, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2480
+jacobian (fp2, trap2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2488
+jacobian (fp2, di) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2496
+jacobian (fp2, si) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2504
+jacobian (fp2, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2512
+jacobian (fp2, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2520
+jacobian (fp2, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2528
+jacobian (fp2, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2536
+jacobian (fp2, implicit_equation_5) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp2, implicit_equation_6) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp3, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2544
+jacobian (fp3, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2552
+jacobian (fp3, trap2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2560
+jacobian (fp3, di) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2568
+jacobian (fp3, si) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2576
+jacobian (fp3, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2584
+jacobian (fp3, fp4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2592
+jacobian (fp3, fp1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 2600
+jacobian (fp3, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2608
+jacobian (fp3, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 2616
+jacobian (fp3, implicit_equation_7) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (fp3, implicit_equation_8) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_0, trap1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_0, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2624
+jacobian (implicit_equation_1, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_1, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_1, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_1, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_1, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_1, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_1, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_1, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2632
+jacobian (implicit_equation_2, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_2, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_2, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_2, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_2, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_2, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_2, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_2, implicit_equation_2) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2640
+jacobian (implicit_equation_3, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_3, implicit_equation_3) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2648
+jacobian (implicit_equation_4, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_4, implicit_equation_4) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2656
+jacobian (implicit_equation_5, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_5, implicit_equation_5) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2664
+jacobian (implicit_equation_6, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_6, implicit_equation_6) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2672
+jacobian (implicit_equation_7, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, fp4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_7, implicit_equation_7) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2680
+jacobian (implicit_equation_8, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, trap2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, gi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, fp4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, fp1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, fp2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, fp3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_8, implicit_equation_8) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 2688
+collapsible (dt, gnd)
+collapsible (trap1, gnd)
+collapsible (trap2, gnd)
+collapsible (d, fp4)
+collapsible (si, s)
+collapsible (fp1, di)
+collapsible (fp2, fp1)
+collapsible (fp3, fp2)
+collapsible (fp4, fp3)
+collapsible (g, gi)
+0 states
+has bound_step false
+instance size 6304
+model size 1608

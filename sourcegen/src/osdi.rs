@@ -21,6 +21,7 @@ fn gen_osdi_structs() {
         .collect();
 
     let osdi_src_dir = project_root().join("openvaf").join("osdi").join("src").join("metadata");
+    let osdi_test_dir = project_root().join("openvaf").join("osdi").join("tests").join("load");
     let melange_src_dir = project_root().join("melange").join("core").join("src").join("veriloga");
 
     for header in &headers {
@@ -62,7 +63,8 @@ fn gen_osdi_structs() {
         let file_string = add_preamble("gen_osdi_structs", reformat(file_string));
         let file_name = format!("osdi_{}_{}.rs", header.version_major, header.version_minor);
 
-        ensure_file_contents(&melange_src_dir.join(file_name), &file_string);
+        ensure_file_contents(&melange_src_dir.join(&file_name), &file_string);
+        ensure_file_contents(&osdi_test_dir.join(&file_name), &file_string);
     }
 }
 
@@ -583,16 +585,16 @@ impl ToTokens for RustStruct<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let OsdiStruct { is_union, ident, ref fields, .. } = *self.0;
         let private =
-            if matches!(ident, "OsdiDescriptor") { quote!(__private: ()) } else { quote!() };
+            if matches!(ident, "OsdiDescriptor") { quote!(#[non_exhaustive]) } else { quote!() };
         let ident = format_ident!("{ident}");
         let kind = if is_union { quote!(union) } else { quote!(struct) };
         let field_names = fields.iter().map(|(name, _)| format_ident!("{name}"));
         let field_tys = fields.iter().map(|(_, ty)| RustTy(ty));
         quote! {
             #[repr(C)]
+            #private
             pub #kind #ident {
                 #(pub #field_names: #field_tys,)*
-                #private
             }
         }
         .to_tokens(tokens);
