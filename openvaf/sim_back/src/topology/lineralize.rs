@@ -8,7 +8,7 @@ use bitset::SparseBitMatrix;
 use hir_lower::{CallBackKind, HirInterner, ImplicitEquationKind, ParamKind};
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
-use mir::{Block, FuncRef, Inst, InstructionData, Opcode, Value, F_ONE, F_ZERO};
+use mir::{Block, FuncRef, Inst, InstructionData, Opcode, Value, FALSE, F_ONE, F_ZERO, TRUE};
 use typed_indexmap::TiSet;
 
 use crate::topology::{Contribution, Noise};
@@ -22,9 +22,9 @@ pub(super) enum Evaluation {
     /// without the need for an additional unknown
     Linear {
         /// The contribute that this linear equation writes to
-        contribute: Value,
-        /// The seperate dimension that this value was mapped to
-        dimension: Value,
+        /// Contains a painr of the original contribution and
+        /// the seperate dimension it was mapped to
+        contributes: Box<[(Value, Value)]>,
     },
     /// This operator is not used and can be ignored
     Dead,
@@ -48,26 +48,37 @@ impl<'a> super::Builder<'a> {
                     let val = self.func.dfg.first_result(operator_inst);
                     self.func.dfg.replace_uses(val, F_ZERO);
                 }
-                Evaluation::Linear { contribute, mut dimension } => {
+                Evaluation::Linear { contributes } => {
                     cov_mark::hit!(linear_operator);
                     let cb = &intern.callbacks[cb];
-                    let resistive_contribute = contribute;
-                    let inst = self.func.dfg.value_def(resistive_contribute).inst().unwrap();
-                    let contribute = self.topology.as_contribution(contribute).unwrap();
-                    let contribute = self.topology.get_mut(contribute);
-                    if is_noise {
-                        dimension = FuncCursor::new(self.func)
-                            .after_inst(inst)
-                            .ins()
-                            .ensure_optbarrier(dimension);
-                        let noise =
-                            Noise::new(operator_inst, cb, dimension, &mut ssa_builder, self.func);
-                        contribute.noise.push(noise)
-                    } else {
-                        update_optbarrier(self.func, &mut contribute.react, |mut val, cursor| {
-                            add(cursor, &mut val, dimension, false);
-                            val
-                        });
+                    for (contribute, mut dimension) in &*contributes {
+                        let resistive_contribute = *contribute;
+                        let inst = self.func.dfg.value_def(resistive_contribute).inst().unwrap();
+                        let contribute = self.topology.as_contribution(*contribute).unwrap();
+                        let contribute = self.topology.get_mut(contribute);
+                        if is_noise {
+                            dimension = FuncCursor::new(self.func)
+                                .after_inst(inst)
+                                .ins()
+                                .ensure_optbarrier(dimension);
+                            let noise = Noise::new(
+                                operator_inst,
+                                cb,
+                                dimension,
+                                &mut ssa_builder,
+                                self.func,
+                            );
+                            contribute.noise.push(noise)
+                        } else {
+                            update_optbarrier(
+                                self.func,
+                                &mut contribute.react,
+                                |mut val, cursor| {
+                                    add(cursor, &mut val, dimension, false);
+                                    val
+                                },
+                            );
+                        }
                     }
                 }
                 Evaluation::Equation => {
@@ -197,7 +208,7 @@ impl<'a> super::Builder<'a> {
                 self.op_dependent_vals.contains(&val)
             }
         };
-        let mut contribute = None;
+        let mut contributes = Vec::new();
         for &inst in postorder.iter() {
             match func.dfg.insts[inst] {
                 InstructionData::Binary { opcode: Opcode::Fadd | Opcode::Fsub, .. } => (),
@@ -254,10 +265,12 @@ impl<'a> super::Builder<'a> {
                         output_values.contains(val)
                     };
                     if is_output {
-                        if contribute.is_some() {
+                        // multiple uses of a noise source indicate
+                        // correlated noise, for now just create a correlation network
+                        if noise && !contributes.is_empty()  {
                             return Evaluation::Equation;
                         } else if self.topology.as_contribution(val).map_or(false,|it| !it.is_reactive()) {
-                            contribute = Some(val)
+                            contributes.push((val, F_ZERO))
                         } else {
                             return Evaluation::Equation;
                         }
@@ -268,18 +281,17 @@ impl<'a> super::Builder<'a> {
                 }
             }
         }
-        match contribute {
-            Some(contribute) => {
-                self.create_dimension(
-                    if noise { F_ONE } else { self.func.dfg.instr_args(inst)[0] },
-                    self.func.dfg.first_result(inst),
-                );
-                Evaluation::Linear { contribute, dimension: self.val_map[&contribute] }
-            }
-            None => {
-                debug_assert!(noise, "ddt should have been deadcode eliminated");
-                Evaluation::Dead
-            }
+        if contributes.is_empty() {
+            assert!(noise, "ddt should have been deadcode eliminated");
+            return Evaluation::Dead;
         }
+        self.create_dimension(
+            if noise { F_ONE } else { self.func.dfg.instr_args(inst)[0] },
+            self.func.dfg.first_result(inst),
+        );
+        for (contrib, dim) in &mut contributes {
+            *dim = self.val_map[&*contrib];
+        }
+        Evaluation::Linear { contributes: contributes.into_boxed_slice() }
     }
 }
