@@ -568,7 +568,7 @@ impl<'a> SimplifyCfg<'a> {
                     debug_assert_eq!(*destination, src);
                     *destination = dst;
                 }
-                _ => unreachable!(),
+                _ => unreachable!("last instruction must be terminator"),
             }
         }
 
