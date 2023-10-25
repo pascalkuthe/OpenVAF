@@ -11,11 +11,10 @@
 //!
 //! See also a neighboring `body` module.
 
-use std::fmt::{Debug, Display};
-use std::intrinsics::transmute;
+use std::fmt::Debug;
 
 use arena::Idx;
-use stdx::impl_debug;
+use stdx::{impl_debug, Ieee64};
 use syntax::ast::{self, BinaryOp, UnaryOp};
 
 use crate::Path;
@@ -26,7 +25,7 @@ pub type ExprId = Idx<Expr>;
 pub enum Literal {
     String(Box<str>),
     Int(i32),
-    Float(BitewiseF64),
+    Float(Ieee64),
     Inf,
 }
 
@@ -39,7 +38,11 @@ impl Literal {
         }
     }
     pub fn is_zero(&self) -> bool {
-        matches!(self, Literal::Int(0) | Literal::Float(PZERO | NZERO),)
+        match self {
+            Literal::Int(0) => true,
+            Literal::Float(val) => val.is_zero(),
+            _ => false,
+        }
     }
 }
 
@@ -49,59 +52,6 @@ impl_debug! {
         Literal::Int(val) => "{}",val;
         Literal::Float(val) => "{}",f64::from(*val);
         Literal::Inf => "inf";
-    }
-}
-
-/// Wrapper around f64 that implements
-#[derive(Clone, Eq, PartialEq, Hash, Copy)]
-#[repr(transparent)]
-pub struct BitewiseF64(u64);
-
-pub const PZERO: BitewiseF64 = BitewiseF64(unsafe { transmute(0f64) });
-pub const NZERO: BitewiseF64 = BitewiseF64(unsafe { transmute(-0f64) });
-
-impl From<f64> for BitewiseF64 {
-    #[inline(always)] // compiles to no op
-    fn from(val: f64) -> Self {
-        Self(val.to_bits())
-    }
-}
-impl From<BitewiseF64> for f64 {
-    #[inline(always)] // compiles to no op
-    fn from(bitwise: BitewiseF64) -> Self {
-        f64::from_bits(bitwise.0)
-    }
-}
-
-impl AsRef<f64> for BitewiseF64 {
-    #[inline(always)] // compiles to no op
-    fn as_ref(&self) -> &f64 {
-        // This is save because BitewiseF64 is repr(transparent) and therefore bitwise equivalent
-        // to an f64
-        unsafe { transmute(self) }
-    }
-}
-
-impl AsMut<f64> for BitewiseF64 {
-    #[inline(always)] // compiles to no op
-    fn as_mut(&mut self) -> &mut f64 {
-        // This is save because BitewiseF64 is repr(transparent) and therefore bitwise equivalent
-        // to an f64
-        unsafe { transmute(self) }
-    }
-}
-
-impl Debug for BitewiseF64 {
-    #[inline] // compiles to f64::fmt(self,f)
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&f64::from(*self), f)
-    }
-}
-
-impl Display for BitewiseF64 {
-    #[inline] // compiles to f64::fmt(self,f)
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&f64::from(*self), f)
     }
 }
 

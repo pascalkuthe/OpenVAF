@@ -24,7 +24,6 @@
 mod dfg;
 mod dominators;
 mod entities;
-mod immediates;
 mod instructions;
 mod layout;
 mod serialize;
@@ -47,12 +46,12 @@ pub use crate::dfg::{Const, DataFlowGraph, DfgValues, InstUseIter, UseCursor, Us
 pub use crate::dominators::DominatorTree;
 pub use crate::entities::{AnyEntity, Block, FuncRef, Inst, Param, Use, Value};
 pub use crate::flowgraph::ControlFlowGraph;
-pub use crate::immediates::Ieee64;
 pub use crate::instructions::{
     InstructionData, InstructionFormat, Opcode, PhiMap, PhiNode, ValueList, ValueListPool,
 };
 pub use crate::layout::{InstCursor, InstIter, Layout};
 use crate::write::DummyResolver;
+pub use stdx::Ieee64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FunctionSignature {

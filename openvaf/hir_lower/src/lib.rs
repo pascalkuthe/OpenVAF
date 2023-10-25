@@ -6,31 +6,44 @@ use hir::{
     Branch, BranchWrite, CompilationDB, Module, Node, ParamSysFun, Parameter, Type, Variable,
 };
 use indexmap::IndexMap;
-use lasso::{Rodeo, Spur};
+use lasso::Rodeo;
 use mir::builder::InstBuilder;
-use mir::{
-    DataFlowGraph, FuncRef, Function, FunctionSignature, KnownDerivatives, Param, Unknown, Value,
-};
+use mir::{DataFlowGraph, FuncRef, Function, Inst, KnownDerivatives, Param, Unknown, Value};
 use mir_build::{FunctionBuilder, FunctionBuilderContext, RetBuilder};
 use stdx::packed_option::PackedOption;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::{map, TiMap, TiSet};
 
-use crate::body::LoweringCtx;
+pub use callbacks::{CallBackKind, NoiseTable, ParamInfoKind};
+
+use crate::body::BodyLoweringCtx;
+use crate::ctx::LoweringCtx;
+
+macro_rules! match_signature {
+    ($signature:ident: $($case:ident $(| $extra_case:ident)* => $res:expr),*) => {
+        match $signature {
+            $($case $(|$extra_case)* => $res,)*
+            signature => unreachable!("invalid signature {:?}",signature)
+        }
+
+    };
+}
 
 mod body;
+mod callbacks;
+mod ctx;
+mod expr;
+pub mod fmt;
 mod parameters;
 mod state;
+mod stmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImplicitEquationKind {
     Ddt,
-    UnresolvedDdt(Value),
-    LinearDdt,
-    Idt(IdtKind),
     NoiseSrc,
-    Absdelay,
+    Idt(IdtKind),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -45,6 +58,17 @@ impl From<BranchWrite> for CurrentKind {
         match kind {
             BranchWrite::Named(branch) => CurrentKind::Branch(branch),
             BranchWrite::Unnamed { hi, lo } => CurrentKind::Unnamed { hi, lo },
+        }
+    }
+}
+
+impl TryFrom<CurrentKind> for BranchWrite {
+    type Error = ();
+    fn try_from(kind: CurrentKind) -> Result<BranchWrite, ()> {
+        match kind {
+            CurrentKind::Branch(branch) => Ok(BranchWrite::Named(branch)),
+            CurrentKind::Unnamed { hi, lo } => Ok(BranchWrite::Unnamed { hi, lo }),
+            CurrentKind::Port(_) => Err(()),
         }
     }
 }
@@ -133,12 +157,12 @@ pub enum PlaceKind {
     FunctionArg(hir::FunctionArg),
     Contribute {
         dst: BranchWrite,
-        dim: Dim,
+        reactive: bool,
         voltage_src: bool,
     },
     ImplicitResidual {
         equation: ImplicitEquation,
-        dim: Dim,
+        reactive: bool,
     },
     CollapseImplicitEquation(ImplicitEquation),
     IsVoltageSrc(BranchWrite),
@@ -146,6 +170,7 @@ pub enum PlaceKind {
     Param(Parameter),
     ParamMin(Parameter),
     ParamMax(Parameter),
+    BoundStep,
 }
 
 impl PlaceKind {
@@ -160,7 +185,12 @@ impl PlaceKind {
                 param.ty(db)
             }
             PlaceKind::IsVoltageSrc(_) | PlaceKind::CollapseImplicitEquation(_) => Type::Bool,
+            PlaceKind::BoundStep => Type::Real,
         }
+    }
+
+    pub fn is_init_only(&self) -> bool {
+        matches!(self, Self::CollapseImplicitEquation(_))
     }
 }
 
@@ -172,160 +202,6 @@ impl From<hir::AssignmentLhs> for PlaceKind {
             hir::AssignmentLhs::FunctionArg(arg) => PlaceKind::FunctionArg(arg),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
-pub enum ParamInfoKind {
-    Invalid,
-    MinInclusive,
-    MaxInclusive,
-    MinExclusive,
-    MaxExclusive,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
-pub enum DisplayKind {
-    Debug,
-    Display,
-    Info,
-    Warn,
-    Error,
-    Fatal,
-    Monitor,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub enum FmtArgKind {
-    Binary,
-    EngineerReal,
-    Other,
-}
-
-impl From<Type> for FmtArg {
-    fn from(ty: Type) -> FmtArg {
-        FmtArg { ty, kind: FmtArgKind::Other }
-    }
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct FmtArg {
-    pub ty: Type,
-    pub kind: FmtArgKind,
-}
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub enum CallBackKind {
-    BoundStep,
-    Print { kind: DisplayKind, arg_tys: Box<[FmtArg]> },
-    SimParam,
-    SimParamOpt,
-    SimParamStr,
-    Derivative(Param),
-    NodeDerivative(Node),
-    ParamInfo(ParamInfoKind, Parameter),
-    CollapseHint(Node, Option<Node>),
-    BuiltinLimit { name: Spur, num_args: u32 },
-    StoreLimit(LimitState),
-    LimDiscontinuity,
-    Analysis,
-    StoreDelayTime(ImplicitEquation),
-}
-
-impl CallBackKind {
-    pub fn signature(&self) -> FunctionSignature {
-        match self {
-            CallBackKind::SimParam => FunctionSignature {
-                name: "simparam".to_owned(),
-                params: 1,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::SimParamOpt => FunctionSignature {
-                name: "simparam_opt".to_owned(),
-                params: 2,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::SimParamStr => FunctionSignature {
-                name: "simparam_str".to_owned(),
-                params: 1,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::Derivative(param) => FunctionSignature {
-                name: format!("ddx_{}", param),
-                params: 1,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::NodeDerivative(node) => FunctionSignature {
-                name: format!("ddx_node_{:?}", node),
-                params: 1,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::ParamInfo(kind, param) => FunctionSignature {
-                name: format!("set_{:?}({:?})", kind, param),
-                params: 0,
-                returns: 0,
-                has_sideeffects: true,
-            },
-            CallBackKind::CollapseHint(hi, lo) => FunctionSignature {
-                name: format!("collapse_{:?}_{:?}", hi, lo),
-                params: 0,
-                returns: 0,
-                has_sideeffects: true,
-            },
-            CallBackKind::Print { kind, arg_tys: args } => FunctionSignature {
-                name: format!("{:?})", kind),
-                params: args.len() as u16 + 1,
-                returns: 0,
-                has_sideeffects: true,
-            },
-            CallBackKind::BoundStep => FunctionSignature {
-                name: "$bound_step".to_owned(),
-                params: 1,
-                returns: 0,
-                has_sideeffects: true,
-            },
-            CallBackKind::BuiltinLimit { name, num_args } => FunctionSignature {
-                name: format!("$limit[{name:?}]"),
-                params: *num_args as u16,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::StoreLimit(state) => FunctionSignature {
-                name: format!("$store[{state:?}]"),
-                params: 1,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::LimDiscontinuity => FunctionSignature {
-                name: "$discontinuty[-1]".to_owned(),
-                params: 0,
-                returns: 0,
-                has_sideeffects: true,
-            },
-            CallBackKind::Analysis => FunctionSignature {
-                name: "analysis".to_owned(),
-                params: 1,
-                returns: 1,
-                has_sideeffects: false,
-            },
-            CallBackKind::StoreDelayTime(eq) => FunctionSignature {
-                name: format!("store_delay[{eq:?}]"),
-                params: 1,
-                returns: 1,
-                has_sideeffects: false,
-            },
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Dim(u32);
-impl_idx_from!(Dim(u32));
-impl_debug_display! {
-    match Dim {Dim(i) => "dim{}", i;}
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -342,27 +218,15 @@ impl_debug_display! {
     match LimitState {LimitState(i) => "lim_state{}", i;}
 }
 
-pub const RESISTIVE_DIM: Dim = Dim(0u32);
-pub const REACTIVE_DIM: Dim = Dim(1u32);
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum DimKind {
-    Resistive,
-    Reactive,
-    WhiteNoise(Spur),
-    FlickrNoise(Spur),
-    TableNoise(Spur),
-}
-
 /// A mapping between abstractions used in the MIR and the corresponding
 /// information from the HIR. This allows the MIR to remain independent of the frontend/HIR
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct HirInterner {
-    pub tagged_reads: IndexMap<Value, Variable, ahash::RandomState>,
     pub outputs: IndexMap<PlaceKind, PackedOption<Value>, ahash::RandomState>,
     pub params: TiMap<Param, ParamKind, Value>,
     pub callbacks: TiSet<FuncRef, CallBackKind>,
-    pub dims: TiVec<Dim, DimKind>,
+    pub callback_uses: TiVec<FuncRef, Vec<Inst>>,
+    pub tagged_reads: IndexMap<Value, Variable, ahash::RandomState>,
     pub implicit_equations: TiVec<ImplicitEquation, ImplicitEquationKind>,
     pub lim_state: TiMap<LimitState, Value, Vec<(Value, bool)>>,
 }
@@ -394,11 +258,7 @@ impl HirInterner {
         }
     }
 
-    pub fn unknowns<'a>(
-        &'a mut self,
-        func: &'a mut Function,
-        sim_derivatives: bool,
-    ) -> KnownDerivatives {
+    pub fn unknowns<'a>(&'a self, func: &'a Function, sim_derivatives: bool) -> KnownDerivatives {
         let mut unknowns = TiSet::default();
         let mut ddx_calls = AHashMap::new();
         // let mut nodes: AHashMap<NodeId, HybridBitSet<Value>> = AHashMap::new();
@@ -504,19 +364,17 @@ impl HirInterner {
     }
 
     pub fn ensure_param(&mut self, func: &mut Function, kind: ParamKind) -> Value {
-        Self::ensure_param_(&mut self.params, func, kind).0
+        Self::ensure_param_(&mut self.params, func, kind)
     }
 
     pub fn ensure_param_(
         params: &mut TiMap<Param, ParamKind, Value>,
         func: &mut Function,
         kind: ParamKind,
-    ) -> (Value, bool) {
+    ) -> Value {
         let len = params.len();
         let entry = params.raw.entry(kind);
-        let changed = matches!(entry, indexmap::map::Entry::Vacant(_));
-        let val = *entry.or_insert_with(|| func.dfg.make_param(len.into()));
-        (val, changed)
+        *entry.or_insert_with(|| func.dfg.make_param(len.into()))
     }
 
     pub fn live_params<'a>(
@@ -544,7 +402,7 @@ pub struct MirBuilder<'a> {
     tagged_reads: AHashSet<Variable>,
     tag_writes: bool,
     ctx: Option<&'a mut FunctionBuilderContext>,
-    split_contribute: bool,
+    lower_equations: bool,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -561,7 +419,7 @@ impl<'a> MirBuilder<'a> {
             is_output,
             required_vars,
             ctx: None,
-            split_contribute: false,
+            lower_equations: false,
             tag_writes: false,
         }
     }
@@ -584,12 +442,12 @@ impl<'a> MirBuilder<'a> {
         self
     }
 
-    pub fn split_contributions(&mut self) {
-        self.split_contribute = true;
+    pub fn lower_equations(&mut self) {
+        self.lower_equations = true;
     }
 
-    pub fn with_split_contributions(mut self) -> Self {
-        self.split_contribute = true;
+    pub fn with_equations(mut self) -> Self {
+        self.lower_equations = true;
         self
     }
 
@@ -615,61 +473,42 @@ impl<'a> MirBuilder<'a> {
             &mut ctx_
         };
 
-        let mut builder = FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
+        let builder: FunctionBuilder<'_> =
+            FunctionBuilder::new(&mut func, literals, ctx, self.tag_writes);
         let path = self.module.name(self.db);
-
         let analog_initial_body = self.module.analog_initial_block(self.db);
-
         let analog_body = self.module.analog_block(self.db);
 
-        let mut places = TiSet::default();
-        let mut extra_dims = TiVec::new();
-        if self.split_contribute {
-            interner.dims.push(DimKind::Resistive);
-            interner.dims.push(DimKind::Reactive);
-            extra_dims.push(AHashMap::default());
-            extra_dims.push(AHashMap::default());
-        }
-
-        let mut ctx = LoweringCtx {
-            db: self.db,
-            func: &mut builder,
-            data: &mut interner,
-            body: analog_initial_body.borrow(),
-            tagged_vars: &self.tagged_reads,
-            places: &mut places,
-            extra_dims: self.split_contribute.then_some(&mut extra_dims),
-            path: &path,
-            contribute_rhs: false,
-            inside_lim: false,
-        };
+        let mut ctx = LoweringCtx::new(self.db, builder, !self.lower_equations, &mut interner)
+            .with_tagged_vars(self.tagged_reads);
+        let mut body_ctx =
+            BodyLoweringCtx { ctx: &mut ctx, body: analog_initial_body.borrow(), path: &path };
 
         // lower analog initial blocks first
-        ctx.lower_entry_stmts();
+        body_ctx.lower_entry_stmts();
         // ... and normal analog blocks afterwards
-        ctx.body = analog_body.borrow();
-        ctx.lower_entry_stmts();
+        body_ctx.body = analog_body.borrow();
+        body_ctx.lower_entry_stmts();
 
         for var in self.required_vars {
-            ctx.place(PlaceKind::Var(var));
+            ctx.dec_place(PlaceKind::Var(var));
         }
         let is_output = self.is_output;
-        interner.outputs = places
+        ctx.intern.outputs = ctx
+            .places
             .iter_enumerated()
             .map(|(place, kind)| {
                 if is_output(*kind) {
-                    let mut val = builder.use_var(place);
-                    // if builder.func.dfg.values.def_allow_alias(val).inst().is_some() {
-                    val = builder.ins().optbarrier(val);
-                    // }
+                    let mut val = ctx.func.use_var(place);
+                    val = ctx.func.ins().optbarrier(val);
                     (*kind, val.into())
                 } else {
                     (*kind, None.into())
                 }
             })
             .collect();
-        builder.ins().ret();
-        builder.finalize();
+        ctx.func.ins().ret();
+        ctx.func.finalize();
         (func, interner)
     }
 }

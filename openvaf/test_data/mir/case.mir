@@ -1,56 +1,56 @@
-function %(v15, v19, v23, v32) {
+function %(v16, v20, v24, v33) {
     v4 = iconst 0
     v5 = iconst 1
-    v22 = fconst 0x1.920c49ba5e354p1
-    v25 = iconst 2
-    v27 = iconst 3
+    v23 = fconst 0x1.920c49ba5e354p1
+    v26 = iconst 2
+    v28 = iconst 3
                                 block0:
-@0002                               v16 = ilt v15, v4
-@0002                               br v16, block2, block3
+@0002                               v17 = ilt v16, v4
+@0002                               br v17, block2, block3
 
                                 block2:
-@0002                               v17 = ineg v15
+@0002                               v18 = ineg v16
 @0002                               jmp block4
 
                                 block3:
 @0002                               jmp block4
 
                                 block4:
-@0002                               v18 = phi [v17, block2], [v15, block3]
-@0004                               v20 = iadd v18, v19
-@0005                               v21 = ieq v4, v20
-                                    br v21, block6, block7
+@0002                               v19 = phi [v18, block2], [v16, block3]
+@0004                               v21 = iadd v19, v20
+@0005                               v22 = ieq v4, v21
+                                    br v22, block6, block7
 
                                 block6:
                                     jmp block5
 
                                 block7:
-@0008                               v24 = ieq v5, v20
-                                    br v24, block8, block9
+@0008                               v25 = ieq v5, v21
+                                    br v25, block8, block9
 
                                 block9:
-@0009                               v26 = ieq v25, v20
-                                    br v26, block8, block10
+@0009                               v27 = ieq v26, v21
+                                    br v27, block8, block10
 
                                 block10:
-@000a                               v28 = ieq v27, v20
-                                    br v28, block8, block11
+@000a                               v29 = ieq v28, v21
+                                    br v29, block8, block11
 
                                 block8:
-@000c                               v29 = ifcast v15
-@000e                               v30 = fdiv v29, v22
-@0011                               v31 = sin v30
+@000c                               v30 = ifcast v16
+@000e                               v31 = fdiv v30, v23
+@0011                               v32 = sin v31
                                     jmp block5
 
                                 block11:
-@0013                               v33 = ifcast v4
+@0013                               v34 = ifcast v4
                                     jmp block5
 
                                 block5:
-                                    v36 = phi [v32, block6], [v31, block8], [v32, block11]
-                                    v34 = phi [v22, block6], [v30, block8], [v33, block11]
-                                    v35 = optbarrier v34
-                                    v38 = optbarrier v36
+                                    v37 = phi [v33, block6], [v32, block8], [v33, block11]
+                                    v35 = phi [v23, block6], [v31, block8], [v34, block11]
+                                    v36 = optbarrier v35
+                                    v46 = optbarrier v37
                                     jmp block1
 
                                 block1:

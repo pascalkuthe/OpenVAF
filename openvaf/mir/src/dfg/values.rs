@@ -74,6 +74,7 @@ pub mod consts {
         pub const N_ONE: i32 = -1;
         pub const F_TEN: f64 = 10.0;
         pub const F_THREE: f64 = 3.0;
+        pub const INFINITY: f64 = f64::INFINITY;
     }
 }
 

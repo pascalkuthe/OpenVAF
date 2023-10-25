@@ -673,11 +673,6 @@ fn second_order_pow() {
             v101 = feq v10, v3
             br v101, block1, block2
 
-        block1:
-            v110 = phi [v3, block0], [v104, block2]
-            v111 = phi [v3, block0], [v109, block2]
-            v100 = optbarrier v111
-
         block2:
             v102 = ln v10
             v103 = fadd v6, v102
@@ -688,6 +683,11 @@ fn second_order_pow() {
             v108 = fmul v104, v103
             v109 = fadd v107, v108
             jmp block1
+
+        block1:
+            v110 = phi [v3, block0], [v104, block2]
+            v111 = phi [v3, block0], [v109, block2]
+            v100 = optbarrier v111
         }
     "#]];
 

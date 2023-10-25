@@ -1,11 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
+mod ieee64;
 pub mod iter;
 mod macros;
 pub mod packed_option;
 pub mod pretty;
 pub mod vec;
+pub use crate::ieee64::Ieee64;
 
 pub const IS_CI: bool = option_env!("CI").is_some();
 pub const SKIP_HOST_TESTS: bool = option_env!("CI").is_some() && cfg!(windows);

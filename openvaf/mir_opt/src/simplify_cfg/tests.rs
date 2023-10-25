@@ -231,9 +231,9 @@ pub fn duplicate_phis_set() {
             jmp block3
 
         block3:
-            v15 = phi [v5, block0], [v6, block2]
-            v79 = phi [v6, block0], [v5, block2]
-            v9 = imul v15, v79
+            v16 = phi [v5, block0], [v6, block2]
+            v80 = phi [v6, block0], [v5, block2]
+            v9 = imul v16, v80
         }
     "#]];
     expect.assert_eq(&func.to_debug_string())

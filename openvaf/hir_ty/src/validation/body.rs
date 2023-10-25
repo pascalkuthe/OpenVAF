@@ -12,7 +12,8 @@ use syntax::name::{AsIdent, Name};
 
 use crate::builtin::{
     ABSDELAY_MAX, DDT_TOL, IDT_IC_ASSERT_TOL, NATURE_ACCESS_BRANCH, NATURE_ACCESS_NODES,
-    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, TRANSITION_DELAY_RISET_FALLT_TOL,
+    NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, NOISE_TABLE_INLINE, NOISE_TABLE_INLINE_NAME,
+    TRANSITION_DELAY_RISET_FALLT_TOL,
 };
 use crate::db::HirTyDB;
 use crate::inference::{BranchWrite, InferenceResult, ResolvedFun};
@@ -678,6 +679,10 @@ impl ExprValidator<'_, '_> {
                 }
             }
 
+            (
+                BuiltIn::noise_table | BuiltIn::noise_table_log,
+                Some(NOISE_TABLE_INLINE | NOISE_TABLE_INLINE_NAME),
+            ) => self.validate_const_expr(args[0]),
             (func @ (BuiltIn::simparam | BuiltIn::simparam_str), _) => {
                 if self.parent.ctx == BodyCtx::Const {
                     let known = if let Expr::Literal(Literal::String(name)) =

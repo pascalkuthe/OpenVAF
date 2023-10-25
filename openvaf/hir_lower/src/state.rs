@@ -3,6 +3,7 @@ use lasso::Rodeo;
 use mir::Function;
 use mir_build::{FunctionBuilder, FunctionBuilderContext};
 
+use crate::ctx::LoweringCtx;
 use crate::{HirInterner, ParamKind};
 
 impl HirInterner {
@@ -13,18 +14,19 @@ impl HirInterner {
         literals: &mut Rodeo,
     ) {
         let mut ctx = FunctionBuilderContext::default();
-        let (mut builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
-        for (kind, param) in self.params.clone().iter() {
+        let (builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
+        let mut ctx = LoweringCtx::new(db, builder, true, self);
+        for (kind, param) in ctx.intern.params.clone().iter() {
             if let ParamKind::HiddenState(var) = *kind {
-                if builder.func.dfg.value_dead(*param) {
+                if ctx.dfg().value_dead(*param) {
                     continue;
                 }
-                let val = self.lower_expr_body(db, var.init(db), 0, &mut builder);
-                builder.func.dfg.replace_uses(*param, val);
+                let val = ctx.lower_expr_body(var.init(db).borrow(), 0);
+                ctx.dfg_mut().replace_uses(*param, val);
             }
         }
 
-        builder.ensured_sealed();
-        builder.func.layout.append_inst_to_bb(term, builder.current_block())
+        ctx.ensured_sealed();
+        ctx.func.func.layout.append_inst_to_bb(term, ctx.current_block())
     }
 }

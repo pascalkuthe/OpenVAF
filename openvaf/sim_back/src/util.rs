@@ -2,7 +2,7 @@
 
 use bitset::BitSet;
 use hir::BranchWrite;
-use hir_lower::{Dim, HirInterner, ParamKind, PlaceKind};
+use hir_lower::{Dimension, HirInterner, ParamKind, PlaceKind};
 use mir::{Function, Inst, InstructionData, Opcode, Value, ValueDef, F_ZERO};
 
 pub fn strip_optbarrier(func: &Function, mut val: Value) -> Value {
@@ -33,7 +33,7 @@ pub fn get_contrib(
     func: &Function,
     intern: &HirInterner,
     branch: BranchWrite,
-    dim: Dim,
+    dim: Dimension,
     voltage_src: bool,
 ) -> Value {
     let contrib = PlaceKind::Contribute { dst: branch, dim, voltage_src };
@@ -49,7 +49,7 @@ pub fn get_contrib(
 pub fn get_contrib_with_barrier(
     intern: &HirInterner,
     branch: BranchWrite,
-    dim: Dim,
+    dim: Dimension,
     voltage_src: bool,
 ) -> Value {
     let contrib = PlaceKind::Contribute { dst: branch, dim, voltage_src };

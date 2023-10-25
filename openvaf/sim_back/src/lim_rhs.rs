@@ -50,8 +50,7 @@ impl LimRhs {
                                 &mut intern.params,
                                 func.func,
                                 ParamKind::NewState(state),
-                            )
-                            .0;
+                            );
 
                             let delta = if *neg {
                                 func.ins().fadd(changed, *unchanged)
