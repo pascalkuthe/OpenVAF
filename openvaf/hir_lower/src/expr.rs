@@ -86,7 +86,7 @@ impl BodyLoweringCtx<'_, '_, '_> {
                 // Special case INFINITY
                 if is_inf {
                     match self.body.expr_type(arg) {
-                        Type::Real => return INFINITY,
+                        Type::Real => return self.ctx.fconst(f64::NEG_INFINITY),
                         Type::Integer => return self.ctx.iconst(i32::MIN),
                         ty => unreachable!("{ty:?}"),
                     }

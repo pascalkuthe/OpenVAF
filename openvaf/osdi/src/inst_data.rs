@@ -3,9 +3,9 @@ use hir::{CompilationDB, ParamSysFun, Parameter, Variable};
 use hir_lower::{HirInterner, LimitState, ParamKind, PlaceKind};
 use indexmap::IndexMap;
 use llvm::{
-    IntPredicate, LLVMBuildFAdd, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildIntCast2, LLVMBuildLoad2,
-    LLVMBuildStore, LLVMBuildStructGEP2, LLVMConstInt, LLVMOffsetOfElement, LLVMSetFastMath,
-    TargetData, UNNAMED,
+    IntPredicate, LLVMBuildFAdd, LLVMBuildFSub, LLVMBuildGEP2, LLVMBuildICmp, LLVMBuildIntCast2,
+    LLVMBuildLoad2, LLVMBuildStore, LLVMBuildStructGEP2, LLVMConstInt, LLVMOffsetOfElement,
+    LLVMSetFastMath, TargetData, UNNAMED,
 };
 use mir::{Const, Param, ValueDef, F_ZERO};
 use mir_llvm::{CodegenCx, MemLoc};
@@ -412,11 +412,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         let residual = &self.residual[node];
         let residual = if reactive { &residual.react_lim_rhs } else { &residual.resist_lim_rhs };
         let slot = residual.expand()?;
-        let elem = NUM_CONST_FIELDS
-            + self.params.len() as u32
-            + self.cache_slots.len() as u32
-            + u32::from(slot);
-
+        let elem = self.eval_output_slot_elem(slot);
         let off = unsafe { LLVMOffsetOfElement(target_data, self.ty, elem) } as u32;
         Some(off)
     }
@@ -635,6 +631,7 @@ impl<'ll> OsdiInstanceData<'ll> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn store_contrib(
         &self,
         cx: &CodegenCx<'_, 'll>,
@@ -643,11 +640,16 @@ impl<'ll> OsdiInstanceData<'ll> {
         dst: &'ll llvm::Value,
         contrib: &'ll llvm::Value,
         llbuilder: &llvm::Builder<'ll>,
+        negate: bool,
     ) {
         let off = self.read_node_off(cx, node, ptr, llbuilder);
         let dst = LLVMBuildGEP2(llbuilder, cx.ty_double(), dst, [off].as_ptr(), 1, UNNAMED);
         let old = LLVMBuildLoad2(llbuilder, cx.ty_double(), dst, UNNAMED);
-        let val = LLVMBuildFAdd(llbuilder, contrib, old, UNNAMED);
+        let val = if negate {
+            LLVMBuildFSub(llbuilder, old, contrib, UNNAMED)
+        } else {
+            LLVMBuildFAdd(llbuilder, old, contrib, UNNAMED)
+        };
         LLVMSetFastMath(val);
         LLVMBuildStore(llbuilder, val, dst);
     }

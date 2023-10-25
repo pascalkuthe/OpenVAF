@@ -113,16 +113,25 @@ pub struct Residual {
     /// for this model. That means that instead of x the system is evaluated
     /// with x_lim. The corresponding newton would be
     ///
-    /// J(lim_x) delta_x = I(lim_x) + ddt(Q)                (1)
-    /// x' = lim_x - delta_x                                (2)
+    /// J(lim_x) delta_limx = I(lim_x) + ddt(Q)                (1)
+    /// x' = lim_x - delta_limx                                (2)
     ///
-    /// However the simulator is not avaible of the limiting and will instead
-    /// calculate: x' = x - delta_x. That means x' has an error of
-    /// err_x = lim_x - x. Inserting that error back into (1) yields a corrective
+    /// However the simulator is not aware  of the limiting and will instead
+    /// calculate: x' = x - delta_limx. That means x' has an error of
+    /// err_x = lim_x - x. Inserting that error back into (2) yields a corrective
     /// term:
+    /// x' = lim_x - delta_limx = x + err_x - delta_limx
+    /// delta_x = delta_limx - err_x
+    /// J(lim_x)  (delta_x + err_x) = I(lim_x) + ddt(Q)
+    /// J(lim_x) delta_x  = I(lim_x) + ddt(Q) - J(lim_x) * err_x
+    /// lim_rhs = J(lim_x) (lim_x - x)
     ///
-    /// J_I(lim_x) (delta_x + err_x) = I(lim_x) + ddt(Q)    (3)
-    /// lim_rhs = J_I(lim_x) (lim_x - x)                    (4)
+    /// note that this term endsup being included automatically in handwritten
+    /// models of spice-like simulator:
+    /// J(lim_x) (x - x')  =   I(lim_x)  ddt(Q) - J(lim_x) (lim_x - x)
+    /// J(lim_x) x'  = J(lim_x) x - I(lim_x) - ddt(Q) + J(lim_x) (lim_x - x)
+    /// J(lim_x) x'  = J(lim_x) lim_x - I(lim_x) - ddt(Q)
+    ///
     ///
     /// This corrective factor needs to be computed both for the resistive and
     /// reactive residual (the jacobian is madeup of both). The reactive component
@@ -133,16 +142,25 @@ pub struct Residual {
     /// for this model. That means that instead of x the system is evaluated
     /// with x_lim. The corresponding newton would be
     ///
-    /// J(lim_x) delta_x = I(lim_x) + ddt(Q)                (1)
-    /// x' = lim_x - delta_x                                (2)
+    /// J(lim_x) delta_limx = I(lim_x) + ddt(Q)                (1)
+    /// x' = lim_x - delta_limx                                (2)
     ///
-    /// However the simulator is not avaible of the limiting and will instead
-    /// calculate: x' = x - delta_x. That means x' has an error of
-    /// err_x = lim_x - x. Inserting that error back into (1) yields a corrective
+    /// However the simulator is not aware  of the limiting and will instead
+    /// calculate: x' = x - delta_limx. That means x' has an error of
+    /// err_x = lim_x - x. Inserting that error back into (2) yields a corrective
     /// term:
+    /// x' = lim_x - delta_limx = x + err_x - delta_limx
+    /// delta_x = delta_limx - err_x
+    /// J(lim_x)  (delta_x + err_x) = I(lim_x) + ddt(Q)
+    /// J(lim_x) delta_x  = I(lim_x) + ddt(Q) - J(lim_x) * err_x
+    /// lim_rhs = J(lim_x) (lim_x - x)
     ///
-    /// J_I(lim_x) (delta_x + err_x) = I(lim_x) + ddt(Q)    (3)
-    /// lim_rhs = J_I(lim_x) (lim_x - x)                    (4)
+    /// note that this term endsup being included automatically in handwritten
+    /// models of spice-like simulator:
+    /// J(lim_x) (x - x')  =   I(lim_x)  ddt(Q) - J(lim_x) (lim_x - x)
+    /// J(lim_x) x'  = J(lim_x) x - I(lim_x) - ddt(Q) + J(lim_x) (lim_x - x)
+    /// J(lim_x) x'  = J(lim_x) lim_x - I(lim_x) - ddt(Q)
+    ///
     ///
     /// This corrective factor needs to be computed both for the resistive and
     /// reactive residual (the jacobian is madeup of both). The reactive component

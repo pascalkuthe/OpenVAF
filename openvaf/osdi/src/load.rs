@@ -79,7 +79,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             for node in module.dae_system.unknowns.indices() {
                 if let Some(contrib) = inst_data.read_residual(node, inst, llbuilder, reactive) {
-                    inst_data.store_contrib(cx, node, inst, dst, contrib, llbuilder);
+                    inst_data.store_contrib(cx, node, inst, dst, contrib, llbuilder, false);
                 }
             }
 
@@ -111,7 +111,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
 
             for node in module.dae_system.unknowns.indices() {
                 if let Some(contrib) = inst_data.read_lim_rhs(node, inst, llbuilder, reactive) {
-                    inst_data.store_contrib(cx, node, inst, dst, contrib, llbuilder);
+                    inst_data.store_contrib(cx, node, inst, dst, contrib, llbuilder, true);
                 }
             }
 
@@ -188,7 +188,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         res = LLVMBuildFMul(llbuilder, res, alpha, UNNAMED);
                         LLVMSetFastMath(res);
                     }
-                    inst_data.store_contrib(cx, node, inst, dst, res, llbuilder);
+                    inst_data.store_contrib(cx, node, inst, dst, res, llbuilder, false);
                 }
             }
         }

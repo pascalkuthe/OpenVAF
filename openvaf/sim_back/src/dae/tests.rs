@@ -61,6 +61,21 @@ fn lim_rhs() {
 }
 
 #[test]
+fn lim_rhs_react() {
+    let src = indoc! {r#"
+        `include "disciplines.vams"
+        module lim_rhs_react(inout a, inout c);
+            electrical a, c;
+            parameter real foo=1.0, bar=2.0;
+            analog begin
+                I(a, c) <+ ddt(foo*$limit(V(a,c), "testlim"));
+            end
+        endmodule
+    "#};
+    run_test(src);
+}
+
+#[test]
 fn lim_rhs_sign() {
     let src = indoc! {r#"
         `include "disciplines.vams"

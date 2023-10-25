@@ -64,7 +64,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         };
 
         let next_state = unsafe {
-            let ptr = builder.struct_gep(sim_info_ty, sim_info, 3);
+            let ptr = builder.struct_gep(sim_info_ty, sim_info, 4);
             builder.load(cx.ty_ptr(), ptr)
         };
 

@@ -1,0 +1,36 @@
+function %(v16, v17, v18, v19, v20, v38, v42) {
+    inst0 = const fn %$limit[Spur(1)](2) -> 1
+    inst1 = const fn %$store[lim_state0](1) -> 1
+    inst2 = const fn %ddt(1) -> 1
+
+                                block5:
+@0009                               br v20, block2, block4
+
+                                block2:
+@0009                               v21 = call inst0(v18, v19)
+@0009                               jmp block4
+
+                                block4:
+@0009                               v22 = phi [v21, block2], [v18, block5]
+@0009                               v23 = call inst1(v22)
+@000a                               v24 = fmul v17, v23
+                                    v37 = fneg v24
+                                    v39 = fneg v17
+                                    v43 = fsub v42, v18
+                                    v44 = fmul v17, v43
+                                    v46 = fmul v39, v43
+                                    v48 = fmul v38, v24
+                                    v47 = optbarrier v48
+                                    v50 = fmul v38, v44
+                                    v49 = optbarrier v50
+                                    v52 = fmul v38, v37
+                                    v51 = optbarrier v52
+                                    v54 = fmul v38, v46
+                                    v53 = optbarrier v54
+                                    v56 = fmul v38, v17
+                                    v55 = optbarrier v56
+                                    v58 = fmul v38, v39
+                                    v57 = optbarrier v58
+                                    v59 = optbarrier v58
+                                    v61 = optbarrier v56
+}
