@@ -19,8 +19,8 @@ Topology {
                 },
                 current_src: Contribution {
                     unknown: None,
-                    resist: v80,
-                    react: v116,
+                    resist: v31,
+                    react: v3,
                     resist_small_signal: v3,
                     react_small_signal: v3,
                     noise: [],
@@ -31,10 +31,10 @@ Topology {
     implicit_equations: {
         inode0: Contribution {
             unknown: Some(
-                v83,
+                v32,
             ),
-            resist: v115,
-            react: v99,
+            resist: v39,
+            react: v36,
             resist_small_signal: v3,
             react_small_signal: v3,
             noise: [],

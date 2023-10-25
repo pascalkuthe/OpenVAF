@@ -275,39 +275,39 @@ units = "", desc = "", flags = ParameterFlags(PARA_TY_INT)
 
 5 terminals
 node "c" units = "V", runits = ""
-residual 2272 2280 4294967295 4294967295
+residual 2280 2288 4294967295 4294967295
 node "b" units = "V", runits = ""
-residual 2288 2296 4294967295 4294967295
+residual 2296 2304 4294967295 4294967295
 node "e" units = "V", runits = ""
-residual 2304 2312 4294967295 4294967295
+residual 2312 2320 4294967295 4294967295
 node "s" units = "V", runits = ""
-residual 2320 2328 4294967295 4294967295
+residual 2328 2336 4294967295 4294967295
 node "tnode" units = "V", runits = ""
-residual 2336 2344 4294967295 4294967295
+residual 2344 2352 4294967295 4294967295
 node "bi" units = "V", runits = ""
-residual 2352 2360 4294967295 4294967295
+residual 2360 2368 4294967295 4294967295
 node "ei" units = "V", runits = ""
-residual 2368 2376 4294967295 4294967295
+residual 2376 2384 4294967295 4294967295
 node "ci" units = "V", runits = ""
-residual 2384 2392 4294967295 4294967295
+residual 2392 2400 4294967295 4294967295
 node "bp" units = "V", runits = ""
-residual 2400 2408 4294967295 4294967295
+residual 2408 2416 4294967295 4294967295
 node "si" units = "V", runits = ""
-residual 2416 2424 4294967295 4294967295
+residual 2424 2432 4294967295 4294967295
 node "xf1" units = "V", runits = ""
-residual 2432 2440 4294967295 4294967295
+residual 2440 2448 4294967295 4294967295
 node "xf2" units = "V", runits = ""
-residual 2448 2456 4294967295 4294967295
+residual 2456 2464 4294967295 4294967295
 node "xf" units = "V", runits = ""
-residual 2464 2472 4294967295 4294967295
+residual 2472 2480 4294967295 4294967295
 node "n1" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "n2" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "implicit_equation_0" units = "", runits = ""
-residual 4294967295 2480 4294967295 4294967295
-node "implicit_equation_1" units = "", runits = ""
 residual 4294967295 2488 4294967295 4294967295
+node "implicit_equation_1" units = "", runits = ""
+residual 4294967295 2496 4294967295 4294967295
 jacobian (c, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 696
 jacobian (c, s) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 704
 jacobian (c, tnode) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 712
@@ -394,6 +394,8 @@ jacobian (xf, ci) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CON
 jacobian (xf, xf) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1064
 jacobian (implicit_equation_0, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 1072
 jacobian (implicit_equation_1, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 1080
+collapsible (implicit_equation_0, gnd)
+collapsible (implicit_equation_1, gnd)
 collapsible (b, bp)
 collapsible (bp, bi)
 collapsible (ci, c)
@@ -419,5 +421,5 @@ noise "ibei" (n1, gnd)
 noise "it" (n2, gnd)
 0 states
 has bound_step false
-instance size 3472
+instance size 3480
 model size 1112

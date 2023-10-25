@@ -118,7 +118,7 @@ impl Noise {
         let (kind, name) = match *cb {
             CallBackKind::WhiteNoise { name, .. } => {
                 let mut pwr = func.dfg.instr_args(inst)[0];
-                pwr = ssa_builder.define_at_exit(func, pwr, inst);
+                pwr = ssa_builder.define_at_exit(func, F_ZERO, pwr, inst);
                 (NoiseSourceKind::WhiteNoise { pwr }, name)
             }
             CallBackKind::FlickerNoise { name, .. } => {
@@ -126,8 +126,8 @@ impl Noise {
                 let exp = func.dfg.instr_args(inst)[1];
                 (
                     NoiseSourceKind::FlickerNoise {
-                        pwr: ssa_builder.define_at_exit(func, pwr, inst),
-                        exp: ssa_builder.define_at_exit(func, exp, inst),
+                        pwr: ssa_builder.define_at_exit(func, F_ZERO, pwr, inst),
+                        exp: ssa_builder.define_at_exit(func, F_ZERO, exp, inst),
                     },
                     name,
                 )

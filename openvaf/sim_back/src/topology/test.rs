@@ -86,6 +86,25 @@ fn conditional_ddt() {
 
     assert(src);
 }
+#[test]
+fn collapsible_ddt() {
+    cov_mark::check!(collapsible_ddt);
+    let src = indoc! {r#"
+        `include "disciplines.vams"
+        module collapsible_ddt(inout a, inout c);
+            electrical a, c;
+            parameter real foo=1.0;
+            real tmp;
+            analog begin
+                if (foo < 0) begin
+                    I(a, c)  <+ V(a) * ddt(V(c));
+                end
+            end
+        endmodule
+    "#};
+
+    assert(src);
+}
 
 /// Noise doesn't really create its own equation (its just a small
 /// signal source) so it can be used in conditions directly and can

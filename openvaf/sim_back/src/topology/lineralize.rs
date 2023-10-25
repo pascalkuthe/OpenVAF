@@ -5,7 +5,7 @@
 use std::mem::take;
 
 use bitset::SparseBitMatrix;
-use hir_lower::{CallBackKind, HirInterner, ImplicitEquationKind, ParamKind};
+use hir_lower::{CallBackKind, HirInterner, ImplicitEquationKind, ParamKind, PlaceKind};
 use mir::builder::InstBuilder;
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{Block, FuncRef, Inst, InstructionData, Opcode, Value, FALSE, F_ONE, F_ZERO, TRUE};
@@ -92,6 +92,15 @@ impl<'a> super::Builder<'a> {
                         intern.ensure_param(&mut self.func, ParamKind::ImplicitUnknown(eq));
                     let res = self.func.dfg.first_result(operator_inst);
                     self.func.dfg.replace_uses(res, eq_val);
+                    let collpase =
+                        ssa_builder.define_at_exit(self.func, TRUE, FALSE, operator_inst);
+                    if collpase != FALSE {
+                        cov_mark::hit!(collapsible_ddt);
+                        debug_assert_ne!(collpase, TRUE);
+                        intern
+                            .outputs
+                            .insert(PlaceKind::CollapseImplicitEquation(eq), collpase.into());
+                    }
 
                     let neg_eq_val = FuncCursor::new(self.func).at_exit().ins().fneg(eq_val);
                     let contributions = if is_noise {
@@ -109,7 +118,8 @@ impl<'a> super::Builder<'a> {
                             ..Contribution::default()
                         }
                     } else {
-                        let arg0 = ssa_builder.define_at_exit(self.func, arg0, operator_inst);
+                        let arg0 =
+                            ssa_builder.define_at_exit(self.func, F_ZERO, arg0, operator_inst);
                         Contribution {
                             unknown: Some(eq_val),
                             resist: arg0,

@@ -405,7 +405,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             if let PlaceKind::CollapseImplicitEquation(eq) = kind {
                 let should_collapse = val.unwrap_unchecked();
                 let eq = module.dae_system.unknowns.unwrap_index(&SimUnknownKind::Implicit(eq));
-                // let idx = cx.const_unsigned_int(eq.into());
 
                 let llcx = cx.llcx;
                 let llbuilder = &*builder.llbuilder;

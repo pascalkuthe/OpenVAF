@@ -63,7 +63,7 @@ function %(v16, v17, v19, v22, v25, v39, v83) {
                                     v76 = phi [v43, block12], [v78, block16]
                                     v82 = phi [v3, block12], [v81, block16]
                                     v80 = optbarrier v76
-                                    v84 = fneg v83
-                                    v100 = optbarrier v17
-                                    v101 = optbarrier v82
+                                    v99 = fneg v83
+                                    v115 = optbarrier v17
+                                    v116 = optbarrier v82
 }

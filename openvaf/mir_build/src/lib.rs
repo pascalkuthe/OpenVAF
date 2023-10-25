@@ -3,7 +3,7 @@ use mir::builder::{InsertBuilder, InstBuilder, InstInserterBase};
 use mir::cursor::{Cursor, FuncCursor};
 use mir::{
     Block, ControlFlowGraph, DataFlowGraph, FuncRef, Function, FunctionSignature, Inst,
-    InstructionData, Param, Value, F_ZERO,
+    InstructionData, Param, Value,
 };
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
@@ -591,10 +591,16 @@ impl<'a> SSAVariableBuilder<'a> {
     }
 
     #[must_use]
-    pub fn define_at_exit(&mut self, func: &mut Function, mut val: Value, inst: Inst) -> Value {
+    pub fn define_at_exit(
+        &mut self,
+        func: &mut Function,
+        init: Value,
+        mut val: Value,
+        inst: Inst,
+    ) -> Value {
         let finised_vals = func.dfg.num_values();
         self.new_var();
-        self.def_var(F_ZERO, func.layout.entry_block().unwrap());
+        self.def_var(init, func.layout.entry_block().unwrap());
         let bb = func.layout.inst_block(inst).unwrap();
         self.def_var(val, bb);
         let exit = func.layout.last_block().unwrap();

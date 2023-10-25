@@ -1,4 +1,4 @@
-use ahash::{AHashMap, RandomState};
+use ahash::{AHashMap, AHashSet, RandomState};
 use bitset::{BitSet, SparseBitMatrix};
 use hir::{CompilationDB, Type};
 use hir_lower::{HirInterner, ParamKind, PlaceKind};
@@ -45,9 +45,9 @@ impl Initalization {
         while let Some(bb) = blocks.next(&builder.func.layout) {
             builder.split_block(bb);
         }
-        builder.build_init_cache(&gvn);
-        builder.optimize();
-        builder.build_init_itern();
+        let collapse_implict = builder.build_init_itern();
+        builder.build_init_cache(&gvn, &collapse_implict);
+        builder.optimize(collapse_implict);
         builder.init
     }
 }
@@ -214,7 +214,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn build_init_cache(&mut self, gvn: &'a GVN) {
+    fn build_init_cache(&mut self, gvn: &GVN, collapse_implict: &AHashSet<Value>) {
         // first run deadcode elimination on the main function to figure out which cached
         // initialization values are actually used
         self.dom_tree.compute_postdom_frontiers(self.cfg, &mut self.control_dep);
@@ -241,7 +241,9 @@ impl<'a> Builder<'a> {
             .init_cache
             .iter()
             .filter_map(|(&val, &old_inst)| {
-                if self.func.dfg.value_dead(val) && !self.output_values.contains(val) {
+                if self.func.dfg.value_dead(val)
+                    && (!self.output_values.contains(val) || collapse_implict.contains(&val))
+                {
                     // make some other value here so there isn't an undefined parameter
                     self.func.dfg.values.fconst_at(0.0.into(), val);
                     return None;
@@ -251,6 +253,8 @@ impl<'a> Builder<'a> {
                     let idx = usize::from(tag);
                     let place = self.intern.outputs.get_index(idx).unwrap().0;
                     place.ty(self.db)
+                } else if collapse_implict.contains(&val) {
+                    Type::Bool
                 } else {
                     Type::Real
                 };
@@ -281,26 +285,27 @@ impl<'a> Builder<'a> {
             .collect();
     }
 
-    fn optimize(&mut self) {
+    fn optimize(&mut self, collapse_implict: AHashSet<Value>) {
         // perform final optimization/DCE
         simplify_cfg(self.func, self.cfg);
         self.cfg.compute(&self.init.func);
         aggressive_dead_code_elimination(
             &mut self.init.func,
             self.cfg,
-            &|val, _| self.init.cached_vals.contains_key(&val),
+            &|val, _| self.init.cached_vals.contains_key(&val) || collapse_implict.contains(&val),
             &self.control_dep,
         );
         simplify_cfg(&mut self.init.func, self.cfg);
     }
 
-    fn build_init_itern(&mut self) {
+    fn build_init_itern(&mut self) -> AHashSet<Value> {
         for (&kind, val) in self.intern.params.iter() {
             if let Some(&val) = self.val_map.get(val) {
                 let (param, _) = self.init.intern.params.insert_full(kind, val);
                 self.init.func.dfg.values.make_param_at(param, val);
             }
         }
+        let mut collapse_implict = AHashSet::new();
         for (&kind, val) in &mut self.intern.outputs {
             if let PlaceKind::CollapseImplicitEquation(eq) = kind {
                 if let Some(mut val) = val.take() {
@@ -311,10 +316,12 @@ impl<'a> Builder<'a> {
                         continue;
                     }
                     if let Some(&val) = self.val_map.get(&val) {
+                        collapse_implict.insert(val);
                         self.init.intern.outputs.insert(kind, val.into());
                     }
                 }
             }
         }
+        collapse_implict
     }
 }
