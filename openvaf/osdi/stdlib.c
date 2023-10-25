@@ -1,8 +1,14 @@
-#define NO_STD
 #ifdef NO_STD
 typedef int uint32_t;
 typedef unsigned char bool;
 typedef __SIZE_TYPE__ size_t;
+extern size_t strlen (const char *__s);
+extern void *memcpy (void *__restrict __dest, const void *__restrict __src,
+		     size_t __n);
+extern void *malloc (size_t __size);
+extern void *realloc (void *__ptr, size_t __size);
+extern double log(double);
+extern int strcmp(const char*, const char*);
 #define NULL ((void*)0)
 #else
 #include <math.h>
