@@ -9,7 +9,7 @@ pub use module_info::{collect_modules, ModuleInfo};
 
 use crate::context::{Context, OptimiziationStage};
 use crate::dae::DaeSystem;
-use crate::init::Initalization;
+use crate::init::Initialization;
 use crate::node_collapse::NodeCollapse;
 use crate::topology::Topology;
 
@@ -46,7 +46,7 @@ pub struct CompiledModule<'a> {
     pub dae_system: DaeSystem,
     pub eval: Function,
     pub intern: HirInterner,
-    pub init: Initalization,
+    pub init: Initialization,
     pub model_param_setup: Function,
     pub model_param_intern: HirInterner,
     pub node_collapse: NodeCollapse,
@@ -61,7 +61,7 @@ impl<'a> CompiledModule<'a> {
         let mut cx = Context::new(db, literals, module);
         cx.compute_outputs(true);
         cx.compute_cfg();
-        cx.optimize(OptimiziationStage::Inital);
+        cx.optimize(OptimiziationStage::Initial);
         debug_assert!(cx.func.validate());
 
         let topology = Topology::new(&mut cx);
@@ -74,7 +74,7 @@ impl<'a> CompiledModule<'a> {
         debug_assert!(cx.func.validate());
 
         cx.refresh_op_dependent_insts();
-        let mut init = Initalization::new(&mut cx, gvn);
+        let mut init = Initialization::new(&mut cx, gvn);
         let node_collapse = NodeCollapse::new(&init, &dae_system, &cx);
         debug_assert!(cx.func.validate());
         debug_assert!(init.func.validate());

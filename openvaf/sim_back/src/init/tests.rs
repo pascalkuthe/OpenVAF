@@ -9,7 +9,7 @@ use stdx::{integration_test_dir, openvaf_test_data};
 
 use crate::context::{Context, OptimiziationStage};
 use crate::dae::DaeSystem;
-use crate::init::Initalization;
+use crate::init::Initialization;
 use crate::topology::Topology;
 
 fn run_test(src: &str) {
@@ -19,7 +19,7 @@ fn run_test(src: &str) {
     let mut cx = Context::new(&db, &mut literals, &module);
     cx.compute_outputs(true);
     cx.compute_cfg();
-    cx.optimize(OptimiziationStage::Inital);
+    cx.optimize(OptimiziationStage::Initial);
 
     let topology = Topology::new(&mut cx);
     let mut dae_system = DaeSystem::new(&mut cx, topology);
@@ -29,7 +29,7 @@ fn run_test(src: &str) {
     dae_system.sparsify(&mut cx);
 
     cx.refresh_op_dependent_insts();
-    let init = Initalization::new(&mut cx, gvn);
+    let init = Initialization::new(&mut cx, gvn);
     let name = module.module.name(&db);
     let test_dir = openvaf_test_data("init");
     let topology = format!("{:#?}\n{:#?}", init.cached_vals, init.cache_slots);

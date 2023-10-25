@@ -7,7 +7,7 @@ use typed_indexmap::TiSet;
 
 use crate::context::Context;
 use crate::dae::{DaeSystem, SimUnknown};
-use crate::init::Initalization;
+use crate::init::Initialization;
 use crate::SimUnknownKind;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
@@ -22,7 +22,7 @@ pub struct NodeCollapse {
 }
 
 impl NodeCollapse {
-    pub(super) fn new(init: &Initalization, dae_system: &DaeSystem, ctx: &Context) -> NodeCollapse {
+    pub(super) fn new(init: &Initialization, dae_system: &DaeSystem, ctx: &Context) -> NodeCollapse {
         let mut pairs = TiSet::with_capacity(32);
         for (&kind, _) in &init.intern.outputs {
             if let PlaceKind::CollapseImplicitEquation(eq) = kind {

@@ -15,13 +15,13 @@ test = false
 
 openvaf = { version = "0.1.2", path = "../openvaf" }
 
-clap = "4.3"
+clap = "=4.3"
 directories-next = "2"
 path-absolutize = "3.1.0"
 anyhow = "1"
 termcolor = "1.2"
 camino = "1.1.4"
-env_logger = "0.10.0"
+env_logger = { version = "0.10.0", default-features = false, features = ["auto-color"] }
 log = "0.4.19"
 backtrace-ext = "0.2.1"
 backtrace = "0.3.68"

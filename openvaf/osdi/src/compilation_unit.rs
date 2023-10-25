@@ -13,7 +13,7 @@ use llvm::{
 use mir::{FuncRef, Function};
 use mir_llvm::{CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use sim_back::dae::DaeSystem;
-use sim_back::init::Initalization;
+use sim_back::init::Initialization;
 use sim_back::node_collapse::NodeCollapse;
 use sim_back::{CompiledModule, ModuleInfo};
 use typed_index_collections::TiVec;
@@ -108,7 +108,7 @@ pub struct OsdiModule<'a> {
     pub dae_system: &'a DaeSystem,
     pub eval: &'a Function,
     pub intern: &'a HirInterner,
-    pub init: &'a Initalization,
+    pub init: &'a Initialization,
     pub model_param_setup: &'a Function,
     pub model_param_intern: &'a HirInterner,
     pub lim_table: &'a TiSet<OsdiLimId, OsdiLimFunction>,

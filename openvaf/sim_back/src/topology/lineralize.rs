@@ -1,6 +1,6 @@
-//! This module is responsible for determing whether an internal unknown needs
+//! This module is responsible for determining whether an internal unknown needs
 //! to be created for an anlog opertor (like ddt) or to turn the analog operator
-//! into a seperate dimension instead.
+//! into a separate dimension instead.
 
 use std::mem::take;
 
@@ -19,14 +19,14 @@ use crate::util::{add, update_optbarrier};
 
 #[derive(Debug)]
 pub(super) enum Evaluation {
-    /// The analog operator must be evaluated as a seperate equation
+    /// The analog operator must be evaluated as a separate equation
     Equation,
     /// The analog operator can be evaluated as a linear contribution
     /// without the need for an additional unknown
     Linear {
         /// The contribute that this linear equation writes to
         /// Contains a painr of the original contribution and
-        /// the seperate dimension it was mapped to
+        /// the separate dimension it was mapped to
         contributes: Box<[(Value, Value)]>,
     },
     /// This operator is not used and can be ignored
@@ -34,18 +34,18 @@ pub(super) enum Evaluation {
 }
 
 impl<'a> super::Builder<'a> {
-    /// Build topology for a list of analog operators (noise and ddt) with a predetermined evalution.
+    /// Build topology for a list of analog operators (noise and ddt) with a predetermined evaluation.
     pub(super) fn builid_analog_operators(
         &mut self,
         analog_operators: Vec<(Inst, Evaluation)>,
         intern: &mut HirInterner,
     ) {
         let mut ssa_builder = mir_build::SSAVariableBuilder::new(self.cfg);
-        for (operator_inst, evalutation) in analog_operators {
+        for (operator_inst, evaluation) in analog_operators {
             let arg0 = self.func.dfg.instr_args(operator_inst)[0];
             let cb = self.func.dfg.func_ref(operator_inst).unwrap();
             let is_noise = intern.callbacks[cb].is_noise();
-            match evalutation {
+            match evaluation {
                 Evaluation::Dead => {
                     cov_mark::hit!(dead_noise);
                     let val = self.func.dfg.first_result(operator_inst);
@@ -95,14 +95,14 @@ impl<'a> super::Builder<'a> {
                         intern.ensure_param(&mut self.func, ParamKind::ImplicitUnknown(eq));
                     let res = self.func.dfg.first_result(operator_inst);
                     self.func.dfg.replace_uses(res, eq_val);
-                    let collpase =
+                    let collapse =
                         ssa_builder.define_at_exit(self.func, TRUE, FALSE, operator_inst);
-                    if collpase != FALSE {
+                    if collapse != FALSE {
                         cov_mark::hit!(collapsible_ddt);
-                        debug_assert_ne!(collpase, TRUE);
+                        debug_assert_ne!(collapse, TRUE);
                         intern
                             .outputs
-                            .insert(PlaceKind::CollapseImplicitEquation(eq), collpase.into());
+                            .insert(PlaceKind::CollapseImplicitEquation(eq), collapse.into());
                     }
 
                     let neg_eq_val = FuncCursor::new(self.func).at_exit().ins().fneg(eq_val);
@@ -147,7 +147,7 @@ impl<'a> super::Builder<'a> {
     ) -> Vec<(Inst, Evaluation)> {
         let mut analog_operators = Vec::new();
 
-        // first iterate all analog operators and determine if they can
+        // first iterate all analog operators and determining if they can
         // be lineraized/turned into dimensions. This step does not modify the
         // function yet as otherwise the detection may return incorrect results
         for (cb, uses) in intern.callback_uses.iter_mut_enumerated() {
@@ -258,13 +258,13 @@ impl<'a> super::Builder<'a> {
                 }
                 InstructionData::PhiNode(ref phi) => {
                     // phis are pretty complex to figure out. The most correct
-                    // implemenation is to check if a phi is operating point
+                    // implementation is to check if a phi is operating point
                     // dependent. To determine that we check whether any of
                     // the control dependencies of the edge are operating point
                     // dependent.
                     //
-                    // However, to avoid cerating many uneccesary implicit
-                    // equiation a specical optimization for chains of additions
+                    // However, to avoid cerating many unnecessary implicit
+                    // equiation a special optimization for chains of additions
                     // is necessary. Chains of addition/subtraction where only one
                     // summand depends on the analog operator don't need an equation.
                     // This optimizes the following (common) case:
@@ -274,7 +274,7 @@ impl<'a> super::Builder<'a> {
                     //    I(x) <+ bar;
                     //
                     // this will create an (op dependent) phi [ddt(foo), ddt(foo) + bar].
-                    // This does not change the ddt state and therefore doens't require
+                    // This does not change the ddt state and therefore doesn't require
                     // introduction of state.
 
                     let mut op_dependent = false;

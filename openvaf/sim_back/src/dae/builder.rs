@@ -118,7 +118,7 @@ impl<'a> Builder<'a> {
     /// Return a list of all parameters that read from one of the simulation
     /// unknowns and therefore need to be considered during matrix construction.
     /// These need to be conrtsucted from the list of parameters instead of the list
-    /// of sim unkowns because voltage probes access to node voltages at the same time:
+    /// of sim unknowns because voltage probes access to node voltages at the same time:
     ///
     /// V(x, y) = V(x) - V(y)
     ///
@@ -538,7 +538,7 @@ impl<'a> Builder<'a> {
             val
         };
         for (unknown, residual) in &mut self.system.residual.iter_mut_enumerated() {
-            // we purpusfully ignore small singal values here since they never contribute the residual
+            // we purpusfully ignore small signal values here since they never contribute the residual
             residual.react_small_signal = F_ZERO;
             residual.react_small_signal = F_ZERO;
             let is_kirchoff =

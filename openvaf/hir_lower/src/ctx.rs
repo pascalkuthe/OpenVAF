@@ -23,7 +23,7 @@ pub struct LoweringCtx<'a, 'c> {
     /// We create a dedicated callback for each noise source
     /// by giving each callback a unique index. Kind of ineffcient
     /// but necessary to avoid accidental correlation/opimization.
-    /// For exmaple white_noise(x) - white_noise(x) is not zero.
+    /// For example white_noise(x) - white_noise(x) is not zero.
     pub num_noise_sources: u32,
 }
 

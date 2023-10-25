@@ -28,15 +28,15 @@ impl_debug_display! {match CacheSlot{CacheSlot(id) => "cslot{id}";}}
 /// The part of the model that is operating point independent and can be
 /// computed at the start of the simulation and cached afterwards
 #[derive(Debug)]
-pub struct Initalization {
+pub struct Initialization {
     pub func: Function,
     pub intern: HirInterner,
     pub cached_vals: IndexMap<Value, CacheSlot, RandomState>,
     pub cache_slots: TiMap<CacheSlot, (PackedOption<ClassId>, u32), hir::Type>,
 }
 
-impl Initalization {
-    pub(super) fn new(cx: &mut Context<'_>, gvn: GVN) -> Initalization {
+impl Initialization {
+    pub(super) fn new(cx: &mut Context<'_>, gvn: GVN) -> Initialization {
         let mut builder = Builder::new(cx);
         for _ in 0..builder.func.layout.num_blocks() {
             builder.init.func.layout.make_block();
@@ -45,15 +45,15 @@ impl Initalization {
         while let Some(bb) = blocks.next(&builder.func.layout) {
             builder.split_block(bb);
         }
-        let collapse_implict = builder.build_init_itern();
-        builder.build_init_cache(&gvn, &collapse_implict);
-        builder.optimize(collapse_implict);
+        let collapse_implicit = builder.build_init_itern();
+        builder.build_init_cache(&gvn, &collapse_implicit);
+        builder.optimize(collapse_implicit);
         builder.init
     }
 }
 
 struct Builder<'a> {
-    init: Initalization,
+    init: Initialization,
     init_cache: IndexMap<Value, Inst, RandomState>,
     // inputs
     func: &'a mut Function,
@@ -71,7 +71,7 @@ struct Builder<'a> {
 impl<'a> Builder<'a> {
     fn new(ctx: &'a mut Context) -> Builder<'a> {
         Builder {
-            init: Initalization {
+            init: Initialization {
                 func: Function::with_name(format!("{}_init", &ctx.func.name)),
                 cached_vals: IndexMap::with_capacity_and_hasher(128, RandomState::new()),
                 cache_slots: TiMap::default(),
@@ -105,7 +105,7 @@ impl<'a> Builder<'a> {
                         let srcloc = self.func.srclocs.get(inst).copied().unwrap_or_default();
                         self.init.func.srclocs.push(srcloc);
                     }
-                    // Some callbacks (collpase hints) have no meaning if not operating point dependent
+                    // Some callbacks (collapse hints) have no meaning if not operating point dependent
                     InstructionData::Call { func_ref, .. }
                         if self.intern.callbacks[func_ref].ignore_if_op_dependent() =>
                     {
@@ -169,11 +169,11 @@ impl<'a> Builder<'a> {
         debug_assert_eq!(new_inst_, new_inst);
 
         // we cache all instructions that produce an output or were tagged
-        // (writte to a variable by a user). Thes instructions can be removed.
+        // (writte to a variable by a user). These instructions can be removed.
         // Otherwise we only remove the inrsuction insrtuction if possible. If
         // its not possible we let DCE deal with later
         //
-        // outputs recieve special treatment as we always want to cache them
+        // outputs receive special treatment as we always want to cache them
         // if possible but outputs may not be places. There are also some special
         // consideratinos required for optbarriers.
         let is_output = self.func.dfg.insts[inst].opcode() == Opcode::OptBarrier
@@ -191,7 +191,7 @@ impl<'a> Builder<'a> {
             if let Some(inst) = inst {
                 cov_mark::hit!(cache_output);
                 let param = self.init_cache.insert_full(arg, inst).0 + self.intern.params.len();
-                // needed to ensure the type is calulated correctly
+                // needed to ensure the type is calculated correctly
                 if let Some(tag) = self.func.dfg.tag(val) {
                     self.func.dfg.set_tag(arg, Some(tag));
                 }
@@ -214,7 +214,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn build_init_cache(&mut self, gvn: &GVN, collapse_implict: &AHashSet<Value>) {
+    fn build_init_cache(&mut self, gvn: &GVN, collapse_implicit: &AHashSet<Value>) {
         // first run deadcode elimination on the main function to figure out which cached
         // initialization values are actually used
         self.dom_tree.compute_postdom_frontiers(self.cfg, &mut self.control_dep);
@@ -242,7 +242,7 @@ impl<'a> Builder<'a> {
             .iter()
             .filter_map(|(&val, &old_inst)| {
                 if self.func.dfg.value_dead(val)
-                    && (!self.output_values.contains(val) || collapse_implict.contains(&val))
+                    && (!self.output_values.contains(val) || collapse_implicit.contains(&val))
                 {
                     // make some other value here so there isn't an undefined parameter
                     self.func.dfg.values.fconst_at(0.0.into(), val);
@@ -253,7 +253,7 @@ impl<'a> Builder<'a> {
                     let idx = usize::from(tag);
                     let place = self.intern.outputs.get_index(idx).unwrap().0;
                     place.ty(self.db)
-                } else if collapse_implict.contains(&val) {
+                } else if collapse_implicit.contains(&val) {
                     Type::Bool
                 } else {
                     Type::Real
@@ -285,14 +285,14 @@ impl<'a> Builder<'a> {
             .collect();
     }
 
-    fn optimize(&mut self, collapse_implict: AHashSet<Value>) {
+    fn optimize(&mut self, collapse_implicit: AHashSet<Value>) {
         // perform final optimization/DCE
         simplify_cfg(self.func, self.cfg);
         self.cfg.compute(&self.init.func);
         aggressive_dead_code_elimination(
             &mut self.init.func,
             self.cfg,
-            &|val, _| self.init.cached_vals.contains_key(&val) || collapse_implict.contains(&val),
+            &|val, _| self.init.cached_vals.contains_key(&val) || collapse_implicit.contains(&val),
             &self.control_dep,
         );
         simplify_cfg(&mut self.init.func, self.cfg);
@@ -305,7 +305,7 @@ impl<'a> Builder<'a> {
                 self.init.func.dfg.values.make_param_at(param, val);
             }
         }
-        let mut collapse_implict = AHashSet::new();
+        let mut collapse_implicit = AHashSet::new();
         for (&kind, val) in &mut self.intern.outputs {
             if let PlaceKind::CollapseImplicitEquation(eq) = kind {
                 if let Some(mut val) = val.take() {
@@ -316,12 +316,12 @@ impl<'a> Builder<'a> {
                         continue;
                     }
                     if let Some(&val) = self.val_map.get(&val) {
-                        collapse_implict.insert(val);
+                        collapse_implicit.insert(val);
                         self.init.intern.outputs.insert(kind, val.into());
                     }
                 }
             }
         }
-        collapse_implict
+        collapse_implicit
     }
 }

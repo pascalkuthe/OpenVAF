@@ -26,7 +26,7 @@ pub(crate) struct Context<'a> {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum OptimiziationStage {
-    Inital,
+    Initial,
     PostDerivative,
     Final,
 }
@@ -66,7 +66,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn optimize(&mut self, stage: OptimiziationStage) -> GVN {
-        if stage == OptimiziationStage::Inital {
+        if stage == OptimiziationStage::Initial {
             dead_code_elimination(&mut self.func, &self.output_values);
         }
         sparse_conditional_constant_propagation(&mut self.func, &self.cfg);

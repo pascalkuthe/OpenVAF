@@ -16,7 +16,7 @@ fn compile(src: &str) -> (Function, Topology, String) {
     let mut context = Context::new(&db, &mut literals, &module);
     context.compute_outputs(true);
     context.compute_cfg();
-    context.optimize(OptimiziationStage::Inital);
+    context.optimize(OptimiziationStage::Initial);
     let topology = Topology::new(&mut context);
     assert!(context.func.validate());
     (context.func, topology, module.module.name(&db))
@@ -152,8 +152,8 @@ fn unused_noise() {
 }
 
 /// This test tests two things:
-/// * that a noise source that is used in multiple times is correcly transformed to a noise source.
-/// * that the contributions (to external nodes in this case) are correcly transformed to small
+/// * that a noise source that is used in multiple times is correctly transformed to a noise source.
+/// * that the contributions (to external nodes in this case) are correctly transformed to small
 ///   signal contributions
 #[test]
 fn correlated_noise() {

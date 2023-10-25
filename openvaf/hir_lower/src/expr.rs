@@ -462,7 +462,7 @@ impl BodyLoweringCtx<'_, '_, '_> {
                 // we create a dedicated callback for each noise source
                 // by giving every source a unique index. Kind of ineffcient
                 // but necessary to avoid accidental correlation/opimization
-                // (for exmaple white_noise(x) - white_noise(x) is not zero)
+                // (for example white_noise(x) - white_noise(x) is not zero)
                 let idx = self.ctx.num_noise_sources;
                 self.ctx.num_noise_sources += 1;
                 let name = if signature == WHITE_NOISE_NAME {

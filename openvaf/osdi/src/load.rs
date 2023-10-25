@@ -81,7 +81,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         LLVMSetFastMath(pwr);
                         pwr
                     }
-                    NoiseSourceKind::NoiseTable { .. } => unimplemented!("noise tabels"),
+                    NoiseSourceKind::NoiseTable { .. } => unimplemented!("noise tables"),
                 };
                 pwr = LLVMBuildFMul(llbuilder, pwr, fac, UNNAMED);
                 LLVMSetFastMath(pwr);

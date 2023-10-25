@@ -24,7 +24,7 @@ pub(super) struct Builder<'a> {
 
 impl<'a> Builder<'a> {
     /// Turns one (or multiple) linear contributions into a separate dimension.
-    /// That means that `val` gets replaced with 0 (altough not handeled in this function yet)
+    /// That means that `val` gets replaced with 0 (although not handled in this function yet)
     /// and all dependent calculations will use `dim_val` multiplied with the same value
     /// as `val`.
     pub(super) fn create_dimension(&mut self, dim_val: Value, val: Value) {

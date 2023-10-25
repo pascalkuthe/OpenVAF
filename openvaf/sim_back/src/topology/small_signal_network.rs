@@ -9,7 +9,7 @@ use crate::topology::Builder;
 use crate::util::{add, update_optbarrier};
 
 /// This is somewhat similar to the value lattices/flat sets used during
-/// constatn propagation. By representing the set of possible constatns
+/// constant propagation. By representing the set of possible constants
 /// that can be taken on by a value. The Elem variant is replaced by two
 /// other variants representing zero and the top set represents any
 /// set of non-zero values.
@@ -40,7 +40,7 @@ impl Candidate {
 }
 
 #[derive(PartialEq, Eq)]
-enum Depedency {
+enum Dependency {
     NonLinear,
     Linear,
     /// values statically known to be non-zero (constants)
@@ -56,10 +56,10 @@ enum CandidateKind {
 
 impl Builder<'_> {
     /// explores all `candidates` to extract the noise network
-    fn solve(&mut self, canidates: &mut Vec<Candidate>) {
+    fn solve(&mut self, candidates: &mut Vec<Candidate>) {
         loop {
             let mut changed = false;
-            canidates.retain_mut(|candidate| {
+            candidates.retain_mut(|candidate| {
                 if let Some(node) = candidate.as_node() {
                     self.topology.small_signal_vals.insert(node);
                 }
@@ -156,93 +156,92 @@ impl Builder<'_> {
         }
     }
 
-    fn analyze_dependency(&self, mut recurse: u32, val: Value, unknown: Value) -> Depedency {
+    fn analyze_dependency(&self, mut recurse: u32, val: Value, unknown: Value) -> Dependency {
         let inst = match self.func.dfg.value_def(val) {
             ValueDef::Result(inst, _) => inst,
             ValueDef::Param(_) if unknown == val => {
-                return Depedency::Linear;
+                return Dependency::Linear;
             }
             ValueDef::Const(Const::Float(val_)) if val != F_ZERO && val_.is_finite() => {
-                return Depedency::NonZero
+                return Dependency::NonZero
             }
-            ValueDef::Param(_) | ValueDef::Const(_) => return Depedency::Independent,
+            ValueDef::Param(_) | ValueDef::Const(_) => return Dependency::Independent,
             ValueDef::Invalid => unreachable!(),
         };
         if !self.scratch_buf.contains(inst) {
-            return Depedency::Independent;
+            return Dependency::Independent;
         }
         if let Some(it) = recurse.checked_sub(1) {
             recurse = it;
         } else {
-            return Depedency::NonLinear;
+            return Dependency::NonLinear;
         }
 
         match self.func.dfg.insts[inst] {
             InstructionData::Binary { opcode: Opcode::Fadd | Opcode::Fsub, args } => {
                 let arg0 = self.analyze_dependency(recurse, args[0], unknown);
-                if arg0 == Depedency::NonLinear {
-                    return Depedency::NonLinear;
+                if arg0 == Dependency::NonLinear {
+                    return Dependency::NonLinear;
                 }
                 let arg1 = self.analyze_dependency(recurse, args[1], unknown);
                 match (arg0, arg1) {
-                    (Depedency::NonLinear, _)
-                    | (_, Depedency::NonLinear)
-                    | (Depedency::Linear, Depedency::Linear) => Depedency::NonLinear,
-                    (Depedency::Linear, _) | (_, Depedency::Linear) => Depedency::Linear,
-                    _ => Depedency::Independent,
+                    (Dependency::NonLinear, _)
+                    | (_, Dependency::NonLinear)
+                    | (Dependency::Linear, Dependency::Linear) => Dependency::NonLinear,
+                    (Dependency::Linear, _) | (_, Dependency::Linear) => Dependency::Linear,
+                    _ => Dependency::Independent,
                 }
             }
             InstructionData::Binary { opcode: Opcode::Fdiv, args } => {
                 let arg0 = self.analyze_dependency(recurse, args[0], unknown);
-                if arg0 == Depedency::NonLinear {
-                    return Depedency::NonLinear;
+                if arg0 == Dependency::NonLinear {
+                    return Dependency::NonLinear;
                 }
                 let arg1 = self.analyze_dependency(recurse, args[1], unknown);
                 match (arg0, arg1) {
-                    (_, Depedency::Linear | Depedency::NonLinear) | (Depedency::NonLinear, _) => {
-                        Depedency::NonLinear
+                    (_, Dependency::Linear | Dependency::NonLinear)
+                    | (Dependency::NonLinear, _) => Dependency::NonLinear,
+                    (Dependency::Linear, Dependency::NonZero | Dependency::Independent) => {
+                        Dependency::Linear
                     }
-                    (Depedency::Linear, Depedency::NonZero | Depedency::Independent) => {
-                        Depedency::Linear
-                    }
-                    _ => Depedency::Independent,
+                    _ => Dependency::Independent,
                 }
             }
             InstructionData::Binary { opcode: Opcode::Fmul, args } => {
                 let arg0 = self.analyze_dependency(recurse, args[0], unknown);
-                if arg0 == Depedency::NonLinear {
-                    return Depedency::NonLinear;
+                if arg0 == Dependency::NonLinear {
+                    return Dependency::NonLinear;
                 }
                 let arg1 = self.analyze_dependency(recurse, args[1], unknown);
                 match (arg0, arg1) {
-                    (_, Depedency::Independent) | (Depedency::Independent, _) => {
-                        Depedency::Independent
+                    (_, Dependency::Independent) | (Dependency::Independent, _) => {
+                        Dependency::Independent
                     }
-                    _ => Depedency::Linear,
+                    _ => Dependency::Linear,
                 }
             }
             InstructionData::PhiNode(ref phi) => {
                 let mut is_linear = true;
                 for (_, arg) in self.func.dfg.phi_edges(phi) {
                     match self.analyze_dependency(recurse, arg, unknown) {
-                        Depedency::Linear => (),
-                        Depedency::NonZero | Depedency::Independent => {
+                        Dependency::Linear => (),
+                        Dependency::NonZero | Dependency::Independent => {
                             is_linear = false;
                         }
-                        Depedency::NonLinear => return Depedency::NonLinear,
+                        Dependency::NonLinear => return Dependency::NonLinear,
                     }
                 }
                 if is_linear {
-                    Depedency::Linear
+                    Dependency::Linear
                 } else {
-                    Depedency::Independent
+                    Dependency::Independent
                 }
             }
 
             InstructionData::Unary { opcode: Opcode::Fneg | Opcode::OptBarrier, arg } => {
                 self.analyze_dependency(recurse, arg, unknown)
             }
-            _ => Depedency::Independent,
+            _ => Dependency::Independent,
         }
     }
 
@@ -258,18 +257,18 @@ impl Builder<'_> {
         let mut found_linear = false;
         for val in vals {
             match self.analyze_dependency(20, val, unknown) {
-                Depedency::NonLinear => return false,
-                Depedency::Linear if found_linear => return false,
-                Depedency::Linear => found_linear = true,
-                Depedency::NonZero | Depedency::Independent => (),
+                Dependency::NonLinear => return false,
+                Dependency::Linear if found_linear => return false,
+                Dependency::Linear => found_linear = true,
+                Dependency::NonZero | Dependency::Independent => (),
             }
         }
         found_linear
     }
 
     /// Moves contributions form the small signal network to the large network
-    /// into a seperate dimension where possible. This avoids thes creation
-    /// of unneded derivatives
+    /// into a separate dimension where possible. This avoids the creation
+    /// of unneeded derivatives
     pub(super) fn prune_small_signal(&mut self) {
         let mut candidates = self.collect_candidates();
         self.solve(&mut candidates);
@@ -393,7 +392,7 @@ impl Builder<'_> {
     }
 
     /// returns the list of contributes that `val` is used in if and only if turning
-    /// these contributions value into a seperate dimension is valid. Specifically that
+    /// these contributions value into a separate dimension is valid. Specifically that
     /// means that all partial deriveves of these contrbituions (and the contributions themselves)
     /// do not changed their value if `val` zero (unless derived by itself)
     fn collect_linear_contributes(&mut self, val: Value) -> Option<Vec<Value>> {

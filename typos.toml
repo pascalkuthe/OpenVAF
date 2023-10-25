@@ -1,6 +1,6 @@
 default.extend-ignore-re = ["\\\\u\\{[0-9A-Z]*\\}"]
 [files]
-extend-exclude = ["integration_tests", "verilogae/tests", "*.mir", "openvaf/lexer/src/tests.rs"]
+extend-exclude = ["integration_tests", "verilogae/tests", "*.mir", "openvaf/lexer/src/tests.rs", "openvaf/test_data/**", "*.snap"]
 [default.extend-identifiers]
 "inout" = "inout"
 "laplace-and" = "laplace-and"

@@ -18,7 +18,7 @@ fn run_test(src: &str) {
     let mut context = Context::new(&db, &mut literals, &module);
     context.compute_outputs(true);
     context.compute_cfg();
-    context.optimize(OptimiziationStage::Inital);
+    context.optimize(OptimiziationStage::Initial);
     let topology = topology::Topology::new(&mut context);
     let mut dae_system = DaeSystem::new(&mut context, topology);
     context.compute_cfg();

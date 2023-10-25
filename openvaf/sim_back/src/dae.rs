@@ -19,7 +19,7 @@ pub struct SimUnknown(u32);
 impl_idx_from!(SimUnknown(u32));
 impl_debug_display! {match SimUnknown{SimUnknown(id) => "sim_node{id}";}}
 
-/// Repersents the topology of Verliog-A (top level) module as a set
+/// Represents the topology of Verliog-A (top level) module as a set
 /// of DAE equations.
 ///
 /// I(x) + ddt(Q(x)) = 0

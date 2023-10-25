@@ -10,10 +10,10 @@
 //! * Turn function calls like `ddt` and `whitle_noise` either into direct
 //!   contributions if possible (lineraization) or into an implicit node/
 //!   intenal equation if not.
-//! * Determine all nodes which are statically known to always have a large singal
+//! * Determine all nodes which are statically known to always have a large signal
 //!   voltage of zero (small_signal_network).
-//! * Seperate contributionsi made form the small signal network to the large
-//!   signal network into seperate values where possible (prune). Prevents the
+//! * Separate contributionsi made form the small signal network to the large
+//!   signal network into separate values where possible (prune). Prevents the
 //!   generation of unnecessary derivatives.
 //!
 
@@ -171,13 +171,13 @@ impl Topology {
                 } else {
                     return None;
                 };
-                let is_collpased = ctx
+                let is_collapsed = ctx
                     .intern
                     .outputs
                     .get(&PlaceKind::CollapseImplicitEquation(eq))
                     .and_then(|val| val.expand())
                     .map(|val| strip_optbarrier(&ctx.func, val));
-                if is_collpased == Some(TRUE) {
+                if is_collapsed == Some(TRUE) {
                     ctx.func.dfg.replace_uses(eq_val, F_ZERO);
                     return None;
                 }
