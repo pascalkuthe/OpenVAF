@@ -30,6 +30,7 @@ pub(crate) trait ControlFlowGraph {
     type PredecessorsRev<'a>: Iterator<Item = Block> + 'a
     where
         Self: 'a;
+    const NEEDS_TAG: bool;
     fn predecessors(&self, bb: Block) -> Self::Predecessors<'_>;
     fn has_single_predecessor(&self, bb: Block) -> bool;
     fn predecessors_rev(&self, bb: Block) -> Self::PredecessorsRev<'_>;
@@ -41,9 +42,15 @@ impl<'c> ControlFlowGraph for &'c CompleteCfg {
     type Predecessors<'a> = mir::flowgraph::PredecessorIter<'a> where 'c: 'a;
     type PredecessorsRev<'a> = mir::flowgraph::PredecessorRevIter<'a> where 'c: 'a;
 
+    const NEEDS_TAG: bool = false;
     fn predecessors(&self, bb: Block) -> Self::Predecessors<'_> {
         self.pred_iter(bb)
     }
+
+    fn has_single_predecessor(&self, bb: Block) -> bool {
+        self.single_predecessor(bb).is_some()
+    }
+
     fn predecessors_rev(&self, bb: Block) -> Self::PredecessorsRev<'_> {
         self.pred_rev_iter(bb)
     }
@@ -54,10 +61,6 @@ impl<'c> ControlFlowGraph for &'c CompleteCfg {
 
     fn push_undef_phis(&mut self, _bb: Block, _var: Place, _val: Value) {
         unreachable!("all blocks are sealed")
-    }
-
-    fn has_single_predecessor(&self, bb: Block) -> bool {
-        self.single_predecessor(bb).is_some()
     }
 }
 /// Structure containing the data relevant the construction of SSA for a given function.
@@ -269,7 +272,7 @@ enum Call {
 /// as well as modify the jump instruction and `Block` parameters to account for the SSA
 /// Phi functions.
 ///
-impl<Blocks: ControlFlowGraph> SSABuilder<Blocks> {
+impl<C: ControlFlowGraph> SSABuilder<C> {
     /// Declares a new definition of a variable in a given basic block.
     /// The SSA value is passed as an argument because it should be created with
     /// `ir::DataFlowGraph::append_result`.
@@ -362,7 +365,9 @@ impl<Blocks: ControlFlowGraph> SSABuilder<Blocks> {
             } else {
                 // Break potential cycles by eagerly adding a sentinel value
                 let val = func.dfg.make_invalid_value();
-                func.dfg.set_tag(val, Some(u32::from(var).into()));
+                if C::NEEDS_TAG {
+                    func.dfg.set_tag(val, Some(u32::from(var).into()));
+                }
 
                 // Define the operandless param added above to prevent lookup cycles.
                 self.def_var(var, val, block);
@@ -372,7 +377,9 @@ impl<Blocks: ControlFlowGraph> SSABuilder<Blocks> {
             }
         } else {
             let val = func.dfg.make_invalid_value();
-            func.dfg.set_tag(val, Some(u32::from(var).into()));
+            if C::NEEDS_TAG {
+                func.dfg.set_tag(val, Some(u32::from(var).into()));
+            }
             self.cfg.push_undef_phis(block, var, val);
             // Define the operandless param added above to prevent lookup cycles.
             self.def_var(var, val, block);
@@ -565,6 +572,7 @@ pub(crate) struct IncompleteCfg {
 impl ControlFlowGraph for IncompleteCfg {
     type Predecessors<'a> = iter::Copied<slice::Iter<'a, Block>>;
     type PredecessorsRev<'a> = iter::Copied<iter::Rev<slice::Iter<'a, Block>>>;
+    const NEEDS_TAG: bool = true;
 
     fn predecessors(&self, bb: Block) -> Self::Predecessors<'_> {
         self.blocks[bb].predecessors.iter().copied()
