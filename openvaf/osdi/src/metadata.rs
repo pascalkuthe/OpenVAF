@@ -6,7 +6,7 @@ use lasso::{Rodeo, Spur};
 use llvm::{LLVMABISizeOfType, LLVMOffsetOfElement, TargetData};
 use mir_llvm::CodegenCx;
 use sim_back::matrix::MatrixEntry;
-use sim_back::SimUnknown;
+use sim_back::SimUnknownKind;
 use smol_str::SmolStr;
 
 use crate::compilation_unit::{OsdiCompilationUnit, OsdiModule};
@@ -310,19 +310,19 @@ impl OsdiModule<'_> {
     }
 }
 
-fn sim_unknown_info(unknown: SimUnknown, db: &CompilationDB) -> (String, String, bool) {
+fn sim_unknown_info(unknown: SimUnknownKind, db: &CompilationDB) -> (String, String, bool) {
     let name;
     let discipline;
     let is_flow;
 
     match unknown {
-        SimUnknown::KirchoffLaw(node) => {
+        SimUnknownKind::KirchoffLaw(node) => {
             name = node.name(db).to_string();
             discipline = Some(node.discipline(db));
             is_flow = false;
         }
 
-        SimUnknown::Current(CurrentKind::Unnamed { hi, lo }) => {
+        SimUnknownKind::Current(CurrentKind::Unnamed { hi, lo }) => {
             name = if let Some(lo) = lo {
                 format!("flow({},{})", &hi.name(db), &lo.name(db))
             } else {
@@ -331,17 +331,17 @@ fn sim_unknown_info(unknown: SimUnknown, db: &CompilationDB) -> (String, String,
             discipline = Some(hi.discipline(db));
             is_flow = true;
         }
-        SimUnknown::Current(CurrentKind::Branch(br)) => {
+        SimUnknownKind::Current(CurrentKind::Branch(br)) => {
             name = format!("flow({})", &br.name(db));
             discipline = Some(br.discipline(db));
             is_flow = true;
         }
-        SimUnknown::Current(CurrentKind::Port(node)) => {
+        SimUnknownKind::Current(CurrentKind::Port(node)) => {
             name = format!("flow(<{}>)", &node.name(db));
             discipline = Some(node.discipline(db));
             is_flow = true;
         }
-        SimUnknown::Implicit(equ) => {
+        SimUnknownKind::Implicit(equ) => {
             name = format!("implicit_equation_{}", u32::from(equ));
             discipline = None;
             is_flow = false;

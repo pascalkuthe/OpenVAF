@@ -12,16 +12,16 @@ mod util;
 // mod tests;
 
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
-pub enum SimUnknown {
+pub enum SimUnknownKind {
     KirchoffLaw(Node),
     Current(CurrentKind),
     Implicit(ImplicitEquation),
 }
 
 impl_debug_display! {
-    match SimUnknown{
-        SimUnknown::KirchoffLaw(node) => "{node:?}";
-        SimUnknown::Current(curr) => "br[{curr:?}]";
-        SimUnknown::Implicit(node) => "{node}";
+    match SimUnknownKind{
+        SimUnknownKind::KirchoffLaw(node) => "{node:?}";
+        SimUnknownKind::Current(curr) => "br[{curr:?}]";
+        SimUnknownKind::Implicit(node) => "{node}";
     }
 }

@@ -9,7 +9,7 @@ use llvm::{
 };
 use log::info;
 use mir_llvm::{Builder, BuilderVal, CallbackFun, MemLoc};
-use sim_back::{BoundStepKind, SimUnknown};
+use sim_back::{BoundStepKind, SimUnknownKind};
 use typed_index_collections::TiVec;
 
 use crate::bitfield::{is_flag_set, is_flag_set_mem, is_flag_unset};
@@ -115,9 +115,9 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 .into()
                         }
                         ParamKind::Voltage { hi, lo } => {
-                            let hi = prev_solve[&SimUnknown::KirchoffLaw(hi)];
+                            let hi = prev_solve[&SimUnknownKind::KirchoffLaw(hi)];
                             if let Some(lo) = lo {
-                                let lo = prev_solve[&SimUnknown::KirchoffLaw(lo)];
+                                let lo = prev_solve[&SimUnknownKind::KirchoffLaw(lo)];
                                 llvm::LLVMBuildFSub(builder.llbuilder, hi, lo, UNNAMED)
                             } else {
                                 hi
@@ -137,14 +137,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         }
 
                         ParamKind::Current(kind) => prev_solve
-                            .get(&SimUnknown::Current(kind))
+                            .get(&SimUnknownKind::Current(kind))
                             .copied()
                             .unwrap_or_else(|| {
                                 info!("current probe {kind:?} always returns zero");
                                 cx.const_real(0.0)
                             }),
                         ParamKind::ImplicitUnknown(equation) => prev_solve
-                            .get(&SimUnknown::Implicit(equation))
+                            .get(&SimUnknownKind::Implicit(equation))
                             .copied()
                             .unwrap_or_else(|| {
                                 info!("implicit equation {equation} collapsed to zero");
@@ -178,7 +178,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                             }
                         }
                         ParamKind::PortConnected { port } => {
-                            let id = module.node_ids.unwrap_index(&SimUnknown::KirchoffLaw(port));
+                            let id =
+                                module.node_ids.unwrap_index(&SimUnknownKind::KirchoffLaw(port));
                             let id = cx.const_unsigned_int(id.into());
                             builder.int_cmp(id, connected_ports, IntULT)
                         }

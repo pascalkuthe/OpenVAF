@@ -8,7 +8,7 @@ use llvm::{
 };
 use mir::ControlFlowGraph;
 use mir_llvm::{Builder, BuilderVal, CallbackFun, CodegenCx};
-use sim_back::{BoundStepKind, SimUnknown};
+use sim_back::{BoundStepKind, SimUnknownKind};
 
 use crate::compilation_unit::{general_callbacks, OsdiCompilationUnit};
 use crate::inst_data::OsdiInstanceParam;
@@ -294,7 +294,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         }
 
         for (node_id, unknown) in module.node_ids.iter_enumerated() {
-            if let SimUnknown::KirchoffLaw(node) = unknown {
+            if let SimUnknownKind::KirchoffLaw(node) = unknown {
                 if let Some((dst, val)) =
                     intern.params.index_and_val(&ParamKind::PortConnected { port: *node })
                 {
@@ -351,8 +351,8 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     }
                 }
                 CallBackKind::CollapseHint(node1, node2) => {
-                    let node1 = SimUnknown::KirchoffLaw(*node1);
-                    let node2 = node2.map(SimUnknown::KirchoffLaw);
+                    let node1 = SimUnknownKind::KirchoffLaw(*node1);
+                    let node2 = node2.map(SimUnknownKind::KirchoffLaw);
                     let info = module.mir.collapse.index_and_val(&(node1, node2));
                     let (idx, extra_indices) = if let Some(info) = info {
                         info
@@ -414,7 +414,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         builder.select_bb(exit_bb);
 
         for (idx, (collapse, _)) in module.mir.collapse.iter_enumerated() {
-            if let (SimUnknown::Implicit(equation), None) = collapse {
+            if let (SimUnknownKind::Implicit(equation), None) = collapse {
                 let should_collapse = PlaceKind::CollapseImplicitEquation(*equation);
                 let outputs = &module.mir.init_inst_intern.outputs;
                 let should_collapse = outputs[&should_collapse].unwrap_unchecked();

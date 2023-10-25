@@ -12,7 +12,7 @@ use llvm::{
 use mir::FuncRef;
 use mir_llvm::{CallbackFun, CodegenCx, LLVMBackend, ModuleLlvm};
 use sim_back::matrix::MatrixEntry;
-use sim_back::{EvalMir, ModuleInfo, SimUnknown};
+use sim_back::{EvalMir, ModuleInfo, SimUnknownKind};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
@@ -32,7 +32,7 @@ pub struct OsdiMatrixEntry {
 }
 
 impl OsdiMatrixEntry {
-    pub fn to_middle(self, node_ids: &TiSet<OsdiNodeId, SimUnknown>) -> MatrixEntry {
+    pub fn to_middle(self, node_ids: &TiSet<OsdiNodeId, SimUnknownKind>) -> MatrixEntry {
         MatrixEntry { row: node_ids[self.row], col: node_ids[self.col] }
     }
 }
@@ -117,7 +117,7 @@ pub struct OsdiModule<'a> {
     pub base: &'a ModuleInfo,
     pub mir: &'a EvalMir,
     pub lim_table: &'a TiSet<OsdiLimId, OsdiLimFunction>,
-    pub node_ids: TiSet<OsdiNodeId, SimUnknown>,
+    pub node_ids: TiSet<OsdiNodeId, SimUnknownKind>,
     pub matrix_ids: TiSet<OsdiMatrixId, OsdiMatrixEntry>,
     pub num_terminals: u32,
     pub sym: String,
@@ -135,7 +135,7 @@ impl<'a> OsdiModule<'a> {
             .module
             .ports(db)
             .iter()
-            .map(|port| SimUnknown::KirchoffLaw(*port))
+            .map(|port| SimUnknownKind::KirchoffLaw(*port))
             .collect();
         let num_terminals = terminals.len() as u32;
 
@@ -146,7 +146,7 @@ impl<'a> OsdiModule<'a> {
                     if mir.pruned_nodes.contains(&node) {
                         return None;
                     }
-                    Some(SimUnknown::KirchoffLaw(node))
+                    Some(SimUnknownKind::KirchoffLaw(node))
                 });
 
             terminals.raw.extend(internal_nodes);
