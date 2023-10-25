@@ -116,6 +116,13 @@ where
         }
     }
 
+    pub fn is_empty_sparse(&self) -> bool {
+        match self {
+            HybridBitSet::Sparse(sparse) => sparse.is_empty(),
+            HybridBitSet::Dense(_) => false,
+        }
+    }
+
     pub fn insert_growable(&mut self, elem: T, domain_size: usize) -> bool {
         if let HybridBitSet::Dense(dense) = self {
             dense.ensure(elem.into() + 1)

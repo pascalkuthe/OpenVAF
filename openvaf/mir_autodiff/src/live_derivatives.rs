@@ -271,7 +271,7 @@ impl LiveDerivatives {
     }
 
     pub fn of_inst(&self, inst: Inst) -> Option<&HybridBitSet<Derivative>> {
-        self.mat.row(inst)
+        self.mat.row(inst).filter(|row| !row.is_empty_sparse())
     }
 
     pub fn compute_inst(
