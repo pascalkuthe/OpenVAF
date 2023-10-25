@@ -5,6 +5,7 @@ mod context;
 pub mod dae;
 pub mod init;
 mod module_info;
+pub mod node_collapse;
 mod noise;
 mod topology;
 
