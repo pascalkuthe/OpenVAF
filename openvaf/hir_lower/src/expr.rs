@@ -459,41 +459,50 @@ impl BodyLoweringCtx<'_, '_, '_> {
             }
 
             BuiltIn::white_noise => {
+                // we create a dedicated callback for each noise source
+                // by giving every source a unique index. Kind of ineffcient
+                // but necessary to avoid accidental correlation/opimization
+                // (for exmaple white_noise(x) - white_noise(x) is not zero)
+                let idx = self.ctx.num_noise_sources;
+                self.ctx.num_noise_sources += 1;
                 let name = if signature == WHITE_NOISE_NAME {
                     let name = self.body.as_literal(args[1]).unwrap().unwrap_str();
                     self.ctx.func.interner.get_or_intern(name)
                 } else {
-                    let name = format!("unnamed{}", self.ctx.unnamed_sources + 1);
-                    self.ctx.unnamed_sources += 1;
+                    let name = format!("unnamed{idx}");
                     self.ctx.func.interner.get_or_intern(name)
                 };
                 let pwr = self.lower_expr(args[0]);
-                self.ctx.call1(CallBackKind::WhiteNoise { name }, &[pwr])
+                self.ctx.call1(CallBackKind::WhiteNoise { name, idx }, &[pwr])
             }
             BuiltIn::flicker_noise => {
+                // see above
+                let idx = self.ctx.num_noise_sources;
+                self.ctx.num_noise_sources += 1;
                 let name = if signature == FLICKER_NOISE_NAME {
                     let name = self.body.as_literal(args[2]).unwrap().unwrap_str();
                     self.ctx.func.interner.get_or_intern(name)
                 } else {
-                    let name = format!("unnamed{}", self.ctx.unnamed_sources + 1);
-                    self.ctx.unnamed_sources += 1;
+                    let name = format!("unnamed{idx}");
                     self.ctx.func.interner.get_or_intern(name)
                 };
                 let pwr = self.lower_expr(args[0]);
                 let exp = self.lower_expr(args[1]);
-                self.ctx.call1(CallBackKind::FlickerNoise { name }, &[pwr, exp])
+                self.ctx.call1(CallBackKind::FlickerNoise { name, idx }, &[pwr, exp])
             }
             BuiltIn::noise_table | BuiltIn::noise_table_log => {
+                // see above
+                let idx = self.ctx.num_noise_sources;
+                self.ctx.num_noise_sources += 1;
                 let name = if matches!(signature, NOISE_TABLE_INLINE_NAME | NOISE_TABLE_FILE_NAME) {
                     let name = self.body.as_literal(args[1]).unwrap().unwrap_str();
                     self.ctx.func.interner.get_or_intern(name)
                 } else {
-                    let name = format!("unnamed{}", self.ctx.unnamed_sources + 1);
-                    self.ctx.unnamed_sources += 1;
+                    let name = format!("unnamed{idx}");
                     self.ctx.func.interner.get_or_intern(name)
                 };
                 let log = builtin == BuiltIn::noise_table_log;
-                let noise_table = NoiseTable::new([(0.0, 0.0)], log, name);
+                let noise_table = NoiseTable::new([(0.0, 0.0)], log, name, idx);
                 self.ctx.call1(CallBackKind::NoiseTable(Box::new(noise_table)), &[])
             }
 

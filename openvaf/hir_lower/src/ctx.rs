@@ -20,7 +20,11 @@ pub struct LoweringCtx<'a, 'c> {
     pub places: TiSet<Place, PlaceKind>,
     tagged_vars: AHashSet<Variable>,
     pub inside_lim: bool,
-    pub unnamed_sources: u32,
+    /// We create a dedicated callback for each noise source
+    /// by giving each callback a unique index. Kind of ineffcient
+    /// but necessary to avoid accidental correlation/opimization.
+    /// For exmaple white_noise(x) - white_noise(x) is not zero.
+    pub num_noise_sources: u32,
 }
 
 impl<'a, 'c> LoweringCtx<'a, 'c> {
@@ -38,7 +42,7 @@ impl<'a, 'c> LoweringCtx<'a, 'c> {
             tagged_vars: AHashSet::default(),
             inside_lim: false,
             intern,
-            unnamed_sources: 0,
+            num_noise_sources: 0,
         }
     }
 

@@ -116,12 +116,12 @@ impl Noise {
         func: &mut Function,
     ) -> Noise {
         let (kind, name) = match *cb {
-            CallBackKind::WhiteNoise { name } => {
+            CallBackKind::WhiteNoise { name, .. } => {
                 let mut pwr = func.dfg.instr_args(inst)[0];
                 pwr = ssa_builder.define_at_exit(func, pwr, inst);
                 (NoiseSourceKind::WhiteNoise { pwr }, name)
             }
-            CallBackKind::FlickerNoise { name } => {
+            CallBackKind::FlickerNoise { name, .. } => {
                 let pwr = func.dfg.instr_args(inst)[0];
                 let exp = func.dfg.instr_args(inst)[1];
                 (
@@ -298,8 +298,8 @@ impl Topology {
             val_map: AHashMap::with_capacity(128),
             edges: Vec::with_capacity(128),
             phis: Vec::with_capacity(128),
-            op_dependent_insts: &mut ctx.op_dependent_insts,
-            op_dependent_vals: &mut ctx.op_dependent_vals,
+            op_dependent_insts: &ctx.op_dependent_insts,
+            op_dependent_vals: &ctx.op_dependent_vals,
         };
         let operators = builder.analog_operator_evaluations(&postdom_frontiers, &mut ctx.intern);
         drop(postdom_frontiers);

@@ -30,8 +30,8 @@ pub enum CallBackKind {
     BuiltinLimit { name: Spur, num_args: u32 },
     StoreLimit(LimitState),
     TimeDerivative,
-    WhiteNoise { name: Spur },
-    FlickerNoise { name: Spur },
+    WhiteNoise { name: Spur, idx: u32 },
+    FlickerNoise { name: Spur, idx: u32 },
     NoiseTable(Box<NoiseTable>),
 }
 
@@ -116,13 +116,13 @@ impl CallBackKind {
                 returns: 1,
                 has_sideeffects: false,
             },
-            CallBackKind::WhiteNoise { name } => FunctionSignature {
+            CallBackKind::WhiteNoise { name, .. } => FunctionSignature {
                 name: format!("white_noise({name:?})"),
                 params: 1,
                 returns: 1,
                 has_sideeffects: false,
             },
-            CallBackKind::FlickerNoise { name } => FunctionSignature {
+            CallBackKind::FlickerNoise { name, .. } => FunctionSignature {
                 name: format!("flickr_noise({name:?})"),
                 params: 2,
                 returns: 1,
@@ -177,11 +177,17 @@ pub struct NoiseTable {
     pub name: Spur,
     pub log: bool,
     pub vals: Box<[(Ieee64, Ieee64)]>,
+    idx: u32,
 }
 
 impl NoiseTable {
     // TODO: read from disk
-    pub fn new(vals: impl IntoIterator<Item = (f64, f64)>, log: bool, name: Spur) -> Self {
+    pub fn new(
+        vals: impl IntoIterator<Item = (f64, f64)>,
+        log: bool,
+        name: Spur,
+        idx: u32,
+    ) -> Self {
         let mut vals: Vec<(Ieee64, Ieee64)> = if log {
             vals.into_iter().map(|(f, pwr)| (f.into(), pwr.into())).collect()
         } else {
@@ -189,6 +195,6 @@ impl NoiseTable {
         };
         vals.sort_unstable_by(|(f1, _), (f2, _)| f1.partial_cmp(f2).unwrap());
         vals.dedup_by_key(|(f, _)| *f);
-        Self { name, log, vals: vals.into_boxed_slice() }
+        Self { name, log, vals: vals.into_boxed_slice(), idx }
     }
 }
