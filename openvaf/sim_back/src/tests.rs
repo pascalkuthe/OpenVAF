@@ -14,7 +14,7 @@ use typed_index_collections::{TiSlice, TiVec};
 use typed_indexmap::TiMap;
 
 use crate::matrix::{JacobianMatrix, MatrixEntry, MatrixEntryId};
-use crate::middle::EvalMir;
+use crate::EvalMir;
 use crate::{collect_modules, ModuleInfo, SimUnknown};
 
 mod stamps;

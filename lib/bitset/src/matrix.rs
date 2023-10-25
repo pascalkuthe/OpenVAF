@@ -321,6 +321,16 @@ where
     }
 }
 
+impl<T> SparseBitMatrix<T, T>
+where
+    T: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
+{
+    /// Creates a new empty sparse bit matrix with no rows or columns.
+    pub fn new_square(n: usize) -> Self {
+        Self { num_columns: n, num_rows: n, rows: Vec::new(), _row_ty: PhantomData }
+    }
+}
+
 impl<R, C> SparseBitMatrix<R, C>
 where
     R: From<usize> + Into<usize> + Copy + PartialOrd + PartialEq + Debug,
