@@ -1,0 +1,20 @@
+function %(v16, v17, v20, v21) {
+    inst0 = const fn %white_noise(None)(1) -> 1
+    v3 = fconst 0.0
+    v6 = fconst 0x1.0000000000000p0
+    v11 = fconst 0x1.0000000000000p1
+
+                                block2:
+@0007                               v19 = fsub v3, v3
+                                    v29 = fneg v6
+@000f                               v22 = fdiv v21, v17
+@0013                               v25 = fmul v11, v3
+                                    v32 = fmul v11, v3
+@0014                               v26 = fadd v22, v25
+                                    v27 = optbarrier v19
+                                    v30 = optbarrier v29
+                                    v28 = optbarrier v26
+                                    v31 = optbarrier v17
+                                    v33 = optbarrier v16
+                                    v34 = optbarrier v32
+}

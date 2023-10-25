@@ -1,0 +1,42 @@
+Topology {
+    branches: {
+        branch0: (
+            Unnamed {
+                hi: node0,
+                lo: Some(
+                    node1,
+                ),
+            },
+            BranchInfo {
+                is_voltage_src: v1,
+                voltage_src: Contribution {
+                    unknown: None,
+                    resist: v3,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+                current_src: Contribution {
+                    unknown: None,
+                    resist: v32,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [
+                        Noise {
+                            name: None,
+                            kind: WhiteNoise {
+                                pwr: v37,
+                            },
+                            factor: v34,
+                        },
+                    ],
+                },
+            },
+        ),
+    },
+    implicit_equations: {},
+    small_signal_vals: {},
+    contributes: {},
+}

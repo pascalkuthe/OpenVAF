@@ -4,6 +4,7 @@ pub use module_info::{collect_modules, ModuleInfo};
 mod context;
 mod module_info;
 mod noise;
+mod topology;
 
 mod util;
 

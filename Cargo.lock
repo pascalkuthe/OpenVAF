@@ -298,6 +298,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7704b5fdd17b18ae31c4c1da5a2e0305a2bf17b5249300a9ee9ed7b72114c636"
 
 [[package]]
+name = "cov-mark"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ffa3d3e0138386cd4361f63537765cac7ee40698028844635a54495a92f67f3"
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1333,6 +1339,7 @@ version = "0.0.0"
 dependencies = [
  "ahash 0.8.3",
  "bitset",
+ "cov-mark",
  "expect-test",
  "float-cmp",
  "hir",
@@ -1342,6 +1349,7 @@ dependencies = [
  "lasso",
  "mir",
  "mir_autodiff",
+ "mir_build",
  "mir_interpret",
  "mir_opt",
  "paths",

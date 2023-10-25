@@ -284,6 +284,9 @@ impl DfgValues {
         let data = ValueData::new(ty, tag.into());
         self.defs.push_and_get_key(data)
     }
+    pub fn make_invalid_value(&mut self) -> Value {
+        self.make(ValueDataType::Invalid, None)
+    }
 
     /// Allocate an extended value entry.
     pub fn make_param(&mut self, param: Param) -> Value {

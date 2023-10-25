@@ -1,0 +1,69 @@
+function %(v16, v17, v19, v22, v25, v39, v83) {
+    inst0 = const fn %ddt(1) -> 1
+    v3 = fconst 0.0
+
+                                block17:
+@000d                               v21 = flt v17, v3
+                                    br v21, block2, block3
+
+                                block2:
+@0010                               v24 = flt v22, v3
+                                    br v24, block5, block6
+
+                                block5:
+@0013                               v27 = flt v25, v3
+                                    br v27, block8, block9
+
+                                block8:
+                                    v34 = fadd v17, v83
+                                    jmp block10
+
+                                block9:
+                                    jmp block10
+
+                                block10:
+                                    v47 = phi [v34, block8], [v17, block9]
+                                    jmp block7
+
+                                block6:
+                                    jmp block7
+
+                                block7:
+                                    v45 = phi [v17, block6], [v47, block10]
+                                    jmp block4
+
+                                block3:
+                                    jmp block4
+
+                                block4:
+                                    v43 = phi [v17, block3], [v45, block7]
+@001a                               v36 = flt v22, v3
+                                    br v36, block11, block12
+
+                                block11:
+@001d                               v38 = flt v25, v3
+                                    br v38, block14, block15
+
+                                block14:
+                                    v49 = fadd v43, v3
+                                    jmp block16
+
+                                block15:
+                                    jmp block16
+
+                                block16:
+                                    v78 = phi [v49, block14], [v43, block15]
+                                    v81 = phi [v39, block14], [v3, block15]
+                                    jmp block13
+
+                                block12:
+                                    jmp block13
+
+                                block13:
+                                    v76 = phi [v43, block12], [v78, block16]
+                                    v82 = phi [v3, block12], [v81, block16]
+                                    v80 = optbarrier v76
+                                    v84 = fneg v83
+                                    v100 = optbarrier v17
+                                    v101 = optbarrier v82
+}

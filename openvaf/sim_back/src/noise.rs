@@ -1,12 +1,8 @@
-use hir::{Branch, Node};
-use hir_lower::{CallBackKind, ImplicitEquation};
 use lasso::Spur;
-use mir::{Function, Inst, Value};
-use mir_build::SSAVariableBuilder;
+use mir::Value;
 use stdx::Ieee64;
 
-use crate::residual::Residual;
-use crate::SimUnknown;
+use crate::topology::SimUnknown;
 
 #[derive(Debug, Clone)]
 pub enum NoiseSourceKind {
