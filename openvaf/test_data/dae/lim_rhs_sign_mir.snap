@@ -1,0 +1,75 @@
+function %(v16, v19, v20, v21, v25, v30, v45, v60) {
+    inst0 = const fn %$limit[Spur(1)](2) -> 1
+    inst1 = const fn %$store[lim_state0](1) -> 1
+    v3 = fconst 0.0
+    v6 = fconst 0x1.0000000000000p0
+
+                                block11:
+@0003                               v18 = flt v16, v3
+                                    br v18, block2, block3
+
+                                block2:
+@0009                               br v21, block5, block7
+
+                                block5:
+@0009                               v22 = call inst0(v19, v20)
+@0009                               jmp block7
+
+                                block7:
+@0009                               v23 = phi [v19, block2], [v22, block5]
+@0009                               v24 = call inst1(v23)
+                                    jmp block4
+
+                                block3:
+@000d                               v26 = fneg v19
+@000f                               br v21, block8, block10
+
+                                block8:
+@000f                               v27 = call inst0(v26, v20)
+@000f                               jmp block10
+
+                                block10:
+@000f                               v28 = phi [v26, block3], [v27, block8]
+@000f                               v29 = call inst1(v28)
+                                    jmp block4
+
+                                block4:
+@0015                               v31 = phi [v24, block7], [v29, block10]
+@ffffffeb                           v46 = phi [v6, block7], [v3, block10]
+@ffffffeb                           v47 = phi [v3, block7], [v6, block10]
+@0016                               v32 = exp v31
+                                    v33 = fmul v16, v32
+                                    v50 = fmul v33, v46
+                                    v51 = fmul v33, v47
+                                    v44 = fneg v33
+                                    v52 = fneg v50
+                                    v53 = fneg v51
+                                    v55 = fadd v52, v51
+                                    v56 = fsub v50, v51
+                                    v58 = fadd v50, v53
+                                    v59 = fsub v52, v53
+                                    v61 = fsub v60, v19
+                                    v62 = fmul v50, v61
+                                    v63 = fadd v60, v19
+                                    v64 = fmul v51, v63
+                                    v65 = fadd v62, v64
+                                    v67 = fmul v52, v61
+                                    v69 = fmul v53, v63
+                                    v70 = fadd v67, v69
+                                    v72 = fmul v45, v33
+                                    v71 = optbarrier v72
+                                    v74 = fmul v45, v65
+                                    v73 = optbarrier v74
+                                    v76 = fmul v45, v44
+                                    v75 = optbarrier v76
+                                    v78 = fmul v45, v70
+                                    v77 = optbarrier v78
+                                    v80 = fmul v45, v55
+                                    v79 = optbarrier v80
+                                    v82 = fmul v45, v56
+                                    v81 = optbarrier v82
+                                    v84 = fmul v45, v58
+                                    v83 = optbarrier v84
+                                    v86 = fmul v45, v59
+                                    v85 = optbarrier v86
+}

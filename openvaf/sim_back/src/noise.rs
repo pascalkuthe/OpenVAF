@@ -2,7 +2,7 @@ use lasso::Spur;
 use mir::Value;
 use stdx::Ieee64;
 
-use crate::topology::SimUnknown;
+use crate::dae::SimUnknown;
 
 #[derive(Debug, Clone)]
 pub enum NoiseSourceKind {
@@ -18,4 +18,18 @@ pub struct NoiseSource {
     pub hi: SimUnknown,
     pub lo: Option<SimUnknown>,
     pub factor: Value,
+}
+
+impl NoiseSource {
+    pub fn map_vals(&mut self, mut f: impl FnMut(Value) -> Value) {
+        self.factor = f(self.factor);
+        match &mut self.kind {
+            NoiseSourceKind::WhiteNoise { pwr } => *pwr = f(*pwr),
+            NoiseSourceKind::FlickerNoise { pwr, exp } => {
+                *pwr = f(*pwr);
+                *exp = f(*exp);
+            }
+            NoiseSourceKind::NoiseTable { .. } => (),
+        }
+    }
 }

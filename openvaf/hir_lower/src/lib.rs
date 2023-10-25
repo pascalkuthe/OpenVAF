@@ -502,7 +502,7 @@ impl<'a> MirBuilder<'a> {
             .map(|(place, kind)| {
                 if is_output(*kind) {
                     let mut val = ctx.func.use_var(place);
-                    val = ctx.func.ins().optbarrier(val);
+                    val = ctx.func.ins().ensure_optbarrier(val);
                     (*kind, val.into())
                 } else {
                     (*kind, None.into())

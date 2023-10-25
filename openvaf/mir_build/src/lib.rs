@@ -599,7 +599,7 @@ impl<'a> SSAVariableBuilder<'a> {
         self.def_var(val, bb);
         let exit = func.layout.last_block().unwrap();
         val = self.use_var(func, exit);
-        let res = FuncCursor::new(func).at_bottom(exit).ins().optbarrier(val);
+        let res = FuncCursor::new(func).at_bottom(exit).ins().ensure_optbarrier(val);
         func.dfg.strip_alias_after(finised_vals);
         res
     }

@@ -1,0 +1,154 @@
+DaeSystem {
+    unknowns: {
+        sim_node0: node0,
+        sim_node1: node1,
+        sim_node2: node2,
+        sim_node3: node3,
+    },
+    residual: {
+        sim_node0: Residual {
+            resist: v572,
+            react: v574,
+            resist_small_signal: v3,
+            react_small_signal: v3,
+            resist_lim_rhs: v3,
+            react_lim_rhs: v3,
+        },
+        sim_node1: Residual {
+            resist: v576,
+            react: v3,
+            resist_small_signal: v3,
+            react_small_signal: v3,
+            resist_lim_rhs: v3,
+            react_lim_rhs: v3,
+        },
+        sim_node2: Residual {
+            resist: v578,
+            react: v3,
+            resist_small_signal: v3,
+            react_small_signal: v3,
+            resist_lim_rhs: v3,
+            react_lim_rhs: v3,
+        },
+        sim_node3: Residual {
+            resist: v580,
+            react: v582,
+            resist_small_signal: v3,
+            react_small_signal: v3,
+            resist_lim_rhs: v3,
+            react_lim_rhs: v3,
+        },
+    },
+    jacobian: {
+        j0: MatrixEntry {
+            row: sim_node0,
+            col: sim_node0,
+            resist: v585,
+            react: v587,
+        },
+        j1: MatrixEntry {
+            row: sim_node0,
+            col: sim_node2,
+            resist: v589,
+            react: v591,
+        },
+        j2: MatrixEntry {
+            row: sim_node0,
+            col: sim_node3,
+            resist: v593,
+            react: v595,
+        },
+        j3: MatrixEntry {
+            row: sim_node1,
+            col: sim_node1,
+            resist: v597,
+            react: v3,
+        },
+        j4: MatrixEntry {
+            row: sim_node1,
+            col: sim_node2,
+            resist: v599,
+            react: v3,
+        },
+        j5: MatrixEntry {
+            row: sim_node1,
+            col: sim_node3,
+            resist: v601,
+            react: v3,
+        },
+        j6: MatrixEntry {
+            row: sim_node2,
+            col: sim_node0,
+            resist: v603,
+            react: v3,
+        },
+        j7: MatrixEntry {
+            row: sim_node2,
+            col: sim_node1,
+            resist: v605,
+            react: v3,
+        },
+        j8: MatrixEntry {
+            row: sim_node2,
+            col: sim_node2,
+            resist: v607,
+            react: v3,
+        },
+        j9: MatrixEntry {
+            row: sim_node2,
+            col: sim_node3,
+            resist: v609,
+            react: v3,
+        },
+        j10: MatrixEntry {
+            row: sim_node3,
+            col: sim_node0,
+            resist: v611,
+            react: v613,
+        },
+        j11: MatrixEntry {
+            row: sim_node3,
+            col: sim_node1,
+            resist: v615,
+            react: v3,
+        },
+        j12: MatrixEntry {
+            row: sim_node3,
+            col: sim_node2,
+            resist: v617,
+            react: v619,
+        },
+        j13: MatrixEntry {
+            row: sim_node3,
+            col: sim_node3,
+            resist: v621,
+            react: v623,
+        },
+    },
+    small_signal_parameters: {},
+    noise_sources: [
+        NoiseSource {
+            name: None,
+            kind: FlickerNoise {
+                pwr: v374,
+                exp: v6,
+            },
+            hi: sim_node0,
+            lo: Some(
+                sim_node3,
+            ),
+            factor: v405,
+        },
+        NoiseSource {
+            name: None,
+            kind: WhiteNoise {
+                pwr: v402,
+            },
+            hi: sim_node3,
+            lo: Some(
+                sim_node1,
+            ),
+            factor: v384,
+        },
+    ],
+}

@@ -2,6 +2,7 @@
 pub use module_info::{collect_modules, ModuleInfo};
 
 mod context;
+pub mod dae;
 mod module_info;
 mod noise;
 mod topology;

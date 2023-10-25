@@ -51,6 +51,10 @@ pub fn openvaf_test_data(test: &str) -> PathBuf {
     project_root().join("openvaf").join("test_data").join(test)
 }
 
+pub fn integration_test_dir(test: &str) -> PathBuf {
+    project_root().join("integration_tests").join(test)
+}
+
 pub fn is_va_file(path: &Path) -> bool {
     path.extension().and_then(|ext| ext.to_str()).map_or(false, |ext| ext == "va")
 }

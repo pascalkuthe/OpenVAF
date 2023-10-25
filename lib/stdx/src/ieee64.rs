@@ -308,6 +308,10 @@ impl Ieee64 {
         f64::from_bits(self.0).is_nan()
     }
 
+    pub fn is_finite(self) -> bool {
+        f64::from_bits(self.0).is_finite()
+    }
+
     /// Get the bitwise representation.
     pub fn is_zero(self) -> bool {
         // IEEE number is zero if mantissa is zero
