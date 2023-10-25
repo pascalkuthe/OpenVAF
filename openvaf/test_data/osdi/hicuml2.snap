@@ -400,7 +400,24 @@ collapsible (ci, c)
 collapsible (ei, e)
 collapsible (si, s)
 collapsible (tnode, gnd)
+noise "flicker" (bi, ei)
+noise "ibei" (bi, ei)
+noise "ibci" (bi, ci)
+noise "it" (ci, ei)
+noise "ijbcx" (bp, ci)
+noise "rbx" (b, bp)
+noise "rbi" (bp, bi)
+noise "flicker" (bp, ei)
+noise "ibep" (bp, ei)
+noise "ijsc" (si, ci)
+noise "rcx" (ci, c)
+noise "re" (ei, e)
+noise "flicker_re" (ei, e)
+noise "rsu" (si, s)
+noise "iavl" (ci, bi)
+noise "ibei" (n1, gnd)
+noise "it" (n2, gnd)
 0 states
 has bound_step false
-instance size 3336
+instance size 3472
 model size 1112

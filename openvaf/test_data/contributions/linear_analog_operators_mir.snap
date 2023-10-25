@@ -1,6 +1,6 @@
 function %(v16, v17, v18, v22) {
     inst0 = const fn %ddt(1) -> 1
-    inst1 = const fn %white_noise(Some(Spur(1)))(1) -> 1
+    inst1 = const fn %white_noise(Spur(1))(1) -> 1
     v3 = fconst 0.0
     v6 = fconst 0x1.0000000000000p0
     v11 = fconst 0x1.0000000000000p1

@@ -721,7 +721,19 @@ collapsible (BP, BI)
 collapsible (BS, BI)
 collapsible (BD, BI)
 collapsible (B, BI)
+noise "flicker" (D, S)
+noise "idid" (D, S)
+noise "igs" (GP, S)
+noise "igd" (GP, D)
+noise "ibs" (BS, S)
+noise "ibd" (BD, D)
+noise "unnamed1" (G, GP)
+noise "unnamed2" (BP, BI)
+noise "unnamed3" (BS, BI)
+noise "unnamed4" (BD, BI)
+noise "unnamed5" (B, BI)
+noise "igig" (NOI2, gnd)
 0 states
 has bound_step false
-instance size 5792
+instance size 5848
 model size 2584

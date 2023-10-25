@@ -1797,39 +1797,39 @@ units = "", desc = "", flags = ParameterFlags(0x0)
 
 4 terminals
 node "d" units = "V", runits = ""
-residual 3456 4294967295 4294967295 4294967295
-node "g" units = "V", runits = ""
-residual 3464 4294967295 4294967295 4294967295
-node "s" units = "V", runits = ""
 residual 3472 4294967295 4294967295 4294967295
-node "b" units = "V", runits = ""
+node "g" units = "V", runits = ""
 residual 3480 4294967295 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 3488 4294967295 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 3496 4294967295 4294967295 4294967295
 node "di" units = "V", runits = ""
-residual 3488 3496 4294967295 4294967295
-node "si" units = "V", runits = ""
 residual 3504 3512 4294967295 4294967295
+node "si" units = "V", runits = ""
+residual 3520 3528 4294967295 4294967295
 node "gi" units = "V", runits = ""
-residual 3520 4294967295 4294967295 4294967295
+residual 3536 4294967295 4294967295 4294967295
 node "bi" units = "V", runits = ""
-residual 3528 3536 4294967295 4294967295
+residual 3544 3552 4294967295 4294967295
 node "gm" units = "V", runits = ""
-residual 3544 4294967295 4294967295 4294967295
+residual 3560 4294967295 4294967295 4294967295
 node(flow) "flow(sbulk,bi)" units = "A", runits = ""
-residual 3552 4294967295 4294967295 4294967295
+residual 3568 4294967295 4294967295 4294967295
 node "sbulk" units = "V", runits = ""
-residual 3560 3568 4294967295 4294967295
+residual 3576 3584 4294967295 4294967295
 node(flow) "flow(sbulk,b)" units = "A", runits = ""
-residual 3576 4294967295 4294967295 4294967295
-node(flow) "flow(b,bi)" units = "A", runits = ""
-residual 3584 4294967295 4294967295 4294967295
-node(flow) "flow(b,dbulk)" units = "A", runits = ""
 residual 3592 4294967295 4294967295 4294967295
+node(flow) "flow(b,bi)" units = "A", runits = ""
+residual 3600 4294967295 4294967295 4294967295
+node(flow) "flow(b,dbulk)" units = "A", runits = ""
+residual 3608 4294967295 4294967295 4294967295
 node "dbulk" units = "V", runits = ""
-residual 3600 3608 4294967295 4294967295
+residual 3616 3624 4294967295 4294967295
 node(flow) "flow(bi,dbulk)" units = "A", runits = ""
-residual 3616 4294967295 4294967295 4294967295
+residual 3632 4294967295 4294967295 4294967295
 node "implicit_equation_0" units = "", runits = ""
-residual 3624 3632 4294967295 4294967295
+residual 3640 3648 4294967295 4294967295
 jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (d, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (d, si) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
@@ -1921,7 +1921,23 @@ collapsible (b, dbulk)
 collapsible (flow(sbulk,b), gnd)
 collapsible (flow(b,bi), gnd)
 collapsible (flow(b,dbulk), gnd)
+noise "thermal" (di, si)
+noise "flicker" (di, si)
+noise "shot" (gi, si)
+noise "shot" (gi, si)
+noise "shot" (gi, di)
+noise "shot" (gi, di)
+noise "shot" (gi, bi)
+noise "Rs" (s, si)
+noise "Rd" (d, di)
+noise "Rg" (g, gm)
+noise "Rbulk" (flow(sbulk,bi), gnd)
+noise "Rbulk" (flow(sbulk,b), gnd)
+noise "Rbulk" (flow(b,bi), gnd)
+noise "Rbulk" (flow(b,dbulk), gnd)
+noise "Rbulk" (flow(bi,dbulk), gnd)
+noise "Rg" (gi, g)
 0 states
 has bound_step false
-instance size 4208
+instance size 4312
 model size 7208

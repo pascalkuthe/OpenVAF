@@ -459,28 +459,39 @@ impl BodyLoweringCtx<'_, '_, '_> {
             }
 
             BuiltIn::white_noise => {
-                let name = (signature == WHITE_NOISE_NAME).then(|| {
+                let name = if signature == WHITE_NOISE_NAME {
                     let name = self.body.as_literal(args[1]).unwrap().unwrap_str();
                     self.ctx.func.interner.get_or_intern(name)
-                });
+                } else {
+                    let name = format!("unnamed{}", self.ctx.unnamed_sources + 1);
+                    self.ctx.unnamed_sources += 1;
+                    self.ctx.func.interner.get_or_intern(name)
+                };
                 let pwr = self.lower_expr(args[0]);
                 self.ctx.call1(CallBackKind::WhiteNoise { name }, &[pwr])
             }
             BuiltIn::flicker_noise => {
-                let name = (signature == FLICKER_NOISE_NAME).then(|| {
+                let name = if signature == FLICKER_NOISE_NAME {
                     let name = self.body.as_literal(args[2]).unwrap().unwrap_str();
                     self.ctx.func.interner.get_or_intern(name)
-                });
+                } else {
+                    let name = format!("unnamed{}", self.ctx.unnamed_sources + 1);
+                    self.ctx.unnamed_sources += 1;
+                    self.ctx.func.interner.get_or_intern(name)
+                };
                 let pwr = self.lower_expr(args[0]);
                 let exp = self.lower_expr(args[1]);
                 self.ctx.call1(CallBackKind::FlickerNoise { name }, &[pwr, exp])
             }
             BuiltIn::noise_table | BuiltIn::noise_table_log => {
-                let name = matches!(signature, NOISE_TABLE_INLINE_NAME | NOISE_TABLE_FILE_NAME)
-                    .then(|| {
-                        let name = self.body.as_literal(args[1]).unwrap().unwrap_str();
-                        self.ctx.func.interner.get_or_intern(name)
-                    });
+                let name = if matches!(signature, NOISE_TABLE_INLINE_NAME | NOISE_TABLE_FILE_NAME) {
+                    let name = self.body.as_literal(args[1]).unwrap().unwrap_str();
+                    self.ctx.func.interner.get_or_intern(name)
+                } else {
+                    let name = format!("unnamed{}", self.ctx.unnamed_sources + 1);
+                    self.ctx.unnamed_sources += 1;
+                    self.ctx.func.interner.get_or_intern(name)
+                };
                 let log = builtin == BuiltIn::noise_table_log;
                 let noise_table = NoiseTable::new([(0.0, 0.0)], log, name);
                 self.ctx.call1(CallBackKind::NoiseTable(Box::new(noise_table)), &[])

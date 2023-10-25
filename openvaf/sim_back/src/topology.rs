@@ -102,7 +102,7 @@ impl ContributeKind {
 
 #[derive(Debug, Clone)]
 pub struct Noise {
-    pub name: Option<Spur>,
+    pub name: Spur,
     pub kind: NoiseSourceKind,
     pub factor: Value,
 }

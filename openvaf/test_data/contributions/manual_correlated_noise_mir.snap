@@ -1,5 +1,5 @@
 function %(v16, v17, v20, v21) {
-    inst0 = const fn %white_noise(None)(1) -> 1
+    inst0 = const fn %white_noise(Spur(1))(1) -> 1
     v3 = fconst 0.0
     v6 = fconst 0x1.0000000000000p0
     v11 = fconst 0x1.0000000000000p1

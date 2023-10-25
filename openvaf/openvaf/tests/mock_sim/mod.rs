@@ -24,6 +24,7 @@ pub struct MockSimulation {
     pub jacobian_react: &'static [UnsafeCell<f64>],
     pub state_1: Vec<f64>,
     pub state_2: Vec<f64>,
+    pub noise_dense: Vec<f64>,
 }
 impl MockSimulation {
     fn new() -> MockSimulation {
@@ -45,6 +46,7 @@ impl MockSimulation {
             jacobian_react: &[],
             state_1: Vec::new(),
             state_2: Vec::new(),
+            noise_dense: Vec::new(),
         }
     }
 
@@ -69,6 +71,10 @@ impl MockSimulation {
         } else {
             self.jacobian_info.get_index_of(&(hi, lo)).unwrap()
         }
+    }
+
+    pub fn read_noise(&mut self, src: usize) -> f64 {
+        self.noise_dense[src]
     }
 
     pub fn set_voltage(&mut self, node: &str, voltage: f64) {
@@ -105,6 +111,7 @@ impl MockSimulation {
             unsafe { entry.get().write(0.0) };
         }
     }
+
     pub(crate) fn next_iter(&mut self) {
         self.solve.fill(0.0);
         swap(&mut self.state_1, &mut self.state_2);
@@ -170,6 +177,7 @@ impl OsdiInstance {
         }
         sim.state_1.resize(self.descriptor.num_states as usize, 0.0);
         sim.state_2.resize(self.descriptor.num_states as usize, 0.0);
+        sim.noise_dense.resize(self.descriptor.num_noise_src as usize, 0.0);
         Ok(sim)
     }
 
@@ -182,6 +190,10 @@ impl OsdiInstance {
             ALPHA,
         );
         self.descriptor.load_jacobian_tran(self.data, self.data, ALPHA);
+    }
+
+    pub fn load_noise(&self, model: &OsdiModel, sim: &mut MockSimulation, freq: f64) {
+        self.descriptor.load_noise(self.data, model.data, freq, sim.noise_dense.as_mut_ptr())
     }
 
     pub fn load_dae(&self, model: &OsdiModel, sim: &mut MockSimulation) {

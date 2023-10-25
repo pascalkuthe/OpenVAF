@@ -1693,31 +1693,31 @@ units = "", desc = "Fraction below which drain-bulk junction capacitance compone
 
 4 terminals
 node "D" units = "V", runits = ""
-residual 6472 4294967295 4294967295 4294967295
-node "G" units = "V", runits = ""
-residual 6480 4294967295 4294967295 4294967295
-node "S" units = "V", runits = ""
-residual 6488 4294967295 4294967295 4294967295
-node "B" units = "V", runits = ""
 residual 6496 4294967295 4294967295 4294967295
+node "G" units = "V", runits = ""
+residual 6504 4294967295 4294967295 4294967295
+node "S" units = "V", runits = ""
+residual 6512 4294967295 4294967295 4294967295
+node "B" units = "V", runits = ""
+residual 6520 4294967295 4294967295 4294967295
 node "DI" units = "V", runits = ""
-residual 6504 6512 4294967295 4294967295
+residual 6528 6536 4294967295 4294967295
 node "BP" units = "V", runits = ""
-residual 6520 6528 4294967295 4294967295
+residual 6544 6552 4294967295 4294967295
 node "SI" units = "V", runits = ""
-residual 6536 6544 4294967295 4294967295
+residual 6560 6568 4294967295 4294967295
 node "GP" units = "V", runits = ""
-residual 6552 6560 4294967295 4294967295
+residual 6576 6584 4294967295 4294967295
 node "BS" units = "V", runits = ""
-residual 6568 6576 4294967295 4294967295
+residual 6592 6600 4294967295 4294967295
 node "BD" units = "V", runits = ""
-residual 6584 6592 4294967295 4294967295
-node "BI" units = "V", runits = ""
-residual 6600 4294967295 4294967295 4294967295
-node "NOI" units = "V", runits = ""
 residual 6608 6616 4294967295 4294967295
+node "BI" units = "V", runits = ""
+residual 6624 4294967295 4294967295 4294967295
+node "NOI" units = "V", runits = ""
+residual 6632 6640 4294967295 4294967295
 node "implicit_equation_0" units = "", runits = ""
-residual 6624 6632 4294967295 4294967295
+residual 6648 6656 4294967295 4294967295
 jacobian (D, D) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (D, DI) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (G, G) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
@@ -1783,7 +1783,23 @@ collapsible (BP, BI)
 collapsible (BS, BI)
 collapsible (BD, BI)
 collapsible (B, BI)
+noise "idid" (DI, SI)
+noise "flicker" (DI, SI)
+noise "flicker" (DI, SI)
+noise "ididedge" (DI, SI)
+noise "igs" (GP, SI)
+noise "igd" (GP, DI)
+noise "ibs" (BS, SI)
+noise "ibd" (BD, DI)
+noise "rgate" (G, GP)
+noise "rsource" (S, SI)
+noise "rdrain" (D, DI)
+noise "rbulk" (BP, BI)
+noise "rjuns" (BS, BI)
+noise "rjund" (BD, BI)
+noise "rwell" (B, BI)
+noise "igig" (NOI, gnd)
 0 states
 has bound_step false
-instance size 7112
+instance size 7208
 model size 6824

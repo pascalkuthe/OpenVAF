@@ -26,7 +26,7 @@ Topology {
                     react_small_signal: v3,
                     noise: [
                         Noise {
-                            name: None,
+                            name: Spur(1),
                             kind: WhiteNoise {
                                 pwr: v66,
                             },
@@ -81,7 +81,7 @@ Topology {
                 current_src: Contribution {
                     unknown: None,
                     resist: v62,
-                    react: v68,
+                    react: v67,
                     resist_small_signal: v3,
                     react_small_signal: v3,
                     noise: [],
@@ -167,9 +167,9 @@ Topology {
                     react_small_signal: v3,
                     noise: [
                         Noise {
-                            name: None,
+                            name: Spur(2),
                             kind: WhiteNoise {
-                                pwr: v67,
+                                pwr: v71,
                             },
                             factor: v6,
                         },
@@ -181,10 +181,10 @@ Topology {
     implicit_equations: {
         inode0: Contribution {
             unknown: Some(
-                v69,
+                v68,
             ),
-            resist: v71,
-            react: v70,
+            resist: v70,
+            react: v69,
             resist_small_signal: v78,
             react_small_signal: v3,
             noise: [],

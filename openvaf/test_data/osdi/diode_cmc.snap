@@ -244,7 +244,10 @@ collapsible (AIK, K)
 collapsible (charge_A, gnd)
 collapsible (charge_K, gnd)
 collapsible (depl_A, gnd)
+noise "shot" (A, AIK)
+noise "flicker" (A, AIK)
+noise "thermal" (AIK, K)
 0 states
 has bound_step false
-instance size 1840
+instance size 1856
 model size 840

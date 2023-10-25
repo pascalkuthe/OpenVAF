@@ -25,9 +25,7 @@ Topology {
                     react_small_signal: v3,
                     noise: [
                         Noise {
-                            name: Some(
-                                Spur(1),
-                            ),
+                            name: Spur(1),
                             kind: WhiteNoise {
                                 pwr: v35,
                             },

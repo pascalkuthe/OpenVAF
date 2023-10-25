@@ -1725,43 +1725,43 @@ units = "-", desc = "Cross-term dependence of vdiffjs )", flags = ParameterFlags
 
 6 terminals
 node "d" units = "V", runits = ""
-residual 5736 5744 4294967295 4294967295
-node "g" units = "V", runits = ""
-residual 5752 4294967295 4294967295 4294967295
-node "s" units = "V", runits = ""
 residual 5760 5768 4294967295 4294967295
-node "b" units = "V", runits = ""
+node "g" units = "V", runits = ""
 residual 5776 4294967295 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 5784 5792 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 5800 4294967295 4294967295 4294967295
 node "sub" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "temp" units = "V", runits = ""
-residual 5784 5792 4294967295 4294967295
+residual 5808 5816 4294967295 4294967295
 node "charge_A" units = "V", runits = ""
-residual 5800 5808 4294967295 4294967295
+residual 5824 5832 4294967295 4294967295
 node "charge_K" units = "V", runits = ""
-residual 5816 5824 4294967295 4294967295
+residual 5840 5848 4294967295 4294967295
 node "depl_A" units = "V", runits = ""
-residual 5832 5840 4294967295 4294967295
+residual 5856 5864 4294967295 4294967295
 node "dp" units = "V", runits = ""
-residual 5848 5856 4294967295 4294967295
+residual 5872 5880 4294967295 4294967295
 node "sp" units = "V", runits = ""
-residual 5864 5872 4294967295 4294967295
+residual 5888 5896 4294967295 4294967295
 node "bp" units = "V", runits = ""
-residual 5880 5888 4294967295 4294967295
+residual 5904 5912 4294967295 4294967295
 node "sb" units = "V", runits = ""
-residual 5896 5904 4294967295 4294967295
+residual 5920 5928 4294967295 4294967295
 node "db" units = "V", runits = ""
-residual 5912 5920 4294967295 4294967295
+residual 5936 5944 4294967295 4294967295
 node "gp" units = "V", runits = ""
-residual 5928 5936 4294967295 4294967295
+residual 5952 5960 4294967295 4294967295
 node "n" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "qi" units = "V", runits = ""
-residual 5944 5952 4294967295 4294967295
+residual 5968 5976 4294967295 4294967295
 node "qb" units = "V", runits = ""
-residual 5960 5968 4294967295 4294967295
+residual 5984 5992 4294967295 4294967295
 node "qbd" units = "V", runits = ""
-residual 5976 5984 4294967295 4294967295
+residual 6000 6008 4294967295 4294967295
 jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1032
 jacobian (d, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1040
 jacobian (d, sub) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1048
@@ -1903,7 +1903,15 @@ collapsible (db, bp)
 collapsible (qi, gnd)
 collapsible (qb, gnd)
 collapsible (qbd, gnd)
+noise "iflick" (dp, sp)
+noise "unnamed2" (dp, sp)
+noise "iigs" (gp, sp)
+noise "iigd" (gp, dp)
+noise "iigb" (gp, bp)
+noise "idrain" (d, dp)
+noise "isource" (sp, s)
+noise "unnamed1" (n, gnd)
 0 states
 has bound_step false
-instance size 7304
+instance size 7392
 model size 6848

@@ -692,7 +692,13 @@ collapsible (fp2, fp1)
 collapsible (fp3, fp2)
 collapsible (fp4, fp3)
 collapsible (g, gi)
+noise "flicker" (flow(di,si), gnd)
+noise "thermal" (flow(di,si), gnd)
+noise "shot" (gi, si)
+noise "shot" (gi, di)
+noise "thermal" (d, fp4)
+noise "thermal" (si, s)
 0 states
 has bound_step false
-instance size 5976
+instance size 6024
 model size 1608

@@ -196,7 +196,9 @@ jacobian (implicit_equation_1, g) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN
 jacobian (implicit_equation_1, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (implicit_equation_1, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (implicit_equation_1, implicit_equation_1) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 368
+noise "thermal" (d, s)
+noise "flicker" (d, s)
 0 states
 has bound_step false
-instance size 1232
+instance size 1248
 model size 616

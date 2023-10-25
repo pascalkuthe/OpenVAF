@@ -23,7 +23,15 @@ Topology {
                     react: v3,
                     resist_small_signal: v33,
                     react_small_signal: v3,
-                    noise: [],
+                    noise: [
+                        Noise {
+                            name: Spur(2),
+                            kind: WhiteNoise {
+                                pwr: v30,
+                            },
+                            factor: v6,
+                        },
+                    ],
                 },
             },
         ),
@@ -64,7 +72,7 @@ Topology {
             react_small_signal: v3,
             noise: [
                 Noise {
-                    name: None,
+                    name: Spur(1),
                     kind: WhiteNoise {
                         pwr: v29,
                     },

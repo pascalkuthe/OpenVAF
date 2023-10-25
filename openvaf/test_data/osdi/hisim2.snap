@@ -1377,29 +1377,29 @@ units = "V", desc = "Ps0 limit for deep punchthrough ", flags = ParameterFlags(0
 
 4 terminals
 node "d" units = "V", runits = ""
-residual 3648 4294967295 4294967295 4294967295
-node "g" units = "V", runits = ""
-residual 3656 4294967295 4294967295 4294967295
-node "s" units = "V", runits = ""
-residual 3664 4294967295 4294967295 4294967295
-node "b" units = "V", runits = ""
 residual 3672 4294967295 4294967295 4294967295
+node "g" units = "V", runits = ""
+residual 3680 4294967295 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 3688 4294967295 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 3696 4294967295 4294967295 4294967295
 node "int_nqs_b" units = "V", runits = ""
-residual 3680 3688 4294967295 4294967295
+residual 3704 3712 4294967295 4294967295
 node "int_nqs_i" units = "V", runits = ""
-residual 3696 3704 4294967295 4294967295
+residual 3720 3728 4294967295 4294967295
 node "dp" units = "V", runits = ""
-residual 3712 3720 4294967295 4294967295
+residual 3736 3744 4294967295 4294967295
 node "sp" units = "V", runits = ""
-residual 3728 3736 4294967295 4294967295
+residual 3752 3760 4294967295 4294967295
 node "bp" units = "V", runits = ""
-residual 3744 3752 4294967295 4294967295
+residual 3768 3776 4294967295 4294967295
 node "sb" units = "V", runits = ""
-residual 3760 3768 4294967295 4294967295
+residual 3784 3792 4294967295 4294967295
 node "db" units = "V", runits = ""
-residual 3776 3784 4294967295 4294967295
+residual 3800 3808 4294967295 4294967295
 node "gp" units = "V", runits = ""
-residual 3792 3800 4294967295 4294967295
+residual 3816 3824 4294967295 4294967295
 node "n" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
@@ -1468,7 +1468,15 @@ collapsible (g, gp)
 collapsible (b, bp)
 collapsible (b, sb)
 collapsible (b, db)
+noise "iflick" (dp, sp)
+noise "unnamed2" (dp, sp)
+noise "iigs" (gp, sp)
+noise "iigd" (gp, dp)
+noise "iigb" (gp, bp)
+noise "idrain" (d, dp)
+noise "isource" (sp, s)
+noise "unnamed1" (n, gnd)
 0 states
 has bound_step false
-instance size 4312
+instance size 4384
 model size 5480

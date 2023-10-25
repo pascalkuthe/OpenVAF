@@ -4,7 +4,7 @@ use llvm::{
     LLVMDisposeBuilder, LLVMGetParam, LLVMPositionBuilderAtEnd, LLVMSetFastMath,
     LLVMSetPartialFastMath, UNNAMED,
 };
-use sim_back::dae::{NoiseSource, NoiseSourceKind};
+use sim_back::dae::NoiseSourceKind;
 use stdx::iter::zip;
 use typed_index_collections::TiVec;
 
@@ -44,8 +44,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         let OsdiCompilationUnit { cx, module, .. } = self;
         let void_ptr = cx.ty_ptr();
         let f64_ptr_ty = cx.ty_ptr();
-        let fun_ty =
-            cx.ty_func(&[void_ptr, void_ptr, cx.ty_double(), f64_ptr_ty, f64_ptr_ty], cx.ty_void());
+        let fun_ty = cx.ty_func(&[void_ptr, void_ptr, cx.ty_double(), f64_ptr_ty], cx.ty_void());
         let name = &format!("load_noise_{}", module.sym);
         let llfunc = cx.declare_int_c_fn(name, fun_ty);
 
@@ -57,19 +56,14 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             let model = LLVMGetParam(llfunc, 1);
             let freq = LLVMGetParam(llfunc, 2);
             let dst = LLVMGetParam(llfunc, 3);
-            let dst_ln = LLVMGetParam(llfunc, 4);
 
             for (i, (src, eval_outputs)) in
                 zip(&module.dae_system.noise_sources, &self.inst_data.noise).enumerate()
             {
                 let fac = self.load_eval_output(eval_outputs.factor, inst, model, llbuilder);
-                let pwr = match src.kind {
+                let mut pwr = match src.kind {
                     NoiseSourceKind::WhiteNoise { .. } => {
-                        let pwr =
-                            self.load_eval_output(eval_outputs.args[0], inst, model, llbuilder);
-                        let pwr = LLVMBuildFMul(llbuilder, pwr, fac, UNNAMED);
-                        LLVMSetFastMath(pwr);
-                        pwr
+                        self.load_eval_output(eval_outputs.args[0], inst, model, llbuilder)
                     }
                     NoiseSourceKind::FlickerNoise { .. } => {
                         let mut pwr =
@@ -85,17 +79,12 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                         LLVMSetPartialFastMath(freq_exp);
                         pwr = LLVMBuildFDiv(llbuilder, pwr, freq_exp, UNNAMED);
                         LLVMSetFastMath(pwr);
-                        pwr = LLVMBuildFMul(llbuilder, pwr, fac, UNNAMED);
-                        LLVMSetFastMath(pwr);
                         pwr
                     }
                     NoiseSourceKind::NoiseTable { .. } => unimplemented!("noise tabels"),
                 };
-                let (ty, fun) = self
-                    .cx
-                    .intrinsic("llvm.log.f64")
-                    .unwrap_or_else(|| unreachable!("intrinsic {} not found", name));
-                let ln_pwr = LLVMBuildCall2(llbuilder, ty, fun, [pwr].as_ptr(), 1, UNNAMED);
+                pwr = LLVMBuildFMul(llbuilder, pwr, fac, UNNAMED);
+                LLVMSetFastMath(pwr);
                 let dst = LLVMBuildGEP2(
                     llbuilder,
                     cx.ty_double(),
@@ -105,15 +94,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                     UNNAMED,
                 );
                 LLVMBuildStore(llbuilder, pwr, dst);
-                let dst_ln = LLVMBuildGEP2(
-                    llbuilder,
-                    cx.ty_double(),
-                    dst_ln,
-                    [cx.const_unsigned_int(i as u32)].as_ptr(),
-                    1,
-                    UNNAMED,
-                );
-                LLVMBuildStore(llbuilder, ln_pwr, dst_ln);
             }
 
             // TODO noise

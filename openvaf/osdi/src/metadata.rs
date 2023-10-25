@@ -237,7 +237,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
         db: &CompilationDB,
     ) -> OsdiDescriptor<'ll> {
         let collapsible = self.collapsible();
-        let OsdiCompilationUnit { ref inst_data, ref model_data, module, .. } = *self;
+        let OsdiCompilationUnit { ref inst_data, ref model_data, module, cx, .. } = *self;
 
         unsafe {
             let node_mapping_offset =
@@ -260,12 +260,10 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                 .noise_sources
                 .iter()
                 .map(|source| {
-                    let hi: u32 = source.hi.into();
-                    let lo: u32 = source.lo.map_or(u32::MAX, u32::from);
-                    OsdiNoiseSource {
-                        name: String::new(),
-                        nodes: OsdiNodePair { node_1: hi, node_2: lo },
-                    }
+                    let node_1: u32 = source.hi.into();
+                    let node_2: u32 = source.lo.map_or(u32::MAX, u32::from);
+                    let name = cx.literals.resolve(&source.name).to_owned();
+                    OsdiNoiseSource { name, nodes: OsdiNodePair { node_1, node_2 } }
                 })
                 .collect();
 

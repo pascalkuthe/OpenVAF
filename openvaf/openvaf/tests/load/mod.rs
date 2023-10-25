@@ -38,6 +38,11 @@ impl OsdiDescriptor {
         unsafe { slice::from_raw_parts(self.collapsible, self.num_collapsible as usize) }
     }
 
+    pub fn noise(&self) -> &[OsdiNoiseSource] {
+        // SAFETY: self.data is a valid allocation and the descriptor is assumed valid
+        unsafe { slice::from_raw_parts(self.noise_sources, self.num_noise_src as usize) }
+    }
+
     pub fn matrix_entries(&self) -> &[OsdiJacobianEntry] {
         // SAFETY: self.data is a valid allocation and the descriptor is assumed valid
         unsafe { slice::from_raw_parts(self.jacobian_entries, self.num_jacobian_entries as usize) }
@@ -474,6 +479,15 @@ impl Debug for OsdiDescriptor {
                     osdi_str(self.nodes()[*node_2 as usize].name)
                 };
                 wn!("collapsible ({}, {})", osdi_str(hi), lo);
+            }
+            for OsdiNoiseSource { name, nodes: OsdiNodePair { node_1, node_2 } } in self.noise() {
+                let hi = self.nodes()[*node_1 as usize].name;
+                let lo = if *node_2 == u32::MAX {
+                    "gnd"
+                } else {
+                    osdi_str(self.nodes()[*node_2 as usize].name)
+                };
+                wn!("noise {:?} ({}, {})", osdi_str(*name), osdi_str(hi), lo);
             }
             wn!("{} states", self.num_states);
             wn!("has bound_step {}", self.bound_step_offset != u32::MAX);

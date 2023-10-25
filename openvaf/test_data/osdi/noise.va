@@ -1,0 +1,14 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module noise_test(inout electrical a,inout electrical c);
+    parameter real pwr = 1e-14 from [0:inf];
+    parameter real flicker_exp = 1 from [0:inf];
+    analog begin
+        I(a, c) <+ white_noise(pwr * V(a, c), "white1");
+        I(a, c) <+ pwr* white_noise(V(a, c), "white2");
+        I(a, c) <+ pwr * flicker_noise(V(a,c), flicker_exp, "flickr1");
+        I(a, c) <+ pwr * flicker_noise(1, flicker_exp * V(a,c), "flickr2");
+    end
+endmodule
+

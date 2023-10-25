@@ -128,7 +128,7 @@ DaeSystem {
     small_signal_parameters: {},
     noise_sources: [
         NoiseSource {
-            name: None,
+            name: Spur(2),
             kind: FlickerNoise {
                 pwr: v374,
                 exp: v6,
@@ -140,7 +140,7 @@ DaeSystem {
             factor: v405,
         },
         NoiseSource {
-            name: None,
+            name: Spur(3),
             kind: WhiteNoise {
                 pwr: v402,
             },

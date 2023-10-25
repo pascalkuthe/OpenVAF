@@ -633,29 +633,29 @@ units = "", desc = "", flags = ParameterFlags(0x0)
 
 4 terminals
 node "d" units = "V", runits = ""
-residual 2272 2280 4294967295 4294967295
+residual 2288 2296 4294967295 4294967295
 node "g" units = "V", runits = ""
-residual 2288 4294967295 4294967295 4294967295
+residual 2304 4294967295 4294967295 4294967295
 node "s" units = "V", runits = ""
-residual 2296 2304 4294967295 4294967295
+residual 2312 2320 4294967295 4294967295
 node "e" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "gp" units = "V", runits = ""
-residual 2312 2320 4294967295 4294967295
-node "bp" units = "V", runits = ""
 residual 2328 2336 4294967295 4294967295
+node "bp" units = "V", runits = ""
+residual 2344 2352 4294967295 4294967295
 node "n" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "t" units = "K", runits = ""
-residual 2344 2352 4294967295 4294967295
-node "nqs_qhs" units = "V", runits = ""
 residual 2360 2368 4294967295 4294967295
-node "nqs_qi" units = "V", runits = ""
+node "nqs_qhs" units = "V", runits = ""
 residual 2376 2384 4294967295 4294967295
-node "nqs_qb" units = "V", runits = ""
+node "nqs_qi" units = "V", runits = ""
 residual 2392 2400 4294967295 4294967295
+node "nqs_qb" units = "V", runits = ""
+residual 2408 2416 4294967295 4294967295
 node "implicit_equation_0" units = "", runits = ""
-residual 4294967295 2408 4294967295 4294967295
+residual 4294967295 2424 4294967295 4294967295
 jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 544
 jacobian (d, g) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 552
 jacobian (d, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 560
@@ -729,7 +729,13 @@ collapsible (t, gnd)
 collapsible (nqs_qhs, gnd)
 collapsible (nqs_qi, gnd)
 collapsible (nqs_qb, gnd)
+noise "iflick" (d, s)
+noise "unnamed2" (d, s)
+noise "iigs" (gp, s)
+noise "iigd" (gp, d)
+noise "iigb" (gp, bp)
+noise "unnamed1" (n, gnd)
 0 states
 has bound_step false
-instance size 3024
+instance size 3088
 model size 2480

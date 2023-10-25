@@ -30,8 +30,8 @@ pub enum CallBackKind {
     BuiltinLimit { name: Spur, num_args: u32 },
     StoreLimit(LimitState),
     TimeDerivative,
-    WhiteNoise { name: Option<Spur> },
-    FlickerNoise { name: Option<Spur> },
+    WhiteNoise { name: Spur },
+    FlickerNoise { name: Spur },
     NoiseTable(Box<NoiseTable>),
 }
 
@@ -174,14 +174,14 @@ impl CallBackKind {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct NoiseTable {
-    pub name: Option<Spur>,
+    pub name: Spur,
     pub log: bool,
     pub vals: Box<[(Ieee64, Ieee64)]>,
 }
 
 impl NoiseTable {
     // TODO: read from disk
-    pub fn new(vals: impl IntoIterator<Item = (f64, f64)>, log: bool, name: Option<Spur>) -> Self {
+    pub fn new(vals: impl IntoIterator<Item = (f64, f64)>, log: bool, name: Spur) -> Self {
         let mut vals: Vec<(Ieee64, Ieee64)> = if log {
             vals.into_iter().map(|(f, pwr)| (f.into(), pwr.into())).collect()
         } else {

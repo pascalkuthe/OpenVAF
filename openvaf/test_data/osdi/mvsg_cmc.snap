@@ -511,55 +511,55 @@ units = "F", desc = "Minimum capacitance", flags = ParameterFlags(0x0)
 
 4 terminals
 node "d" units = "V", runits = ""
-residual 3528 3536 4294967295 4294967295
+residual 3560 3568 4294967295 4294967295
 node "g" units = "V", runits = ""
-residual 3544 4294967295 4294967295 4294967295
+residual 3576 4294967295 4294967295 4294967295
 node "s" units = "V", runits = ""
-residual 3552 3560 4294967295 4294967295
+residual 3584 3592 4294967295 4294967295
 node "b" units = "V", runits = ""
-residual 4294967295 3568 4294967295 4294967295
+residual 4294967295 3600 4294967295 4294967295
 node "tr1" units = "V", runits = ""
-residual 3576 3584 4294967295 4294967295
-node "tr" units = "V", runits = ""
-residual 3592 3600 4294967295 4294967295
-node "fp4" units = "V", runits = ""
 residual 3608 3616 4294967295 4294967295
-node "fp3" units = "V", runits = ""
+node "tr" units = "V", runits = ""
 residual 3624 3632 4294967295 4294967295
-node "gi2" units = "V", runits = ""
+node "fp4" units = "V", runits = ""
 residual 3640 3648 4294967295 4294967295
-node "si" units = "V", runits = ""
+node "fp3" units = "V", runits = ""
 residual 3656 3664 4294967295 4294967295
-node "fp2" units = "V", runits = ""
+node "gi2" units = "V", runits = ""
 residual 3672 3680 4294967295 4294967295
-node "fp1" units = "V", runits = ""
+node "si" units = "V", runits = ""
 residual 3688 3696 4294967295 4294967295
-node "di" units = "V", runits = ""
+node "fp2" units = "V", runits = ""
 residual 3704 3712 4294967295 4294967295
-node "fps1" units = "V", runits = ""
+node "fp1" units = "V", runits = ""
 residual 3720 3728 4294967295 4294967295
-node "fps2" units = "V", runits = ""
+node "di" units = "V", runits = ""
 residual 3736 3744 4294967295 4294967295
-node "fps3" units = "V", runits = ""
+node "fps1" units = "V", runits = ""
 residual 3752 3760 4294967295 4294967295
-node "fps4" units = "V", runits = ""
+node "fps2" units = "V", runits = ""
 residual 3768 3776 4294967295 4294967295
-node "src" units = "V", runits = ""
-residual 3784 4294967295 4294967295 4294967295
-node "drc" units = "V", runits = ""
-residual 3792 4294967295 4294967295 4294967295
-node "xt1" units = "V", runits = ""
+node "fps3" units = "V", runits = ""
+residual 3784 3792 4294967295 4294967295
+node "fps4" units = "V", runits = ""
 residual 3800 3808 4294967295 4294967295
+node "src" units = "V", runits = ""
+residual 3816 4294967295 4294967295 4294967295
+node "drc" units = "V", runits = ""
+residual 3824 4294967295 4294967295 4294967295
+node "xt1" units = "V", runits = ""
+residual 3832 3840 4294967295 4294967295
 node "xt2" units = "V", runits = ""
-residual 3816 3824 4294967295 4294967295
-node(flow) "flow(d,drc)" units = "A", runits = ""
-residual 3832 4294967295 4294967295 4294967295
-node(flow) "flow(src,s)" units = "A", runits = ""
-residual 3840 4294967295 4294967295 4294967295
-node "gi1" units = "V", runits = ""
 residual 3848 3856 4294967295 4294967295
+node(flow) "flow(d,drc)" units = "A", runits = ""
+residual 3864 4294967295 4294967295 4294967295
+node(flow) "flow(src,s)" units = "A", runits = ""
+residual 3872 4294967295 4294967295 4294967295
+node "gi1" units = "V", runits = ""
+residual 3880 3888 4294967295 4294967295
 node "dt" units = "K", runits = ""
-residual 3864 3872 4294967295 4294967295
+residual 3896 3904 4294967295 4294967295
 jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1528
 jacobian (d, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1536
 jacobian (d, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 1544
@@ -771,7 +771,21 @@ collapsible (gi1, gi2)
 collapsible (dt, gnd)
 collapsible (flow(d,drc), gnd)
 collapsible (flow(src,s), gnd)
+noise "rfp4" (fp4, fp3)
+noise "g-s shot" (gi2, si)
+noise "rfp3" (fp3, fp2)
+noise "rfp2" (fp2, fp1)
+noise "rfp1" (fp1, di)
+noise "g-d shot" (gi2, di)
+noise "rfps1" (si, fps1)
+noise "rfps2" (fps1, fps2)
+noise "rfps3" (fps2, fps3)
+noise "rfps4" (fps3, fps4)
+noise "flicker" (di, si)
+noise "channel" (di, si)
+noise "rcd" (flow(d,drc), gnd)
+noise "rcs" (flow(src,s), gnd)
 0 states
 has bound_step false
-instance size 5680
+instance size 5840
 model size 2072

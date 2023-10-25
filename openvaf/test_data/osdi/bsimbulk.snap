@@ -2095,37 +2095,37 @@ units = "V", desc = "Smoothing parameter", flags = ParameterFlags(0x0)
 
 5 terminals
 node "d" units = "V", runits = ""
-residual 4184 4294967295 4294967295 4294967295
-node "g" units = "V", runits = ""
-residual 4192 4294967295 4294967295 4294967295
-node "s" units = "V", runits = ""
 residual 4200 4294967295 4294967295 4294967295
-node "b" units = "V", runits = ""
+node "g" units = "V", runits = ""
 residual 4208 4294967295 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 4216 4294967295 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 4224 4294967295 4294967295 4294967295
 node "t" units = "K", runits = ""
-residual 4216 4224 4294967295 4294967295
-node "di" units = "V", runits = ""
 residual 4232 4240 4294967295 4294967295
-node "si" units = "V", runits = ""
+node "di" units = "V", runits = ""
 residual 4248 4256 4294967295 4294967295
-node "N1" units = "V", runits = ""
+node "si" units = "V", runits = ""
 residual 4264 4272 4294967295 4294967295
+node "N1" units = "V", runits = ""
+residual 4280 4288 4294967295 4294967295
 node "N2" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "gi" units = "V", runits = ""
-residual 4280 4288 4294967295 4294967295
-node "bi" units = "V", runits = ""
 residual 4296 4304 4294967295 4294967295
-node "gm" units = "V", runits = ""
+node "bi" units = "V", runits = ""
 residual 4312 4320 4294967295 4294967295
-node "sbulk" units = "V", runits = ""
+node "gm" units = "V", runits = ""
 residual 4328 4336 4294967295 4294967295
-node "dbulk" units = "V", runits = ""
+node "sbulk" units = "V", runits = ""
 residual 4344 4352 4294967295 4294967295
-node "implicit_equation_0" units = "", runits = ""
+node "dbulk" units = "V", runits = ""
 residual 4360 4368 4294967295 4294967295
-node "implicit_equation_1" units = "", runits = ""
+node "implicit_equation_0" units = "", runits = ""
 residual 4376 4384 4294967295 4294967295
+node "implicit_equation_1" units = "", runits = ""
+residual 4392 4400 4294967295 4294967295
 jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (d, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (d, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
@@ -2239,7 +2239,25 @@ collapsible (gm, gi)
 collapsible (b, sbulk)
 collapsible (b, bi)
 collapsible (b, dbulk)
+noise "1overf" (di, si)
+noise "1overf" (di, si)
+noise "id" (di, si)
+noise "id" (di, si)
+noise "1overf_edgefet" (di, si)
+noise "corl" (N2, gnd)
+noise "corl" (N1, gnd)
+noise "igs" (gi, si)
+noise "igd" (gi, di)
+noise "igb" (gi, bi)
+noise "rd" (d, di)
+noise "rs" (s, si)
+noise "rg" (g, gm)
+noise "rbps" (bi, sbulk)
+noise "rbsb" (b, sbulk)
+noise "rbpb" (b, bi)
+noise "rbdb" (b, dbulk)
+noise "rbpd" (bi, dbulk)
 0 states
 has bound_step false
-instance size 5368
+instance size 5528
 model size 8424

@@ -13,7 +13,7 @@ pub enum NoiseSourceKind {
 
 #[derive(Debug)]
 pub struct NoiseSource {
-    pub name: Option<Spur>,
+    pub name: Spur,
     pub kind: NoiseSourceKind,
     pub hi: SimUnknown,
     pub lo: Option<SimUnknown>,

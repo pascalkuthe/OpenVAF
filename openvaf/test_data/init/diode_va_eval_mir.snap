@@ -1,8 +1,8 @@
 function %(v16, v17, v19, v20, v22, v28, v29, v30, v33, v35, v40, v47, v48, v50, v53, v55, v58, v59, v60, v61, v62, v76, v77, v81, v86, v95, v100, v107, v108, v122, v201, v274, v276, v283, v361, v362, v405, v85, v408) {
     inst0 = const fn %ddt(1) -> 1
     inst1 = const fn %simparam_opt(2) -> 1
-    inst2 = const fn %flickr_noise(None)(2) -> 1
-    inst3 = const fn %white_noise(None)(1) -> 1
+    inst2 = const fn %flickr_noise(Spur(2))(2) -> 1
+    inst3 = const fn %white_noise(Spur(3))(1) -> 1
     inst4 = fn %collapse_node3_Some(node1)(0) -> 0
     inst5 = fn %collapse_node2_None(0) -> 0
     inst6 = const fn %ddx_node_node0(1) -> 1

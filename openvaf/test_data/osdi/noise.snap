@@ -1,0 +1,20 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "pwr"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "flicker_exp"
+units = "", desc = "", flags = ParameterFlags(0x0)
+
+2 terminals
+node "a" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+node "c" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+noise "white1" (a, c)
+noise "white2" (a, c)
+noise "flickr1" (a, c)
+noise "flickr2" (a, c)
+0 states
+has bound_step false
+instance size 72
+model size 32

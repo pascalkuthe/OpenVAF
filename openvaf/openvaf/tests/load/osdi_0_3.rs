@@ -153,7 +153,7 @@ pub struct OsdiDescriptor {
     pub setup_instance:
         fn(*mut c_void, *mut c_void, *mut c_void, f64, u32, *mut OsdiSimParas, *mut OsdiInitInfo),
     pub eval: fn(*mut c_void, *mut c_void, *mut c_void, *mut OsdiSimInfo) -> u32,
-    pub load_noise: fn(*mut c_void, *mut c_void, f64, *mut f64, *mut f64),
+    pub load_noise: fn(*mut c_void, *mut c_void, f64, *mut f64),
     pub load_residual_resist: fn(*mut c_void, *mut c_void, *mut f64),
     pub load_residual_react: fn(*mut c_void, *mut c_void, *mut f64),
     pub load_limit_rhs_resist: fn(*mut c_void, *mut c_void, *mut f64),
@@ -210,9 +210,8 @@ impl OsdiDescriptor {
         model: *mut c_void,
         freq: f64,
         noise_dens: *mut f64,
-        ln_noise_dens: *mut f64,
     ) {
-        (self.load_noise)(inst, model, freq, noise_dens, ln_noise_dens)
+        (self.load_noise)(inst, model, freq, noise_dens)
     }
     pub fn load_residual_resist(&self, inst: *mut c_void, model: *mut c_void, dst: *mut f64) {
         (self.load_residual_resist)(inst, model, dst)

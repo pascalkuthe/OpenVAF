@@ -1787,37 +1787,37 @@ units = "", desc = "Body-bias coefficient for SCE effect for Edge FET", flags = 
 
 5 terminals
 node "d" units = "V", runits = ""
-residual 3432 4294967295 4294967295 4294967295
-node "g" units = "V", runits = ""
-residual 3440 4294967295 4294967295 4294967295
-node "s" units = "V", runits = ""
 residual 3448 4294967295 4294967295 4294967295
-node "b" units = "V", runits = ""
+node "g" units = "V", runits = ""
 residual 3456 4294967295 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 3464 4294967295 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 3472 4294967295 4294967295 4294967295
 node "t" units = "K", runits = ""
-residual 3464 3472 4294967295 4294967295
-node "di" units = "V", runits = ""
 residual 3480 3488 4294967295 4294967295
-node "si" units = "V", runits = ""
+node "di" units = "V", runits = ""
 residual 3496 3504 4294967295 4294967295
+node "si" units = "V", runits = ""
+residual 3512 3520 4294967295 4294967295
 node "N2" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "N1" units = "V", runits = ""
 residual 4294967295 4294967295 4294967295 4294967295
 node "gi" units = "V", runits = ""
-residual 3512 3520 4294967295 4294967295
-node "bi" units = "V", runits = ""
 residual 3528 3536 4294967295 4294967295
-node "gm" units = "V", runits = ""
+node "bi" units = "V", runits = ""
 residual 3544 3552 4294967295 4294967295
-node "sbulk" units = "V", runits = ""
+node "gm" units = "V", runits = ""
 residual 3560 3568 4294967295 4294967295
-node "dbulk" units = "V", runits = ""
+node "sbulk" units = "V", runits = ""
 residual 3576 3584 4294967295 4294967295
-node "implicit_equation_0" units = "", runits = ""
+node "dbulk" units = "V", runits = ""
 residual 3592 3600 4294967295 4294967295
-node "implicit_equation_1" units = "", runits = ""
+node "implicit_equation_0" units = "", runits = ""
 residual 3608 3616 4294967295 4294967295
+node "implicit_equation_1" units = "", runits = ""
+residual 3624 3632 4294967295 4294967295
 jacobian (d, d) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (d, t) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
 jacobian (d, di) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
@@ -1918,7 +1918,23 @@ collapsible (t, gnd)
 collapsible (b, sbulk)
 collapsible (b, bi)
 collapsible (b, dbulk)
+noise "1overf" (di, si)
+noise "id" (di, si)
+noise "id" (di, si)
+noise "corl" (N2, gnd)
+noise "corl" (N1, gnd)
+noise "igs" (gi, si)
+noise "igd" (gi, di)
+noise "igb" (gi, bi)
+noise "rd" (d, di)
+noise "rs" (s, si)
+noise "rg" (g, gm)
+noise "rbps" (bi, sbulk)
+noise "rbsb" (b, sbulk)
+noise "rbpb" (b, bi)
+noise "rbdb" (b, dbulk)
+noise "rbpd" (bi, dbulk)
 0 states
 has bound_step false
-instance size 4432
+instance size 4576
 model size 7176

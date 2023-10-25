@@ -1,6 +1,7 @@
-function %(v16, v17, v20, v22, v25, v26, v34, v41, v42, v45, v47, v48, v51, v54, v69) {
-    inst0 = const fn %white_noise(None)(1) -> 1
+function %(v16, v17, v20, v22, v25, v26, v34, v41, v42, v45, v47, v48, v51, v54, v68) {
+    inst0 = const fn %white_noise(Spur(1))(1) -> 1
     inst1 = const fn %ddt(1) -> 1
+    inst2 = const fn %white_noise(Spur(2))(1) -> 1
     v3 = fconst 0.0
     v6 = fconst 0x1.0000000000000p0
     v28 = fconst 0x1.0000000000000p-1
@@ -16,7 +17,7 @@ function %(v16, v17, v20, v22, v25, v26, v34, v41, v42, v45, v47, v48, v51, v54,
 @001c                               v30 = fmul v29, v22
 @001f                               v31 = fmul v30, v3
                                     v74 = fmul v30, v3
-@0021                               v33 = fneg v69
+@0021                               v33 = fneg v68
 @0036                               v44 = fmul v42, v27
 @0038                               v46 = fmul v44, v45
 @003a                               v49 = fdiv v3, v48
@@ -36,10 +37,10 @@ function %(v16, v17, v20, v22, v25, v26, v34, v41, v42, v45, v47, v48, v51, v54,
                                     v64 = optbarrier v33
                                     v65 = optbarrier v59
                                     v66 = optbarrier v18
-                                    v67 = optbarrier v57
-                                    v68 = optbarrier v23
-                                    v70 = fneg v69
-                                    v71 = optbarrier v31
+                                    v67 = optbarrier v23
+                                    v69 = fneg v68
+                                    v70 = optbarrier v31
+                                    v71 = optbarrier v57
                                     v77 = optbarrier v76
                                     v78 = optbarrier v74
 }
