@@ -6,13 +6,13 @@ function %(v16, v18, v19, v22, v27) {
                                 block2:
 @000a                               v21 = fadd v19, v3
 @000d                               v23 = fmul v22, v3
-                                    v32 = fmul v22, v3
+                                    v33 = fmul v22, v27
 @000e                               v24 = fadd v21, v23
                                     v25 = optbarrier v24
                                     v26 = optbarrier v3
                                     v28 = fneg v3
-                                    v31 = fneg v3
+                                    v32 = fneg v27
                                     v29 = optbarrier v16
                                     v30 = optbarrier v16
-                                    v33 = optbarrier v32
+                                    v34 = optbarrier v33
 }

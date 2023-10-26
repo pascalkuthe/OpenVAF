@@ -21,7 +21,7 @@ Topology {
                     unknown: None,
                     resist: v27,
                     react: v3,
-                    resist_small_signal: v33,
+                    resist_small_signal: v34,
                     react_small_signal: v3,
                     noise: [
                         Noise {
@@ -58,7 +58,7 @@ Topology {
                     unknown: None,
                     resist: v28,
                     react: v3,
-                    resist_small_signal: v34,
+                    resist_small_signal: v35,
                     react_small_signal: v3,
                     noise: [],
                 },

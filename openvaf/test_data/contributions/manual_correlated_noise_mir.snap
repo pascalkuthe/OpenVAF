@@ -9,12 +9,12 @@ function %(v16, v17, v20, v21) {
                                     v29 = fneg v6
 @000f                               v22 = fdiv v21, v17
 @0013                               v25 = fmul v11, v3
-                                    v32 = fmul v11, v3
+                                    v33 = fmul v11, v16
 @0014                               v26 = fadd v22, v25
                                     v27 = optbarrier v19
                                     v30 = optbarrier v29
                                     v28 = optbarrier v26
                                     v31 = optbarrier v17
-                                    v33 = optbarrier v16
-                                    v34 = optbarrier v32
+                                    v34 = optbarrier v16
+                                    v35 = optbarrier v33
 }

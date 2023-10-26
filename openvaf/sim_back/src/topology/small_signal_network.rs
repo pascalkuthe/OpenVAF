@@ -275,7 +275,10 @@ impl Builder<'_> {
         let small_signal_vals = take(&mut self.topology.small_signal_vals);
         for &val in &small_signal_vals {
             if let Some(contributes) = self.collect_linear_contributes(val) {
-                self.create_dimension(val, val);
+                // create placeholder since all uses of val will be replaced with 0
+                // but we obviously still need it
+                let placeholder = self.func.dfg.make_invalid_value();
+                self.create_dimension(placeholder, val);
                 for contribute in contributes {
                     let dimension = self.val_map[&contribute];
                     let contribute = self.topology.as_contribution(contribute).unwrap();
@@ -321,6 +324,7 @@ impl Builder<'_> {
                         val
                     });
                 }
+                self.func.dfg.replace_uses(placeholder, val);
             }
         }
         self.topology.small_signal_vals = small_signal_vals;
@@ -438,6 +442,6 @@ impl Builder<'_> {
                 res.push(val);
             }
         }
-        Some(res)
+        (!res.is_empty()).then_some(res)
     }
 }
