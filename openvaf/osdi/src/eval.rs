@@ -79,9 +79,7 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
             .unknowns
             .indices()
             .map(|node| unsafe {
-                let val =
-                    inst_data.read_node_voltage(cx, node, instance, prev_result, builder.llbuilder);
-                val
+                inst_data.read_node_voltage(cx, node, instance, prev_result, builder.llbuilder)
             })
             .collect();
 

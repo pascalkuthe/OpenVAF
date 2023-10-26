@@ -345,7 +345,7 @@ impl<C: ControlFlowGraph> SSABuilder<C> {
                 return false;
             }
 
-            let next = self.cfg.predecessors(block).nth(0).unwrap();
+            let next = self.cfg.predecessors(block).next().unwrap();
             visited.insert(current, block_cnt);
             current = next;
         }
@@ -359,7 +359,7 @@ impl<C: ControlFlowGraph> SSABuilder<C> {
         if self.cfg.sealed(block) {
             // Optimize the common case of one predecessor: no param needed.
             if optimize_var_lookup {
-                let pred = self.cfg.predecessors(block).nth(0).unwrap();
+                let pred = self.cfg.predecessors(block).next().unwrap();
                 self.calls.push(Call::FinishSealedOnePredecessor(block));
                 self.calls.push(Call::UseVar(pred));
             } else {

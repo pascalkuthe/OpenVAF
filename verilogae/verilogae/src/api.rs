@@ -422,6 +422,8 @@ unsafe fn access_val<T: Copy + Default>(lib: &Library, sym_name: &[u8]) -> T {
     }
 }
 
+// false positive
+#[allow(clippy::explicit_auto_deref)]
 unsafe fn access_global<'a, T>(
     lib: &'a Library,
     sym_name: &[u8],

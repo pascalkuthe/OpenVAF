@@ -180,12 +180,13 @@ impl PlaceKind {
             PlaceKind::FunctionReturn(fun) => fun.return_ty(db),
             PlaceKind::FunctionArg(arg) => arg.ty(db),
 
-            PlaceKind::ImplicitResidual { .. } | PlaceKind::Contribute { .. } => Type::Real,
+            PlaceKind::ImplicitResidual { .. }
+            | PlaceKind::Contribute { .. }
+            | PlaceKind::BoundStep => Type::Real,
             PlaceKind::ParamMin(param) | PlaceKind::ParamMax(param) | PlaceKind::Param(param) => {
                 param.ty(db)
             }
             PlaceKind::IsVoltageSrc(_) | PlaceKind::CollapseImplicitEquation(_) => Type::Bool,
-            PlaceKind::BoundStep => Type::Real,
         }
     }
 
