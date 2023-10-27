@@ -177,6 +177,10 @@ macro_rules! assert_approx_eq {
 }
 
 fn test_noise() -> Result<()> {
+    if stdx::IS_CI && cfg!(windows) {
+        return Ok(());
+    }
+
     // skipping in CI for now as we don't have a toolchain there
     // currently
     const MFACTOR: f64 = 2.0;
