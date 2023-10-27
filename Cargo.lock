@@ -1296,13 +1296,11 @@ dependencies = [
  "mir_build",
  "mir_interpret",
  "mir_opt",
- "paths",
  "smol_str",
  "stdx",
  "syntax",
  "typed-index-collections",
  "typed_indexmap",
- "workqueue",
 ]
 
 [[package]]
