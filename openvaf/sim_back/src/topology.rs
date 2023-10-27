@@ -92,8 +92,8 @@ enum ContributeKind {
 }
 
 impl ContributeKind {
-    pub fn is_reactive(&self) -> bool {
-        match *self {
+    pub fn is_reactive(self) -> bool {
+        match self {
             ContributeKind::Branch { is_reactive, .. }
             | ContributeKind::ImplicitEquation { is_reactive, .. } => is_reactive,
         }

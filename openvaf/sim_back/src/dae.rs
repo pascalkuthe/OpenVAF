@@ -85,8 +85,9 @@ impl DaeSystem {
                 return false;
             }
             match noise_src.kind {
-                NoiseSourceKind::WhiteNoise { pwr } => pwr != F_ZERO,
-                NoiseSourceKind::FlickerNoise { pwr, .. } => pwr != F_ZERO,
+                NoiseSourceKind::WhiteNoise { pwr } | NoiseSourceKind::FlickerNoise { pwr, .. } => {
+                    pwr != F_ZERO
+                }
                 NoiseSourceKind::NoiseTable { .. } => true,
             }
         });
